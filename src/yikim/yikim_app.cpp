@@ -64,6 +64,7 @@ struct YikimApp {
         world.params.muStatic = cfg.f("phys.mu_static", world.params.muStatic);
         world.params.muDynamic = cfg.f("phys.mu_dynamic", world.params.muDynamic);
         world.params.restitution = cfg.f("phys.restitution", world.params.restitution);
+        world.params.dampAlpha = cfg.f("phys.damp_alpha", world.params.dampAlpha);
     }
     void build() {
         if (cfg.values.count("scene") && cfg.values.at("scene") == "cerceve") {

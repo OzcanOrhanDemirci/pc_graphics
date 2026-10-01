@@ -47,6 +47,7 @@ struct DPatch {           // the contact points of one pair of bodies, for frict
     float3 ra, rb;        // world levers of the patch centre
     float3 n;             // pushes a away from b
     float J;              // normal impulse of the position pass (J / h^2 is the force)
+    float depth;          // deepest point of the patch (an overlap being pushed out, or merely touching)
     float spent;          // friction impulse already spent at position level
     float radius;         // spread of the points about the centre (torsional friction)
 };
@@ -63,7 +64,10 @@ struct DevWorld {
     float3 *localC = nullptr, *localH = nullptr;    // local box (centre, half extents)
     float3 *lo = nullptr, *hi = nullptr;            // world boxes, grown
     // accumulators (Jacobi)
-    float3 *dx = nullptr, *dth = nullptr;
+    // per body: displacement / velocity (3) and rotation / angular velocity (3) corrections summed in 2^-40 fixed
+    // point: integer addition is associative, so the order the atomics land in no longer changes the result and a
+    // run repeats exactly (float atomics made the same earthquake bring a building down in one run and not the next)
+    long long* acc = nullptr;
     int* cnt = nullptr;
     // shapes
     int *sampleStart = nullptr, *sampleCount = nullptr, *planeStart = nullptr, *planeCount = nullptr;
@@ -106,10 +110,21 @@ struct DevWorld {
 // ------------------------------------------------------------------------------------------------------------
 // device helpers
 // ------------------------------------------------------------------------------------------------------------
-__device__ __forceinline__ void atomicAdd3(float3* p, float3 v) {
-    atomicAdd(&p->x, v.x);
-    atomicAdd(&p->y, v.y);
-    atomicAdd(&p->z, v.z);
+#define FIX_SCALE 1099511627776.0   // 2^40: 1e-12 resolution, +-8e6 range
+__device__ __forceinline__ void accumFix(long long* p, float v) {
+    atomicAdd(reinterpret_cast<unsigned long long*>(p), static_cast<unsigned long long>(__double2ll_rn(double(v) * FIX_SCALE)));
+}
+__device__ __forceinline__ void accum(DevWorld& W, int b, float3 lin, float3 ang) {
+    long long* p = W.acc + 6 * size_t(b);
+    accumFix(p + 0, lin.x); accumFix(p + 1, lin.y); accumFix(p + 2, lin.z);
+    accumFix(p + 3, ang.x); accumFix(p + 4, ang.y); accumFix(p + 5, ang.z);
+}
+__device__ __forceinline__ void takeAccum(DevWorld& W, int b, float3& lin, float3& ang) {   // read and clear
+    long long* p = W.acc + 6 * size_t(b);
+    const double k = 1.0 / FIX_SCALE;
+    lin = make_float3(float(p[0] * k), float(p[1] * k), float(p[2] * k));
+    ang = make_float3(float(p[3] * k), float(p[4] * k), float(p[5] * k));
+    for (int c = 0; c < 6; ++c) p[c] = 0;
 }
 // generalised inverse mass of a body for a push along unit n at lever r (world)
 __device__ __forceinline__ float genInvMass(float im, float3 iI, float4 q, float3 r, float3 n) {
@@ -120,7 +135,19 @@ __device__ __forceinline__ float genInvMass(float im, float3 iI, float4 q, float
 // ------------------------------------------------------------------------------------------------------------
 // integrate
 // ------------------------------------------------------------------------------------------------------------
-__global__ void kIntegrate(DevWorld W, float h, int substep, float maxSpeed) {
+// Damping (measured, kept in DURUM): an explicit per-interface velocity damping cannot reach a building's ~5% (it is
+// capped at removing the relative velocity of a substep, and a smooth sway leaves neighbours almost none: 0.5-0.6% of
+// critical whatever the coefficient); XPBD's implicit stiffness damping softened the structure instead (first period
+// 0.45 -> 1.43 s). What is left is Rayleigh's other half: mass-proportional damping of the motion relative to the
+// ground, zeta = alpha / (2 omega), for bodies still bonded to something (debris falls free), with its deceleration
+// capped (a toppling bonded block is not held back by more than a few percent of g).
+__device__ __forceinline__ bool hasLivingInterface(const DevWorld& W, int i) {
+    for (int k = W.adjStart[i]; k < W.adjStart[i + 1]; ++k)
+        if (W.ifc[W.adjList[k]].alive > 0) return true;
+    return false;
+}
+
+__global__ void kIntegrate(DevWorld W, float h, int substep, float maxSpeed, float alpha, float capLin, float capAng) {
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= W.n) return;
     const float g = *W.gravityDev;
@@ -137,6 +164,13 @@ __global__ void kIntegrate(DevWorld W, float h, int substep, float maxSpeed) {
         return;
     }
     float3 v = W.v[i];
+    float3 wv = W.w[i];
+    if (alpha > 0.0f && hasLivingInterface(W, i)) {
+        const float3 vr = v - W.v[0];   // relative to the ground (the ground body's velocity is this substep's)
+        const float vl = length(vr), wl = length(wv);
+        if (vl > 0.0f) v = v - vr * (fminf(alpha * h * vl, capLin * h) / vl);
+        if (wl > 0.0f) wv = wv * (1.0f - fminf(alpha * h * wl, capAng * h) / wl);
+    }
     v.y -= g * h;
     const float sp = length(v);
     if (sp > maxSpeed) v = v * (maxSpeed / sp);   // guard, never reached by sane motion
@@ -145,7 +179,7 @@ __global__ void kIntegrate(DevWorld W, float h, int substep, float maxSpeed) {
     // rotation: gyroscopic term in the body frame, then q += h/2 [w,0] q
     const float4 q = W.q[i];
     const float3 iI = W.invI[i];
-    float3 wl = qrotInv(q, W.w[i]);
+    float3 wl = qrotInv(q, wv);
     const float3 Iw = make_float3(iI.x > 0 ? wl.x / iI.x : 0.0f, iI.y > 0 ? wl.y / iI.y : 0.0f, iI.z > 0 ? wl.z / iI.z : 0.0f);
     wl = wl - cross(wl, Iw) * iI * h;
     float3 w = qrot(q, wl);
@@ -339,6 +373,7 @@ struct PatchAcc {
     float3 n = make_float3(0, 0, 0);     // sum lambda * normal pushing a away from b
     float rr = 0.0f;                     // sum lambda * |lever|^2 (patch radius)
     int points = 0;
+    float depth = 0.0f;                  // deepest point (m)
     float J = 0.0f;                      // normal impulse applied to the pair, all iterations
 };
 
@@ -357,8 +392,9 @@ struct PairState {       // private copies of the two bodies
 
 // body P's point (lever rp from P, world) is inside Q by depth along Q's outward normal m: P's correction is a push
 // along m. pIsA: P is the pair's body a. Accumulates into the iteration's sums (applied averaged).
-__device__ void pointCorrection(PairState& S, bool pIsA, float3 rp, float3 m, float depth, float h, const PhysParams& prm, PatchAcc& acc) {
-    const float C = fminf(depth - prm.slop, prm.maxDepenetration * h);
+__device__ void pointCorrection(PairState& S, bool pIsA, float3 rp, float3 m, float depth, float h, const PhysParams& prm, PatchAcc& acc,
+                                float tolerance = 0.0f) {
+    const float C = fminf(depth - fmaxf(prm.slop, tolerance), prm.maxDepenetration * h);
     if (C <= 0.0f) return;
     const double3 xp = pIsA ? S.xa : S.xb, xq = pIsA ? S.xb : S.xa;
     const float4 qp = pIsA ? S.qa : S.qb, qq = pIsA ? S.qb : S.qa;
@@ -380,10 +416,12 @@ __device__ void pointCorrection(PairState& S, bool pIsA, float3 rp, float3 m, fl
     acc.n = acc.n + na * lam;
     acc.rr += lam * dot(ra, ra);
     acc.points++;
+    acc.depth = fmaxf(acc.depth, depth);
 }
 
 // samples of P against the planes of Q (P = a when pIsA)
-__device__ void pointsVsHull(const DevWorld& W, PairState& S, int p, int q, bool pIsA, float h, const PhysParams& prm, PatchAcc& acc, int lane) {
+__device__ void pointsVsHull(const DevWorld& W, PairState& S, int p, int q, bool pIsA, float h, const PhysParams& prm, PatchAcc& acc, int lane,
+                             float tolerance) {
     const int s0 = W.sampleStart[W.shape[p]], sn = W.sampleCount[W.shape[p]];
     const int p0 = W.planeStart[W.shape[q]], pn = W.planeCount[W.shape[q]];
     const float3 hq = W.localH[q], cq = W.localC[q];
@@ -404,7 +442,7 @@ __device__ void pointsVsHull(const DevWorld& W, PairState& S, int p, int q, bool
         }
         if (bi < 0) continue;
         const float4 P = W.planes[p0 + bi];
-        pointCorrection(S, pIsA, rp, qrot(qq, make_float3(P.x, P.y, P.z)), -best, h, prm, acc);
+        pointCorrection(S, pIsA, rp, qrot(qq, make_float3(P.x, P.y, P.z)), -best, h, prm, acc, tolerance);
     }
 }
 
@@ -528,20 +566,20 @@ __device__ PairState loadPair(const DevWorld& W, int a, int b) {
 }
 
 // the pair's net motion into the bodies' accumulators (averaged over each body's pairs), and the patch record
-__device__ void finishPair(DevWorld& W, int a, int b, const PairState& S, const PatchAcc& last, float J) {
+#define BOND_OVERLAP 0.02f   // m: how far bonded bodies may overlap before contact steps in
+
+__device__ void finishPair(DevWorld& W, int a, int b, const PairState& S, const PatchAcc& last, float J, bool bonded = false) {
     if (J <= 0.0f) return;
     if (S.ima > 0.0f) {
         const float4 dq = qmul(S.qa, qconj(W.q[a]));
         const float3 dth = make_float3(dq.x, dq.y, dq.z) * (dq.w < 0.0f ? -2.0f : 2.0f);
-        atomicAdd3(&W.dx[a], diff3(S.xa, W.x[a]));
-        atomicAdd3(&W.dth[a], dth);
+        accum(W, a, diff3(S.xa, W.x[a]), dth);
         atomicAdd(&W.cnt[a], 1);
     }
     if (S.imb > 0.0f) {
         const float4 dq = qmul(S.qb, qconj(W.q[b]));
         const float3 dth = make_float3(dq.x, dq.y, dq.z) * (dq.w < 0.0f ? -2.0f : 2.0f);
-        atomicAdd3(&W.dx[b], diff3(S.xb, W.x[b]));
-        atomicAdd3(&W.dth[b], dth);
+        accum(W, b, diff3(S.xb, W.x[b]), dth);
         atomicAdd(&W.cnt[b], 1);
     }
     if (last.lam <= 0.0f) return;
@@ -555,8 +593,9 @@ __device__ void finishPair(DevWorld& W, int a, int b, const PairState& S, const 
         DPatch c;
         c.a = a; c.b = b; c.ra = ra; c.rb = diff3(W.x[a], W.x[b]) + ra; c.n = n;
         c.J = J;
-        c.spent = S.lamT;
+        c.spent = bonded ? 1e30f : S.lamT;   // a bonded pair gets no friction (its fibres hold it)
         c.radius = sqrtf(fmaxf(0.0f, last.rr / last.lam - dot(ra, ra)));
+        c.depth = last.depth;
         W.patches[slot] = c;
     }
 }
@@ -569,10 +608,15 @@ __device__ __forceinline__ float warpSum(float v) {
     return __shfl_sync(0xffffffffu, v, 0);
 }
 __device__ __forceinline__ float3 warpSum3(float3 v) { return make_float3(warpSum(v.x), warpSum(v.y), warpSum(v.z)); }
+__device__ __forceinline__ float warpMax(float v) {
+    for (int o = 16; o > 0; o >>= 1) v = fmaxf(v, __shfl_down_sync(0xffffffffu, v, o));
+    return __shfl_sync(0xffffffffu, v, 0);
+}
 __device__ void warpReduce(PairState& S, PatchAcc& acc) {
     S.dxa = warpSum3(S.dxa); S.dta = warpSum3(S.dta); S.dxb = warpSum3(S.dxb); S.dtb = warpSum3(S.dtb);
     acc.lam = warpSum(acc.lam); acc.r = warpSum3(acc.r); acc.n = warpSum3(acc.n); acc.rr = warpSum(acc.rr);
     acc.points = int(warpSum(float(acc.points)) + 0.5f);
+    acc.depth = warpMax(acc.depth);
 }
 __device__ __forceinline__ double3 shflD3(double3 v) {
     return make_double3(__shfl_sync(0xffffffffu, v.x, 0), __shfl_sync(0xffffffffu, v.y, 0), __shfl_sync(0xffffffffu, v.z, 0));
@@ -592,22 +636,26 @@ __device__ void frictionOnLane0(DevWorld& W, int a, int b, int frame, PairState&
 __device__ void contactPairWarp(DevWorld& W, int i, int lane, float h, const PhysParams& prm, int frame) {
     const int2 pr = W.pairs[i];
     const int a = pr.x, b = pr.y;
-    if (bonded(W, a, b)) return;
+    // a bonded pair touches face to face by design: contact only past BOND_OVERLAP. Skipping it altogether let a
+    // crushed, half-broken bond sink one body into the other (a wall block 30 cm into the ground), and the overlap
+    // exploded when the last fibre went (measured: 29 m/s).
+    const bool bnd = bonded(W, a, b);
+    const float tol = bnd ? BOND_OVERLAP : 0.0f;
     PairState S = loadPair(W, a, b);
     PatchAcc last;
     float J = 0.0f;
     for (int it = 0; it < prm.contactIters; ++it) {
         PatchAcc acc;
-        pointsVsHull(W, S, a, b, true, h, prm, acc, lane);
-        pointsVsHull(W, S, b, a, false, h, prm, acc, lane);
+        pointsVsHull(W, S, a, b, true, h, prm, acc, lane, tol);
+        pointsVsHull(W, S, b, a, false, h, prm, acc, lane, tol);
         warpReduce(S, acc);
         acc.J = J;
         if (!applyPoints(S, acc)) { if (it == 0) return; break; }
         J = acc.J;
-        frictionOnLane0(W, a, b, frame, S, acc, prm, it == prm.contactIters - 1, lane);
+        if (!bnd) frictionOnLane0(W, a, b, frame, S, acc, prm, it == prm.contactIters - 1, lane);
         last = acc;
     }
-    if (lane == 0) finishPair(W, a, b, S, last, J);
+    if (lane == 0) finishPair(W, a, b, S, last, J, bnd);
 }
 
 __global__ void kContacts(DevWorld W, float h, PhysParams prm) {
@@ -633,7 +681,8 @@ __global__ void kGround(DevWorld W, float h, PhysParams prm) {
             const float ext = fabsf(r1.x) * hh.x + fabsf(r1.y) * hh.y + fabsf(r1.z) * hh.z;
             if (yc - ext > gy + 0.01f) continue;
         }
-        if (bonded(W, i, 0)) continue;   // still held by its foundation
+        const bool bnd = bonded(W, i, 0);   // held by its foundation: contact only past BOND_OVERLAP (see contactPairWarp)
+        const float tol = bnd ? BOND_OVERLAP : 0.0f;
         PairState S = loadPair(W, i, 0);
         const int s0 = W.sampleStart[W.shape[i]], sn = W.sampleCount[W.shape[i]];
         PatchAcc last;
@@ -644,17 +693,17 @@ __global__ void kGround(DevWorld W, float h, PhysParams prm) {
             for (int s = lane; s < sn; s += 32) {
                 const float3 r = qrot(S.qa, W.samples[s0 + s]);
                 const float y = float(S.xa.y - double(gy)) + r.y;
-                if (y < 0.0f) pointCorrection(S, true, r, make_float3(0, 1, 0), -y, h, prm, acc);
+                if (y < -tol) pointCorrection(S, true, r, make_float3(0, 1, 0), -y, h, prm, acc, tol);
             }
             warpReduce(S, acc);
             acc.J = J;
             if (!applyPoints(S, acc)) break;
             any = true;
             J = acc.J;
-            frictionOnLane0(W, i, 0, frame, S, acc, prm, it == prm.contactIters - 1, lane);
+            if (!bnd) frictionOnLane0(W, i, 0, frame, S, acc, prm, it == prm.contactIters - 1, lane);
             last = acc;
         }
-        if (any && lane == 0) finishPair(W, i, 0, S, last, J);
+        if (any && lane == 0) finishPair(W, i, 0, S, last, J, bnd);
     }
 }
 
@@ -662,13 +711,13 @@ __global__ void kApply(DevWorld W, float relax) {
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= W.n) return;
     const int c = W.cnt[i];
+    float3 dx, dth;
+    takeAccum(W, i, dx, dth);
     if (c > 0 && !W.kin[i]) {
         const float s = (c > 1 ? relax : 1.0f) / float(c);
-        W.x[i] = W.x[i] + d3(W.dx[i] * s);
-        W.q[i] = qaddRot(W.q[i], W.dth[i] * s);
+        W.x[i] = W.x[i] + d3(dx * s);
+        W.q[i] = qaddRot(W.q[i], dth * s);
     }
-    W.dx[i] = make_float3(0, 0, 0);
-    W.dth[i] = make_float3(0, 0, 0);
     W.cnt[i] = 0;
 }
 
@@ -712,7 +761,10 @@ __global__ void kPatchVelocities(DevWorld W, float h, PhysParams prm, float g) {
         // the other side: separating faster than the bounce, or than the pair was already separating, is velocity the
         // position pass made up pushing an overlap out. It is capped at maxDepenetration; otherwise it piles up over
         // the substeps (measured: a block pressed into the ground by falling debris shot up at 22-52 m/s).
-        const float ceilVn = fmaxf(fmaxf(target, vnOld), prm.maxDepenetration);
+        // an overlap still being pushed out (deeper than touching) separates at maxDepenetration at most: letting it keep
+        // last substep's separation ratchets up (measured: 1.5 -> 11.5 -> 29 m/s over two frames)
+        const float ceilVn = c.depth > 3.0f * prm.slop ? fmaxf(target, prm.maxDepenetration)
+                                                       : fmaxf(fmaxf(target, vnOld), prm.maxDepenetration);
         if (vn < target || vn > ceilVn) {
             const float wn = genInvMass(ima, iIa, qa, c.ra, c.n) + genInvMass(imb, iIb, qb, c.rb, c.n);
             if (wn > 0.0f) P = P + c.n * (((vn < target ? target : ceilVn) - vn) / wn);
@@ -725,56 +777,13 @@ __global__ void kPatchVelocities(DevWorld W, float h, PhysParams prm, float g) {
             if (wtor > 0.0f) L = c.n * (-copysignf(fminf(prm.muDynamic * fnh * c.radius, fabsf(wn) / wtor), wn));
         }
         if (ima > 0.0f) {
-            atomicAdd3(&W.dx[a], P * ima);
-            atomicAdd3(&W.dth[a], invInertiaMul(qa, iIa, cross(c.ra, P) + L));
+            accum(W, a, P * ima, invInertiaMul(qa, iIa, cross(c.ra, P) + L));
             atomicAdd(&W.cnt[a], 1);
         }
         if (imb > 0.0f) {
-            atomicAdd3(&W.dx[b], P * -imb);
-            atomicAdd3(&W.dth[b], invInertiaMul(qb, iIb, cross(c.rb, P * -1.0f) - L));
+            accum(W, b, P * -imb, invInertiaMul(qb, iIb, cross(c.rb, P * -1.0f) - L));
             atomicAdd(&W.cnt[b], 1);
         }
-    }
-}
-
-// interface damping: remove a share of the relative velocity across each living interface (Jacobi)
-__global__ void kInterfaceDamping(DevWorld W, float h) {
-    const int k = blockIdx.x * blockDim.x + threadIdx.x;
-    if (k >= W.nIfc) return;
-    const DInterface I = W.ifc[k];
-    if (I.alive <= 0) return;
-    const float c = W.mats[I.mat].damping;
-    if (c <= 0.0f) return;
-    const float eta = fminf(1.0f, c * h);
-    const int a = I.a, b = I.b;
-    const float ima = W.invMass[a], imb = W.invMass[b];
-    const float3 iIa = W.invI[a], iIb = W.invI[b];
-    const float4 qa = W.q[a], qb = W.q[b];
-    const float3 ra = qrot(qa, I.cA), rb = qrot(qb, I.cB);
-    const float3 vr = (W.v[b] + cross(W.w[b], rb)) - (W.v[a] + cross(W.w[a], ra));
-    const float vl = length(vr);
-    float3 Pl = make_float3(0, 0, 0), L = make_float3(0, 0, 0);
-    if (vl > 1e-7f) {
-        const float3 d = vr * (1.0f / vl);
-        const float wsum = genInvMass(ima, iIa, qa, ra, d) + genInvMass(imb, iIb, qb, rb, d);
-        if (wsum > 0.0f) Pl = d * (-eta * vl / wsum);   // impulse on b
-    }
-    const float3 wr = W.w[b] - W.w[a];
-    const float wl = length(wr);
-    if (wl > 1e-7f) {
-        const float3 ax = wr * (1.0f / wl);
-        const float wsum = dot(ax, invInertiaMul(qa, iIa, ax)) + dot(ax, invInertiaMul(qb, iIb, ax));
-        if (wsum > 0.0f) L = ax * (-eta * wl / wsum);   // angular impulse on b
-    }
-    if (imb > 0.0f) {
-        atomicAdd3(&W.dx[b], Pl * imb);
-        atomicAdd3(&W.dth[b], invInertiaMul(qb, iIb, cross(rb, Pl) + L));
-        atomicAdd(&W.cnt[b], 1);
-    }
-    if (ima > 0.0f) {
-        atomicAdd3(&W.dx[a], Pl * -ima);
-        atomicAdd3(&W.dth[a], invInertiaMul(qa, iIa, cross(ra, Pl * -1.0f) - L));
-        atomicAdd(&W.cnt[a], 1);
     }
 }
 
@@ -782,13 +791,13 @@ __global__ void kApplyVel(DevWorld W) {
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= W.n) return;
     const int c = W.cnt[i];
+    float3 dv, dw;
+    takeAccum(W, i, dv, dw);
     if (c > 0 && !W.kin[i]) {
         const float s = 1.0f / float(c);
-        W.v[i] = W.v[i] + W.dx[i] * s;
-        W.w[i] = W.w[i] + W.dth[i] * s;
+        W.v[i] = W.v[i] + dv * s;
+        W.w[i] = W.w[i] + dw * s;
     }
-    W.dx[i] = make_float3(0, 0, 0);
-    W.dth[i] = make_float3(0, 0, 0);
     W.cnt[i] = 0;
 }
 
@@ -875,7 +884,7 @@ PhysWorld::~PhysWorld() { freeDevice(); }
 void PhysWorld::freeDevice() {
     if (!d_) return;
     void* ptrs[] = {d_->x, d_->xPrev, d_->q, d_->qPrev, d_->v, d_->w, d_->vOld, d_->wOld, d_->invMass, d_->invI, d_->kin, d_->shape,
-                    d_->localC, d_->localH, d_->lo, d_->hi, d_->dx, d_->dth, d_->cnt, d_->sampleStart, d_->sampleCount, d_->planeStart,
+                    d_->localC, d_->localH, d_->lo, d_->hi, d_->acc, d_->cnt, d_->sampleStart, d_->sampleCount, d_->planeStart,
                     d_->planeCount, d_->samples, d_->planes, d_->ifc, d_->fib, d_->colourList, d_->adjStart, d_->adjList, d_->mats,
                     d_->keys, d_->keysSorted, d_->ids, d_->idsSorted, d_->sortTemp, d_->pairs, d_->nPairs, d_->patches, d_->nPatches, d_->anchorKey, d_->anchorFrame, d_->anchorSlide, d_->anchorA, d_->anchorB};
     for (void* p : ptrs)
@@ -1058,8 +1067,7 @@ void PhysWorld::upload() {
     W.localH = dupload(lh);
     W.lo = dmalloc<float3>(n);
     W.hi = dmalloc<float3>(n);
-    W.dx = dmalloc<float3>(n);
-    W.dth = dmalloc<float3>(n);
+    W.acc = dmalloc<long long>(size_t(n) * 6);
     W.cnt = dmalloc<int>(n);
     // interfaces and fibres
     std::vector<DInterface> ifc;
@@ -1239,7 +1247,7 @@ void PhysWorld::step(float dt) {
         PCHECK(cudaStreamBeginCapture(st, cudaStreamCaptureModeThreadLocal));
         const int contactBlocks = std::max(1, std::min(blocks(W.maxPairs * 32, 128), 2048));
         for (int s = 0; s < S; ++s) {
-            kIntegrate<<<blocks(n), 128, 0, st>>>(W, h, s, params.maxSpeed);
+            kIntegrate<<<blocks(n), 128, 0, st>>>(W, h, s, params.maxSpeed, params.dampAlpha, params.dampCapLin, params.dampCapAng);
             solveInterfaces(h, st);
             PCHECK(cudaMemsetAsync(W.nPatches, 0, sizeof(int), st));
             kContacts<<<contactBlocks, 128, 0, st>>>(W, h, params);
@@ -1247,7 +1255,6 @@ void PhysWorld::step(float dt) {
             kApply<<<blocks(n), 128, 0, st>>>(W, params.relax);
             kVelocities<<<blocks(n), 128, 0, st>>>(W, h);
             kPatchVelocities<<<256, 128, 0, st>>>(W, h, params, params.gravity);
-            if (W.nIfc) kInterfaceDamping<<<blocks(W.nIfc), 128, 0, st>>>(W, h);
             kApplyVel<<<blocks(n), 128, 0, st>>>(W);
         }
         PCHECK(cudaStreamEndCapture(st, &W.graph));
@@ -1300,7 +1307,7 @@ void PhysWorld::profile(float dt) {
     });
     const int contactBlocks = std::max(1, std::min(blocks(W.maxPairs * 32, 128), 2048));
     for (int s = 0; s < S; ++s) {
-        timed(1, [&] { kIntegrate<<<blocks(n), 128, 0, st>>>(W, h, s, params.maxSpeed); });
+        timed(1, [&] { kIntegrate<<<blocks(n), 128, 0, st>>>(W, h, s, params.maxSpeed, params.dampAlpha, params.dampCapLin, params.dampCapAng); });
         timed(2, [&] {
             solveInterfaces(h, st);
         });
@@ -1315,7 +1322,6 @@ void PhysWorld::profile(float dt) {
         });
         timed(6, [&] { kPatchVelocities<<<256, 128, 0, st>>>(W, h, params, params.gravity); });
         timed(7, [&] {
-            if (W.nIfc) kInterfaceDamping<<<blocks(W.nIfc), 128, 0, st>>>(W, h);
             kApplyVel<<<blocks(n), 128, 0, st>>>(W);
         });
     }

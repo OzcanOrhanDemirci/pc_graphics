@@ -3,6 +3,10 @@
 > Tek kaynak durum panosu. Plan ve Özcan'ın sözleri `docs/yikim/PLAN.md`'de.
 
 ## Şu an
+- **2026-10-01 · Y2 (deprem) benim tarafımda bitti; Özcan'ın gözü bekleniyor.** Özcan (Y1 kapanışı): *"Çok iyi duruyor.
+  Devam edebilirsin."* Y2'de: **determinizm** (aynı deprem aynı binayı her koşuda aynı yıkar), **sönüm %5,3** (kütleye
+  orantılı, zemine göre), bağlı çiftlerde derin iç içe geçmeye temas, ayrılma hızı cırcırı kapandı (en hızlı parça
+  ≤ 18 m/s). Klip `captures/yikim/y2_ayni_bina_iki_siddet.mp4`: Yarımca ×1,0 (ayakta) ve ×1,5 (yumuşak kat göçmesi) yan yana.
 - **2026-10-01 · Y1 (apartman) benim tarafımda bitti; Özcan'ın gözü bekleniyor.** 5 kat (dükkânlı zemin 3,5 m + 4 × 2,9 m),
   3 × 4 açıklık (12 × 16 m), kolon 30×50, tuğla dolgu duvarlar (pencere ve balkon kapısı boşluklu), ön balkonlar, düz
   çatı + korkuluk + binaya bağlı olmayan 3 su deposu ve 3 güneş kollektörü: 3007 cisim, 6857 arayüz, 44 378 lif.
@@ -25,7 +29,7 @@
 |---|---|---|
 | Y0 Fizik çekirdeği | ✅ 10-01 | çözücü, testler, sade görüntü, iki klip; Özcan: hız ve his yeterli |
 | Y1 Bina | ✅ benim tarafım | apartman, testler, üç klip; kesit ısı haritası yapılmadı (tanı araçları yetti); Özcan'ın gözü bekleniyor |
-| Y2 Deprem | ⏳ | kayıtlar hazır (aşağıda) |
+| Y2 Deprem | ✅ benim tarafım | kayıtlar, otomatik başlangıç, determinizm, sönüm, iki şiddet klibi; Özcan'ın gözü bekleniyor |
 | Y3 Kırılma görünümü | ⏳ | |
 | Y4 Toz | ⏳ | |
 | Y5 Görüntü | ⏳ | |
@@ -80,6 +84,8 @@ kalıcı eğilme, kopma yok; ×1,5 → yumuşak kat göçmesi; Antakya ×1,0 →
 0,07·H^0,75 = 0,54 s; dolgu katılaştırır). Fizik 12-20 ms/kare (40×2), canlı için Y6'da hızlanmalı. Gerçek kayıtlar
 (en güçlü anından 15 sn önce başlar, `deprem.offset = -1`):
 
+⚠️ *Bu tablo Y1 hâlidir (sönümsüz, deterministik değil, bağlı çiftler iç içe geçebiliyordu); güncel olan Y2 tablosu aşağıda.*
+
 | Kayıt (×1) | Yatay tepe | Sonuç |
 |---|---|---|
 | 2020 Bayraklı | 0,12 g | ayakta, %0,6 öteleme, korkuluklar ve bazı duvarlar dökülür |
@@ -90,6 +96,21 @@ kalıcı eğilme, kopma yok; ×1,5 → yumuşak kat göçmesi; Antakya ×1,0 →
 
 Kolon kaldırma (zemin kat): 2 köşe kolonu → ayakta; ön hattın 4'ü → ayakta (üst katlar dolgu + çerçeve kafes kutu,
 döşeme donatısı çekme başlığı); ön iki hattın 8'i → ön yarı göçer.
+
+**Y2 (güncel, deterministik, sönüm %5,3):**
+
+| Kayıt | Sonuç (çatının zemine göre en büyük ötelemesi) |
+|---|---|
+| 2020 Bayraklı ×1 (0,12 g) | ayakta, %0,24 |
+| 1999 İzmit ×1 (0,25 g) | ayakta, %0,28 |
+| 1999 Yarımca ×1 (0,34 g) | ayakta, %0,69; duvarlar ve korkuluklar dökülür |
+| 1999 Yarımca ×1,5 | tam göçme (yumuşak kat) |
+| 2023 Antakya ×1 (0,67 g) | tam göçme |
+| 2023 Pazarcık ×1 | tam göçme |
+
+Bina testi: sönüm (serbest titreşim, tepelerin logaritmik azalması, en küçük kareler) **0,053**; periyot 0,449 s
+(sönüm değiştirmedi). Determinizm testi: aynı yığın iki koşu, fark **0 m**; bina ölçeğinde Yarımca iki koşu birebir.
+Testler 24/26.
 
 **Bilinen sınır:** uzun rijit zincirler (konsol) varsayılan ayarda yumuşak; 60×2'de 1,9× (7,5 ms). Binanın gerçek
 yumuşaklığı Y1'de doğal periyotla ölçülecek; gerekirse alt adım artar.
@@ -137,6 +158,21 @@ yumuşaklığı Y1'de doğal periyotla ölçülecek; gerekirse alt adım artar.
 - **Akış yarışı:** sıfırlayan `cudaMemset` varsayılan akışta, fizik engellemeyen akışta; ikinci dünyanın ilk karesinde
   yerçekimi 0 kaldı (kutu bir kare geç düştü). Yüklemenin sonunda aygıt eşzamanlanıyor.
 - **Eşikteki yapı kaotiktir:** aynı kayıt aynı binayı bir koşuda yıkıp bir koşuda yıkmayabilir; tek koşudan hüküm verme.
+
+## Y2'de öğrenilenler (ölçülerek)
+- **Kayan noktalı atomik toplama deterministik değil:** toplama sırası koşudan koşuya değişiyor, eşikteki bina bir koşuda
+  yıkılıp öbüründe yıkılmıyordu. Düzeltme sabit nokta (2^-40) tamsayı toplama; geniş faz çift sırası ve çapa tablosu
+  sırası sonucu değiştirmiyor (her çiftin hesabı sırasından bağımsız).
+- **Sönümün üç denemesi:** (1) arayüzde açık göreli hız sönümü katsayı ne olursa olsun %0,5-0,6'da kaldı: bir alt
+  adımda göreli hızın tamamından fazlasını alamaz, düzgün salınımda komşu iki bağın etkisi birbirini götürür (ikinci
+  fark kalır). (2) XPBD'nin kapalı rijitlik sönümü (γ = β/h) yakınsamayı yavaşlatıp binayı yumuşattı (periyot 0,45 →
+  1,43 s). (3) **Kütleye orantılı, zemine göre göreli hıza, yalnız bağlı cisimlere, ivmesi sınırlı** (0,5 m/s²,
+  0,1 rad/s²): α = 1,2 ile %5,3, periyot değişmedi, düşen enkaz serbest.
+- **Bağlı çiftte teması tamamen kapatmak yanlış:** yarı kırık bağla zemine 30 cm gömülen blok son lif kopunca 29 m/s
+  fırladı. Bağlı çiftlerde 2 cm'yi aşan iç içe geçmeye temas (sürtünmesiz).
+- **Ayrılma hızı tavanında "önceki ayrılma hızına izin" cırcır oldu** (1,5 → 11,5 → 29 m/s): iç içe geçme sürerken
+  tavan yalnız sekme hızı / 2 m/s.
+- **Yakalayıcı "bir karede 3 kat" kuralı iki karede biriken fırlamayı kaçırdı:** izleme (`test.watch`) buldu.
 
 ## Deprem kayıtları (`assets/deprem/`, `src/yikim/quake.*`)
 ESM (esm-db.eu, işlenmiş MP, hesapsız indirilebilir) ve AFAD TADAS (misafir girişi). İvme cm/s², hepsi ayrıştırılıp

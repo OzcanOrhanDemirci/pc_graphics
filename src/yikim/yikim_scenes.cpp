@@ -275,6 +275,5 @@ PhysMaterial concreteFromConfig(const Config& c) {
     m.crushStart = c.f("concrete.crush_start", m.crushStart);
     m.crushBreak = c.f("concrete.crush_break", m.crushBreak);
     m.residual = c.f("concrete.residual", m.residual);
-    m.damping = c.f("concrete.damping", m.damping);
     return m;
 }

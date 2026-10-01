@@ -27,7 +27,6 @@ struct PhysMaterial {
     float crushStart = 0.0035f;       // shortening / length at which the concrete is crushed
     float crushBreak = 0.25f;         // shortening / length at which the crushed fibre is gone
     float residual = 0.3f;            // compressive capacity left after crushing
-    float damping = 0.0f;             // 1/s: relative velocity across the interface removed per second
 };
 
 struct FiberDesc {
@@ -55,6 +54,9 @@ struct PhysParams {
     int contactIters = 4;          // per pair: averaged normal pass + patch static friction, repeated
     float margin = 0.05f;          // m: broad-phase box growth
     float maxSpeed = 120.0f;       // m/s guard
+    float dampAlpha = 1.2f;        // 1/s: mass-proportional damping relative to the ground (zeta = alpha / 2 omega)
+    float dampCapLin = 0.5f;       // m/s^2 and rad/s^2: the most it may decelerate a bonded body
+    float dampCapAng = 0.1f;
 };
 
 struct BodyInfo {     // host copy of what the renderer and the tests need

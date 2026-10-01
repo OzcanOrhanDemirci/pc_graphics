@@ -36,6 +36,7 @@ void applyParams(PhysWorld& w) {   // solver settings from scenes/yikim.cfg (and
     w.params.slop = g_cfg->f("phys.slop", w.params.slop);
     w.params.contactIters = g_cfg->i("phys.contact_iters", w.params.contactIters);
     w.params.interfaceIters = g_cfg->i("phys.interface_iters", w.params.interfaceIters);
+    w.params.dampAlpha = g_cfg->f("phys.damp_alpha", w.params.dampAlpha);
 }
 
 double kinetic(const PhysWorld& w) {
@@ -199,7 +200,6 @@ void testSlope(const Config&) {
 void testCantilever(const Config&) {
     PhysMaterial m;
     m.ft = m.fc = m.cohesion = 1e12f;   // elastic: the test measures the solver's stiffness, not the strength
-    m.damping = 0.0f;
     PhysWorld w;
     const int segs = 10;
     const float L = 0.5f, b = 0.3f, h = 0.5f;
@@ -311,6 +311,24 @@ void testEnergy(const Config&) {
     report("enerji: hic bir an baslangictan fazla", Emax <= E0 * 1.0 + 0.01 * scale, "%.3e J", Emax - E0, "<= %.2e J (%%1)", 0.01 * scale);
     report("enerji: 1 sn'de en buyuk artis / dusus enerjisi", worstRise / scale < 0.01, "%.4f", worstRise / scale, "< %.2f", 0.01);
     report("enerji: en buyuk hiz / serbest dusus hizi", vmax / std::sqrt(2 * g * hMax) < 1.1, "%.3f", vmax / std::sqrt(2 * g * hMax), "< %.1f", 1.1);
+}
+
+// determinism: the same pile run twice must end bit for bit in the same place (the accumulators are fixed point)
+void testDeterminism(const Config&) {
+    std::vector<double3> end[2];
+    for (int run = 0; run < 2; ++run) {
+        PhysWorld w;
+        w.clear();
+        buildPile(w, 40, 777u);
+        applyParams(w);
+        w.upload();
+        for (int k = 0; k < 60 * 6; ++k) w.step(kDt);
+        w.download();
+        end[run] = w.pos;
+    }
+    double worst = 0;
+    for (size_t i = 1; i < end[0].size(); ++i) worst = std::max(worst, dlength(end[0][i] - end[1][i]));
+    report("determinizm: ayni yigin iki kez, 6 sn sonra en buyuk fark", worst == 0.0, "%.3g m", worst, "%.0f m", 0.0);
 }
 
 void testFrame(const Config& cfg) {
@@ -438,6 +456,31 @@ void testBuilding(const Config& cfg) {
     for (double x : xs) amp = std::max(amp, std::fabs(x - mean));
     report("bina: 1. dogal periyot (x)", T > 0.2 && T < 1.0, "%.3f s", T, "0,2..1,0 s (formul %.2f)", 0.07 * std::pow(ap.height, 0.75));
     std::printf("      (cati genligi %.1f mm, %zu gecis)\n", amp * 1000.0, ups.size());
+    // damping: the logarithmic decrement of the swing's peaks (one peak per period, between upward crossings).
+    // Threshold written before the first run: 2..7% of critical (reinforced concrete buildings ~5%).
+    std::vector<double> peaks;
+    for (size_t c = 0; c + 1 < ups.size(); ++c) {
+        double pk = 0;
+        for (size_t k = 0; k < xs.size(); ++k)
+            if (ts[k] >= ups[c] && ts[k] < ups[c + 1]) pk = std::max(pk, xs[k] - mean);
+        peaks.push_back(pk);
+    }
+    // least-squares slope of ln(peak) per cycle: modes beating against each other make single peaks unreliable
+    double zeta = 0;
+    {
+        double sx = 0, sy = 0, sxx = 0, sxy = 0;
+        int m = 0;
+        for (size_t c = 0; c < peaks.size(); ++c)
+            if (peaks[c] > 0) {
+                const double x = double(c), y = std::log(peaks[c]);
+                sx += x; sy += y; sxx += x * x; sxy += x * y; ++m;
+            }
+        if (m >= 3) zeta = -((m * sxy - sx * sy) / (m * sxx - sx * sx)) / (2.0 * 3.14159265358979);
+    }
+    report("bina: sonum orani (serbest titresim)", zeta > 0.02 && zeta < 0.07, "%.3f", zeta, "0,02..0,07 (beton ~%.2f)", 0.05);
+    std::printf("      (tepeler:");
+    for (double pk : peaks) std::printf(" %.2f", pk * 1000.0);
+    std::printf(" mm)\n");
 }
 
 }   // namespace
@@ -447,7 +490,7 @@ int runYikimTests(const Config& cfg, const std::string& only) {
     std::printf("YIKIM fizik testleri (alt adim %d)\n", cfg.i("phys.substeps", 20));
     struct T { const char* name; void (*fn)(const Config&); };
     const T tests[] = {{"dusme", testFallTiming}, {"dusme", testFreeFall}, {"yigin", testStacks}, {"egim", testSlope},
-                       {"konsol", testCantilever}, {"mafsal", testHinge}, {"enerji", testEnergy}, {"cerceve", testFrame}, {"bina", testBuilding}};
+                       {"konsol", testCantilever}, {"mafsal", testHinge}, {"enerji", testEnergy}, {"determinizm", testDeterminism}, {"cerceve", testFrame}, {"bina", testBuilding}};
     for (const T& t : tests)
         if (only.empty() || only == t.name) t.fn(cfg);
     int fails = 0;

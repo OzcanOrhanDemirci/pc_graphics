@@ -222,6 +222,5 @@ PhysMaterial brickFromConfig(const Config& c) {
     m.crushStart = c.f("brick.crush_start", 0.003f);
     m.crushBreak = c.f("brick.crush_break", 0.1f);
     m.residual = c.f("brick.residual", 0.3f);
-    m.damping = c.f("brick.damping", 0.0f);
     return m;
 }
