@@ -3,6 +3,9 @@
 > Tek kaynak durum panosu. Her faz sonunda güncellenir; bağlam sıkıştırılınca BASLA.md ile birlikte okunur.
 
 ## Şu an
+- **2026-10-01, Özcan'ın geri bildirimi:** "teknik olarak etkileyici ama görsel olarak değil: ışık var, küp var". Kısa tur
+  (motor aynı): karanlık oda, 5 yarık, huzmelere asılı 14 kristal prizma (`crystal.count`), sıcak beyaz dengesi, güçlü
+  parlama. Yeni varsayılan kamera 0 "gökkuşağı" (`captures/FINAL_gokkusagi_dn.png`). Canlı 24 fps, durağan ~8 örnek/s.
 - **2026-10-01 · F0-F5 benim tarafımda bitti; Özcan'ın gözü bekleniyor** (F5 kapısı: "şaşırdım" ya da düzeltme listesi).
 - Gösteri: `build\stress.exe` → kahraman kare (kamera 0, prizma natürmortu) durağan modda açılır. Tuşlar `GOSTERI.md`.
 - Gönderilenler: F1_kose (F1), sheet_cv (F3 ara), hero_q4_dn (F5 aday), FINAL_prizma_dn (son kare, 8192 örnek).

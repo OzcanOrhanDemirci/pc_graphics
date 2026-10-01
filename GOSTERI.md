@@ -2,11 +2,12 @@
 
 ## Açmak
 `C:\dev\stress_test_pc\build\stress.exe` — çift tıkla ya da terminalden çalıştır. Birincil monitörde kenarlıksız tam
-ekran açılır (2560×1440), **durağan modda** başlar: görüntü her saniye ~20 örnek biriktirerek netleşir.
+ekran açılır (2560×1440), **durağan modda** başlar. İlk kare "gökkuşağı": karanlık odaya 5 yarıktan giren güneş,
+huzmelere asılı 14 kristal prizma, betona saçılan tayflar. Görüntü saniyede ~8 örnek biriktirerek netleşir.
 
-- İlk saniye: yapay zekâ gürültü gidericisiyle okunur bir görüntü.
-- ~10 saniye: temiz.
-- ~45 saniye ve sonrası: referansa çok yakın (8192 örnekten sonra gürültü giderici devreden çıkar, ham görüntü kalır).
+- İlk saniyeler: yapay zekâ gürültü gidericisiyle okunur bir görüntü.
+- ~30 saniye: temiz.
+- birkaç dakika: referansa çok yakın (8192 örnekten sonra gürültü giderici devreden çıkar, ham görüntü kalır).
 
 Bekle ve bak: ışık bıçağı, prizmanın içindeki tayf, perde duvardaki gökkuşağı, köpüklerin ince film renkleri, toz
 zerreleri. Hepsi hesaplanıyor; hiçbiri boyanmış doku değil.
@@ -14,8 +15,8 @@ zerreleri. Hepsi hesaplanıyor; hiçbiri boyanmış doku değil.
 ## Tuşlar
 | Tuş | Ne yapar |
 |---|---|
-| **Boşluk** | durağan ↔ **canlı** (canlı: su dalgalanır, köpükler ve toz süzülür, ~26-35 fps) |
-| **C** | sonraki kamera (0 prizma natürmortu, 1 alçak geniş, 2 orta, 3 köşe, 4 havuz, 5 plan) |
+| **Boşluk** | durağan ↔ **canlı** (canlı: su dalgalanır, köpükler ve toz süzülür, ~24 fps) |
+| **C** | sonraki kamera (0 gökkuşağı, 1 prizma natürmortu, 2 alçak geniş, 3 orta, 4 köşe, 5 havuz, 6 plan) |
 | **H** | gösterge aç/kapa (sol altta: fps, ms, örnek, W, sıcaklık) |
 | **S** | ekran görüntüsü → `captures/shot_*.png` + `.exr` |
 | **↑ / ↓** | pozlama ±¼ durak |

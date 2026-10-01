@@ -14,7 +14,7 @@
 #define SKY_BINS 48                   // spectral bins of the sky map, 10 nm apart starting at LAMBDA_MIN
 #define SKY_BIN_NM 10.0f
 #define MAX_PORTALS 8
-#define MAX_EMITTERS 8
+#define MAX_EMITTERS 24
 #define BEAM_PIECES 16                 // each photon beam is split into this many boxes for a tight BVH
 #define NOISE_TEX 1024                // baked noise texture size; NOISE_PERIOD gradient cells across it
 #define NOISE_PERIOD 128

@@ -280,6 +280,26 @@ Scene buildScene(const Config& cfg) {
     s.addBox(make_float3(prismPos.x - plateHalf, pedestalH - plateT, prismPos.z - plateHalf), make_float3(prismPos.x + plateHalf, pedestalH, prismPos.z + plateHalf), mConcrete);
     const float prismSide = cfg.f("prism.side", 0.20f), prismH = cfg.f("prism.height", 0.40f);
     addPrism(s, make_float3(prismPos.x, pedestalH, prismPos.z), prismSide, prismH, cfg.f("prism.yaw", 20.0f), mPrism);
+    // crystal prisms hanging in the sunbeams (like window sun-catchers): each throws its own spectrum on the walls.
+    // Yaws alternate between the two windows where every colour leaves the glass (~78 and ~82 degrees, see
+    // tools/prism_plan.py), so the rainbows land on both end walls.
+    {
+        const int nc = cfg.i("crystal.count", 0);
+        const float side = cfg.f("crystal.side", 0.09f), height = cfg.f("crystal.height", 0.22f);
+        unsigned int seed = 777u;
+        auto rnd = [&]() { seed = seed * 1664525u + 1013904223u; return (seed >> 8) * (1.0f / 16777216.0f); };
+        for (int k = 0; k < nc; ++k) {
+            const int slit = k % slitCount;
+            const float z = 0.6f + 3.4f * rnd();
+            const float y = 1.0f + 2.6f * rnd();
+            const float x = beamX(slit, z);
+            const float yaw = (k & 1 ? 78.0f : 82.0f) + (rnd() - 0.5f) * 2.0f + 120.0f * float(k % 3);
+            addPrism(s, make_float3(x, y, z), side, height, yaw, mPrism);
+            if (int(s.emitters.size()) < MAX_EMITTERS)
+                s.emitters.push_back({make_float3(x - side, y, z - side), make_float3(x + side, y + height, z + side)});
+        }
+    }
+
     // a freestanding white plaster screen catching the spectrum close to the prism (an installation piece):
     // centred screen.dist metres along screen.dir (degrees in the floor plane, 0 = +x, 90 = +z), facing back
     if (cfg.i("screen.enable", 1)) {
@@ -367,6 +387,7 @@ Scene buildScene(const Config& cfg) {
     s.hazeMax = make_float3(L, H, W);
 
     // ---- cameras
+    s.cameras.push_back({"gokkusagi", make_float3(6.5f, 1.4f, 5.4f), make_float3(0.0f, 1.7f, 2.6f), 24.0f, 4.0f, 0.0f});
     s.cameras.push_back({"prizma", make_float3(4.4f, 1.40f, 2.2f), make_float3(8.1f, 1.42f, 1.55f), 45.0f, 2.8f, 0.0f});
     s.cameras.push_back({"alcak", make_float3(2.2f, 0.55f, 6.4f), make_float3(9.5f, 1.2f, 2.0f), 28.0f, 5.6f, 0.0f});
     s.cameras.push_back({"orta", make_float3(3.4f, 1.45f, 6.2f), make_float3(9.8f, 1.05f, 2.6f), 32.0f, 4.0f, 0.0f});
