@@ -34,7 +34,9 @@ if [ ! -d glfw ]; then
 fi
 mkdir -p stb tinyexr
 [ -f stb/stb_image_write.h ] || curl -sSL -o stb/stb_image_write.h https://raw.githubusercontent.com/nothings/stb/master/stb_image_write.h
+[ -f stb/stb_easy_font.h ] || curl -sSL -o stb/stb_easy_font.h https://raw.githubusercontent.com/nothings/stb/master/stb_easy_font.h
 [ -f stb/stb_image.h ] || curl -sSL -o stb/stb_image.h https://raw.githubusercontent.com/nothings/stb/master/stb_image.h
 [ -f tinyexr/tinyexr.h ] || curl -sSL -o tinyexr/tinyexr.h https://raw.githubusercontent.com/syoyo/tinyexr/release/tinyexr.h
+for f in exr_reader.hh streamreader.hh; do [ -f tinyexr/$f ] || curl -sSL -o tinyexr/$f https://raw.githubusercontent.com/syoyo/tinyexr/release/$f; done
 [ -f tinyexr/miniz.h ] || { curl -sSL -o tinyexr/miniz.c https://raw.githubusercontent.com/syoyo/tinyexr/release/deps/miniz/miniz.c; curl -sSL -o tinyexr/miniz.h https://raw.githubusercontent.com/syoyo/tinyexr/release/deps/miniz/miniz.h; }
 echo "done"

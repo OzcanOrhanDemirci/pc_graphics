@@ -7,3 +7,4 @@ out/
 tools/smoke/out/
 *.exr
 __pycache__/
+captures/

@@ -1,0 +1,406 @@
+// "Altin saatte cam ve tas": the room, its objects and materials, generated from code.
+#include "scene.h"
+#include "shared/spectrum.h"
+
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
+#include <fstream>
+#include <sstream>
+
+// ---------------------------------------------------------------------------------------------------
+// Config
+// ---------------------------------------------------------------------------------------------------
+static std::string trim(const std::string& s) {
+    const size_t a = s.find_first_not_of(" \t\r\n"), b = s.find_last_not_of(" \t\r\n");
+    return a == std::string::npos ? std::string() : s.substr(a, b - a + 1);
+}
+bool Config::load(const std::string& path) {
+    std::ifstream in(path);
+    if (!in) return false;
+    std::string line;
+    while (std::getline(in, line)) {
+        const size_t hash = line.find('#');
+        if (hash != std::string::npos) line = line.substr(0, hash);
+        const size_t eq = line.find('=');
+        if (eq == std::string::npos) continue;
+        values[trim(line.substr(0, eq))] = trim(line.substr(eq + 1));
+    }
+    return true;
+}
+float Config::f(const std::string& key, float def) const {
+    auto it = values.find(key);
+    return it == values.end() ? def : std::stof(it->second);
+}
+float3 Config::v3(const std::string& key, float3 def) const {
+    auto it = values.find(key);
+    if (it == values.end()) return def;
+    float3 r = def;
+    std::sscanf(it->second.c_str(), "%f %f %f", &r.x, &r.y, &r.z);
+    return r;
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Mesh building
+// ---------------------------------------------------------------------------------------------------
+void Scene::addTriangle(float3 a, float3 b, float3 c, int mat) {
+    const float3 n = normalize(cross(b - a, c - a));
+    const unsigned int base = unsigned(vertices.size());
+    vertices.push_back(a); vertices.push_back(b); vertices.push_back(c);
+    normals.push_back(n); normals.push_back(n); normals.push_back(n);
+    indices.push_back(make_uint3(base, base + 1, base + 2));
+    triMaterial.push_back(mat);
+}
+void Scene::addQuad(float3 a, float3 b, float3 c, float3 d, int mat) {
+    addTriangle(a, b, c, mat);
+    addTriangle(a, c, d, mat);
+}
+// Quad whose front must face n: reorders the corners when needed.
+static void quadFacing(Scene& s, float3 a, float3 b, float3 c, float3 d, float3 n, int mat) {
+    if (dot(cross(b - a, c - a), n) >= 0.0f) s.addQuad(a, b, c, d, mat);
+    else s.addQuad(a, d, c, b, mat);
+}
+void Scene::addBox(float3 lo, float3 hi, int mat) {
+    const float3 p[8] = {{lo.x, lo.y, lo.z}, {hi.x, lo.y, lo.z}, {hi.x, hi.y, lo.z}, {lo.x, hi.y, lo.z},
+                         {lo.x, lo.y, hi.z}, {hi.x, lo.y, hi.z}, {hi.x, hi.y, hi.z}, {lo.x, hi.y, hi.z}};
+    quadFacing(*this, p[0], p[1], p[2], p[3], make_float3(0, 0, -1), mat);
+    quadFacing(*this, p[4], p[5], p[6], p[7], make_float3(0, 0, 1), mat);
+    quadFacing(*this, p[0], p[4], p[7], p[3], make_float3(-1, 0, 0), mat);
+    quadFacing(*this, p[1], p[5], p[6], p[2], make_float3(1, 0, 0), mat);
+    quadFacing(*this, p[0], p[1], p[5], p[4], make_float3(0, -1, 0), mat);
+    quadFacing(*this, p[3], p[2], p[6], p[7], make_float3(0, 1, 0), mat);
+}
+void Scene::addSlab(float3 origin, float3 u, float3 v, float3 n, float w, float h, float thickness,
+                    const std::vector<float4>& openings, int mat, int revealMat) {
+    std::vector<float> us = {0.0f, w}, vs = {0.0f, h};
+    for (const float4& o : openings) { us.push_back(o.x); us.push_back(o.z); vs.push_back(o.y); vs.push_back(o.w); }
+    std::sort(us.begin(), us.end()); us.erase(std::unique(us.begin(), us.end()), us.end());
+    std::sort(vs.begin(), vs.end()); vs.erase(std::unique(vs.begin(), vs.end()), vs.end());
+    const float3 back = n * (-thickness);
+    auto P = [&](float a, float b) { return origin + u * a + v * b; };
+    for (size_t i = 0; i + 1 < us.size(); ++i)
+        for (size_t j = 0; j + 1 < vs.size(); ++j) {
+            const float uc = 0.5f * (us[i] + us[i + 1]), vc = 0.5f * (vs[j] + vs[j + 1]);
+            bool hole = false;
+            for (const float4& o : openings) hole |= uc > o.x && uc < o.z && vc > o.y && vc < o.w;
+            if (hole) continue;
+            const float3 a = P(us[i], vs[j]), b = P(us[i + 1], vs[j]), c = P(us[i + 1], vs[j + 1]), d = P(us[i], vs[j + 1]);
+            quadFacing(*this, a, b, c, d, n, mat);
+            quadFacing(*this, a + back, b + back, c + back, d + back, -n, mat);
+        }
+    // reveals: the sides of each opening, facing into the opening (skipped where it meets the slab edge)
+    for (const float4& o : openings) {
+        const float3 a = P(o.x, o.y), b = P(o.z, o.y), c = P(o.z, o.w), d = P(o.x, o.w);
+        if (o.y > 0.0f) quadFacing(*this, a, b, b + back, a + back, v, revealMat);
+        if (o.w < h) quadFacing(*this, d, c, c + back, d + back, -v, revealMat);
+        if (o.x > 0.0f) quadFacing(*this, a, d, d + back, a + back, u, revealMat);
+        if (o.z < w) quadFacing(*this, b, c, c + back, b + back, -u, revealMat);
+    }
+    // perimeter
+    const float3 c00 = P(0, 0), c10 = P(w, 0), c11 = P(w, h), c01 = P(0, h);
+    quadFacing(*this, c00, c10, c10 + back, c00 + back, -v, mat);
+    quadFacing(*this, c01, c11, c11 + back, c01 + back, v, mat);
+    quadFacing(*this, c00, c01, c01 + back, c00 + back, -u, mat);
+    quadFacing(*this, c10, c11, c11 + back, c10 + back, u, mat);
+}
+
+static void addPortal(Scene& s, float3 origin, float3 u, float3 v, float3 n, const float4& o) {
+    Portal p{};
+    p.corner = origin + u * o.x + v * o.y;
+    p.edgeU = u * (o.z - o.x);
+    p.edgeV = v * (o.w - o.y);
+    p.normal = n;
+    p.area = length(cross(p.edgeU, p.edgeV));
+    s.portals.push_back(p);
+}
+
+// Triangular prism, vertical axis, equilateral cross-section of side `side`.
+static void addPrism(Scene& s, float3 base, float side, float height, float yawDeg, int mat) {
+    const float r = side / std::sqrt(3.0f);
+    float3 b[3], t[3];
+    for (int k = 0; k < 3; ++k) {
+        const float a = (yawDeg + 90.0f + 120.0f * k) * 3.14159265f / 180.0f;
+        b[k] = base + make_float3(r * std::cos(a), 0.0f, r * std::sin(a));
+        t[k] = b[k] + make_float3(0.0f, height, 0.0f);
+    }
+    const float3 c = base + make_float3(0, height * 0.5f, 0);
+    auto face = [&](float3 p0, float3 p1, float3 p2, float3 p3) {
+        const float3 m = (p0 + p1 + p2 + p3) * 0.25f;
+        quadFacing(s, p0, p1, p2, p3, m - c, mat);
+    };
+    for (int k = 0; k < 3; ++k) face(b[k], b[(k + 1) % 3], t[(k + 1) % 3], t[k]);
+    if (dot(cross(b[1] - b[0], b[2] - b[0]), make_float3(0, -1, 0)) >= 0) s.addTriangle(b[0], b[1], b[2], mat);
+    else s.addTriangle(b[0], b[2], b[1], mat);
+    if (dot(cross(t[1] - t[0], t[2] - t[0]), make_float3(0, 1, 0)) >= 0) s.addTriangle(t[0], t[1], t[2], mat);
+    else s.addTriangle(t[0], t[2], t[1], mat);
+}
+
+// ---------------------------------------------------------------------------------------------------
+// The room
+// ---------------------------------------------------------------------------------------------------
+static Material makeMat(int type, float3 albedoRGB, float roughness = 1.0f, float coat = 0.0f) {
+    Material m{};
+    m.type = type;
+    m.sigA = fitSigmoid(albedoRGB);
+    m.sigB = m.sigA;
+    m.roughness = roughness;
+    m.coat = coat;
+    return m;
+}
+
+Scene buildScene(const Config& cfg) {
+    Scene s;
+    const float L = 6 * 1.82f, W = 4 * 1.82f, H = 6 * 0.91f, T = cfg.f("wall.thickness", 0.25f);
+
+    // ---- materials
+    Material plaster = makeMat(MAT_DIFFUSE, cfg.v3("mat.plaster", make_float3(0.80f, 0.785f, 0.75f)));
+    plaster.p.x = 1.0f;
+    const int mPlaster = s.addMaterial(plaster);
+    Material concrete = makeMat(MAT_CONCRETE, cfg.v3("mat.concrete", make_float3(0.40f, 0.395f, 0.375f)), 0.35f, 0.25f);
+    concrete.sigB = fitSigmoid(cfg.v3("mat.concrete2", make_float3(0.34f, 0.35f, 0.35f)));
+    concrete.p = make_float4(1.82f, 0.91f, 0.0125f, 1.0f);
+    const int mConcrete = s.addMaterial(concrete);
+    Material stone = makeMat(MAT_STONE, cfg.v3("mat.floor", make_float3(0.52f, 0.51f, 0.49f)), cfg.f("mat.floor.rough", 0.045f), 1.0f);
+    stone.sigB = fitSigmoid(cfg.v3("mat.chips", make_float3(0.74f, 0.73f, 0.70f)));
+    stone.p = make_float4(0.75f, 0.018f, 0, 0);
+    stone.flags = 1;   // brass divider strips
+    const int mStone = s.addMaterial(stone);
+    Material pool = makeMat(MAT_POOL, cfg.v3("mat.pool", make_float3(0.33f, 0.34f, 0.34f)), 0.25f, 0.4f);
+    pool.sigB = fitSigmoid(make_float3(0.55f, 0.55f, 0.53f));
+    pool.p = make_float4(0.6f, 0.012f, 0, 0);
+    const int mPool = s.addMaterial(pool);
+    Material water{};
+    water.type = MAT_WATER;
+    water.iorInside = IOR_WATER;
+    water.iorOutside = IOR_AIR;
+    water.p.x = cfg.f("water.ripple", 1.0f);
+    const int mWater = s.addMaterial(water);
+    Material sf11{};
+    sf11.type = MAT_DIELECTRIC;
+    sf11.iorInside = IOR_SF11;
+    sf11.iorOutside = IOR_AIR;
+    const int mPrism = s.addMaterial(sf11);
+    Material globe = sf11;
+    globe.iorInside = IOR_BK7;
+    const int mGlobe = s.addMaterial(globe);
+    Material globeWater = sf11;
+    globeWater.iorInside = IOR_WATER;
+    globeWater.iorOutside = IOR_BK7;
+    const int mGlobeWater = s.addMaterial(globeWater);
+    Material film{};
+    film.type = MAT_FILM;
+    film.p = make_float4(cfg.f("film.top", 60.0f), cfg.f("film.bottom", 900.0f), cfg.f("film.swirl", 260.0f), 0);
+    const int mFilm = s.addMaterial(film);
+    Material brass = makeMat(MAT_METAL, make_float3(0.91f, 0.78f, 0.42f), 0.08f);
+    const int mBrass = s.addMaterial(brass);
+    (void)mBrass;
+
+    // ---- shell: floor with the pool cut out, ceiling with a skylight slot, four walls
+    const float poolX0 = cfg.f("pool.x0", 1.82f), poolX1 = cfg.f("pool.x1", 9.10f);
+    const float poolZ0 = cfg.f("pool.z0", 5.46f), poolZ1 = cfg.f("pool.z1", 7.28f - 0.30f);
+    const float poolDepth = 0.24f, waterLevel = -0.035f;
+    s.addSlab(make_float3(-T, 0, -T), make_float3(1, 0, 0), make_float3(0, 0, 1), make_float3(0, 1, 0), L + 2 * T, W + 2 * T, 0.3f,
+              {make_float4(poolX0 + T, poolZ0 + T, poolX1 + T, poolZ1 + T)}, mStone, mPool);
+    s.addQuad(make_float3(poolX0, -poolDepth, poolZ0), make_float3(poolX0, -poolDepth, poolZ1),
+              make_float3(poolX1, -poolDepth, poolZ1), make_float3(poolX1, -poolDepth, poolZ0), mPool);
+    s.addQuad(make_float3(poolX0, waterLevel, poolZ0), make_float3(poolX0, waterLevel, poolZ1),
+              make_float3(poolX1, waterLevel, poolZ1), make_float3(poolX1, waterLevel, poolZ0), mWater);
+    s.emitters.push_back({make_float3(poolX0, waterLevel - 0.01f, poolZ0), make_float3(poolX1, waterLevel + 0.01f, poolZ1)});
+
+    // ceiling: slot along the right wall
+    const float slotW = cfg.f("skylight.width", 0.30f);
+    const std::vector<float4> ceilOpen = {make_float4(T + 0.91f, T + W - slotW, T + L - 0.91f, T + W)};
+    s.addSlab(make_float3(-T, H, -T), make_float3(1, 0, 0), make_float3(0, 0, 1), make_float3(0, -1, 0), L + 2 * T, W + 2 * T, 0.35f,
+              ceilOpen, mConcrete, mConcrete);
+    for (const float4& o : ceilOpen)
+        addPortal(s, make_float3(-T, H, -T), make_float3(1, 0, 0), make_float3(0, 0, 1), make_float3(0, -1, 0), o);
+
+    // left wall (z = 0, faces +z): the sun's wall, a full-height vertical slit
+    const float slitX = cfg.f("slit.x", 6.37f), slitW = cfg.f("slit.width", 0.20f);
+    const std::vector<float4> leftOpen = {make_float4(slitX, 0.0f, slitX + slitW, H)};
+    s.addSlab(make_float3(0, 0, 0), make_float3(1, 0, 0), make_float3(0, 1, 0), make_float3(0, 0, 1), L, H, T, leftOpen, mConcrete, mConcrete);
+    for (const float4& o : leftOpen) addPortal(s, make_float3(0, 0, 0), make_float3(1, 0, 0), make_float3(0, 1, 0), make_float3(0, 0, 1), o);
+    // horizontal slit low in the left wall, optional
+    // right wall (z = W, faces -z): white plaster, receives the light
+    s.addSlab(make_float3(0, 0, W), make_float3(1, 0, 0), make_float3(0, 1, 0), make_float3(0, 0, -1), L, H, T, {}, mPlaster, mPlaster);
+    // end walls (x = 0 faces +x, x = L faces -x)
+    s.addSlab(make_float3(0, 0, -T), make_float3(0, 0, 1), make_float3(0, 1, 0), make_float3(1, 0, 0), W + 2 * T, H, T, {}, mConcrete, mConcrete);
+    s.addSlab(make_float3(L, 0, -T), make_float3(0, 0, 1), make_float3(0, 1, 0), make_float3(-1, 0, 0), W + 2 * T, H, T, {}, mPlaster, mPlaster);
+
+    // ---- the objects
+    const float3 prismPos = cfg.v3("prism.pos", make_float3(5.6f, 0.0f, 2.4f));
+    const float pedestalH = cfg.f("pedestal.height", 0.95f);
+    s.addBox(make_float3(prismPos.x - 0.22f, 0.0f, prismPos.z - 0.22f), make_float3(prismPos.x + 0.22f, pedestalH, prismPos.z + 0.22f), mConcrete);
+    const float prismSide = cfg.f("prism.side", 0.16f), prismH = cfg.f("prism.height", 0.30f);
+    addPrism(s, make_float3(prismPos.x, pedestalH, prismPos.z), prismSide, prismH, cfg.f("prism.yaw", 20.0f), mPrism);
+    s.emitters.push_back({make_float3(prismPos.x - prismSide, pedestalH, prismPos.z - prismSide),
+                          make_float3(prismPos.x + prismSide, pedestalH + prismH, prismPos.z + prismSide)});
+
+    const float3 globePos = cfg.v3("globe.pos", make_float3(6.0f, 0.0f, 1.3f));
+    const float globeR = cfg.f("globe.radius", 0.14f);
+    const float3 gc = make_float3(globePos.x, globeR + 0.001f, globePos.z);
+    s.spheres.push_back(make_float4(gc.x, gc.y, gc.z, globeR));
+    s.sphereMaterial.push_back(mGlobe);
+    s.spheres.push_back(make_float4(gc.x, gc.y, gc.z, globeR - 0.004f));
+    s.sphereMaterial.push_back(mGlobeWater);
+    s.emitters.push_back({gc - make_float3(globeR, globeR, globeR), gc + make_float3(globeR, globeR, globeR)});
+
+    // soap bubbles drifting in the light sheet
+    const float azB = cfg.f("sun.azimuth", 20.0f) * 3.14159265f / 180.0f;
+    const int nb = cfg.i("bubbles", 5);
+    for (int k = 0; k < nb; ++k) {
+        const float fz = std::fmod(0.754878f * (k + 1), 1.0f), fy = std::fmod(0.569840f * (k + 1), 1.0f);
+        const float z = 0.9f + 3.6f * fz;
+        const float x = slitX + 0.5f * slitW - std::tan(azB) * z + 0.25f * (std::fmod(0.618034f * (k + 1), 1.0f) - 0.5f);
+        const float3 c = make_float3(x, 1.3f + 1.8f * fy, z);
+        s.spheres.push_back(make_float4(c.x, c.y, c.z, 0.035f + 0.045f * std::fmod(0.43f * (k + 2), 1.0f)));
+        s.sphereMaterial.push_back(mFilm);
+    }
+
+    // ---- sun
+    const float el = cfg.f("sun.elevation", 10.0f) * 3.14159265f / 180.0f;
+    const float az = cfg.f("sun.azimuth", 20.0f) * 3.14159265f / 180.0f;
+    s.sunDir = normalize(make_float3(std::sin(az) * std::cos(el), std::sin(el), -std::cos(az) * std::cos(el)));
+
+    s.hazeMin = make_float3(0, 0, 0);
+    s.hazeMax = make_float3(L, H, W);
+
+    // ---- cameras
+    s.cameras.push_back({"giris", make_float3(0.75f, 1.55f, 4.6f), make_float3(6.0f, 1.05f, 2.4f), 32.0f, 4.0f, 0.0f});
+    s.cameras.push_back({"prizma", make_float3(2.6f, 1.25f, 4.2f), make_float3(5.2f, 1.08f, 2.4f), 50.0f, 2.8f, 0.0f});
+    s.cameras.push_back({"havuz", make_float3(10.3f, 1.6f, 6.4f), make_float3(4.0f, 1.0f, 2.6f), 28.0f, 5.6f, 0.0f});
+    return s;
+}
+
+void cameraFromPreset(const CameraPreset& p, unsigned int width, unsigned int height, Camera& cam) {
+    cam.pos = p.pos;
+    cam.fwd = normalize(p.target - p.pos);
+    cam.right = normalize(cross(cam.fwd, make_float3(0, 1, 0)));
+    cam.up = cross(cam.right, cam.fwd);
+    cam.tanHalfX = 18.0f / p.focalMm;
+    cam.tanHalfY = cam.tanHalfX * float(height) / float(width);
+    cam.lensRadius = p.fNumber > 0.0f ? p.focalMm / (2.0f * p.fNumber) * 1e-3f : 0.0f;
+    cam.focusDist = p.focusDist > 0.0f ? p.focusDist : dot(p.target - p.pos, cam.fwd);
+    cam.blades = 9;
+    cam.bladeRot = 0.3f;
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Spectral helpers (host)
+// ---------------------------------------------------------------------------------------------------
+static const float kD65[48] = {  // CIE D65, 360..830 nm, 10 nm
+    46.6383f, 52.0891f, 49.9755f, 54.6482f, 82.7549f, 91.486f, 93.4318f, 86.6823f, 104.865f, 117.008f,
+    117.812f, 114.861f, 115.923f, 108.811f, 109.354f, 107.802f, 104.79f, 107.689f, 104.405f, 104.046f,
+    100.0f, 96.3342f, 95.788f, 88.6856f, 90.0062f, 89.5991f, 87.6987f, 83.2886f, 83.6992f, 80.0268f,
+    80.2146f, 82.2778f, 78.2842f, 69.7213f, 71.6091f, 74.349f, 61.604f, 69.8856f, 75.087f, 63.5927f,
+    46.4182f, 66.8054f, 63.3828f, 64.304f, 59.4519f, 51.959f, 57.4406f, 50.7f};
+static float d65(float l) {
+    const float x = std::clamp((l - 360.0f) / 10.0f, 0.0f, 46.999f);
+    const int i = int(x);
+    return kD65[i] + (kD65[i + 1] - kD65[i]) * (x - i);
+}
+// XYZ of a reflectance spectrum under D65, normalised so that a perfect white has Y = 1.
+template <class F> static float3 reflectanceXYZ(F refl) {
+    double X = 0, Y = 0, Z = 0, N = 0;
+    for (float l = 360.0f; l <= 830.0f; l += 1.0f) {
+        const float3 c = cieXYZ(l);
+        const double e = d65(l), r = refl(l);
+        X += e * r * c.x; Y += e * r * c.y; Z += e * r * c.z; N += e * c.y;
+    }
+    return make_float3(float(X / N), float(Y / N), float(Z / N));
+}
+
+float3 fitSigmoid(float3 target) {
+    target = make_float3(std::clamp(target.x, 0.001f, 0.999f), std::clamp(target.y, 0.001f, 0.999f), std::clamp(target.z, 0.001f, 0.999f));
+    auto residual = [&](float3 c) {
+        const float3 rgb = xyzToLinearSRGB(reflectanceXYZ([&](float l) { return sigmoidSpectrum(c, l); }));
+        return rgb - target;
+    };
+    const float lum = 0.2126f * target.x + 0.7152f * target.y + 0.0722f * target.z;
+    const float s = 2.0f * lum - 1.0f;
+    float3 c = make_float3(0.0f, 0.0f, s / std::sqrt(std::max(1e-6f, 1.0f - s * s)));
+    for (int it = 0; it < 40; ++it) {
+        const float3 r = residual(c);
+        if (dot(r, r) < 1e-10f) break;
+        // numeric Jacobian
+        float J[3][3];
+        const float h = 1e-3f;
+        for (int k = 0; k < 3; ++k) {
+            float3 cp = c;
+            (&cp.x)[k] += h;
+            const float3 d = (residual(cp) - r) * (1.0f / h);
+            J[0][k] = d.x; J[1][k] = d.y; J[2][k] = d.z;
+        }
+        // solve J dx = -r (Cramer)
+        const float det = J[0][0] * (J[1][1] * J[2][2] - J[1][2] * J[2][1]) - J[0][1] * (J[1][0] * J[2][2] - J[1][2] * J[2][0]) +
+                          J[0][2] * (J[1][0] * J[2][1] - J[1][1] * J[2][0]);
+        if (std::fabs(det) < 1e-12f) break;
+        float3 dx;
+        const float b[3] = {-r.x, -r.y, -r.z};
+        for (int k = 0; k < 3; ++k) {
+            float M[3][3];
+            for (int a = 0; a < 3; ++a)
+                for (int bb = 0; bb < 3; ++bb) M[a][bb] = bb == k ? b[a] : J[a][bb];
+            const float dk = M[0][0] * (M[1][1] * M[2][2] - M[1][2] * M[2][1]) - M[0][1] * (M[1][0] * M[2][2] - M[1][2] * M[2][0]) +
+                             M[0][2] * (M[1][0] * M[2][1] - M[1][1] * M[2][0]);
+            (&dx.x)[k] = dk / det;
+        }
+        // damped step
+        float step = 1.0f;
+        const float r0 = dot(r, r);
+        for (int t = 0; t < 10; ++t) {
+            const float3 cn = c + dx * step;
+            const float3 rn = residual(cn);
+            if (dot(rn, rn) < r0) { c = cn; break; }
+            step *= 0.5f;
+        }
+    }
+    return c;
+}
+
+bool spectralSelfTest(std::string& report) {
+    std::ostringstream o;
+    bool ok = true;
+    auto check = [&](const char* name, double got, double want, double tol) {
+        const bool pass = std::fabs(got - want) <= tol;
+        ok &= pass;
+        char line[256];
+        std::snprintf(line, sizeof(line), "  %-34s %10.5f  (beklenen %10.5f +-%g)  %s\n", name, got, want, tol, pass ? "OK" : "HATA");
+        o << line;
+    };
+    // 1. D65 white point through the CMF fit
+    double X = 0, Y = 0, Z = 0, Yint = 0;
+    for (float l = 360.0f; l <= 830.0f; l += 1.0f) {
+        const float3 c = cieXYZ(l);
+        X += d65(l) * c.x; Y += d65(l) * c.y; Z += d65(l) * c.z; Yint += c.y;
+    }
+    check("D65 x", X / (X + Y + Z), 0.31271, 0.0015);
+    check("D65 y", Y / (X + Y + Z), 0.32902, 0.0015);
+    check("CMF ybar integrali (nm)", Yint, 106.857, 0.2);
+    const float3 w = xyzToLinearSRGB(make_float3(float(X / Y), 1.0f, float(Z / Y)));
+    check("D65 -> sRGB R", w.x, 1.0, 0.01);
+    check("D65 -> sRGB G", w.y, 1.0, 0.01);
+    check("D65 -> sRGB B", w.z, 1.0, 0.01);
+    // 2. Sellmeier at Fraunhofer F (486.13), d (587.56), C (656.27): catalogue values
+    check("BK7 nF", iorOf(IOR_BK7, 486.13f), 1.52238, 2e-4);
+    check("BK7 nd", iorOf(IOR_BK7, 587.56f), 1.51680, 2e-4);
+    check("BK7 nC", iorOf(IOR_BK7, 656.27f), 1.51432, 2e-4);
+    check("SF11 nF", iorOf(IOR_SF11, 486.13f), 1.80645, 3e-4);
+    check("SF11 nd", iorOf(IOR_SF11, 587.56f), 1.78472, 3e-4);
+    check("SF11 nC", iorOf(IOR_SF11, 656.27f), 1.77599, 3e-4);
+    check("su nD (589.3)", iorOf(IOR_WATER, 589.3f), 1.3330, 1.5e-3);
+    // 3. Fresnel and thin film
+    check("Fresnel n=1.5 dik gelis", fresnelDielectric(1.0f, 1.5f), 0.04, 1e-5);
+    check("ince film d=0 -> R", thinFilmReflectance(550.0f, 0.0f, 1.333f, 1.0f), 0.0, 1e-6);
+    check("ince film d=lambda/2n -> R", thinFilmReflectance(550.0f, 550.0f / (2 * 1.333f), 1.333f, 1.0f), 0.0, 1e-5);
+    check("ince film d=lambda/4n -> R", thinFilmReflectance(550.0f, 550.0f / (4 * 1.333f), 1.333f, 1.0f), 0.0784, 2e-3);
+    // 4. sigmoid fit round trip
+    const float3 tgt = make_float3(0.8f, 0.25f, 0.1f);
+    const float3 c = fitSigmoid(tgt);
+    const float3 got = xyzToLinearSRGB(reflectanceXYZ([&](float l) { return sigmoidSpectrum(c, l); }));
+    check("sigmoid uydurma R", got.x, tgt.x, 0.01);
+    check("sigmoid uydurma G", got.y, tgt.y, 0.01);
+    check("sigmoid uydurma B", got.z, tgt.z, 0.01);
+    report = o.str();
+    return ok;
+}

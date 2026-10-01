@@ -1,0 +1,10 @@
+// PNG / EXR writing and PNG reading (stb, tinyexr).
+#pragma once
+#include <string>
+#include <vector>
+
+bool writePNG(const std::string& path, int w, int h, const unsigned char* rgba);
+// Linear float RGB(A) image; channels 3 or 4.
+bool writeEXR(const std::string& path, int w, int h, int channels, const float* data);
+bool readPNGGray(const std::string& path, int& w, int& h, std::vector<unsigned char>& out);
+bool readEXR(const std::string& path, int& w, int& h, std::vector<float>& rgba);
