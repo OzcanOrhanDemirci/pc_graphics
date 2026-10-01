@@ -28,6 +28,8 @@ add_library(pc_core OBJECT
     src/yikim/yikim_scenes.cpp
     src/yikim/yikim_tests.cpp
     src/yikim/yikim_app.cpp
+    src/yikim/yikim_renderer.cpp
+    src/yikim/quake.cpp
     ${TP}/tinyexr/miniz.c)
 add_executable(pc_graphics src/main.cpp $<TARGET_OBJECTS:pc_core>)
 add_executable(fener src/main.cpp $<TARGET_OBJECTS:pc_core>)

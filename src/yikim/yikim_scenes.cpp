@@ -136,14 +136,14 @@ int buildSlope(PhysWorld& w, float angleDeg) {
     return w.addBody(polyBox(top + ay * 0.5, d3(0.5, 0.5, 0.5), ax, ay, az), 2500.0f, false, PK_OTHER, 0xc08040);
 }
 
-int buildCantilever(PhysWorld& w, int segs, float L, float b, float h, const PhysMaterial& m) {
+int buildCantilever(PhysWorld& w, int segs, float L, float b, float h, const PhysMaterial& m, float rho, float density) {
     w.clear();
     const int mat = w.addMaterial(m);
     const double y0 = 5.0;
     const int wall = w.addBody(polyAabb(d3(-1.0, y0 - 1.5, -1.0), d3(0.0, y0 + 1.5, 1.0)), 2500.0f, true, PK_OTHER, 0x707070);
     int prev = wall;
     for (int i = 0; i < segs; ++i) {
-        const int body = w.addBody(polyAabb(d3(i * L, y0 - h * 0.5, -b * 0.5), d3((i + 1) * L, y0 + h * 0.5, b * 0.5)), 2500.0f, false, PK_BEAM,
+        const int body = w.addBody(polyAabb(d3(i * L, y0 - h * 0.5, -b * 0.5), d3((i + 1) * L, y0 + h * 0.5, b * 0.5)), density, false, PK_BEAM,
                                    0xa8a49c);
         InterfaceDesc d;
         d.a = prev;
@@ -151,7 +151,7 @@ int buildCantilever(PhysWorld& w, int segs, float L, float b, float h, const Phy
         d.n = make_float3(1, 0, 0);
         d.len = i == 0 ? L * 0.5f : L;   // at the wall only the beam's half deforms
         d.mat = mat;
-        d.fibers = fibreGrid(make_float3(float(i * L), float(y0), 0.0f), make_float3(0, 1, 0), make_float3(0, 0, 1), h * 0.5f, b * 0.5f, 0.0f);
+        d.fibers = fibreGrid(make_float3(float(i * L), float(y0), 0.0f), make_float3(0, 1, 0), make_float3(0, 0, 1), h * 0.5f, b * 0.5f, rho * b * h);
         w.addInterface(d);
         prev = body;
     }

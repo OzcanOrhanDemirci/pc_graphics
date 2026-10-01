@@ -234,6 +234,53 @@ void testCantilever(const Config&) {
     std::printf("      (sehim %.2f mm, frekans %.2f Hz, son 2 sn genlik %.2f mm)\n", -mean * 1000.0, freq, amp * 1000.0);
 }
 
+// a plastic hinge: a 6 m cantilever (0.3 x 0.5, C16, S220, 0.8% steel) under its own weight. Root moment
+// q L^2 / 2 = 66 kN m against the fibre section's yield moment ~38 kN m: the root must yield, the tip sag on and on,
+// and the bars snap. A 3 m one (16.5 kN m) must hold with only elastic sag.
+void testHinge(const Config& cfg) {
+    const PhysMaterial mat = concreteFromConfig(cfg);
+    for (int run = 0; run < 2; ++run) {
+        PhysWorld w;
+        const int segs = run == 0 ? 12 : 6;
+        const int tip = buildCantilever(w, segs, 0.5f, 0.3f, 0.5f, mat, 0.008f);
+        applyParams(w);
+        w.upload();
+        const double y0 = w.pos[tip].y;
+        double sag1 = 0, sag3 = 0;
+        for (int k = 0; k < 60 * 3; ++k) {
+            w.step(kDt);
+            if (k == 59) { w.download(); sag1 = y0 - w.pos[tip].y; }
+        }
+        w.download();
+        sag3 = y0 - w.pos[tip].y;
+        const PhysStats st = w.stats();
+        const double L = segs * 0.5, q = 2500.0 * 9.81 * 0.15;
+        std::printf("      konsol %.0f m: kok momenti %.1f kN m; uc cokmesi 1 sn %.3f m, 3 sn %.3f m; catlak %d, kirik %d lif\n", L, q * L * L / 2000.0, sag1,
+                    sag3, st.cracked, st.broken);
+        if (run == 0) report("mafsal: 6 m konsol (66 kN m > ~38) 3 sn'de duser", sag3 > 1.0, "%.3f m", sag3, "> %.1f m", 1.0);
+        else report("mafsal: 3 m konsol (16,5 kN m < ~38) durur", sag3 < 0.02, "%.3f m", sag3, "< %.2f m", 0.02);
+    }    // a slab strip 1 m wide, 0.12 m thick, 0.4% steel, 4500 kg/m^3 (with finishes and contents), cantilevered 2 m:
+    // 10.6 kN m at the root against ~3.7 kN m of the fibre section: it must fall. 0.6 m (1.0 kN m) must hold.
+    for (int run = 0; run < 2; ++run) {
+        PhysWorld w;
+        const int segs = run == 0 ? 4 : 1;
+        const float L = run == 0 ? 0.5f : 0.6f;
+        const int tip = buildCantilever(w, segs, L, 1.0f, 0.12f, mat, 0.004f, 4500.0f);
+        applyParams(w);
+        w.upload();
+        const double y0 = w.pos[tip].y;
+        for (int k = 0; k < 60 * 3; ++k) w.step(kDt);
+        w.download();
+        const double sag = y0 - w.pos[tip].y;
+        const PhysStats st = w.stats();
+        const double Lt = segs * L, q = 4500.0 * 9.81 * 0.12;
+        std::printf("      doseme konsolu %.1f m: kok momenti %.1f kN m; uc cokmesi 3 sn %.3f m; catlak %d, kirik %d lif\n", Lt, q * Lt * Lt / 2000.0, sag,
+                    st.cracked, st.broken);
+        if (run == 0) report("mafsal: 2 m doseme konsolu (10,6 kN m > ~3,7) duser", sag > 1.0, "%.3f m", sag, "> %.1f m", 1.0);
+        else report("mafsal: 0,6 m doseme konsolu (1 kN m) durur", sag < 0.02, "%.3f m", sag, "< %.2f m", 0.02);
+    }
+}
+
 void testEnergy(const Config&) {
     PhysWorld w;
     w.clear();
@@ -346,7 +393,7 @@ int runYikimTests(const Config& cfg, const std::string& only) {
     std::printf("YIKIM fizik testleri (alt adim %d)\n", cfg.i("phys.substeps", 20));
     struct T { const char* name; void (*fn)(const Config&); };
     const T tests[] = {{"dusme", testFallTiming}, {"dusme", testFreeFall}, {"yigin", testStacks}, {"egim", testSlope},
-                       {"konsol", testCantilever}, {"enerji", testEnergy}, {"cerceve", testFrame}};
+                       {"konsol", testCantilever}, {"mafsal", testHinge}, {"enerji", testEnergy}, {"cerceve", testFrame}};
     for (const T& t : tests)
         if (only.empty() || only == t.name) t.fn(cfg);
     int fails = 0;

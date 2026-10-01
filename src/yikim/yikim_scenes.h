@@ -36,7 +36,8 @@ void buildFreeFall(PhysWorld& w, float drop);
 void buildTower(PhysWorld& w, int n, float size);
 void buildPyramid(PhysWorld& w, int base, float size, float x0);
 int buildSlope(PhysWorld& w, float angleDeg);                         // returns the block's body
-int buildCantilever(PhysWorld& w, int segments, float segLen, float b, float h, const PhysMaterial& m);   // returns the tip body
+int buildCantilever(PhysWorld& w, int segments, float segLen, float b, float h, const PhysMaterial& m, float rho = 0.0f,
+                    float density = 2500.0f);   // returns the tip body
 void buildPile(PhysWorld& w, int count, unsigned seed);
 // the reinforced-concrete frame; returns the pieces (body indices filled in)
 std::vector<Piece> buildFrame(PhysWorld& w, const FrameSpec& spec, const PhysMaterial& concrete);

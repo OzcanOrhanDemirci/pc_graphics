@@ -157,7 +157,7 @@ __global__ void kIntegrate(DevWorld W, float h, float g, int substep, float maxS
 // interfaces (one thread per interface of a colour: no two share a moving body)
 // ------------------------------------------------------------------------------------------------------------
 // One interface per thread (a colour's interfaces share no moving body). The fibres are solved in order
-// (Gauss-Seidel), each XPBD with a fresh multiplier: dl = -C / (w + compliance / h^2). Capacities clamp it; what the
+// (Gauss-Seidel), each XPBD: dl = -(C + at lambda) / (w + at), lambda accumulated over the substep's passes. Capacities clamp it; what the
 // clamp leaves unresolved becomes permanent (plastic) offset, so a yielding fibre keeps carrying its capacity.
 // The two bodies' rotations, world inverse inertias and the interface frame are taken once per interface; within
 // the interface the corrections are tracked as small displacements and rotation vectors (first order) and applied
@@ -197,7 +197,7 @@ struct IfcBody {         // one side of an interface during its solve
     __device__ float3 moved(float3 r) const { return dx + cross(dth, r); }
 };
 
-__global__ void kSolveInterfaces(DevWorld W, const int* list, int count, float h) {
+__global__ void kSolveInterfaces(DevWorld W, const int* list, int count, float h, int iter) {
     const int t = blockIdx.x * blockDim.x + threadIdx.x;
     if (t >= count) return;
     const int k = list[t];
@@ -219,43 +219,49 @@ __global__ void kSolveInterfaces(DevWorld W, const int* list, int count, float h
     for (int f = I.first; f < I.first + I.count; ++f) {
         DFiber F = W.fib[f];
         if (F.flags & F_BROKEN) continue;
+        // the multipliers the earlier passes of this substep applied (XPBD accumulates them; capacities bound the
+        // total: measured, bounding each pass alone let two passes carry twice the yield moment)
+        const float lam0 = iter == 0 ? 0.0f : -F.force.x * hh;
+        const float l10 = iter == 0 ? 0.0f : -F.force.y * hh, l20 = iter == 0 ? 0.0f : -F.force.z * hh;
         const float3 ra = A.R.mul(F.rA), rb = B.R.mul(F.rB);
         const float wn = A.w(ra, n) + B.w(rb, n);
         // ---- normal (axial) part
         float3 sep = xab + rb + B.moved(rb) - ra - A.moved(ra);
         const float C = dot(sep, n) - F.plastic.x;
-        float fn = 0.0f;   // total normal force, >0 tension
+        float fn = 0.0f;   // total normal force this substep, >0 tension
         if (wn > 0.0f) {
             float at = 1.0f / (F.kn * hh);
-            float lam = -C / (wn + at);
-            fn = -lam / hh;
+            float dl = -(C + at * lam0) / (wn + at);
+            float lamT = lam0 + dl;
+            fn = -lamT / hh;
             if (fn > 0.0f && !(F.flags & F_CRACKED) && fn > F.crackF) F.flags |= F_CRACKED;
             if (fn > 0.0f && (F.flags & F_CRACKED)) {
                 if (F.kSteel <= 0.0f) {
                     // an open crack without bars: no tension, and an opening is a gap, not a permanent offset
-                    lam = 0.0f;
+                    lamT = 0.0f;
                     fn = 0.0f;
                     if (C > M.openBreak) F.flags |= F_BROKEN;
                 } else {
                     at = 1.0f / (F.kSteel * hh);
-                    lam = -C / (wn + at);
-                    fn = -lam / hh;
+                    lamT = lam0 - (C + at * lam0) / (wn + at);
+                    fn = -lamT / hh;
                     if (fn > F.capSteel) {   // the bars yield
                         fn = F.capSteel;
-                        lam = -fn * hh;
-                        F.plastic.x += C + (wn + at) * lam;
+                        lamT = -fn * hh;
+                        F.plastic.x += C + wn * (lamT - lam0) + at * lamT;
                     }
                 }
             } else if (fn < 0.0f) {
                 const float cap = (F.flags & F_CRUSHED) ? F.capC * M.residual : F.capC;
                 if (-fn > cap) {   // the concrete crushes
                     fn = -cap;
-                    lam = cap * hh;
-                    F.plastic.x += C + (wn + at) * lam;
+                    lamT = cap * hh;
+                    F.plastic.x += C + wn * (lamT - lam0) + at * lamT;
                     if (F.plastic.x < -M.crushStart * F.len) F.flags |= F_CRUSHED;
                 }
             }
-            const float3 p = n * lam;   // on b; -p on a
+            dl = lamT - lam0;
+            const float3 p = n * dl;   // on b; -p on a
             B.push(rb, p);
             A.push(ra, p * -1.0f);
         }
@@ -265,27 +271,29 @@ __global__ void kSolveInterfaces(DevWorld W, const int* list, int count, float h
         if (!(F.flags & F_BROKEN)) {
             sep = xab + rb + B.moved(rb) - ra - A.moved(ra);
             const float c1 = dot(sep, t1) - F.plastic.y, c2 = dot(sep, t2) - F.plastic.z;
-            const float cl = sqrtf(c1 * c1 + c2 * c2);
-            if (cl > 1e-14f) {
-                const float3 dir = (t1 * c1 + t2 * c2) * (1.0f / cl);
+            const float at = 1.0f / (F.ks * hh);
+            const float g1 = c1 + at * l10, g2 = c2 + at * l20;
+            const float gl = sqrtf(g1 * g1 + g2 * g2);
+            if (gl > 1e-14f) {
+                const float3 dir = (t1 * g1 + t2 * g2) * (1.0f / gl);
                 const float ws = A.w(ra, dir) + B.w(rb, dir);
                 if (ws > 0.0f) {
-                    const float at = 1.0f / (F.ks * hh);
-                    float lam = -cl / (ws + at);
-                    const float S = -lam / hh;
+                    float n1 = l10 - g1 / (ws + at), n2 = l20 - g2 / (ws + at);   // total multipliers
+                    const float S = sqrtf(n1 * n1 + n2 * n2) / hh;
                     const float cap = ((F.flags & F_CRACKED) ? 0.0f : F.capCoh) + M.mu * fmaxf(0.0f, -fn) + F.capDowel;
                     if (S > cap) {   // slips: cohesion is gone, friction and dowels hold what they can
-                        lam = -cap * hh;
-                        const float slip = cl + (ws + at) * lam;
-                        F.plastic.y += slip * c1 / cl;
-                        F.plastic.z += slip * c2 / cl;
+                        const float sc = cap / S;
+                        n1 *= sc;
+                        n2 *= sc;
+                        F.plastic.y += c1 + ws * (n1 - l10) + at * n1;
+                        F.plastic.z += c2 + ws * (n2 - l20) + at * n2;
                         F.flags |= F_CRACKED;
                     }
-                    const float3 p = dir * lam;
+                    const float3 p = t1 * (n1 - l10) + t2 * (n2 - l20);
                     B.push(rb, p);
                     A.push(ra, p * -1.0f);
-                    F.force.y = -lam / hh * c1 / cl;
-                    F.force.z = -lam / hh * c2 / cl;
+                    F.force.y = -n1 / hh;
+                    F.force.z = -n2 / hh;
                 }
             }
             if (F.plastic.y * F.plastic.y + F.plastic.z * F.plastic.z > M.slipBreak * M.slipBreak) F.flags |= F_BROKEN;
@@ -1184,7 +1192,7 @@ void PhysWorld::solveInterfaces(float h, void* stream) {
         for (int k = 0; k < C; ++k) {
             const int c = k;
             kSolveInterfaces<<<blocks(int(colours_[c].size()), 64), 64, 0, static_cast<cudaStream_t>(stream)>>>(W, W.colourList + colourOffset_[c],
-                                                                                                             int(colours_[c].size()), h);
+                                                                                                             int(colours_[c].size()), h, it);
         }
 }
 
@@ -1328,6 +1336,28 @@ void PhysWorld::breakBody(int b) {
             PCHECK(cudaMemcpy(d_->fib + ifc[k].first, f.data(), f.size() * sizeof(DFiber), cudaMemcpyHostToDevice));
         }
     PCHECK(cudaMemcpy(d_->ifc, ifc.data(), ifc.size() * sizeof(DInterface), cudaMemcpyHostToDevice));
+}
+
+void PhysWorld::setVelocity(int b, float3 v, float3 w) {
+    if (!uploaded_ || b <= 0 || b >= d_->n) return;
+    PCHECK(cudaMemcpy(d_->v + b, &v, sizeof(float3), cudaMemcpyHostToDevice));
+    PCHECK(cudaMemcpy(d_->w + b, &w, sizeof(float3), cudaMemcpyHostToDevice));
+}
+
+std::vector<float> PhysWorld::damage() {
+    std::vector<float> dmg(info.size(), 0.0f), cnt(info.size(), 0.0f);
+    if (!uploaded_ || !d_->nFib) return dmg;
+    std::vector<DFiber> fib(d_->nFib);
+    PCHECK(cudaMemcpy(fib.data(), d_->fib, fib.size() * sizeof(DFiber), cudaMemcpyDeviceToHost));
+    size_t f = 0;
+    for (const InterfaceDesc& d : interfaceDescs)
+        for (size_t k = 0; k < d.fibers.size(); ++k, ++f) {
+            const float x = (fib[f].flags & F_BROKEN) ? 1.0f : (fib[f].flags & (F_CRACKED | F_CRUSHED)) ? 0.5f : 0.0f;
+            dmg[d.a] += x; dmg[d.b] += x;
+            cnt[d.a] += 1.0f; cnt[d.b] += 1.0f;
+        }
+    for (size_t i = 0; i < dmg.size(); ++i) dmg[i] = cnt[i] > 0 ? dmg[i] / cnt[i] : 0.0f;
+    return dmg;
 }
 
 PhysStats PhysWorld::stats() {

@@ -86,6 +86,8 @@ public:
     void profile(float dt);        // one frame kernel by kernel (events), printed
     void setGroundMotion(double3 pos) { groundTarget_ = pos; }   // where the ground is at the end of the next step
     void breakBody(int b);         // every interface of the body breaks (interaction)
+    void setVelocity(int b, float3 v, float3 w);   // a push (interaction, scenarios)
+    std::vector<float> damage();   // per body: share of its interfaces' fibres cracked or broken (display)
     PhysStats stats();             // counts (reads the fibres back: not every frame)
     // per fibre, in interfaceDescs order: flags (1 cracked, 2 crushed, 4 broken) and last force (interface frame:
     // x normal, >0 tension; y, z shear), N
