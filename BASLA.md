@@ -40,6 +40,12 @@ gürültüsüz, kenar yumuşatmalı, fiziksel olarak doğru ışık; canlı modd
 
 ## 3 · Özcan ve çalışma biçimi
 
+- 🔴 **Çalışma kipi: OTONOM, proje bitene kadar.** Özcan (2026-10-01): *"Yeni oturumda grafik devam yazayım, sen
+  projeyi bitirene kadar çalış."* Tetikleyici **"grafik devam"**. F0'dan F5'e kendin ilerle; faz sonlarında ekran
+  görüntüsünü gönder ama **onay bekleyip durma**. Yalnız gerçekten Özcan'ın vermesi gereken bir karar varsa sor;
+  yanıt gelmezse en iyi yargınla devam et ve kararı `docs/DURUM.md`'ye yaz. Bitirince: gösteri, `docs/SINIRLAR.md`
+  raporu, hafıza hasadı.
+
 - Özcan Orhan Demirci, İzmir, Flutter/Android geliştirici, donanım meraklısı. İletişim **Türkçe**. Hafıza deposu
   `C:/dev/claude_memory/hafiza/` (indeks otomatik yüklenir); oturum başında `git pull`, ritüel orada yazılı.
 - **İşe başlamadan oku:** hafızadaki `genel/feedback_gpu_ve_grafik.md` (bir önceki grafik projesinin dersleri:
