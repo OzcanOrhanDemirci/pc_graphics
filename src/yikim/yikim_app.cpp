@@ -55,9 +55,8 @@ struct YikimApp {
     std::string scenario = "kolon";
     QuakeRecord quake;
     bool quakeOn = false;
-    double quakeT0 = 0;          // scenario time at which the record starts playing
-    double quakeOffset = 0;      // seconds of the record skipped (its quiet start)
-    float quakeScale = 1.0f;
+    int quakeMag = 0;            // the magnitude playing (quake.h)
+    double quakeT0 = 0;          // scenario time at which it starts
     double3 groundBase = {0, 0, 0};
     bool removed = false;
 
@@ -170,36 +169,31 @@ struct YikimApp {
             }
             removed = true;
         }
-        if (scenario == "sarsinti" && !quakeOn && t >= cfg.f("deprem.time", 1.0f)) startQuake(cfg.i("deprem.record", 0), cfg.f("deprem.scale", 1.0f), t);
+        if (scenario == "sarsinti" && !quakeOn && quakeMag == 0 && t >= cfg.f("deprem.time", 1.0f)) startQuake(cfg.i("deprem.magnitude", 7), t);
         driveQuake(t);
     }
-    // the record starts playing at scenario time t, from deprem.offset s of the record, or (negative) 15 s before its
-    // strongest moment; the ground keeps where it stands when a quake begins (the record is played relative to it)
-    bool startQuake(int record, float scale, double t) {
+    // a quake of this magnitude (quake.h) starts at scenario time t; the ground moves relative to where it stands
+    bool startQuake(int magnitude, double t) {
         std::string err;
-        if (!quakeLoad(record, root, quake, err)) {
-            std::printf("deprem kaydi yuklenemedi: %s\n", err.c_str());
+        if (!quakeLoadMagnitude(magnitude, root, quake, err)) {
+            std::printf("deprem yuklenemedi: %s\n", err.c_str());
             return false;
         }
         quakeOn = true;
+        quakeMag = magnitude;
         quakeT0 = t;
-        quakeOffset = cfg.f("deprem.offset", -1.0f);
-        if (quakeOffset < 0) quakeOffset = std::max(0.0, quake.tPeak - 15.0);
-        quakeScale = scale;
         groundBase = world.groundPos();
-        std::printf("t=%.2f s: deprem %s, yatay tepe ivme %.2f g (kaydin %.1f. sn), x%.2f, kaydin %.1f. saniyesinden\n", t, quake.name.c_str(),
-                    quake.pga / 9.81, quake.tPeak, quakeScale, quakeOffset);
+        std::printf("t=%.2f s: deprem %s, yatay tepe ivme %.3f g (%.1f. sn), %.1f sn\n", t, quake.name.c_str(), quake.pga / 9.81, quake.tPeak,
+                    quake.duration());
         return true;
     }
-    void stopQuake() { quakeOn = false; }   // the ground stays where the record left it
+    void stopQuake() { quakeOn = false; }   // the ground stays where it was
+    double quakeProgress(double t) const { return quakeOn ? std::min(1.0, (t - quakeT0) / std::max(quake.duration(), 1e-6)) : 0.0; }
     void driveQuake(double t) {
         if (!quakeOn) return;
-        const double tr = t - quakeT0 + quakeOffset;
-        if (tr > quake.duration()) { quakeOn = false; return; }
-        // fade in over a second so the ground does not jump to the record's displacement at the offset
-        const double3 d = quake.displacement(tr) - quake.displacement(quakeOffset);
-        const double fade = std::min(1.0, (t - quakeT0) / 1.0);
-        world.setGroundMotion(groundBase + d * (quakeScale * fade));
+        const double tr = t - quakeT0;
+        if (tr > quake.duration()) { quakeOn = false; world.setGroundMotion(groundBase); return; }
+        world.setGroundMotion(groundBase + quake.displacement(tr));
     }
     // an explosive charge at p: bodies whose centre is within r are gone, those within 3r are thrown outwards
     int blast(float3 p, float r) {
@@ -573,8 +567,7 @@ static int runWindow(YikimApp& app, bool windowed, bool autotest) {
     const float speeds[3] = {1.0f, 0.25f, 0.1f};
     int speedIdx = 0;
     bool paused = false, hud = true;
-    int record = app.cfg.i("deprem.record", 0);
-    float scale = app.cfg.f("deprem.scale", 1.0f);
+    int magnitude = app.cfg.i("deprem.magnitude", 6);
     const unsigned spp = unsigned(app.cfg.i("display.spp", 2));
     app.renderer.denoiseMode = app.cfg.i("display.denoise", 1);
     app.renderer.filterPasses(app.cfg.i("display.filter_passes", 4));
@@ -626,17 +619,15 @@ static int runWindow(YikimApp& app, bool windowed, bool autotest) {
             speedIdx = (speedIdx + 1) % 3;
             say(speedIdx == 0 ? "normal hiz" : speedIdx == 1 ? "agir cekim x0.25" : "agir cekim x0.1");
         }
-        for (int r = 0; r < quakeCount() && r < 9; ++r)
-            if (ypressed(GLFW_KEY_1 + r)) {
-                record = r;
-                say("kayit: " + quakeName(r) + (app.quakeOn ? " (Bosluk ile baslat)" : ""));
+        for (int m = quakeMagnitudeMin(); m <= quakeMagnitudeMax(); ++m)
+            if (ypressed(GLFW_KEY_0 + m)) {
+                magnitude = m;
+                say("buyukluk " + std::to_string(m) + (app.quakeOn ? " (Bosluk ile baslat)" : ""));
                 if (app.quakeOn) app.stopQuake();
             }
-        if (ypressed(GLFW_KEY_EQUAL) || ypressed(GLFW_KEY_KP_ADD)) { scale = std::min(4.0f, scale + 0.25f); app.quakeScale = scale; say("siddet x" + std::to_string(scale).substr(0, 4)); }
-        if (ypressed(GLFW_KEY_MINUS) || ypressed(GLFW_KEY_KP_SUBTRACT)) { scale = std::max(0.25f, scale - 0.25f); app.quakeScale = scale; say("siddet x" + std::to_string(scale).substr(0, 4)); }
         if (ypressed(GLFW_KEY_SPACE)) {
             if (app.quakeOn) { app.stopQuake(); say("deprem durdu"); }
-            else if (app.startQuake(record, scale, app.world.time)) say("DEPREM: " + quakeName(record) + "  x" + std::to_string(scale).substr(0, 4));
+            else if (app.startQuake(magnitude, app.world.time)) say("DEPREM: buyukluk " + std::to_string(magnitude));
         }
         if (ypressed(GLFW_KEY_R)) {
             say("bina yeniden kuruluyor...");
@@ -747,15 +738,15 @@ static int runWindow(YikimApp& app, bool windowed, bool autotest) {
             char b[640];
             std::snprintf(b, sizeof(b),
                           "YIKIM  %.0f fps   fizik %.1f ms   goruntu %.1f ms%s   t %.1f s%s%s\n"
-                          "deprem: %s  x%.2f  %s\n"
+                          "deprem: buyukluk %d  %s\n"
                           "parca %d   kirik lif %d / %d   catlak %d   temas yamasi %d",
                           fps, app.world.lastMs, app.renderer.lastMs, app.renderer.denoiseMode == 0 ? " (ham)" : app.renderer.denoiseMode == 1 ? " (suzgec dahil)" : " (yapay zeka dahil)", app.world.time,
                           paused ? "   DURDU" : "",
-                          speedIdx ? (speedIdx == 1 ? "   AGIR CEKIM x0.25" : "   AGIR CEKIM x0.1") : "", quakeName(record).c_str(), scale,
+                          speedIdx ? (speedIdx == 1 ? "   AGIR CEKIM x0.25" : "   AGIR CEKIM x0.1") : "", magnitude,
                           app.quakeOn ? "OYNUYOR (Bosluk: durdur)" : "(Bosluk: baslat)", st.bodies, st.broken, st.fibres, st.cracked, st.contacts);
             yDrawText(24, float(fbh) - 90.0f, b, 2.0f);
             yDrawText(24, 24, "Sol tik: patlat (Ctrl: buyuk)   Sag tik + fare: bak   WASD, Q/E, Shift: uc   Tekerlek: yakinlas\n"
-                              "Bosluk: deprem   1-5: kayit   +/-: siddet   T: agir cekim   P: dur   B: donati   G: gurultu giderici   R: bastan   F12: ekran goruntusu   H: gizle   Esc: cik",
+                              "Bosluk: deprem   3-9: buyukluk   T: agir cekim   P: dur   B: donati   G: gurultu giderici   R: bastan   F12: ekran goruntusu   H: gizle   Esc: cik",
                       2.0f);
             if (fnow2() < msg) yDrawText(24, float(fbh) - 130.0f, message, 2.0f);
         }

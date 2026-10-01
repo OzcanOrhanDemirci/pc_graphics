@@ -71,6 +71,80 @@ static const QuakeFiles kQuakes[] = {
     {"2020 Sisam, Bayrakli (TK.3513)", "20201030115124_3513_mp_Acc_E.asc", "20201030115124_3513_mp_Acc_N.asc", "20201030115124_3513_mp_Acc_U.asc"},
 };
 
+// Peak ground accelerations follow ground-motion models only loosely (about 15 km away, firm ground); the waveforms
+// are the real records of the larger quakes (index into kQuakes: 1 Antakya, 2 Yarimca, 3 Izmit, 4 Bayrakli). What each
+// does to the building was measured (docs/yikim/DURUM.md): 3-5 cracks only, 6 parapets and some infill fall, 7 heavy
+// damage but standing, 8 and 9 collapse. Pazarcik's record is not used: its energy sits in short periods, so at x1 the
+// building stands and scaled up until it falls (4.2 g) it throws debris unlike anything else.
+static const QuakeMagnitude kMagnitudes[] = {
+    {3, "Zayıf", 4, 0.012, 3.0, 0.45},
+    {4, "Hafif", 4, 0.035, 5.0, 0.55},
+    {5, "Orta", 3, 0.13, 8.0, 0.7},
+    {6, "Kuvvetli", 3, 0.20, 14.0, 0.85},
+    {7, "Şiddetli", 2, 0.33, 26.0, 1.0},
+    {8, "Yıkıcı", 1, 0.70, 32.0, 1.0},
+    {9, "Felaket", 1, 1.1, 45.0, 1.0},
+};
+
+int quakeMagnitudeMin() { return kMagnitudes[0].magnitude; }
+int quakeMagnitudeMax() { return kMagnitudes[sizeof(kMagnitudes) / sizeof(kMagnitudes[0]) - 1].magnitude; }
+const QuakeMagnitude* quakeMagnitude(int m) {
+    for (const QuakeMagnitude& q : kMagnitudes)
+        if (q.magnitude == m) return &q;
+    return nullptr;
+}
+
+bool quakeLoadMagnitude(int magnitude, const std::string& root, QuakeRecord& q, std::string& err) {
+    const QuakeMagnitude* M = quakeMagnitude(magnitude);
+    if (!M) { err = "no such magnitude"; return false; }
+    QuakeRecord r;
+    if (!quakeLoad(M->record, root, r, err)) return false;
+    // played faster: the same samples, closer together
+    const double dt = r.dt * M->timeScale;
+    const double tPeak = r.tPeak * M->timeScale;
+    // the strong part around the peak: a third before it, the rest after, within the record
+    const double total = dt * (r.acc.size() - 1);
+    double t0 = std::max(0.0, tPeak - 0.3 * M->window), t1 = std::min(total, t0 + M->window);
+    t0 = std::max(0.0, t1 - M->window);
+    const size_t i0 = size_t(t0 / dt), i1 = std::min(r.acc.size() - 1, size_t(t1 / dt));
+    const size_t N = i1 - i0 + 1;
+    const double T = dt * (N - 1);
+    // cosine tapers so it rises and dies away instead of switching on and off
+    const double rise = std::max(0.5, 0.12 * T), fall = std::max(0.8, 0.2 * T);
+    const double scale = M->pgaG * 9.81 / std::max(r.pga, 1e-9);
+    q = QuakeRecord();
+    q.name = std::string("buyukluk ") + std::to_string(magnitude) + " (" + r.name + " kaydindan)";
+    q.dt = dt;
+    q.acc.resize(N);
+    q.vel.assign(N, d3(0, 0, 0));
+    q.disp.assign(N, d3(0, 0, 0));
+    q.pga = 0.0;
+    for (size_t i = 0; i < N; ++i) {
+        const double t = dt * i;
+        double w = 1.0;
+        if (t < rise) w = 0.5 - 0.5 * std::cos(3.14159265358979 * t / rise);
+        if (T - t < fall) w = std::min(w, 0.5 - 0.5 * std::cos(3.14159265358979 * (T - t) / fall));
+        q.acc[i] = r.acc[i0 + i] * (w * scale);
+        const double ah = std::sqrt(q.acc[i].x * q.acc[i].x + q.acc[i].z * q.acc[i].z);
+        if (ah > q.pga) { q.pga = ah; q.tPeak = t; }
+    }
+    for (size_t i = 1; i < N; ++i) {
+        q.vel[i] = q.vel[i - 1] + (q.acc[i] + q.acc[i - 1]) * (0.5 * dt);
+        q.disp[i] = q.disp[i - 1] + (q.vel[i] + q.vel[i - 1]) * (0.5 * dt);
+    }
+    // baseline: a cut record ends moving; a smooth correction (zero slope at the start, matching value and slope at
+    // the end) brings the ground back to rest where it began. Its acceleration is ~6 d / T^2: millimetres per s^2.
+    const double3 dEnd = q.disp[N - 1], vEnd = q.vel[N - 1];
+    for (size_t i = 0; i < N; ++i) {
+        const double s = T > 0.0 ? dt * i / T : 0.0;
+        const double h = s * s * (3.0 - 2.0 * s), g = s * s * (s - 1.0);
+        q.disp[i] = q.disp[i] - dEnd * h - vEnd * (T * g);
+    }
+    for (size_t i = 1; i + 1 < N; ++i) q.vel[i] = (q.disp[i + 1] - q.disp[i - 1]) * (0.5 / dt);
+    q.vel[0] = q.vel[N - 1] = d3(0, 0, 0);
+    return true;
+}
+
 int quakeCount() { return int(sizeof(kQuakes) / sizeof(kQuakes[0])); }
 std::string quakeName(int i) { return i >= 0 && i < quakeCount() ? kQuakes[i].name : std::string(); }
 bool quakeLoad(int i, const std::string& root, QuakeRecord& q, std::string& err) {
