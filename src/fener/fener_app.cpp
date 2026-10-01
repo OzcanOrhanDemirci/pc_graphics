@@ -295,7 +295,11 @@ static bool fpressed(int key) {
     return p;
 }
 
-static int runFenerWindow(FenerApp& app, bool windowed) {
+// --autotest: keys pressed on a timeline through the same path real key presses take (window check)
+struct FenerKeyAt { double t; int key; };
+static const FenerKeyAt kFenerAutotest[] = {{3.0, GLFW_KEY_SPACE}, {12.0, GLFW_KEY_S}, {20.0, GLFW_KEY_SPACE}, {24.0, GLFW_KEY_S}, {26.0, GLFW_KEY_ESCAPE}};
+
+static int runFenerWindow(FenerApp& app, bool windowed, bool autotest) {
     if (!glfwInit()) { std::printf("glfwInit failed\n"); return 1; }
     GLFWmonitor* mon = glfwGetPrimaryMonitor();
     const GLFWvidmode* mode = glfwGetVideoMode(mon);
@@ -330,8 +334,16 @@ static int runFenerWindow(FenerApp& app, bool windowed) {
     std::string message;
     double messageUntil = 0;
     auto say = [&](const std::string& m) { message = m; messageUntil = fnow() + 3.0; std::printf("%s\n", m.c_str()); };
+    const double winStart = fnow();
+    size_t autoNext = 0;
     while (!glfwWindowShouldClose(win)) {
         glfwPollEvents();
+        if (autotest && autoNext < sizeof(kFenerAutotest) / sizeof(kFenerAutotest[0]) && fnow() - winStart > kFenerAutotest[autoNext].t) {
+            std::printf("autotest: key %d at %.1f s (%.1f fps, walk %.0f m, v %.1f m/s, EV %+.2f)\n", kFenerAutotest[autoNext].key, fnow() - winStart, fps,
+                        app.journey.d, app.journey.v, app.evAdapt);
+            g_fkeys[kFenerAutotest[autoNext].key] = true;
+            ++autoNext;
+        }
         if (fpressed(GLFW_KEY_ESCAPE)) break;
         if (fpressed(GLFW_KEY_H)) hud = !hud;
         if (fpressed(GLFW_KEY_P)) { paused = !paused; say(paused ? "zaman durdu" : "zaman akiyor"); }
@@ -412,7 +424,7 @@ static int runFenerWindow(FenerApp& app, bool windowed) {
 
 int runFener(int argc, char** argv) {
     FenerApp app;
-    bool headless = false, windowed = false;
+    bool headless = false, windowed = false, autotest = false;
     int frames = 0, live = 0, journeyFrames = 0, journeyEvery = 30;
     float atMeters = -1.0f;
     int pview = 0;   // 1 surface only, 2 volume only, 3 depth, 4 normals
@@ -424,6 +436,7 @@ int runFener(int argc, char** argv) {
         if (a == "--scene") next();
         else if (a == "--headless") headless = true;
         else if (a == "--windowed") windowed = true;
+        else if (a == "--autotest") autotest = true;
         else if (a == "--frames") frames = std::stoi(next());
         else if (a == "--live") live = std::stoi(next());
         else if (a == "--journey") journeyFrames = std::stoi(next());
@@ -510,7 +523,7 @@ int runFener(int argc, char** argv) {
                     std::max(1, live - 5) / sum);
         printTimes(app.renderer.times());
     } else {
-        rc = runFenerWindow(app, windowed);
+        rc = runFenerWindow(app, windowed, autotest);
     }
     gpuStatsShutdown();
     app.renderer.shutdown();
