@@ -1,7 +1,10 @@
 // Scene 3 "Yikim": OptiX device program, compiled at run time with NVRTC.
 //   __raygen__render  jittered primary ray per sample; Lambert pieces and ground: sun with a ray-traced soft shadow,
 //                     sky light from one cosine-sampled ray (sky, or the ground plane below the horizon, lit by the
-//                     sun and the sky without occlusion: one cheap bounce). Accumulates; writes the tone-mapped image.
+//                     sun and the sky without occlusion: one cheap bounce). Accumulates; writes the tone-mapped image,
+//                     and the denoiser's guides: first-hit albedo and normal, and where each pixel's point was a frame ago.
+//   __raygen__prep    the accumulation as the denoiser's input (means of beauty, albedo, normal)
+//   __raygen__tonemap the denoised image to the display (AgX, sRGB, dither)
 #include <optix.h>
 #include "shared/yikim_params.h"
 #include "shared/display.h"
@@ -116,43 +119,123 @@ extern "C" __global__ void __raygen__pick() {
     *params.pickHit = make_float4(p.x, p.y, p.z, t);
 }
 
+// where a world point was on the previous frame's screen (render pixels); far behind the camera: no match
+static __forceinline__ __device__ float2 projectPrev(float3 p) {
+    const YCamera& c = params.prevCam;
+    const float3 v = p - c.pos;
+    const float z = dot(v, c.fwd);
+    if (z < 1e-4f) return make_float2(-1e6f, -1e6f);
+    const float u = dot(v, c.right) / (z * c.tanHalfX), w = dot(v, c.up) / (z * c.tanHalfY);
+    return make_float2((u + 1.0f) * 0.5f * params.width, (1.0f - w) * 0.5f * params.height);
+}
+
+// the same point of body instance k a frame ago: into the body frame with this frame's transform, out with the last
+static __forceinline__ __device__ float3 prevPoint(unsigned int k, float3 p) {
+    const float* c = params.xfCur + size_t(k) * params.xfStride;
+    const float* q = params.xfPrev + size_t(k) * 12;
+    const float3 r = p - make_float3(c[3], c[7], c[11]);
+    const float3 l = make_float3(c[0] * r.x + c[4] * r.y + c[8] * r.z, c[1] * r.x + c[5] * r.y + c[9] * r.z, c[2] * r.x + c[6] * r.y + c[10] * r.z);
+    return make_float3(q[0] * l.x + q[1] * l.y + q[2] * l.z + q[3], q[4] * l.x + q[5] * l.y + q[6] * l.z + q[7], q[8] * l.x + q[9] * l.y + q[10] * l.z + q[11]);
+}
+
 extern "C" __global__ void __raygen__render() {
     const uint3 ix = optixGetLaunchIndex();
     const unsigned int px = ix.x, py = ix.y;
     const unsigned int pix = py * params.width + px;
     Rng r;
     r.s = hashU32(pix * 9781u + params.seed * 6271u + params.samples * 26699u);
-    float3 sum = make_float3(0, 0, 0);
+    float3 sum = make_float3(0, 0, 0), sumAlb = make_float3(0, 0, 0), sumN = make_float3(0, 0, 0);
     const YCamera& C = params.cam;
     for (unsigned int s = 0; s < params.spp; ++s) {
-        const float u = ((px + r.next()) / params.width) * 2.0f - 1.0f, v = 1.0f - ((py + r.next()) / params.height) * 2.0f;
+        // the first sample goes through the pixel centre: the guides (what is seen, where it was) stay put from frame to frame
+        const float jx = s == 0 ? 0.5f : r.next(), jy = s == 0 ? 0.5f : r.next();
+        const float u = ((px + jx) / params.width) * 2.0f - 1.0f, v = 1.0f - ((py + jy) / params.height) * 2.0f;
         const float3 d = normalize(C.fwd + C.right * (u * C.tanHalfX) + C.up * (v * C.tanHalfY));
         const Hit h = trace(C.pos, d, 1e30f);
         const float tg = d.y < 0.0f ? (params.groundY - C.pos.y) / d.y : 1e30f;
-        float3 L;
+        float3 L, alb, n = make_float3(0, 0, 0);
+        float3 pp = make_float3(0, 0, 0);   // first sample only: this point a frame ago (the denoisers' motion guide)
+        float dist = 1e9f, seen = -1.0f;
+        bool dir = false;
         if (h.hit && h.t < tg) {
             const YBody b = params.bodies[h.body];
-            const float3 alb = b.albedo * (1.0f - params.damageTint * b.damage);
-            L = shade(C.pos + d * h.t, h.n, alb, r);
+            alb = b.albedo * (1.0f - params.damageTint * b.damage);
+            const float3 p = C.pos + d * h.t;
+            L = shade(p, h.n, alb, r);
+            n = h.n;
+            if (s == 0) { pp = h.body < params.barInstance ? prevPoint(h.body, p) : p; dist = h.t; seen = float(h.body) + 1.0f; }
         } else if (tg < 1e29f) {
             const float3 p = C.pos + d * tg;
-            L = shade(p, make_float3(0, 1, 0), groundAlbedo(p), r);
+            alb = groundAlbedo(p);
+            L = shade(p, make_float3(0, 1, 0), alb, r);
+            n = make_float3(0, 1, 0);
             // haze towards the horizon (a hint of distance)
             const float f = 1.0f - expf(-tg * 0.0015f);
             L = L + (sky(make_float3(0, 0.05f, 1.0f)) - L) * f;
+            if (s == 0) {   // the ground rides the earthquake
+                pp = p - make_float3(params.groundShift.x - params.groundShiftPrev.x, params.groundY - params.groundYPrev,
+                                     params.groundShift.y - params.groundShiftPrev.y);
+                dist = tg;
+                seen = 0.0f;
+            }
         } else {
             L = sky(d);
+            alb = make_float3(fminf(L.x, 1.0f), fminf(L.y, 1.0f), fminf(L.z, 1.0f));
             if (dot(d, params.sunDir) > params.sunCosMax) L = L + params.sunE * (1.0f / (2.0f * M_PIf * (1.0f - params.sunCosMax)));
+            if (s == 0) { pp = params.prevCam.pos + d; dir = true; }   // a direction: only the camera's turn moves it
+        }
+        if (s == 0 && params.motion) {
+            const float2 prev = projectPrev(pp);
+            const float3 dv = pp - params.prevCam.pos;
+            params.motion[pix] = make_float4(px + jx - prev.x, py + jy - prev.y, dir ? 1e9f : sqrtf(dot(dv, dv)), 0.0f);
+            params.gbuf[pix] = make_float4(dist, seen, 0.0f, 0.0f);
         }
         sum = sum + L;
+        sumAlb = sumAlb + alb;
+        sumN = sumN + n;
     }
     float4 acc = params.samples > 0 ? params.accum[pix] : make_float4(0, 0, 0, 0);
     acc = acc + make_float4(sum.x, sum.y, sum.z, 0.0f);
     params.accum[pix] = acc;
+    if (params.albedoAcc) {
+        const float4 a = params.samples > 0 ? params.albedoAcc[pix] : make_float4(0, 0, 0, 0);
+        const float4 nn = params.samples > 0 ? params.normalAcc[pix] : make_float4(0, 0, 0, 0);
+        params.albedoAcc[pix] = a + make_float4(sumAlb.x, sumAlb.y, sumAlb.z, 0.0f);
+        params.normalAcc[pix] = nn + make_float4(sumN.x, sumN.y, sumN.z, 0.0f);
+    }
     const float inv = 1.0f / float(params.samples + params.spp);
     float3 col = make_float3(acc.x, acc.y, acc.z) * (inv * params.exposure);
     col = agx(col);
     // TPDF dither so the sky does not band
+    const float dn = (r.next() + r.next() - 1.0f) / 255.0f;
+    params.output[pix] = make_uchar4((unsigned char)(saturate(srgbOetf(col.x) + dn) * 255.0f + 0.5f),
+                                     (unsigned char)(saturate(srgbOetf(col.y) + dn) * 255.0f + 0.5f),
+                                     (unsigned char)(saturate(srgbOetf(col.z) + dn) * 255.0f + 0.5f), 255);
+}
+
+// the denoiser's input: means over the samples so far (params.samples counts this frame's too); normals in world space
+// (optix_types.h, OptixDenoiserGuideLayer: world space for the AOV models)
+extern "C" __global__ void __raygen__prep() {
+    const uint3 ix = optixGetLaunchIndex();
+    const unsigned int pix = ix.y * params.width + ix.x;
+    const float inv = 1.0f / float(max(params.samples, 1u));
+    const float4 a = params.accum[pix], al = params.albedoAcc[pix], n = params.normalAcc[pix];
+    params.dnIn[pix] = make_float4(a.x * inv, a.y * inv, a.z * inv, 1.0f);
+    params.dnAlbedo[pix] = make_float4(al.x * inv, al.y * inv, al.z * inv, 1.0f);
+    const float3 nm = make_float3(n.x, n.y, n.z);
+    const float l = sqrtf(dot(nm, nm));
+    params.dnNormal[pix] = l > 1e-6f ? make_float4(nm.x / l, nm.y / l, nm.z / l, 0.0f) : make_float4(0, 0, 0, 0);
+}
+
+// the denoised image to the display, as __raygen__render does with the raw one
+extern "C" __global__ void __raygen__tonemap() {
+    const uint3 ix = optixGetLaunchIndex();
+    const unsigned int pix = ix.y * params.width + ix.x;
+    Rng r;
+    r.s = hashU32(pix * 7919u + params.seed * 104729u + 17u);
+    const float4 c = params.denoised[pix];
+    float3 col = make_float3(fmaxf(c.x, 0.0f), fmaxf(c.y, 0.0f), fmaxf(c.z, 0.0f)) * params.exposure;
+    col = agx(col);
     const float dn = (r.next() + r.next() - 1.0f) / 255.0f;
     params.output[pix] = make_uchar4((unsigned char)(saturate(srgbOetf(col.x) + dn) * 255.0f + 0.5f),
                                      (unsigned char)(saturate(srgbOetf(col.y) + dn) * 255.0f + 0.5f),

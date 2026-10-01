@@ -29,6 +29,7 @@ add_library(pc_core OBJECT
     src/yikim/yikim_tests.cpp
     src/yikim/yikim_app.cpp
     src/yikim/yikim_renderer.cpp
+    src/yikim/yikim_filter.cu
     src/yikim/quake.cpp
     src/yikim/building.cpp
     ${TP}/tinyexr/miniz.c)

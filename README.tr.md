@@ -86,7 +86,8 @@ sallıyor, ya da izleyen kişi kolonlarını fareyle patlatıyor. Işık bilerek
 | --- | --- |
 | ![Yakın plan: eksik köşe kolonunun üstündeki kirişlerden ve kolondan çıkan eğri demirler](docs/images/yikim-bars.jpg) | ![Pazarcık kaydından sonra hâlâ ayakta duran bina, dolgu duvarlarının çoğu yok](docs/images/yikim-pazarcik.jpg) |
 
-Canlı çalışır: 1080p tam ekran pencere, RTX 4080'de saniyede 55-75 kare, fizik ve görüntü ekran kartında yan yana.
+Canlı çalışır: 1080p tam ekran pencere, RTX 4080'de gürültü giderici açıkken saniyede ~55 kare (ham 60-75), fizik ve
+görüntü ekran kartında yan yana.
 Tıklayıp parça patlat, beş kayıttan birini başlat, zamanı onda birine kadar yavaşlat.
 
 ## Sahne 1: neyi hesaplıyor
@@ -175,6 +176,7 @@ kayıtları altında dağılmayan bir çözücü.
 | **Sönüm** | Serbest titreşimden ölçülen kritik sönümün %5,3'ü: kütleye orantılı, zemine göre, yalnız bağlı cisimlere, ivmesi sınırlı (düşen enkaz serbest kalır). |
 | **Depremler** | ESM ve AFAD TADAS'tan beş kuvvetli yer hareketi kaydı (2023 Pazarcık ve Antakya, 1999 Yarımca ve İzmit, 2020 Bayraklı), iki kez integre edilip yer değiştirmeye çevrilir; zemin hareket eden kinematik bir cisim. Oynatma her kaydın en güçlü anından 15 sn önce başlar. |
 | **Görüntü** | OptiX: her parça kendi kabuğunun bir örneği, dönüşümleri fizik doğrudan örnek tamponuna yazar, üst yapı her kare yeniden kurulur. Yumuşak gölgeli güneş, gök, zeminden bir sekme, depremle birlikte kayan metre ızgarası. Donatı liflerin durumundan çizilir: tuttukça çatlağın üstünden geçer, koptuğunda eğri filizler olarak çıkar. |
+| **Gürültü giderme** | Karede altı örnek, bir şey hareket ederken grenli. Kendi yazdığımız hafif bir SVGF: ışık (görüntü bölü albedo) her parçanın kendi hareketiyle kareden kareye taşınır, cisim, normal ve uzaklıkla denetlenir, üstünden gölge geçerken yeni karenin komşuluğuna kırpılır; sonra başka cisimde, normalde, derinlik basamağında ve ışık kenarında duran à-trous geçişleri. 1080p'de 2,4 ms. OptiX yapay zekâ gidericisi bir tuş ötede (G): daha da temiz, ama 9,7 ms tutuyor ve ekran kartını paylaşan fiziği yavaşlatıyor. |
 
 Binanın yaptığı (çatının zemine göre en büyük ötelemesi, deterministik):
 
@@ -219,6 +221,11 @@ Okunmaya değer kararlar:
   3-4 m/s ile yukarı fırlıyordu (Özcan gördü: hafif parçalar düşmek yerine fırlıyor). 0,5 m/s'de binadan fırlayan
   tuğla (yerden 1 m'nin üstünde, bir karede 2 m/s'den fazla hızlanan) Pazarcık'ta 93'ten 1'e, Antakya'nın çöküşünden
   önce 44'ten 0'a indi; testler ve her kaydın binaya yaptığı değişmedi.
+- **Fiziğin yanına sığan gürültü giderici.** OptiX yapay zekâ gidericisi greni tamamen aldı, ama 9,7 ms'siyle fiziği
+  14,5'ten 23 ms'ye yavaşlattı (ekran kartını paylaşıyorlar): 40 fps ve üçte iki hızında bir deprem. Katı cisimler
+  daha ucuz bir süzgeci işletiyor: hareketleri tam bilindiği için her yüzey noktası kendi geçmişini taşıyor. İlk
+  sürümü, yıkılan binanın gölgesi zeminde kayarken aydınlık lekeler bıraktı; geçmişi yeni karenin komşuluğuna kırpmak
+  bunları sildi.
 - **Taşıyıcıyı ölç, üstünde duranı değil.** "Çatı ötelemesi" en üstteki parçaların ortalamasıydı, onlar da tuğla
   korkuluktu; savrulan korkuluk, ayakta duran binada çatının 9,7 m düştüğü diye okundu.
 
@@ -290,7 +297,7 @@ build\yikim.exe --clip kolon --still 3 --out captures\yikim\ad
 | 1-5 | kayıt: Pazarcık, Antakya, Yarımca, İzmit, Bayraklı |
 | + / − | şiddet, 0,25'lik adımla |
 | T | ağır çekim: 1, 0,25, 0,1 |
-| P, B, R | durdur, donatıyı göster/gizle, binayı baştan kur |
+| P, B, G, R | durdur, donatıyı göster/gizle, gürültü giderici (süzgeç, yapay zekâ, ham), binayı baştan kur |
 | F12, H, Esc | ekran görüntüsü, yazıları gizle, çık |
 
 Sahne 3'ün ayarları (bina, malzemeler, çözücü, kamera, güneş) `scenes/yikim.cfg` içinde; her biri

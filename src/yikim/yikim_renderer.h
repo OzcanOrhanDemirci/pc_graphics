@@ -4,6 +4,7 @@
 #pragma once
 #include "shared/yikim_params.h"
 #include "yikim/phys.h"
+#include "yikim/yikim_filter.h"
 
 #include <cuda_runtime.h>
 #include <optix.h>
@@ -20,7 +21,7 @@ public:
     void updateWorld(PhysWorld& w);                    // transforms and bars from the physics, top level rebuilt
     void* transformsDone() const { return evXf_; }     // a cudaEvent_t recorded after updateWorld read the state
     void setDamage(const std::vector<float>& perBody); // display tint, per body (index = body)
-    void render(unsigned int spp, bool accumulate);    // adds spp samples (accumulate) or starts afresh
+    void render(unsigned int spp, bool accumulate);    // adds spp samples (accumulate) or starts afresh; denoises if on
     void download(std::vector<uchar4>& out);
     void downloadTo(uchar4* hostPinned);                 // width * height pixels
     // the body under render pixel (x, y): index, or 0 the ground, -1 the sky; hit point and distance in hit
@@ -29,6 +30,12 @@ public:
     float lastMs = 0.0f;
     float barRadius = 0.01f, barGap = 0.005f, barStub = 0.25f;   // the reinforcing bars (m), see PhysWorld::writeBars
     bool showBars = true;
+    // 0 the raw image: grain where the sky light and the sun's disc are sampled with a few rays a frame while things move;
+    // 1 our own filter (yikim_filter.h), ~1 ms; 2 the OptiX AI denoiser (temporal AOV with albedo, normal and motion
+    // guides): cleaner still, but 9.7 ms at 1080p, and it shares the GPU with the physics (measured: 40 fps).
+    int denoiseMode = 0;
+    void filterPasses(int n) { filter_.passes = n; }
+    float denoiseMs = 0.0f;
     unsigned int width() const { return w_; }
     unsigned int height() const { return h_; }
 
@@ -40,11 +47,14 @@ private:
     OptixPipeline pipeline_ = nullptr;
     std::vector<OptixProgramGroup> groups_;
     OptixShaderBindingTable sbt_{};
-    CUdeviceptr rg_ = 0, rgPick_ = 0, miss_ = 0, hit_ = 0, dParams_ = 0;
+    CUdeviceptr rg_ = 0, rgPick_ = 0, rgPrep_ = 0, rgTone_ = 0, miss_ = 0, hit_ = 0, dParams_ = 0;
     int* dPickBody_ = nullptr;
     float4* dPickHit_ = nullptr;
     cudaStream_t stream_ = nullptr;
-    cudaEvent_t e0_ = nullptr, e1_ = nullptr, evXf_ = nullptr;
+    cudaEvent_t e0_ = nullptr, e1_ = nullptr, evXf_ = nullptr, eMid_ = nullptr;
+    YCamera prevCam_{};
+    float2 prevShift_{};
+    float prevGroundY_ = 0.0f;
     YikimParams p_{};
     std::vector<void*> worldBuffers_;
     OptixInstance* dInstances_ = nullptr;
@@ -58,6 +68,19 @@ private:
     size_t barTempSize_ = 0, barOutSize_ = 0;
     OptixTraversableHandle barGas_ = 0;
     bool buildBars();
+    // motion and the denoiser
+    float* xfPrev_ = nullptr;      // the instances' transforms a frame ago (12 floats each)
+    bool havePrev_ = false, havePrevCam_ = false;
+    OptixDenoiser dn_ = nullptr;
+    void *dnState_ = nullptr, *dnScratch_ = nullptr, *dnGuideA_ = nullptr, *dnGuideB_ = nullptr;
+    size_t dnStateSize_ = 0, dnScratchSize_ = 0, dnGuidePixel_ = 0;
+    float4 *dnOut_ = nullptr, *dnPrevOut_ = nullptr;
+    float* dnIntensity_ = nullptr;
+    float* dnAvg_ = nullptr;
+    bool dnHistory_ = false;
+    YFilter filter_;
+    bool createDenoiser();
+    void runDenoiser();
     void *iasTemp_ = nullptr, *iasOut_ = nullptr;
     size_t iasTempSize_ = 0, iasOutSize_ = 0;
     YBody* dBodies_ = nullptr;

@@ -13,7 +13,8 @@
 >   parçalar yok olur, çevresi savrulur; **Ctrl + sol tık** büyük patlama) · **sağ tık + fare** bak · **WASD** uç, **E/Q**
 >   yukarı/aşağı, **Shift** hızlı · **tekerlek** yakınlaş · **Boşluk** depremi başlat/durdur · **1-5** kayıt (1 Pazarcık
 >   2023, 2 Antakya 2023, 3 Yarımca 1999, 4 İzmit 1999, 5 Bayraklı 2020) · **+ / -** şiddet ¼ adımla · **T** ağır çekim
->   (×1, ×0,25, ×0,1) · **P** zamanı durdur · **B** donatı demirlerini göster/gizle · **R** binayı baştan kur · **F12**
+>   (×1, ×0,25, ×0,1) · **P** zamanı durdur · **B** donatı demirlerini göster/gizle · **G** gürültü giderici (hızlı süzgeç
+>   → yapay zekâ → ham) · **R** binayı baştan kur · **F12**
 >   ekran görüntüsü · **H** yazıları gizle · **Esc** çıkış. Dene: Antakya ×1 (bina göçer), Pazarcık ×1 (eşikte: ağır
 >   hasarla ayakta kalır, korkuluklar ve duvarlar dökülür; **+** ile ×1,25'te göçer), Yarımca ×1 ile ×1,5 (aynı bina,
 >   iki son); zemin kat kolonlarını tek tek patlat; çöküşü **T** ile ağır çekimde izle, kırık kolon uçlarına uçup

@@ -88,8 +88,9 @@ purpose; the effort went into the physics.
 | --- | --- |
 | ![Close up: bent reinforcing bars sticking out of the beams and the column above the missing corner column](docs/images/yikim-bars.jpg) | ![The building still standing after the Pazarcık record, many infill walls gone](docs/images/yikim-pazarcik.jpg) |
 
-It runs live: a full-screen window at 1080p, 55 to 75 frames per second on the RTX 4080, physics and picture side by
-side on the GPU. Click to blow pieces out, start any of the five records, slow time down to a tenth.
+It runs live: a full-screen window at 1080p, about 55 frames per second on the RTX 4080 with the denoising filter on
+(60 to 75 raw), physics and picture side by side on the GPU. Click to blow pieces out, start any of the five records,
+slow time down to a tenth.
 
 ## What scene 1 computes
 
@@ -179,6 +180,7 @@ holds together under real earthquake records.
 | **Damping** | 5.3 % of critical, measured from free vibration: mass-proportional, relative to the ground, bonded bodies only, with capped accelerations so falling debris stays free. |
 | **Earthquakes** | Five strong-motion records from ESM and AFAD TADAS (2023 Pazarcık and Antakya, 1999 Yarımca and İzmit, 2020 Bayraklı), integrated twice to ground displacement; the ground is a moving kinematic body. Playback starts 15 s before each record's strongest moment. |
 | **Picture** | OptiX: every piece an instance of its own hull, transforms written by the physics straight into the instance buffer, top level rebuilt every frame. Sun with soft shadows, sky, one bounce off the ground, a metre grid that rides the earthquake. Reinforcing bars are drawn from the fibres' state: across a crack while they hold, as bent stubs once they are gone. |
+| **Denoising** | Six samples a frame are grainy while things move. A light SVGF of our own: the lighting (beauty over albedo) is carried along each piece's own motion from frame to frame, checked by body, normal and distance, clamped to the new frame's neighbourhood when a shadow sweeps over it, then a-trous passes that stop at other bodies, normals, depth steps and lighting edges. 2.4 ms at 1080p. The OptiX AI denoiser is one key away (G): cleaner still, but it costs 9.7 ms and slows the physics that shares the GPU. |
 
 What the building does (roof drift relative to the ground, deterministic):
 
@@ -227,6 +229,11 @@ Decisions worth reading:
   At 0.5 m/s, bricks thrown from the building (more than 2 m/s gained in one frame, above 1 m) went from 93 to 1
   under Pazarcık and from 44 to 0 before Antakya's collapse; the tests and what each record does to the building
   stayed the same.
+- **A denoiser that fits beside the physics.** The OptiX AI denoiser took the grain away completely, but at 9.7 ms it
+  slowed the physics from 14.5 to 23 ms (they share the GPU): 40 fps and an earthquake at two thirds of its speed.
+  Rigid bodies make a cheaper filter work well: their motion is known exactly, so each surface point keeps its own
+  history. Its first version left lit blotches where a falling building's shadow swept the ground; clamping the history
+  to the new frame's neighbourhood removed them.
 - **Measure the structure, not what stands on it.** "Roof drift" was averaged over the highest pieces, which were the
   brick parapet; a parapet thrown off read as the roof falling 9.7 m from a building still standing.
 
@@ -298,7 +305,7 @@ build\yikim.exe --clip kolon --still 3 --out captures\yikim\name
 | 1 to 5 | record: Pazarcık, Antakya, Yarımca, İzmit, Bayraklı |
 | + / − | intensity in steps of 0.25 |
 | T | slow motion: 1, 0.25, 0.1 |
-| P, B, R | pause, reinforcing bars on and off, rebuild the building |
+| P, B, G, R | pause, reinforcing bars on and off, denoising (filter, AI, raw), rebuild the building |
 | F12, H, Esc | screenshot, hide the text, quit |
 
 Settings for scene 3 (building, materials, solver, camera, sun) are in `scenes/yikim.cfg`; any of them can be

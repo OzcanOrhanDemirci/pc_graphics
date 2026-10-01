@@ -3,6 +3,13 @@
 > Tek kaynak durum panosu. Plan ve Özcan'ın sözleri `docs/yikim/PLAN.md`'de.
 
 ## Şu an
+- **2026-10-02 · Gren giderildi.** Özcan: *"Görüntü noktacıklı yani çok grenli gibi. Estetik bir durum [...] Bir hata
+  olduğunu sanmıyorum. Eğer öyle olması gerekiyorsa düzeltmek yerine nedenini de açıklayabilirsin."* Sebep: ışın
+  izleme, gök ışığı (tek kosinüs ışını) ve güneş diski (tek gölge ışını) karede 6 örnekle; dünya durunca örnekler
+  birikip temizleniyor, bir şey hareket edince her kare sıfırdan. Çözüm: **kendi gürültü gidericimiz**
+  (`src/yikim/yikim_filter.cu`, hafif SVGF), 2,4 ms, pencere ~54 fps; **G** tuşu süzgeç → OptiX yapay zekâ → ham.
+  Özcan otomatik testi izlerken: *"o noktacıklanma, grenlenme düzelmiş görünüyor"* (1. süzgeç), 2. ham grenli,
+  *"3.yü açınca yine temiz görüntü"* (yapay zekâ).
 - **2026-10-02 · Fırlayan tuğlalar düzeltildi.** Özcan (kapanıştan sonra): *"Fizik kısmı tamam, çok iyi olmuş. [...]
   Yıkılma fiziği hem çok gerçekçi hem de tutarlı hissettiriyor. Sadece arada hafif parçalar uçuşabiliyor, kolonlar
   değil de kahverengimsi duvar gibi olanlar. Onlar her zaman değil bazen sallanırken düşmek yerine fırlıyor. Fizik
@@ -257,6 +264,18 @@ yumuşaklığı Y1'de doğal periyotla ölçülecek; gerekirse alt adım artar.
   blok 3-4 m/s ile yukarı, dönerek. Tanıdaki iz: temas kuvveti 760-880 kN = 154 kg × 2 m/s / h (sınırın ta kendisi).
   0,5 m/s'de gömülme ~3 karede çözülür, oluşan hız gözle görülmez; testler (yığın, düşme, gömülme, enerji) ve bina
   sonuçları değişmedi. 1 m/s ara değeri Pazarcık ×1'i göçürdü (eşik kaotik), 0,25 ile 0,5 arasında fark küçük.
+
+- **Yapay zekâ gürültü gidericisi fiziğin yanına sığmadı:** OptiX TEMPORAL_AOV 1080p'de 9,7 ms; fizik aynı kartta
+  14,5 → 23 ms, pencere 40 fps, deprem gerçek zamanın üçte ikisi. Görüntü kusursuzdu ama "hız ve hissiyat" onaylıydı.
+- **Katı cisim sahnesinde zamansal süzgeç kolay:** her parçanın bu ve önceki kare dönüşümü bilindiği için piksel başına
+  hareket vektörü tam (cismin çerçevesine gir, eskisiyle çık); zemin depremle kaydığından onun kayması da düşülür. Geçmiş
+  cisim kimliği, normal ve beklenen uzaklıkla denetleniyor. İlk ışın piksel merkezinden: kenarda kimlik kare kare
+  zıplamasın.
+- **Gölge geçerken süzgecin hafızası leke bırakır:** yıkılan binanın gölgesi zeminde kayarken aynı noktanın eski
+  "güneşte" geçmişi kabul edildi (aynı cisim, aynı normal), gölgenin içinde aydınlık lekeler. Geçmiş, yeni karenin 3x3
+  komşuluğunun ortalama ± 2 sapmasına kırpılıyor; büyük kırpmada hafıza kısalıyor (3 kare). Lekeler gitti.
+- **Normal kılavuzunun uzayı:** OptiX 9.1 başlığı (`OptixDenoiserGuideLayer`) AOV modelleri için normali **dünya**
+  uzayında istiyor; sahne 1'in hazırlığı kamera uzayına çeviriyor (kaynak gösterilerek). Sahne 1'de doğrulanmadı.
 
 ## Deprem kayıtları (`assets/deprem/`, `src/yikim/quake.*`)
 ESM (esm-db.eu, işlenmiş MP, hesapsız indirilebilir) ve AFAD TADAS (misafir girişi). İvme cm/s², hepsi ayrıştırılıp

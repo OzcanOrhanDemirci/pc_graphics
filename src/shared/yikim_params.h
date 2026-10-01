@@ -47,4 +47,20 @@ struct YikimParams {
     float2 pickPixel;              // in render pixels
     int* pickBody;                 // out: body index (instance + 1), 0 the ground, -1 the sky
     float4* pickHit;               // out: hit point xyz, distance w
+    // the AI denoiser (temporal AOV model): guides summed like accum, then means (__raygen__prep), then the display
+    float4* albedoAcc;             // first-hit albedo, summed over the samples (null: no guides)
+    float4* normalAcc;             // first-hit world normal, summed
+    float4* motion;                // xy: pixel movement from the previous frame (render pixels); z: the point's distance
+                                   // from last frame's camera (first, pixel-centre ray)
+    float4* gbuf;                  // first ray: x distance, y what is seen (body + 1, 0 the ground, -1 the sky)
+    float4 *dnIn, *dnAlbedo, *dnNormal;   // the denoiser's input and guides (means)
+    const float4* denoised;        // its output, linear (tone mapped by __raygen__tonemap)
+    // motion: each instance's 3x4 transform now (inside the OptixInstance array) and a frame ago (12 floats each)
+    const float* xfCur;
+    unsigned int xfStride;         // floats between instances in xfCur
+    const float* xfPrev;
+    unsigned int barInstance;      // the bars' instance (world space, rebuilt every frame: taken as still)
+    YCamera prevCam;
+    float2 groundShiftPrev;
+    float groundYPrev;
 };

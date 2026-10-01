@@ -230,6 +230,9 @@ static int runClip(YikimApp& app, double seconds, double still, unsigned spp, co
     std::vector<uchar4> px;
     double physMs = 0, rendMs = 0;
     int shots = 0;
+    // clips and stills are raw by default (many samples); display.denoise_clip = 1 (filter) or 2 (AI) shows the window's look
+    app.renderer.denoiseMode = app.cfg.i("display.denoise_clip", 0);
+    app.renderer.filterPasses(app.cfg.i("display.filter_passes", 4));
     // the roof: the structure's pieces whose top is at the top storey's level (not the brick parapet standing on it:
     // measured, a parapet thrown off by the shaking read as the roof falling 9.7 m from a building still standing)
     std::vector<int> roof;
@@ -580,6 +583,8 @@ static int runWindow(YikimApp& app, bool windowed, bool autotest) {
     int record = app.cfg.i("deprem.record", 0);
     float scale = app.cfg.f("deprem.scale", 1.0f);
     const unsigned spp = unsigned(app.cfg.i("display.spp", 2));
+    app.renderer.denoiseMode = app.cfg.i("display.denoise", 1);
+    app.renderer.filterPasses(app.cfg.i("display.filter_passes", 4));
     double tick = 0.0, last = fnow2(), fpsT = fnow2(), msg = 0.0;
     int fpsFrames = 0, frameNo = 0;
     float fps = 0.0f;
@@ -604,8 +609,8 @@ static int runWindow(YikimApp& app, bool windowed, bool autotest) {
         double clickX = 0, clickY = 0;
         if (autotest && autoNext < sizeof(kYAutotest) / sizeof(YKeyAt) && fnow2() - winStart > kYAutotest[autoNext].t) {
             const int k = kYAutotest[autoNext].key;
-            std::printf("autotest: %d at %.1f s (%.1f fps, kare %.1f ms, fizik %.1f ms, goruntu %.1f ms)\n", k, fnow2() - winStart, fps, frameMs,
-                        app.world.lastMs, app.renderer.lastMs);
+            std::printf("autotest: %d at %.1f s (%.1f fps, kare %.1f ms, fizik %.1f ms, goruntu %.1f ms, gurultu giderici %.1f ms)\n", k,
+                        fnow2() - winStart, fps, frameMs, app.world.lastMs, app.renderer.lastMs, app.renderer.denoiseMs);
             if (k < 0) { click = true; clickCtrl = k == -2; clickX = qx + qw * 0.5; clickY = qy + qh * 0.62; }
             else g_ykeys[k] = true;
             ++autoNext;
@@ -613,6 +618,11 @@ static int runWindow(YikimApp& app, bool windowed, bool autotest) {
         if (ypressed(GLFW_KEY_ESCAPE)) break;
         if (glfwGetWindowAttrib(win, GLFW_ICONIFIED)) { glfwWaitEventsTimeout(0.05); last = fnow2(); continue; }
         if (ypressed(GLFW_KEY_H)) hud = !hud;
+        if (ypressed(GLFW_KEY_G)) {
+            app.renderer.denoiseMode = (app.renderer.denoiseMode + 1) % 3;
+            say(app.renderer.denoiseMode == 0 ? "ham goruntu (gurultu giderici kapali)"
+                : app.renderer.denoiseMode == 1 ? "gurultu giderici: hizli suzgec" : "gurultu giderici: yapay zeka (en temiz, fizigi yavaslatir)");
+        }
         if (ypressed(GLFW_KEY_P)) { paused = !paused; say(paused ? "durdu" : "devam"); }
         if (ypressed(GLFW_KEY_B)) {
             app.renderer.showBars = !app.renderer.showBars;
@@ -753,15 +763,16 @@ static int runWindow(YikimApp& app, bool windowed, bool autotest) {
         if (hud) {
             char b[640];
             std::snprintf(b, sizeof(b),
-                          "YIKIM  %.0f fps   fizik %.1f ms   goruntu %.1f ms   t %.1f s%s%s\n"
+                          "YIKIM  %.0f fps   fizik %.1f ms   goruntu %.1f ms%s   t %.1f s%s%s\n"
                           "deprem: %s  x%.2f  %s\n"
                           "parca %d   kirik lif %d / %d   catlak %d   temas yamasi %d",
-                          fps, app.world.lastMs, app.renderer.lastMs, app.world.time, paused ? "   DURDU" : "",
+                          fps, app.world.lastMs, app.renderer.lastMs, app.renderer.denoiseMode == 0 ? " (ham)" : app.renderer.denoiseMode == 1 ? " (suzgec dahil)" : " (yapay zeka dahil)", app.world.time,
+                          paused ? "   DURDU" : "",
                           speedIdx ? (speedIdx == 1 ? "   AGIR CEKIM x0.25" : "   AGIR CEKIM x0.1") : "", quakeName(record).c_str(), scale,
                           app.quakeOn ? "OYNUYOR (Bosluk: durdur)" : "(Bosluk: baslat)", st.bodies, st.broken, st.fibres, st.cracked, st.contacts);
             yDrawText(24, float(fbh) - 90.0f, b, 2.0f);
             yDrawText(24, 24, "Sol tik: patlat (Ctrl: buyuk)   Sag tik + fare: bak   WASD, Q/E, Shift: uc   Tekerlek: yakinlas\n"
-                              "Bosluk: deprem   1-5: kayit   +/-: siddet   T: agir cekim   P: dur   B: donati   R: bastan   F12: ekran goruntusu   H: gizle   Esc: cik",
+                              "Bosluk: deprem   1-5: kayit   +/-: siddet   T: agir cekim   P: dur   B: donati   G: gurultu giderici   R: bastan   F12: ekran goruntusu   H: gizle   Esc: cik",
                       2.0f);
             if (fnow2() < msg) yDrawText(24, float(fbh) - 130.0f, message, 2.0f);
         }
