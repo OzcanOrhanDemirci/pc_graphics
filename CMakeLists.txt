@@ -11,6 +11,7 @@ set(TP ${CMAKE_SOURCE_DIR}/third_party)
 # Everything but main.cpp is compiled once (pc_core) and linked into two executables:
 #   pc_graphics.exe  scene 1 "Altin saatte cam ve tas" (scene 2 with --scene fener)
 #   fener.exe        scene 2 "Fener" straight away (double-click)
+#   yikim.exe        scene 3 "Yikim" straight away (double-click)
 add_library(pc_core OBJECT
     src/renderer.cpp
     src/scene.cpp
@@ -22,12 +23,19 @@ add_library(pc_core OBJECT
     src/fener/fener_app.cpp
     src/fener/fener_renderer.cpp
     src/fener/fener_scene.cpp
+    src/yikim/geom.cpp
+    src/yikim/phys.cu
+    src/yikim/yikim_scenes.cpp
+    src/yikim/yikim_tests.cpp
+    src/yikim/yikim_app.cpp
     ${TP}/tinyexr/miniz.c)
 add_executable(pc_graphics src/main.cpp $<TARGET_OBJECTS:pc_core>)
 add_executable(fener src/main.cpp $<TARGET_OBJECTS:pc_core>)
 target_compile_definitions(fener PRIVATE PC_DEFAULT_SCENE_FENER)
+add_executable(yikim src/main.cpp $<TARGET_OBJECTS:pc_core>)
+target_compile_definitions(yikim PRIVATE PC_DEFAULT_SCENE_YIKIM)
 
-foreach(t pc_core pc_graphics fener)
+foreach(t pc_core pc_graphics fener yikim)
     target_include_directories(${t} PRIVATE
         src
         ${TP}/cuda/include
@@ -48,7 +56,7 @@ foreach(t pc_core pc_graphics fener)
     endif()
 endforeach()
 
-foreach(t pc_graphics fener)
+foreach(t pc_graphics fener yikim)
     target_link_libraries(${t} PRIVATE
         ${TP}/cuda/lib/x64/cudart_static.lib
         ${TP}/cuda/lib/x64/cuda.lib

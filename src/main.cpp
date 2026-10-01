@@ -1,5 +1,5 @@
 // pc_graphics: art-directed scenes on OptiX 9.1. Scene 1 "Altin saatte cam ve tas" (spectral path tracer, this file);
-// scene 2 "Fener" with --scene fener (src/fener/fener_app.cpp).
+// scene 2 "Fener" with --scene fener (src/fener/fener_app.cpp); scene 3 "Yikim" with --scene yikim (src/yikim/).
 //
 //   pc_graphics.exe                      borderless full screen on the primary monitor
 //   pc_graphics.exe --windowed           1280x720 window (still renders at --width x --height)
@@ -516,13 +516,19 @@ static int runWindow(App& app, bool windowed, int autotest) {
 }
 
 int runFener(int argc, char** argv);   // scene 2, src/fener/fener_app.cpp
+int runYikim(int argc, char** argv);   // scene 3, src/yikim/yikim_app.cpp
 
 int main(int argc, char** argv) {
 #ifdef PC_DEFAULT_SCENE_FENER
     return runFener(argc, argv);   // fener.exe: scene 2 straight away
 #endif
-    for (int i = 1; i + 1 < argc; ++i)
+#ifdef PC_DEFAULT_SCENE_YIKIM
+    return runYikim(argc, argv);   // yikim.exe: scene 3 straight away
+#endif
+    for (int i = 1; i + 1 < argc; ++i) {
         if (std::string(argv[i]) == "--scene" && std::string(argv[i + 1]) == "fener") return runFener(argc, argv);
+        if (std::string(argv[i]) == "--scene" && std::string(argv[i + 1]) == "yikim") return runYikim(argc, argv);
+    }
     App app;
     g_app = &app;
     bool headless = false, windowed = false, selftest = false, compileOnly = false, furnace = false;
