@@ -83,6 +83,9 @@ struct Params {
     float4* aovNormal;
     float* heat;                 // per-pixel GPU clock cycles of the last launch
     uchar4* output;
+    float4* hdr;                 // exposure-scaled linear sRGB of the displayed image (before glare and AgX)
+    const float4* bloom;         // lens glare at half resolution (null: none)
+    float bloomStrength;         // share of the light spread by the glare point spread function
     unsigned int width, height;  // output (display) size
     unsigned int renderWidth, renderHeight;  // path tracing size: equal in still mode, half in upscaled live mode
     unsigned int frame;          // frames accumulated so far (seeds the sampler)
@@ -90,6 +93,7 @@ struct Params {
     unsigned int seed;           // decorrelates independent renders of the same frame (noise measurements)
     float liveAlpha;             // live mode: exponential blend weight of the new frame (0: progressive average)
     float liveAlphaCaustic;      // same for the caustic buffer
+    int cameraDispersion;        // camera paths split colours in glass (1, still mode) or refract along the hero only (0, live)
     int hazeAllSegments;         // single scattering on every path segment (1) or only before the first surface (0)
     float sampleClampY;          // live mode: a path sample's luminance is clamped to this (0: no clamp, unbiased)
     int view;                    // 0 beauty, 1 albedo, 2 normal, 3 caustics, 4 heat, 5 relative noise

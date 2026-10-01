@@ -71,7 +71,8 @@ struct DeltaResult {
 // Smooth interface. ngOut: outward geometric normal; nsOut: outward shading normal (ripples).
 // beta is the spectral throughput, updated in place. importance = photon transport (no 1/eta^2).
 static __forceinline__ __device__ DeltaResult dielectricEvent(const Material& m, float3 d, float3 ngOut, float3 nsOut,
-                                                              Wavelengths& wl, float4& beta, float u, bool importance) {
+                                                              Wavelengths& wl, float4& beta, float u, bool importance,
+                                                              bool allowDispersion = true) {
     DeltaResult r;
     r.passThrough = false;
     const bool front = dot(d, ngOut) < 0.0f;
@@ -103,7 +104,7 @@ static __forceinline__ __device__ DeltaResult dielectricEvent(const Material& m,
         r.dir = refractDir(d, ng, eta[0], c, ok);
         if (!ok) { r.dir = reflect3(d, ng); r.transmitted = false; r.medium = mi; return r; }
     }
-    const bool dispersive = iorIsDispersive(mt) || iorIsDispersive(mi);
+    const bool dispersive = allowDispersion && (iorIsDispersive(mt) || iorIsDispersive(mi));
     if (dispersive) {
         terminateSecondary(wl);
         b[1] = b[2] = b[3] = 0.0f;

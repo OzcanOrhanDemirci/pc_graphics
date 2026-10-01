@@ -80,6 +80,16 @@ bool Renderer::init(unsigned int width, unsigned int height, const std::string& 
     params_.aovNormal = devAlloc<float4>(n);
     params_.heat = devAlloc<float>(n);
     params_.output = devAlloc<uchar4>(n);
+    params_.hdr = devAlloc<float4>(n);
+    {
+        unsigned int w = width, h = height;
+        for (int k = 0; k < kBloomLevels; ++k) {
+            w = std::max(1u, w / 2);
+            h = std::max(1u, h / 2);
+            bloomLevels_[k] = devAlloc<float4>(size_t(w) * h);
+            bloomAccum_[k] = devAlloc<float4>(size_t(w) * h);
+        }
+    }
     params_.nanCounter = devAlloc<unsigned int>(1);
     CUDA_CHECK(cudaMemset(params_.nanCounter, 0, sizeof(unsigned int)));
     params_.skyW = 512;
@@ -91,6 +101,7 @@ bool Renderer::init(unsigned int width, unsigned int height, const std::string& 
     params_.maxDepth = 12;
     params_.enableNee = 1;
     params_.enableSunPatch = 1;
+    params_.cameraDispersion = 1;
     params_.skyMapFraction = 0.5f;
     params_.gatherDepth = 2;
     photonGrid_.allocate(1u << 22, 1u << 22);
@@ -166,10 +177,11 @@ bool Renderer::compileDevice(std::string& log) {
     if (r != OPTIX_SUCCESS) { log = std::string("optixModuleCreate: ") + optixGetErrorString(r) + "\n" + olog; return false; }
 
     // program groups: 4 raygen, 2 miss, 4 hit groups
-    std::vector<OptixProgramGroupDesc> d(12);
+    std::vector<OptixProgramGroupDesc> d(13);
     for (auto& x : d) std::memset(&x, 0, sizeof(x));
-    const char* rgNames[5] = {"__raygen__render", "__raygen__sky", "__raygen__tonemap", "__raygen__bakenoise", "__raygen__photons"};
-    const int RG = 5;
+    const char* rgNames[6] = {"__raygen__render", "__raygen__sky", "__raygen__tonemap", "__raygen__bakenoise", "__raygen__photons",
+                              "__raygen__composite"};
+    const int RG = 6;
     for (int i = 0; i < RG; ++i) {
         d[i].kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
         d[i].raygen.module = module;
@@ -228,6 +240,7 @@ bool Renderer::compileDevice(std::string& log) {
     record(groups_[2], rgTonemap_);
     record(groups_[3], rgBake_);
     record(groups_[4], rgPhotons_);
+    record(groups_[5], rgComposite_);
     Record miss[2], hit[5];
     OPTIX_CHECK(optixSbtRecordPackHeader(groups_[RG + 0], &miss[0]));
     OPTIX_CHECK(optixSbtRecordPackHeader(groups_[RG + 1], &miss[1]));
@@ -631,6 +644,16 @@ void Renderer::denoise(float blend, bool caustics) {
 
 void Renderer::tonemap() {
     launch(rgTonemap_, width_, height_, &times_.tonemap);
+    if (params_.view != 0 && params_.view != 3) return;   // debug views were written directly
+    params_.bloomStrength = bloomStrength;
+    params_.bloom = nullptr;
+    if (bloomStrength > 0.0f) {
+        launchBloom(params_.hdr, int(width_), int(height_), bloomLevels_, bloomAccum_, kBloomLevels, stream_);
+        params_.bloom = bloomAccum_[0];
+    }
+    float ms = 0.0f;
+    launch(rgComposite_, width_, height_, &ms);
+    times_.tonemap += ms;
 }
 
 void Renderer::downloadOutput(std::vector<uchar4>& out) {

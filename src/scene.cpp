@@ -160,7 +160,7 @@ Scene buildScene(const Config& cfg) {
     const float L = 6 * 1.82f, W = 4 * 1.82f, H = 6 * 0.91f, T = cfg.f("wall.thickness", 0.25f);
 
     // ---- materials
-    Material plaster = makeMat(MAT_DIFFUSE, cfg.v3("mat.plaster", make_float3(0.80f, 0.785f, 0.75f)));
+    Material plaster = makeMat(MAT_DIFFUSE, cfg.v3("mat.plaster", make_float3(0.80f, 0.795f, 0.78f)));
     plaster.p.x = 1.0f;
     const int mPlaster = s.addMaterial(plaster);
     Material concrete = makeMat(MAT_CONCRETE, cfg.v3("mat.concrete", make_float3(0.40f, 0.395f, 0.375f)), 0.35f, 0.25f);
@@ -250,8 +250,16 @@ Scene buildScene(const Config& cfg) {
         }
     }
     // horizontal slit low in the left wall, optional
-    // right wall (z = W, faces -z): white plaster, receives the light
-    s.addSlab(make_float3(0, 0, W), make_float3(1, 0, 0), make_float3(0, 1, 0), make_float3(0, 0, -1), L, H, T, {}, mPlaster, mPlaster);
+    // right wall (z = W, faces -z): white plaster. An optional tall opening looks away from the sun: cool sky fill.
+    {
+        std::vector<float4> rightOpen;
+        const float rw0 = cfg.f("rightwindow.x0", 0.0f), rw1 = cfg.f("rightwindow.x1", 0.0f);
+        if (rw1 > rw0) rightOpen.push_back(make_float4(L - rw1, cfg.f("rightwindow.y0", 0.6f), L - rw0, cfg.f("rightwindow.y1", 4.5f)));
+        // the slab runs along -x so that its front faces -z: u = -x from x = L
+        s.addSlab(make_float3(L, 0, W), make_float3(-1, 0, 0), make_float3(0, 1, 0), make_float3(0, 0, -1), L, H, T, rightOpen, mPlaster, mPlaster);
+        for (const float4& o : rightOpen)
+            addPortal(s, make_float3(L, 0, W), make_float3(-1, 0, 0), make_float3(0, 1, 0), make_float3(0, 0, -1), o, T);
+    }
     // end walls (x = 0 faces +x, x = L faces -x)
     s.addSlab(make_float3(0, 0, -T), make_float3(0, 0, 1), make_float3(0, 1, 0), make_float3(1, 0, 0), W + 2 * T, H, T, {}, mConcrete, mConcrete);
     s.addSlab(make_float3(L, 0, -T), make_float3(0, 0, 1), make_float3(0, 1, 0), make_float3(-1, 0, 0), W + 2 * T, H, T, {}, mPlaster, mPlaster);
@@ -272,6 +280,23 @@ Scene buildScene(const Config& cfg) {
     s.addBox(make_float3(prismPos.x - plateHalf, pedestalH - plateT, prismPos.z - plateHalf), make_float3(prismPos.x + plateHalf, pedestalH, prismPos.z + plateHalf), mConcrete);
     const float prismSide = cfg.f("prism.side", 0.20f), prismH = cfg.f("prism.height", 0.40f);
     addPrism(s, make_float3(prismPos.x, pedestalH, prismPos.z), prismSide, prismH, cfg.f("prism.yaw", 20.0f), mPrism);
+    // a freestanding white plaster screen catching the spectrum close to the prism (an installation piece):
+    // centred screen.dist metres along screen.dir (degrees in the floor plane, 0 = +x, 90 = +z), facing back
+    if (cfg.i("screen.enable", 1)) {
+        const float ang = cfg.f("screen.dir", 44.0f) * 3.14159265f / 180.0f, dist = cfg.f("screen.dist", 1.6f);
+        const float3 dir = make_float3(std::cos(ang), 0.0f, std::sin(ang));
+        const float3 c = make_float3(prismPos.x, 0.0f, prismPos.z) + dir * dist;
+        const float3 side = make_float3(-dir.z, 0.0f, dir.x);
+        const float hw = 0.5f * cfg.f("screen.width", 1.3f), sh = cfg.f("screen.height", 2.2f), th = 0.12f;
+        const float3 a0 = c - side * hw, a1 = c + side * hw;
+        // front face towards the prism, back face, two ends, top (the slab of a thin wall)
+        const float3 f0 = a0, f1 = a1, b0 = a0 + dir * th, b1 = a1 + dir * th, up = make_float3(0, sh, 0);
+        quadFacing(s, f0, f1, f1 + up, f0 + up, -dir, mPlaster);
+        quadFacing(s, b0, b1, b1 + up, b0 + up, dir, mPlaster);
+        quadFacing(s, f0, b0, b0 + up, f0 + up, -side, mPlaster);
+        quadFacing(s, f1, b1, b1 + up, f1 + up, side, mPlaster);
+        quadFacing(s, f0 + up, f1 + up, b1 + up, b0 + up, make_float3(0, 1, 0), mPlaster);
+    }
     s.emitters.push_back({make_float3(prismPos.x - prismSide, pedestalH, prismPos.z - prismSide),
                           make_float3(prismPos.x + prismSide, pedestalH + prismH, prismPos.z + prismSide)});
 
@@ -294,6 +319,15 @@ Scene buildScene(const Config& cfg) {
         const float x = beamX(k % slitCount, z) + 0.12f * (std::fmod(0.618034f * (k + 1), 1.0f) - 0.5f);
         const float3 c = make_float3(x, 1.3f + 1.8f * fy, z);
         s.spheres.push_back(make_float4(c.x, c.y, c.z, 0.035f + 0.045f * std::fmod(0.43f * (k + 2), 1.0f)));
+        s.sphereMaterial.push_back(mFilm);
+    }
+    // a few larger bubbles drifting through the prism's sunbeam, near the screen: the still life's sparkle
+    const int nh = cfg.i("bubbles.hero", 3);
+    for (int k = 0; k < nh; ++k) {
+        const float z = prismZ + 0.35f + 0.55f * k;
+        const float x = beamX(cfg.i("prism.slit", 1), z) + 0.06f * (k - 1);
+        const float3 c = make_float3(x, pedestalH + 0.05f + 0.32f * k - 0.12f * (k == 2), z);
+        s.spheres.push_back(make_float4(c.x, c.y, c.z, 0.055f + 0.02f * k));
         s.sphereMaterial.push_back(mFilm);
     }
 
@@ -333,6 +367,7 @@ Scene buildScene(const Config& cfg) {
     s.hazeMax = make_float3(L, H, W);
 
     // ---- cameras
+    s.cameras.push_back({"prizma", make_float3(4.4f, 1.40f, 2.2f), make_float3(8.1f, 1.42f, 1.55f), 45.0f, 2.8f, 0.0f});
     s.cameras.push_back({"alcak", make_float3(2.2f, 0.55f, 6.4f), make_float3(9.5f, 1.2f, 2.0f), 28.0f, 5.6f, 0.0f});
     s.cameras.push_back({"orta", make_float3(3.4f, 1.45f, 6.2f), make_float3(9.8f, 1.05f, 2.6f), 32.0f, 4.0f, 0.0f});
     s.cameras.push_back({"kose", make_float3(1.3f, 1.5f, 6.6f), make_float3(9.0f, 1.1f, 0.5f), 24.0f, 5.6f, 0.0f});

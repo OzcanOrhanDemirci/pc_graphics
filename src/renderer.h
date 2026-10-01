@@ -28,6 +28,7 @@ public:
     void updateSpheres(const Scene& scene);   // moved spheres: new centres, sphere GAS and IAS rebuilt
     void updateSky();                     // after the sun moved
     void resetAccumulation() { frame_ = 0; params_.photonFrame = 0; }
+    float bloomStrength = 0.04f;
     float photonRadius0 = 0.01f;          // m, first photon map's gather radius; shrinks as frames accumulate
     unsigned int photonsPerFrame = 1u << 20;
     float beamRadius0 = 0.02f;            // m, photon beam blur radius of the first frame
@@ -66,7 +67,10 @@ private:
     OptixPipeline pipeline_ = nullptr;
     std::vector<OptixProgramGroup> groups_;
     OptixShaderBindingTable sbt_{};
-    CUdeviceptr rgRender_ = 0, rgSky_ = 0, rgTonemap_ = 0, rgBake_ = 0, rgPhotons_ = 0, missRecords_ = 0, hitRecords_ = 0;
+    CUdeviceptr rgRender_ = 0, rgSky_ = 0, rgTonemap_ = 0, rgBake_ = 0, rgPhotons_ = 0, rgComposite_ = 0, missRecords_ = 0, hitRecords_ = 0;
+    static const int kBloomLevels = 7;
+    float4* bloomLevels_[kBloomLevels] = {};
+    float4* bloomAccum_[kBloomLevels] = {};
     PhotonGrid photonGrid_;
     Denoiser denoiser_, temporalDenoiser_, upscaleDenoiser_;
     bool denoiserReady_ = false, temporalReady_ = false, upscaleReady_ = false;

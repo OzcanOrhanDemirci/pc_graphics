@@ -18,3 +18,12 @@
   hata yakaladı (pus geçirgenliği tutarsızlığı, %4,7).
 - **Sanat:** ilk düzenlemeler "tek renk turuncu-bej" çıktı; beyaz dengesi ve kamera açısı (ışığa karşı) gerekti.
   F1 karesi hâlâ sütlü ve düz; neyin "çarpıcı" olduğuna dair yargım burada en zayıf yerim.
+- **Bir API davranışını varsaydım:** OptiX yerleşik küresinin içeriden de vurulduğunu sandım; su dolu küre siyah çıkınca
+  deneyle (içeriden vuruşları boyayan bayrak) ölçtüm. İlk deney tasarımım da hatalıydı (işaret tek dalga boyundaydı).
+- **Kabuk alıntılaması** birkaç kez düzenleme betiklerimi bozdu (`
+` kaçışı); betikleri dosyaya yazarak çözdüm.
+- **Gökkuşağının nereye düşeceğini önce tahminle aradım** (açı taraması); prizmanın çoğu açıda tam iç yansıma yaptığını
+  görünce 2B ışın izleme betiği yazıp hesapladım.
+- **Hareketi göremiyorum:** canlı modun titreşimini ardışık kare farkıyla ölçtüm; gözle onay Özcan'da.
+- **Sanat yargısı:** "düz ve zeytin" görüntünün sebebini bulmam birkaç tur sürdü (önce pusa, sonra pozlamaya baktım; asıl
+  sebep serin dolgu ışığının yokluğuydu). Kahraman kompozisyonu (natürmort) altıncı denemede çıktı.

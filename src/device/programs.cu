@@ -9,6 +9,7 @@
 #include "bsdf.h"
 #include "specular.h"
 #include "shared/photon_grid.h"
+#include "shared/display.h"
 
 enum { RAY_RADIANCE = 0, RAY_SHADOW = 1, RAY_TYPES = 2 };
 enum { INST_TRIANGLES = 0, INST_SPHERES = 1 };
@@ -819,7 +820,7 @@ static __forceinline__ __device__ PathOut tracePath(unsigned int px, unsigned in
                 const float3 local = (h.p - make_float3(sp.x, sp.y, sp.z)) * (1.0f / sp.w);
                 r = filmEvent(m, d, h.ngOut, local, float(h.prim) * 3.17f, wl, beta, rng.uniform());
             } else {
-                r = dielectricEvent(m, d, h.ngOut, ns, wl, beta, rng.uniform(), false);
+                r = dielectricEvent(m, d, h.ngOut, ns, wl, beta, rng.uniform(), false, params.cameraDispersion != 0);
             }
             const float3 side = dot(r.dir, h.ngOut) > 0.0f ? h.ngOut : -h.ngOut;
             o = offsetRay(h.p, side);
@@ -947,39 +948,6 @@ extern "C" __global__ void __raygen__render() {
 // =====================================================================================================
 // Display transform
 // =====================================================================================================
-static __forceinline__ __device__ float3 agxContrast(float3 x) {
-    auto p = [](float v) {
-        const float v2 = v * v, v4 = v2 * v2;
-        return 15.5f * v4 * v2 - 40.14f * v4 * v + 31.96f * v4 - 6.868f * v2 * v + 0.4298f * v2 + 0.1191f * v - 0.00232f;
-    };
-    return make_float3(p(x.x), p(x.y), p(x.z));
-}
-// AgX (Troy Sobotka; minimal fit by Benjamin Wrensch). Input linear Rec.709, output display-linear.
-static __forceinline__ __device__ float3 agx(float3 c) {
-    float3 v = make_float3(0.842479062253094f * c.x + 0.0784335999999992f * c.y + 0.0792237451477643f * c.z,
-                           0.0423282422610123f * c.x + 0.878468636469772f * c.y + 0.0791661274605434f * c.z,
-                           0.0423756549057051f * c.x + 0.0784336f * c.y + 0.879142973793104f * c.z);
-    const float minEv = -12.47393f, maxEv = 4.026069f;
-    v = make_float3(clampf(log2f(fmaxf(v.x, 1e-10f)), minEv, maxEv), clampf(log2f(fmaxf(v.y, 1e-10f)), minEv, maxEv),
-                    clampf(log2f(fmaxf(v.z, 1e-10f)), minEv, maxEv));
-    v = (v - make_float3(minEv, minEv, minEv)) * (1.0f / (maxEv - minEv));
-    v = agxContrast(v);
-    float3 o = make_float3(1.19687900512017f * v.x - 0.0980208811401368f * v.y - 0.0990297440797205f * v.z,
-                           -0.0528968517574562f * v.x + 1.15190312990417f * v.y - 0.0989611768448433f * v.z,
-                           -0.0529716355144438f * v.x - 0.0980434501171241f * v.y + 1.15107367264116f * v.z);
-    return make_float3(powf(fmaxf(o.x, 0.0f), 2.2f), powf(fmaxf(o.y, 0.0f), 2.2f), powf(fmaxf(o.z, 0.0f), 2.2f));
-}
-static __forceinline__ __device__ float srgbOetf(float x) {
-    x = saturate(x);
-    return x <= 0.0031308f ? 12.92f * x : 1.055f * powf(x, 1.0f / 2.4f) - 0.055f;
-}
-// Out-of-gamut spectral colours: pull towards the luminance until no channel is negative.
-static __forceinline__ __device__ float3 gamutCompress(float3 rgb, float Y) {
-    const float mn = fminf(rgb.x, fminf(rgb.y, rgb.z));
-    if (mn >= 0.0f || Y <= 0.0f) return fmaxf3(rgb, make_float3(0, 0, 0));
-    const float t = Y / (Y - mn);
-    return make_float3(Y, Y, Y) + (rgb - make_float3(Y, Y, Y)) * t;
-}
 static __forceinline__ __device__ float3 heatColor(float t) {
     t = saturate(t);
     return make_float3(saturate(1.5f * t * 2.0f - 0.5f), saturate(sinf(t * M_PIf)), saturate(1.0f - 2.0f * t));
@@ -995,6 +963,19 @@ static __forceinline__ __device__ float4 renderBuffer(const float4* buf, unsigne
     const float tx = saturate(fx - x0), ty = saturate(fy - y0);
     const unsigned int W = params.renderWidth;
     return (buf[y0 * W + x0] * (1.0f - tx) + buf[y0 * W + x1] * tx) * (1.0f - ty) + (buf[y1 * W + x0] * (1.0f - tx) + buf[y1 * W + x1] * tx) * ty;
+}
+
+// sRGB encoding (unless the view is already display-referred), blue-noise dither of +-1 LSB, 8-bit output.
+static __forceinline__ __device__ void writeDisplay(unsigned int pix, unsigned int x, unsigned int y, float3 rgb, bool linearOut) {
+    const float3 enc = linearOut ? make_float3(srgbOetf(rgb.x), srgbOetf(rgb.y), srgbOetf(rgb.z)) : rgb;
+    const unsigned int bx = (x + 37u * params.ditherFrame) & 127u, by = (y + 71u * params.ditherFrame) & 127u;
+    const float bn = params.blueNoise ? params.blueNoise[by * 128u + bx] : 0.5f;
+    const float v = bn * 2.0f - 1.0f;
+    const float tri = copysignf(1.0f - sqrtf(1.0f - fabsf(v)), v);
+    const float dth = tri / 255.0f;
+    params.output[pix] = make_uchar4((unsigned char)(saturate(enc.x + dth) * 255.0f + 0.5f),
+                                     (unsigned char)(saturate(enc.y + dth) * 255.0f + 0.5f),
+                                     (unsigned char)(saturate(enc.z + dth) * 255.0f + 0.5f), 255);
 }
 
 extern "C" __global__ void __raygen__tonemap() {
@@ -1031,16 +1012,32 @@ extern "C" __global__ void __raygen__tonemap() {
             lin = lin + d;
             Y += 0.2126f * d.x + 0.7152f * d.y + 0.0722f * d.z;
         }
-        rgb = agx(gamutCompress(lin, Y));
+        // beauty and caustic views continue in __raygen__composite (after the glare pass)
+        params.hdr[pix] = make_float4(lin.x, lin.y, lin.z, Y);
+        return;
     }
-    float3 enc = linearOut ? make_float3(srgbOetf(rgb.x), srgbOetf(rgb.y), srgbOetf(rgb.z)) : rgb;
-    // blue-noise dither with a triangular distribution of +-1 LSB
-    const unsigned int bx = (idx.x + 37u * params.ditherFrame) & 127u, by = (idx.y + 71u * params.ditherFrame) & 127u;
-    const float bn = params.blueNoise ? params.blueNoise[by * 128u + bx] : 0.5f;
-    const float v = bn * 2.0f - 1.0f;
-    const float tri = copysignf(1.0f - sqrtf(1.0f - fabsf(v)), v);
-    const float dth = tri / 255.0f;
-    params.output[pix] = make_uchar4((unsigned char)(saturate(enc.x + dth) * 255.0f + 0.5f),
-                                     (unsigned char)(saturate(enc.y + dth) * 255.0f + 0.5f),
-                                     (unsigned char)(saturate(enc.z + dth) * 255.0f + 0.5f), 255);
+    writeDisplay(pix, idx.x, idx.y, rgb, linearOut);
 }
+
+// Glare (half-resolution bloom, bilinear) + AgX + sRGB + dither for the beauty and caustic views.
+extern "C" __global__ void __raygen__composite() {
+    const uint3 idx = optixGetLaunchIndex();
+    const unsigned int pix = idx.y * params.width + idx.x;
+    const float4 h = params.hdr[pix];
+    float3 lin = make_float3(h.x, h.y, h.z);
+    float Y = h.w;
+    if (params.bloom && params.bloomStrength > 0.0f) {
+        const unsigned int bw = params.width / 2, bh = params.height / 2;
+        const float fx = (idx.x + 0.5f) * 0.5f - 0.5f, fy = (idx.y + 0.5f) * 0.5f - 0.5f;
+        const int x0 = max(0, min(int(floorf(fx)), int(bw) - 1)), y0 = max(0, min(int(floorf(fy)), int(bh) - 1));
+        const int x1 = min(x0 + 1, int(bw) - 1), y1 = min(y0 + 1, int(bh) - 1);
+        const float tx = saturate(fx - x0), ty = saturate(fy - y0);
+        const float4 b = (params.bloom[y0 * bw + x0] * (1.0f - tx) + params.bloom[y0 * bw + x1] * tx) * (1.0f - ty) +
+                         (params.bloom[y1 * bw + x0] * (1.0f - tx) + params.bloom[y1 * bw + x1] * tx) * ty;
+        const float s = params.bloomStrength;
+        lin = lin * (1.0f - s) + make_float3(b.x, b.y, b.z) * s;
+        Y = Y * (1.0f - s) + b.w * s;
+    }
+    writeDisplay(pix, idx.x, idx.y, agx(gamutCompress(lin, Y)), true);
+}
+

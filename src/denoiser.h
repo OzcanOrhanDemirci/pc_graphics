@@ -37,4 +37,6 @@ private:
 };
 
 // CUDA kernel launcher (kernels.cu): builds the denoiser's input and guide images from the accumulation.
+// Lens glare pyramid (kernels.cu): levels/accum hold nLevels images of halving size; accum[0] (half size) is the result.
+void launchBloom(const float4* hdr, int w, int h, float4** levels, float4** accum, int nLevels, cudaStream_t stream);
 void launchDenoisePrep(const Params& p, float4* rgb, float4* albedo, float4* normal, float4* caustic, cudaStream_t stream);

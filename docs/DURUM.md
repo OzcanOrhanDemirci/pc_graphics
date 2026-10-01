@@ -3,8 +3,9 @@
 > Tek kaynak durum panosu. Her faz sonunda güncellenir; bağlam sıkıştırılınca BASLA.md ile birlikte okunur.
 
 ## Şu an
-- **2026-10-01 · F1 ışık doğru bitti** (kapılar aşağıda). ⏭️ **F2 · Malzeme ve detay** (BASLA.md §7).
-- F1 karesi Özcan'a gönderildi: `captures/F1_kose.png` (köşe kamerası, 2048 örnek).
+- **2026-10-01 · F0-F4 bitti, F5 sanat turu sürüyor.** Kahraman kare: "prizma natürmortu" (kamera 0), Özcan'a gönderildi
+  (`captures/hero_q4_dn.png`); yanıt yok, kendi yargımla ilerliyorum. ⏭️ referans karşılaştırması, son cila, SINIRLAR raporu.
+- Gönderilenler: F1_kose (F1), sheet_cv (F3 ara, 4 açı), hero_q4_dn (F5 aday).
 
 ## Nasıl çalıştırılır
 - Derleme: `cmd /c C:\dev\stress_test_pc\build.bat` (CMake + Ninja, VS 2026, `third_party/cuda`). PowerShell'de
@@ -21,10 +22,10 @@
 |---|---|---|
 | F0 İskelet | ✅ 10-01 | pencere 2560×1440 @165 Hz RTX 4080'de (GL_RENDERER doğrulandı), F5, S (PNG+EXR), HUD, NVML |
 | F1 Işık doğru | ✅ 10-01 | fırın %0,03 · D65 beyazı ±0,001 · yakınsama 1/√n · güneş ~3480 K · 3 yarık + tavan yarığı + köşe kamerası |
-| F2 Malzeme ve detay | bekliyor | |
-| F3 Kostik ve hacim | bekliyor | |
-| F4 Canlı mod | bekliyor | |
-| F5 Sanat ve zirve | bekliyor | |
+| F2 Malzeme ve detay | ✅ 10-01 | Sellmeier F/d/C, Newton ince film dizisi (seçim testinde); özel küreler (giriş+çıkış); terrazzo, beton, sıva |
+| F3 Kostik ve hacim | ✅ 10-01 | spektral fotonlar + PPM; foton ışınları (hacimsel kostik); huzme aralık örneklemesi; 5° güneşle PT'ye karşı oran 0,991 |
+| F4 Canlı mod | ✅ 10-01 | 720p + TEMPORAL_UPSCALE2X → 1440p, 34-35 fps (RTSS de 35 diyor); titreşim 0,73/255; Özcan'ın gözü bekliyor |
+| F5 Sanat ve zirve | sürüyor | natürmort kompozisyonu, serin gök penceresi, parlama (bloom), köpükler ışıkta |
 
 ## Kararlar
 - **Yapı:** tüm OptiX programları tek `programs.cu` (NVRTC, OptiX-IR); raygen içinde `optixTraverse` +
@@ -53,6 +54,20 @@
   (düşük tutarsızlık / mavi gürültü) ve gürültü giderici.
 - Hatanın %99,5'i köpüklerdeki alt-piksel güneş parıltılarında: gerçek, yavaş yakınsıyor, ton eşlemede kırpılıyor.
 
+## F2-F5'te öğrenilenler (ölçülerek)
+- **OptiX yerleşik küresi içeriden vurulmuyor** (deneyle: içeriden vuruş sayısı 0) → su dolu küre siyahtı, köpük tek filmdi.
+  Küreler özel ilkel (`__intersection__sphere`, iki kök).
+- **Su yön için dağılımsız** (Δn ~0,01): her havuz ışınında ikincil dalga boylarını öldürmek renk karıncası yapıyordu.
+  Fotonlar suda tam dağıtıcı (her foton kendi dalga boyunda, gürültü bedeli yok).
+- **Gökkuşağının yeri hesaplandı** (`tools/prism_plan.py`): çoğu açıda prizmada tam iç yansıma; tüm renklerin çıktığı
+  pencere ~78-84°. 82° seçildi.
+- **Foton ışınları pahalı** (kutular üst üste biniyor): 16 parçaya bölme + kare başına ışınların ~1/8'i (akı ölçekli, yansız).
+- **Toz 21 ms yiyordu**: ayrı GAS + görünürlük maskesi 2 (yalnız kamera ışınları) → ~0 ms.
+- **Gürültü giderici:** kostik ayrı kalmalı (denendi: gökkuşağını bulanıklaştırdı). Canlıda AOV modeli düz sıvada "fırça izi"
+  uyduruyordu; TEMPORAL_AOV + kamera uzayı normal düzeltti. Ateşböceği → blok; canlıda örnek kırpması.
+- **Renk:** zeytin-kahve ton, serin gök dolgusunun yokluğundandı; güneşe sırtı dönük sağ duvar açıklığı dengeyi kurdu.
+  Gök modelinde çoklu saçılım yok (gök gerçekte daha parlak/mavi): bilinen eksik.
+
 ## Ölçümler
 | Tarih | Ne | Değer |
 |---|---|---|
@@ -65,3 +80,7 @@
 | 10-01 | 960×540 1 spp (dokular pişmiş) | 3,4 ms, ~150 M yol/s; 1440p 2048 spp 49 s |
 | 10-01 | yakınsama (ort. göreli piksel hatası, 16k referansa) | 16: 0,62 · 64: 0,35 · 256: 0,19 · 1024: 0,11 |
 | 10-01 | güneş rengi 10° | xy 0,4122 0,4063 · CCT ~3480 K |
+| 10-01 | durağan 1440p (fotonlar+ışınlar+toz) | ~43-47 ms/örnek, ~20 örnek/s; 900 örnek 45 sn |
+| 10-01 | canlı 1440p (720p + büyütme) | 28-29 ms/kare: yol 10 + foton 1,3 + gg 14-15 + ton 0,3 ms |
+| 10-01 | güç (pencere, durağan) | 262 W / 370 W, 2880 MHz, 54 °C |
+| 10-01 | güneş lekesi / gök haritası örneklemesi | yansız ama eşit sürede kazanmıyor: varsayılan kapalı |

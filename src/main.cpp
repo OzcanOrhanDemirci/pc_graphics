@@ -94,6 +94,7 @@ struct App {
         }
         p.skyMapFraction = cfg.f("sky.map_fraction", 0.0f);
         p.debugFlags = cfg.i("debug.flags", 0);
+        renderer.bloomStrength = cfg.f("bloom.strength", 0.04f);
         p.enablePhotons = cfg.i("photon.enable", 1);
         denoise = cfg.i("denoise.enable", 1) != 0;
         liveDenoiseCaustics = cfg.i("live.denoise_caustics", 0) != 0;
@@ -121,6 +122,7 @@ struct App {
         p.sampleClampY = on ? cfg.f("live.clamp", 0.25f) : 0.0f;
         p.maxDepth = on ? cfg.i("live.max_depth", 6) : cfg.i("path.max_depth", 12);
         p.hazeAllSegments = on ? cfg.i("live.haze_all", 0) : 1;
+        p.cameraDispersion = on ? cfg.i("live.camera_dispersion", 0) : 1;
         renderer.useTemporalDenoiser = on && cfg.i("live.temporal", 1) != 0;
         renderer.setHalfResolution(on && renderer.useTemporalDenoiser && cfg.i("live.upscale", 1) != 0);
         if (renderer.useTemporalDenoiser) p.liveAlpha = cfg.f("live.alpha_temporal", 1.0f);   // the denoiser keeps the history
@@ -180,13 +182,16 @@ struct App {
         writePNG(prefix + ".png", int(width), int(height), reinterpret_cast<const unsigned char*>(pixels.data()));
         std::vector<float4> acc;
         renderer.downloadAccum(acc);
+        // the accumulation is at the render size (half in the upscaled live mode)
+        const unsigned int rw = renderer.params().renderWidth, rh = renderer.params().renderHeight;
+        acc.resize(size_t(rw) * rh);
         std::vector<float> rgba(acc.size() * 4);
         for (size_t i = 0; i < acc.size(); ++i) {
             const float n = acc[i].w > 0 ? 1.0f / acc[i].w : 0.0f;
             const float3 rgb = xyzToLinearSRGB(make_float3(acc[i].x * n, acc[i].y * n, acc[i].z * n));
             rgba[i * 4 + 0] = rgb.x; rgba[i * 4 + 1] = rgb.y; rgba[i * 4 + 2] = rgb.z; rgba[i * 4 + 3] = 1.0f;
         }
-        writeEXR(prefix + ".exr", int(width), int(height), 4, rgba.data());
+        writeEXR(prefix + ".exr", int(rw), int(rh), 4, rgba.data());
         std::printf("saved %s.png / .exr (%u spp)\n", prefix.c_str(), renderer.samplesPerPixel());
     }
 };
@@ -338,10 +343,15 @@ static bool pressed(int key) {
 }
 
 // --autotest: presses keys on a timeline through the same path real key presses take (F0 gate).
-static const struct { double t; int key; } kAutotest[] = {
-    {3.0, GLFW_KEY_H}, {3.5, GLFW_KEY_H}, {4.0, GLFW_KEY_F5}, {7.0, GLFW_KEY_S}, {9.0, GLFW_KEY_ESCAPE}};
+struct TimedKey { double t; int key; };
+static const TimedKey kAutotest[] = {{3.0, GLFW_KEY_H}, {3.5, GLFW_KEY_H}, {4.0, GLFW_KEY_F5}, {7.0, GLFW_KEY_S}, {9.0, GLFW_KEY_ESCAPE}};
+static const TimedKey kAutotestLive[] = {{2.0, GLFW_KEY_SPACE}, {9.0, GLFW_KEY_S}, {10.0, GLFW_KEY_ESCAPE}};
+static const TimedKey kAutotestStill[] = {{45.0, GLFW_KEY_S}, {47.0, GLFW_KEY_ESCAPE}};
 
-static int runWindow(App& app, bool windowed, bool autotest) {
+static int runWindow(App& app, bool windowed, int autotest) {
+    const TimedKey* timeline = autotest == 2 ? kAutotestLive : (autotest == 3 ? kAutotestStill : kAutotest);
+    const size_t timelineLen = autotest == 2 ? sizeof(kAutotestLive) / sizeof(TimedKey)
+                                             : (autotest == 3 ? sizeof(kAutotestStill) / sizeof(TimedKey) : sizeof(kAutotest) / sizeof(TimedKey));
     if (!glfwInit()) { std::printf("glfwInit failed\n"); return 1; }
     GLFWmonitor* mon = glfwGetPrimaryMonitor();
     const GLFWvidmode* mode = glfwGetVideoMode(mon);
@@ -385,9 +395,10 @@ static int runWindow(App& app, bool windowed, bool autotest) {
     size_t autoNext = 0;
     while (!glfwWindowShouldClose(win)) {
         glfwPollEvents();
-        if (autotest && autoNext < sizeof(kAutotest) / sizeof(kAutotest[0]) && nowSec() - windowStart > kAutotest[autoNext].t) {
-            std::printf("autotest: key %d at %.1f s\n", kAutotest[autoNext].key, nowSec() - windowStart);
-            g_keys[kAutotest[autoNext].key] = true;
+        if (autotest && autoNext < timelineLen && nowSec() - windowStart > timeline[autoNext].t) {
+            std::printf("autotest: key %d at %.1f s  (fps %.1f, path %.1f ms, denoise %.1f ms)\n", timeline[autoNext].key, nowSec() - windowStart, fps,
+                        app.renderer.times().render, app.renderer.denoiseMs());
+            g_keys[timeline[autoNext].key] = true;
             ++autoNext;
         }
         if (pressed(GLFW_KEY_ESCAPE)) break;
@@ -498,7 +509,8 @@ static int runWindow(App& app, bool windowed, bool autotest) {
 int main(int argc, char** argv) {
     App app;
     g_app = &app;
-    bool headless = false, windowed = false, selftest = false, compileOnly = false, furnace = false, autotest = false;
+    bool headless = false, windowed = false, selftest = false, compileOnly = false, furnace = false;
+    int autotest = 0;
     int spp = 64, view = 0, sppPerLaunch = 1;
     unsigned int seed = 0;
     int liveFrames = 0;
@@ -511,7 +523,9 @@ int main(int argc, char** argv) {
         else if (a == "--selftest") selftest = true;
         else if (a == "--compile-only") compileOnly = true;
         else if (a == "--furnace") furnace = true;
-        else if (a == "--autotest") autotest = true;
+        else if (a == "--autotest") autotest = 1;
+        else if (a == "--autotest-live") autotest = 2;
+        else if (a == "--autotest-still") autotest = 3;
         else if (a == "--auto-ev") app.autoEvTarget = std::stof(next());
         else if (a == "--seed") seed = unsigned(std::stoul(next()));
         else if (a == "--denoise") app.headlessDenoise = true;
