@@ -17,7 +17,10 @@ __global__ void denoisePrepKernel(Params p, float4* rgb, float4* albedo, float4*
     const float3 xyz = make_float3(m[0] * raw.x + m[1] * raw.y + m[2] * raw.z, m[3] * raw.x + m[4] * raw.y + m[5] * raw.z,
                                    m[6] * raw.x + m[7] * raw.y + m[8] * raw.z);
     const float3 s = xyzToLinearSRGB(xyz);
-    rgb[i] = make_float4(fmaxf(s.x, 0.0f), fmaxf(s.y, 0.0f), fmaxf(s.z, 0.0f), 1.0f);
+    float3 sc = make_float3(fmaxf(s.x, 0.0f), fmaxf(s.y, 0.0f), fmaxf(s.z, 0.0f));
+    const float Y = 0.2126f * sc.x + 0.7152f * sc.y + 0.0722f * sc.z;
+    if (p.denoiseClampY > 0.0f && Y > p.denoiseClampY) sc = sc * (p.denoiseClampY / Y);   // a lone firefly would become a block
+    rgb[i] = make_float4(sc.x, sc.y, sc.z, 1.0f);
     {   // caustic layer, white balanced linear sRGB (may be slightly negative for spectral colours: kept)
         const float3 cr = make_float3(c.x, c.y, c.z) * inv;
         const float3 cx = make_float3(m[0] * cr.x + m[1] * cr.y + m[2] * cr.z, m[3] * cr.x + m[4] * cr.y + m[5] * cr.z,

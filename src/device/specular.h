@@ -72,7 +72,7 @@ struct DeltaResult {
 // beta is the spectral throughput, updated in place. importance = photon transport (no 1/eta^2).
 static __forceinline__ __device__ DeltaResult dielectricEvent(const Material& m, float3 d, float3 ngOut, float3 nsOut,
                                                               Wavelengths& wl, float4& beta, float u, bool importance,
-                                                              bool allowDispersion = true) {
+                                                              bool allowDispersion = true, int keep = 0) {
     DeltaResult r;
     r.passThrough = false;
     const bool front = dot(d, ngOut) < 0.0f;
@@ -82,6 +82,16 @@ static __forceinline__ __device__ DeltaResult dielectricEvent(const Material& m,
     const int mt = front ? m.iorInside : m.iorOutside;
     float cosI = -dot(d, n);
     if (cosI <= 1e-4f) { n = ng; cosI = -dot(d, n); }
+    // stratified spectral split: the caller traces the same path once per lane; at the dispersive event lane `keep`
+    // becomes the hero (moved to lane 0), so the four runs follow the four wavelengths' own refractions
+    if (keep > 0 && allowDispersion && (iorIsDispersive(mt) || iorIsDispersive(mi)) && wl.pdf.y + wl.pdf.z + wl.pdf.w > 0.0f) {
+        float* L = &wl.lambda.x;
+        float* P = &wl.pdf.x;
+        float* B = &beta.x;
+        float t = L[0]; L[0] = L[keep]; L[keep] = t;
+        t = P[0]; P[0] = P[keep]; P[keep] = t;
+        t = B[0]; B[0] = B[keep]; B[keep] = t;
+    }
     float eta[4], F[4];
     const float* l = &wl.lambda.x;
     for (int k = 0; k < 4; ++k) {

@@ -3,11 +3,15 @@
 //   stress.exe                      borderless full screen on the primary monitor
 //   stress.exe --windowed           1280x720 window (still renders at --width x --height)
 //   stress.exe --headless --spp N --out captures/name     render N samples per pixel, write PNG + EXR
-//   stress.exe --selftest           spectral tests (CMF, D65, Sellmeier, thin film, sigmoid fit)
-//   options: --camera k, --width W, --height H, --set key=value, --view v, --furnace, --spp-per-launch k
+//   stress.exe --headless --live N --out captures/name     N live frames: timings, flicker, three frames saved
+//   stress.exe --selftest           spectral tests (CMF, D65, Sellmeier, thin film, Newton colours, sigmoid fit)
+//   options: --camera k, --width W, --height H, --set key=value, --view v, --furnace, --spp-per-launch k,
+//            --denoise (headless: also write _dn.png), --auto-ev target, --seed s,
+//            --autotest | --autotest-live | --autotest-still (window: keys pressed on a timeline)
 //
-// Keys: H hud, Space still/live, S screenshot, R reset, F5 reload shaders + scene.cfg, 1-6 views,
-//       Up/Down exposure, Left/Right focus, C next camera, P photons, V haze, N NEE, Esc quit.
+// Keys: H hud, Space still/live, S screenshot, R reset, F5 reload shaders + scene.cfg, 1-5 views (beauty, albedo,
+//       normal, caustics, cost), Up/Down exposure, Left/Right focus, C next camera, D denoiser, P photons, V haze,
+//       N next-event estimation, G sun-patch sampling, Esc quit.
 #include "gpu_stats.h"
 #include "image_io.h"
 #include "renderer.h"
@@ -81,6 +85,7 @@ struct App {
         p.hazeG = cfg.f("haze.g", 0.65f);
         p.hazeBeamFraction = cfg.f("haze.beam_fraction", 0.75f);
         p.hazeAllSegments = 1;
+        p.dispersionBoost = unsigned(cfg.i("path.spectral_split", 1) * 4);
         p.maxDepth = cfg.i("path.max_depth", 12);
         p.enableSunPatch = cfg.i("path.sun_patch", 0);
         p.waterDepthTint = cfg.f("water.tint", 0.05f);
@@ -95,6 +100,7 @@ struct App {
         p.skyMapFraction = cfg.f("sky.map_fraction", 0.0f);
         p.debugFlags = cfg.i("debug.flags", 0);
         renderer.bloomStrength = cfg.f("bloom.strength", 0.04f);
+        p.denoiseClampY = cfg.f("denoise.clamp", 0.5f);
         p.enablePhotons = cfg.i("photon.enable", 1);
         denoise = cfg.i("denoise.enable", 1) != 0;
         liveDenoiseCaustics = cfg.i("live.denoise_caustics", 0) != 0;
@@ -122,7 +128,8 @@ struct App {
         p.sampleClampY = on ? cfg.f("live.clamp", 0.25f) : 0.0f;
         p.maxDepth = on ? cfg.i("live.max_depth", 6) : cfg.i("path.max_depth", 12);
         p.hazeAllSegments = on ? cfg.i("live.haze_all", 0) : 1;
-        p.cameraDispersion = on ? cfg.i("live.camera_dispersion", 0) : 1;
+        p.cameraDispersion = on ? cfg.i("live.camera_dispersion", 1) : 1;
+        p.dispersionBoost = unsigned(on ? cfg.i("live.spectral_split", 1) * 4 : cfg.i("path.spectral_split", 1) * 4);
         renderer.useTemporalDenoiser = on && cfg.i("live.temporal", 1) != 0;
         renderer.setHalfResolution(on && renderer.useTemporalDenoiser && cfg.i("live.upscale", 1) != 0);
         if (renderer.useTemporalDenoiser) p.liveAlpha = cfg.f("live.alpha_temporal", 1.0f);   // the denoiser keeps the history
@@ -136,6 +143,7 @@ struct App {
     }
     void liveStep(float t) {
         Params& p = renderer.params();
+        if (cfg.i("live.animate", 1) == 0) t = cfg.f("time", 0.0f);   // frozen: measurements against a still reference
         p.time = t;
         animateScene(scene, t);
         renderer.updateSpheres(scene);

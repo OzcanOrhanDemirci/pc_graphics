@@ -265,7 +265,8 @@ extern "C" __global__ void __anyhit__shadow() {
     const int prim = optixGetPrimitiveIndex();
     const int mi = params.sphereMaterial[prim];
     const Material& m = params.materials[mi];
-    if (m.type != MAT_FILM) return;                       // accept: blocks (terminate on first hit)
+    // accept (blocks) unless it is a soap film; the furnace test turns films into opaque white spheres for every ray
+    if (m.type != MAT_FILM || params.furnace) return;
     const float4 s = params.spheres[prim];
     const float3 c = make_float3(s.x, s.y, s.z);
     const float3 d = optixGetWorldRayDirection();
@@ -737,7 +738,7 @@ struct PathOut {
 
 static __forceinline__ __device__ bool isDelta(int type) { return type == MAT_DIELECTRIC || type == MAT_WATER || type == MAT_FILM; }
 
-static __forceinline__ __device__ PathOut tracePath(unsigned int px, unsigned int py, Rng& rng) {
+static __forceinline__ __device__ PathOut tracePath(unsigned int px, unsigned int py, Rng& rng, int keepLane = 0) {
     PathOut out;
     out.xyz = out.causticXyz = make_float3(0, 0, 0);
     out.albedo = out.normal = make_float3(0, 0, 0);
@@ -820,7 +821,7 @@ static __forceinline__ __device__ PathOut tracePath(unsigned int px, unsigned in
                 const float3 local = (h.p - make_float3(sp.x, sp.y, sp.z)) * (1.0f / sp.w);
                 r = filmEvent(m, d, h.ngOut, local, float(h.prim) * 3.17f, wl, beta, rng.uniform());
             } else {
-                r = dielectricEvent(m, d, h.ngOut, ns, wl, beta, rng.uniform(), false, params.cameraDispersion != 0);
+                r = dielectricEvent(m, d, h.ngOut, ns, wl, beta, rng.uniform(), false, params.cameraDispersion != 0, keepLane);
             }
             const float3 side = dot(r.dir, h.ngOut) > 0.0f ? h.ngOut : -h.ngOut;
             o = offsetRay(h.p, side);
@@ -899,9 +900,35 @@ extern "C" __global__ void __raygen__render() {
     const long long c0 = clock64();
     float3 sum = make_float3(0, 0, 0), sumC = make_float3(0, 0, 0), alb = make_float3(0, 0, 0), nrm = make_float3(0, 0, 0);
     float n = 0.0f;
-    for (unsigned int s = 0; s < params.sppPerLaunch; ++s) {
-        Rng rng = makeRng(pix, params.frame * params.sppPerLaunch + s, 0xA511E9B3u ^ (params.seed * 0x9E3779B9u));
-        PathOut r = tracePath(idx.x, idx.y, rng);
+    // pixels whose primary ray meets dispersive glass (the prism) get more samples: one wavelength per path
+    // through it means colour noise there, and they are few
+    const unsigned int spp = params.sppPerLaunch;
+    bool split = false;
+    if (params.dispersionBoost > 1u) {
+        const Camera& cam = params.cam;
+        const float sx = ((idx.x + 0.5f) / params.renderWidth) * 2.0f - 1.0f, sy = 1.0f - ((idx.y + 0.5f) / params.renderHeight) * 2.0f;
+        const float3 d = normalize(cam.fwd + cam.right * (sx * cam.tanHalfX) + cam.up * (sy * cam.tanHalfY));
+        const Hit h = traceRadiance(cam.pos, d, 1e16f, false);
+        if (h.hit) {
+            const Material& m = params.materials[h.mat];
+            if (m.type == MAT_DIELECTRIC && (iorIsDispersive(m.iorInside) || iorIsDispersive(m.iorOutside))) split = true;
+        }
+    }
+    for (unsigned int s = 0; s < spp; ++s) {
+        Rng rng = makeRng(pix, (params.frame * params.sppPerLaunch) * 64u + s, 0xA511E9B3u ^ (params.seed * 0x9E3779B9u));
+        PathOut r;
+        if (split) {   // stratified spectral split: same random numbers, a different lane carried through the glass
+            const Rng start = rng;
+            r = tracePath(idx.x, idx.y, rng, 0);
+            for (int k = 1; k < 4; ++k) {
+                Rng rk = start;
+                const PathOut q = tracePath(idx.x, idx.y, rk, k);
+                r.xyz += q.xyz; r.causticXyz += q.causticXyz;
+            }
+            r.xyz *= 0.25f; r.causticXyz *= 0.25f;
+        } else {
+            r = tracePath(idx.x, idx.y, rng);
+        }
         if (params.sampleClampY > 0.0f) {   // live mode: fireflies would become blotches in the denoiser
             float3 base = r.xyz - r.causticXyz;
             if (base.y > params.sampleClampY) base = base * (params.sampleClampY / base.y);

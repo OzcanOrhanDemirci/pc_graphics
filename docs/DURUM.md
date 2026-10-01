@@ -68,6 +68,20 @@
 - **Renk:** zeytin-kahve ton, serin gök dolgusunun yokluğundandı; güneşe sırtı dönük sağ duvar açıklığı dengeyi kurdu.
   Gök modelinde çoklu saçılım yok (gök gerçekte daha parlak/mavi): bilinen eksik.
 
+- **Tabakalı tayf bölme:** prizmayı gören pikseller aynı rastgele sayılarla 4 kez izlenir, camda her seferinde başka
+  dalga boyu sürer (ortalama yansız). Durağanda +%24 süre, prizmanın renk gürültüsü belirgin düşük. "16 örnek ver"
+  denemesi aynı iş parçacığında sıralı çalıştığı için başlatmayı bekletti (11 → 48 ms): sayı değil dağılım önemli.
+- **Fırın testi bir tutarsızlık daha yakaladı** (+%0,15): fırında köpükler ışın için opak, gölge ışını için geçirgendi.
+  Yalnız fırına özgü; düzeldi (%0,02-0,03).
+
+## Referansa uzaklık (LDR-FLIP, kahraman kare, 16.384 örnek referans)
+| Kip | Süre | FLIP | Not |
+|---|---|---|---|
+| durağan 16 örnek + gg | 0,7 s | 0,077 | |
+| durağan 256 örnek + gg | 11,6 s | 0,061 | |
+| durağan 1024 örnek + gg | 45 s | 0,041 | ham 1024: 0,055 |
+| canlı 80. kare (donuk) | 25,9 fps | 0,115 | en çok prizmada ayrışıyor (canlıda karıncalı tayf) |
+
 ## Ölçümler
 | Tarih | Ne | Değer |
 |---|---|---|

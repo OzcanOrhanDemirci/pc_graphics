@@ -95,7 +95,9 @@ struct Params {
     float liveAlphaCaustic;      // same for the caustic buffer
     int cameraDispersion;        // camera paths split colours in glass (1, still mode) or refract along the hero only (0, live)
     int hazeAllSegments;         // single scattering on every path segment (1) or only before the first surface (0)
-    float sampleClampY;          // live mode: a path sample's luminance is clamped to this (0: no clamp, unbiased)
+    float sampleClampY;
+    float denoiseClampY;
+    unsigned int dispersionBoost;// > 1: pixels looking into dispersive glass trace a stratified spectral split (4 runs)         // the denoiser's input only: luminance ceiling against early fireflies (accumulation untouched)          // live mode: a path sample's luminance is clamped to this (0: no clamp, unbiased)
     int view;                    // 0 beauty, 1 albedo, 2 normal, 3 caustics, 4 heat, 5 relative noise
     float exposure;              // linear multiplier before tone mapping
     const float* blueNoise;      // 128 x 128, values in [0,1)
