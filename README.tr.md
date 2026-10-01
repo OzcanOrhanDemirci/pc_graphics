@@ -181,12 +181,12 @@ Binanın yaptığı (çatının zemine göre en büyük ötelemesi, deterministi
 | Kayıt | Yatay tepe ivme | Sonuç |
 | --- | --- | --- |
 | 2020 Bayraklı ×1 | 0,12 g | ayakta, öteleme %0,29 |
-| 1999 İzmit ×1 | 0,25 g | ayakta, %0,28 |
-| 1999 Yarımca ×1 | 0,34 g | ayakta, %0,91 |
-| 1999 Yarımca ×1,5 | | yumuşak kat göçmesi, çatı 13,0 m iner |
-| 2023 Antakya ×1 | 0,67 g | göçer, çatı 12,8 m iner |
-| 2023 Pazarcık ×1 | 2,25 g (bir bileşen) | ağır hasarla ayakta: kalıcı %1,34 öteleme, korkuluklar ve dolgu duvarlar savrulur |
-| 2023 Pazarcık ×1,25 | | göçer, çatı 12,4 m iner |
+| 1999 İzmit ×1 | 0,25 g | ayakta, %0,26 |
+| 1999 Yarımca ×1 | 0,34 g | ayakta, %0,70 |
+| 1999 Yarımca ×1,5 | | yumuşak kat göçmesi, çatı 12,5 m iner |
+| 2023 Antakya ×1 | 0,67 g | göçer, çatı 12,3 m iner |
+| 2023 Pazarcık ×1 | 2,25 g (bir bileşen) | ağır hasarla ayakta: öteleme %0,81, korkuluklar ve dolgunun çoğu dökülür |
+| 2023 Pazarcık ×1,25 | | göçer, çatı 12,1 m iner |
 
 Pazarcık ×1 tam eşikte: en sonda düzeltilen bir modelleme hatasına kadar binayı yıkıyordu (aşağıda), düzeltmeden
 sonra bina ayakta. Sınırındaki yapı kaotiktir; bu sonuçların bir şey ifade etmesi için çözücünün önce deterministik
@@ -214,6 +214,11 @@ Okunmaya değer kararlar:
   çıkıyordu. Bir parçanın kendi donatı oranı (balkonların) değdiği tuğlaya sızıyordu: dayanımı sıfır ama korkuluğun
   tabanını 1,8 kat katılaştıran, çatlatan kuvveti de o kadar büyüten demirler. Hiçbir test ve klip göstermemişti.
   Düzeltmek Pazarcık ×1'i göçmeden ayakta kalmaya taşıdı.
+- **İç içe geçmeyi itmek bir şey fırlatmamalı.** İç içe geçmeler 2 m/s'ye kadar hızla dışarı itiliyordu. Tuğla
+  korkuluğun ezilen bağı onu kirişe birkaç santim gömüyor; son lif kopunca gömülme bir anda itiliyor, 150 kg'lık blok
+  3-4 m/s ile yukarı fırlıyordu (Özcan gördü: hafif parçalar düşmek yerine fırlıyor). 0,5 m/s'de binadan fırlayan
+  tuğla (yerden 1 m'nin üstünde, bir karede 2 m/s'den fazla hızlanan) Pazarcık'ta 93'ten 1'e, Antakya'nın çöküşünden
+  önce 44'ten 0'a indi; testler ve her kaydın binaya yaptığı değişmedi.
 - **Taşıyıcıyı ölç, üstünde duranı değil.** "Çatı ötelemesi" en üstteki parçaların ortalamasıydı, onlar da tuğla
   korkuluktu; savrulan korkuluk, ayakta duran binada çatının 9,7 m düştüğü diye okundu.
 

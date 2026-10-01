@@ -3,6 +3,13 @@
 > Tek kaynak durum panosu. Plan ve Özcan'ın sözleri `docs/yikim/PLAN.md`'de.
 
 ## Şu an
+- **2026-10-02 · Fırlayan tuğlalar düzeltildi.** Özcan (kapanıştan sonra): *"Fizik kısmı tamam, çok iyi olmuş. [...]
+  Yıkılma fiziği hem çok gerçekçi hem de tutarlı hissettiriyor. Sadece arada hafif parçalar uçuşabiliyor, kolonlar
+  değil de kahverengimsi duvar gibi olanlar. Onlar her zaman değil bazen sallanırken düşmek yerine fırlıyor. Fizik
+  anlamında sadece onu düzeltebilirsin."* Sebep: iç içe geçmeyi itme hızı sınırı (2 m/s) hafif bloğu fırlatıyordu
+  (ayrıntı "Kapanışta öğrenilenler"). `phys.max_depenetration` 2 → **0,5 m/s**. Binadan fırlayan tuğla Pazarcık ×1'de
+  93 → 1, Antakya çöküş öncesi 44 → 0, Yarımca ×1 13 → 0, Bayraklı 3 → 0. Testler 24/26, her kaydın sonucu aynı.
+  Yan yana klip: `captures/yikim/y3_firlama_once_sonra_pazarcik.mp4`. Tanı aracı: `--set test.kick=2 test.kick_min_y=1`.
 - **2026-10-02 · 🏁 Sahne 3 kapandı.** Özcan (Y2 klibi üzerine): *"Tamam. Video yine iyi duruyor. Artık son eklemeleri,
   düzenlemeleri yapıp tamamlayabilirsin."* Kapanışta yapılanlar:
   - **Canlı pencere hızlandı: 28-30 → 55-75 fps** (1920×1080, 6 örnek; koşudan koşuya, fizik saniyede en çok 60 adım). Fizik bir sonraki adımı hesaplarken görüntü
@@ -139,6 +146,23 @@ taşıyıcı sistemin en üst parçaları (döşeme, kiriş, kolon başı).
 | 2023 Pazarcık ×1,25 | | tam göçme, çatı 12,4 m iner |
 | 2023 Pazarcık ×1,5 | | tam göçme, çatı 12,9 m iner |
 
+**Güncel (10-02, iç içe geçme itme sınırı 0,5 m/s; aynı ölçüm; son sütun: binadan fırlayan tuğla, yerden 1 m'nin
+üstünde bir karede 2 m/s'den fazla hızlanan, eski sınır → yeni):**
+
+| Kayıt | En büyük öteleme | Sonuç | Fırlayan tuğla |
+|---|---|---|---|
+| 2020 Bayraklı ×1 | %0,29 | ayakta | 3 → 0 |
+| 1999 İzmit ×1 | %0,26 | ayakta | |
+| 1999 Yarımca ×1 | %0,70 | ayakta | 13 → 0 |
+| 1999 Yarımca ×1,5 | | tam göçme, çatı 12,5 m iner | |
+| 2023 Antakya ×1 | | tam göçme, çatı 12,3 m iner | çöküşten önce (16,6 sn) 44 → 0 |
+| 2023 Pazarcık ×1 | %0,81 | ağır hasarla ayakta | 93 → 1 |
+| 2023 Pazarcık ×1,25 | | tam göçme, çatı 12,1 m iner | |
+| 2023 Pazarcık ×1,5 | | tam göçme, çatı 12,5 m iner | |
+
+Göçmelerde yerdeki enkazda hâlâ "fırlama" sayılıyor (Pazarcık ×1'de yerden 1 m'nin altında 15 parça): düşen blok yerde
+yatan bloğa çarpınca alttaki bir kenarı üstünde dönerek kalkıyor (tırmık gibi). Fiziksel olarak mümkün; dokunulmadı.
+
 Testler 24/26 (periyot 0,448 s, sönüm 0,053: değişmedi).
 
 Bina testi: sönüm (serbest titreşim, tepelerin logaritmik azalması, en küçük kareler) **0,053**; periyot 0,449 s
@@ -225,6 +249,14 @@ yumuşaklığı Y1'de doğal periyotla ölçülecek; gerekirse alt adım artar.
 - **Taşıyıcıyı ölç, üstünde duranı değil:** "çatı" en üstteki parçaların ortalamasıydı, yani tuğla korkuluk; savrulan
   korkuluk, ayakta duran binada "çatı 9,7 m çöktü" diye okundu. Kare bakınca bina ayaktaydı. Ölçü artık taşıyıcı
   sistemin en üst parçalarında.
+
+- **İç içe geçmeyi itmek bir şey fırlatmamalı (Özcan gördü, 10-02):** temas, derin iç içe geçmeyi alt adım başına
+  `maxDepenetration·h` kadar itiyor, hız geçişi de ayrılma hızını o sınıra kırpıyordu: 2 m/s. Ağır parçada fark
+  edilmez; 154 kg'lık korkuluk bloğu kirişe ~2 cm gömülüyor (bağlı çiftte temas ancak `BOND_OVERLAP` = 2 cm'den sonra
+  devrede, tuğla bağı ezilirken blok o kadar batıyor), son lif kopunca bağ kalkıyor ve gömülme bir anda itiliyor:
+  blok 3-4 m/s ile yukarı, dönerek. Tanıdaki iz: temas kuvveti 760-880 kN = 154 kg × 2 m/s / h (sınırın ta kendisi).
+  0,5 m/s'de gömülme ~3 karede çözülür, oluşan hız gözle görülmez; testler (yığın, düşme, gömülme, enerji) ve bina
+  sonuçları değişmedi. 1 m/s ara değeri Pazarcık ×1'i göçürdü (eşik kaotik), 0,25 ile 0,5 arasında fark küçük.
 
 ## Deprem kayıtları (`assets/deprem/`, `src/yikim/quake.*`)
 ESM (esm-db.eu, işlenmiş MP, hesapsız indirilebilir) ve AFAD TADAS (misafir girişi). İvme cm/s², hepsi ayrıştırılıp

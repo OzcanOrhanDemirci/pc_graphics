@@ -185,12 +185,12 @@ What the building does (roof drift relative to the ground, deterministic):
 | Record | Peak ground acceleration | Result |
 | --- | --- | --- |
 | 2020 Bayraklı ×1 | 0.12 g | stands, drift 0.29 % |
-| 1999 İzmit ×1 | 0.25 g | stands, 0.28 % |
-| 1999 Yarımca ×1 | 0.34 g | stands, 0.91 % |
-| 1999 Yarımca ×1.5 | | soft-storey collapse, the roof comes down 13.0 m |
-| 2023 Antakya ×1 | 0.67 g | collapses, the roof comes down 12.8 m |
-| 2023 Pazarcık ×1 | 2.25 g (one component) | stands, heavily damaged: 1.34 % drift that stays, parapets and infill thrown off |
-| 2023 Pazarcık ×1.25 | | collapses, the roof comes down 12.4 m |
+| 1999 İzmit ×1 | 0.25 g | stands, 0.26 % |
+| 1999 Yarımca ×1 | 0.34 g | stands, 0.70 % |
+| 1999 Yarımca ×1.5 | | soft-storey collapse, the roof comes down 12.5 m |
+| 2023 Antakya ×1 | 0.67 g | collapses, the roof comes down 12.3 m |
+| 2023 Pazarcık ×1 | 2.25 g (one component) | stands, heavily damaged: drift 0.81 %, parapets and much of the infill fall |
+| 2023 Pazarcık ×1.25 | | collapses, the roof comes down 12.1 m |
 
 Pazarcık ×1 sits right at the threshold: it brought the building down until a modelling bug was fixed at the very end
 (below), and it stands after it. A building at its limit is chaotic; that is why the solver had to become
@@ -221,6 +221,12 @@ Decisions worth reading:
   brick parapets. A piece's own steel ratio (the balconies') leaked into the brick it touched: bars with zero
   strength that still stiffened the parapet's base 1.8 times, and raised the force that cracks it by as much. No test
   and no clip had shown it. Fixing it moved Pazarcık ×1 from collapse to standing.
+- **Pushing an overlap out must not throw things.** Overlaps were pushed out at up to 2 m/s. A brick parapet's
+  crushing bond lets it sink a couple of centimetres into the beam; when its last fibre went, the overlap was pushed
+  out at once and a 150 kg block left upwards at 3 to 4 m/s (Özcan saw it: light pieces flying instead of falling).
+  At 0.5 m/s, bricks thrown from the building (more than 2 m/s gained in one frame, above 1 m) went from 93 to 1
+  under Pazarcık and from 44 to 0 before Antakya's collapse; the tests and what each record does to the building
+  stayed the same.
 - **Measure the structure, not what stands on it.** "Roof drift" was averaged over the highest pieces, which were the
   brick parapet; a parapet thrown off read as the roof falling 9.7 m from a building still standing.
 

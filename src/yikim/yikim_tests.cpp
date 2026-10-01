@@ -37,6 +37,7 @@ void applyParams(PhysWorld& w) {   // solver settings from scenes/yikim.cfg (and
     w.params.contactIters = g_cfg->i("phys.contact_iters", w.params.contactIters);
     w.params.interfaceIters = g_cfg->i("phys.interface_iters", w.params.interfaceIters);
     w.params.dampAlpha = g_cfg->f("phys.damp_alpha", w.params.dampAlpha);
+    w.params.maxDepenetration = g_cfg->f("phys.max_depenetration", w.params.maxDepenetration);
 }
 
 double kinetic(const PhysWorld& w) {

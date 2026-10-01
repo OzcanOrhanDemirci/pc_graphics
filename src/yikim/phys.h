@@ -48,7 +48,10 @@ struct PhysParams {
     float muStatic = 0.7f, muDynamic = 0.6f;
     float restitution = 0.15f;
     float slop = 0.0005f;          // m of penetration tolerated (resting contacts do not chatter)
-    float maxDepenetration = 2.0f; // m/s: a deep overlap is resolved at most this fast (spawned or tunnelled bodies)
+    // m/s: a deep overlap is resolved at most this fast. 2 m/s threw light brick blocks out of the shaking building
+    // (a parapet's crushed bond lets it sink 2 cm into the beam, the overlap is pushed out when the last fibre goes;
+    // measured, Pazarcik x1: 116 blocks kicked by more than 2 m/s in a frame; 0.5: 15, mostly struck by falling debris)
+    float maxDepenetration = 0.5f;
     float relax = 1.0f;            // relaxation of a body's pairs (Jacobi between pairs)
     int interfaceIters = 2;        // colour passes over the interfaces per substep
     int contactIters = 4;          // per pair: averaged normal pass + patch static friction, repeated

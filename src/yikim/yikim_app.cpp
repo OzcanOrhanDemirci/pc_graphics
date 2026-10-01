@@ -25,6 +25,7 @@
 #include <cstdlib>
 #include <ctime>
 #include <filesystem>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -75,6 +76,7 @@ struct YikimApp {
         world.params.muDynamic = cfg.f("phys.mu_dynamic", world.params.muDynamic);
         world.params.restitution = cfg.f("phys.restitution", world.params.restitution);
         world.params.dampAlpha = cfg.f("phys.damp_alpha", world.params.dampAlpha);
+        world.params.maxDepenetration = cfg.f("phys.max_depenetration", world.params.maxDepenetration);
     }
     void build() {
         if (cfg.values.count("scene") && cfg.values.at("scene") == "cerceve") {
@@ -243,6 +245,10 @@ static int runClip(YikimApp& app, double seconds, double still, unsigned spp, co
     float fastest = 0;
     int fastestBody = -1;
     double fastestT = 0, fastestY = 0;
+    std::vector<float3> kickPrev;
+    std::set<int> kickBodies, kickUpBodies;
+    int kicks = 0;
+    float kickUp = 0, kickSide = 0;
     for (int k = 0; k <= frames; ++k) {
         const double t = k * dt;
         app.events(t);
@@ -316,6 +322,48 @@ static int runClip(YikimApp& app, double seconds, double still, unsigned spp, co
                                     pi.n.x, pi.n.y, pi.n.z);
                 }
             prevVel = app.world.vel;
+        }
+        // diagnosis (test.kick = dv m/s): brick pieces whose speed relative to the ground jumps by more than dv in one
+        // frame (a throw, not a fall: gravity adds 0.16 m/s a frame). The first test.kick_n are shown with what touches them.
+        if (app.cfg.f("test.kick", 0.0f) > 0.0f) {
+            const float dvMin = app.cfg.f("test.kick", 0.0f);
+            if (kickPrev.size() == app.world.vel.size()) {
+                const float3 g0 = app.world.vel[0], g0p = kickPrev[0];
+                for (size_t i = 1; i < app.world.vel.size(); ++i) {
+                    if (app.world.kinematic[i] || app.world.info[i].tag != 3) continue;
+                    if (app.world.pos[i].y - app.world.pos[0].y < app.cfg.f("test.kick_min_y", 0.0f)) continue;   // e.g. not the debris on the ground
+                    const float3 vr = app.world.vel[i] - g0, vp = kickPrev[i] - g0p;
+                    const float gain = length(vr) - length(vp);
+                    kickUp = std::max(kickUp, vr.y);
+                    kickSide = std::max(kickSide, std::sqrt(vr.x * vr.x + vr.z * vr.z));
+                    if (vr.y > 2.0f) kickUpBodies.insert(int(i));
+                    if (gain <= dvMin) continue;
+                    kickBodies.insert(int(i));
+                    ++kicks;
+                    if (kicks > app.cfg.i("test.kick_n", 8)) continue;
+                    const int b = int(i);
+                    std::printf("FIRLAMA t=%.3f govde %d (%.0f kg) y %.2f: |v| %.2f -> %.2f m/s, v (%.2f %.2f %.2f) -> (%.2f %.2f %.2f), |w| %.1f rad/s\n", t, b,
+                                app.world.info[b].mass, app.world.pos[b].y, length(vp), length(vr), vp.x, vp.y, vp.z, vr.x, vr.y, vr.z,
+                                length(app.world.angVel[b]));
+                    std::vector<unsigned> fl;
+                    std::vector<float3> fo;
+                    app.world.fibres(fl, fo);
+                    size_t fi = 0;
+                    for (const InterfaceDesc& d : app.world.interfaceDescs) {
+                        int alive = 0;
+                        float fmax = 0;
+                        for (size_t q = 0; q < d.fibers.size(); ++q, ++fi)
+                            if (!(fl[fi] & 4u)) { ++alive; fmax = std::max(fmax, length(fo[fi])); }
+                        if ((d.a == b || d.b == b) && alive)
+                            std::printf("    arayuz %d-%d: %d canli lif, en buyuk kuvvet %.0f N\n", d.a, d.b, alive, fmax);
+                    }
+                    for (const PhysWorld::PatchInfo& pi : app.world.patchesOf(b))
+                        std::printf("    temas: govde %d (tur %d, %.0f kg, v (%.2f %.2f %.2f)), normal kuvvet %.0f N, n (%.2f %.2f %.2f)\n", pi.other,
+                                    pi.other > 0 ? app.world.info[pi.other].tag : -1, app.world.info[pi.other].mass, app.world.vel[pi.other].x - g0.x,
+                                    app.world.vel[pi.other].y - g0.y, app.world.vel[pi.other].z - g0.z, pi.force, pi.n.x, pi.n.y, pi.n.z);
+                }
+            }
+            kickPrev = app.world.vel;
         }
         // the fastest piece: a fall from the roof is ~17 m/s; much more is energy the solver made up
         for (size_t i = 1; i < app.world.vel.size(); ++i) {
@@ -395,6 +443,9 @@ static int runClip(YikimApp& app, double seconds, double still, unsigned spp, co
     std::printf("%d kare; fizik ort. %.2f ms/kare, goruntu ort. %.1f ms/kare\n", shots, physMs / std::max(1, frames), rendMs / std::max(1, shots));
     std::printf("cati: zemine gore en buyuk yatay oteleme %.3f m (t=%.2f s, yukseklige oran %.2f%%), en buyuk cokme %.3f m\n", maxDrift, tMaxDrift,
                 100.0 * maxDrift / roofY, maxDrop);
+    if (app.cfg.f("test.kick", 0.0f) > 0.0f)
+        std::printf("firlama (tugla, zemine gore, karede > %.1f m/s hizlanma): %d olay, %zu parca; yukari > 2 m/s: %zu parca; en buyuk yukari %.2f m/s, "
+                    "en buyuk yatay %.2f m/s\n", app.cfg.f("test.kick", 0.0f), kicks, kickBodies.size(), kickUpBodies.size(), kickUp, kickSide);
     {
         const double fall = std::sqrt(2.0 * 9.81 * (roofY + 1.0));
         std::printf("en hizli parca: %.1f m/s (govde %d, tur %d, t=%.2f s, y=%.1f m); catidan serbest dusus %.1f m/s\n", fastest, fastestBody,
