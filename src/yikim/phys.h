@@ -67,7 +67,7 @@ struct BodyInfo {     // host copy of what the renderer and the tests need
 };
 
 struct PhysStats {
-    int bodies = 0, interfaces = 0, fibres = 0, alive = 0, broken = 0, cracked = 0, pairs = 0, contacts = 0, colours = 0;
+    int bodies = 0, interfaces = 0, fibres = 0, alive = 0, broken = 0, cracked = 0, pairs = 0, contacts = 0, colours = 0, maxDegree = 0;
     float ms = 0;              // GPU time of the last step
 };
 
@@ -84,10 +84,13 @@ public:
     int addInterface(const InterfaceDesc& d);
     void upload();                 // to the GPU; colours the interface graph
     void step(float dt);           // one frame: broad phase once, then params.substeps substeps
+    void stepBegin(float dt, void* afterEvent);   // the same, queued: returns at once (afterEvent: a cudaEvent_t to wait for)
+    void stepEnd();                // waits for a queued step; anything reading or changing the state comes after it
     void download();               // positions, rotations, velocities to the host arrays below
     void settle(float seconds, float ramp, float dt);   // gravity ramped up, then rest; time restarts at 0
     void profile(float dt);        // one frame kernel by kernel (events), printed
     void setGroundMotion(double3 pos) { groundTarget_ = pos; }   // where the ground is at the end of the next step
+    double3 groundPos() const { return groundTarget_; }
     void breakBody(int b);         // every interface of the body breaks (interaction)
     void setVelocity(int b, float3 v, float3 w);   // a push (interaction, scenarios)
     // the body is gone (an explosive charge, "notional removal"): its interfaces break, it is parked far below the
@@ -106,6 +109,10 @@ public:
 
     // write the 3x4 object-to-world transform of body (first + i) into an array of OptixInstance (stride bytes)
     void writeTransforms(void* instances, size_t strideBytes, int first, int count, void* stream = nullptr);
+    // display, the reinforcing bars: two thin prisms per reinforced fibre (6 float3 vertices each, NaN when not shown):
+    // across a crack wider than minGap while the fibre holds, stubs out of both faces once it is gone (m)
+    int barPrisms() const;
+    void writeBars(void* verts, float radius, float minGap, float stub, void* stream = nullptr) const;
 
     PhysParams params;
     float gravityScale = 1.0f;     // share of params.gravity applied (settle ramps it)
@@ -128,6 +135,8 @@ private:
     bool uploaded_ = false;
     int lastPairs_ = 0;
     int frame_ = 0;
+    bool pending_ = false;
+    float pendingDt_ = 0.0f;
     float gravityNow_ = 9.81f;
     float lastH_ = 0.0f;
     std::vector<char> graphKey_;
@@ -135,6 +144,7 @@ private:
     double3 groundTarget_ = {0, 0, 0}, groundPrev_ = {0, 0, 0};
     std::vector<std::vector<int>> colours_;
     std::vector<int> colourOffset_;
+    int maxDegree_ = 0;
     void solveInterfaces(float h, void* stream);
     void freeDevice();
 };

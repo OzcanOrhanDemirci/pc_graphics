@@ -43,4 +43,8 @@ struct YikimParams {
     float2 groundShift;            // horizontal ground displacement (the grid rides along)
     float exposure;
     float damageTint;              // display: how much a cracked body darkens
+    // picking (__raygen__pick, one thread): the body under a pixel
+    float2 pickPixel;              // in render pixels
+    int* pickBody;                 // out: body index (instance + 1), 0 the ground, -1 the sky
+    float4* pickHit;               // out: hit point xyz, distance w
 };

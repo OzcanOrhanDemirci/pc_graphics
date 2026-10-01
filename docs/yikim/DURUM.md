@@ -3,6 +3,21 @@
 > Tek kaynak durum panosu. Plan ve Özcan'ın sözleri `docs/yikim/PLAN.md`'de.
 
 ## Şu an
+- **2026-10-02 · 🏁 Sahne 3 kapandı.** Özcan (Y2 klibi üzerine): *"Tamam. Video yine iyi duruyor. Artık son eklemeleri,
+  düzenlemeleri yapıp tamamlayabilirsin."* Kapanışta yapılanlar:
+  - **Canlı pencere hızlandı: 28-30 → 55-75 fps** (1920×1080, 6 örnek; koşudan koşuya, fizik saniyede en çok 60 adım). Fizik bir sonraki adımı hesaplarken görüntü
+    öncekini çiziyor (iki akış, aralarında bir olay); karede en çok bir fizik adımı.
+  - **Donatı görünümü** (Y3'ün parçası): lif tuttukça çatlağın üstünden geçen, koptuğunda yüzden eğri çıkan demirler;
+    **B** gizler. Maliyeti ölçülemeyecek kadar küçük.
+  - **Fizik hatası düzeltildi:** balkon döşemesinin donatı oranı ona değen tuğlaya (korkuluk) sızıyordu: dayanımı sıfır,
+    ama tabanı 1,8 kat katılaştıran "hayalet demir". Donatı görünümü buldu (yerdeki korkuluk parçalarından demir
+    çıkıyordu). Deprem tablosu yeniden ölçüldü (aşağıda). Sonuç: Pazarcık ×1 artık **ağır hasarla ayakta**
+    (önceden göçüyordu), ×1,25'te göçüyor; öbür kayıtlar aynı sonucu verdi. "Çatı ötelemesi" ölçüsü de düzeltildi
+    (korkuluğu ölçüyordu).
+  - README (EN + TR) üç sahneyle güncellendi (sahne 2 hiç eklenmemişti), `GOSTERI.md`'ye `yikim.exe` tuşları.
+  - Açmak: `build\yikim.exe` (çift tık, tam ekran). Testler 24/26 (kalan iki: konsolun elastik yumuşaklığı).
+  - **Yapılmadı (bilerek):** Y4 toz, Y5 görüntü (Özcan'ın ışık kararı "sade güneşli gün"), Y3'ün geri kalanı (pürüzlü
+    kırık yüzey, sıva, cam). İstenirse açılır.
 - **2026-10-01 · Y2 (deprem) benim tarafımda bitti; Özcan'ın gözü bekleniyor.** Özcan (Y1 kapanışı): *"Çok iyi duruyor.
   Devam edebilirsin."* Y2'de: **determinizm** (aynı deprem aynı binayı her koşuda aynı yıkar), **sönüm %5,3** (kütleye
   orantılı, zemine göre), bağlı çiftlerde derin iç içe geçmeye temas, ayrılma hızı cırcırı kapandı (en hızlı parça
@@ -28,13 +43,13 @@
 | Faz | Durum | Not |
 |---|---|---|
 | Y0 Fizik çekirdeği | ✅ 10-01 | çözücü, testler, sade görüntü, iki klip; Özcan: hız ve his yeterli |
-| Y1 Bina | ✅ benim tarafım | apartman, testler, üç klip; kesit ısı haritası yapılmadı (tanı araçları yetti); Özcan'ın gözü bekleniyor |
-| Y2 Deprem | ✅ benim tarafım | kayıtlar, otomatik başlangıç, determinizm, sönüm, iki şiddet klibi; Özcan'ın gözü bekleniyor |
-| Y3 Kırılma görünümü | ⏳ | |
-| Y4 Toz | ⏳ | |
-| Y5 Görüntü | ⏳ | |
-| Y6 Canlı | ⏳ | |
-| Y7 Fizik turları | ⏳ | |
+| Y1 Bina | ✅ 10-01 | apartman, testler, üç klip; kesit ısı haritası yapılmadı (tanı araçları yetti); Özcan: "Çok iyi duruyor" |
+| Y2 Deprem | ✅ 10-01 | kayıtlar, otomatik başlangıç, determinizm, sönüm, iki şiddet klibi; Özcan: "Video yine iyi duruyor" |
+| Y3 Kırılma görünümü | ◐ 10-02 | yalnız donatı (çatlakta köprü, kopunca filiz); pürüzlü yüzey, sıva, cam yapılmadı |
+| Y4 Toz | ✖ | yapılmadı: sahne kapandı, odak fizikti |
+| Y5 Görüntü | ✖ | yapılmadı: Özcan'ın ışık kararı sade güneşli gün |
+| Y6 Canlı | ✅ 10-02 | kamera, patlatma (sol tık, Ctrl büyük), deprem tuşları, ağır çekim, HUD, 55-60 fps |
+| Y7 Fizik turları | ✅ | her fazın klibi Özcan'ın gözünden geçti (Y0, Y1, Y2 onayları) |
 
 ## Mimari (Y0)
 - `src/yikim/`: `geom` (dışbükey çokyüzlü, kesme, kütle ve eylemsizlik), `phys.h/.cu` (ekran kartı çözücüsü),
@@ -108,6 +123,24 @@ döşeme donatısı çekme başlığı); ön iki hattın 8'i → ön yarı göç
 | 2023 Antakya ×1 (0,67 g) | tam göçme |
 | 2023 Pazarcık ×1 | tam göçme |
 
+**Kapanış (10-02, korkuluk düzeltmesinden ve çatı ölçüsü düzeltmesinden sonra; `--still 45`):**
+⚠️ Yukarıdaki Y1 ve Y2 tablolarında "çatı" en üstteki parçaların ortalamasıydı, yani **tuğla korkuluk**; ayakta kalan
+binalarda korkuluk yerinde kaldığı için öteleme sayıları yaklaşık doğru, ama korkuluk savrulunca anlamsız. Artık çatı =
+taşıyıcı sistemin en üst parçaları (döşeme, kiriş, kolon başı).
+
+| Kayıt | Çatının zemine göre en büyük ötelemesi | Sonuç |
+|---|---|---|
+| 2020 Bayraklı ×1 | %0,29 | ayakta |
+| 1999 İzmit ×1 | %0,28 | ayakta |
+| 1999 Yarımca ×1 | %0,91 | ayakta |
+| 1999 Yarımca ×1,5 | | tam göçme, çatı 13,0 m iner |
+| 2023 Antakya ×1 | | tam göçme, çatı 12,8 m iner |
+| 2023 Pazarcık ×1 | %1,34 (43,6. sn; 90 sn'ye kadar artmıyor) | **ağır hasarla ayakta** (korkuluklar, dolgu duvarlar savrulur); düzeltmeden önce tam göçüyordu |
+| 2023 Pazarcık ×1,25 | | tam göçme, çatı 12,4 m iner |
+| 2023 Pazarcık ×1,5 | | tam göçme, çatı 12,9 m iner |
+
+Testler 24/26 (periyot 0,448 s, sönüm 0,053: değişmedi).
+
 Bina testi: sönüm (serbest titreşim, tepelerin logaritmik azalması, en küçük kareler) **0,053**; periyot 0,449 s
 (sönüm değiştirmedi). Determinizm testi: aynı yığın iki koşu, fark **0 m**; bina ölçeğinde Yarımca iki koşu birebir.
 Testler 24/26.
@@ -173,6 +206,25 @@ yumuşaklığı Y1'de doğal periyotla ölçülecek; gerekirse alt adım artar.
 - **Ayrılma hızı tavanında "önceki ayrılma hızına izin" cırcır oldu** (1,5 → 11,5 → 29 m/s): iç içe geçme sürerken
   tavan yalnız sekme hızı / 2 m/s.
 - **Yakalayıcı "bir karede 3 kat" kuralı iki karede biriken fırlamayı kaçırdı:** izleme (`test.watch`) buldu.
+
+## Kapanışta öğrenilenler (ölçülerek)
+- **Pencerede karede iki fizik adımı 30 fps'e kilitledi:** fizik ~15 ms, görüntü 1 ms iken kare 32-35 ms. Gerçek zamanı
+  yakalamaya çalışmak (adım biriktirmek) kare hızını yarıya indiriyor. Karede en çok bir adım + fizik ile görüntünün
+  iki akışta üst üste binmesi (görüntü önce dönüşümleri okur, bir olay kaydeder, fizik adımı o olayı bekler): 55-75
+  fps; fizik ağırlaştığında dünya biraz yavaşlar, kare hızı çökmez. Görüntü ekran kartını fizikle paylaşıyor: 16
+  örnekte fizik 5 ms yavaşladı, 6 örnek denge.
+- **Arayüz başına warp hızlandırmadı** (11,6 ms aynı): maliyet bellek beklemesi değil, 13 renk × 2 geçiş × 40 alt
+  adımlık küçük çekirdek dizisi; her biri en uzun arayüzünün seri yürüyüşü kadar sürüyor. 13 renk boyamanın alt sınırı.
+- **İç durumu göstermek denetlemektir:** donatı görünümünün ilk karesinde yerdeki tuğla korkuluk parçalarından demir
+  çıkıyordu. Sebep `glueTouching`: parçaya özel donatı oranı (balkon 0,012) "iki taraftan büyüğü" kuralıyla değdiği
+  tuğlaya geçiyordu; tuğla malzemesinde akma 0 olduğu için kuvvet taşımıyor ama Es·As ile tabanı 1,8 kat katılaştırıyor
+  ve çatlama kuvvetini aynı oranda büyütüyordu. Hiçbir test ve klip bunu göstermemişti.
+- **Bir hatayı düzeltmek eşikteki sonucu çevirebilir:** korkuluk düzeltmesi Pazarcık ×1'i göçmeden "ağır hasarla
+  ayakta"ya taşıdı (×1,25 göçer). Fizikte her düzeltmeden sonra bütün tablo yeniden ölçülür; tek kayıt üstünden
+  "model şunu yapar" denmez.
+- **Taşıyıcıyı ölç, üstünde duranı değil:** "çatı" en üstteki parçaların ortalamasıydı, yani tuğla korkuluk; savrulan
+  korkuluk, ayakta duran binada "çatı 9,7 m çöktü" diye okundu. Kare bakınca bina ayaktaydı. Ölçü artık taşıyıcı
+  sistemin en üst parçalarında.
 
 ## Deprem kayıtları (`assets/deprem/`, `src/yikim/quake.*`)
 ESM (esm-db.eu, işlenmiş MP, hesapsız indirilebilir) ve AFAD TADAS (misafir girişi). İvme cm/s², hepsi ayrıştırılıp

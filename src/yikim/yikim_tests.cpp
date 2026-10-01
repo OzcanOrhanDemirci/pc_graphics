@@ -418,6 +418,7 @@ void testBuilding(const Config& cfg) {
     applyParams(w);
     w.upload();
     w.settle(cfg.f("phys.settle_seconds", 2.0f), cfg.f("phys.settle_ramp", 0.5f), kDt);
+    if (cfg.i("test.profile", 0)) w.profile(kDt);
     w.download();
     const std::vector<double3> start = w.pos;
     for (int k = 0; k < 60 * 10; ++k) w.step(kDt);
@@ -425,8 +426,8 @@ void testBuilding(const Config& cfg) {
     double sag = 0;
     for (size_t i = 1; i < w.pos.size(); ++i) sag = std::max(sag, start[i].y - w.pos[i].y);
     PhysStats st = w.stats();
-    std::printf("      bina: %d govde, %d arayuz, %d lif, %d renk, fizik %.2f ms/kare, cati %.1f m\n", st.bodies, st.interfaces, st.fibres, st.colours,
-                st.ms, ap.height);
+    std::printf("      bina: %d govde, %d arayuz, %d lif, %d renk (alt sinir %d), fizik %.2f ms/kare, cati %.1f m\n", st.bodies, st.interfaces, st.fibres,
+                st.colours, st.maxDegree, st.ms, ap.height);
     report("bina: oturduktan sonra 10 sn, kirik lif", st.broken == 0, "%.0f", double(st.broken), "%.0f", 0.0);
     report("bina: 10 sn'de en buyuk cokme", sag < 0.02, "%.4f m", sag, "< %.2f m", 0.02);
     std::printf("      (catlak lif %d)\n", st.cracked);

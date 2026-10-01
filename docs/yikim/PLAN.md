@@ -38,6 +38,8 @@ Varsayılan (Özcan'a söylendi, itiraz gelmedi): sahnede insan yok.
 |---|---|
 | Y0 kapanışı (2026-10-01) | Özcan: *"fizik yeterince iyi duruyor ya hız ve hissiyat olarak. Devam edebilirsin."* |
 | Çatı (Y1) | **Düz çatı + su depoları + güneş kollektörleri**, binaya bağlı değil (kiremit çatı seçilmedi) |
+| Y1 kapanışı (2026-10-01) | Özcan: *"Çok iyi duruyor. Devam edebilirsin."* |
+| Y2 kapanışı ve sahnenin kapanışı (2026-10-01) | Özcan: *"Tamam. Video yine iyi duruyor. Artık son eklemeleri, düzenlemeleri yapıp tamamlayabilirsin."* Kapanış işi: Y6 canlı pencere (hız), Y3'ten donatı görünümü; Y4 toz ve Y5 görüntü yapılmadı (odak fizikti, ışık kararı "sade güneşli gün"), Y7'nin yerini her fazda Özcan'ın klip yorumları tuttu |
 
 ## 2 · Veri
 

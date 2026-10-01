@@ -1,6 +1,7 @@
 // Scene 3 "Yikim": an earthquake and a reinforced-concrete building, the physics on the GPU.
 //
-//   yikim.exe --test [name]            physics tests (dusme, yigin, egim, konsol, enerji, cerceve)
+//   yikim.exe                          the live window (full screen; --windowed: 1280x720; --autotest: keys on a timeline)
+//   yikim.exe --test [name]            physics tests (dusme, yigin, egim, konsol, mafsal, enerji, determinizm, cerceve, bina)
 //   yikim.exe --clip kolon|sarsinti --seconds S --out captures/x     frames (30 fps) + an mp4 (ffmpeg)
 //   yikim.exe --still T --out captures/x          the scenario simulated to T seconds, one clean frame
 //   options: --scenario kolon|sarsinti, --spp N, --width W, --height H, --set key=value, --root dir
@@ -11,11 +12,18 @@
 #include "yikim/yikim_renderer.h"
 #include "yikim/yikim_scenes.h"
 
+#define GLFW_INCLUDE_NONE
+#include <GLFW/glfw3.h>
+#include <windows.h>
+#include <GL/gl.h>
+#include "stb_easy_font.h"
+
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <ctime>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -30,6 +38,7 @@ static double ynow() {
     using namespace std::chrono;
     return duration<double>(steady_clock::now().time_since_epoch()).count();
 }
+static double fnow2() { return ynow(); }
 
 struct YikimApp {
     Config cfg;
@@ -47,6 +56,7 @@ struct YikimApp {
     double quakeT0 = 0;          // scenario time at which the record starts playing
     double quakeOffset = 0;      // seconds of the record skipped (its quiet start)
     float quakeScale = 1.0f;
+    double3 groundBase = {0, 0, 0};
     bool removed = false;
 
     void loadConfig() {
@@ -105,6 +115,9 @@ struct YikimApp {
         p.groundAlbedo = cfg.v3("ground.albedo", make_float3(0.30f, 0.29f, 0.27f));
         p.exposure = std::pow(2.0f, cfg.f("display.ev", 0.0f));
         p.damageTint = cfg.f("display.damage_tint", 0.35f);
+        renderer.barRadius = cfg.f("bar.radius", 0.01f);
+        renderer.barGap = cfg.f("bar.gap", 0.005f);
+        renderer.barStub = cfg.f("bar.stub", 0.25f);
     }
     void setCamera() {
         const float3 pos = cfg.v3("camera.pos", make_float3(-9.0f, 4.5f, -11.0f));
@@ -154,28 +167,54 @@ struct YikimApp {
             }
             removed = true;
         }
-        if (scenario == "sarsinti" && !quakeOn && t >= cfg.f("deprem.time", 1.0f)) {
-            std::string err;
-            if (quakeLoad(cfg.i("deprem.record", 0), root, quake, err)) {
-                quakeOn = true;
-                quakeT0 = t;
-                // where the record starts playing: deprem.offset seconds, or (negative) 15 s before its strongest moment
-                quakeOffset = cfg.f("deprem.offset", -1.0f);
-                if (quakeOffset < 0) quakeOffset = std::max(0.0, quake.tPeak - 15.0);
-                quakeScale = cfg.f("deprem.scale", 1.0f);
-                std::printf("t=%.2f s: deprem %s, yatay tepe ivme %.2f g (kaydin %.1f. sn), x%.2f, kaydin %.1f. saniyesinden\n", t, quake.name.c_str(),
-                            quake.pga / 9.81, quake.tPeak, quakeScale, quakeOffset);
-            } else {
-                std::printf("deprem kaydi yuklenemedi: %s\n", err.c_str());
+        if (scenario == "sarsinti" && !quakeOn && t >= cfg.f("deprem.time", 1.0f)) startQuake(cfg.i("deprem.record", 0), cfg.f("deprem.scale", 1.0f), t);
+        driveQuake(t);
+    }
+    // the record starts playing at scenario time t, from deprem.offset s of the record, or (negative) 15 s before its
+    // strongest moment; the ground keeps where it stands when a quake begins (the record is played relative to it)
+    bool startQuake(int record, float scale, double t) {
+        std::string err;
+        if (!quakeLoad(record, root, quake, err)) {
+            std::printf("deprem kaydi yuklenemedi: %s\n", err.c_str());
+            return false;
+        }
+        quakeOn = true;
+        quakeT0 = t;
+        quakeOffset = cfg.f("deprem.offset", -1.0f);
+        if (quakeOffset < 0) quakeOffset = std::max(0.0, quake.tPeak - 15.0);
+        quakeScale = scale;
+        groundBase = world.groundPos();
+        std::printf("t=%.2f s: deprem %s, yatay tepe ivme %.2f g (kaydin %.1f. sn), x%.2f, kaydin %.1f. saniyesinden\n", t, quake.name.c_str(),
+                    quake.pga / 9.81, quake.tPeak, quakeScale, quakeOffset);
+        return true;
+    }
+    void stopQuake() { quakeOn = false; }   // the ground stays where the record left it
+    void driveQuake(double t) {
+        if (!quakeOn) return;
+        const double tr = t - quakeT0 + quakeOffset;
+        if (tr > quake.duration()) { quakeOn = false; return; }
+        // fade in over a second so the ground does not jump to the record's displacement at the offset
+        const double3 d = quake.displacement(tr) - quake.displacement(quakeOffset);
+        const double fade = std::min(1.0, (t - quakeT0) / 1.0);
+        world.setGroundMotion(groundBase + d * (quakeScale * fade));
+    }
+    // an explosive charge at p: bodies whose centre is within r are gone, those within 3r are thrown outwards
+    int blast(float3 p, float r) {
+        world.download();
+        int n = 0;
+        for (size_t i = 1; i < world.pos.size(); ++i) {
+            if (world.kinematic[i]) continue;
+            const float3 d = f3(world.pos[i]) - p;
+            const float dl = length(d);
+            if (dl < r) {
+                world.removeBody(int(i));
+                ++n;
+            } else if (dl < 3.0f * r) {
+                const float k = cfg.f("patlama.hiz", 6.0f) * (1.0f - dl / (3.0f * r));
+                world.setVelocity(int(i), world.vel[i] + d * (k / dl), world.angVel[i]);
             }
         }
-        if (quakeOn) {
-            const double tr = t - quakeT0 + quakeOffset;
-            // fade in over a second so the ground does not jump to the record's displacement at the offset
-            const double3 d = quake.displacement(tr) - quake.displacement(quakeOffset);
-            const double fade = std::min(1.0, (t - quakeT0) / 1.0);
-            world.setGroundMotion(d * (quakeScale * fade));
-        }
+        return n;
     }
 };
 
@@ -189,12 +228,14 @@ static int runClip(YikimApp& app, double seconds, double still, unsigned spp, co
     std::vector<uchar4> px;
     double physMs = 0, rendMs = 0;
     int shots = 0;
-    // the roof: pieces whose top is at the top storey's level
+    // the roof: the structure's pieces whose top is at the top storey's level (not the brick parapet standing on it:
+    // measured, a parapet thrown off by the shaking read as the roof falling 9.7 m from a building still standing)
     std::vector<int> roof;
     double roofY = 0;
-    for (const Piece& p : app.pieces) roofY = std::max(roofY, p.hi.y);
     for (const Piece& p : app.pieces)
-        if (p.hi.y > roofY - 1e-6) roof.push_back(p.body);
+        if (p.kind != PK_WALL) roofY = std::max(roofY, p.hi.y);
+    for (const Piece& p : app.pieces)
+        if (p.kind != PK_WALL && p.hi.y > roofY - 1e-6) roof.push_back(p.body);
     std::vector<double3> start;
     double maxDrift = 0, maxDrop = 0, tMaxDrift = 0;
     bool caught = false;
@@ -385,6 +426,302 @@ static int runClip(YikimApp& app, double seconds, double still, unsigned spp, co
     return 0;
 }
 
+// ---------------------------------------------------------------------------------------------------------
+// the live window
+// ---------------------------------------------------------------------------------------------------------
+static bool g_ykeys[GLFW_KEY_LAST + 1] = {};
+static bool g_yclick = false, g_yclickCtrl = false;
+static double g_yscroll = 0.0;
+static void yKey(GLFWwindow*, int key, int, int action, int) {
+    if (key >= 0 && key <= GLFW_KEY_LAST && action == GLFW_PRESS) g_ykeys[key] = true;
+}
+static void yMouse(GLFWwindow* w, int button, int action, int mods) {
+    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
+        g_yclick = true;
+        g_yclickCtrl = (mods & GLFW_MOD_CONTROL) != 0;
+    }
+    (void)w;
+}
+static void yScroll(GLFWwindow*, double, double dy) { g_yscroll += dy; }
+static bool ypressed(int key) {
+    const bool p = g_ykeys[key];
+    g_ykeys[key] = false;
+    return p;
+}
+
+static void yDrawText(float x, float y, const std::string& text, float scale) {
+    static char buffer[200000];
+    const int quads = stb_easy_font_print(0, 0, const_cast<char*>(text.c_str()), nullptr, buffer, sizeof(buffer));
+    glEnableClientState(GL_VERTEX_ARRAY);
+    for (int pass = 0; pass < 2; ++pass) {
+        glPushMatrix();
+        glTranslatef(x + (pass == 0 ? scale : 0), y + (pass == 0 ? scale : 0), 0);
+        glScalef(scale, scale, 1);
+        if (pass == 0) glColor4f(0, 0, 0, 0.85f);
+        else glColor4f(1.0f, 0.97f, 0.9f, 1.0f);
+        glVertexPointer(2, GL_FLOAT, 16, buffer);
+        glDrawArrays(GL_QUADS, 0, quads * 4);
+        glPopMatrix();
+    }
+    glDisableClientState(GL_VERTEX_ARRAY);
+}
+
+static std::string ystamp() {
+    std::time_t t = std::time(nullptr);
+    char b[64];
+    std::strftime(b, sizeof(b), "%Y%m%d_%H%M%S", std::localtime(&t));
+    return b;
+}
+
+// --autotest: keys and clicks on a timeline, through the same paths as real input (the window cannot be watched)
+struct YKeyAt { double t; int key; };   // key -1: a click at the centre, -2: a ctrl-click at the centre
+static const YKeyAt kYAutotest[] = {{3.0, GLFW_KEY_F12}, {4.0, -1}, {6.0, GLFW_KEY_F12}, {7.0, GLFW_KEY_SPACE}, {16.0, GLFW_KEY_F12},
+                                    {17.0, GLFW_KEY_T}, {20.0, GLFW_KEY_F12}, {21.0, GLFW_KEY_R}, {26.0, GLFW_KEY_F12}, {27.0, GLFW_KEY_ESCAPE}};
+
+static int runWindow(YikimApp& app, bool windowed, bool autotest) {
+    if (!glfwInit()) { std::printf("glfwInit failed\n"); return 1; }
+    GLFWmonitor* mon = glfwGetPrimaryMonitor();
+    const GLFWvidmode* mode = glfwGetVideoMode(mon);
+    GLFWwindow* win = nullptr;
+    if (windowed) {
+        win = glfwCreateWindow(1280, 720, "pc_graphics - Yikim", nullptr, nullptr);
+    } else {
+        glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
+        glfwWindowHint(GLFW_REFRESH_RATE, mode->refreshRate);
+        glfwWindowHint(GLFW_AUTO_ICONIFY, GLFW_FALSE);
+        win = glfwCreateWindow(mode->width, mode->height, "pc_graphics - Yikim", mon, nullptr);
+    }
+    if (!win) { std::printf("window creation failed\n"); return 1; }
+    glfwMakeContextCurrent(win);
+    glfwSwapInterval(0);
+    glfwSetKeyCallback(win, yKey);
+    glfwSetMouseButtonCallback(win, yMouse);
+    glfwSetScrollCallback(win, yScroll);
+    GLuint tex = 0;
+    glGenTextures(1, &tex);
+    glBindTexture(GL_TEXTURE_2D, tex);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, app.width, app.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+    uchar4* pinned = nullptr;   // page-locked: the frame comes down at full PCIe speed
+    cudaMallocHost(reinterpret_cast<void**>(&pinned), size_t(app.width) * app.height * sizeof(uchar4));
+    double frameMs = 0.0;
+
+    // the free camera: yaw (0 looks along +z), pitch
+    YCamera& cam = app.renderer.params().cam;
+    float3 camPos = cam.pos;
+    float yaw = std::atan2(cam.fwd.x, cam.fwd.z), pitch = std::asin(std::max(-1.0f, std::min(1.0f, cam.fwd.y)));
+    float fovDeg = app.cfg.f("camera.fov", 50.0f);
+    auto applyCam = [&]() {
+        const float3 f = make_float3(std::sin(yaw) * std::cos(pitch), std::sin(pitch), std::cos(yaw) * std::cos(pitch));
+        cam.pos = camPos;
+        cam.fwd = normalize(f);
+        cam.right = normalize(cross(cam.fwd, make_float3(0, 1, 0)));
+        cam.up = cross(cam.right, cam.fwd);
+        cam.tanHalfY = std::tan(0.5f * fovDeg * 3.14159265f / 180.0f);
+        cam.tanHalfX = cam.tanHalfY * float(app.width) / float(app.height);
+    };
+    applyCam();
+
+    const float speeds[3] = {1.0f, 0.25f, 0.1f};
+    int speedIdx = 0;
+    bool paused = false, hud = true;
+    int record = app.cfg.i("deprem.record", 0);
+    float scale = app.cfg.f("deprem.scale", 1.0f);
+    const unsigned spp = unsigned(app.cfg.i("display.spp", 2));
+    double tick = 0.0, last = fnow2(), fpsT = fnow2(), msg = 0.0;
+    int fpsFrames = 0, frameNo = 0;
+    float fps = 0.0f;
+    std::string message;
+    auto say = [&](const std::string& m) { message = m; msg = fnow2() + 3.0; std::printf("%s\n", m.c_str()); std::fflush(stdout); };
+    double mouseX = 0, mouseY = 0;
+    glfwGetCursorPos(win, &mouseX, &mouseY);
+    bool looking = false, camMoved = true;
+    PhysStats st = app.world.stats();
+    double lastStats = 0.0;
+    const double winStart = fnow2();
+    size_t autoNext = 0;
+    say("YIKIM: sol tik patlat (Ctrl: buyuk), Bosluk deprem, 1-5 kayit, +/- siddet, T agir cekim, P dur, R bastan, H yardim");
+
+    while (!glfwWindowShouldClose(win)) {
+        glfwPollEvents();
+        int fbw, fbh;
+        glfwGetFramebufferSize(win, &fbw, &fbh);
+        const float sx = float(fbw) / app.width, sy = float(fbh) / app.height, sc = std::min(sx, sy);
+        const float qw = app.width * sc, qh = app.height * sc, qx = 0.5f * (fbw - qw), qy = 0.5f * (fbh - qh);
+        bool click = false, clickCtrl = false;
+        double clickX = 0, clickY = 0;
+        if (autotest && autoNext < sizeof(kYAutotest) / sizeof(YKeyAt) && fnow2() - winStart > kYAutotest[autoNext].t) {
+            const int k = kYAutotest[autoNext].key;
+            std::printf("autotest: %d at %.1f s (%.1f fps, kare %.1f ms, fizik %.1f ms, goruntu %.1f ms)\n", k, fnow2() - winStart, fps, frameMs,
+                        app.world.lastMs, app.renderer.lastMs);
+            if (k < 0) { click = true; clickCtrl = k == -2; clickX = qx + qw * 0.5; clickY = qy + qh * 0.62; }
+            else g_ykeys[k] = true;
+            ++autoNext;
+        }
+        if (ypressed(GLFW_KEY_ESCAPE)) break;
+        if (glfwGetWindowAttrib(win, GLFW_ICONIFIED)) { glfwWaitEventsTimeout(0.05); last = fnow2(); continue; }
+        if (ypressed(GLFW_KEY_H)) hud = !hud;
+        if (ypressed(GLFW_KEY_P)) { paused = !paused; say(paused ? "durdu" : "devam"); }
+        if (ypressed(GLFW_KEY_B)) {
+            app.renderer.showBars = !app.renderer.showBars;
+            camMoved = true;
+            say(app.renderer.showBars ? "donati gorunuyor" : "donati gizli");
+        }
+        if (ypressed(GLFW_KEY_T)) {
+            speedIdx = (speedIdx + 1) % 3;
+            say(speedIdx == 0 ? "normal hiz" : speedIdx == 1 ? "agir cekim x0.25" : "agir cekim x0.1");
+        }
+        for (int r = 0; r < quakeCount() && r < 9; ++r)
+            if (ypressed(GLFW_KEY_1 + r)) {
+                record = r;
+                say("kayit: " + quakeName(r) + (app.quakeOn ? " (Bosluk ile baslat)" : ""));
+                if (app.quakeOn) app.stopQuake();
+            }
+        if (ypressed(GLFW_KEY_EQUAL) || ypressed(GLFW_KEY_KP_ADD)) { scale = std::min(4.0f, scale + 0.25f); app.quakeScale = scale; say("siddet x" + std::to_string(scale).substr(0, 4)); }
+        if (ypressed(GLFW_KEY_MINUS) || ypressed(GLFW_KEY_KP_SUBTRACT)) { scale = std::max(0.25f, scale - 0.25f); app.quakeScale = scale; say("siddet x" + std::to_string(scale).substr(0, 4)); }
+        if (ypressed(GLFW_KEY_SPACE)) {
+            if (app.quakeOn) { app.stopQuake(); say("deprem durdu"); }
+            else if (app.startQuake(record, scale, app.world.time)) say("DEPREM: " + quakeName(record) + "  x" + std::to_string(scale).substr(0, 4));
+        }
+        if (ypressed(GLFW_KEY_R)) {
+            say("bina yeniden kuruluyor...");
+            app.build();
+            app.renderer.uploadWorld(app.world);
+            camMoved = true;
+            say("bina hazir");
+        }
+        const bool shot = ypressed(GLFW_KEY_F12);
+        // mouse: right button looks, left button blasts, the wheel zooms
+        double mx, my;
+        glfwGetCursorPos(win, &mx, &my);
+        const bool rmb = glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
+        if (rmb && looking) {
+            const float sens = app.cfg.f("camera.mouse", 0.0025f);
+            yaw += float(mx - mouseX) * sens;
+            pitch = std::max(-1.5f, std::min(1.5f, pitch - float(my - mouseY) * sens));
+            if (mx != mouseX || my != mouseY) camMoved = true;
+        }
+        looking = rmb;
+        mouseX = mx;
+        mouseY = my;
+        if (g_yscroll != 0.0) { fovDeg = std::max(15.0f, std::min(90.0f, fovDeg - float(g_yscroll) * 3.0f)); g_yscroll = 0.0; camMoved = true; }
+        if (g_yclick) { click = true; clickCtrl = g_yclickCtrl; clickX = mx; clickY = my; g_yclick = false; }
+        const double now = fnow2();
+        const float realDt = float(std::min(0.1, now - last));
+        last = now;
+        {   // WASD + Q/E, Shift faster
+            const float3 f = make_float3(std::sin(yaw), 0.0f, std::cos(yaw)), r = make_float3(std::cos(yaw), 0.0f, -std::sin(yaw));
+            float3 mv = make_float3(0, 0, 0);
+            if (glfwGetKey(win, GLFW_KEY_W) == GLFW_PRESS) mv = mv + f;
+            if (glfwGetKey(win, GLFW_KEY_S) == GLFW_PRESS) mv = mv - f;
+            if (glfwGetKey(win, GLFW_KEY_D) == GLFW_PRESS) mv = mv + r;
+            if (glfwGetKey(win, GLFW_KEY_A) == GLFW_PRESS) mv = mv - r;
+            if (glfwGetKey(win, GLFW_KEY_E) == GLFW_PRESS) mv.y += 1.0f;
+            if (glfwGetKey(win, GLFW_KEY_Q) == GLFW_PRESS) mv.y -= 1.0f;
+            if (dot(mv, mv) > 0.0f) {
+                const float v = (glfwGetKey(win, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS ? 24.0f : 7.0f) * realDt;
+                camPos = camPos + normalize(mv) * v;
+                camPos.y = std::max(camPos.y, 0.3f);
+                camMoved = true;
+            }
+        }
+        applyCam();
+        if (click) {   // the cursor in render pixels
+            const float rx = float((clickX - qx) / qw * app.width), ry = float((clickY - qy) / qh * app.height);
+            if (rx >= 0 && ry >= 0 && rx < app.width && ry < app.height) {
+                float4 hit;
+                const int body = app.renderer.pick(rx, ry, hit);
+                if (body > 0) {
+                    const int n = app.blast(make_float3(hit.x, hit.y, hit.z), clickCtrl ? 1.3f : 0.55f);
+                    say("patlatildi: " + std::to_string(n) + " parca");
+                } else {
+                    say(body == 0 ? "zemin" : "bos");
+                }
+            }
+        }
+        // draw the current state while the GPU computes the next one: the transforms are read first (an event), the
+        // step waits for them, the render runs on its own stream meanwhile. One step a frame at most, on a 60 Hz tick:
+        // when a step costs more than a tick the world slows down a little instead of the frame rate collapsing (two
+        // steps a frame locked the window at 30 fps, measured).
+        if (++frameNo % 10 == 0) app.renderer.setDamage(app.world.damage());
+        app.renderer.updateWorld(app.world);
+        {
+            YikimParams& P = app.renderer.params();
+            const double3 g = app.world.groundPos();
+            P.groundY = float(g.y);
+            P.groundShift = make_float2(float(g.x), float(g.z));
+        }
+        bool stepped = false;
+        if (!paused) {
+            tick += realDt;
+            if (tick >= 1.0 / 60.0) {
+                tick = std::min(tick - 1.0 / 60.0, 1.0 / 60.0);   // no backlog
+                const double dt = speeds[speedIdx] / 60.0;
+                app.driveQuake(app.world.time + dt);
+                app.world.stepBegin(float(dt), app.renderer.transformsDone());
+                stepped = true;
+                camMoved = true;
+            }
+        }
+        // a still world under a still camera gathers samples; anything moving starts afresh
+        app.renderer.render(camMoved ? spp : spp * 2, !camMoved && app.renderer.params().samples < 4096);
+        camMoved = false;
+        app.renderer.downloadTo(pinned);
+        if (stepped) app.world.stepEnd();
+        if (shot) {
+            std::filesystem::create_directories(app.root + "/captures");
+            const std::string name = app.root + "/captures/yikim_" + ystamp() + ".png";
+            writePNG(name, int(app.width), int(app.height), reinterpret_cast<const unsigned char*>(pinned));
+            say("ekran goruntusu: " + name);
+        }
+
+        glViewport(0, 0, fbw, fbh);
+        glClearColor(0, 0, 0, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glMatrixMode(GL_PROJECTION);
+        glLoadIdentity();
+        glOrtho(0, fbw, fbh, 0, -1, 1);
+        glMatrixMode(GL_MODELVIEW);
+        glLoadIdentity();
+        glBindTexture(GL_TEXTURE_2D, tex);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, app.width, app.height, GL_RGBA, GL_UNSIGNED_BYTE, pinned);
+        glEnable(GL_TEXTURE_2D);
+        glColor4f(1, 1, 1, 1);
+        glBegin(GL_QUADS);
+        glTexCoord2f(0, 0); glVertex2f(qx, qy);
+        glTexCoord2f(1, 0); glVertex2f(qx + qw, qy);
+        glTexCoord2f(1, 1); glVertex2f(qx + qw, qy + qh);
+        glTexCoord2f(0, 1); glVertex2f(qx, qy + qh);
+        glEnd();
+        glDisable(GL_TEXTURE_2D);
+        frameMs = (fnow2() - now) * 1000.0;
+        ++fpsFrames;
+        if (fnow2() - fpsT > 0.5) { fps = float(fpsFrames / (fnow2() - fpsT)); fpsFrames = 0; fpsT = fnow2(); }
+        if (fnow2() - lastStats > 0.5) { st = app.world.stats(); lastStats = fnow2(); }
+        if (hud) {
+            char b[640];
+            std::snprintf(b, sizeof(b),
+                          "YIKIM  %.0f fps   fizik %.1f ms   goruntu %.1f ms   t %.1f s%s%s\n"
+                          "deprem: %s  x%.2f  %s\n"
+                          "parca %d   kirik lif %d / %d   catlak %d   temas yamasi %d",
+                          fps, app.world.lastMs, app.renderer.lastMs, app.world.time, paused ? "   DURDU" : "",
+                          speedIdx ? (speedIdx == 1 ? "   AGIR CEKIM x0.25" : "   AGIR CEKIM x0.1") : "", quakeName(record).c_str(), scale,
+                          app.quakeOn ? "OYNUYOR (Bosluk: durdur)" : "(Bosluk: baslat)", st.bodies, st.broken, st.fibres, st.cracked, st.contacts);
+            yDrawText(24, float(fbh) - 90.0f, b, 2.0f);
+            yDrawText(24, 24, "Sol tik: patlat (Ctrl: buyuk)   Sag tik + fare: bak   WASD, Q/E, Shift: uc   Tekerlek: yakinlas\n"
+                              "Bosluk: deprem   1-5: kayit   +/-: siddet   T: agir cekim   P: dur   B: donati   R: bastan   F12: ekran goruntusu   H: gizle   Esc: cik",
+                      2.0f);
+            if (fnow2() < msg) yDrawText(24, float(fbh) - 130.0f, message, 2.0f);
+        }
+        glfwSwapBuffers(win);
+    }
+    cudaFreeHost(pinned);
+    glfwDestroyWindow(win);
+    glfwTerminate();
+    return 0;
+}
+
 int runYikim(int argc, char** argv) {
     YikimApp app;
     std::string only, out;
@@ -392,6 +729,7 @@ int runYikim(int argc, char** argv) {
     double seconds = 6.0, still = -1.0;
     unsigned spp = 16;
     std::string clipName;
+    bool windowed = false, autotest = false, sizeGiven = false;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         auto next = [&]() { return i + 1 < argc ? std::string(argv[++i]) : std::string(); };
@@ -402,8 +740,10 @@ int runYikim(int argc, char** argv) {
         else if (a == "--still") still = std::stod(next());
         else if (a == "--seconds") seconds = std::stod(next());
         else if (a == "--spp") spp = unsigned(std::stoi(next()));
-        else if (a == "--width") app.width = unsigned(std::stoi(next()));
-        else if (a == "--height") app.height = unsigned(std::stoi(next()));
+        else if (a == "--width") { app.width = unsigned(std::stoi(next())); sizeGiven = true; }
+        else if (a == "--height") { app.height = unsigned(std::stoi(next())); sizeGiven = true; }
+        else if (a == "--windowed") windowed = true;
+        else if (a == "--autotest") autotest = true;
         else if (a == "--out") out = next();
         else if (a == "--set") app.overrides.push_back(next());
         else if (a == "--root") app.root = next();
@@ -412,6 +752,14 @@ int runYikim(int argc, char** argv) {
     app.loadConfig();
     if (test) return runYikimTests(app.cfg, only);
     if (!clipName.empty()) app.scenario = clipName;
+    const bool live = clipName.empty() && still < 0.0;
+    if (live) {
+        app.scenario = "none";
+        if (!sizeGiven) {   // the window renders at display.width x display.height, scaled to the screen
+            app.width = unsigned(app.cfg.i("display.width", 1920));
+            app.height = unsigned(app.cfg.i("display.height", 1080));
+        }
+    }
     app.renderer.init(app.width, app.height, app.root);
     std::string log;
     const double t0 = ynow();
@@ -427,7 +775,7 @@ int runYikim(int argc, char** argv) {
         app.renderer.shutdown();
         return rc;
     }
-    std::printf("pencere henuz yok: --test, --clip, --still\n");
+    const int rc = runWindow(app, windowed, autotest);
     app.renderer.shutdown();
-    return 0;
+    return rc;
 }

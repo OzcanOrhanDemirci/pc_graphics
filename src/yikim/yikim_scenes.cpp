@@ -95,9 +95,14 @@ void glueTouching(PhysWorld& w, std::vector<Piece>& P, int mat, const FrameSpec&
                 d.b = B.body;
                 d.n = n;
                 d.len = float(((aHi - aLo) + (bHi - bLo)) * 0.5);
-                d.mat = (A.kind == PK_WALL || B.kind == PK_WALL) && spec.matBrick >= 0 ? spec.matBrick : mat;
+                const bool brick = (A.kind == PK_WALL || B.kind == PK_WALL) && spec.matBrick >= 0;
+                d.mat = brick ? spec.matBrick : mat;
                 const float area = float((hi1 - lo1) * (hi2 - lo2));
-                d.fibers = fibreGrid(f3(c), u, v, float(hi1 - lo1) * 0.5f, float(hi2 - lo2) * 0.5f, (A.rho >= 0 || B.rho >= 0 ? std::max(A.rho, B.rho) : steelRatio(A.kind, B.kind, spec)) * area);
+                // brick carries no bars: a piece's own ratio (the balconies') must not leak into the brick it touches
+                // (it did: the balcony parapets got bars of zero strength that still stiffened their base 1.8 times,
+                // and with it the tension that cracks it)
+                const float rho = brick ? 0.0f : A.rho >= 0 || B.rho >= 0 ? std::max(A.rho, B.rho) : steelRatio(A.kind, B.kind, spec);
+                d.fibers = fibreGrid(f3(c), u, v, float(hi1 - lo1) * 0.5f, float(hi2 - lo2) * 0.5f, rho * area);
                 w.addInterface(d);
             }
         }

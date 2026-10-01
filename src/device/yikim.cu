@@ -100,6 +100,22 @@ static __forceinline__ __device__ float3 shade(float3 p, float3 n, float3 albedo
     return albedo * L;
 }
 
+// the body under a pixel (the window's mouse): one thread
+extern "C" __global__ void __raygen__pick() {
+    const YCamera& C = params.cam;
+    const float u = (params.pickPixel.x / params.width) * 2.0f - 1.0f, v = 1.0f - (params.pickPixel.y / params.height) * 2.0f;
+    const float3 d = normalize(C.fwd + C.right * (u * C.tanHalfX) + C.up * (v * C.tanHalfY));
+    const Hit h = trace(C.pos, d, 1e30f);
+    const float tg = d.y < 0.0f ? (params.groundY - C.pos.y) / d.y : 1e30f;
+    int body = -1;
+    float t = 1e30f;
+    if (h.hit && h.t < tg) { body = int(h.body) + 1; t = h.t; }
+    else if (tg < 1e29f) { body = 0; t = tg; }
+    *params.pickBody = body;
+    const float3 p = C.pos + d * (t < 1e29f ? t : 0.0f);
+    *params.pickHit = make_float4(p.x, p.y, p.z, t);
+}
+
 extern "C" __global__ void __raygen__render() {
     const uint3 ix = optixGetLaunchIndex();
     const unsigned int px = ix.x, py = ix.y;

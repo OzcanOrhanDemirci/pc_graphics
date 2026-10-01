@@ -77,6 +77,9 @@ struct DevWorld {
     int nIfc = 0, nFib = 0;
     DInterface* ifc = nullptr;
     DFiber* fib = nullptr;
+    int nBars = 0;
+    int2* bars = nullptr;            // display: the reinforced fibres (fibre, interface)
+    float3* ifcNB = nullptr;         // display: each interface's normal in body b's frame, pointing out of b
     int* colourList = nullptr;
     int *adjStart = nullptr, *adjList = nullptr;
     PhysMaterial* mats = nullptr;
@@ -100,6 +103,7 @@ struct DevWorld {
     // the substep loop as a CUDA graph (hundreds of small kernels a frame: launch overhead dominated)
     cudaStream_t stream = nullptr;
     double3* groundPath = nullptr;   // the ground's position at the end of each substep of this frame
+    int* pairsHost = nullptr;        // page-locked: the pair count read back after a step
     int* frameDev = nullptr;
     float* gravityDev = nullptr;     // this frame's gravity (ramped up while a world settles)
     int maxSubsteps = 0;
@@ -233,6 +237,9 @@ struct IfcBody {         // one side of an interface during its solve
     __device__ float3 moved(float3 r) const { return dx + cross(dth, r); }
 };
 
+// (Tried and measured: one warp per interface, lanes loading the fibres at once and walking them in lockstep, gave the
+// same 11.6 ms: the cost is the 13 colours x 2 passes x 40 substeps of small kernels, each as long as its longest
+// interface's serial walk, not memory waiting. 13 colours is the colouring's lower bound, the most interfaces on a body.)
 __global__ void kSolveInterfaces(DevWorld W, const int* list, int count, float h, int iter) {
     const int t = blockIdx.x * blockDim.x + threadIdx.x;
     if (t >= count) return;
@@ -848,6 +855,61 @@ __global__ void kSweep(DevWorld W) {
 }
 
 // transforms for the renderer: OptixInstance.transform is the first 12 floats (3x4 rows)
+// Display: the reinforcing bars. A reinforced fibre owns two thin prisms (6 vertices each). While it holds and its crack
+// is wider than minGap, one spans the crack (anchor on a to anchor on b). Once it is gone and the faces are apart, a
+// stub sticks out of each face, bent a little (the bars of a failed member, stripped of their concrete). A prism not
+// shown is NaN: OptiX skips it.
+__device__ void barPrism(float3* v, float3 p0, float3 p1, float r) {
+    const float3 d = p1 - p0;
+    float3 u, w;
+    makeBasis(d * (1.0f / fmaxf(length(d), 1e-9f)), u, w);
+    for (int k = 0; k < 3; ++k) {
+        const float a = k * 2.0943951f;
+        const float3 o = (u * cosf(a) + w * sinf(a)) * r;
+        v[k] = p0 + o;
+        v[k + 3] = p1 + o;
+    }
+}
+__device__ void barNone(float3* v) {
+    const float nan = __int_as_float(0x7fc00000);
+    for (int k = 0; k < 6; ++k) v[k] = make_float3(nan, nan, nan);
+}
+__device__ unsigned barHash(unsigned x) {
+    x ^= x >> 16; x *= 0x7feb352du; x ^= x >> 15; x *= 0x846ca68bu; x ^= x >> 16;
+    return x;
+}
+__device__ float3 barBend(float3 n, unsigned h, float most) {
+    float3 t, b;
+    makeBasis(n, t, b);
+    const float a = (h & 0xffffu) * (6.2831853f / 65536.0f), s = most * float((h >> 16) & 0xffu) / 255.0f;
+    return normalize(n + (t * cosf(a) + b * sinf(a)) * s);
+}
+__global__ void kBars(DevWorld W, float3* v, float r, float minGap, float stub) {
+    const int t = blockIdx.x * blockDim.x + threadIdx.x;
+    if (t >= W.nBars) return;
+    const int2 e = W.bars[t];
+    const DFiber F = W.fib[e.x];
+    const DInterface I = W.ifc[e.y];
+    float3* v0 = v + size_t(t) * 12;
+    float3* v1 = v0 + 6;
+    const float4 qa = W.q[I.a], qb = W.q[I.b];
+    const float3 pa = f3(W.x[I.a]) + qrot(qa, F.rA), pb = f3(W.x[I.b]) + qrot(qb, F.rB);
+    const float gap = length(pb - pa);
+    if (!(F.flags & F_BROKEN)) {
+        if (gap > minGap) barPrism(v0, pa, pb, r);
+        else barNone(v0);
+        barNone(v1);
+    } else if (gap > 3.0f * minGap) {
+        const unsigned h1 = barHash(unsigned(e.x) * 2u + 1u), h2 = barHash(unsigned(e.x) * 2u + 2u);
+        const float3 na = qrot(qmul(qa, I.qI), make_float3(1, 0, 0)), nb = qrot(qb, W.ifcNB[e.y]);
+        barPrism(v0, pa, pa + barBend(na, h1, 0.35f) * (stub * (0.6f + 0.4f * float(h2 >> 24) / 255.0f)), r);
+        barPrism(v1, pb, pb + barBend(nb, h2, 0.35f) * (stub * (0.6f + 0.4f * float(h1 >> 24) / 255.0f)), r);
+    } else {
+        barNone(v0);
+        barNone(v1);
+    }
+}
+
 __global__ void kTransforms(DevWorld W, char* base, size_t stride, int first, int count) {
     const int k = blockIdx.x * blockDim.x + threadIdx.x;
     if (k >= count) return;
@@ -886,7 +948,7 @@ void PhysWorld::freeDevice() {
     void* ptrs[] = {d_->x, d_->xPrev, d_->q, d_->qPrev, d_->v, d_->w, d_->vOld, d_->wOld, d_->invMass, d_->invI, d_->kin, d_->shape,
                     d_->localC, d_->localH, d_->lo, d_->hi, d_->acc, d_->cnt, d_->sampleStart, d_->sampleCount, d_->planeStart,
                     d_->planeCount, d_->samples, d_->planes, d_->ifc, d_->fib, d_->colourList, d_->adjStart, d_->adjList, d_->mats,
-                    d_->keys, d_->keysSorted, d_->ids, d_->idsSorted, d_->sortTemp, d_->pairs, d_->nPairs, d_->patches, d_->nPatches, d_->anchorKey, d_->anchorFrame, d_->anchorSlide, d_->anchorA, d_->anchorB};
+                    d_->keys, d_->keysSorted, d_->ids, d_->idsSorted, d_->sortTemp, d_->pairs, d_->nPairs, d_->patches, d_->nPatches, d_->anchorKey, d_->anchorFrame, d_->anchorSlide, d_->anchorA, d_->anchorB, d_->bars, d_->ifcNB};
     for (void* p : ptrs)
         if (p) cudaFree(p);
     if (d_->graphExec) cudaGraphExecDestroy(d_->graphExec);
@@ -894,6 +956,7 @@ void PhysWorld::freeDevice() {
     if (d_->groundPath) cudaFree(d_->groundPath);
     if (d_->frameDev) cudaFree(d_->frameDev);
     if (d_->gravityDev) cudaFree(d_->gravityDev);
+    if (d_->pairsHost) cudaFreeHost(d_->pairsHost);
     if (d_->stream) cudaStreamDestroy(d_->stream);
     if (d_->e0) cudaEventDestroy(d_->e0);
     if (d_->e1) cudaEventDestroy(d_->e1);
@@ -1073,6 +1136,8 @@ void PhysWorld::upload() {
     std::vector<DInterface> ifc;
     std::vector<DFiber> fib;
     std::vector<std::vector<int>> adj(n);
+    std::vector<int2> bars;
+    std::vector<float3> ifcNB;
     for (const InterfaceDesc& d : interfaceDescs) {
         const PhysMaterial& M = materials[d.mat];
         DInterface I{};
@@ -1107,6 +1172,7 @@ void PhysWorld::upload() {
             F.capDowel = M.dowel * M.fy * fd.as;
             F.len = L;
             F.flags = 0;
+            if (F.kSteel > 0.0f && F.capSteel > 0.0f) bars.push_back(make_int2(int(fib.size()), int(ifc.size())));
             fib.push_back(F);
             cen = cen + fd.p * (fd.ac + fd.as);
             atot += fd.ac + fd.as;
@@ -1116,6 +1182,7 @@ void PhysWorld::upload() {
         I.cB = qrotInv(rot[d.b], diff3(d3(cen), pos[d.b]));
         I.count = int(fib.size()) - I.first;
         I.alive = I.count;
+        ifcNB.push_back(qrotInv(rot[d.b], d.n * -1.0f));
         adj[d.a].push_back(int(ifc.size()));
         adj[d.b].push_back(int(ifc.size()));
         ifc.push_back(I);
@@ -1124,6 +1191,9 @@ void PhysWorld::upload() {
     W.nFib = int(fib.size());
     W.ifc = dupload(ifc);
     W.fib = dupload(fib);
+    W.nBars = int(bars.size());
+    W.bars = dupload(bars);
+    W.ifcNB = dupload(ifcNB);
     W.mats = dupload(materials);
     std::vector<int> adjStart(n + 1, 0), adjList;
     for (int i = 0; i < n; ++i) {
@@ -1153,6 +1223,12 @@ void PhysWorld::upload() {
         if (!kinematic[b]) bodyColours[b].push_back(c);
         if (int(colours_.size()) <= c) colours_.resize(c + 1);
         colours_[c].push_back(int(k));
+    }
+    {   // the lower bound of any colouring: the most interfaces on one moving body
+        int maxDeg = 0;
+        for (int i = 0; i < n; ++i)
+            if (!kinematic[i]) maxDeg = std::max(maxDeg, int(adj[i].size()));
+        maxDegree_ = maxDeg;
     }
     std::vector<int> flat;
     colourOffset_.clear();
@@ -1192,6 +1268,8 @@ void PhysWorld::upload() {
     W.groundPath = dmalloc<double3>(W.maxSubsteps);
     W.frameDev = dmalloc<int>(1);
     W.gravityDev = dmalloc<float>(1);
+    PCHECK(cudaMallocHost(reinterpret_cast<void**>(&W.pairsHost), sizeof(int)));
+    pending_ = false;
     graphKey_.clear();
     PCHECK(cudaEventCreate(&W.e0));
     PCHECK(cudaEventCreate(&W.e1));
@@ -1217,13 +1295,22 @@ void PhysWorld::solveInterfaces(float h, void* stream) {
 }
 
 void PhysWorld::step(float dt) {
+    stepBegin(dt, nullptr);
+    stepEnd();
+}
+
+// the step's GPU work is queued and the call returns: a renderer can draw the previous state meanwhile (its own stream).
+// after: an event the step waits for first (the renderer's transforms of the state being overwritten).
+void PhysWorld::stepBegin(float dt, void* after) {
     if (!uploaded_) upload();
+    if (pending_) stepEnd();
     DevWorld& W = *d_;
     const int n = W.n;
     const int S = std::min(std::max(1, params.substeps), W.maxSubsteps);
     const float h = dt / S;
     lastH_ = h;
     cudaStream_t st = W.stream;
+    if (after) PCHECK(cudaStreamWaitEvent(st, static_cast<cudaEvent_t>(after), 0));
     // this frame's inputs: where the ground is at the end of each substep, and the frame number (friction anchors)
     groundSteps_.resize(S);
     for (int s = 0; s < S; ++s) groundSteps_[s] = groundPrev_ + (groundTarget_ - groundPrev_) * (double(s + 1) / S);
@@ -1262,15 +1349,23 @@ void PhysWorld::step(float dt) {
         graphKey_ = key;
     }
     PCHECK(cudaGraphLaunch(W.graphExec, st));
+    PCHECK(cudaMemcpyAsync(W.pairsHost, W.nPairs, sizeof(int), cudaMemcpyDeviceToHost, st));
     PCHECK(cudaEventRecord(W.e1, st));
+    pending_ = true;
+    pendingDt_ = dt;
+}
+
+void PhysWorld::stepEnd() {
+    if (!pending_) return;
+    DevWorld& W = *d_;
     PCHECK(cudaEventSynchronize(W.e1));
     PCHECK(cudaEventElapsedTime(&lastMs, W.e0, W.e1));
     PCHECK(cudaGetLastError());
-    PCHECK(cudaMemcpy(&lastPairs_, W.nPairs, sizeof(int), cudaMemcpyDeviceToHost));
-    lastPairs_ = std::min(lastPairs_, W.maxPairs);
+    lastPairs_ = std::min(*W.pairsHost, W.maxPairs);
     groundPrev_ = groundTarget_;
-    time += dt;
+    time += pendingDt_;
     ++frame_;
+    pending_ = false;
 }
 
 // one frame without the graph, every kernel group timed with events (profile before optimising)
@@ -1419,6 +1514,7 @@ PhysStats PhysWorld::stats() {
     s.bodies = int(info.size());
     s.interfaces = int(interfaceDescs.size());
     s.colours = int(colours_.size());
+    s.maxDegree = maxDegree_;
     s.ms = lastMs;
     s.pairs = lastPairs_;
     if (!uploaded_) return s;
@@ -1475,6 +1571,13 @@ std::vector<PhysWorld::PatchInfo> PhysWorld::patchesOf(int b) {
     for (const DPatch& c : P)
         if (c.a == b || c.b == b) out.push_back({c.a == b ? c.b : c.a, c.J / (lastH_ * lastH_), c.a == b ? c.n : c.n * -1.0f});
     return out;
+}
+
+int PhysWorld::barPrisms() const { return uploaded_ ? 2 * d_->nBars : 0; }
+
+void PhysWorld::writeBars(void* verts, float radius, float minGap, float stub, void* stream) const {
+    if (!uploaded_ || !d_->nBars) return;
+    kBars<<<blocks(d_->nBars), 128, 0, static_cast<cudaStream_t>(stream)>>>(*d_, static_cast<float3*>(verts), radius, minGap, stub);
 }
 
 void PhysWorld::writeTransforms(void* instances, size_t stride, int first, int count, void* stream) {

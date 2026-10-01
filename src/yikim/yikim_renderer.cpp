@@ -54,6 +54,7 @@ bool YikimRenderer::init(unsigned int width, unsigned int height, const std::str
     YCUDA(cudaStreamCreate(&stream_));
     YCUDA(cudaEventCreate(&e0_));
     YCUDA(cudaEventCreate(&e1_));
+    YCUDA(cudaEventCreateWithFlags(&evXf_, cudaEventDisableTiming));
     YOPTIX(optixInit());
     OptixDeviceContextOptions o{};
     o.logCallbackFunction = ylog;
@@ -64,6 +65,10 @@ bool YikimRenderer::init(unsigned int width, unsigned int height, const std::str
     p_.accum = ualloc<float4>(size_t(width) * height);
     p_.output = ualloc<uchar4>(size_t(width) * height);
     YCUDA(cudaMalloc(reinterpret_cast<void**>(&dParams_), sizeof(YikimParams)));
+    dPickBody_ = ualloc<int>(1);
+    dPickHit_ = ualloc<float4>(1);
+    p_.pickBody = dPickBody_;
+    p_.pickHit = dPickHit_;
     return true;
 }
 
@@ -107,23 +112,26 @@ bool YikimRenderer::compileDevice(std::string& log) {
     OptixModule module = nullptr;
     OptixResult r = optixModuleCreate(ctx_, &mco, &pco, ir.data(), ir.size(), olog, &olen, &module);
     if (r != OPTIX_SUCCESS) { log = std::string("optixModuleCreate: ") + optixGetErrorString(r) + "\n" + olog; return false; }
-    OptixProgramGroupDesc d[3];
+    OptixProgramGroupDesc d[4];
     std::memset(d, 0, sizeof(d));
     d[0].kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
     d[0].raygen.module = module;
     d[0].raygen.entryFunctionName = "__raygen__render";
     d[1].kind = OPTIX_PROGRAM_GROUP_KIND_MISS;
     d[2].kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;
-    std::vector<OptixProgramGroup> groups(3);
+    d[3].kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
+    d[3].raygen.module = module;
+    d[3].raygen.entryFunctionName = "__raygen__pick";
+    std::vector<OptixProgramGroup> groups(4);
     OptixProgramGroupOptions go{};
     olen = sizeof(olog);
-    r = optixProgramGroupCreate(ctx_, d, 3, &go, olog, &olen, groups.data());
+    r = optixProgramGroupCreate(ctx_, d, 4, &go, olog, &olen, groups.data());
     if (r != OPTIX_SUCCESS) { log = std::string("optixProgramGroupCreate: ") + optixGetErrorString(r) + "\n" + olog; return false; }
     OptixPipelineLinkOptions lo{};
     lo.maxTraceDepth = 1;
     OptixPipeline pipeline = nullptr;
     olen = sizeof(olog);
-    r = optixPipelineCreate(ctx_, &pco, &lo, groups.data(), 3, olog, &olen, &pipeline);
+    r = optixPipelineCreate(ctx_, &pco, &lo, groups.data(), 4, olog, &olen, &pipeline);
     if (r != OPTIX_SUCCESS) { log = std::string("optixPipelineCreate: ") + optixGetErrorString(r) + "\n" + olog; return false; }
     YOPTIX(optixPipelineSetStackSizeFromCallDepths(pipeline, 1, 0, 0, 0, 2));
     YCUDA(cudaDeviceSynchronize());
@@ -142,6 +150,7 @@ bool YikimRenderer::compileDevice(std::string& log) {
     record(groups_[0], rg_);
     record(groups_[1], miss_);
     record(groups_[2], hit_);
+    record(groups_[3], rgPick_);
     sbt_ = {};
     sbt_.raygenRecord = rg_;
     sbt_.missRecordBase = miss_;
@@ -162,9 +171,50 @@ void YikimRenderer::freeWorld() {
     dBodies_ = nullptr;
     if (iasTemp_) cudaFree(iasTemp_);
     if (iasOut_) cudaFree(iasOut_);
+    if (barTemp_) cudaFree(barTemp_);
+    if (barOut_) cudaFree(barOut_);
     iasTemp_ = iasOut_ = nullptr;
     iasTempSize_ = iasOutSize_ = 0;
-    instanceCount_ = 0;
+    instanceCount_ = bodyInstances_ = barPrisms_ = 0;
+    barVerts_ = nullptr;
+    barIdx_ = nullptr;
+    barTemp_ = barOut_ = nullptr;
+    barTempSize_ = barOutSize_ = 0;
+    barGas_ = 0;
+}
+
+// the bars' triangle structure, from the vertices the physics wrote (NaN prisms are skipped)
+bool YikimRenderer::buildBars() {
+    OptixBuildInput bi{};
+    bi.type = OPTIX_BUILD_INPUT_TYPE_TRIANGLES;
+    CUdeviceptr verts = CUdeviceptr(barVerts_);
+    bi.triangleArray.vertexFormat = OPTIX_VERTEX_FORMAT_FLOAT3;
+    bi.triangleArray.vertexStrideInBytes = sizeof(float3);
+    bi.triangleArray.numVertices = unsigned(barPrisms_ * 6);
+    bi.triangleArray.vertexBuffers = &verts;
+    bi.triangleArray.indexFormat = OPTIX_INDICES_FORMAT_UNSIGNED_INT3;
+    bi.triangleArray.indexStrideInBytes = sizeof(uint3);
+    bi.triangleArray.numIndexTriplets = unsigned(barPrisms_ * 6);
+    bi.triangleArray.indexBuffer = CUdeviceptr(barIdx_);
+    const unsigned int flags[1] = {OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT};
+    bi.triangleArray.flags = flags;
+    bi.triangleArray.numSbtRecords = 1;
+    OptixAccelBuildOptions ao{};
+    ao.buildFlags = OPTIX_BUILD_FLAG_PREFER_FAST_BUILD;
+    ao.operation = OPTIX_BUILD_OPERATION_BUILD;
+    if (!barOut_) {
+        OptixAccelBufferSizes sz{};
+        YOPTIX(optixAccelComputeMemoryUsage(ctx_, &ao, &bi, 1, &sz));
+        YCUDA(cudaMalloc(&barTemp_, sz.tempSizeInBytes));
+        YCUDA(cudaMalloc(&barOut_, sz.outputSizeInBytes));
+        barTempSize_ = sz.tempSizeInBytes;
+        barOutSize_ = sz.outputSizeInBytes;
+    }
+    OptixTraversableHandle h = 0;
+    YOPTIX(optixAccelBuild(ctx_, stream_, &ao, &bi, 1, CUdeviceptr(barTemp_), barTempSize_, CUdeviceptr(barOut_), barOutSize_, &h, nullptr, 0));
+    const bool changed = h != barGas_;
+    barGas_ = h;
+    return changed;
 }
 
 void YikimRenderer::uploadWorld(const PhysWorld& w) {
@@ -235,6 +285,44 @@ void YikimRenderer::uploadWorld(const PhysWorld& w) {
         b.damage = 0.0f;
         bodies_.push_back(b);
     }
+    bodyInstances_ = int(inst.size());
+    // the bars: one more instance in the world frame, its own mesh and colour (rusty steel)
+    barPrisms_ = w.barPrisms();
+    if (barPrisms_ > 0) {
+        barVerts_ = ualloc<float3>(size_t(barPrisms_) * 6);
+        barIdx_ = ualloc<uint3>(size_t(barPrisms_) * 6);
+        worldBuffers_.push_back(barVerts_);
+        worldBuffers_.push_back(barIdx_);
+        std::vector<uint3> idx;
+        idx.reserve(size_t(barPrisms_) * 6);
+        for (unsigned p = 0; p < unsigned(barPrisms_); ++p) {   // the three sides of a prism: ends 0 1 2 and 3 4 5
+            const unsigned b = p * 6;
+            for (unsigned k = 0; k < 3; ++k) {
+                const unsigned k1 = (k + 1) % 3;
+                idx.push_back(make_uint3(b + k, b + k1, b + k1 + 3));
+                idx.push_back(make_uint3(b + k, b + k1 + 3, b + k + 3));
+            }
+        }
+        YCUDA(cudaMemcpy(barIdx_, idx.data(), idx.size() * sizeof(uint3), cudaMemcpyHostToDevice));
+        w.writeBars(barVerts_, barRadius, barGap, barStub, stream_);
+        buildBars();
+        YCUDA(cudaStreamSynchronize(stream_));
+        YMesh m;
+        m.pos = barVerts_;
+        m.idx = barIdx_;
+        meshes.push_back(m);
+        OptixInstance oi{};
+        oi.transform[0] = oi.transform[5] = oi.transform[10] = 1.0f;
+        oi.instanceId = unsigned(bodyInstances_);
+        oi.visibilityMask = 1;
+        oi.flags = OPTIX_INSTANCE_FLAG_NONE;
+        oi.traversableHandle = barGas_;
+        inst.push_back(oi);
+        YBody b;
+        b.albedo = make_float3(0.11f, 0.075f, 0.055f);
+        b.damage = 0.0f;
+        bodies_.push_back(b);
+    }
     instanceCount_ = int(inst.size());
     YMesh* dm = ualloc<YMesh>(meshes.size());
     YCUDA(cudaMemcpy(dm, meshes.data(), meshes.size() * sizeof(YMesh), cudaMemcpyHostToDevice));
@@ -277,7 +365,11 @@ void YikimRenderer::buildIAS() {
 
 void YikimRenderer::updateWorld(PhysWorld& w) {
     if (!instanceCount_) return;
-    w.writeTransforms(dInstances_, sizeof(OptixInstance), 1, instanceCount_, stream_);
+    w.writeTransforms(dInstances_, sizeof(OptixInstance), 1, bodyInstances_, stream_);
+    if (barPrisms_) w.writeBars(barVerts_, showBars ? barRadius : 0.0f, showBars ? barGap : 1e30f, barStub, stream_);
+    YCUDA(cudaEventRecord(evXf_, stream_));   // the state has been read: a queued physics step may overwrite it now
+    if (barPrisms_ && buildBars())
+        YCUDA(cudaMemcpyAsync(&dInstances_[bodyInstances_].traversableHandle, &barGas_, sizeof(barGas_), cudaMemcpyHostToDevice, stream_));
     buildIAS();
 }
 
@@ -298,6 +390,24 @@ void YikimRenderer::render(unsigned int spp, bool accumulate) {
     YCUDA(cudaEventElapsedTime(&lastMs, e0_, e1_));
     p_.samples += spp;
     ++p_.seed;
+}
+
+int YikimRenderer::pick(float x, float y, float4& hit) {
+    p_.pickPixel = make_float2(x, y);
+    YCUDA(cudaMemcpyAsync(reinterpret_cast<void*>(dParams_), &p_, sizeof(YikimParams), cudaMemcpyHostToDevice, stream_));
+    OptixShaderBindingTable sbt = sbt_;
+    sbt.raygenRecord = rgPick_;
+    YOPTIX(optixLaunch(pipeline_, stream_, dParams_, sizeof(YikimParams), &sbt, 1, 1, 1));
+    int body = -1;
+    YCUDA(cudaMemcpyAsync(&body, dPickBody_, sizeof(int), cudaMemcpyDeviceToHost, stream_));
+    YCUDA(cudaMemcpyAsync(&hit, dPickHit_, sizeof(float4), cudaMemcpyDeviceToHost, stream_));
+    YCUDA(cudaStreamSynchronize(stream_));
+    return body;
+}
+
+void YikimRenderer::downloadTo(uchar4* dst) {
+    YCUDA(cudaMemcpyAsync(dst, p_.output, size_t(w_) * h_ * sizeof(uchar4), cudaMemcpyDeviceToHost, stream_));
+    YCUDA(cudaStreamSynchronize(stream_));
 }
 
 void YikimRenderer::download(std::vector<uchar4>& out) {
