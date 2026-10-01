@@ -3,14 +3,16 @@
 > Tek kaynak durum panosu. Plan ve Özcan'ın tarifi `docs/fener/PLAN.md`'de.
 
 ## Şu an
-- **2026-10-01 · F0 değer etüdü bitti, Özcan'ın seçimi bekleniyor.** Üç kompozisyon + "huzme kamerada" anı:
+- **2026-10-01 · Özcan seçti: A başlangıç, B varış, Space ile canlı yolculuk orman içinden** (PLAN "F0 sonrası
+  kararlar"). Tepe anı: ışık sütunu + göz kamaşması. Sıradaki: F1 altyapı.
+- **2026-10-01 · F0 değer etüdü bitti.** Üç kompozisyon + "huzme kamerada" anı:
   `docs/fener/etud/` (A pencere, B yücelik, C yakın; A'nın tepe anı). Üretici: `python tools/fener_etud.py --variant all --w 1600`
   (`--phi 2` huzmeyi kameraya çevirir). Taslak başına ~1 dk (1600 px, numpy).
 
 ## Fazlar
 | Faz | Durum | Not |
 |---|---|---|
-| F0 Değer etüdü | ✅ benim tarafım | 3 kompozisyon + tepe anı; Özcan seçecek |
+| F0 Değer etüdü | ✅ 10-01 | A + B seçildi (C hayır); tepe anı: ışık sütunu + göz kamaşması |
 | F1 Altyapı (sahne seçimi) | ⏳ | |
 | F2 Kaba 3D | ⏳ | |
 | F3 Işık | ⏳ | |

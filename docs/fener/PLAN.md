@@ -45,6 +45,18 @@ patika, ışık dönüyor, kamera alt ortada, arada su). Kaynak klasör: Masaüs
 Yorumum (Özcan düzeltmedi): "yakamoz" = ay ışığının suda kırık kırık parlaması (parıltı yolu), deniz canlılarının
 ışıldaması değil.
 
+### F0 sonrası kararlar (2026-10-01, taslaklar `docs/fener/etud/` üzerine)
+- **Kompozisyon: A "Pencere" başlangıç, B "Yücelik" varış.** C "Yakın"ı beğenmedi. Özcan'ın sözleri: *"A ve B ikisi de
+  çok güzel. [...] A da başlıyor. Mesela canlı renderda Space tuşuna basınca kamera yavaşça B ye gidiyor ve o gidiş de
+  canlı render, orman içinden ağaçların arasından geçiyor ve adanın diğer tarafına doğru o yüce alana ulaşıyor. Sonra
+  tekrar space basınca tekrar A ya doğru yola çıkıyor. Yani canlı render + etkileşim olmuş oluyor."*
+- **Asıl ürün artık canlı, etkileşimli pencere.** Space: A → B yolculuğu (40-60 sn, yumuşak kalkış/duruş), tekrar
+  Space: geri; yolda basılırsa yumuşakça döner. Video yan ürün (A döngüsü + yolculuk kaydı).
+- Kamera adası gerçek 3D orman: kamera ağaçların arasından geçer (yakından inandırıcı köknar + binlerce kopya).
+- Durunca (A'da, B'de) görüntü birkaç saniyede durağan kaliteye toplanır; yolda canlı kalite (gürültü giderici).
+- **Tepe anı: ışık sütunu + göz kamaşması** (taslaktaki gibi; huzme kameranın üstünden geçer, lamba kör eder,
+  köknarlar simsiyah, deniz parlar, sonra yavaşça karanlık).
+
 ## 2 · Araştırma: Inside nasıl yapılmış (Playdead'in kendi kaynakları)
 
 Kaynaklar: GDC 2016 "Low Complexity, High Fidelity: INSIDE Rendering" (Gjøl, Svendsen; slayt + konuşmacı notları,
@@ -113,11 +125,12 @@ saçılım çarpanı, sisin parlak kaynakları sınırlı örtmesi) ve her biri 
 |---|---|---|
 | F0 | Değer etüdü: 3D'den önce 3 kompozisyon taslağı (2B, Python) | 3 taslak, Özcan seçer |
 | F1 | Altyapı: sahne seçimi; sahne 1 aynen çalışıyor (önce/sonra karşılaştırması) | |
-| F2 | Kaba 3D: araziler, orman (tek modelden binlerce kopya), fener, kulübe, patika, deniz, sis, ay; kompozisyon kilidi | ilk kare |
+| F2 | Kuşbakışı harita (iki ada, A, B, orman içi yol) → kaba 3D: araziler, orman (tek modelden binlerce kopya), fener, kulübe, patika, deniz, sis, ay; A ve B karelerinin kilidi | harita, sonra A ve B ilk kareleri |
+| F2b | Yakın köknar (kameranın arasından geçeceği ağaç) ve kamera adası ormanı; Space ile A ↔ B yolculuğu (yol eğrisi, yumuşak hız) | yolculuktan kareler |
 | F3 | Işık: dönen huzme, sis içinde lamba örneklemesi (eşit açılı), yükseklikle incelen sürüklenen sis, ay + bulut + hâle, kulübe | huzmenin 3-4 açısı |
 | F4 | Su: keskin küçük dalgalar, ay parıltı yolu, lamba yansıması | |
 | F5 | Son işlem (Inside zinciri): iki parlama, TPDF mavi gürültü titreşimi, renk derecelendirme, hafif vinyet | son kare adayı |
-| F6 | Hareket, döngü, video (ffmpeg) ve canlı pencere | video |
+| F6 | Hareket, döngü, canlı pencere kalitesi (durunca toplanma, yolda gürültü giderici), video (ffmpeg) | canlı + video |
 | F7 | Sanat turları: "%90 kıs", ayrıntı silme, Özcan'ın gözü | |
 
 **Ölçülecekler (sanatta ölçülebilir olan):** katman maskeleriyle her derinlik katmanının ortalama parlaklığı önden
