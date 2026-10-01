@@ -3,9 +3,12 @@
 > Tek kaynak durum panosu. Her faz sonunda güncellenir; bağlam sıkıştırılınca BASLA.md ile birlikte okunur.
 
 ## Şu an
-- **2026-10-01 · F0-F4 bitti, F5 sanat turu sürüyor.** Kahraman kare: "prizma natürmortu" (kamera 0), Özcan'a gönderildi
-  (`captures/hero_q4_dn.png`); yanıt yok, kendi yargımla ilerliyorum. ⏭️ referans karşılaştırması, son cila, SINIRLAR raporu.
-- Gönderilenler: F1_kose (F1), sheet_cv (F3 ara, 4 açı), hero_q4_dn (F5 aday).
+- **2026-10-01 · F0-F5 benim tarafımda bitti; Özcan'ın gözü bekleniyor** (F5 kapısı: "şaşırdım" ya da düzeltme listesi).
+- Gösteri: `build\stress.exe` → kahraman kare (kamera 0, prizma natürmortu) durağan modda açılır. Tuşlar `GOSTERI.md`.
+- Gönderilenler: F1_kose (F1), sheet_cv (F3 ara), hero_q4_dn (F5 aday), FINAL_prizma_dn (son kare, 8192 örnek).
+- Özcan'dan yanıt yok (oturum boyunca); kararlar kendi yargımla verildi, aşağıda gerekçeli.
+- Açık kalanlar: canlı modda prizma tayfı karıncalı (durağanın kalitesine yetişmiyor); gök modelinde çoklu saçılım yok;
+  kostiğin 2'den derin dolaylı sekmeleri toplanmıyor (~%0,7 eksik); güneş canlıda hareket etmiyor.
 
 ## Nasıl çalıştırılır
 - Derleme: `cmd /c C:\dev\stress_test_pc\build.bat` (CMake + Ninja, VS 2026, `third_party/cuda`). PowerShell'de
@@ -25,7 +28,7 @@
 | F2 Malzeme ve detay | ✅ 10-01 | Sellmeier F/d/C, Newton ince film dizisi (seçim testinde); özel küreler (giriş+çıkış); terrazzo, beton, sıva |
 | F3 Kostik ve hacim | ✅ 10-01 | spektral fotonlar + PPM; foton ışınları (hacimsel kostik); huzme aralık örneklemesi; 5° güneşle PT'ye karşı oran 0,991 |
 | F4 Canlı mod | ✅ 10-01 | 720p + TEMPORAL_UPSCALE2X → 1440p, 34-35 fps (RTSS de 35 diyor); titreşim 0,73/255; Özcan'ın gözü bekliyor |
-| F5 Sanat ve zirve | sürüyor | natürmort kompozisyonu, serin gök penceresi, parlama (bloom), köpükler ışıkta |
+| F5 Sanat ve zirve | ✅ benim tarafım | natürmort, perde duvar, serin gök penceresi, parlama, tayf bölme, FLIP referans; Özcan'ın gözü bekliyor |
 
 ## Kararlar
 - **Yapı:** tüm OptiX programları tek `programs.cu` (NVRTC, OptiX-IR); raygen içinde `optixTraverse` +
