@@ -7,36 +7,35 @@ set(CMAKE_CUDA_STANDARD 20)
 set(CMAKE_CUDA_ARCHITECTURES 89)
 set(TP ${CMAKE_SOURCE_DIR}/third_party)
 
-# Host programs. The OptiX device programs (src/device) are compiled at run time with NVRTC.
-# Everything but main.cpp is compiled once (pc_core) and linked into two executables:
-#   pc_graphics.exe  scene 1 "Altin saatte cam ve tas" (scene 2 with --scene fener)
-#   fener.exe        scene 2 "Fener" straight away (double-click)
-#   yikim.exe        scene 3 "Yikim" straight away (double-click)
+# Host programs. The OptiX device programs (src/scenes/*/device) are compiled at run time with NVRTC.
+# Everything but the entry point is compiled once (pc_core): the shared core, the interface kit and the scenes.
 add_library(pc_core OBJECT
-    src/renderer.cpp
-    src/scene.cpp
-    src/image_io.cpp
-    src/gpu_stats.cpp
-    src/photons.cu
-    src/kernels.cu
-    src/denoiser.cpp
-    src/fener/fener_app.cpp
-    src/fener/fener_renderer.cpp
-    src/fener/fener_scene.cpp
-    src/yikim/geom.cpp
-    src/yikim/phys.cu
-    src/yikim/yikim_scenes.cpp
-    src/yikim/yikim_tests.cpp
-    src/yikim/yikim_app.cpp
-    src/yikim/yikim_renderer.cpp
-    src/yikim/yikim_filter.cu
-    src/yikim/quake.cpp
-    src/yikim/building.cpp
+    src/core/config.cpp
+    src/core/image_io.cpp
+    src/core/gpu_stats.cpp
+    src/core/bloom.cu
+    src/scenes/altinsaat/altinsaat_renderer.cpp
+    src/scenes/altinsaat/altinsaat_world.cpp
+    src/scenes/altinsaat/photons.cu
+    src/scenes/altinsaat/kernels.cu
+    src/scenes/altinsaat/denoiser.cpp
+    src/scenes/fener/fener_app.cpp
+    src/scenes/fener/fener_renderer.cpp
+    src/scenes/fener/fener_scene.cpp
+    src/scenes/yikim/geom.cpp
+    src/scenes/yikim/phys.cu
+    src/scenes/yikim/yikim_scenes.cpp
+    src/scenes/yikim/yikim_tests.cpp
+    src/scenes/yikim/yikim_app.cpp
+    src/scenes/yikim/yikim_renderer.cpp
+    src/scenes/yikim/yikim_filter.cu
+    src/scenes/yikim/quake.cpp
+    src/scenes/yikim/building.cpp
     ${TP}/tinyexr/miniz.c)
-add_executable(pc_graphics src/main.cpp $<TARGET_OBJECTS:pc_core>)
-add_executable(fener src/main.cpp $<TARGET_OBJECTS:pc_core>)
+add_executable(pc_graphics src/scenes/altinsaat/altinsaat_app.cpp $<TARGET_OBJECTS:pc_core>)
+add_executable(fener src/scenes/altinsaat/altinsaat_app.cpp $<TARGET_OBJECTS:pc_core>)
 target_compile_definitions(fener PRIVATE PC_DEFAULT_SCENE_FENER)
-add_executable(yikim src/main.cpp $<TARGET_OBJECTS:pc_core>)
+add_executable(yikim src/scenes/altinsaat/altinsaat_app.cpp $<TARGET_OBJECTS:pc_core>)
 target_compile_definitions(yikim PRIVATE PC_DEFAULT_SCENE_YIKIM)
 
 foreach(t pc_core pc_graphics fener yikim)
