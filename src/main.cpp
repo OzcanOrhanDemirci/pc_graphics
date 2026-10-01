@@ -1,10 +1,10 @@
-// stress_test_pc: "Altin saatte cam ve tas". A spectral path tracer on OptiX 9.1 for one scene.
+// pc_graphics: art-directed scenes on a spectral path tracer (OptiX 9.1). First scene: "Altin saatte cam ve tas".
 //
-//   stress.exe                      borderless full screen on the primary monitor
-//   stress.exe --windowed           1280x720 window (still renders at --width x --height)
-//   stress.exe --headless --spp N --out captures/name     render N samples per pixel, write PNG + EXR
-//   stress.exe --headless --live N --out captures/name     N live frames: timings, flicker, three frames saved
-//   stress.exe --selftest           spectral tests (CMF, D65, Sellmeier, thin film, Newton colours, sigmoid fit)
+//   pc_graphics.exe                      borderless full screen on the primary monitor
+//   pc_graphics.exe --windowed           1280x720 window (still renders at --width x --height)
+//   pc_graphics.exe --headless --spp N --out captures/name     render N samples per pixel, write PNG + EXR
+//   pc_graphics.exe --headless --live N --out captures/name     N live frames: timings, flicker, three frames saved
+//   pc_graphics.exe --selftest           spectral tests (CMF, D65, Sellmeier, thin film, Newton colours, sigmoid fit)
 //   options: --camera k, --width W, --height H, --set key=value, --view v, --furnace, --spp-per-launch k,
 //            --denoise (headless: also write _dn.png), --auto-ev target, --seed s,
 //            --autotest | --autotest-live | --autotest-still (window: keys pressed on a timeline)
@@ -365,14 +365,14 @@ static int runWindow(App& app, bool windowed, int autotest) {
     const GLFWvidmode* mode = glfwGetVideoMode(mon);
     GLFWwindow* win = nullptr;
     if (windowed) {
-        win = glfwCreateWindow(1280, 720, "stress_test_pc", nullptr, nullptr);
+        win = glfwCreateWindow(1280, 720, "pc_graphics", nullptr, nullptr);
     } else {
         glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
         glfwWindowHint(GLFW_RED_BITS, mode->redBits);
         glfwWindowHint(GLFW_GREEN_BITS, mode->greenBits);
         glfwWindowHint(GLFW_BLUE_BITS, mode->blueBits);
         glfwWindowHint(GLFW_REFRESH_RATE, mode->refreshRate);
-        win = glfwCreateWindow(mode->width, mode->height, "stress_test_pc", mon, nullptr);
+        win = glfwCreateWindow(mode->width, mode->height, "pc_graphics", mon, nullptr);
     }
     if (!win) { std::printf("window creation failed\n"); return 1; }
     glfwMakeContextCurrent(win);

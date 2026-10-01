@@ -1,5 +1,5 @@
 @echo off
-rem Configures (first time) and builds stress.exe into build\. MSVC from VS 2026, CMake + Ninja from VS,
+rem Configures (first time) and builds pc_graphics.exe into build\. MSVC from VS 2026, CMake + Ninja from VS,
 rem CUDA from third_party\cuda.
 setlocal
 call "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1 || exit /b 1

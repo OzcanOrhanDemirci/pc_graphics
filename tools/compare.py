@@ -1,4 +1,4 @@
-"""Error of a render against a reference (both linear sRGB EXR from stress.exe).
+"""Error of a render against a reference (both linear sRGB EXR from pc_graphics.exe).
 
   python tools/compare.py test.exr reference.exr [--exposure 2^EV] [--flip]
 Prints RMSE and relative RMSE of luminance, mean luminance difference (bias), and optionally NVIDIA FLIP on the

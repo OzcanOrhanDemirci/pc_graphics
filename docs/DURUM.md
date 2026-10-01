@@ -1,4 +1,4 @@
-# DURUM — stress_test_pc
+# DURUM — pc_graphics · sahne 1: "Altın saatte cam ve taş"
 
 > Tek kaynak durum panosu. Her faz sonunda güncellenir; bağlam sıkıştırılınca BASLA.md ile birlikte okunur.
 
@@ -7,17 +7,17 @@
   (motor aynı): karanlık oda, 5 yarık, huzmelere asılı 14 kristal prizma (`crystal.count`), sıcak beyaz dengesi, güçlü
   parlama. Yeni varsayılan kamera 0 "gökkuşağı" (`captures/FINAL_gokkusagi_dn.png`). Canlı 24 fps, durağan ~8 örnek/s.
 - **2026-10-01 · F0-F5 benim tarafımda bitti; Özcan'ın gözü bekleniyor** (F5 kapısı: "şaşırdım" ya da düzeltme listesi).
-- Gösteri: `build\stress.exe` → kahraman kare (kamera 0, prizma natürmortu) durağan modda açılır. Tuşlar `GOSTERI.md`.
+- Gösteri: `build\pc_graphics.exe` → kahraman kare (kamera 0, prizma natürmortu) durağan modda açılır. Tuşlar `GOSTERI.md`.
 - Gönderilenler: F1_kose (F1), sheet_cv (F3 ara), hero_q4_dn (F5 aday), FINAL_prizma_dn (son kare, 8192 örnek).
 - Özcan'dan yanıt yok (oturum boyunca); kararlar kendi yargımla verildi, aşağıda gerekçeli.
 - Açık kalanlar: canlı modda prizma tayfı karıncalı (durağanın kalitesine yetişmiyor); gök modelinde çoklu saçılım yok;
   kostiğin 2'den derin dolaylı sekmeleri toplanmıyor (~%0,7 eksik); güneş canlıda hareket etmiyor.
 
 ## Nasıl çalıştırılır
-- Derleme: `cmd /c C:\dev\stress_test_pc\build.bat` (CMake + Ninja, VS 2026, `third_party/cuda`). PowerShell'de
+- Derleme: `cmd /c C:\dev\pc_graphics\build.bat` (CMake + Ninja, VS 2026, `third_party/cuda`). PowerShell'de
   `cd` cmd'ye geçmez: build.bat'ı **tam yoluyla** çağır.
-- Pencere: `build\stress.exe` (kenarlıksız tam ekran, birincil monitör). Tuşlar main.cpp başında.
-- Başsız: `build\stress.exe --headless --width 1280 --height 720 --spp 64 --out captures/ad` → PNG + EXR,
+- Pencere: `build\pc_graphics.exe` (kenarlıksız tam ekran, birincil monitör). Tuşlar main.cpp başında.
+- Başsız: `build\pc_graphics.exe --headless --width 1280 --height 720 --spp 64 --out captures/ad` → PNG + EXR,
   güneş/gök tanı satırı, ms/başlatma, NaN sayacı.
 - Testler: `--selftest` (spektral), `--furnace` (beyaz fırın), `--autotest` (pencere: H, F5, S, Esc zaman çizelgesi).
 - Ekran yakalama (monitörde gerçekte görünen): `tools/screengrab.ps1 -Out <mutlak yol> -DelaySeconds 2.5`.

@@ -1,7 +1,7 @@
 # Gösteri — "Altın saatte cam ve taş"
 
 ## Açmak
-`C:\dev\stress_test_pc\build\stress.exe` — çift tıkla ya da terminalden çalıştır. Birincil monitörde kenarlıksız tam
+`C:\dev\pc_graphics\build\pc_graphics.exe` — çift tıkla ya da terminalden çalıştır. Birincil monitörde kenarlıksız tam
 ekran açılır (2560×1440), **durağan modda** başlar. İlk kare "gökkuşağı": karanlık odaya 5 yarıktan giren güneş,
 huzmelere asılı 14 kristal prizma, betona saçılan tayflar. Görüntü saniyede ~8 örnek biriktirerek netleşir.
 

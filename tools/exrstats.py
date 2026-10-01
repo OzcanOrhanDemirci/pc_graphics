@@ -1,4 +1,4 @@
-"""Statistics of a linear sRGB EXR written by stress.exe: luminance mean / percentiles, optional region.
+"""Statistics of a linear sRGB EXR written by pc_graphics.exe: luminance mean / percentiles, optional region.
 
   python tools/exrstats.py captures/x.exr [--crop x0 y0 x1 y1] [--expect 1.0]
 Exit code 1 when --expect is given and the mean luminance misses it by more than --tol (relative).
