@@ -309,6 +309,7 @@ static int runFenerWindow(FenerApp& app, bool windowed, bool autotest) {
     } else {
         glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
         glfwWindowHint(GLFW_REFRESH_RATE, mode->refreshRate);
+        glfwWindowHint(GLFW_AUTO_ICONIFY, GLFW_FALSE);   // losing focus must not minimise it (a minimised window's swap can stall)
         win = glfwCreateWindow(mode->width, mode->height, "pc_graphics - Fener", mon, nullptr);
     }
     if (!win) { std::printf("window creation failed\n"); return 1; }
@@ -341,10 +342,17 @@ static int runFenerWindow(FenerApp& app, bool windowed, bool autotest) {
         if (autotest && autoNext < sizeof(kFenerAutotest) / sizeof(kFenerAutotest[0]) && fnow() - winStart > kFenerAutotest[autoNext].t) {
             std::printf("autotest: key %d at %.1f s (%.1f fps, walk %.0f m, v %.1f m/s, EV %+.2f)\n", kFenerAutotest[autoNext].key, fnow() - winStart, fps,
                         app.journey.d, app.journey.v, app.evAdapt);
+            std::printf("          window: focused %d, iconified %d\n", glfwGetWindowAttrib(win, GLFW_FOCUSED), glfwGetWindowAttrib(win, GLFW_ICONIFIED));
+            std::fflush(stdout);
             g_fkeys[kFenerAutotest[autoNext].key] = true;
             ++autoNext;
         }
         if (fpressed(GLFW_KEY_ESCAPE)) break;
+        if (glfwGetWindowAttrib(win, GLFW_ICONIFIED)) {   // minimised: nothing to show, wait instead of rendering
+            glfwWaitEventsTimeout(0.05);
+            last = lastStep = fnow();
+            continue;
+        }
         if (fpressed(GLFW_KEY_H)) hud = !hud;
         if (fpressed(GLFW_KEY_P)) { paused = !paused; say(paused ? "zaman durdu" : "zaman akiyor"); }
         if (fpressed(GLFW_KEY_RIGHT)) t += 1.0;

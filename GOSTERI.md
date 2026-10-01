@@ -1,4 +1,12 @@
-# Gösteri — "Altın saatte cam ve taş"
+# Gösteri
+
+> **İki sahne, iki exe** (`C:\dev\pc_graphics\build\`):
+> - `pc_graphics.exe`: sahne 1, "Altın saatte cam ve taş" (bu sayfa).
+> - `fener.exe`: sahne 2, Inside tarzı deniz feneri. Tuşlar: **Boşluk** A'dan B'ye orman içinden yürü (yolda basarsan
+>   geri döner) · **B** öbür bakışa atla · **P** zamanı durdur · **← / →** zaman ∓1 sn · **↑ / ↓** pozlama · **S** ekran
+>   görüntüsü · **H** gösterge · **F5** `scenes/fener.cfg` ve gölgelendiricileri yeniden yükle · **Esc** çıkış.
+
+# Sahne 1 — "Altın saatte cam ve taş"
 
 ## Açmak
 `C:\dev\pc_graphics\build\pc_graphics.exe` — çift tıkla ya da terminalden çalıştır. Birincil monitörde kenarlıksız tam

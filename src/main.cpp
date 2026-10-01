@@ -518,6 +518,9 @@ static int runWindow(App& app, bool windowed, int autotest) {
 int runFener(int argc, char** argv);   // scene 2, src/fener/fener_app.cpp
 
 int main(int argc, char** argv) {
+#ifdef PC_DEFAULT_SCENE_FENER
+    return runFener(argc, argv);   // fener.exe: scene 2 straight away
+#endif
     for (int i = 1; i + 1 < argc; ++i)
         if (std::string(argv[i]) == "--scene" && std::string(argv[i + 1]) == "fener") return runFener(argc, argv);
     App app;

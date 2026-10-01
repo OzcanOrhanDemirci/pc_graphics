@@ -7,9 +7,11 @@ set(CMAKE_CUDA_STANDARD 20)
 set(CMAKE_CUDA_ARCHITECTURES 89)
 set(TP ${CMAKE_SOURCE_DIR}/third_party)
 
-# Host program. The OptiX device programs (src/device) are compiled at run time with NVRTC.
-add_executable(pc_graphics
-    src/main.cpp
+# Host programs. The OptiX device programs (src/device) are compiled at run time with NVRTC.
+# Everything but main.cpp is compiled once (pc_core) and linked into two executables:
+#   pc_graphics.exe  scene 1 "Altin saatte cam ve tas" (scene 2 with --scene fener)
+#   fener.exe        scene 2 "Fener" straight away (double-click)
+add_library(pc_core OBJECT
     src/renderer.cpp
     src/scene.cpp
     src/image_io.cpp
@@ -21,37 +23,42 @@ add_executable(pc_graphics
     src/fener/fener_renderer.cpp
     src/fener/fener_scene.cpp
     ${TP}/tinyexr/miniz.c)
+add_executable(pc_graphics src/main.cpp $<TARGET_OBJECTS:pc_core>)
+add_executable(fener src/main.cpp $<TARGET_OBJECTS:pc_core>)
+target_compile_definitions(fener PRIVATE PC_DEFAULT_SCENE_FENER)
 
-target_include_directories(pc_graphics PRIVATE
-    src
-    ${TP}/cuda/include
-    ${TP}/cuda/include/cccl
-    ${TP}/optix/include
-    ${TP}/glfw/include
-    ${TP}/stb
-    ${TP}/tinyexr)
+foreach(t pc_core pc_graphics fener)
+    target_include_directories(${t} PRIVATE
+        src
+        ${TP}/cuda/include
+        ${TP}/cuda/include/cccl
+        ${TP}/optix/include
+        ${TP}/glfw/include
+        ${TP}/stb
+        ${TP}/tinyexr)
+    target_compile_definitions(${t} PRIVATE
+        PROJECT_ROOT="${CMAKE_SOURCE_DIR}"
+        NOMINMAX
+        WIN32_LEAN_AND_MEAN
+        _CRT_SECURE_NO_WARNINGS)
+    if(MSVC)
+        target_compile_options(${t} PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/W3 /O2 /utf-8 /wd4244 /wd4267 /wd4305>)
+        # CUB (CCCL) needs MSVC's standard-conforming preprocessor
+        target_compile_options(${t} PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=/Zc:preprocessor -Xcompiler=/utf-8>)
+    endif()
+endforeach()
 
-target_compile_definitions(pc_graphics PRIVATE
-    PROJECT_ROOT="${CMAKE_SOURCE_DIR}"
-    NOMINMAX
-    WIN32_LEAN_AND_MEAN
-    _CRT_SECURE_NO_WARNINGS)
+foreach(t pc_graphics fener)
+    target_link_libraries(${t} PRIVATE
+        ${TP}/cuda/lib/x64/cudart_static.lib
+        ${TP}/cuda/lib/x64/cuda.lib
+        ${TP}/cuda/lib/x64/nvrtc.lib
+        ${TP}/cuda/lib/x64/nvml.lib
+        ${TP}/glfw/lib-vc2022/glfw3.lib
+        opengl32 advapi32 user32 gdi32 shell32)
+endforeach()
 
-if(MSVC)
-    target_compile_options(pc_graphics PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/W3 /O2 /utf-8 /wd4244 /wd4267 /wd4305>)
-    # CUB (CCCL) needs MSVC's standard-conforming preprocessor
-    target_compile_options(pc_graphics PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=/Zc:preprocessor -Xcompiler=/utf-8>)
-endif()
-
-target_link_libraries(pc_graphics PRIVATE
-    ${TP}/cuda/lib/x64/cudart_static.lib
-    ${TP}/cuda/lib/x64/cuda.lib
-    ${TP}/cuda/lib/x64/nvrtc.lib
-    ${TP}/cuda/lib/x64/nvml.lib
-    ${TP}/glfw/lib-vc2022/glfw3.lib
-    opengl32 advapi32 user32 gdi32 shell32)
-
-# NVRTC is loaded at run time: keep its DLLs next to the executable.
+# NVRTC is loaded at run time: keep its DLLs next to the executables (both live in build/).
 add_custom_command(TARGET pc_graphics POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         ${TP}/cuda/bin/x64/nvrtc64_130_0.dll
