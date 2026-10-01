@@ -3,6 +3,9 @@
 > Tek kaynak durum panosu. Plan ve Özcan'ın tarifi `docs/fener/PLAN.md`'de.
 
 ## Şu an
+- **2026-10-01 · F1 altyapı bitti, ilk 3D kareler çıktı.** `pc_graphics.exe --scene fener` (pencere) ya da
+  `--headless --frames 256 --out ...` (durağan kare) / `--headless --live N` (canlı ölçüm). Sahne 1 bit bit aynı
+  (değişiklikten önce ve sonra 960x540 32 örnek, `--seed 7`: piksel farkı 0). Kareler `docs/fener/kareler/F1_A_t0.png`, `F1_A_t5.png`.
 - **2026-10-01 · Özcan seçti: A başlangıç, B varış, Space ile canlı yolculuk orman içinden** (PLAN "F0 sonrası
   kararlar"). Tepe anı: ışık sütunu + göz kamaşması. Sıradaki: F1 altyapı.
 - **2026-10-01 · F0 değer etüdü bitti.** Üç kompozisyon + "huzme kamerada" anı:
@@ -13,13 +16,42 @@
 | Faz | Durum | Not |
 |---|---|---|
 | F0 Değer etüdü | ✅ 10-01 | A + B seçildi (C hayır); tepe anı: ışık sütunu + göz kamaşması |
-| F1 Altyapı (sahne seçimi) | ⏳ | |
+| F1 Altyapı (sahne seçimi) | ✅ 10-01 | ayrı modül `src/fener/`, cihaz programı `src/device/fener.cu`, ayar `scenes/fener.cfg`; sahne 1 bit bit aynı |
 | F2 Kaba 3D | ⏳ | |
 | F3 Işık | ⏳ | |
 | F4 Su | ⏳ | |
 | F5 Son işlem | ⏳ | |
 | F6 Hareket, döngü, video | ⏳ | |
 | F7 Sanat turları | ⏳ | |
+
+## Mimari (F1)
+- Ayrı modül, sahne 1'e dokunmaz: `src/fener/` (uygulama, OptiX, sahne üretimi), `src/shared/fener_params.h`,
+  `src/device/fener.cu` (NVRTC, F5 ile yeniden derlenir). `main.cpp` yalnız `--scene fener`'i yönlendirir.
+- Playdead'in tarifi: az örnek + mavi gürültü + zamansal birikim (TAA). Sahne hiç durağan değil (huzme döner), o
+  yüzden "dur ve topla" yerine her kare kendi başına iyi olmalı.
+- Geçişler: yüzey (tam çözünürlük; ay, huzme, pencere ışığı, gölgeler, gök örtüsü, deniz) → hacim (yarım çözünürlük;
+  huzme eşit açılı, ay geçirgenlikle örneklenir, gölgeli) → hacmin zamansal birikimi → birleştirme (derinliğe duyarlı
+  büyütme) → TAA (YCoCg sapma kırpması) → iki parlama piramidi (kernels.cu `launchBloom`) → son geçiş (ACES, soğuk
+  gölge, TPDF mavi gürültü titreşimi).
+- Dünya: RGB (tayfsal değil), deniz analitik düzlem (40 dalga, Smith maskeli Beckmann parıltıları), köknar 6 çeşit
+  x ~32 bin örnek (253 milyon üçgen örneklenmiş), adalar yükseklik alanı, fiyort duvarları perde.
+
+## Ölçümler (F1, RTX 4080)
+| Ne | Değer |
+|---|---|
+| canlı 2560x1440, huzme 32 + ay 8 örnek/piksel | 6,2 ms/kare (160 fps): yüzey 1,6 · hacim 2,9 · TAA 0,5 · parlama 0,45 ms |
+| canlı 2560x1440, huzme 8 örnek | 4,6 ms/kare (220 fps) |
+| durağan 2560x1440, 256 kare birikim | 1,1 s |
+| sahne kurulumu | 14 ağ, 31 957 örnek, ~0,1 s |
+
+## F1'de öğrenilenler (ölçülerek)
+- **Hareket vektörü titreşimli noktadan hesaplanınca TAA görüntüyü bulanıklaştırır:** durağan kamerada bile geçmiş her
+  karede alt-piksel kaydırılıp yeniden örneklendi. Aynı dünya noktasının iki kameradaki titreşimsiz izdüşümü alınınca
+  keskinleşti.
+- **Denizde ufuk lekeleri:** Beckmann parıltısında Smith maskeleme yoktu; sıyırma açısında 1/(4 cos) şişiyordu.
+- **Yüksek pus 40 km boyunca sayılınca bütün gök sis rengine boğuldu;** pusa ~2 km ölçek yüksekliği verince gece göğü
+  yukarıda göründü.
+- 32 karede hacimdeki benekler sistematik değil: 256 karede pürüzsüz (ölçüldü). Canlıda örnek sayısı artırılacak.
 
 ## Etüdün sayıları (seçilen taslak 3D'ye bunlarla taşınır)
 | | A Pencere | B Yücelik | C Yakın |

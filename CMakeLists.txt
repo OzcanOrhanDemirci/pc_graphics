@@ -17,6 +17,9 @@ add_executable(pc_graphics
     src/photons.cu
     src/kernels.cu
     src/denoiser.cpp
+    src/fener/fener_app.cpp
+    src/fener/fener_renderer.cpp
+    src/fener/fener_scene.cpp
     ${TP}/tinyexr/miniz.c)
 
 target_include_directories(pc_graphics PRIVATE

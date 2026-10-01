@@ -1,4 +1,5 @@
-// pc_graphics: art-directed scenes on a spectral path tracer (OptiX 9.1). First scene: "Altin saatte cam ve tas".
+// pc_graphics: art-directed scenes on OptiX 9.1. Scene 1 "Altin saatte cam ve tas" (spectral path tracer, this file);
+// scene 2 "Fener" with --scene fener (src/fener/fener_app.cpp).
 //
 //   pc_graphics.exe                      borderless full screen on the primary monitor
 //   pc_graphics.exe --windowed           1280x720 window (still renders at --width x --height)
@@ -514,7 +515,11 @@ static int runWindow(App& app, bool windowed, int autotest) {
     return 0;
 }
 
+int runFener(int argc, char** argv);   // scene 2, src/fener/fener_app.cpp
+
 int main(int argc, char** argv) {
+    for (int i = 1; i + 1 < argc; ++i)
+        if (std::string(argv[i]) == "--scene" && std::string(argv[i + 1]) == "fener") return runFener(argc, argv);
     App app;
     g_app = &app;
     bool headless = false, windowed = false, selftest = false, compileOnly = false, furnace = false;
