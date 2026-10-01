@@ -93,6 +93,17 @@ extern "C" __global__ void __raygen__sky() {
     }
 }
 
+// Bakes the tileable 2D noise texture: gnoise2, its gradient, and a second independent noise.
+extern "C" __global__ void __raygen__bakenoise() {
+    const uint3 idx = optixGetLaunchIndex();
+    const float2 uv = make_float2((idx.x + 0.5f) * NOISE_PERIOD / NOISE_TEX, (idx.y + 0.5f) * NOISE_PERIOD / NOISE_TEX);
+    const float h = 0.002f;
+    const float a = gnoise2(uv, 0x51EDu);
+    const float gx = (gnoise2(make_float2(uv.x + h, uv.y), 0x51EDu) - gnoise2(make_float2(uv.x - h, uv.y), 0x51EDu)) / (2.0f * h);
+    const float gy = (gnoise2(make_float2(uv.x, uv.y + h), 0x51EDu) - gnoise2(make_float2(uv.x, uv.y - h), 0x51EDu)) / (2.0f * h);
+    params.noiseBake[idx.y * NOISE_TEX + idx.x] = make_float4(a, gx, gy, gnoise2(uv, 0xBEEFu));
+}
+
 // =====================================================================================================
 // Ray casting
 // =====================================================================================================
@@ -113,21 +124,21 @@ static __forceinline__ __device__ void fetchTriangle(int prim, float2 bary, floa
     if (dot(ns, ng) < 0.0f) ns = ng;
 }
 
-static __forceinline__ __device__ Hit traceRadiance(float3 o, float3 d, float tmax) {
+static __forceinline__ __device__ Hit traceRadiance(float3 o, float3 d, float tmax, bool reorder = true) {
     optixTraverse(params.handle, o, d, 0.0f, tmax, 0.0f, OptixVisibilityMask(255), OPTIX_RAY_FLAG_DISABLE_ANYHIT,
                   RAY_RADIANCE, RAY_TYPES, RAY_RADIANCE);
     Hit h;
     h.hit = optixHitObjectIsHit();
     h.mat = -1;
     if (!h.hit) {
-        optixReorder(15u, 4);
+        if (reorder && !(params.debugFlags & 8)) optixReorder(15u, 4);
         return h;
     }
     h.t = optixHitObjectGetRayTmax();
     h.inst = optixHitObjectGetInstanceId();
     h.prim = optixHitObjectGetPrimitiveIndex();
     h.mat = h.inst == INST_TRIANGLES ? params.triMaterial[h.prim] : params.sphereMaterial[h.prim];
-    optixReorder((unsigned int)params.materials[h.mat].type & 15u, 4);
+    if (reorder && !(params.debugFlags & 8)) optixReorder((unsigned int)params.materials[h.mat].type & 15u, 4);
     if (h.inst == INST_TRIANGLES) {
         fetchTriangle(h.prim, optixHitObjectGetTriangleBarycentrics(), h.p, h.ngOut, h.nsOut);
     } else {
@@ -138,6 +149,10 @@ static __forceinline__ __device__ Hit traceRadiance(float3 o, float3 d, float tm
         h.ngOut = h.nsOut = n;
     }
     return h;
+}
+
+static __forceinline__ __device__ bool hazeActive() {
+    return params.enableHaze && !params.furnace && params.hazeSigmaS + params.hazeSigmaA > 0.0f;
 }
 
 // Length of the ray segment [0, tmax] inside the haze box.
@@ -161,7 +176,7 @@ static __forceinline__ __device__ float4 traceShadow(float3 o, float3 d, float t
                vis, t0, t1, t2, t3, l0, l1, l2, l3);
     if (!vis) return f4(0.0f);
     float4 T = make_float4(u2f(t0), u2f(t1), u2f(t2), u2f(t3));
-    if (params.enableHaze && params.hazeSigmaS + params.hazeSigmaA > 0.0f) {
+    if (hazeActive()) {
         float a, b;
         if (hazeSegment(o, d, tmax, a, b)) T *= expf(-(params.hazeSigmaS + params.hazeSigmaA) * (b - a));
     }
@@ -194,11 +209,28 @@ extern "C" __global__ void __anyhit__shadow() {
 // =====================================================================================================
 // Light sampling
 // =====================================================================================================
-// Solid-angle pdf of reaching the sky through the portals in direction d from p (one portal chosen
-// uniformly, a uniform point on it).
+// Sky light enters through portals (the openings). A portal is chosen with probability proportional to
+// a rough solid-angle estimate seen from p, then a uniform point on it.
+static __forceinline__ __device__ float portalWeights(float3 p, float* w) {
+    float sum = 0.0f;
+    for (int i = 0; i < params.numPortals; ++i) {
+        const Portal& P = params.portals[i];
+        const float3 v = P.corner + (P.edgeU + P.edgeV) * 0.5f - p;
+        const float d2 = dot(v, v);
+        const float cosL = -dot(v, P.normal) * rsqrtf(fmaxf(d2, 1e-12f));
+        w[i] = cosL > 0.0f ? P.area * fmaxf(cosL, 0.1f) / fmaxf(d2, 0.05f) : 0.0f;
+        sum += w[i];
+    }
+    return sum;
+}
+// Solid-angle pdf of that strategy producing direction d from p.
 static __forceinline__ __device__ float portalPdf(float3 p, float3 d) {
+    float w[MAX_PORTALS];
+    const float sum = portalWeights(p, w);
+    if (sum <= 0.0f) return 0.0f;
     float pdf = 0.0f;
     for (int i = 0; i < params.numPortals; ++i) {
+        if (w[i] <= 0.0f) continue;
         const Portal& P = params.portals[i];
         const float dn = dot(d, P.normal);
         if (dn >= 0.0f) continue;                  // must leave the room through the portal
@@ -207,12 +239,51 @@ static __forceinline__ __device__ float portalPdf(float3 p, float3 d) {
         const float3 q = p + d * t - P.corner;
         const float a = dot(q, P.edgeU) / dot(P.edgeU, P.edgeU), b = dot(q, P.edgeV) / dot(P.edgeV, P.edgeV);
         if (a < 0.0f || a > 1.0f || b < 0.0f || b > 1.0f) continue;
-        pdf += t * t / (-dn * P.area);
+        pdf += (w[i] / sum) * t * t / (-dn * P.area);
     }
-    return params.numPortals > 0 ? pdf / params.numPortals : 0.0f;
+    return pdf;
 }
 
-static __forceinline__ __device__ float4 neeSun(const Surface& s, float3 wo, const Wavelengths& wl, Rng& rng, int medium) {
+// ---- sun patches: sunlit surfaces as secondary light sources
+// The sun enters only through the openings. Tracing the sun's central ray inwards from a uniform point on
+// an opening's outer face lands on a sunlit point y with area density cos(theta_y) * crossings / A_proj
+// (A_proj: the openings' total area seen from the sun). Connecting a shading point x to y samples the light
+// bounced by the bright patches directly. The path x -> y -> sun is also made by BSDF sampling at x followed
+// by sun sampling (or BSDF sampling) at y; all three are combined with the power heuristic.
+static __forceinline__ __device__ int sunPortalCrossings(float3 p) {
+    int n = 0;
+    for (int i = 0; i < params.numSunPortals; ++i) {
+        const Portal& P = params.sunPortals[i];
+        const float dn = dot(params.sunDir, P.normal);
+        if (dn >= 0.0f) continue;
+        const float t = dot(P.corner - p, P.normal) / dn;
+        if (t <= 0.0f) continue;
+        const float3 q = p + params.sunDir * t - P.corner;
+        const float a = dot(q, P.edgeU) / dot(P.edgeU, P.edgeU), b = dot(q, P.edgeV) / dot(P.edgeV, P.edgeV);
+        if (a >= 0.0f && a <= 1.0f && b >= 0.0f && b <= 1.0f) ++n;
+    }
+    return n;
+}
+// Area density with which the sun-patch strategy produces the point p (exact: casts the central ray).
+static __forceinline__ __device__ float sunPatchPdf(float3 p, float3 ng, float4 lambda) {
+    if (!params.enableSunPatch || params.sunPortalAreaTotal <= 0.0f) return 0.0f;
+    const float c = dot(ng, params.sunDir);
+    if (c <= 0.0f) return 0.0f;
+    const int n = sunPortalCrossings(p);
+    if (n == 0) return 0.0f;
+    if (!(params.debugFlags & 2) && hmax(traceShadow(offsetRay(p, ng), params.sunDir, 1e16f, lambda, IOR_AIR)) <= 0.0f) return 0.0f;
+    return c * n / params.sunPortalAreaTotal;
+}
+// Three-way power heuristic for a path x -> y -> sun: a = patch (p3 * pc), b = BSDF at x then sun sampling
+// at y (pIn * pc), c = BSDF at x then BSDF at y (pIn * pBy). Returns the weight of the chosen term.
+static __forceinline__ __device__ float weight3(float chosen, float a, float b, float c) {
+    const float d = a * a + b * b + c * c;
+    return d > 0.0f ? chosen * chosen / d : 0.0f;
+}
+
+// Direct sun at s. pIn: area density of reaching s by BSDF sampling from a vertex that also did the patch
+// strategy (0 if not), needed for the three-way weight.
+static __forceinline__ __device__ float4 neeSun(const Surface& s, float3 wo, const Wavelengths& wl, Rng& rng, int medium, float pIn) {
     const float3 local = sampleCone(rng.uniform2(), params.sunOneMinusCosMax);
     const float3 ld = Frame::from(params.sunDir).toWorld(local);
     if (dot(ld, s.ng) <= 0.0f) return f4(0.0f);
@@ -223,29 +294,123 @@ static __forceinline__ __device__ float4 neeSun(const Surface& s, float3 wo, con
     const float4 T = traceShadow(offsetRay(s.p, s.ng), ld, 1e16f, wl.lambda, medium);
     if (hmax(T) <= 0.0f) return f4(0.0f);
     const float lpdf = sunConePdf();
-    return f * Le * T * (powerHeuristic(lpdf, bpdf) / lpdf);
+    float w;
+    if (pIn > 0.0f) {
+        const float p3 = sunPatchPdf(s.p, s.ng, wl.lambda);
+        w = weight3(pIn * lpdf, p3 * lpdf, pIn * lpdf, pIn * bpdf);
+    } else {
+        w = powerHeuristic(lpdf, bpdf);
+    }
+    return f * Le * T * (w / lpdf);
+}
+
+static __forceinline__ __device__ bool isDeltaType(int type) { return type == MAT_DIELECTRIC || type == MAT_WATER || type == MAT_FILM; }
+
+static __forceinline__ __device__ float4 sunPatchConnect(const Surface& x, float3 wo, const Wavelengths& wl, Rng& rng) {
+    const float total = params.sunPortalAreaTotal;
+    if (params.numSunPortals == 0 || total <= 0.0f) return f4(0.0f);
+    float u0 = rng.uniform() * total;
+    int k = 0;
+    while (k < params.numSunPortals - 1 && u0 >= params.sunPortalProj[k]) { u0 -= params.sunPortalProj[k]; ++k; }
+    const Portal& P = params.sunPortals[k];
+    const float2 u = rng.uniform2();
+    float3 o = P.corner + P.edgeU * u.x + P.edgeV * u.y + params.sunDir * 0.05f;
+    const float3 dir = -params.sunDir;
+    Hit h;
+    h.hit = false;
+    for (int i = 0; i < 8; ++i) {                    // soap films let the sun through
+        h = traceRadiance(o, dir, 1e16f, false);
+        if (!h.hit || params.materials[h.mat].type != MAT_FILM) break;
+        o = offsetRay(h.p, dot(dir, h.ngOut) > 0.0f ? h.ngOut : -h.ngOut);
+    }
+    if (!h.hit || (params.debugFlags & 4)) return f4(0.0f);
+    const Material my = params.materials[h.mat];
+    if (isDeltaType(my.type)) return f4(0.0f);      // glass and water: the photons carry that light
+    const float3 ny = h.ngOut;
+    const float cosYs = dot(ny, params.sunDir);
+    if (cosYs <= 0.0f) return f4(0.0f);
+    const int crossings = sunPortalCrossings(h.p);
+    if (crossings == 0) return f4(0.0f);
+    const float p3 = cosYs * crossings / total;
+
+    float3 v = h.p - x.p;
+    const float d2 = dot(v, v);
+    const float dist = sqrtf(d2);
+    const float3 w = v * (1.0f / dist);
+    if (dot(w, x.ng) <= 0.0f) return f4(0.0f);
+    const float cosYc = -dot(w, ny);
+    if (cosYc <= 0.0f) return f4(0.0f);
+    float pdfX;
+    const float4 fx = bsdfEval(x, wo, w, pdfX);
+    if (hmax(fx) <= 0.0f) return f4(0.0f);
+
+    Surface y;
+    y.p = h.p;
+    y.ng = ny;
+    y.ns = h.nsOut;
+    y.matId = h.mat;
+    if (params.debugFlags & 1) {
+        y.type = MAT_DIFFUSE; y.albedo = f4(0.5f); y.coat = 0.0f; y.alpha = 1.0f; y.frame = Frame::from(y.ns);
+    } else {
+        // the patch points land on random materials: regroup threads before the procedural textures
+        if (!(params.debugFlags & 8)) optixReorder((unsigned int)my.type & 15u, 4);
+        prepareSurface(y, my, wl.lambda);
+    }
+    const float3 ls = Frame::from(params.sunDir).toWorld(sampleCone(rng.uniform2(), params.sunOneMinusCosMax));
+    if (dot(ls, y.ng) <= 0.0f) return f4(0.0f);
+    float pdfY;
+    const float4 fy = bsdfEval(y, -w, ls, pdfY);
+    if (hmax(fy) <= 0.0f) return f4(0.0f);
+    const float4 Ts = traceShadow(offsetRay(y.p, y.ng), ls, 1e16f, wl.lambda, IOR_AIR);
+    if (hmax(Ts) <= 0.0f) return f4(0.0f);
+    const float4 Tc = traceShadow(offsetRay(x.p, x.ng), w, fmaxf(0.0f, dist - fmaxf(1e-3f, dist * 1e-4f)), wl.lambda, IOR_AIR);
+    if (hmax(Tc) <= 0.0f) return f4(0.0f);
+    const float4 Le = sunRadiance(ls, wl.lambda);
+    const float pc = sunConePdf();
+    const float pA = pdfX * cosYc / d2;
+    const float wgt = weight3(p3 * pc, p3 * pc, pA * pc, pA * pdfY);
+    return fx * fy * Le * Ts * Tc * (cosYc / d2 * wgt / (p3 * pc));
+}
+
+// Sky light: a one-sample mixture of portal sampling and sky-map sampling; skyPdf is the mixture's density.
+static __forceinline__ __device__ float skyPdf(float3 p, float3 d) {
+    const float f = params.skyPdfUV ? params.skyMapFraction : 0.0f;
+    return (1.0f - f) * portalPdf(p, d) + f * skyMapPdf(d);
 }
 
 static __forceinline__ __device__ float4 neeSky(const Surface& s, float3 wo, const Wavelengths& wl, Rng& rng, int medium) {
-    if (params.numPortals == 0) return f4(0.0f);
-    const float u0 = rng.uniform();
-    const int k = min(int(u0 * params.numPortals), params.numPortals - 1);
-    const Portal& P = params.portals[k];
-    const float2 u = rng.uniform2();
-    const float3 q = P.corner + P.edgeU * u.x + P.edgeV * u.y;
-    float3 ld = q - s.p;
-    const float dist = length(ld);
-    ld = ld * (1.0f / dist);
-    if (dot(ld, P.normal) >= 0.0f || dot(ld, s.ng) <= 0.0f) return f4(0.0f);
+    const float f = params.skyPdfUV ? params.skyMapFraction : 0.0f;
+    float3 ld;
+    if (rng.uniform() < f) {
+        float pm;
+        ld = sampleSkyMap(rng.uniform2(), pm);
+        if (pm <= 0.0f) return f4(0.0f);
+        rng.uniform();                                // keep the random stream aligned with the portal branch
+    } else {
+        if (params.numPortals == 0) return f4(0.0f);
+        float w[MAX_PORTALS];
+        const float sum = portalWeights(s.p, w);
+        if (sum <= 0.0f) return f4(0.0f);
+        float u0 = rng.uniform() * sum;
+        int k = 0;
+        while (k < params.numPortals - 1 && (u0 >= w[k] || w[k] <= 0.0f)) { u0 -= w[k]; ++k; }
+        if (w[k] <= 0.0f) return f4(0.0f);
+        const Portal& P = params.portals[k];
+        const float2 u = rng.uniform2();
+        const float3 q = P.corner + P.edgeU * u.x + P.edgeV * u.y;
+        ld = normalize(q - s.p);
+        if (dot(ld, P.normal) >= 0.0f) return f4(0.0f);
+    }
+    if (dot(ld, s.ng) <= 0.0f) return f4(0.0f);
     float bpdf;
-    const float4 f = bsdfEval(s, wo, ld, bpdf);
-    if (hmax(f) <= 0.0f) return f4(0.0f);
-    const float lpdf = portalPdf(s.p, ld);
+    const float4 fr = bsdfEval(s, wo, ld, bpdf);
+    if (hmax(fr) <= 0.0f) return f4(0.0f);
+    const float lpdf = skyPdf(s.p, ld);
     if (lpdf <= 0.0f) return f4(0.0f);
     const float4 T = traceShadow(offsetRay(s.p, s.ng), ld, 1e16f, wl.lambda, medium);
     if (hmax(T) <= 0.0f) return f4(0.0f);
     const float4 Le = skyRadiance(ld, wl.lambda);
-    return f * Le * T * (powerHeuristic(lpdf, bpdf) / lpdf);
+    return fr * Le * T * (powerHeuristic(lpdf, bpdf) / lpdf);
 }
 
 // Single scattering of sunlight in the room's haze along [t0, t1] of the ray (one sample).
@@ -315,15 +480,21 @@ static __forceinline__ __device__ PathOut tracePath(unsigned int px, unsigned in
     bool specularBounce = true;   // the previous vertex was delta (the camera counts as one)
     bool causticChain = false;    // non-delta vertex, then only photon-covered delta events since
     float prevPdf = 0.0f;
-    float3 prevP = o;
+    float3 prevP = o, prevNg = make_float3(0, 1, 0);
     int medium = IOR_AIR;
+    // patch-strategy bookkeeping: did the last non-delta vertex connect to sun patches, the distance
+    // travelled since it (soap films pass straight through), and that vertex's own incoming area pdf
+    bool prevPatch = false, vtxPrevPatch = false;
+    float segDist = 0.0f, vtxPIn = 0.0f;
+    const bool patches = params.enableSunPatch && params.enableNee && !params.furnace;
     const int maxDepth = params.furnace ? 4096 : params.maxDepth;
 
     for (int depth = 0; depth < maxDepth; ++depth) {
         const Hit h = traceRadiance(o, d, 1e16f);
         const float tSeg = h.hit ? h.t : 1e16f;
+        segDist += tSeg;
 
-        if (medium == IOR_AIR && params.enableHaze && !params.furnace) {
+        if (medium == IOR_AIR && hazeActive()) {
             float t0, t1;
             if (hazeSegment(o, d, tSeg, t0, t1)) {
                 L += beta * hazeInscatter(o, d, t0, t1, wl, rng);
@@ -338,10 +509,15 @@ static __forceinline__ __device__ PathOut tracePath(unsigned int px, unsigned in
             float4 Lsun = sunRadiance(d, wl.lambda);
             float wSky = 1.0f, wSun = 1.0f;
             if (!specularBounce && params.enableNee) {
-                wSky = powerHeuristic(prevPdf, portalPdf(prevP, d));
-                wSun = powerHeuristic(prevPdf, sunConePdf());
+                wSky = powerHeuristic(prevPdf, skyPdf(prevP, d));
+                if (vtxPrevPatch && vtxPIn > 0.0f && hmax(Lsun) > 0.0f) {
+                    const float p3 = sunPatchPdf(prevP, prevNg, wl.lambda);
+                    wSun = weight3(vtxPIn * prevPdf, p3 * sunConePdf(), vtxPIn * sunConePdf(), vtxPIn * prevPdf);
+                } else {
+                    wSun = powerHeuristic(prevPdf, sunConePdf());
+                }
             }
-            if (causticChain && params.enablePhotons) wSun = 0.0f;   // the photon map carries this light
+            if (causticChain) wSun = 0.0f;   // diffuse -> glass/water -> sun: the photon map carries this light
             L += beta * (Ls * wSky + Lsun * wSun);
             break;
         }
@@ -363,6 +539,7 @@ static __forceinline__ __device__ PathOut tracePath(unsigned int px, unsigned in
             medium = r.medium;
             if (!r.passThrough) {
                 specularBounce = true;
+                prevPatch = false;
                 if (m.type != MAT_FILM) causticChain = causticChain || prevPdf > 0.0f;
                 else causticChain = false;
             }
@@ -384,9 +561,13 @@ static __forceinline__ __device__ PathOut tracePath(unsigned int px, unsigned in
             out.albedo = make_float3(1, 1, 1) * (0.25f * hsum(s.albedo));
             out.normal = s.ns;
         }
+        // area density of having reached s by BSDF sampling from a vertex that also tried the patch strategy
+        const float pIn = prevPatch ? prevPdf * fabsf(dot(s.ng, d)) / fmaxf(segDist * segDist, 1e-8f) : 0.0f;
+        const bool canPatch = patches && medium == IOR_AIR;
         if (params.enableNee) {
-            L += beta * neeSun(s, wo, wl, rng, medium);
+            L += beta * neeSun(s, wo, wl, rng, medium, pIn);
             L += beta * neeSky(s, wo, wl, rng, medium);
+            if (canPatch) L += beta * sunPatchConnect(s, wo, wl, rng);
         }
         float3 wi;
         float4 w;
@@ -395,12 +576,18 @@ static __forceinline__ __device__ PathOut tracePath(unsigned int px, unsigned in
         beta *= w;
         prevPdf = pdf;
         prevP = s.p;
+        prevNg = s.ng;
+        vtxPIn = pIn;
+        vtxPrevPatch = prevPatch;
+        prevPatch = canPatch;
+        segDist = 0.0f;
         specularBounce = false;
         causticChain = false;
         o = offsetRay(s.p, s.ng);
         d = wi;
 
-        if (depth >= 3) {
+        // Russian roulette; off in the furnace test so the estimate stays bounded (paths end by escaping)
+        if (depth >= 3 && !params.furnace) {
             const float q = fmaxf(0.05f, 1.0f - hmax(beta));
             if (rng.uniform() < q) break;
             beta *= 1.0f / (1.0f - q);
@@ -417,7 +604,7 @@ extern "C" __global__ void __raygen__render() {
     float3 sum = make_float3(0, 0, 0), sumC = make_float3(0, 0, 0), alb = make_float3(0, 0, 0), nrm = make_float3(0, 0, 0);
     float n = 0.0f;
     for (unsigned int s = 0; s < params.sppPerLaunch; ++s) {
-        Rng rng = makeRng(pix, params.frame * params.sppPerLaunch + s, 0xA511E9B3u);
+        Rng rng = makeRng(pix, params.frame * params.sppPerLaunch + s, 0xA511E9B3u ^ (params.seed * 0x9E3779B9u));
         const PathOut r = tracePath(idx.x, idx.y, rng);
         const float v = r.xyz.x + r.xyz.y + r.xyz.z + r.causticXyz.x;
         if (!isfinite(v)) {
@@ -498,7 +685,10 @@ extern "C" __global__ void __raygen__tonemap() {
         linearOut = false;
     } else {
         const float4 a = params.view == 3 ? params.causticAccum[pix] : params.accum[pix];
-        const float3 xyz = make_float3(a.x, a.y, a.z) * (1.0f / fmaxf(a.w, 1.0f)) * params.exposure;
+        const float3 raw = make_float3(a.x, a.y, a.z) * (1.0f / fmaxf(a.w, 1.0f)) * params.exposure;
+        const float* m = params.wbMatrix;
+        const float3 xyz = make_float3(m[0] * raw.x + m[1] * raw.y + m[2] * raw.z, m[3] * raw.x + m[4] * raw.y + m[5] * raw.z,
+                                       m[6] * raw.x + m[7] * raw.y + m[8] * raw.z);
         rgb = agx(gamutCompress(xyzToLinearSRGB(xyz), xyz.y));
     }
     float3 enc = linearOut ? make_float3(srgbOetf(rgb.x), srgbOetf(rgb.y), srgbOetf(rgb.z)) : rgb;

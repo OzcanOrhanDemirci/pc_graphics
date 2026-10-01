@@ -41,6 +41,7 @@ public:
 private:
     void launch(CUdeviceptr raygenRecord, unsigned int w, unsigned int h, float* ms);
     void buildAccel(const Scene& scene);
+    void bakeNoise();
 
     std::string root_;
     std::string deviceName_;
@@ -51,7 +52,9 @@ private:
     OptixPipeline pipeline_ = nullptr;
     std::vector<OptixProgramGroup> groups_;
     OptixShaderBindingTable sbt_{};
-    CUdeviceptr rgRender_ = 0, rgSky_ = 0, rgTonemap_ = 0, missRecords_ = 0, hitRecords_ = 0;
+    CUdeviceptr rgRender_ = 0, rgSky_ = 0, rgTonemap_ = 0, rgBake_ = 0, missRecords_ = 0, hitRecords_ = 0;
+    cudaArray_t noiseArray_ = nullptr;
+    cudaTextureObject_t noiseTexObj_ = 0;
     CUdeviceptr dParams_ = 0;
     cudaStream_t stream_ = nullptr;
     cudaEvent_t ev0_ = nullptr, ev1_ = nullptr;

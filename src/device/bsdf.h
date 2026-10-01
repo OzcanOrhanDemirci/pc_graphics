@@ -60,36 +60,43 @@ static __forceinline__ __device__ float ggxReflectPdf(float3 wo, float3 h, float
 
 // ---- textures
 // Planar coordinates on an axis-aligned architectural surface: (along wall, up) for walls, (x, z) for floors.
-static __forceinline__ __device__ float2 archUV(float3 p, float3 n) {
+// du/dv receive the world directions of the two coordinates (for bump mapping).
+static __forceinline__ __device__ float2 archUV(float3 p, float3 n, float3& du, float3& dv) {
     const float ax = fabsf(n.x), ay = fabsf(n.y), az = fabsf(n.z);
-    if (ay >= ax && ay >= az) return make_float2(p.x, p.z);
-    if (ax >= az) return make_float2(p.z, p.y);
+    if (ay >= ax && ay >= az) { du = make_float3(1, 0, 0); dv = make_float3(0, 0, 1); return make_float2(p.x, p.z); }
+    if (ax >= az) { du = make_float3(0, 0, 1); dv = make_float3(0, 1, 0); return make_float2(p.z, p.y); }
+    du = make_float3(1, 0, 0); dv = make_float3(0, 1, 0);
     return make_float2(p.x, p.y);
+}
+// Tilts the shading normal by a height gradient given along the surface's u and v directions.
+static __forceinline__ __device__ float3 bumpNormal(float3 n, float3 du, float3 dv, float gu, float gv) {
+    float3 t = du * gu + dv * gv;
+    t = t - n * dot(t, n);
+    return normalize(n - t);
 }
 
 // Ando concrete: 1820 x 910 mm form panels, six tie holes each, V-joints, mottled tone.
 static __forceinline__ __device__ void textureConcrete(const Material& m, Surface& s, float4 lambda) {
     const float pw = m.p.x, ph = m.p.y, holeR = m.p.z;
-    const float2 uv = archUV(s.p, s.ng);
+    float3 du3, dv3;
+    const float2 uv = archUV(s.p, s.ng, du3, dv3);
     const float iu = floorf(uv.x / pw), iv = floorf(uv.y / ph);
     const float lu = uv.x - iu * pw, lv = uv.y - iv * ph;         // metres inside the panel
-    const unsigned int panel = hash3i(int(iu), int(iv), int(fabsf(s.ng.x) > 0.5f ? 1 : (fabsf(s.ng.z) > 0.5f ? 2 : 3)));
+    const unsigned int panel = pcgHash(hash2i(int(iu), int(iv)) ^ (fabsf(s.ng.x) > 0.5f ? 11u : (fabsf(s.ng.z) > 0.5f ? 23u : 37u)));
     float tone = (hashToFloat(panel) - 0.5f) * 0.10f;              // panel-to-panel pour variation
-    // mottling at several scales, plus slight vertical streaking of the pour
-    const float3 q = s.p * 1.0f;
-    tone += 0.07f * fbm(make_float3(q.x * 1.3f, q.y * 0.6f, q.z * 1.3f), 4);
-    tone += 0.035f * fbm(q * 9.0f, 3);
-    float mixB = saturate(0.5f + 2.5f * fbm(q * 0.7f + make_float3(5.1f, 0.0f, 2.3f), 3));
+    // mottling at several scales, with a slight vertical streaking of the pour
+    tone += 0.07f * fbm2(make_float2(uv.x * 1.3f, uv.y * 0.6f), 4).x;
+    tone += 0.035f * fbm2(make_float2(uv.x * 9.0f + 3.1f, uv.y * 9.0f), 3).x;
+    const float mixB = saturate(0.5f + 2.5f * fbm2(make_float2(uv.x * 0.7f + 5.1f, uv.y * 0.7f + 2.3f), 3).x);
     float cavity = 1.0f;
-    float3 bump = make_float3(0.0f, 0.0f, 0.0f);
+    float bu = 0.0f, bv = 0.0f;
     // V-joints between panels: 3 mm wide
     const float du = fminf(lu, pw - lu), dv = fminf(lv, ph - lv);
     const float jw = 0.003f;
     if (du < jw || dv < jw) {
         cavity *= 0.72f;
-        // tilt the normal into the groove
-        if (du < dv) bump.x = (lu < pw * 0.5f ? -1.0f : 1.0f) * 0.6f;
-        else bump.y = (lv < ph * 0.5f ? -1.0f : 1.0f) * 0.6f;
+        if (du < dv) bu = (lu < pw * 0.5f ? 1.0f : -1.0f) * 0.6f;   // the groove's walls face its centre line
+        else bv = (lv < ph * 0.5f ? 1.0f : -1.0f) * 0.6f;
     }
     // tie holes: 3 x 2 per panel
     const float hu[3] = {0.30f, 0.91f, 1.52f};
@@ -101,8 +108,8 @@ static __forceinline__ __device__ void textureConcrete(const Material& m, Surfac
             if (d < holeR) {               // recessed conical plug: darker, normal facing the centre
                 const float k = d / holeR;
                 cavity *= 0.35f + 0.35f * k;
-                bump.x += -dx / fmaxf(d, 1e-5f) * 0.5f * k;
-                bump.y += -dy / fmaxf(d, 1e-5f) * 0.5f * k;
+                bu += dx / fmaxf(d, 1e-5f) * 0.5f * k;
+                bv += dy / fmaxf(d, 1e-5f) * 0.5f * k;
             } else if (d < holeR * 2.2f) { // a faint ring left by the form cone
                 tone -= 0.03f * (1.0f - (d - holeR) / (holeR * 1.2f));
             }
@@ -111,7 +118,7 @@ static __forceinline__ __device__ void textureConcrete(const Material& m, Surfac
     {
         const float cs = 0.02f;
         const float gx = floorf(uv.x / cs), gy = floorf(uv.y / cs);
-        const unsigned int h = hash3i(int(gx), int(gy), 913);
+        const unsigned int h = pcgHash(hash2i(int(gx), int(gy)) ^ 913u);
         if ((h & 15u) == 0u) {
             const float cx = (gx + 0.2f + 0.6f * hashToFloat(h * 31u)) * cs;
             const float cy = (gy + 0.2f + 0.6f * hashToFloat(h * 57u)) * cs;
@@ -125,25 +132,17 @@ static __forceinline__ __device__ void textureConcrete(const Material& m, Surfac
     s.albedo = (a * (1.0f - mixB) + b * mixB) * (t * cavity);
     s.cavity = cavity;
     // micro-relief of the cast surface
-    const float3 g = fbmGrad(s.p * 60.0f, 2, 0.05f) * 0.012f;
-    float3 tw, bw;
-    makeBasis(s.ns, tw, bw);
-    // archUV axes: map bump.x / bump.y onto world directions along u and v
-    const float ax = fabsf(s.ng.x), ay = fabsf(s.ng.y), az = fabsf(s.ng.z);
-    float3 du3, dv3;
-    if (ay >= ax && ay >= az) { du3 = make_float3(1, 0, 0); dv3 = make_float3(0, 0, 1); }
-    else if (ax >= az) { du3 = make_float3(0, 0, 1); dv3 = make_float3(0, 1, 0); }
-    else { du3 = make_float3(1, 0, 0); dv3 = make_float3(0, 1, 0); }
-    float3 n = s.ns + du3 * bump.x + dv3 * bump.y + (g - s.ns * dot(g, s.ns));
-    s.ns = normalize(n);
+    const float3 g = fbm2(uv * 60.0f, 2) * 0.012f;
+    s.ns = bumpNormal(s.ns, du3, dv3, g.y + bu, g.z + bv);
     s.alpha = m.roughness;
     s.coat = m.coat;
 }
 
 // Polished terrazzo: light matrix with marble chips, brass divider strips on the 1820 x 910 grid.
 static __forceinline__ __device__ void textureStone(const Material& m, Surface& s, float4 lambda, bool& isBrass) {
-    const float2 uv = archUV(s.p, s.ng);
-    float4 base = sigmoidSpectrum4(m.sigA, lambda);
+    float3 du3, dv3;
+    const float2 uv = archUV(s.p, s.ng, du3, dv3);
+    const float4 base = sigmoidSpectrum4(m.sigA, lambda);
     // chips: one per cell, check the 3x3 neighbourhood
     const float cs = m.p.y;
     const float gx = floorf(uv.x / cs), gy = floorf(uv.y / cs);
@@ -151,22 +150,22 @@ static __forceinline__ __device__ void textureStone(const Material& m, Surface& 
     unsigned int bestH = 0u;
     for (int j = -1; j <= 1; ++j)
         for (int i = -1; i <= 1; ++i) {
-            const unsigned int h = hash3i(int(gx) + i, int(gy) + j, 77);
+            const unsigned int h = pcgHash(hash2i(int(gx) + i, int(gy) + j) ^ 77u);
             const float cx = (gx + i + hashToFloat(h)) * cs, cy = (gy + j + hashToFloat(h * 7919u)) * cs;
             const float r = cs * (0.25f + 0.45f * hashToFloat(h * 104729u));
             const float d = sqrtf(sqr(uv.x - cx) + sqr(uv.y - cy)) / r;
             if (d < best) { best = d; bestH = h; }
         }
-    const float edge = best + 0.25f * gnoise(make_float3(uv.x * 400.0f, uv.y * 400.0f, 3.0f));
+    const float edge = best + 0.25f * noiseTex(uv * 400.0f).w;
     float4 alb = base;
     if (edge < 1.0f && hashToFloat(bestH * 31337u) < m.p.x) {
         const float c = hashToFloat(bestH * 2654435761u);
         const float4 chip = sigmoidSpectrum4(m.sigB, lambda);
-        float shade = c < 0.55f ? 1.08f : (c < 0.85f ? 0.62f : 0.30f);   // white marble, grey, dark
+        const float shade = c < 0.55f ? 1.08f : (c < 0.85f ? 0.62f : 0.30f);   // white marble, grey, dark
         alb = chip * shade;
         if (c > 0.97f) alb = alb * make_float4(1.0f, 1.0f, 1.05f, 1.15f);
     }
-    alb *= 1.0f + 0.05f * fbm(make_float3(uv.x * 2.0f, 0.0f, uv.y * 2.0f), 3);
+    alb *= 1.0f + 0.05f * fbm2(uv * 2.0f, 3).x;
     s.albedo = alb;
     s.cavity = 1.0f;
     // brass strips
@@ -175,19 +174,21 @@ static __forceinline__ __device__ void textureStone(const Material& m, Surface& 
     const float d = fminf(fminf(lu, pw - lu), fminf(lv, ph - lv));
     isBrass = d < 0.002f && m.flags == 1;
     // polish: roughness varies slightly (wax, wear)
-    const float wear = fbm(make_float3(uv.x * 1.5f, 1.0f, uv.y * 1.5f), 3);
+    const float wear = fbm2(make_float2(uv.x * 1.5f + 40.0f, uv.y * 1.5f), 3).x;
     s.alpha = m.roughness * (1.0f + 0.8f * fmaxf(0.0f, wear));
     s.coat = m.coat;
-    const float3 g = fbmGrad(s.p * 8.0f, 2, 0.05f) * 0.002f;
-    s.ns = normalize(s.ns + (g - s.ns * dot(g, s.ns)));
+    const float3 g = fbm2(uv * 8.0f, 2) * 0.002f;
+    s.ns = bumpNormal(s.ns, du3, dv3, g.y, g.z);
 }
 
 static __forceinline__ __device__ void texturePlaster(const Material& m, Surface& s, float4 lambda) {
-    const float v = fbm(s.p * 3.0f, 3);
+    float3 du3, dv3;
+    const float2 uv = archUV(s.p, s.ng, du3, dv3);
+    const float v = fbm2(uv * 3.0f, 3).x;
     s.albedo = sigmoidSpectrum4(m.sigA, lambda) * (1.0f + 0.025f * v);
     s.cavity = 1.0f;
-    const float3 g = fbmGrad(s.p * 25.0f, 3, 0.05f) * (0.004f * m.p.x);
-    s.ns = normalize(s.ns + (g - s.ns * dot(g, s.ns)));
+    const float3 g = fbm2(uv * 25.0f + make_float2(17.0f, 3.0f), 3) * (0.004f * m.p.x);
+    s.ns = bumpNormal(s.ns, du3, dv3, g.y, g.z);
     s.alpha = 1.0f;
     s.coat = 0.0f;
 }
@@ -206,9 +207,9 @@ static __forceinline__ __device__ void prepareSurface(Surface& s, const Material
     s.alpha = 1.0f;
     s.coat = 0.0f;
     s.cavity = 1.0f;
-    if (params.furnace) {
+    if (params.furnace || (params.debugFlags & 16)) {
         s.type = MAT_DIFFUSE;
-        s.albedo = f4(1.0f);
+        s.albedo = f4(params.furnace ? 1.0f : 0.5f);
         s.frame = Frame::from(s.ns);
         return;
     }

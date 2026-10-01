@@ -37,6 +37,7 @@ struct Scene {
     std::vector<int> sphereMaterial;
     std::vector<Material> materials;
     std::vector<Portal> portals;
+    std::vector<float> portalDepth;   // wall thickness behind each portal: its outer face is portal - normal * depth
     std::vector<CameraPreset> cameras;
     std::vector<Emitter> emitters;
     float3 hazeMin, hazeMax;
@@ -58,3 +59,5 @@ void cameraFromPreset(const CameraPreset& p, unsigned int width, unsigned int he
 // Spectral helpers on the host
 float3 fitSigmoid(float3 linearSRGB);          // reflectance spectrum coefficients for an sRGB albedo
 bool spectralSelfTest(std::string& report);    // D65 white point, sRGB white, Sellmeier, thin film order
+// Bradford adaptation that renders a blackbody of `kelvin` as neutral (D65) white; kelvin <= 0: identity.
+void whiteBalanceMatrix(float kelvin, float out[9]);

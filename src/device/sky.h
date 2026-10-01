@@ -97,8 +97,41 @@ static __forceinline__ __device__ float4 sunRadiance(float3 d, float4 lambda) {
     const float sinMax2 = params.sunOneMinusCosMax * (2.0f - params.sunOneMinusCosMax);
     const float mu = sqrtf(fmaxf(0.0f, 1.0f - sin2 / sinMax2));
     const float limb = 1.0f - params.sunLimb * (1.0f - mu);
-    return make_float4(sunTableAt(lambda.x), sunTableAt(lambda.y), sunTableAt(lambda.z), sunTableAt(lambda.w)) * limb;
+    return make_float4(sunTableAt(lambda.x), sunTableAt(lambda.y), sunTableAt(lambda.z), sunTableAt(lambda.w)) * (limb * params.sunScale);
 }
 static __forceinline__ __device__ float sunConePdf() {
     return 1.0f / (2.0f * M_PIf * params.sunOneMinusCosMax);
+}
+
+// ---- importance sampling of the sky map (luminance x solid angle), for the bright aureole around the sun
+// Jacobian of the (u, v) parameterisation: d(omega) = 4 pi^2 cos(e) |2v - 1| du dv.
+static __forceinline__ __device__ float skyJacobian(float v) {
+    const float s = 2.0f * v - 1.0f;
+    const float e = copysignf(s * s, s) * (0.5f * M_PIf);
+    return 4.0f * M_PIf * M_PIf * cosf(e) * fabsf(s);
+}
+static __forceinline__ __device__ float skyMapPdf(float3 d) {
+    if (!params.skyPdfUV) return 0.0f;
+    const float2 uv = skyUV(d);
+    const int x = min(int(uv.x * params.skyW), params.skyW - 1), y = min(int(uv.y * params.skyH), params.skyH - 1);
+    return params.skyPdfUV[y * params.skyW + x] / fmaxf(skyJacobian(uv.y), 1e-7f);
+}
+// Largest i with cdf[i] <= u in a monotone table of n + 1 entries; remainder in [0,1) within the bin.
+static __forceinline__ __device__ int searchCdf(const float* cdf, int n, float u, float& rem) {
+    int lo = 0, hi = n;
+    while (hi - lo > 1) {
+        const int mid = (lo + hi) >> 1;
+        if (cdf[mid] <= u) lo = mid; else hi = mid;
+    }
+    const float w = cdf[lo + 1] - cdf[lo];
+    rem = w > 0.0f ? clampf((u - cdf[lo]) / w, 0.0f, 0.99999f) : 0.5f;
+    return lo;
+}
+static __forceinline__ __device__ float3 sampleSkyMap(float2 u, float& pdf) {
+    float ry, rx;
+    const int y = searchCdf(params.skyCdfRow, params.skyH, u.x, ry);
+    const int x = searchCdf(params.skyCdfCol + size_t(y) * (params.skyW + 1), params.skyW, u.y, rx);
+    const float uu = (x + rx) / params.skyW, vv = (y + ry) / params.skyH;
+    pdf = params.skyPdfUV[y * params.skyW + x] / fmaxf(skyJacobian(vv), 1e-7f);
+    return skyDir(uu, vv);
 }

@@ -78,24 +78,30 @@ void Scene::addSlab(float3 origin, float3 u, float3 v, float3 n, float w, float 
     std::sort(vs.begin(), vs.end()); vs.erase(std::unique(vs.begin(), vs.end()), vs.end());
     const float3 back = n * (-thickness);
     auto P = [&](float a, float b) { return origin + u * a + v * b; };
-    for (size_t i = 0; i + 1 < us.size(); ++i)
-        for (size_t j = 0; j + 1 < vs.size(); ++j) {
+    const int nu = int(us.size()) - 1, nv = int(vs.size()) - 1;
+    std::vector<char> holes(size_t(nu) * nv, 0);
+    for (int i = 0; i < nu; ++i)
+        for (int j = 0; j < nv; ++j) {
             const float uc = 0.5f * (us[i] + us[i + 1]), vc = 0.5f * (vs[j] + vs[j + 1]);
             bool hole = false;
             for (const float4& o : openings) hole |= uc > o.x && uc < o.z && vc > o.y && vc < o.w;
-            if (hole) continue;
-            const float3 a = P(us[i], vs[j]), b = P(us[i + 1], vs[j]), c = P(us[i + 1], vs[j + 1]), d = P(us[i], vs[j + 1]);
-            quadFacing(*this, a, b, c, d, n, mat);
-            quadFacing(*this, a + back, b + back, c + back, d + back, -n, mat);
+            holes[size_t(i) * nv + j] = hole;
         }
-    // reveals: the sides of each opening, facing into the opening (skipped where it meets the slab edge)
-    for (const float4& o : openings) {
-        const float3 a = P(o.x, o.y), b = P(o.z, o.y), c = P(o.z, o.w), d = P(o.x, o.w);
-        if (o.y > 0.0f) quadFacing(*this, a, b, b + back, a + back, v, revealMat);
-        if (o.w < h) quadFacing(*this, d, c, c + back, d + back, -v, revealMat);
-        if (o.x > 0.0f) quadFacing(*this, a, d, d + back, a + back, u, revealMat);
-        if (o.z < w) quadFacing(*this, b, c, c + back, b + back, -u, revealMat);
-    }
+    auto isHole = [&](int i, int j) { return holes[size_t(i) * nv + j] != 0; };
+    for (int i = 0; i < nu; ++i)
+        for (int j = 0; j < nv; ++j) {
+            const float3 a = P(us[i], vs[j]), b = P(us[i + 1], vs[j]), c = P(us[i + 1], vs[j + 1]), d = P(us[i], vs[j + 1]);
+            if (!isHole(i, j)) {
+                quadFacing(*this, a, b, c, d, n, mat);
+                quadFacing(*this, a + back, b + back, c + back, d + back, -n, mat);
+                continue;
+            }
+            // reveals: where this hole cell borders solid slab, facing into the hole; none at the slab's edge
+            if (j > 0 && !isHole(i, j - 1)) quadFacing(*this, a, b, b + back, a + back, v, revealMat);
+            if (j + 1 < nv && !isHole(i, j + 1)) quadFacing(*this, d, c, c + back, d + back, -v, revealMat);
+            if (i > 0 && !isHole(i - 1, j)) quadFacing(*this, a, d, d + back, a + back, u, revealMat);
+            if (i + 1 < nu && !isHole(i + 1, j)) quadFacing(*this, b, c, c + back, b + back, -u, revealMat);
+        }
     // perimeter
     const float3 c00 = P(0, 0), c10 = P(w, 0), c11 = P(w, h), c01 = P(0, h);
     quadFacing(*this, c00, c10, c10 + back, c00 + back, -v, mat);
@@ -104,7 +110,7 @@ void Scene::addSlab(float3 origin, float3 u, float3 v, float3 n, float w, float 
     quadFacing(*this, c10, c11, c11 + back, c10 + back, u, mat);
 }
 
-static void addPortal(Scene& s, float3 origin, float3 u, float3 v, float3 n, const float4& o) {
+static void addPortal(Scene& s, float3 origin, float3 u, float3 v, float3 n, const float4& o, float depth) {
     Portal p{};
     p.corner = origin + u * o.x + v * o.y;
     p.edgeU = u * (o.z - o.x);
@@ -112,6 +118,7 @@ static void addPortal(Scene& s, float3 origin, float3 u, float3 v, float3 n, con
     p.normal = n;
     p.area = length(cross(p.edgeU, p.edgeV));
     s.portals.push_back(p);
+    s.portalDepth.push_back(depth);
 }
 
 // Triangular prism, vertical axis, equilateral cross-section of side `side`.
@@ -213,13 +220,18 @@ Scene buildScene(const Config& cfg) {
     s.addSlab(make_float3(-T, H, -T), make_float3(1, 0, 0), make_float3(0, 0, 1), make_float3(0, -1, 0), L + 2 * T, W + 2 * T, 0.35f,
               ceilOpen, mConcrete, mConcrete);
     for (const float4& o : ceilOpen)
-        addPortal(s, make_float3(-T, H, -T), make_float3(1, 0, 0), make_float3(0, 0, 1), make_float3(0, -1, 0), o);
+        addPortal(s, make_float3(-T, H, -T), make_float3(1, 0, 0), make_float3(0, 0, 1), make_float3(0, -1, 0), o, 0.35f);
 
-    // left wall (z = 0, faces +z): the sun's wall, a full-height vertical slit
+    // left wall (z = 0, faces +z): the sun's wall. Full-height vertical slits, optionally a low horizontal slit.
     const float slitX = cfg.f("slit.x", 6.37f), slitW = cfg.f("slit.width", 0.20f);
-    const std::vector<float4> leftOpen = {make_float4(slitX, 0.0f, slitX + slitW, H)};
+    const int slitCount = cfg.i("slit.count", 1);
+    const float slitStep = cfg.f("slit.spacing", 1.82f);
+    std::vector<float4> leftOpen;
+    for (int k = 0; k < slitCount; ++k) leftOpen.push_back(make_float4(slitX + k * slitStep, 0.0f, slitX + k * slitStep + slitW, H));
+    const float lowH = cfg.f("lowslit.height", 0.0f);
+    if (lowH > 0.0f) leftOpen.push_back(make_float4(cfg.f("lowslit.x0", 0.91f), 0.0f, cfg.f("lowslit.x1", L - 0.91f), lowH));
     s.addSlab(make_float3(0, 0, 0), make_float3(1, 0, 0), make_float3(0, 1, 0), make_float3(0, 0, 1), L, H, T, leftOpen, mConcrete, mConcrete);
-    for (const float4& o : leftOpen) addPortal(s, make_float3(0, 0, 0), make_float3(1, 0, 0), make_float3(0, 1, 0), make_float3(0, 0, 1), o);
+    for (const float4& o : leftOpen) addPortal(s, make_float3(0, 0, 0), make_float3(1, 0, 0), make_float3(0, 1, 0), make_float3(0, 0, 1), o, T);
     // horizontal slit low in the left wall, optional
     // right wall (z = W, faces -z): white plaster, receives the light
     s.addSlab(make_float3(0, 0, W), make_float3(1, 0, 0), make_float3(0, 1, 0), make_float3(0, 0, -1), L, H, T, {}, mPlaster, mPlaster);
@@ -266,9 +278,11 @@ Scene buildScene(const Config& cfg) {
     s.hazeMax = make_float3(L, H, W);
 
     // ---- cameras
+    s.cameras.push_back({"kose", make_float3(1.3f, 1.5f, 6.6f), make_float3(9.0f, 1.1f, 0.5f), 24.0f, 5.6f, 0.0f});
     s.cameras.push_back({"giris", make_float3(0.75f, 1.55f, 4.6f), make_float3(6.0f, 1.05f, 2.4f), 32.0f, 4.0f, 0.0f});
-    s.cameras.push_back({"prizma", make_float3(2.6f, 1.25f, 4.2f), make_float3(5.2f, 1.08f, 2.4f), 50.0f, 2.8f, 0.0f});
+    s.cameras.push_back({"prizma", make_float3(2.6f, 1.25f, 4.2f), make_float3(5.6f, 1.08f, 2.4f), 50.0f, 2.8f, 0.0f});
     s.cameras.push_back({"havuz", make_float3(10.3f, 1.6f, 6.4f), make_float3(4.0f, 1.0f, 2.6f), 28.0f, 5.6f, 0.0f});
+    s.cameras.push_back({"plan", make_float3(L * 0.5f, H - 0.05f, W * 0.5f), make_float3(L * 0.5f, 0.0f, W * 0.5f - 0.01f), 9.0f, 0.0f, 0.0f});
     return s;
 }
 
@@ -403,4 +417,29 @@ bool spectralSelfTest(std::string& report) {
     check("sigmoid uydurma B", got.z, tgt.z, 0.01);
     report = o.str();
     return ok;
+}
+
+void whiteBalanceMatrix(float kelvin, float out[9]) {
+    const float id[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1};
+    if (kelvin <= 0.0f) { std::copy(id, id + 9, out); return; }
+    double X = 0, Y = 0, Z = 0;
+    for (float l = 360.0f; l <= 830.0f; l += 1.0f) {
+        const float3 c = cieXYZ(l);
+        const double b = blackbody(l, kelvin);
+        X += b * c.x; Y += b * c.y; Z += b * c.z;
+    }
+    const double src[3] = {X / Y, 1.0, Z / Y}, dst[3] = {0.95047, 1.0, 1.08883};
+    const double B[3][3] = {{0.8951, 0.2664, -0.1614}, {-0.7502, 1.7135, 0.0367}, {0.0389, -0.0685, 1.0296}};
+    const double Bi[3][3] = {{0.9869929, -0.1470543, 0.1599627}, {0.4323053, 0.5183603, 0.0492912}, {-0.0085287, 0.0400428, 0.9684867}};
+    double ls[3], ld[3];
+    for (int i = 0; i < 3; ++i) {
+        ls[i] = B[i][0] * src[0] + B[i][1] * src[1] + B[i][2] * src[2];
+        ld[i] = B[i][0] * dst[0] + B[i][1] * dst[1] + B[i][2] * dst[2];
+    }
+    for (int r = 0; r < 3; ++r)
+        for (int c = 0; c < 3; ++c) {
+            double v = 0;
+            for (int k = 0; k < 3; ++k) v += Bi[r][k] * (ld[k] / ls[k]) * B[k][c];
+            out[r * 3 + c] = float(v);
+        }
 }

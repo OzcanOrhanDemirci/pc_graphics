@@ -14,6 +14,8 @@
 #define SKY_BINS 48                   // spectral bins of the sky map, 10 nm apart starting at LAMBDA_MIN
 #define SKY_BIN_NM 10.0f
 #define MAX_PORTALS 8
+#define NOISE_TEX 1024                // baked noise texture size; NOISE_PERIOD gradient cells across it
+#define NOISE_PERIOD 128
 
 enum MaterialType : int {
     MAT_DIFFUSE = 0,     // plaster: matte, faint normal noise
@@ -75,10 +77,14 @@ struct Params {
     unsigned int width, height;
     unsigned int frame;          // frames accumulated so far (seeds the sampler)
     unsigned int sppPerLaunch;
+    unsigned int seed;           // decorrelates independent renders of the same frame (noise measurements)
     int view;                    // 0 beauty, 1 albedo, 2 normal, 3 caustics, 4 heat, 5 relative noise
     float exposure;              // linear multiplier before tone mapping
     const float* blueNoise;      // 128 x 128, values in [0,1)
+    unsigned long long noiseTex; // cudaTextureObject_t: baked tileable 2D gradient noise (value, d/du, d/dv, second noise)
+    float4* noiseBake;           // bake target, NOISE_TEX x NOISE_TEX
     int ditherFrame;
+    float wbMatrix[9];           // XYZ -> XYZ chromatic adaptation (Bradford), row major: camera white balance
 
     // ---- scene
     OptixTraversableHandle handle;
@@ -97,12 +103,21 @@ struct Params {
     float sunCosMax;             // cos of the sun's angular radius
     float sunOneMinusCosMax;     // 1 - sunCosMax, kept separately for precision
     float sunLimb;               // limb darkening coefficient u in 1 - u(1 - mu)
+    float sunScale;              // multiplier on the sun's radiance (1 physical; 0 isolates the sky)
     const float* sunTable;       // spectral radiance at disk centre, SUN_TABLE_N entries
     const float* sky;            // [y][x][SKY_BINS] spectral radiance, sun disk excluded
     int skyW, skyH;
     float skyScale;
+    const float* skyPdfUV;       // [skyH][skyW] probability density of the sky-map sampler in (u, v)
+    const float* skyCdfRow;      // skyH + 1 entries
+    const float* skyCdfCol;      // skyH rows of skyW + 1 entries
+    float skyMapFraction;        // share of sky light samples drawn from the map (the rest through portals)
     Portal portals[MAX_PORTALS];
     int numPortals;
+    Portal sunPortals[MAX_PORTALS];  // outer faces of the openings the sun shines through
+    float sunPortalProj[MAX_PORTALS];// their areas projected along the sun direction
+    int numSunPortals;
+    float sunPortalAreaTotal;
     float groundAlbedo;
 
     // ---- participating media
@@ -136,8 +151,10 @@ struct Params {
     int enablePhotons;
     int enableHaze;
     int enableNee;
+    int enableSunPatch;              // connect shading points to sunlit patches (secondary light sampling)
     int maxDepth;
-    int furnace;                     // white furnace test: every surface white diffuse, uniform sky = 1
+    int furnace;
+    int debugFlags;                  // cost experiments: 1 plain y surface, 2 no central ray, 4 patch trace only, 8 no SER                     // white furnace test: every surface white diffuse, uniform sky = 1
     unsigned int nanCount_pad;
     unsigned int* nanCounter;
 };

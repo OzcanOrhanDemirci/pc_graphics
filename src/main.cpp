@@ -20,7 +20,9 @@
 #include <GL/gl.h>
 #include "stb_easy_font.h"
 
+#include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <ctime>
@@ -56,6 +58,7 @@ struct App {
     std::vector<uchar4> pixels;
     double start = 0;
     unsigned int photonsDefault = 0;
+    float autoEvTarget = 0.0f;
 
     void loadConfig() {
         cfg = Config();
@@ -73,10 +76,15 @@ struct App {
         p.hazeSigmaA = cfg.f("haze.sigma_a", 0.002f);
         p.hazeG = cfg.f("haze.g", 0.65f);
         p.maxDepth = cfg.i("path.max_depth", 12);
+        p.enableSunPatch = cfg.i("path.sun_patch", 0);
         p.waterDepthTint = cfg.f("water.tint", 0.05f);
         p.groundAlbedo = cfg.f("ground.albedo", 0.18f);
         p.skyScale = cfg.f("sky.scale", 1.0f);
+        p.sunScale = cfg.f("sun.scale", 1.0f);
+        p.skyMapFraction = cfg.f("sky.map_fraction", 0.0f);
+        p.debugFlags = cfg.i("debug.flags", 0);
         p.time = cfg.f("time", 0.0f);
+        whiteBalanceMatrix(cfg.f("wb.kelvin", 0.0f), p.wbMatrix);
     }
     void rebuildScene() {
         scene = buildScene(cfg);
@@ -162,11 +170,30 @@ static int runHeadless(App& app, int spp, const std::string& out) {
         cudaMemcpy(sky.data(), p.sky, sky.size() * sizeof(float), cudaMemcpyDeviceToHost);
         double mx = 0, mean = 0;
         for (float v : sky) { mx = std::max<double>(mx, v); mean += v; }
-        std::printf("sun L(450/550/650) = %.4g %.4g %.4g   sky mean %.4g max %.4g   sunDir %.3f %.3f %.3f\n", sun[90], sun[190], sun[290],
-                    mean / sky.size(), mx, p.sunDir.x, p.sunDir.y, p.sunDir.z);
+        double X = 0, Y = 0, Z = 0;
+        for (int i = 0; i < SUN_TABLE_N; ++i) {
+            const float3 c = cieXYZ(LAMBDA_MIN + i);
+            X += sun[i] * c.x; Y += sun[i] * c.y; Z += sun[i] * c.z;
+        }
+        const double x = X / (X + Y + Z), y = Y / (X + Y + Z), n = (x - 0.3320) / (0.1858 - y);
+        const double cct = 449.0 * n * n * n + 3525.0 * n * n + 6823.3 * n + 5520.33;   // McCamy
+        std::printf("sun L(450/550/650) = %.4g %.4g %.4g   xy %.4f %.4f  CCT ~%.0f K   sky mean %.4g max %.4g   sunDir %.3f %.3f %.3f\n",
+                    sun[90], sun[190], sun[290], x, y, cct, mean / sky.size(), mx, p.sunDir.x, p.sunDir.y, p.sunDir.z);
     }
     std::printf("rendered %u spp in %.2f s (gpu %.1f ms/launch, %.2f Mpaths/s), NaN/Inf: %u\n", s, wall,
                 renderMs / app.renderer.frame(), double(app.width) * app.height * s / (renderMs * 1e-3) / 1e6, app.renderer.nanCount());
+    if (app.autoEvTarget > 0.0f) {   // exposure that puts the median luminance at the target (scene-referred)
+        std::vector<float4> acc;
+        app.renderer.downloadAccum(acc);
+        std::vector<float> Y;
+        Y.reserve(acc.size());
+        for (const float4& a : acc) if (a.w > 0) Y.push_back(a.y / a.w);
+        std::nth_element(Y.begin(), Y.begin() + Y.size() / 2, Y.end());
+        const float med = std::max(Y[Y.size() / 2], 1e-9f);
+        app.ev = std::log2(app.autoEvTarget / med);
+        app.renderer.params().exposure = std::pow(2.0f, app.ev);
+        std::printf("auto exposure: median Y %.4g -> EV %.2f\n", med, app.ev);
+    }
     app.saveCapture(out);
     return 0;
 }
@@ -260,6 +287,7 @@ static int runWindow(App& app, bool windowed, bool autotest) {
         if (pressed(GLFW_KEY_C)) app.setCamera(app.camera + 1);
         if (pressed(GLFW_KEY_P)) { p.enablePhotons = !p.enablePhotons; app.renderer.resetAccumulation(); say(std::string("fotonlar ") + (p.enablePhotons ? "acik" : "kapali")); }
         if (pressed(GLFW_KEY_V)) { p.enableHaze = !p.enableHaze; app.renderer.resetAccumulation(); say(std::string("pus ") + (p.enableHaze ? "acik" : "kapali")); }
+        if (pressed(GLFW_KEY_G)) { p.enableSunPatch = !p.enableSunPatch; app.renderer.resetAccumulation(); say(std::string("gunes lekesi baglantisi ") + (p.enableSunPatch ? "acik" : "kapali")); }
         if (pressed(GLFW_KEY_N)) { p.enableNee = !p.enableNee; app.renderer.resetAccumulation(); say(std::string("NEE ") + (p.enableNee ? "acik" : "kapali")); }
         for (int k = 0; k < 6; ++k)
             if (pressed(GLFW_KEY_1 + k)) p.view = k == 0 ? 0 : k;
@@ -347,6 +375,7 @@ int main(int argc, char** argv) {
     g_app = &app;
     bool headless = false, windowed = false, selftest = false, compileOnly = false, furnace = false, autotest = false;
     int spp = 64, view = 0, sppPerLaunch = 1;
+    unsigned int seed = 0;
     std::string out;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
@@ -357,6 +386,8 @@ int main(int argc, char** argv) {
         else if (a == "--compile-only") compileOnly = true;
         else if (a == "--furnace") furnace = true;
         else if (a == "--autotest") autotest = true;
+        else if (a == "--auto-ev") app.autoEvTarget = std::stof(next());
+        else if (a == "--seed") seed = unsigned(std::stoul(next()));
         else if (a == "--spp") spp = std::stoi(next());
         else if (a == "--spp-per-launch") sppPerLaunch = std::stoi(next());
         else if (a == "--out") out = next();
@@ -387,6 +418,7 @@ int main(int argc, char** argv) {
     Params& p = app.renderer.params();
     p.view = view;
     p.sppPerLaunch = unsigned(sppPerLaunch);
+    p.seed = seed;
     p.furnace = furnace ? 1 : 0;
     app.rebuildScene();
     std::printf("scene: %zu triangles, %zu spheres, %zu materials, %zu portals\n", app.scene.indices.size(), app.scene.spheres.size(),

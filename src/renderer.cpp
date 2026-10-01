@@ -1,10 +1,13 @@
 #include "renderer.h"
+#include "shared/spectrum.h"
 
 #include <nvrtc.h>
 #include <optix_function_table_definition.h>
 #include <optix_stack_size.h>
 #include <optix_stubs.h>
 
+#include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
@@ -85,6 +88,8 @@ bool Renderer::init(unsigned int width, unsigned int height, const std::string& 
     params_.exposure = 1.0f;
     params_.maxDepth = 12;
     params_.enableNee = 1;
+    params_.enableSunPatch = 1;
+    params_.skyMapFraction = 0.5f;
     params_.enableHaze = 1;
     params_.enablePhotons = 0;
     params_.skyScale = 1.0f;
@@ -149,27 +154,28 @@ bool Renderer::compileDevice(std::string& log) {
     bis.buildFlags = OPTIX_BUILD_FLAG_PREFER_FAST_TRACE | OPTIX_BUILD_FLAG_ALLOW_UPDATE;
     OPTIX_CHECK(optixBuiltinISModuleGet(context_, &mco, &pco, &bis, &sphereModule));
 
-    // program groups: 3 raygen, 2 miss, 4 hit groups
-    std::vector<OptixProgramGroupDesc> d(9);
+    // program groups: 4 raygen, 2 miss, 4 hit groups
+    std::vector<OptixProgramGroupDesc> d(10);
     for (auto& x : d) std::memset(&x, 0, sizeof(x));
-    const char* rgNames[3] = {"__raygen__render", "__raygen__sky", "__raygen__tonemap"};
-    for (int i = 0; i < 3; ++i) {
+    const char* rgNames[4] = {"__raygen__render", "__raygen__sky", "__raygen__tonemap", "__raygen__bakenoise"};
+    const int RG = 4;
+    for (int i = 0; i < RG; ++i) {
         d[i].kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
         d[i].raygen.module = module;
         d[i].raygen.entryFunctionName = rgNames[i];
     }
-    d[3].kind = OPTIX_PROGRAM_GROUP_KIND_MISS;                 // radiance: traversal only, no program
-    d[4].kind = OPTIX_PROGRAM_GROUP_KIND_MISS;
-    d[4].miss.module = module;
-    d[4].miss.entryFunctionName = "__miss__shadow";
-    d[5].kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;             // triangles, radiance
-    d[6].kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;             // triangles, shadow (opaque)
-    d[7].kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;             // spheres, radiance
-    d[7].hitgroup.moduleIS = sphereModule;
-    d[8].kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;             // spheres, shadow: soap films transmit
-    d[8].hitgroup.moduleIS = sphereModule;
-    d[8].hitgroup.moduleAH = module;
-    d[8].hitgroup.entryFunctionNameAH = "__anyhit__shadow";
+    d[RG + 0].kind = OPTIX_PROGRAM_GROUP_KIND_MISS;            // radiance: traversal only, no program
+    d[RG + 1].kind = OPTIX_PROGRAM_GROUP_KIND_MISS;
+    d[RG + 1].miss.module = module;
+    d[RG + 1].miss.entryFunctionName = "__miss__shadow";
+    d[RG + 2].kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;        // triangles, radiance
+    d[RG + 3].kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;        // triangles, shadow (opaque)
+    d[RG + 4].kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;        // spheres, radiance
+    d[RG + 4].hitgroup.moduleIS = sphereModule;
+    d[RG + 5].kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;        // spheres, shadow: soap films transmit
+    d[RG + 5].hitgroup.moduleIS = sphereModule;
+    d[RG + 5].hitgroup.moduleAH = module;
+    d[RG + 5].hitgroup.entryFunctionNameAH = "__anyhit__shadow";
     std::vector<OptixProgramGroup> groups(d.size());
     OptixProgramGroupOptions go{};
     olen = sizeof(olog);
@@ -203,10 +209,11 @@ bool Renderer::compileDevice(std::string& log) {
     record(groups_[0], rgRender_);
     record(groups_[1], rgSky_);
     record(groups_[2], rgTonemap_);
+    record(groups_[3], rgBake_);
     Record miss[2], hit[4];
-    OPTIX_CHECK(optixSbtRecordPackHeader(groups_[3], &miss[0]));
-    OPTIX_CHECK(optixSbtRecordPackHeader(groups_[4], &miss[1]));
-    for (int i = 0; i < 4; ++i) OPTIX_CHECK(optixSbtRecordPackHeader(groups_[5 + i], &hit[i]));
+    OPTIX_CHECK(optixSbtRecordPackHeader(groups_[RG + 0], &miss[0]));
+    OPTIX_CHECK(optixSbtRecordPackHeader(groups_[RG + 1], &miss[1]));
+    for (int i = 0; i < 4; ++i) OPTIX_CHECK(optixSbtRecordPackHeader(groups_[RG + 2 + i], &hit[i]));
     if (!missRecords_) CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&missRecords_), sizeof(miss)));
     if (!hitRecords_) CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&hitRecords_), sizeof(hit)));
     CUDA_CHECK(cudaMemcpy(reinterpret_cast<void*>(missRecords_), miss, sizeof(miss), cudaMemcpyHostToDevice));
@@ -220,7 +227,32 @@ bool Renderer::compileDevice(std::string& log) {
     sbt_.hitgroupRecordCount = 4;
     log = nvlog;
     frame_ = 0;
+    bakeNoise();
     return true;
+}
+
+// The procedural noise texture is baked by the device programs themselves (gnoise2), then sampled with
+// hardware bilinear filtering: one fetch per octave instead of eight hashed gradients.
+void Renderer::bakeNoise() {
+    if (!params_.noiseBake) params_.noiseBake = devAlloc<float4>(size_t(NOISE_TEX) * NOISE_TEX);
+    launch(rgBake_, NOISE_TEX, NOISE_TEX, nullptr);
+    if (noiseTexObj_) { cudaDestroyTextureObject(noiseTexObj_); noiseTexObj_ = 0; }
+    if (!noiseArray_) {
+        const cudaChannelFormatDesc fd = cudaCreateChannelDesc<float4>();
+        CUDA_CHECK(cudaMallocArray(&noiseArray_, &fd, NOISE_TEX, NOISE_TEX));
+    }
+    CUDA_CHECK(cudaMemcpy2DToArray(noiseArray_, 0, 0, params_.noiseBake, NOISE_TEX * sizeof(float4), NOISE_TEX * sizeof(float4), NOISE_TEX,
+                                   cudaMemcpyDeviceToDevice));
+    cudaResourceDesc rd{};
+    rd.resType = cudaResourceTypeArray;
+    rd.res.array.array = noiseArray_;
+    cudaTextureDesc td{};
+    td.addressMode[0] = td.addressMode[1] = cudaAddressModeWrap;
+    td.filterMode = cudaFilterModeLinear;
+    td.readMode = cudaReadModeElementType;
+    td.normalizedCoords = 1;
+    CUDA_CHECK(cudaCreateTextureObject(&noiseTexObj_, &rd, &td, nullptr));
+    params_.noiseTex = noiseTexObj_;
 }
 
 template <class T> static T* upload(const std::vector<T>& v, std::vector<void*>& owned) {
@@ -260,6 +292,19 @@ void Renderer::uploadScene(const Scene& s) {
     params_.materials = upload(s.materials, sceneBuffers_);
     params_.numPortals = int(std::min<size_t>(s.portals.size(), MAX_PORTALS));
     for (int i = 0; i < params_.numPortals; ++i) params_.portals[i] = s.portals[i];
+    // openings the sun shines through, as seen from the sun: their outer faces and projected areas
+    params_.numSunPortals = 0;
+    params_.sunPortalAreaTotal = 0.0f;
+    for (size_t i = 0; i < s.portals.size() && params_.numSunPortals < MAX_PORTALS; ++i) {
+        const float c = -dot(s.portals[i].normal, s.sunDir);
+        if (c <= 1e-4f) continue;
+        Portal outer = s.portals[i];
+        outer.corner = outer.corner - outer.normal * s.portalDepth[i];
+        params_.sunPortals[params_.numSunPortals] = outer;
+        params_.sunPortalProj[params_.numSunPortals] = outer.area * c;
+        params_.sunPortalAreaTotal += outer.area * c;
+        ++params_.numSunPortals;
+    }
     params_.hazeMin = s.hazeMin;
     params_.hazeMax = s.hazeMax;
     params_.sunDir = s.sunDir;
@@ -351,6 +396,51 @@ void Renderer::launch(CUdeviceptr raygenRecord, unsigned int w, unsigned int h, 
 void Renderer::updateSky() {
     launch(rgSky_, params_.skyW, params_.skyH, &times_.sky);
     frame_ = 0;
+    // sampling tables for the sky map: probability ~ luminance x solid angle of each texel
+    const int W = params_.skyW, H = params_.skyH;
+    std::vector<float> sky(size_t(W) * H * SKY_BINS);
+    CUDA_CHECK(cudaMemcpy(sky.data(), params_.sky, sky.size() * sizeof(float), cudaMemcpyDeviceToHost));
+    float ybar[SKY_BINS];
+    for (int b = 0; b < SKY_BINS; ++b) ybar[b] = cieXYZ(LAMBDA_MIN + b * SKY_BIN_NM).y;
+    std::vector<double> wgt(size_t(W) * H);
+    std::vector<float> rowCdf(H + 1), colCdf(size_t(H) * (W + 1)), pdfUV(size_t(W) * H);
+    std::vector<double> rowSum(H, 0.0);
+    double total = 0.0;
+    for (int y = 0; y < H; ++y) {
+        const float v = (y + 0.5f) / H, sv = 2.0f * v - 1.0f;
+        const float e = std::copysign(sv * sv, sv) * 1.5707963f;
+        const double jac = std::cos(e) * std::fabs(sv);
+        for (int x = 0; x < W; ++x) {
+            const float* c = &sky[(size_t(y) * W + x) * SKY_BINS];
+            double Y = 0.0;
+            for (int b = 0; b < SKY_BINS; ++b) Y += c[b] * ybar[b];
+            const double w = std::max(Y, 0.0) * jac;
+            wgt[size_t(y) * W + x] = w;
+            rowSum[y] += w;
+        }
+        total += rowSum[y];
+    }
+    if (total <= 0.0) return;
+    double acc = 0.0;
+    for (int y = 0; y < H; ++y) {
+        rowCdf[y] = float(acc / total);
+        acc += rowSum[y];
+        double ra = 0.0;
+        for (int x = 0; x < W; ++x) {
+            colCdf[size_t(y) * (W + 1) + x] = rowSum[y] > 0 ? float(ra / rowSum[y]) : float(x) / W;
+            ra += wgt[size_t(y) * W + x];
+            pdfUV[size_t(y) * W + x] = float(wgt[size_t(y) * W + x] / total * W * H);
+        }
+        colCdf[size_t(y) * (W + 1) + W] = 1.0f;
+    }
+    rowCdf[H] = 1.0f;
+    auto put = [&](const std::vector<float>& v, const float*& dst) {
+        if (!dst) { float* d = nullptr; CUDA_CHECK(cudaMalloc(&d, v.size() * sizeof(float))); dst = d; }
+        CUDA_CHECK(cudaMemcpy(const_cast<float*>(dst), v.data(), v.size() * sizeof(float), cudaMemcpyHostToDevice));
+    };
+    put(pdfUV, params_.skyPdfUV);
+    put(rowCdf, params_.skyCdfRow);
+    put(colCdf, params_.skyCdfCol);
 }
 
 void Renderer::renderFrame() {
