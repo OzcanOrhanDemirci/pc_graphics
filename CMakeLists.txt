@@ -14,11 +14,13 @@ add_executable(stress
     src/scene.cpp
     src/image_io.cpp
     src/gpu_stats.cpp
+    src/photons.cu
     ${TP}/tinyexr/miniz.c)
 
 target_include_directories(stress PRIVATE
     src
     ${TP}/cuda/include
+    ${TP}/cuda/include/cccl
     ${TP}/optix/include
     ${TP}/glfw/include
     ${TP}/stb
@@ -32,6 +34,8 @@ target_compile_definitions(stress PRIVATE
 
 if(MSVC)
     target_compile_options(stress PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/W3 /O2 /utf-8 /wd4244 /wd4267 /wd4305>)
+    # CUB (CCCL) needs MSVC's standard-conforming preprocessor
+    target_compile_options(stress PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=/Zc:preprocessor -Xcompiler=/utf-8>)
 endif()
 
 target_link_libraries(stress PRIVATE

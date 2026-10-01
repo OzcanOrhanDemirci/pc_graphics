@@ -20,7 +20,22 @@ struct Surface {
     float alpha;       // GGX alpha
     float coat;        // coat weight (0: plain diffuse)
     float cavity;      // ambient-occlusion-like darkening already folded into albedo (for AOV)
+    // albedo(lambda) = (sigmoid(sigLo) * (1 - mixHi) + sigmoid(sigHi) * mixHi) * scale: lets the photon gather
+    // evaluate the surface at the photon's own wavelength
+    float3 sigLo, sigHi;
+    float mixHi, scale;
 };
+
+static __forceinline__ __device__ float albedoAt(const Surface& s, float lambda) {
+    const float a = sigmoidSpectrum(s.sigLo, lambda);
+    const float b = s.mixHi > 0.0f ? sigmoidSpectrum(s.sigHi, lambda) : 0.0f;
+    return (a * (1.0f - s.mixHi) + b * s.mixHi) * s.scale;
+}
+static __forceinline__ __device__ void setAlbedo(Surface& s, float3 lo, float3 hi, float mix, float scale, float4 lambda) {
+    s.sigLo = lo; s.sigHi = hi; s.mixHi = mix; s.scale = scale;
+    s.albedo = sigmoidSpectrum4(lo, lambda) * ((1.0f - mix) * scale);
+    if (mix > 0.0f) s.albedo += sigmoidSpectrum4(hi, lambda) * (mix * scale);
+}
 
 // ---- GGX microfacet distribution (isotropic)
 static __forceinline__ __device__ float ggxD(float cosH, float a) {
@@ -128,8 +143,7 @@ static __forceinline__ __device__ void textureConcrete(const Material& m, Surfac
         }
     }
     const float t = 1.0f + tone * m.p.w;
-    const float4 a = sigmoidSpectrum4(m.sigA, lambda), b = sigmoidSpectrum4(m.sigB, lambda);
-    s.albedo = (a * (1.0f - mixB) + b * mixB) * (t * cavity);
+    setAlbedo(s, m.sigA, m.sigB, mixB, t * cavity, lambda);
     s.cavity = cavity;
     // micro-relief of the cast surface
     const float3 g = fbm2(uv * 60.0f, 2) * 0.012f;
@@ -142,7 +156,6 @@ static __forceinline__ __device__ void textureConcrete(const Material& m, Surfac
 static __forceinline__ __device__ void textureStone(const Material& m, Surface& s, float4 lambda, bool& isBrass) {
     float3 du3, dv3;
     const float2 uv = archUV(s.p, s.ng, du3, dv3);
-    const float4 base = sigmoidSpectrum4(m.sigA, lambda);
     // chips: one per cell, check the 3x3 neighbourhood
     const float cs = m.p.y;
     const float gx = floorf(uv.x / cs), gy = floorf(uv.y / cs);
@@ -157,16 +170,14 @@ static __forceinline__ __device__ void textureStone(const Material& m, Surface& 
             if (d < best) { best = d; bestH = h; }
         }
     const float edge = best + 0.25f * noiseTex(uv * 400.0f).w;
-    float4 alb = base;
+    const float var = 1.0f + 0.05f * fbm2(uv * 2.0f, 3).x;
     if (edge < 1.0f && hashToFloat(bestH * 31337u) < m.p.x) {
         const float c = hashToFloat(bestH * 2654435761u);
-        const float4 chip = sigmoidSpectrum4(m.sigB, lambda);
         const float shade = c < 0.55f ? 1.08f : (c < 0.85f ? 0.62f : 0.30f);   // white marble, grey, dark
-        alb = chip * shade;
-        if (c > 0.97f) alb = alb * make_float4(1.0f, 1.0f, 1.05f, 1.15f);
+        setAlbedo(s, m.sigB, m.sigB, 0.0f, shade * var, lambda);
+    } else {
+        setAlbedo(s, m.sigA, m.sigA, 0.0f, var, lambda);
     }
-    alb *= 1.0f + 0.05f * fbm2(uv * 2.0f, 3).x;
-    s.albedo = alb;
     s.cavity = 1.0f;
     // brass strips
     const float pw = 1.82f, ph = 0.91f;
@@ -185,7 +196,7 @@ static __forceinline__ __device__ void texturePlaster(const Material& m, Surface
     float3 du3, dv3;
     const float2 uv = archUV(s.p, s.ng, du3, dv3);
     const float v = fbm2(uv * 3.0f, 3).x;
-    s.albedo = sigmoidSpectrum4(m.sigA, lambda) * (1.0f + 0.025f * v);
+    setAlbedo(s, m.sigA, m.sigA, 0.0f, 1.0f + 0.025f * v, lambda);
     s.cavity = 1.0f;
     const float3 g = fbm2(uv * 25.0f + make_float2(17.0f, 3.0f), 3) * (0.004f * m.p.x);
     s.ns = bumpNormal(s.ns, du3, dv3, g.y, g.z);
@@ -209,7 +220,7 @@ static __forceinline__ __device__ void prepareSurface(Surface& s, const Material
     s.cavity = 1.0f;
     if (params.furnace || (params.debugFlags & 16)) {
         s.type = MAT_DIFFUSE;
-        s.albedo = f4(params.furnace ? 1.0f : 0.5f);
+        setAlbedo(s, make_float3(0, 0, params.furnace ? 1e4f : 0.0f), make_float3(0, 0, 0), 0.0f, 1.0f, lambda);
         s.frame = Frame::from(s.ns);
         return;
     }
@@ -221,18 +232,19 @@ static __forceinline__ __device__ void prepareSurface(Surface& s, const Material
         textureStone(m, s, lambda, brass);
         if (brass) {
             s.type = MAT_METAL;
-            s.f0 = sigmoidSpectrum4(make_float3(-6.0f, 9.0f, -1.2f), lambda);
+            setAlbedo(s, make_float3(-6.0f, 9.0f, -1.2f), make_float3(0, 0, 0), 0.0f, 1.0f, lambda);
+            s.f0 = s.albedo;
             s.alpha = 0.12f;
         }
         break;
     }
     case MAT_METAL:
-        s.f0 = sigmoidSpectrum4(m.sigA, lambda);
-        s.albedo = s.f0;
+        setAlbedo(s, m.sigA, m.sigA, 0.0f, 1.0f, lambda);
+        s.f0 = s.albedo;
         s.alpha = m.roughness;
         break;
     case MAT_DUST:
-        s.albedo = sigmoidSpectrum4(m.sigA, lambda);
+        setAlbedo(s, m.sigA, m.sigA, 0.0f, 1.0f, lambda);
         break;
     default: texturePlaster(m, s, lambda); break;
     }

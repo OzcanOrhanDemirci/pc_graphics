@@ -8,6 +8,7 @@
 #include "sky.h"
 #include "bsdf.h"
 #include "specular.h"
+#include "shared/photon_grid.h"
 
 enum { RAY_RADIANCE = 0, RAY_SHADOW = 1, RAY_TYPES = 2 };
 enum { INST_TRIANGLES = 0, INST_SPHERES = 1 };
@@ -184,6 +185,78 @@ static __forceinline__ __device__ float4 traceShadow(float3 o, float3 d, float t
 }
 
 extern "C" __global__ void __miss__shadow() { optixSetPayload_0(1u); }
+
+// Spheres are custom primitives: OptiX's built-in sphere only reports hits from outside, but glass shells and
+// soap bubbles are entered and left. Both roots are reported (closest wins for radiance rays, any-hit sees both).
+extern "C" __global__ void __intersection__sphere() {
+    const int prim = optixGetPrimitiveIndex();
+    const float4 s = params.spheres[prim];
+    const float3 o = optixGetObjectRayOrigin(), d = optixGetObjectRayDirection();
+    const float3 oc = o - make_float3(s.x, s.y, s.z);
+    const float a = dot(d, d), b = dot(oc, d), c = dot(oc, oc) - s.w * s.w;
+    const float disc = b * b - a * c;
+    if (disc < 0.0f) return;
+    const float sq = sqrtf(disc);
+    // numerically stable roots
+    const float q = -(b + copysignf(sq, b));
+    float t0 = q / a, t1 = c / q;
+    if (t0 > t1) { const float t = t0; t0 = t1; t1 = t; }
+    const float tmin = optixGetRayTmin(), tmax = optixGetRayTmax();
+    if (t0 > tmin && t0 < tmax) optixReportIntersection(t0, 0u);
+    if (t1 > tmin && t1 < tmax) optixReportIntersection(t1, 1u);
+}
+
+// Photon beams: a camera ray "hits" a beam where the two lines pass within the blur radius. Reported at the
+// camera ray's closest point, with the line distance and the position along the beam as attributes.
+extern "C" __global__ void __intersection__beam() {
+    const unsigned int prim = optixGetPrimitiveIndex();
+    const PhotonBeam bm = params.beams[prim / BEAM_PIECES];
+    const float piece = float(prim % BEAM_PIECES);
+    const float3 o = optixGetWorldRayOrigin(), u = optixGetWorldRayDirection();
+    const float3 ab = bm.b - bm.a;
+    const float len = length(ab);
+    if (len <= 1e-6f) return;
+    const float3 v = ab * (1.0f / len);
+    const float3 w0 = o - bm.a;
+    const float uv = dot(u, v), uw = dot(u, w0), vw = dot(v, w0);
+    const float den = 1.0f - uv * uv;
+    if (den < 1e-6f) return;                           // parallel: no well-defined crossing
+    const float sc = (uv * vw - uw) / den;             // along the camera ray
+    const float tb = (vw - uv * uw) / den;             // along the beam
+    const float seg = len * (1.0f / BEAM_PIECES);
+    if (tb < piece * seg || tb >= (piece + 1.0f) * seg || sc <= optixGetRayTmin() || sc >= optixGetRayTmax()) return;
+    const float3 dv = (o + u * sc) - (bm.a + v * tb);
+    const float dist2 = dot(dv, dv), r = params.beamRadius;
+    if (dist2 >= r * r) return;
+    optixReportIntersection(sc, 0u, __float_as_uint(dist2), __float_as_uint(tb));
+}
+
+extern "C" __global__ void __anyhit__beam() {
+    const PhotonBeam bm = params.beams[optixGetPrimitiveIndex() / BEAM_PIECES];
+    const float dist2 = __uint_as_float(optixGetAttribute_0()), tb = __uint_as_float(optixGetAttribute_1());
+    const float3 u = optixGetWorldRayDirection();
+    const float3 v = normalize(bm.b - bm.a);
+    const float uv = dot(u, v);
+    const float sinT = sqrtf(fmaxf(1e-6f, 1.0f - uv * uv));
+    const float r = params.beamRadius;
+    const float kernel = 2.0f * sqrtf(fmaxf(0.0f, r * r - dist2)) / (M_PIf * r * r);   // cylinder cross-section
+    const float sigT = params.hazeSigmaS + params.hazeSigmaA;
+    const float sc = optixGetRayTmax();
+    const float val = params.hazeSigmaS * henyeyGreenstein(-uv, params.hazeG) * bm.flux * expf(-sigT * (tb + sc)) * kernel / sinT;
+    const float3 c = cieXYZ(bm.lambda) * val;
+    optixSetPayload_0(__float_as_uint(__uint_as_float(optixGetPayload_0()) + c.x));
+    optixSetPayload_1(__float_as_uint(__uint_as_float(optixGetPayload_1()) + c.y));
+    optixSetPayload_2(__float_as_uint(__uint_as_float(optixGetPayload_2()) + c.z));
+    optixIgnoreIntersection();
+}
+
+// In-scattered caustic light along a camera ray segment (XYZ, before the path throughput).
+static __forceinline__ __device__ float3 gatherBeams(float3 o, float3 d, float tmax) {
+    unsigned int x = 0u, y = 0u, z = 0u;
+    optixTrace(params.beamHandle, o, d, 0.0f, tmax, 0.0f, OptixVisibilityMask(255), OPTIX_RAY_FLAG_DISABLE_CLOSESTHIT,
+               4, 0, 0, x, y, z);
+    return make_float3(__uint_as_float(x), __uint_as_float(y), __uint_as_float(z)) * (1.0f / CIE_Y_INTEGRAL);
+}
 
 extern "C" __global__ void __anyhit__shadow() {
     // only spheres have an any-hit program: soap films transmit, everything else blocks
@@ -413,22 +486,75 @@ static __forceinline__ __device__ float4 neeSky(const Surface& s, float3 wo, con
     return fr * Le * T * (powerHeuristic(lpdf, bpdf) / lpdf);
 }
 
-// Single scattering of sunlight in the room's haze along [t0, t1] of the ray (one sample).
+// The sunbeams in the room: points whose sunward line passes an opening's outer and inner faces. For one
+// opening that is a convex region; its intersection with a ray is an interval, found by clipping the ray
+// against the eight linear constraints (two rectangles, projected along the sun).
+static __forceinline__ __device__ void clipRect(float3 o, float3 d, float3 C, float3 eU, float3 eV, float3 n, float margin,
+                                               float& lo, float& hi) {
+    const float dn = dot(params.sunDir, n);
+    if (fabsf(dn) < 1e-6f) { hi = lo - 1.0f; return; }
+    // oblique projection along the sun onto the rectangle's plane: P v = v - sunDir * dot(v, n) / dn
+    const float3 v0 = o - C;
+    const float3 p0 = v0 - params.sunDir * (dot(v0, n) / dn);
+    const float3 p1 = d - params.sunDir * (dot(d, n) / dn);
+    const float3 axes[2] = {eU, eV};
+    for (int k = 0; k < 2; ++k) {
+        const float inv = 1.0f / dot(axes[k], axes[k]);
+        const float f0 = dot(p0, axes[k]) * inv, f1 = dot(p1, axes[k]) * inv;
+        const float m = margin * sqrtf(inv);
+        if (fabsf(f1) < 1e-9f) {
+            if (f0 < -m || f0 > 1.0f + m) { hi = lo - 1.0f; return; }
+            continue;
+        }
+        const float ta = (-m - f0) / f1, tb = (1.0f + m - f0) / f1;
+        lo = fmaxf(lo, fminf(ta, tb));
+        hi = fminf(hi, fmaxf(ta, tb));
+    }
+}
+static __forceinline__ __device__ int beamIntervals(float3 o, float3 d, float t0, float t1, float2* iv, float& total) {
+    int n = 0;
+    total = 0.0f;
+    for (int i = 0; i < params.numSunPortals; ++i) {
+        const Portal& P = params.sunPortals[i];
+        float lo = t0, hi = t1;
+        clipRect(o, d, P.corner, P.edgeU, P.edgeV, P.normal, 0.04f, lo, hi);
+        if (hi <= lo) continue;
+        clipRect(o, d, P.corner + P.normal * params.sunPortalDepth[i], P.edgeU, P.edgeV, P.normal, 0.04f, lo, hi);
+        if (hi <= lo) continue;
+        iv[n++] = make_float2(lo, hi);
+        total += hi - lo;
+    }
+    return n;
+}
+
+// Single scattering of sunlight in the room's haze along [t0, t1] of the ray (one sample). The distance is
+// drawn from a mixture: inside the sunbeams (where the light is) or proportional to transmittance.
 static __forceinline__ __device__ float4 hazeInscatter(float3 o, float3 d, float t0, float t1, const Wavelengths& wl, Rng& rng) {
     const float sigT = params.hazeSigmaS + params.hazeSigmaA;
     const float len = t1 - t0;
-    // sample distance proportionally to transmittance within the segment
-    const float u = rng.uniform();
-    float t, pdfT;
-    if (sigT * len > 1e-4f) {
-        const float norm = 1.0f - expf(-sigT * len);
-        const float dt = -logf(1.0f - u * norm) / sigT;
-        t = t0 + dt;
-        pdfT = sigT * expf(-sigT * dt) / norm;
+    float2 iv[MAX_PORTALS];
+    float beamLen;
+    const int nIv = beamIntervals(o, d, t0, t1, iv, beamLen);
+    const float pBeam = nIv > 0 ? params.hazeBeamFraction : 0.0f;
+    const bool trans = sigT * len > 1e-4f;
+    const float norm = trans ? 1.0f - expf(-sigT * len) : 0.0f;
+    float t;
+    if (rng.uniform() < pBeam) {
+        float u = rng.uniform() * beamLen;
+        int k = 0;
+        while (k < nIv - 1 && u >= iv[k].y - iv[k].x) { u -= iv[k].y - iv[k].x; ++k; }
+        t = fminf(iv[k].x + u, iv[k].y);
     } else {
-        t = t0 + u * len;
-        pdfT = 1.0f / len;
+        const float u = rng.uniform();
+        t = trans ? t0 - logf(1.0f - u * norm) / sigT : t0 + u * len;
     }
+    // mixture density at t
+    float pdfBeam = 0.0f;
+    for (int k = 0; k < nIv; ++k) pdfBeam += (t >= iv[k].x && t <= iv[k].y) ? 1.0f : 0.0f;
+    pdfBeam = beamLen > 0.0f ? pdfBeam / beamLen : 0.0f;
+    const float pdfTrans = trans ? sigT * expf(-sigT * (t - t0)) / norm : 1.0f / len;
+    const float pdfT = pBeam * pdfBeam + (1.0f - pBeam) * pdfTrans;
+    if (pdfT <= 0.0f) return f4(0.0f);
     const float3 x = o + d * t;
     const float3 ld = Frame::from(params.sunDir).toWorld(sampleCone(rng.uniform2(), params.sunOneMinusCosMax));
     const float4 Le = sunRadiance(ld, wl.lambda);
@@ -437,6 +563,164 @@ static __forceinline__ __device__ float4 hazeInscatter(float3 o, float3 d, float
     const float Tcam = expf(-sigT * (t - t0));
     const float phase = henyeyGreenstein(dot(ld, d), params.hazeG);
     return Le * T * (params.hazeSigmaS * Tcam * phase / (pdfT * sunConePdf()));
+}
+
+// =====================================================================================================
+// Caustic photons
+// =====================================================================================================
+// Photons leave the sun through a plane across the sun direction, aimed at the caustic objects' footprints
+// in that plane (several rectangles; overlaps are handled by counting how many cover the point). Each photon
+// carries one wavelength. Only photons that reach a non-delta surface after at least one glass or water event
+// are stored: everything else is direct light, which next-event estimation already computes.
+static __forceinline__ __device__ bool photonDeltaEvent(const Material& m, const Hit& h, float3& d, float lambda, int& medium,
+                                                        float& flux, Rng& rng, bool& countsAsCaustic) {
+    countsAsCaustic = false;
+    if (m.type == MAT_FILM) {
+        const float4 sp = params.spheres[h.prim];
+        const float3 local = (h.p - make_float3(sp.x, sp.y, sp.z)) * (1.0f / sp.w);
+        const float3 n = dot(d, h.ngOut) < 0.0f ? h.ngOut : -h.ngOut;
+        const float R = thinFilmReflectance(lambda, filmThickness(local, m.p, params.time, float(h.prim) * 3.17f), iorOf(IOR_WATER, lambda),
+                                            fabsf(dot(d, n)));
+        if (rng.uniform() < R) d = reflect3(d, n);
+        return true;
+    }
+    const float3 nsOut = m.type == MAT_WATER ? waterNormal(h.p, params.time, m.p.x) : h.nsOut;
+    const bool front = dot(d, h.ngOut) < 0.0f;
+    float3 n = front ? nsOut : -nsOut;
+    const float3 ng = front ? h.ngOut : -h.ngOut;
+    const int mi = front ? m.iorOutside : m.iorInside, mt = front ? m.iorInside : m.iorOutside;
+    float cosI = -dot(d, n);
+    if (cosI <= 1e-4f) { n = ng; cosI = -dot(d, n); }
+    const float eta = iorOf(mt, lambda) / iorOf(mi, lambda);
+    const float F = fresnelDielectric(cosI, eta);
+    countsAsCaustic = true;
+    if (rng.uniform() < F) {
+        d = reflect3(d, n);
+        if (dot(d, ng) <= 0.0f) d = reflect3(d, ng);
+        medium = mi;
+        return true;
+    }
+    bool ok;
+    float3 t = refractDir(d, n, eta, cosI, ok);
+    if (!ok || dot(t, ng) >= 0.0f) {
+        t = refractDir(d, ng, eta, -dot(d, ng), ok);
+        if (!ok) { d = reflect3(d, ng); medium = mi; return true; }
+    }
+    d = t;
+    medium = mt;
+    return true;
+}
+
+extern "C" __global__ void __raygen__photons() {
+    const unsigned int i = optixGetLaunchIndex().x;
+    Rng rng = makeRng(i, params.photonFrame, 0x9E0705u ^ params.seed);
+    // footprint rectangle, chosen by area
+    float ua = rng.uniform() * params.emitAreaTotal;
+    int k = 0;
+    while (k < params.numEmitters - 1 && ua >= params.emitArea[k]) { ua -= params.emitArea[k]; ++k; }
+    const float4 R = params.emitRect[k];
+    const float2 u2 = rng.uniform2();
+    const float pu = lerpf(R.x, R.z, u2.x), pv = lerpf(R.y, R.w, u2.y);
+    int cover = 0;
+    for (int j = 0; j < params.numEmitters; ++j) {
+        const float4 Q = params.emitRect[j];
+        cover += pu >= Q.x && pu <= Q.z && pv >= Q.y && pv <= Q.w;
+    }
+    // direction inside the sun's disk, wavelength from the visible pdf
+    const float3 w = Frame::from(params.sunDir).toWorld(sampleCone(rng.uniform2(), params.sunOneMinusCosMax));
+    const float lambda = sampleVisibleWavelength(rng.uniform());
+    const float pdfL = visibleWavelengthPdf(lambda);
+    const float c = sqrtf(fmaxf(0.0f, 1.0f - sqr(dot(w, params.sunDir))));
+    const float mu = sqrtf(fmaxf(0.0f, 1.0f - c * c / (params.sunOneMinusCosMax * (2.0f - params.sunOneMinusCosMax))));
+    const float Le = sunTableAt(lambda) * (1.0f - params.sunLimb * (1.0f - mu)) * params.sunScale;
+    float flux = Le * dot(w, params.sunDir) / sunConePdf() * (params.emitAreaTotal / fmaxf(1.0f, float(cover))) / pdfL /
+                 float(params.photonsToEmit);
+    const float3 onPlane = params.emitBasisU * pu + params.emitBasisV * pv + params.sunDir * params.emitDepth;
+    float3 o = onPlane + w * 40.0f;
+    float3 d = -w;
+    int medium = IOR_AIR;
+    bool caustic = false;
+    for (int bounce = 0; bounce < 12; ++bounce) {
+        const Hit h = traceRadiance(o, d, 1e16f, true);
+        if (!h.hit) return;
+        if (medium == IOR_AIR && hazeActive()) {
+            float t0, t1;
+            if (hazeSegment(o, d, h.t, t0, t1)) {
+                if (caustic && params.enableBeams && rng.uniform() < params.beamFraction) {   // a caustic beam in the haze
+                    const unsigned int slot = atomicAdd(params.beamCount, 1u);
+                    if (slot < params.beamCapacity) {
+                        PhotonBeam bm;
+                        bm.a = o + d * t0;
+                        bm.b = o + d * t1;
+                        bm.lambda = lambda;
+                        bm.flux = flux / params.beamFraction;
+                        params.beamOut[slot] = bm;
+                    }
+                }
+                flux *= expf(-(params.hazeSigmaS + params.hazeSigmaA) * (t1 - t0));
+            }
+        } else if (medium == IOR_WATER) {
+            flux *= expf(-(waterAbsorption(lambda) + params.waterDepthTint) * h.t);
+        }
+        const Material m = params.materials[h.mat];
+        if (isDeltaType(m.type)) {
+            bool counts;
+            photonDeltaEvent(m, h, d, lambda, medium, flux, rng, counts);
+            caustic = caustic || counts;
+            o = offsetRay(h.p, dot(d, h.ngOut) > 0.0f ? h.ngOut : -h.ngOut);
+            continue;
+        }
+        if (!caustic) return;                        // direct light: next-event estimation's job
+        const unsigned int slot = atomicAdd(params.photonCount, 1u);
+        if (slot < params.photonCapacity) {
+            Photon ph;
+            ph.pos = h.p;
+            ph.lambda = lambda;
+            ph.dir = d;
+            ph.flux = flux;
+            params.photonOut[slot] = ph;
+        }
+        return;
+    }
+}
+
+// Caustic radiance leaving s towards wo, as XYZ: Epanechnikov kernel over the photons within the radius.
+static __forceinline__ __device__ float3 gatherCaustics(const Surface& s, float3 wo) {
+    const float r = params.gatherRadius, r2 = r * r;
+    const float h = params.cellSize;
+    const int3 base = photonCell(s.p - make_float3(0.5f * h, 0.5f * h, 0.5f * h), h);
+    float3 xyz = make_float3(0, 0, 0);
+    Surface t = s;
+    for (int k = 0; k < 8; ++k) {
+        const int3 c = make_int3(base.x + (k & 1), base.y + ((k >> 1) & 1), base.z + (k >> 2));
+        const unsigned int key = photonCellHash(c, params.gridSize);
+        const unsigned int b = params.cellStart[key];
+        if (b == PHOTON_EMPTY_CELL) continue;
+        const unsigned int e = params.cellEnd[key];
+        for (unsigned int i = b; i < e; ++i) {
+            const Photon ph = params.photons[i];
+            const float3 v = ph.pos - s.p;
+            const float d2 = dot(v, v);
+            if (d2 > r2) continue;
+            if (fabsf(dot(v, s.ng)) > 0.25f * r || dot(ph.dir, s.ng) >= 0.0f) continue;   // other surface / other side
+            const float a = albedoAt(s, ph.lambda);
+            t.albedo = f4(a);
+            t.f0 = f4(a);
+            float pdf;
+            const float3 wi = -ph.dir;
+            const float cosI = dot(wi, s.ns);
+            if (cosI <= 0.0f) continue;
+            const float f = bsdfEval(t, wo, wi, pdf).x / cosI;
+            xyz += cieXYZ(ph.lambda) * (f * ph.flux * 2.0f * (1.0f - d2 / r2));
+        }
+    }
+    return xyz * (1.0f / (M_PIf * r2 * CIE_Y_INTEGRAL));
+}
+
+// Spectral throughput reduced to one number for the photon gather (photons carry their own wavelength).
+static __forceinline__ __device__ float throughputGray(float4 beta, const Wavelengths& wl) {
+    if (wl.pdf.y == 0.0f && wl.pdf.z == 0.0f && wl.pdf.w == 0.0f) return beta.x;
+    return 0.25f * hsum(beta);
 }
 
 // =====================================================================================================
@@ -487,6 +771,7 @@ static __forceinline__ __device__ PathOut tracePath(unsigned int px, unsigned in
     bool prevPatch = false, vtxPrevPatch = false;
     float segDist = 0.0f, vtxPIn = 0.0f;
     const bool patches = params.enableSunPatch && params.enableNee && !params.furnace;
+    int nonDelta = 0;
     const int maxDepth = params.furnace ? 4096 : params.maxDepth;
 
     for (int depth = 0; depth < maxDepth; ++depth) {
@@ -497,6 +782,8 @@ static __forceinline__ __device__ PathOut tracePath(unsigned int px, unsigned in
         if (medium == IOR_AIR && hazeActive()) {
             float t0, t1;
             if (hazeSegment(o, d, tSeg, t0, t1)) {
+                if (params.enableBeams && params.numBeams > 0 && nonDelta == 0)
+                    out.causticXyz += gatherBeams(o, d, tSeg) * throughputGray(beta, wl);
                 L += beta * hazeInscatter(o, d, t0, t1, wl, rng);
                 beta *= expf(-(params.hazeSigmaS + params.hazeSigmaA) * (t1 - t0));
             }
@@ -517,7 +804,7 @@ static __forceinline__ __device__ PathOut tracePath(unsigned int px, unsigned in
                     wSun = powerHeuristic(prevPdf, sunConePdf());
                 }
             }
-            if (causticChain) wSun = 0.0f;   // diffuse -> glass/water -> sun: the photon map carries this light
+            if (causticChain && params.enablePhotons) wSun = 0.0f;   // diffuse -> glass/water -> sun: the photon map carries it
             L += beta * (Ls * wSky + Lsun * wSun);
             break;
         }
@@ -540,9 +827,9 @@ static __forceinline__ __device__ PathOut tracePath(unsigned int px, unsigned in
             if (!r.passThrough) {
                 specularBounce = true;
                 prevPatch = false;
-                if (m.type != MAT_FILM) causticChain = causticChain || prevPdf > 0.0f;
-                else causticChain = false;
             }
+            // the photon map holds every sun path diffuse <- (delta)+ <- sun with at least one glass/water event
+            if (m.type != MAT_FILM && prevPdf > 0.0f) causticChain = true;
             if (hmax(beta) <= 0.0f) break;
             continue;
         }
@@ -561,6 +848,11 @@ static __forceinline__ __device__ PathOut tracePath(unsigned int px, unsigned in
             out.albedo = make_float3(1, 1, 1) * (0.25f * hsum(s.albedo));
             out.normal = s.ns;
         }
+        if (params.enablePhotons && params.numPhotons > 0 && nonDelta < params.gatherDepth) {
+            const float3 c = gatherCaustics(s, wo) * throughputGray(beta, wl);
+            out.causticXyz += c;
+        }
+        ++nonDelta;
         // area density of having reached s by BSDF sampling from a vertex that also tried the patch strategy
         const float pIn = prevPatch ? prevPdf * fabsf(dot(s.ng, d)) / fmaxf(segDist * segDist, 1e-8f) : 0.0f;
         const bool canPatch = patches && medium == IOR_AIR;
@@ -593,7 +885,7 @@ static __forceinline__ __device__ PathOut tracePath(unsigned int px, unsigned in
             beta *= 1.0f / (1.0f - q);
         }
     }
-    out.xyz = spectrumToXYZ(L, wl);
+    out.xyz = spectrumToXYZ(L, wl) + out.causticXyz;
     return out;
 }
 

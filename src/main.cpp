@@ -75,14 +75,27 @@ struct App {
         p.hazeSigmaS = cfg.f("haze.sigma_s", 0.02f);
         p.hazeSigmaA = cfg.f("haze.sigma_a", 0.002f);
         p.hazeG = cfg.f("haze.g", 0.65f);
+        p.hazeBeamFraction = cfg.f("haze.beam_fraction", 0.75f);
         p.maxDepth = cfg.i("path.max_depth", 12);
         p.enableSunPatch = cfg.i("path.sun_patch", 0);
         p.waterDepthTint = cfg.f("water.tint", 0.05f);
         p.groundAlbedo = cfg.f("ground.albedo", 0.18f);
         p.skyScale = cfg.f("sky.scale", 1.0f);
         p.sunScale = cfg.f("sun.scale", 1.0f);
+        {   // the sun's angular radius (validation tests enlarge it so path tracing can find caustics)
+            const float r = cfg.f("sun.radius_deg", 0.2666f) * 3.14159265f / 180.0f;
+            p.sunOneMinusCosMax = 2.0f * std::sin(0.5f * r) * std::sin(0.5f * r);
+            p.sunCosMax = 1.0f - p.sunOneMinusCosMax;
+        }
         p.skyMapFraction = cfg.f("sky.map_fraction", 0.0f);
         p.debugFlags = cfg.i("debug.flags", 0);
+        p.enablePhotons = cfg.i("photon.enable", 1);
+        p.gatherDepth = cfg.i("photon.gather_depth", 2);
+        renderer.photonRadius0 = cfg.f("photon.radius", 0.01f);
+        renderer.photonsPerFrame = unsigned(cfg.f("photon.count", 1048576.0f));
+        renderer.beamRadius0 = cfg.f("photon.beam_radius", 0.02f);
+        p.enableBeams = cfg.i("photon.beams", 1);
+        p.beamFraction = cfg.f("photon.beam_fraction", 0.125f);
         p.time = cfg.f("time", 0.0f);
         whiteBalanceMatrix(cfg.f("wb.kelvin", 0.0f), p.wbMatrix);
     }
@@ -179,6 +192,13 @@ static int runHeadless(App& app, int spp, const std::string& out) {
         const double cct = 449.0 * n * n * n + 3525.0 * n * n + 6823.3 * n + 5520.33;   // McCamy
         std::printf("sun L(450/550/650) = %.4g %.4g %.4g   xy %.4f %.4f  CCT ~%.0f K   sky mean %.4g max %.4g   sunDir %.3f %.3f %.3f\n",
                     sun[90], sun[190], sun[290], x, y, cct, mean / sky.size(), mx, p.sunDir.x, p.sunDir.y, p.sunDir.z);
+    }
+    {
+        const Params& p = app.renderer.params();
+        const PassTimes& t = app.renderer.times();
+        if (p.enablePhotons)
+            std::printf("photons: %u stored of %u emitted per frame, %u beams (r %.4f m), %d emitters (%.3f m2), radius now %.4f m, trace %.2f ms, grid %.2f ms\n",
+                        p.numPhotons, p.photonsToEmit, p.numBeams, p.beamRadius, p.numEmitters, p.emitAreaTotal, p.gatherRadius, t.photons, t.grid);
     }
     std::printf("rendered %u spp in %.2f s (gpu %.1f ms/launch, %.2f Mpaths/s), NaN/Inf: %u\n", s, wall,
                 renderMs / app.renderer.frame(), double(app.width) * app.height * s / (renderMs * 1e-3) / 1e6, app.renderer.nanCount());

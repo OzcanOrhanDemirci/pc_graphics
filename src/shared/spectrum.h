@@ -74,7 +74,9 @@ HD float iorOf(int model, float lambda) {
     default: return 1.000277f;
     }
 }
-HD bool iorIsDispersive(int model) { return model != IOR_AIR; }
+// Water disperses too, but weakly (dn ~ 0.01 across the visible, ~0.5 deg): it refracts along the hero
+// wavelength only, keeping all four wavelengths alive instead of paying chromatic noise on every pool ray.
+HD bool iorIsDispersive(int model) { return model == IOR_BK7 || model == IOR_SF11; }
 
 // Unpolarised Fresnel reflectance of a smooth dielectric interface. eta = n_transmitted / n_incident.
 HD float fresnelDielectric(float cosI, float eta) {

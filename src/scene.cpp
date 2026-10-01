@@ -212,7 +212,6 @@ Scene buildScene(const Config& cfg) {
               make_float3(poolX1, -poolDepth, poolZ1), make_float3(poolX1, -poolDepth, poolZ0), mPool);
     s.addQuad(make_float3(poolX0, waterLevel, poolZ0), make_float3(poolX0, waterLevel, poolZ1),
               make_float3(poolX1, waterLevel, poolZ1), make_float3(poolX1, waterLevel, poolZ0), mWater);
-    s.emitters.push_back({make_float3(poolX0, waterLevel - 0.01f, poolZ0), make_float3(poolX1, waterLevel + 0.01f, poolZ1)});
 
     // ceiling: slot along the right wall
     const float slotW = cfg.f("skylight.width", 0.30f);
@@ -232,6 +231,24 @@ Scene buildScene(const Config& cfg) {
     if (lowH > 0.0f) leftOpen.push_back(make_float4(cfg.f("lowslit.x0", 0.91f), 0.0f, cfg.f("lowslit.x1", L - 0.91f), lowH));
     s.addSlab(make_float3(0, 0, 0), make_float3(1, 0, 0), make_float3(0, 1, 0), make_float3(0, 0, 1), L, H, T, leftOpen, mConcrete, mConcrete);
     for (const float4& o : leftOpen) addPortal(s, make_float3(0, 0, 0), make_float3(1, 0, 0), make_float3(0, 1, 0), make_float3(0, 0, 1), o, T);
+    // caustic photons aimed at the pool: only where a slit's sunbeam crosses it (the footprint of the opening,
+    // projected along the sun onto the water plane, clipped to the pool)
+    {
+        const float el0 = cfg.f("sun.elevation", 10.0f) * 3.14159265f / 180.0f, az0 = cfg.f("sun.azimuth", 20.0f) * 3.14159265f / 180.0f;
+        const float3 sd = normalize(make_float3(std::sin(az0) * std::cos(el0), std::sin(el0), -std::cos(az0) * std::cos(el0)));
+        for (const float4& o : leftOpen) {
+            float x0 = 1e9f, x1 = -1e9f, z0 = 1e9f, z1 = -1e9f;
+            for (int k = 0; k < 4; ++k) {
+                const float3 c = make_float3(k & 1 ? o.z : o.x, k & 2 ? o.w : o.y, -T);   // outer face corners
+                const float t = (c.y - waterLevel) / sd.y;
+                const float3 q = c - sd * t;
+                x0 = std::min(x0, q.x); x1 = std::max(x1, q.x); z0 = std::min(z0, q.z); z1 = std::max(z1, q.z);
+            }
+            x0 = std::max(x0, poolX0); x1 = std::min(x1, poolX1); z0 = std::max(z0, poolZ0); z1 = std::min(z1, poolZ1);
+            if (x1 > x0 && z1 > z0)
+                s.emitters.push_back({make_float3(x0, waterLevel - 0.01f, z0), make_float3(x1, waterLevel + 0.01f, z1)});
+        }
+    }
     // horizontal slit low in the left wall, optional
     // right wall (z = W, faces -z): white plaster, receives the light
     s.addSlab(make_float3(0, 0, W), make_float3(1, 0, 0), make_float3(0, 1, 0), make_float3(0, 0, -1), L, H, T, {}, mPlaster, mPlaster);
@@ -240,7 +257,14 @@ Scene buildScene(const Config& cfg) {
     s.addSlab(make_float3(L, 0, -T), make_float3(0, 0, 1), make_float3(0, 1, 0), make_float3(-1, 0, 0), W + 2 * T, H, T, {}, mPlaster, mPlaster);
 
     // ---- the objects
-    const float3 prismPos = cfg.v3("prism.pos", make_float3(5.6f, 0.0f, 2.4f));
+    // objects sit in the sunbeams: the centre line of slit k's beam at depth z into the room
+    const float tanAz = std::tan(cfg.f("sun.azimuth", 20.0f) * 3.14159265f / 180.0f);
+    auto beamX = [&](int k, float z) {
+        k = std::clamp(k, 0, slitCount - 1);
+        return slitX + k * slitStep + 0.5f * (slitW - T * tanAz) - z * tanAz;
+    };
+    const float prismZ = cfg.f("prism.z", 2.4f);
+    const float3 prismPos = cfg.v3("prism.pos", make_float3(beamX(cfg.i("prism.slit", 1), prismZ), 0.0f, prismZ));
     const float pedestalH = cfg.f("pedestal.height", 0.95f);
     s.addBox(make_float3(prismPos.x - 0.22f, 0.0f, prismPos.z - 0.22f), make_float3(prismPos.x + 0.22f, pedestalH, prismPos.z + 0.22f), mConcrete);
     const float prismSide = cfg.f("prism.side", 0.16f), prismH = cfg.f("prism.height", 0.30f);
@@ -248,7 +272,8 @@ Scene buildScene(const Config& cfg) {
     s.emitters.push_back({make_float3(prismPos.x - prismSide, pedestalH, prismPos.z - prismSide),
                           make_float3(prismPos.x + prismSide, pedestalH + prismH, prismPos.z + prismSide)});
 
-    const float3 globePos = cfg.v3("globe.pos", make_float3(6.0f, 0.0f, 1.3f));
+    const float globeZ = cfg.f("globe.z", 1.6f);
+    const float3 globePos = cfg.v3("globe.pos", make_float3(beamX(cfg.i("globe.slit", 0), globeZ), 0.0f, globeZ));
     const float globeR = cfg.f("globe.radius", 0.14f);
     const float3 gc = make_float3(globePos.x, globeR + 0.001f, globePos.z);
     s.spheres.push_back(make_float4(gc.x, gc.y, gc.z, globeR));
@@ -258,12 +283,11 @@ Scene buildScene(const Config& cfg) {
     s.emitters.push_back({gc - make_float3(globeR, globeR, globeR), gc + make_float3(globeR, globeR, globeR)});
 
     // soap bubbles drifting in the light sheet
-    const float azB = cfg.f("sun.azimuth", 20.0f) * 3.14159265f / 180.0f;
     const int nb = cfg.i("bubbles", 5);
     for (int k = 0; k < nb; ++k) {
         const float fz = std::fmod(0.754878f * (k + 1), 1.0f), fy = std::fmod(0.569840f * (k + 1), 1.0f);
         const float z = 0.9f + 3.6f * fz;
-        const float x = slitX + 0.5f * slitW - std::tan(azB) * z + 0.25f * (std::fmod(0.618034f * (k + 1), 1.0f) - 0.5f);
+        const float x = beamX(k % slitCount, z) + 0.12f * (std::fmod(0.618034f * (k + 1), 1.0f) - 0.5f);
         const float3 c = make_float3(x, 1.3f + 1.8f * fy, z);
         s.spheres.push_back(make_float4(c.x, c.y, c.z, 0.035f + 0.045f * std::fmod(0.43f * (k + 2), 1.0f)));
         s.sphereMaterial.push_back(mFilm);
@@ -408,6 +432,21 @@ bool spectralSelfTest(std::string& report) {
     check("ince film d=0 -> R", thinFilmReflectance(550.0f, 0.0f, 1.333f, 1.0f), 0.0, 1e-6);
     check("ince film d=lambda/2n -> R", thinFilmReflectance(550.0f, 550.0f / (2 * 1.333f), 1.333f, 1.0f), 0.0, 1e-5);
     check("ince film d=lambda/4n -> R", thinFilmReflectance(550.0f, 550.0f / (4 * 1.333f), 1.333f, 1.0f), 0.0784, 2e-3);
+    // 3b. soap film colours follow Newton's sequence: hue of the reflected D65 light at a few thicknesses
+    auto filmHue = [&](float d) {
+        const float3 xyz = reflectanceXYZ([&](float l) { return thinFilmReflectance(l, d, iorOf(IOR_WATER, l), 1.0f); });
+        const float3 c = xyzToLinearSRGB(xyz);
+        const float mx = std::max(c.x, std::max(c.y, c.z)), mn = std::min(c.x, std::min(c.y, c.z));
+        if (mx - mn <= 1e-9f) return 0.0f;
+        float h = mx == c.x ? (c.y - c.z) / (mx - mn) : (mx == c.y ? 2.0f + (c.z - c.x) / (mx - mn) : 4.0f + (c.x - c.y) / (mx - mn));
+        h *= 60.0f;
+        return h < 0 ? h + 360.0f : h;
+    };
+    check("film 150 nm tonu (sari-turuncu)", filmHue(150.0f), 40.0, 25.0);
+    check("film 200 nm tonu (mor)", filmHue(200.0f), 285.0, 30.0);
+    check("film 250 nm tonu (mavi)", filmHue(250.0f), 215.0, 25.0);
+    check("film 300 nm tonu (yesil)", filmHue(300.0f), 115.0, 30.0);
+    check("film 360 nm tonu (kirmizi)", filmHue(360.0f), 15.0, 20.0);
     // 4. sigmoid fit round trip
     const float3 tgt = make_float3(0.8f, 0.25f, 0.1f);
     const float3 c = fitSigmoid(tgt);

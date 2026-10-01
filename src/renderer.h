@@ -1,6 +1,7 @@
 // OptiX renderer: NVRTC-compiled device programs (hot reload), acceleration structures,
 // accumulation buffers, timed launches.
 #pragma once
+#include "photons.h"
 #include "scene.h"
 #include "shared/params.h"
 
@@ -24,7 +25,10 @@ public:
     bool compileDevice(std::string& log);
     void uploadScene(const Scene& scene);
     void updateSky();                     // after the sun moved
-    void resetAccumulation() { frame_ = 0; }
+    void resetAccumulation() { frame_ = 0; params_.photonFrame = 0; }
+    float photonRadius0 = 0.01f;          // m, first photon map's gather radius; shrinks as frames accumulate
+    unsigned int photonsPerFrame = 1u << 20;
+    float beamRadius0 = 0.02f;            // m, photon beam blur radius of the first frame
 
     void renderFrame();                   // one launch: sppPerLaunch samples per pixel
     void tonemap();                       // accum -> output (uchar4, top row first)
@@ -48,11 +52,16 @@ private:
     unsigned int width_ = 0, height_ = 0;
     unsigned int frame_ = 0;
     OptixDeviceContext context_ = nullptr;
-    OptixModule module_ = nullptr, sphereModule_ = nullptr;
+    OptixModule module_ = nullptr;
     OptixPipeline pipeline_ = nullptr;
     std::vector<OptixProgramGroup> groups_;
     OptixShaderBindingTable sbt_{};
-    CUdeviceptr rgRender_ = 0, rgSky_ = 0, rgTonemap_ = 0, rgBake_ = 0, missRecords_ = 0, hitRecords_ = 0;
+    CUdeviceptr rgRender_ = 0, rgSky_ = 0, rgTonemap_ = 0, rgBake_ = 0, rgPhotons_ = 0, missRecords_ = 0, hitRecords_ = 0;
+    PhotonGrid photonGrid_;
+    void tracePhotons();
+    void buildBeams();
+    void *beamBoxes_ = nullptr, *beamTemp_ = nullptr, *beamGas_ = nullptr;
+    size_t beamTempSize_ = 0, beamOutSize_ = 0;
     cudaArray_t noiseArray_ = nullptr;
     cudaTextureObject_t noiseTexObj_ = 0;
     CUdeviceptr dParams_ = 0;
@@ -63,5 +72,5 @@ private:
 
     // device buffers
     std::vector<void*> sceneBuffers_;
-    void *gasTri_ = nullptr, *gasSph_ = nullptr, *ias_ = nullptr, *instances_ = nullptr;
+    void *gasTri_ = nullptr, *gasSph_ = nullptr, *ias_ = nullptr, *instances_ = nullptr, *aabbs_ = nullptr;
 };

@@ -14,6 +14,8 @@
 #define SKY_BINS 48                   // spectral bins of the sky map, 10 nm apart starting at LAMBDA_MIN
 #define SKY_BIN_NM 10.0f
 #define MAX_PORTALS 8
+#define MAX_EMITTERS 8
+#define BEAM_PIECES 16                 // each photon beam is split into this many boxes for a tight BVH
 #define NOISE_TEX 1024                // baked noise texture size; NOISE_PERIOD gradient cells across it
 #define NOISE_PERIOD 128
 
@@ -66,6 +68,13 @@ struct Photon {                  // a caustic photon resting on a non-specular s
     float flux;                  // spectral flux / wavelength pdf, so it integrates to XYZ via the CMF
 };
 
+struct PhotonBeam {              // a caustic photon's straight flight through the hazy air
+    float3 a;                    // start (leaves the glass or water here)
+    float lambda;
+    float3 b;                    // end (next surface)
+    float flux;                  // at a, before the haze's attenuation along the beam
+};
+
 struct Params {
     // ---- frame / output
     float4* accum;               // xyz = summed XYZ, w = sample count
@@ -116,6 +125,7 @@ struct Params {
     int numPortals;
     Portal sunPortals[MAX_PORTALS];  // outer faces of the openings the sun shines through
     float sunPortalProj[MAX_PORTALS];// their areas projected along the sun direction
+    float sunPortalDepth[MAX_PORTALS];// wall thickness: the inner face is outer + normal * depth
     int numSunPortals;
     float sunPortalAreaTotal;
     float groundAlbedo;
@@ -125,6 +135,7 @@ struct Params {
     float hazeSigmaS;            // 1/m, wavelength independent
     float hazeSigmaA;
     float hazeG;                 // Henyey-Greenstein asymmetry
+    float hazeBeamFraction;      // share of in-scatter samples placed inside the sunbeams
     float waterDepthTint;
 
     // ---- caustic photons (progressive photon mapping, radius shrinks over frames)
@@ -142,10 +153,24 @@ struct Params {
     unsigned int* photonCount;
     unsigned int photonCapacity;
     unsigned int photonsToEmit;
-    float3 emitCenter[4];            // per caustic target: centre of its sun-facing rectangle
-    float3 emitU[4], emitV[4];       // half extents
-    float emitArea[4];
+    float4 emitRect[MAX_EMITTERS];   // per caustic target: (u0, v0, u1, v1) in the plane across the sun direction
+    float emitArea[MAX_EMITTERS];
+    float emitAreaTotal;
+    float3 emitBasisU, emitBasisV;   // the plane's axes, both perpendicular to sunDir
+    float emitDepth;                 // the plane's distance along sunDir
     int numEmitters;
+    unsigned int photonFrame;        // photon maps traced so far (radius schedule, seeds)
+    // ---- photon beams (volumetric caustics): the beams' own acceleration structure, gathered by camera rays
+    OptixTraversableHandle beamHandle;
+    const PhotonBeam* beams;
+    unsigned int numBeams;
+    float beamRadius;
+    PhotonBeam* beamOut;
+    unsigned int* beamCount;
+    unsigned int beamCapacity;
+    int enableBeams;
+    float beamFraction;          // share of caustic photons whose flight is kept as a beam (flux scaled up)
+    int gatherDepth;                 // gather caustics at the first n non-delta vertices
 
     // ---- toggles (debug / measurement)
     int enablePhotons;

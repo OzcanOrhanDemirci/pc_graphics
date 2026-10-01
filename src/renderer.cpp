@@ -90,6 +90,20 @@ bool Renderer::init(unsigned int width, unsigned int height, const std::string& 
     params_.enableNee = 1;
     params_.enableSunPatch = 1;
     params_.skyMapFraction = 0.5f;
+    params_.gatherDepth = 2;
+    photonGrid_.allocate(1u << 22, 1u << 22);
+    params_.photonOut = photonGrid_.raw;
+    params_.photonCount = photonGrid_.count;
+    params_.photonCapacity = photonGrid_.capacity();
+    params_.gridSize = photonGrid_.gridSize();
+    params_.cellStart = photonGrid_.cellStart;
+    params_.cellEnd = photonGrid_.cellEnd;
+    params_.photons = photonGrid_.sorted;
+    params_.beamCapacity = 1u << 17;
+    params_.beamOut = devAlloc<PhotonBeam>(params_.beamCapacity);
+    params_.beams = params_.beamOut;
+    params_.beamCount = devAlloc<unsigned int>(1);
+    params_.enableBeams = 1;
     params_.enableHaze = 1;
     params_.enablePhotons = 0;
     params_.skyScale = 1.0f;
@@ -135,30 +149,25 @@ bool Renderer::compileDevice(std::string& log) {
     mco.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_MINIMAL;
     OptixPipelineCompileOptions pco{};
     pco.usesMotionBlur = 0;
-    pco.traversableGraphFlags = OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_LEVEL_INSTANCING;
+    pco.traversableGraphFlags = OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_ANY;   // the beam GAS is traced directly
     pco.numPayloadValues = 9;
     pco.numAttributeValues = 2;
     pco.exceptionFlags = OPTIX_EXCEPTION_FLAG_NONE;
     pco.pipelineLaunchParamsVariableName = "params";
     pco.pipelineLaunchParamsSizeInBytes = sizeof(Params);
-    pco.usesPrimitiveTypeFlags = OPTIX_PRIMITIVE_TYPE_FLAGS_TRIANGLE | OPTIX_PRIMITIVE_TYPE_FLAGS_SPHERE;
+    pco.usesPrimitiveTypeFlags = OPTIX_PRIMITIVE_TYPE_FLAGS_TRIANGLE | OPTIX_PRIMITIVE_TYPE_FLAGS_CUSTOM;
 
     char olog[8192];
     size_t olen = sizeof(olog);
     OptixModule module = nullptr;
     OptixResult r = optixModuleCreate(context_, &mco, &pco, ir.data(), ir.size(), olog, &olen, &module);
     if (r != OPTIX_SUCCESS) { log = std::string("optixModuleCreate: ") + optixGetErrorString(r) + "\n" + olog; return false; }
-    OptixModule sphereModule = nullptr;
-    OptixBuiltinISOptions bis{};
-    bis.builtinISModuleType = OPTIX_PRIMITIVE_TYPE_SPHERE;
-    bis.buildFlags = OPTIX_BUILD_FLAG_PREFER_FAST_TRACE | OPTIX_BUILD_FLAG_ALLOW_UPDATE;
-    OPTIX_CHECK(optixBuiltinISModuleGet(context_, &mco, &pco, &bis, &sphereModule));
 
     // program groups: 4 raygen, 2 miss, 4 hit groups
-    std::vector<OptixProgramGroupDesc> d(10);
+    std::vector<OptixProgramGroupDesc> d(12);
     for (auto& x : d) std::memset(&x, 0, sizeof(x));
-    const char* rgNames[4] = {"__raygen__render", "__raygen__sky", "__raygen__tonemap", "__raygen__bakenoise"};
-    const int RG = 4;
+    const char* rgNames[5] = {"__raygen__render", "__raygen__sky", "__raygen__tonemap", "__raygen__bakenoise", "__raygen__photons"};
+    const int RG = 5;
     for (int i = 0; i < RG; ++i) {
         d[i].kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
         d[i].raygen.module = module;
@@ -171,11 +180,18 @@ bool Renderer::compileDevice(std::string& log) {
     d[RG + 2].kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;        // triangles, radiance
     d[RG + 3].kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;        // triangles, shadow (opaque)
     d[RG + 4].kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;        // spheres, radiance
-    d[RG + 4].hitgroup.moduleIS = sphereModule;
+    d[RG + 4].hitgroup.moduleIS = module;
+    d[RG + 4].hitgroup.entryFunctionNameIS = "__intersection__sphere";
     d[RG + 5].kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;        // spheres, shadow: soap films transmit
-    d[RG + 5].hitgroup.moduleIS = sphereModule;
+    d[RG + 5].hitgroup.moduleIS = module;
+    d[RG + 5].hitgroup.entryFunctionNameIS = "__intersection__sphere";
     d[RG + 5].hitgroup.moduleAH = module;
     d[RG + 5].hitgroup.entryFunctionNameAH = "__anyhit__shadow";
+    d[RG + 6].kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;        // photon beams (own GAS, sbt offset 4)
+    d[RG + 6].hitgroup.moduleIS = module;
+    d[RG + 6].hitgroup.entryFunctionNameIS = "__intersection__beam";
+    d[RG + 6].hitgroup.moduleAH = module;
+    d[RG + 6].hitgroup.entryFunctionNameAH = "__anyhit__beam";
     std::vector<OptixProgramGroup> groups(d.size());
     OptixProgramGroupOptions go{};
     olen = sizeof(olog);
@@ -198,7 +214,6 @@ bool Renderer::compileDevice(std::string& log) {
     pipeline_ = pipeline;
     groups_ = groups;
     module_ = module;
-    sphereModule_ = sphereModule;
 
     auto record = [&](OptixProgramGroup g, CUdeviceptr& dst) {
         Record rec{};
@@ -210,10 +225,11 @@ bool Renderer::compileDevice(std::string& log) {
     record(groups_[1], rgSky_);
     record(groups_[2], rgTonemap_);
     record(groups_[3], rgBake_);
-    Record miss[2], hit[4];
+    record(groups_[4], rgPhotons_);
+    Record miss[2], hit[5];
     OPTIX_CHECK(optixSbtRecordPackHeader(groups_[RG + 0], &miss[0]));
     OPTIX_CHECK(optixSbtRecordPackHeader(groups_[RG + 1], &miss[1]));
-    for (int i = 0; i < 4; ++i) OPTIX_CHECK(optixSbtRecordPackHeader(groups_[RG + 2 + i], &hit[i]));
+    for (int i = 0; i < 5; ++i) OPTIX_CHECK(optixSbtRecordPackHeader(groups_[RG + 2 + i], &hit[i]));
     if (!missRecords_) CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&missRecords_), sizeof(miss)));
     if (!hitRecords_) CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&hitRecords_), sizeof(hit)));
     CUDA_CHECK(cudaMemcpy(reinterpret_cast<void*>(missRecords_), miss, sizeof(miss), cudaMemcpyHostToDevice));
@@ -224,7 +240,7 @@ bool Renderer::compileDevice(std::string& log) {
     sbt_.missRecordCount = 2;
     sbt_.hitgroupRecordBase = hitRecords_;
     sbt_.hitgroupRecordStrideInBytes = sizeof(Record);
-    sbt_.hitgroupRecordCount = 4;
+    sbt_.hitgroupRecordCount = 5;
     log = nvlog;
     frame_ = 0;
     bakeNoise();
@@ -302,8 +318,36 @@ void Renderer::uploadScene(const Scene& s) {
         outer.corner = outer.corner - outer.normal * s.portalDepth[i];
         params_.sunPortals[params_.numSunPortals] = outer;
         params_.sunPortalProj[params_.numSunPortals] = outer.area * c;
+        params_.sunPortalDepth[params_.numSunPortals] = s.portalDepth[i];
         params_.sunPortalAreaTotal += outer.area * c;
         ++params_.numSunPortals;
+    }
+    // caustic photon emitters: footprints of the caustic objects in a plane across the sun direction
+    {
+        float3 U, V;
+        makeBasis(s.sunDir, U, V);
+        params_.emitBasisU = U;
+        params_.emitBasisV = V;
+        params_.numEmitters = 0;
+        params_.emitAreaTotal = 0.0f;
+        double depth = 0.0;
+        for (const Emitter& e : s.emitters) {
+            if (params_.numEmitters >= MAX_EMITTERS) break;
+            float u0 = 1e9f, u1 = -1e9f, v0 = 1e9f, v1 = -1e9f;
+            for (int k = 0; k < 8; ++k) {
+                const float3 c = make_float3(k & 1 ? e.boundsMax.x : e.boundsMin.x, k & 2 ? e.boundsMax.y : e.boundsMin.y,
+                                             k & 4 ? e.boundsMax.z : e.boundsMin.z);
+                u0 = std::min(u0, dot(c, U)); u1 = std::max(u1, dot(c, U));
+                v0 = std::min(v0, dot(c, V)); v1 = std::max(v1, dot(c, V));
+            }
+            const float pad = 0.01f;   // the sun's disk widens the bundle slightly
+            params_.emitRect[params_.numEmitters] = make_float4(u0 - pad, v0 - pad, u1 + pad, v1 + pad);
+            params_.emitArea[params_.numEmitters] = (u1 - u0 + 2 * pad) * (v1 - v0 + 2 * pad);
+            params_.emitAreaTotal += params_.emitArea[params_.numEmitters];
+            depth += dot((e.boundsMin + e.boundsMax) * 0.5f, s.sunDir);
+            ++params_.numEmitters;
+        }
+        params_.emitDepth = params_.numEmitters ? float(depth / params_.numEmitters) : 0.0f;
     }
     params_.hazeMin = s.hazeMin;
     params_.hazeMax = s.hazeMax;
@@ -348,20 +392,26 @@ void Renderer::buildAccel(const Scene& s) {
         inst.push_back(in);
     }
     if (!s.spheres.empty()) {
+        // custom primitives: one AABB per sphere, intersected by __intersection__sphere
+        std::vector<OptixAabb> boxes(s.spheres.size());
+        for (size_t i = 0; i < s.spheres.size(); ++i) {
+            const float4 c = s.spheres[i];
+            boxes[i] = {c.x - c.w, c.y - c.w, c.z - c.w, c.x + c.w, c.y + c.w, c.z + c.w};
+        }
+        if (aabbs_) cudaFree(aabbs_);
+        CUDA_CHECK(cudaMalloc(&aabbs_, boxes.size() * sizeof(OptixAabb)));
+        CUDA_CHECK(cudaMemcpy(aabbs_, boxes.data(), boxes.size() * sizeof(OptixAabb), cudaMemcpyHostToDevice));
         OptixBuildInput bi{};
-        bi.type = OPTIX_BUILD_INPUT_TYPE_SPHERES;
-        CUdeviceptr centers = CUdeviceptr(params_.spheres);
-        CUdeviceptr radii = CUdeviceptr(reinterpret_cast<const char*>(params_.spheres) + 12);
-        bi.sphereArray.vertexBuffers = &centers;
-        bi.sphereArray.vertexStrideInBytes = sizeof(float4);
-        bi.sphereArray.numVertices = unsigned(s.spheres.size());
-        bi.sphereArray.radiusBuffers = &radii;
-        bi.sphereArray.radiusStrideInBytes = sizeof(float4);
+        bi.type = OPTIX_BUILD_INPUT_TYPE_CUSTOM_PRIMITIVES;
+        CUdeviceptr aabbPtr = CUdeviceptr(aabbs_);
+        bi.customPrimitiveArray.aabbBuffers = &aabbPtr;
+        bi.customPrimitiveArray.numPrimitives = unsigned(boxes.size());
+        bi.customPrimitiveArray.strideInBytes = sizeof(OptixAabb);
         const unsigned int flags[1] = {OPTIX_GEOMETRY_FLAG_NONE};
-        bi.sphereArray.flags = flags;
-        bi.sphereArray.numSbtRecords = 1;
+        bi.customPrimitiveArray.flags = flags;
+        bi.customPrimitiveArray.numSbtRecords = 1;
         OptixTraversableHandle h = 0;
-        gasSph_ = buildGAS(context_, bi, OPTIX_BUILD_FLAG_PREFER_FAST_TRACE | OPTIX_BUILD_FLAG_ALLOW_UPDATE, h);
+        gasSph_ = buildGAS(context_, bi, OPTIX_BUILD_FLAG_PREFER_FAST_TRACE, h);
         OptixInstance in{};
         const float id[12] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0};
         std::memcpy(in.transform, id, sizeof(id));
@@ -443,8 +493,78 @@ void Renderer::updateSky() {
     put(colCdf, params_.skyCdfCol);
 }
 
+// One caustic photon map per frame. The gather radius shrinks as r0 * n^(-1/6) (progressive photon mapping
+// with alpha = 2/3, Knaus & Zwicker 2011): every frame's estimate is averaged, bias and noise both vanish.
+void Renderer::tracePhotons() {
+    params_.numPhotons = 0;
+    if (!params_.enablePhotons || params_.numEmitters == 0) return;
+    CUDA_CHECK(cudaMemsetAsync(photonGrid_.count, 0, sizeof(unsigned int), stream_));
+    CUDA_CHECK(cudaMemsetAsync(params_.beamCount, 0, sizeof(unsigned int), stream_));
+    params_.photonsToEmit = photonsPerFrame;
+    params_.numBeams = 0;
+    launch(rgPhotons_, photonsPerFrame, 1, &times_.photons);
+    buildBeams();
+    const float r = photonRadius0 * std::pow(float(params_.photonFrame + 1), -1.0f / 6.0f);
+    params_.gatherRadius = r;
+    params_.cellSize = 2.0f * r;
+    cudaEventRecord(ev0_, stream_);
+    params_.numPhotons = photonGrid_.build(params_.cellSize, stream_);
+    cudaEventRecord(ev1_, stream_);
+    cudaEventSynchronize(ev1_);
+    cudaEventElapsedTime(&times_.grid, ev0_, ev1_);
+    ++params_.photonFrame;
+}
+
+// The caustic beams of this frame's photons get their own acceleration structure (custom primitives: one
+// box around each beam's blur cylinder). Radius shrinks as r0 * n^(-1/3) (1D blur, alpha = 2/3).
+void Renderer::buildBeams() {
+    unsigned int n = 0;
+    CUDA_CHECK(cudaMemcpyAsync(&n, params_.beamCount, sizeof(n), cudaMemcpyDeviceToHost, stream_));
+    CUDA_CHECK(cudaStreamSynchronize(stream_));
+    n = std::min(n, params_.beamCapacity);
+    params_.numBeams = 0;
+    if (!params_.enableBeams || n == 0) return;
+    params_.beamRadius = beamRadius0 * std::pow(float(params_.photonFrame + 1), -1.0f / 3.0f);
+    if (!beamBoxes_) {
+        CUDA_CHECK(cudaMalloc(&beamBoxes_, size_t(params_.beamCapacity) * BEAM_PIECES * sizeof(OptixAabb)));
+        OptixBuildInput bi{};
+        bi.type = OPTIX_BUILD_INPUT_TYPE_CUSTOM_PRIMITIVES;
+        CUdeviceptr ptr = CUdeviceptr(beamBoxes_);
+        bi.customPrimitiveArray.aabbBuffers = &ptr;
+        bi.customPrimitiveArray.numPrimitives = params_.beamCapacity * BEAM_PIECES;
+        const unsigned int flags[1] = {OPTIX_GEOMETRY_FLAG_NONE};
+        bi.customPrimitiveArray.flags = flags;
+        bi.customPrimitiveArray.numSbtRecords = 1;
+        OptixAccelBuildOptions ao{};
+        ao.buildFlags = OPTIX_BUILD_FLAG_PREFER_FAST_BUILD;
+        ao.operation = OPTIX_BUILD_OPERATION_BUILD;
+        OptixAccelBufferSizes sizes{};
+        OPTIX_CHECK(optixAccelComputeMemoryUsage(context_, &ao, &bi, 1, &sizes));
+        beamTempSize_ = sizes.tempSizeInBytes;
+        beamOutSize_ = sizes.outputSizeInBytes;
+        CUDA_CHECK(cudaMalloc(&beamTemp_, beamTempSize_));
+        CUDA_CHECK(cudaMalloc(&beamGas_, beamOutSize_));
+    }
+    launchBeamBoxes(params_.beams, n, params_.beamRadius, beamBoxes_, stream_);
+    OptixBuildInput bi{};
+    bi.type = OPTIX_BUILD_INPUT_TYPE_CUSTOM_PRIMITIVES;
+    CUdeviceptr ptr = CUdeviceptr(beamBoxes_);
+    bi.customPrimitiveArray.aabbBuffers = &ptr;
+    bi.customPrimitiveArray.numPrimitives = n * BEAM_PIECES;
+    const unsigned int flags[1] = {OPTIX_GEOMETRY_FLAG_NONE};
+    bi.customPrimitiveArray.flags = flags;
+    bi.customPrimitiveArray.numSbtRecords = 1;
+    OptixAccelBuildOptions ao{};
+    ao.buildFlags = OPTIX_BUILD_FLAG_PREFER_FAST_BUILD;
+    ao.operation = OPTIX_BUILD_OPERATION_BUILD;
+    OPTIX_CHECK(optixAccelBuild(context_, stream_, &ao, &bi, 1, CUdeviceptr(beamTemp_), beamTempSize_, CUdeviceptr(beamGas_), beamOutSize_,
+                                &params_.beamHandle, nullptr, 0));
+    params_.numBeams = n;
+}
+
 void Renderer::renderFrame() {
     params_.frame = frame_;
+    tracePhotons();
     launch(rgRender_, width_, height_, &times_.render);
     ++frame_;
 }
