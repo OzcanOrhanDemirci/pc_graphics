@@ -6,6 +6,7 @@
 #include <optix_stubs.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
@@ -48,7 +49,7 @@ template <class T> static T* devAlloc(size_t count) {
     return static_cast<T*>(p);
 }
 
-bool FenerRenderer::init(unsigned int width, unsigned int height, const std::string& root) {
+bool FenerRenderer::init(unsigned int width, unsigned int height, const std::string& root, unsigned int volScale) {
     root_ = root;
     width_ = width;
     height_ = height;
@@ -69,8 +70,9 @@ bool FenerRenderer::init(unsigned int width, unsigned int height, const std::str
     const size_t n = size_t(width) * height;
     params_.width = width;
     params_.height = height;
-    params_.volWidth = width / 2;
-    params_.volHeight = height / 2;
+    params_.volScale = volScale == 2 ? 2u : 1u;
+    params_.volWidth = width / params_.volScale;
+    params_.volHeight = height / params_.volScale;
     const size_t nv = size_t(params_.volWidth) * params_.volHeight;
     params_.surface = devAlloc<float4>(n);
     params_.gdepth = devAlloc<float4>(n);
@@ -319,6 +321,14 @@ void FenerRenderer::renderFrame() {
     CUDA_CHECK(cudaEventRecord(ev1_, stream_));
     CUDA_CHECK(cudaEventSynchronize(ev1_));
     cudaEventElapsedTime(&times_.glow, ev0_, ev1_);
+    {   // metering for the eye's adaptation: the glow pyramid's 1/64 level is a free, well-filtered thumbnail
+        const unsigned int mw = std::max(1u, width_ >> 6), mh = std::max(1u, height_ >> 6);
+        meter_.resize(size_t(mw) * mh);
+        CUDA_CHECK(cudaMemcpy(meter_.data(), wideLevels_[5], meter_.size() * sizeof(float4), cudaMemcpyDeviceToHost));
+        double sum = 0.0;
+        for (const float4& c : meter_) sum += std::log2(std::max(0.2126f * c.x + 0.7152f * c.y + 0.0722f * c.z, 1e-6f));
+        metered_ = float(sum / meter_.size());
+    }
     params_.glowWide = wideAccum_[0];
     params_.glowNarrow = narrowAccum_[0];
     launch(rgFinal_, width_, height_, &times_.final);

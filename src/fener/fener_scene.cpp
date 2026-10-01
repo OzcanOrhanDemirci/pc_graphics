@@ -1,12 +1,15 @@
 // Scene 2 "Fener": islands, forests, the lighthouse and the cabin, generated from code and scenes/fener.cfg.
 // Numbers come from the F0 value study (docs/fener/DURUM.md): camera A 470 m from the lighthouse, B 900 m.
 #include "fener/fener_scene.h"
+#include "image_io.h"
+#include "stb_easy_font.h"
 
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <functional>
 #include <random>
+#include <sstream>
 
 static const float PI = 3.14159265358979f;
 
@@ -128,7 +131,7 @@ static FMeshCPU terrain(const std::string& name, float x0, float x1, float z0, f
 // the spruce: whorls of drooping branches; each branch a hanging curtain of needles with a toothed lower edge.
 // Unit height (scaled per instance), trunk at the origin.
 // ---------------------------------------------------------------------------------------------------
-static FMeshCPU makeSpruce(int seed) {
+static FMeshCPU makeSpruce(int seed, float crownBase) {
     FMeshCPU m;
     m.name = "spruce" + std::to_string(seed);
     std::mt19937 rng(1000u + unsigned(seed));
@@ -140,9 +143,18 @@ static FMeshCPU makeSpruce(int seed) {
         const float r0 = 0.011f, r1 = 0.002f;
         lathe(m, {{r0 * 1.3f, -0.03f}, {r0, 0.04f}, {r0 * 0.55f + r1 * 0.45f, 0.5f}, {r1, 1.0f}}, make_float3(0, 0, 0), seg, FM_BARK);
     }
+    // dead twigs on the bare lower trunk: thin, short, sharp, slightly drooping (Inside's forest is full of them)
+    for (float ty = 0.03f; ty < crownBase - 0.01f; ty += R(0.008f, 0.02f)) {
+        const float th = R(0.0f, 2 * PI);
+        const float3 dir = make_float3(std::cos(th), R(-0.35f, 0.1f), std::sin(th));
+        const float ll = R(0.01f, 0.05f) * (0.5f + ty / std::max(crownBase, 0.05f));
+        const float3 b = make_float3(0.0f, ty, 0.0f) + make_float3(dir.x, 0.0f, dir.z) * 0.008f;
+        const float3 side = normalize(cross(dir, make_float3(0, 1, 0))) * 0.0012f;
+        m.tri(b - side + make_float3(0, 0.0012f, 0), b + side - make_float3(0, 0.0012f, 0), b + dir * ll, FM_BARK);
+    }
     float y = 0.985f;
     float rot = R(0.0f, 2 * PI);
-    while (y > 0.05f) {
+    while (y > std::max(crownBase, 0.05f)) {
         const float u = y;                                   // height fraction
         const float sp = 0.020f + 0.020f * (1.0f - u);       // whorl spacing
         const int nb = int(R(5.0f, 7.99f));
@@ -312,21 +324,43 @@ static float lighthouseIslandH(float x, float z, float Ht, float3 cabin) {
     return h;
 }
 
-static float cameraIslandH(float x, float z) {
-    // a long island south of the strait: north shore ~460 m from the lighthouse, a headland to the west (B)
-    const float cx = -150.0f, cz = -1060.0f;
-    const float dx = (x - cx) / 640.0f, dz = (z - cz) / 600.0f;
-    const float th = std::atan2(dz, dx);
-    float r = std::sqrt(dx * dx + dz * dz);
-    r *= 1.0f - 0.10f * (fbm2(std::cos(th) * 1.6f + 7.0f, std::sin(th) * 1.6f + 1.0f, 41, 4) - 0.5f) * 2.0f;
-    // headland towards B (north-west)
-    const float hx = (x + 330.0f) / 150.0f, hz = (z + 800.0f) / 120.0f;
-    const float head = std::exp(-(hx * hx + hz * hz));
-    const float coast = std::max(sstep(1.06f, 0.97f, r), sstep(1.0f, 0.55f, std::sqrt(hx * hx + hz * hz)));
-    const float hills = 26.0f * std::exp(-sqr((x + 120.0f) / 380.0f) - sqr((z + 1150.0f) / 300.0f)) + 6.0f * head;
-    const float rough = 2.0f * (fbm2(x / 10.0f, z / 10.0f, 43) - 0.5f) + 6.0f * (fbm2(x / 70.0f, z / 70.0f, 45) - 0.5f);
-    return lerp1(-12.0f, 3.2f + hills + rough * 0.6f, coast);
+// The two viewpoints look out through small coves carved into the bank: water starts a few metres ahead and the
+// framing spruces stand on the points either side (set by buildFenerScene before the terrain is generated).
+static float3 s_viewA = {0.0f, 0.0f, -470.0f}, s_viewB = {690.0f, 0.0f, -540.0f};
+static float carveCove(float h, float x, float z, float3 at, float3 fwd, float open) {
+    const float3 rt = make_float3(fwd.z, 0.0f, -fwd.x);
+    const float dx = x - at.x, dz = z - at.z;
+    const float f = dx * fwd.x + dz * fwd.z, r = dx * rt.x + dz * rt.z;
+    if (f < 2.0f || f > 220.0f) return h;
+    const float edge = 4.5f + open * f;
+    const float w = sstep(edge + 5.0f, edge, std::fabs(r)) * sstep(2.0f, 6.0f, f);
+    const float target = lerp1(1.2f, -9.0f, sstep(6.0f, 15.0f, f));
+    return lerp1(h, std::min(h, target), w);
 }
+
+static float cameraIslandH(float x, float z) {
+    // a broad island south of the strait; its north shore runs ~440 m from the lighthouse at A and bends south-east
+    // to B (~920 m from the lighthouse, open water to its north)
+    const float cx = 150.0f, cz = -1020.0f;
+    const float dx = (x - cx) / 760.0f, dz = (z - cz) / 590.0f;
+    float r = std::sqrt(dx * dx + dz * dz);
+    const float th = std::atan2(dz, dx);
+    r *= 1.0f - 0.045f * (fbm2(std::cos(th) * 2.2f + 7.0f, std::sin(th) * 2.2f + 1.0f, 41, 4) - 0.5f) * 2.0f;
+    r += 0.02f * (fbm2(x / 40.0f, z / 40.0f, 47, 3) - 0.5f);   // small coves and points
+    // a headland in the north-east whose west shore faces the lighthouse (B stands on it)
+    const float hx = (x - 760.0f) / 120.0f, hz = (z + 600.0f) / 95.0f;
+    r = std::min(r, 0.985f + 0.05f * (std::sqrt(hx * hx + hz * hz) - 1.0f) * 3.0f);
+    const float coast = sstep(1.035f, 0.985f, r);               // a ~30 m shore band
+    const float inland = sstep(0.98f, 0.70f, r);
+    const float hills = 28.0f * std::exp(-sqr((x - 100.0f) / 420.0f) - sqr((z + 1150.0f) / 280.0f));
+    const float rough = 2.0f * (fbm2(x / 10.0f, z / 10.0f, 43) - 0.5f) + 6.0f * (fbm2(x / 70.0f, z / 70.0f, 45) - 0.5f);
+    float h = lerp1(-12.0f, 3.0f + hills * inland + rough * 0.6f * (0.4f + 0.6f * inland), coast);
+    h = carveCove(h, x, z, s_viewA, make_float3(0.0f, 0.0f, 1.0f), 0.35f);
+    h = carveCove(h, x, z, s_viewB, normalize(make_float3(-s_viewB.x, 0.0f, -s_viewB.z)), 0.45f);
+    return h;
+}
+
+float fenerGround(float x, float z) { return cameraIslandH(x, z); }
 
 static void placement(float m[12], float3 t, float s, float yaw) {
     const float c = std::cos(yaw) * s, n = std::sin(yaw) * s;
@@ -373,6 +407,8 @@ FenerScene buildFenerScene(const Config& cfg) {
     M(FM_FAR, cfg.v3("mat.far", make_float3(0.012f, 0.013f, 0.015f)));
 
     const float Ht = cfg.f("island.hill", 44.0f);
+    s_viewA = cfg.v3("view.A.pos", s_viewA);
+    s_viewB = cfg.v3("view.B.pos", s_viewB);
     std::mt19937 rng(7);
     std::uniform_real_distribution<float> U(0.0f, 1.0f);
 
@@ -393,7 +429,7 @@ FenerScene buildFenerScene(const Config& cfg) {
     const int mLh = int(s.meshes.size());
     s.meshes.push_back(terrain("lighthouse_island", -300, 300, -300, 300, cfg.f("terrain.step", 1.25f), lhH, islandMat));
     const int mCam = int(s.meshes.size());
-    s.meshes.push_back(terrain("camera_island", -900, 600, -1700, -430, cfg.f("terrain.step_far", 2.5f), cameraIslandH,
+    s.meshes.push_back(terrain("camera_island", -700, 1000, -1650, -400, cfg.f("terrain.step_cam", 1.25f), cameraIslandH,
                                [](float, float, float h, float ny) { return (h < 0.5f || ny < 0.7f) ? int(FM_ROCK) : int(FM_GRASS); }));
     // back islands, low and wooded
     const int mBack = int(s.meshes.size());
@@ -405,23 +441,25 @@ FenerScene buildFenerScene(const Config& cfg) {
                                    return -10.0f + 72.0f * m * (0.8f + 0.4f * fbm2(x / 80.0f, z / 80.0f, 51));
                                },
                                [](float, float, float, float) { return int(FM_FAR); }));
-    // the fjord walls: three ridge curtains, kilometres away, colossal
+    // the fjord walls: three ridges on arcs around the strait, kilometres away, colossal; every view meets them
     const int mWalls = int(s.meshes.size());
     {
         FMeshCPU w;
         w.name = "fjord_walls";
-        const float zc[3] = {16000.0f, 10000.0f, 6000.0f}, h0[3] = {1500.0f, 800.0f, 250.0f}, h1[3] = {3400.0f, 2000.0f, 900.0f},
-                    span[3] = {34000.0f, 24000.0f, 16000.0f};
+        const float R[3] = {16000.0f, 10000.0f, 6000.0f}, h0[3] = {1500.0f, 800.0f, 250.0f}, h1[3] = {3400.0f, 2000.0f, 900.0f};
         for (int L = 0; L < 3; ++L) {
-            const int n = 1400;
-            float prevX = 0, prevY = 0;
+            const int n = 2400;
+            const float a0 = -2.1f, a1 = 2.1f;   // radians from north, both sides
+            float3 prevB{}, prevT{};
             for (int k = 0; k <= n; ++k) {
-                const float x = -span[L] + 2 * span[L] * k / n;
-                float y = h0[L] + (h1[L] - h0[L]) * ridged1(x / (span[L] * 0.11f) + 21 + L, 21 + L);
-                if (L == 0) y += 1600.0f * std::exp(-sqr((x + 3200.0f) / 2200.0f)) + 900.0f * std::exp(-sqr((x - 4600.0f) / 1800.0f));
-                const float z = zc[L] - 470.0f;
-                if (k > 0) w.quad(make_float3(prevX, -50.0f, z), make_float3(x, -50.0f, z), make_float3(x, y, z), make_float3(prevX, prevY, z), FM_FAR);
-                prevX = x; prevY = y;
+                const float a = a0 + (a1 - a0) * k / n;
+                const float s_ = R[L] * a;          // arc length: the ridge profile runs along it
+                float y = h0[L] + (h1[L] - h0[L]) * ridged1(s_ / (R[L] * 0.25f) + 21 + L, 21 + L);
+                if (L == 0) y += 1600.0f * std::exp(-sqr((s_ + 3200.0f) / 2200.0f)) + 900.0f * std::exp(-sqr((s_ - 4600.0f) / 1800.0f)) +
+                                 1300.0f * std::exp(-sqr((s_ + 12500.0f) / 2600.0f));
+                const float3 b = make_float3(R[L] * std::sin(a), -50.0f, R[L] * std::cos(a)), t = make_float3(b.x, y, b.z);
+                if (k > 0) w.quad(prevB, b, t, prevT, FM_FAR);
+                prevB = b; prevT = t;
             }
         }
         s.meshes.push_back(w);
@@ -440,9 +478,10 @@ FenerScene buildFenerScene(const Config& cfg) {
     s.meshes.push_back(FMeshCPU{"window_pane"});
     makeCabin(s.meshes[mCabin], s.meshes[mPane], cabin, 0.0f, s.winCorner, s.winU, s.winV, s.winN);
     // spruce variants
-    const int nVar = 6;
+    const int nFull = 3, nStand = 4;
     const int mSpruce = int(s.meshes.size());
-    for (int k = 0; k < nVar; ++k) s.meshes.push_back(makeSpruce(k));
+    for (int k = 0; k < nFull; ++k) s.meshes.push_back(makeSpruce(k, 0.05f));
+    for (int k = 0; k < nStand; ++k) s.meshes.push_back(makeSpruce(nFull + k, 0.34f + 0.05f * k));
 
     // ---- instances
     auto place = [&](int mesh, float3 t, float scale, float yaw, unsigned int mask = 1u) {
@@ -456,6 +495,14 @@ FenerScene buildFenerScene(const Config& cfg) {
     place(mGlass, make_float3(0, 0, 0), 1.0f, 0.0f, 2u);
     place(mPane, make_float3(0, 0, 0), 1.0f, 0.0f, 2u);
 
+    // stand trees (high crowns, bare trunks) inside the forest; skirted trees where the forest meets the open
+    auto open10 = [&](float x, float z, const std::function<float(float, float)>& g) {
+        for (int k = 0; k < 8; ++k) {
+            const float a = k * PI / 4;
+            if (g(x + 11.0f * std::cos(a), z + 11.0f * std::sin(a)) < 0.8f) return true;
+        }
+        return false;
+    };
     // forest on the lighthouse island: jittered grid, clear around the tower, the cabin and the path
     const float spacing = cfg.f("forest.spacing", 4.4f);
     for (float x = -280; x < 280; x += spacing)
@@ -472,7 +519,9 @@ FenerScene buildFenerScene(const Config& cfg) {
             if (std::sqrt(gx * gx + gz * gz) * 0.5f > 0.9f) continue;
             float h = 18.0f + 14.0f * U(rng);
             if (r < 40.0f) h = std::min(h, 10.0f + (r - 17.0f) * 0.55f);   // the tower rises above its own clearing
-            place(mSpruce + int(U(rng) * nVar) % nVar, make_float3(px, g - 0.4f, pz), h, U(rng) * 2 * PI);
+            const bool edge = open10(px, pz, lhH) || r < 30.0f || distToPolyline(px, pz, path) < 9.0f;
+            const int var = edge ? int(U(rng) * nFull) % nFull : nFull + int(U(rng) * nStand) % nStand;
+            place(mSpruce + var, make_float3(px, g - 0.4f, pz), h, U(rng) * 2 * PI);
         }
     // back islands: smaller trees (they read as a serrated line)
     for (float x = -1600; x < 1500; x += 9.0f)
@@ -482,30 +531,73 @@ FenerScene buildFenerScene(const Config& cfg) {
             const float m = std::max(a, b);
             const float g = -10.0f + 72.0f * m * (0.8f + 0.4f * fbm2(x / 80.0f, z / 80.0f, 51));
             if (g < 2.0f || U(rng) > 0.75f) continue;
-            place(mSpruce + int(U(rng) * nVar) % nVar, make_float3(x + (U(rng) - 0.5f) * 6, g - 0.5f, z + (U(rng) - 0.5f) * 6), 14.0f + 10.0f * U(rng),
+            place(mSpruce + int(U(rng) * nFull) % nFull, make_float3(x + (U(rng) - 0.5f) * 6, g - 0.5f, z + (U(rng) - 0.5f) * 6), 14.0f + 10.0f * U(rng),
                   U(rng) * 2 * PI);
         }
-    // camera island: dense forest, open in front of A's viewpoint; the framing spruces of the value study
+    // ---- the journey from A to B through the camera island's forest (Catmull-Rom through journey.points)
+    {
+        std::vector<float> pts;
+        auto it = cfg.values.find("journey.points");
+        const std::string def = "0 -470  25 -505  110 -560  230 -600  360 -630  480 -650  590 -640  660 -585  690 -540";
+        std::istringstream ss(it != cfg.values.end() ? it->second : def);
+        float v;
+        while (ss >> v) pts.push_back(v);
+        std::vector<float3> cp;
+        for (size_t k = 0; k + 1 < pts.size(); k += 2) cp.push_back(make_float3(pts[k], 0.0f, pts[k + 1]));
+        for (size_t k = 0; k + 1 < cp.size(); ++k) {
+            const float3 p0 = cp[k > 0 ? k - 1 : k], p1 = cp[k], p2 = cp[k + 1], p3 = cp[k + 2 < cp.size() ? k + 2 : k + 1];
+            const int n = std::max(2, int(length(p2 - p1)));
+            for (int j = 0; j < n; ++j) {
+                const float t = float(j) / n, t2 = t * t, t3 = t2 * t;
+                const float3 q = (p1 * 2.0f + (p2 - p0) * t + (p0 * 2.0f - p1 * 5.0f + p2 * 4.0f - p3) * t2 + (p1 * 3.0f - p0 - p2 * 3.0f + p3) * t3) * 0.5f;
+                s.journey.push_back(make_float3(q.x, cameraIslandH(q.x, q.z), q.z));
+            }
+        }
+        if (!cp.empty()) s.journey.push_back(make_float3(cp.back().x, cameraIslandH(cp.back().x, cp.back().z), cp.back().z));
+    }
     const float3 A = cfg.v3("view.A.pos", make_float3(0.0f, 0.0f, -470.0f));
-    for (float x = -500; x < 300; x += spacing)
-        for (float z = -900; z < -430; z += spacing) {
+    const float3 Bp = cfg.v3("view.B.pos", make_float3(690.0f, 0.0f, -540.0f));
+    // B looks at the lighthouse: its corridor runs from B along that direction to the shore
+    const float3 bF = normalize(make_float3(-Bp.x, 0.0f, -Bp.z)), bR = normalize(cross(make_float3(0, 1, 0), bF));
+    auto inViewA = [&](float x, float z) {
+        const float dx = x - A.x, dz = z - A.z;
+        return dz > -6.0f && dz < 70.0f && std::fabs(dx) < 7.0f + dz * 0.9f;
+    };
+    auto inViewB = [&](float x, float z) {
+        const float3 v = make_float3(x - Bp.x, 0.0f, z - Bp.z);
+        const float f = dot(v, bF), r = dot(v, bR);
+        return f > -6.0f && f < 90.0f && (r > 0.0f ? r < 8.0f + f * 1.6f : -r < 6.0f + f * 0.45f);
+    };
+    for (float x = -700; x < 1000; x += spacing)
+        for (float z = -1650; z < -420; z += spacing) {
             const float px = x + (U(rng) - 0.5f) * spacing * 0.9f, pz = z + (U(rng) - 0.5f) * spacing * 0.9f;
             const float g = cameraIslandH(px, pz);
             if (g < 1.8f) continue;
-            const float dx = px - A.x, dz = pz - A.z;
-            if (dz > -6.0f && std::fabs(dx) < 7.0f + dz * 0.9f) continue;   // A looks out over the strait
-            if (dx * dx + dz * dz < 36.0f) continue;
-            place(mSpruce + int(U(rng) * nVar) % nVar, make_float3(px, g - 0.4f, pz), 18.0f + 14.0f * U(rng), U(rng) * 2 * PI);
+            if (inViewA(px, pz) || inViewB(px, pz)) continue;
+            // glades and gaps: the beam and the moon reach the forest floor through them
+            if (fbm2(px / 55.0f, pz / 55.0f, 61, 3) > cfg.f("forest.glades", 0.63f) || U(rng) < cfg.f("forest.gaps", 0.08f)) continue;
+            const float dTrail = distToPolyline(px, pz, s.journey);
+            if (dTrail < 2.4f) continue;
+            if (sqr(px - A.x) + sqr(pz - A.z) < 36.0f || sqr(px - Bp.x) + sqr(pz - Bp.z) < 36.0f) continue;
+            const bool edge = open10(px, pz, cameraIslandH) || inViewA(px + 8, pz) || inViewA(px - 8, pz) || inViewB(px + 8 * bR.x, pz + 8 * bR.z) ||
+                              inViewB(px - 8 * bR.x, pz - 8 * bR.z);
+            const int var = edge && dTrail > 10.0f ? int(U(rng) * nFull) % nFull : nFull + int(U(rng) * nStand) % nStand;
+            place(mSpruce + var, make_float3(px, g - 0.4f, pz), 18.0f + 14.0f * U(rng), U(rng) * 2 * PI);
         }
+    // the framing spruces of the value study, placed in each view's own frame (right, forward)
     {
-        const float gA = cameraIslandH(A.x, A.z);
         const float3 fr[3] = {{-9.5f, 0, 11.0f}, {12.0f, 0, 12.5f}, {-14.0f, 0, 19.0f}};
         const float hh[3] = {30.0f, 28.0f, 26.0f};
         for (int k = 0; k < 3; ++k) {
             const float px = A.x + fr[k].x, pz = A.z + fr[k].z;
-            place(mSpruce + k, make_float3(px, cameraIslandH(px, pz) - 0.4f, pz), hh[k], U(rng) * 2 * PI);
+            place(mSpruce + k % nFull, make_float3(px, cameraIslandH(px, pz) - 0.4f, pz), hh[k], U(rng) * 2 * PI);
         }
-        (void)gA;
+        const float2 frB[2] = {{-11.5f, 9.5f}, {-16.5f, 17.0f}};
+        const float hB[2] = {30.0f, 26.0f};
+        for (int k = 0; k < 2; ++k) {
+            const float px = Bp.x + bR.x * frB[k].x + bF.x * frB[k].y, pz = Bp.z + bR.z * frB[k].x + bF.z * frB[k].y;
+            place(mSpruce + (k + 1) % nFull, make_float3(px, cameraIslandH(px, pz) - 0.4f, pz), hB[k], U(rng) * 2 * PI);
+        }
     }
 
     // ---- views
@@ -515,11 +607,13 @@ FenerScene buildFenerScene(const Config& cfg) {
         const float pitch = cfg.f("view.A.pitch", 5.0f) * PI / 180.0f;
         a.target = a.pos + make_float3(0.0f, std::tan(pitch), 1.0f) * 100.0f;
         s.views.push_back(a);
-        const float3 B = cfg.v3("view.B.pos", make_float3(-380.0f, 0.0f, -815.0f));
+        const float3 B = cfg.v3("view.B.pos", make_float3(690.0f, 0.0f, -540.0f));
         const float gB = cameraIslandH(B.x, B.z);
         FenerView b{"B", make_float3(B.x, std::max(gB, 1.0f) + cfg.f("view.B.eye", 1.7f), B.z), make_float3(0, 0, 0), cfg.f("view.B.fov", 44.0f)};
         const float pb = cfg.f("view.B.pitch", 10.0f) * PI / 180.0f;
         float3 f = normalize(make_float3(-b.pos.x, 0.0f, -b.pos.z));
+        const float yaw = cfg.f("view.B.yaw", 9.0f) * PI / 180.0f;   // + turns right (towards the moon)
+        f = make_float3(f.x * std::cos(yaw) + f.z * std::sin(yaw), 0.0f, -f.x * std::sin(yaw) + f.z * std::cos(yaw));
         f.y = std::tan(pb);
         b.target = b.pos + f * 100.0f;
         s.views.push_back(b);
@@ -535,4 +629,94 @@ void fenerCamera(const FenerView& v, unsigned int width, unsigned int height, FC
     cam.tanHalfY = std::tan(v.vfovDeg * 0.5f * PI / 180.0f);
     cam.tanHalfX = cam.tanHalfY * float(width) / float(height);
     cam.jitter = make_float2(0.0f, 0.0f);
+}
+
+// ---------------------------------------------------------------------------------------------------
+// the map: the same height functions and tree instances, seen from above (1 px = 1.5 m)
+// ---------------------------------------------------------------------------------------------------
+bool fenerMap(const FenerScene& s, const Config& cfg, const std::string& path) {
+    const float x0 = -900.0f, x1 = 1100.0f, z0 = -1350.0f, z1 = 450.0f, mpp = 1.5f;
+    const int W = int((x1 - x0) / mpp), H = int((z1 - z0) / mpp);
+    std::vector<float3> img(size_t(W) * H);
+    const float Ht = cfg.f("island.hill", 44.0f);
+    float3 cabin = make_float3(74.0f, 0.0f, -22.0f);
+    cabin.y = Ht * std::exp(-std::pow(std::sqrt(74.0f * 74.0f + 22.0f * 22.0f) / 95.0f, 1.7f)) + 2.5f;
+    auto height = [&](float x, float z) { return std::max(lighthouseIslandH(x, z, Ht, cabin), cameraIslandH(x, z)); };
+    auto toPx = [&](float x, float z, int& px, int& py) { px = int((x - x0) / mpp); py = int((z1 - z) / mpp); };   // north up
+    for (int py = 0; py < H; ++py)
+        for (int px = 0; px < W; ++px) {
+            const float x = x0 + (px + 0.5f) * mpp, z = z1 - (py + 0.5f) * mpp;
+            const float h = height(x, z);
+            float3 c;
+            if (h < 0.0f) {
+                const float d = std::min(-h / 12.0f, 1.0f);
+                c = make_float3(0.10f, 0.16f, 0.24f) * (1.0f - 0.5f * d);
+            } else {
+                const float hx = height(x + mpp, z) - height(x - mpp, z), hz = height(x, z + mpp) - height(x, z - mpp);
+                const float3 n = normalize(make_float3(-hx, 2.0f * mpp, -hz));
+                const float shade = 0.55f + 0.45f * std::max(0.0f, dot(n, normalize(make_float3(-1.0f, 1.2f, 1.0f))));
+                c = make_float3(0.36f, 0.40f, 0.32f) * shade * (0.75f + 0.25f * std::min(h / 50.0f, 1.0f));
+            }
+            img[size_t(py) * W + px] = c;
+        }
+    auto disc = [&](float x, float z, float r, float3 col, float a) {
+        int cx, cy;
+        toPx(x, z, cx, cy);
+        const int R = std::max(1, int(r / mpp + 0.5f));
+        for (int dy = -R; dy <= R; ++dy)
+            for (int dx = -R; dx <= R; ++dx) {
+                if (dx * dx + dy * dy > R * R) continue;
+                const int X = cx + dx, Y = cy + dy;
+                if (X < 0 || Y < 0 || X >= W || Y >= H) continue;
+                float3& p = img[size_t(Y) * W + X];
+                p = p * (1.0f - a) + col * a;
+            }
+    };
+    // trees: crown discs (stand trees darker)
+    for (const FInstanceCPU& in : s.instances) {
+        if (s.meshes[in.mesh].name.rfind("spruce", 0) != 0) continue;
+        const float scale = in.m[5];
+        const bool stand = s.meshes[in.mesh].name >= "spruce3";
+        disc(in.m[3], in.m[11], scale * (stand ? 0.12f : 0.2f), stand ? make_float3(0.08f, 0.12f, 0.09f) : make_float3(0.12f, 0.18f, 0.12f), 0.85f);
+    }
+    // the journey, A and B with their view wedges, the lighthouse and the cabin
+    for (size_t k = 0; k < s.journey.size(); k += 2) disc(s.journey[k].x, s.journey[k].z, 1.6f, make_float3(1.0f, 1.0f, 1.0f), 1.0f);
+    for (size_t v = 0; v < s.views.size(); ++v) {
+        const FenerView& vw = s.views[v];
+        const float3 f = normalize(make_float3(vw.target.x - vw.pos.x, 0.0f, vw.target.z - vw.pos.z));
+        const float halfH = std::atan(std::tan(vw.vfovDeg * 0.5f * PI / 180.0f) * 16.0f / 9.0f);
+        for (int side = -1; side <= 1; side += 2) {
+            const float a = std::atan2(f.z, f.x) + side * halfH;
+            for (float t = 0; t < 420.0f; t += 3.0f) disc(vw.pos.x + std::cos(a) * t, vw.pos.z + std::sin(a) * t, 1.0f, make_float3(1.0f, 0.4f, 0.3f), 0.8f);
+        }
+        disc(vw.pos.x, vw.pos.z, 7.0f, make_float3(1.0f, 0.3f, 0.2f), 1.0f);
+    }
+    disc(0.0f, 0.0f, 9.0f, make_float3(1.0f, 1.0f, 0.9f), 1.0f);
+    disc(cabin.x, cabin.z, 6.0f, make_float3(1.0f, 0.6f, 0.15f), 1.0f);
+    // labels (stb_easy_font quads, rasterised)
+    auto label = [&](float x, float z, const char* text, float scale) {
+        static char buf[20000];
+        const int q = stb_easy_font_print(0, 0, const_cast<char*>(text), nullptr, buf, sizeof(buf));
+        int cx, cy;
+        toPx(x, z, cx, cy);
+        for (int k = 0; k < q; ++k) {
+            const float* v = reinterpret_cast<const float*>(buf + k * 4 * 16);
+            const int qx0 = cx + int(v[0] * scale), qy0 = cy + int(v[1] * scale), qx1 = cx + int(v[8] * scale), qy1 = cy + int(v[9] * scale);
+            for (int Y = std::max(0, qy0); Y < std::min(H, qy1); ++Y)
+                for (int X = std::max(0, qx0); X < std::min(W, qx1); ++X) img[size_t(Y) * W + X] = make_float3(1.0f, 1.0f, 1.0f);
+        }
+    };
+    label(15.0f, 25.0f, "FENER", 3.0f);
+    label(cabin.x + 12.0f, cabin.z, "KULUBE", 2.5f);
+    for (const FenerView& vw : s.views) label(vw.pos.x + 14.0f, vw.pos.z - 10.0f, vw.name.c_str(), 5.0f);
+    label(x0 + 20.0f, z1 - 20.0f, "KUZEY YUKARI   1 px = 1.5 m   beyaz: A -> B yolculugu   koyu daireler: govdeli (ic) agaclar", 2.0f);
+    std::vector<unsigned char> rgba(size_t(W) * H * 4);
+    for (size_t i = 0; i < img.size(); ++i) {
+        const float3 c = img[i];
+        rgba[i * 4 + 0] = (unsigned char)(std::min(std::max(std::pow(c.x, 1 / 2.2f), 0.0f), 1.0f) * 255);
+        rgba[i * 4 + 1] = (unsigned char)(std::min(std::max(std::pow(c.y, 1 / 2.2f), 0.0f), 1.0f) * 255);
+        rgba[i * 4 + 2] = (unsigned char)(std::min(std::max(std::pow(c.z, 1 / 2.2f), 0.0f), 1.0f) * 255);
+        rgba[i * 4 + 3] = 255;
+    }
+    return writePNG(path, W, H, rgba.data());
 }

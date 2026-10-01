@@ -46,7 +46,8 @@ struct FCamera {
 struct FenerParams {
     // ---- frame buffers
     unsigned int width, height;          // display = surface pass size
-    unsigned int volWidth, volHeight;    // volumetric pass size (half)
+    unsigned int volWidth, volHeight;    // volumetric pass size
+    unsigned int volScale;               // 1 full resolution, 2 half (bilateral upsampling)
     float4* surface;                     // linear RGB of this frame: surfaces * transmittance + ambient fog
     float4* gdepth;                      // x: distance along the primary ray (1e30 sky), yzw: world normal
     float2* motion;                      // pixels to subtract to find this pixel in the previous frame
@@ -89,6 +90,7 @@ struct FenerParams {
 
     // ---- atmosphere
     float fogRho0, fogH, fogHaze;        // height fog: sigma(y) = rho0 * exp(-y / H) + haze  (1/m)
+    float fogGround, fogGroundH;         // ground mist: + ground * exp(-y / groundH)
     float3 fogAmbient;                   // moonlit multiple scattering, radiance of an infinitely deep fog (RGB)
     float fogAmbientHalo, fogAmbientG;   // forward-scattering share and asymmetry of the ambient around the moon
     float3 nightSky;                     // radiance of the clear sky above the fog

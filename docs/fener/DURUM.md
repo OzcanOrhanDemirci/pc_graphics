@@ -3,6 +3,10 @@
 > Tek kaynak durum panosu. Plan ve Özcan'ın tarifi `docs/fener/PLAN.md`'de.
 
 ## Şu an
+- **2026-10-01 · F2 + yolculuk çalışıyor.** Kuşbakışı harita (`--map`), A ve B kilitli, Space ile A → B orman içinden
+  yolculuk (778 m, ~70 sn, yumuşak kalkış/duruş, yolda tekrar Space geri döner). Kareler `docs/fener/kareler/F2_*`.
+  Açık: yakın köknar kalitesi (karton testere görünümü), ormanda huzmeyle beyaza dönen iğneler, çisenti, göz kamaşması
+  yıldızı (3B'de henüz yok), canlı modda huzme gürültüsü ölçülmedi, kulübe A'dan çok küçük.
 - **2026-10-01 · F1 altyapı bitti, ilk 3D kareler çıktı.** `pc_graphics.exe --scene fener` (pencere) ya da
   `--headless --frames 256 --out ...` (durağan kare) / `--headless --live N` (canlı ölçüm). Sahne 1 bit bit aynı
   (değişiklikten önce ve sonra 960x540 32 örnek, `--seed 7`: piksel farkı 0). Kareler `docs/fener/kareler/F1_A_t0.png`, `F1_A_t5.png`.
@@ -17,7 +21,7 @@
 |---|---|---|
 | F0 Değer etüdü | ✅ 10-01 | A + B seçildi (C hayır); tepe anı: ışık sütunu + göz kamaşması |
 | F1 Altyapı (sahne seçimi) | ✅ 10-01 | ayrı modül `src/fener/`, cihaz programı `src/device/fener.cu`, ayar `scenes/fener.cfg`; sahne 1 bit bit aynı |
-| F2 Kaba 3D | ⏳ | |
+| F2 Kaba 3D + harita + yolculuk | ✅ 10-01 | B kuzeydoğu burnuna taşındı (920 m, sağı açık deniz); A ve B'nin önüne koy oyuldu; fiyort duvarları yay; orman: kenarda etekli, içeride gövdeli köknar |
 | F3 Işık | ⏳ | |
 | F4 Su | ⏳ | |
 | F5 Son işlem | ⏳ | |
@@ -52,6 +56,20 @@
 - **Yüksek pus 40 km boyunca sayılınca bütün gök sis rengine boğuldu;** pusa ~2 km ölçek yüksekliği verince gece göğü
   yukarıda göründü.
 - 32 karede hacimdeki benekler sistematik değil: 256 karede pürüzsüz (ölçüldü). Canlıda örnek sayısı artırılacak.
+
+## F2'de öğrenilenler (ölçülerek)
+- **Harita ilk denemede iki tasarım hatası gösterdi:** B'nin görüş koridoru kıyı boyunca bütün ormanı silmişti; ve B
+  kıyının fenere bakmayan yerindeydi (bakış çizgisi ~150 m kara üstünden). Kuşbakışı harita aynı yükseklik
+  fonksiyonları ve aynı ağaç örnekleriyle çizildiği için (aynı kaynak) bunlar 3B'den önce görüldü.
+- **Kompozisyon ölçüsü:** A'da kıyı 34 m ilerideyken karanın düz yüzeyi kadrajın alt %28'ini yuttu; 1,7 m göz
+  yüksekliğinde kadrajın alt ~%12'si için kıyı ~10 m ileride olmalı. Çözüm: bakışın önüne koy oyuldu.
+- **Sık ormanın içi gerçekçi olarak karanlıktır:** açık bakışlara göre 4,8 EV (log2 parlaklık A -7,0, B -7,4, orman
+  -12,0). Göz uyumu eklendi (farkın yarısı, 1,5 sn): orman yine karanlık hissettirir ama okunur.
+- **Yarım çözünürlüklü hacim yakın silüetlere parlak hale bindiriyordu** (derinliğe duyarlı büyütme de kurtarmadı);
+  hacim tam çözünürlüğe alındı: 1440p'de 7,6 ms/kare (131 fps).
+- **Yer pusu (7 m ölçek yüksekliği) ormanın içini kurdu:** gövdeler parlayan pusun önünde silüet olunca Inside okunur.
+- **Tepe anı 3B'de kendiliğinden bir şey üretti:** galeri balkonu aşağı inen ışığı kesiyor, lambadan suya karanlık
+  bir gölge piramidi düşüyor; kubbe yukarıya karanlık bir V çiziyor. Özcan'ın gözüne sunulacak.
 
 ## Etüdün sayıları (seçilen taslak 3D'ye bunlarla taşınır)
 | | A Pencere | B Yücelik | C Yakın |

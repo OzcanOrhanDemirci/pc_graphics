@@ -83,14 +83,19 @@ static __forceinline__ __device__ bool projectDir(const FCamera& c, float3 d, fl
 // =====================================================================================================
 // atmosphere: exponential height fog + thin haze, everything analytic
 // =====================================================================================================
-static __forceinline__ __device__ float fogSigma(float y) { return params.fogRho0 * expf(-fmaxf(y, -20.0f) / params.fogH) + params.fogHaze; }
+// two layers: the strait's fog (tens of metres) and a ground mist hugging the forest floor and the water (metres)
+static __forceinline__ __device__ float fogSigma(float y) {
+    return params.fogRho0 * expf(-fmaxf(y, -20.0f) / params.fogH) + params.fogGround * expf(-fmaxf(y, -5.0f) / params.fogGroundH) + params.fogHaze;
+}
+static __forceinline__ __device__ float expLayer(float y0, float dy, float t, float H) {   // integral of exp(-y/H) along the ray
+    const float k = 1.0f / H;
+    const float a = expf(-fmaxf(y0, -20.0f) * k);
+    if (fabsf(dy) < 1e-4f) return a * t;
+    return (a - expf(-fmaxf(y0 + dy * t, -20.0f) * k)) / (dy * k);
+}
 // optical depth from height y0 along a ray whose vertical direction component is dy, for distance t
 static __forceinline__ __device__ float fogTau(float y0, float dy, float t) {
-    const float k = 1.0f / params.fogH;
-    const float a = expf(-fmaxf(y0, -20.0f) * k);
-    float h;
-    if (fabsf(dy) < 1e-4f) h = a * t;
-    else h = (a - expf(-fmaxf(y0 + dy * t, -20.0f) * k)) / (dy * k);
+    const float h = expLayer(y0, dy, t, params.fogH) + params.fogGround / params.fogRho0 * expLayer(y0, dy, t, params.fogGroundH);
     // the haze thins with height too (scale ~2 km): looking up, the night sky shows through
     const float hazePath = fminf(fminf(t, 40000.0f), 2000.0f / fmaxf(dy, 0.05f));
     return params.fogRho0 * h + params.fogHaze * hazePath;
@@ -391,18 +396,19 @@ extern "C" __global__ void __raygen__surface() {
 }
 
 // =====================================================================================================
-// volume pass (half resolution)
+// volume pass (full resolution, or half: volScale 2)
 // =====================================================================================================
 extern "C" __global__ void __raygen__volume() {
     const uint3 idx = optixGetLaunchIndex();
     const unsigned int vi = idx.y * params.volWidth + idx.x;
     const FCamera& cam = params.cam;
-    const unsigned int fx = min(2u * idx.x, params.width - 2u), fy = min(2u * idx.y, params.height - 2u);
+    const unsigned int S = params.volScale;
+    const unsigned int fx = min(S * idx.x, params.width - S), fy = min(S * idx.y, params.height - S);
     float tEnd = 0.0f;
-    for (int k = 0; k < 4; ++k) tEnd = fmaxf(tEnd, params.gdepth[(fy + (k >> 1)) * params.width + fx + (k & 1)].x);
+    for (unsigned int k = 0; k < S * S; ++k) tEnd = fmaxf(tEnd, params.gdepth[(fy + k / S) * params.width + fx + k % S].x);
     tEnd = fminf(tEnd, 3.0e4f);
     const float3 o = cam.pos;
-    const float3 d = cameraRay(cam, fx + 1.0f + cam.jitter.x, fy + 1.0f + cam.jitter.y);
+    const float3 d = cameraRay(cam, fx + 0.5f * S + cam.jitter.x, fy + 0.5f * S + cam.jitter.y);
     float3 L = make_float3(0.0f, 0.0f, 0.0f);
     float wsum = 0.0f, dsum = 0.0f;
 
@@ -468,7 +474,7 @@ extern "C" __global__ void __raygen__volume() {
 }
 
 // =====================================================================================================
-// temporal resolve of the volume (half res)
+// temporal resolve of the volume
 // =====================================================================================================
 static __forceinline__ __device__ float4 fetchClamp(const float4* img, int w, int h, int x, int y) {
     x = max(0, min(w - 1, x));
@@ -499,12 +505,13 @@ extern "C" __global__ void __raygen__volresolve() {
     if (params.frame > 0) {
         // reproject by the mean scattering distance
         const FCamera& cam = params.cam;
-        const float fxp = 2.0f * idx.x + 1.0f, fyp = 2.0f * idx.y + 1.0f;
+        const float S = float(params.volScale);
+        const float fxp = S * (idx.x + 0.5f), fyp = S * (idx.y + 0.5f);
         const float3 d = cameraRay(cam, fxp, fyp);
         float2 prev;
         const bool ok = projectPoint(params.prevCam, cam.pos + d * fmaxf(cur.w, 1.0f), prev);
         if (ok && prev.x >= 0 && prev.y >= 0 && prev.x < params.width && prev.y < params.height) {
-            float4 hist = bilinear(params.volumeHist[params.histRead], w, h, prev.x * 0.5f, prev.y * 0.5f);
+            float4 hist = bilinear(params.volumeHist[params.histRead], w, h, prev.x / S, prev.y / S);
             if (params.taaAlpha > 0.0f) {   // live: clamp; still (progressive) mode: plain average
                 hist.x = clampf(hist.x, mn.x, mx.x);
                 hist.y = clampf(hist.y, mn.y, mx.y);
@@ -528,10 +535,11 @@ static __forceinline__ __device__ float3 fromYCoCg(float3 c) {
     return make_float3(c.x + c.y - c.z, c.x + c.z, c.x - c.y - c.z);
 }
 static __forceinline__ __device__ float3 volumeAt(int x, int y) {
-    // the half-res volume pixel whose depth matches this pixel best among the four nearest (joint bilateral)
-    const float z = params.gdepth[y * params.width + x].x;
     const float4* V = params.volumeHist[params.histRead ^ 1];
     const int w = int(params.volWidth), h = int(params.volHeight);
+    if (params.volScale == 1) return f3(V[y * w + x]);
+    // half res: the volume pixel whose depth matches this pixel best among the four nearest (joint bilateral)
+    const float z = params.gdepth[y * params.width + x].x;
     const float fx = (x + 0.5f) * 0.5f - 0.5f, fy = (y + 0.5f) * 0.5f - 0.5f;
     const int x0 = int(floorf(fx)), y0 = int(floorf(fy));
     const float tx = fx - x0, ty = fy - y0;

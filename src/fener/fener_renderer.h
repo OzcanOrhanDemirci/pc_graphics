@@ -17,7 +17,7 @@ struct FenerTimes {      // milliseconds of the last frame's passes
 
 class FenerRenderer {
 public:
-    bool init(unsigned int width, unsigned int height, const std::string& root);
+    bool init(unsigned int width, unsigned int height, const std::string& root, unsigned int volScale = 1);
     void shutdown();
     bool compileDevice(std::string& log);
     void uploadScene(const FenerScene& scene);
@@ -27,6 +27,7 @@ public:
     void downloadHdr(std::vector<float4>& out);
 
     FenerParams& params() { return params_; }
+    float meteredLog2() const { return metered_; }   // mean log2 luminance of the last frame (before exposure)
     const FenerTimes& times() const { return times_; }
     std::string deviceName() const { return deviceName_; }
 
@@ -46,6 +47,8 @@ private:
     cudaEvent_t ev0_ = nullptr, ev1_ = nullptr;
     FenerParams params_{};
     FenerTimes times_;
+    float metered_ = 0.0f;
+    std::vector<float4> meter_;
     std::vector<void*> sceneBuffers_;
     static const int kWideLevels = 7, kNarrowLevels = 4;
     float4* wideLevels_[kWideLevels] = {};
