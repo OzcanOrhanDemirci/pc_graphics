@@ -362,6 +362,11 @@ static float cameraIslandH(float x, float z) {
 
 float fenerGround(float x, float z) { return cameraIslandH(x, z); }
 
+// ground of both islands (the player walks on it); set up by buildFenerScene
+static float s_Ht = 44.0f;
+static float3 s_cabin = {74.0f, 0.0f, -22.0f};
+float fenerTerrain(float x, float z) { return std::max(cameraIslandH(x, z), lighthouseIslandH(x, z, s_Ht, s_cabin)); }
+
 static void placement(float m[12], float3 t, float s, float yaw) {
     const float c = std::cos(yaw) * s, n = std::sin(yaw) * s;
     const float r[12] = {c, 0, n, t.x, 0, s, 0, t.y, -n, 0, c, t.z};
@@ -416,6 +421,9 @@ FenerScene buildFenerScene(const Config& cfg) {
     const float3 cabinXZ = make_float3(74.0f, 0.0f, -22.0f);
     float3 cabin = cabinXZ;
     cabin.y = Ht * std::exp(-std::pow(std::sqrt(74.0f * 74.0f + 22.0f * 22.0f) / 95.0f, 1.7f)) + 2.5f;
+    s_Ht = Ht;
+    s_cabin = cabin;
+    s.cabin = cabin;
     const std::vector<float3> path = {{4.4f, 0, -1.4f}, {14, 0, -5}, {27, 0, -8}, {41, 0, -11}, {55, 0, -15}, {66, 0, -19}, {71, 0, -20}};
     auto lhH = [&](float x, float z) { return lighthouseIslandH(x, z, Ht, cabin); };
 

@@ -8,7 +8,8 @@
 //   pc_graphics.exe --scene fener --map captures/harita.png    top-down map (islands, forest, A, B, the journey)
 //   options: --view A|B, --time t (seconds: beam angle, waves), --width W, --height H, --set key=value, --windowed
 //
-// Keys: Space walk A <-> B (again on the way: turn back), B jump to the other view, H hud, S screenshot, F5 reload scenes/fener.cfg + device programs, P pause time,
+// Keys: Tab scene -> player (camera island) -> player (lighthouse island) -> scene. Player: WASD, mouse, Shift run,
+//       Space jump, F12 screenshot. Scene: Space walk A <-> B (again on the way: turn back), B jump to the other view, H hud, S screenshot, F5 reload scenes/fener.cfg + device programs, P pause time,
 //       Left/Right time -/+ 1 s, Up/Down exposure, 1-5 views (final, surface, volume, depth, normals), Esc quit.
 #include "fener/fener_renderer.h"
 #include "gpu_stats.h"
@@ -72,6 +73,45 @@ struct Journey {
     }
 };
 
+// Player mode (Tab): walk the islands. A kinematic body: gravity, jumping, the ground as a height function, tree trunks,
+// the tower and the cabin as obstacles, swimming where the sea is deep. Nothing in the world was built for it.
+struct Player {
+    float3 feet = {0, 0, 0}, vel = {0, 0, 0};
+    float yaw = 0.0f, pitch = 0.0f;   // yaw 0 looks north (+z), positive turns right
+    bool onGround = false, swimming = false;
+};
+struct Trunks {                          // tree trunks in an 8 m grid for the player's collisions
+    std::vector<float3> t;               // x, z, radius
+    std::vector<std::vector<int>> cell;
+    int nx = 0, nz = 0;
+    float x0 = -1000.0f, z0 = -1800.0f, cs = 8.0f;
+    void build(const FenerScene& s) {
+        t.clear();
+        for (const FInstanceCPU& in : s.instances)
+            if (s.meshes[in.mesh].name.rfind("spruce", 0) == 0) t.push_back(make_float3(in.m[3], in.m[11], std::max(0.18f, in.m[5] * 0.0125f)));
+        nx = int(2400.0f / cs);
+        nz = int(2400.0f / cs);
+        cell.assign(size_t(nx) * nz, {});
+        for (int k = 0; k < int(t.size()); ++k) {
+            const int cx = int((t[k].x - x0) / cs), cz = int((t[k].y - z0) / cs);
+            if (cx >= 0 && cz >= 0 && cx < nx && cz < nz) cell[size_t(cz) * nx + cx].push_back(k);
+        }
+    }
+    // push a circle of radius r at (x, z) out of every trunk it overlaps
+    void resolve(float& x, float& z, float r) const {
+        const int cx = int((x - x0) / cs), cz = int((z - z0) / cs);
+        for (int dz = -1; dz <= 1; ++dz)
+            for (int dx = -1; dx <= 1; ++dx) {
+                const int X = cx + dx, Z = cz + dz;
+                if (X < 0 || Z < 0 || X >= nx || Z >= nz) continue;
+                for (int k : cell[size_t(Z) * nx + X]) {
+                    const float ex = x - t[k].x, ez = z - t[k].y, d = std::sqrt(ex * ex + ez * ez), m = r + t[k].z;
+                    if (d < m && d > 1e-4f) { x = t[k].x + ex / d * m; z = t[k].y + ez / d * m; }
+                }
+            }
+    }
+};
+
 struct FenerApp {
     FenerRenderer renderer;
     Config cfg;
@@ -84,6 +124,9 @@ struct FenerApp {
     bool still = false;          // progressive accumulation at a frozen time (headless stills)
     std::vector<uchar4> pixels;
     Journey journey;
+    Player player;
+    Trunks trunks;
+    int mode = 0;                        // 0 the scene, 1 player on the camera island, 2 player by the lighthouse
 
     void loadConfig() {
         cfg = Config();
@@ -145,6 +188,7 @@ struct FenerApp {
         renderer.uploadScene(scene);
         std::printf("scene: %zu meshes, %zu instances, %zu triangles drawn (%.1f s)\n", scene.meshes.size(), scene.instances.size(),
                     scene.triangles(), fnow() - t0);
+        trunks.build(scene);
         setView(view);
     }
     // where the walk stands at distance d: position on the path (eye above the smoothed ground), looking along the way
@@ -200,6 +244,85 @@ struct FenerApp {
         evAdapt = instant ? target : evAdapt + (target - evAdapt) * (1.0f - std::exp(-dt / cfg.f("display.adapt_seconds", 1.5f)));
         renderer.params().exposure = std::pow(2.0f, ev + evAdapt);
     }
+    // ---- the player
+    void placePlayer(int where) {
+        if (where == 1) {   // where view A stands, looking the way A looks
+            const FenerView& A = scene.views[0];
+            player.feet = make_float3(A.pos.x, fenerTerrain(A.pos.x, A.pos.z), A.pos.z);
+            const float3 f = normalize(A.target - A.pos);
+            player.yaw = std::atan2(f.x, f.z);
+            player.pitch = std::asin(f.y);
+        } else {            // the lighthouse island, in the clearing south of the tower, looking up at it
+            player.feet = make_float3(3.0f, 0.0f, -16.0f);
+            player.feet.y = fenerTerrain(player.feet.x, player.feet.z);
+            player.yaw = std::atan2(-3.0f, 16.0f);
+            player.pitch = 0.72f;   // up the tower to the lantern
+        }
+        player.vel = make_float3(0, 0, 0);
+        renderer.resetHistory();
+    }
+    // forward/right in -1..1 (W/S, D/A), run (Shift), jump (Space pressed this frame)
+    void stepPlayer(float inFwd, float inRight, bool run, bool jump, float dt) {
+        Player& P = player;
+        const float yawS = std::sin(P.yaw), yawC = std::cos(P.yaw);
+        const float3 fwd = make_float3(yawS, 0.0f, yawC), right = make_float3(yawC, 0.0f, -yawS);
+        float3 wish = fwd * inFwd + right * inRight;
+        const float wl = length(wish);
+        if (wl > 0.0f) wish = wish / wl;
+        const float speed = P.swimming ? cfg.f("player.swim", 2.0f) : (run ? cfg.f("player.run", 8.0f) : cfg.f("player.walk", 4.2f));
+        const float acc = P.onGround || P.swimming ? 30.0f : 6.0f;   // little control in the air
+        for (int c = 0; c < 2; ++c) {
+            float& v = c == 0 ? P.vel.x : P.vel.z;
+            const float target = (c == 0 ? wish.x : wish.z) * speed;
+            const float dv = target - v, mx = acc * dt;
+            v += std::max(-mx, std::min(mx, dv));
+        }
+        // horizontal move, then the obstacles: trunks, the tower, the cabin
+        float x = P.feet.x + P.vel.x * dt, z = P.feet.z + P.vel.z * dt;
+        const float r = 0.35f;
+        trunks.resolve(x, z, r);
+        {   // the tower: a circle around the origin (with its foundation)
+            const float d = std::sqrt(x * x + z * z), m = 4.7f + r;
+            if (d < m && d > 1e-4f) { x = x / d * m; z = z / d * m; }
+        }
+        {   // the cabin: an axis-aligned box 8 x 5.2 m
+            const float hx = 4.1f + r, hz = 2.7f + r, ex = x - scene.cabin.x, ez = z - scene.cabin.z;
+            if (std::fabs(ex) < hx && std::fabs(ez) < hz && P.feet.y < scene.cabin.y + 6.0f) {
+                if (hx - std::fabs(ex) < hz - std::fabs(ez)) x = scene.cabin.x + (ex > 0 ? hx : -hx);
+                else z = scene.cabin.z + (ez > 0 ? hz : -hz);
+            }
+        }
+        P.feet.x = x;
+        P.feet.z = z;
+        // vertical: the ground, gravity, jumping; deep water floats you at the surface
+        const float ground = fenerTerrain(x, z);
+        const float eye = cfg.f("player.eye", 1.7f);
+        P.swimming = ground < -(eye - 0.25f);
+        if (P.swimming) {
+            P.feet.y = -(eye - 0.25f) + 0.06f * std::sin(float(fnow()) * 1.3f);   // the eye just above the waves
+            P.vel.y = 0.0f;
+            P.onGround = false;
+            return;
+        }
+        if (jump && P.onGround) { P.vel.y = cfg.f("player.jump", 4.8f); P.onGround = false; }
+        P.vel.y -= cfg.f("player.gravity", 9.81f) * dt;
+        P.feet.y += P.vel.y * dt;
+        const bool wasOnGround = P.onGround;
+        if (P.feet.y <= ground || (wasOnGround && P.vel.y <= 0.0f && P.feet.y - ground < 0.45f)) {   // land, or follow a slope down
+            P.feet.y = ground;
+            P.vel.y = 0.0f;
+            P.onGround = true;
+        } else {
+            P.onGround = false;
+        }
+    }
+    void applyPlayerCamera() {
+        const Player& P = player;
+        const float3 pos = P.feet + make_float3(0.0f, cfg.f("player.eye", 1.7f), 0.0f);
+        const float3 f = make_float3(std::sin(P.yaw) * std::cos(P.pitch), std::sin(P.pitch), std::cos(P.yaw) * std::cos(P.pitch));
+        fenerCamera(FenerView{"oyuncu", pos, pos + f * 10.0f, cfg.f("player.fov", 58.0f)}, width, height, renderer.params().cam);
+    }
+
     void applyJourney() {
         if (scene.journey.size() < 2) return;
         fenerCamera(journeyView(journey.d), width, height, renderer.params().cam);
@@ -298,8 +421,13 @@ static bool fpressed(int key) {
 // --autotest: keys pressed on a timeline through the same path real key presses take (window check)
 struct FenerKeyAt { double t; int key; };
 static const FenerKeyAt kFenerAutotest[] = {{3.0, GLFW_KEY_SPACE}, {12.0, GLFW_KEY_S}, {20.0, GLFW_KEY_SPACE}, {24.0, GLFW_KEY_S}, {26.0, GLFW_KEY_ESCAPE}};
+// --autotest-player: Tab into the player, jump, Tab to the lighthouse island, screenshot, Tab back to the scene, quit
+static const FenerKeyAt kFenerAutotestPlayer[] = {{3.0, GLFW_KEY_TAB}, {5.0, GLFW_KEY_SPACE}, {7.0, GLFW_KEY_TAB}, {9.0, GLFW_KEY_F12},
+                                                  {10.0, GLFW_KEY_TAB}, {12.0, GLFW_KEY_S}, {13.0, GLFW_KEY_ESCAPE}};
 
-static int runFenerWindow(FenerApp& app, bool windowed, bool autotest) {
+static int runFenerWindow(FenerApp& app, bool windowed, int autotest) {
+    const FenerKeyAt* timeline = autotest == 2 ? kFenerAutotestPlayer : kFenerAutotest;
+    const size_t timelineLen = autotest == 2 ? sizeof(kFenerAutotestPlayer) / sizeof(FenerKeyAt) : sizeof(kFenerAutotest) / sizeof(FenerKeyAt);
     if (!glfwInit()) { std::printf("glfwInit failed\n"); return 1; }
     GLFWmonitor* mon = glfwGetPrimaryMonitor();
     const GLFWvidmode* mode = glfwGetVideoMode(mon);
@@ -337,14 +465,15 @@ static int runFenerWindow(FenerApp& app, bool windowed, bool autotest) {
     auto say = [&](const std::string& m) { message = m; messageUntil = fnow() + 3.0; std::printf("%s\n", m.c_str()); };
     const double winStart = fnow();
     size_t autoNext = 0;
+    double mouseX = 0.0, mouseY = 0.0;
     while (!glfwWindowShouldClose(win)) {
         glfwPollEvents();
-        if (autotest && autoNext < sizeof(kFenerAutotest) / sizeof(kFenerAutotest[0]) && fnow() - winStart > kFenerAutotest[autoNext].t) {
-            std::printf("autotest: key %d at %.1f s (%.1f fps, walk %.0f m, v %.1f m/s, EV %+.2f)\n", kFenerAutotest[autoNext].key, fnow() - winStart, fps,
-                        app.journey.d, app.journey.v, app.evAdapt);
+        if (autotest && autoNext < timelineLen && fnow() - winStart > timeline[autoNext].t) {
+            std::printf("autotest: key %d at %.1f s (%.1f fps, walk %.0f m, v %.1f m/s, EV %+.2f, mode %d, feet %.1f %.1f %.1f)\n", timeline[autoNext].key,
+                        fnow() - winStart, fps, app.journey.d, app.journey.v, app.evAdapt, app.mode, app.player.feet.x, app.player.feet.y, app.player.feet.z);
             std::printf("          window: focused %d, iconified %d\n", glfwGetWindowAttrib(win, GLFW_FOCUSED), glfwGetWindowAttrib(win, GLFW_ICONIFIED));
             std::fflush(stdout);
-            g_fkeys[kFenerAutotest[autoNext].key] = true;
+            g_fkeys[timeline[autoNext].key] = true;
             ++autoNext;
         }
         if (fpressed(GLFW_KEY_ESCAPE)) break;
@@ -357,11 +486,31 @@ static int runFenerWindow(FenerApp& app, bool windowed, bool autotest) {
         if (fpressed(GLFW_KEY_P)) { paused = !paused; say(paused ? "zaman durdu" : "zaman akiyor"); }
         if (fpressed(GLFW_KEY_RIGHT)) t += 1.0;
         if (fpressed(GLFW_KEY_LEFT)) t -= 1.0;
-        if (fpressed(GLFW_KEY_SPACE)) {
-            app.journey.target ^= 1;
-            say(app.journey.target ? "yola cikis: B" : "yola cikis: A");
+        if (fpressed(GLFW_KEY_TAB)) {
+            app.mode = (app.mode + 1) % 3;
+            if (app.mode == 0) {
+                glfwSetInputMode(win, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+                app.applyJourney();
+                app.renderer.resetHistory();
+                say("SAHNE");
+            } else {
+                glfwSetInputMode(win, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+                if (glfwRawMouseMotionSupported()) glfwSetInputMode(win, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
+                glfwGetCursorPos(win, &mouseX, &mouseY);
+                app.placePlayer(app.mode);
+                say(app.mode == 1 ? "OYUNCU: WASD yuru, fare bak, Shift kos, Bosluk zipla  (Tab: fener adasi)" : "OYUNCU: fener adasi  (Tab: sahneye don)");
+            }
         }
-        if (fpressed(GLFW_KEY_B)) { app.setView(app.view + 1); say(std::string("bakis ") + app.scene.views[app.view].name); }
+        bool jump = false;
+        if (fpressed(GLFW_KEY_SPACE)) {
+            if (app.mode == 0) {
+                app.journey.target ^= 1;
+                say(app.journey.target ? "yola cikis: B" : "yola cikis: A");
+            } else {
+                jump = true;
+            }
+        }
+        if (fpressed(GLFW_KEY_B) && app.mode == 0) { app.setView(app.view + 1); say(std::string("bakis ") + app.scene.views[app.view].name); }
         for (int v = 0; v < 5; ++v)
             if (fpressed(GLFW_KEY_1 + v)) p.view = v;
         if (fpressed(GLFW_KEY_UP)) { app.ev += 0.25f; p.exposure = std::pow(2.0f, app.ev); }
@@ -371,15 +520,30 @@ static int runFenerWindow(FenerApp& app, bool windowed, bool autotest) {
             if (app.compile()) { app.applyConfig(); app.rebuildScene(); say("yeniden derlendi"); }
             else say("DERLEME HATASI: konsola bak");
         }
-        if (fpressed(GLFW_KEY_S)) { app.save(app.root + "/captures/fener_" + stamp()); say("ekran goruntusu kaydedildi"); }
+        if (app.mode == 0 && fpressed(GLFW_KEY_S)) { app.save(app.root + "/captures/fener_" + stamp()); say("ekran goruntusu kaydedildi"); }
+        if (app.mode != 0 && fpressed(GLFW_KEY_F12)) { app.save(app.root + "/captures/fener_" + stamp()); say("ekran goruntusu kaydedildi"); }
+        g_fkeys[GLFW_KEY_S] = false;   // in player mode S walks backwards; F12 takes the screenshot
 
         const double now = fnow();
         if (!paused) t += now - last;
         last = now;
         app.setTime(float(t));
-        if (app.journey.moving()) {
+        if (app.mode == 0 && app.journey.moving()) {
             app.journey.step(float(std::min(now - lastStep, 0.1)), app.cfg.f("journey.speed", 12.0f), app.cfg.f("journey.accel", 1.0f));
             app.applyJourney();
+        }
+        if (app.mode != 0) {
+            double mx, my;
+            glfwGetCursorPos(win, &mx, &my);
+            const float sens = app.cfg.f("player.mouse", 0.0022f);
+            app.player.yaw += float(mx - mouseX) * sens;
+            app.player.pitch = std::max(-1.45f, std::min(1.45f, app.player.pitch - float(my - mouseY) * sens));
+            mouseX = mx;
+            mouseY = my;
+            const float inF = (glfwGetKey(win, GLFW_KEY_W) == GLFW_PRESS ? 1.0f : 0.0f) - (glfwGetKey(win, GLFW_KEY_S) == GLFW_PRESS ? 1.0f : 0.0f);
+            const float inR = (glfwGetKey(win, GLFW_KEY_D) == GLFW_PRESS ? 1.0f : 0.0f) - (glfwGetKey(win, GLFW_KEY_A) == GLFW_PRESS ? 1.0f : 0.0f);
+            app.stepPlayer(inF, inR, glfwGetKey(win, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS, jump, float(std::min(now - lastStep, 0.05)));
+            app.applyPlayerCamera();
         }
         app.frame(k++);
         app.adaptExposure(float(std::min(now - lastStep, 0.1)), false);
@@ -415,10 +579,11 @@ static int runFenerWindow(FenerApp& app, bool windowed, bool autotest) {
             char b[512];
             const FenerTimes& tm = app.renderer.times();
             std::snprintf(b, sizeof(b),
-                          "FENER  %.1f fps  yol %.0f / %.0f m  t %.1f s   yuzey %.1f  hacim %.1f  taa %.1f  isilti %.1f ms   EV %+.2f\n"
-                          "%.0f W / %.0f W   %u MHz   %u C   gorunum %d",
-                          fps, app.journey.d, app.journey.length(), t, tm.surface, tm.volume + tm.resolve, tm.compose + tm.taa, tm.glow + tm.final,
-                          app.ev, stats.watts, stats.limitWatts, stats.smClockMHz, stats.tempC, p.view);
+                          "FENER %s  %.1f fps  yol %.0f / %.0f m  t %.1f s   yuzey %.1f  hacim %.1f  taa %.1f  isilti %.1f ms   EV %+.2f\n"
+                          "%.0f W / %.0f W   %u MHz   %u C   gorunum %d   Tab: sahne / oyuncu / fener adasi",
+                          app.mode == 0 ? "SAHNE" : (app.player.swimming ? "OYUNCU (yuzuyor)" : "OYUNCU"), fps, app.journey.d, app.journey.length(), t,
+                          tm.surface, tm.volume + tm.resolve, tm.compose + tm.taa, tm.glow + tm.final, app.ev, stats.watts, stats.limitWatts,
+                          stats.smClockMHz, stats.tempC, p.view);
             drawText(24, float(fbh) - 64.0f, b, 2.0f);
             if (fnow() < messageUntil) drawText(24, float(fbh) - 100.0f, message, 2.0f);
         }
@@ -432,9 +597,11 @@ static int runFenerWindow(FenerApp& app, bool windowed, bool autotest) {
 
 int runFener(int argc, char** argv) {
     FenerApp app;
-    bool headless = false, windowed = false, autotest = false;
+    bool headless = false, windowed = false;
+    int autotest = 0;
     int frames = 0, live = 0, journeyFrames = 0, journeyEvery = 30;
     float atMeters = -1.0f;
+    bool playerTest = false;
     int pview = 0;   // 1 surface only, 2 volume only, 3 depth, 4 normals
     float t0 = -1.0f;
     std::string out, viewName, mapOut;
@@ -444,11 +611,13 @@ int runFener(int argc, char** argv) {
         if (a == "--scene") next();
         else if (a == "--headless") headless = true;
         else if (a == "--windowed") windowed = true;
-        else if (a == "--autotest") autotest = true;
+        else if (a == "--autotest") autotest = 1;
+        else if (a == "--autotest-player") autotest = 2;
         else if (a == "--frames") frames = std::stoi(next());
         else if (a == "--live") live = std::stoi(next());
         else if (a == "--journey") journeyFrames = std::stoi(next());
         else if (a == "--at") atMeters = std::stof(next());
+        else if (a == "--player-test") { playerTest = true; headless = true; }
         else if (a == "--pview") pview = std::stoi(next());
         else if (a == "--every") journeyEvery = std::max(1, std::stoi(next()));
         else if (a == "--out") out = next();
@@ -497,6 +666,38 @@ int runFener(int argc, char** argv) {
         std::printf("still: %d frames in %.2f s, metered log2 %.2f, adaptation %+.2f EV\n", frames, fnow() - s0, app.renderer.meteredLog2(), app.evAdapt);
         printTimes(app.renderer.times());
         app.save(out.empty() ? app.root + "/captures/fener_still_" + stamp() : out);
+    } else if (headless && playerTest) {
+        // player check without a window: walk north from A into the cove, back, jump, run through the forest, swim;
+        // then the lighthouse island. Positions printed, a frame saved at each step.
+        const std::string o = out.empty() ? app.root + "/captures/fener_oyuncu_" + stamp() : out;
+        struct Leg { const char* name; int mode; float f, r, yaw; bool run, jump; float seconds; };
+        const Leg legs[] = {{"A'dan koya, suya", 1, 1, 0, 0.0f, false, false, 6.0f},  {"geri, kiyiya", 1, -1, 0, 0.0f, false, false, 8.0f},
+                            {"zipla", 1, 0, 0, 0.0f, false, true, 1.2f},               {"guneye kos, ormana", 1, 1, 0, 3.1416f, true, false, 8.0f},
+                            {"dogu, agaclar arasi", 1, 1, 0, 1.5708f, true, false, 8.0f}, {"fener adasi", 2, 0, 0, 0.0f, false, false, 0.5f},
+                            {"kuleye yuru", 2, 1, 0, -0.18f, false, false, 6.0f},      {"kulubeye", 2, 1, 0, 1.75f, false, false, 14.0f}};
+        int curMode = 0, n = 0;
+        for (const Leg& L : legs) {
+            if (L.mode != curMode) { app.mode = curMode = L.mode; app.placePlayer(L.mode); }
+            if (L.f != 0.0f || L.r != 0.0f) app.player.yaw = L.yaw;
+            const int steps = int(L.seconds * 60.0f);
+            float maxY = app.player.feet.y;
+            for (int k = 0; k < steps; ++k) {
+                app.stepPlayer(L.f, L.r, L.run, L.jump && k == 0, 1.0f / 60.0f);
+                maxY = std::max(maxY, app.player.feet.y);
+            }
+            const float g = fenerTerrain(app.player.feet.x, app.player.feet.z);
+            std::printf("%-22s feet %8.1f %6.2f %8.1f  ground %6.2f  peak %+.2f  %s%s\n", L.name, app.player.feet.x, app.player.feet.y,
+                        app.player.feet.z, g, maxY - g, app.player.onGround ? "yerde" : "havada", app.player.swimming ? " yuzuyor" : "");
+            app.applyPlayerCamera();
+            app.setTime(t0 + n);
+            app.renderer.resetHistory();
+            for (int k = 0; k < 24; ++k) app.frame(unsigned(k));
+            app.adaptExposure(0.0f, true);
+            for (int k = 0; k < 24; ++k) app.frame(unsigned(k));
+            char nm[32];
+            std::snprintf(nm, sizeof(nm), "_%d", n++);
+            app.save(o + nm);
+        }
     } else if (headless && journeyFrames > 0) {
         const std::string o = out.empty() ? app.root + "/captures/fener_yol_" + stamp() : out;
         app.journey.target = 1;

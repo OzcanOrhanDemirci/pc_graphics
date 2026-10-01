@@ -5,6 +5,9 @@
 > - `fener.exe`: sahne 2, Inside tarzı deniz feneri. Tuşlar: **Boşluk** A'dan B'ye orman içinden yürü (yolda basarsan
 >   geri döner) · **B** öbür bakışa atla · **P** zamanı durdur · **← / →** zaman ∓1 sn · **↑ / ↓** pozlama · **S** ekran
 >   görüntüsü · **H** gösterge · **F5** `scenes/fener.cfg` ve gölgelendiricileri yeniden yükle · **Esc** çıkış.
+>   **Tab** oyuncu kipi (merak, dünya bunun için kurulmadı): 1. Tab kendi adanda A'da, 2. Tab fener adasında kulenin
+>   dibinde, 3. Tab sahneye dönüş. Oyuncuyken **WASD** yürü · **fare** bak · **Shift** koş · **Boşluk** zıpla ·
+>   **F12** ekran görüntüsü. Ağaç gövdelerine, kuleye ve kulübeye çarparsın; derin suda yüzersin.
 
 # Sahne 1 — "Altın saatte cam ve taş"
 

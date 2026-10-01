@@ -44,11 +44,13 @@ struct FenerScene {
     float3 lampPos;
     float3 winCorner, winU, winV, winN;
     std::vector<float3> journey;           // A -> B through the forest, 1 m steps, y = ground
+    float3 cabin;                          // centre of the cabin's floor (8 x 5.2 m, walls along x and z)
     size_t triangles() const;
 };
 
 FenerScene buildFenerScene(const Config& cfg);
 float fenerGround(float x, float z);    // the camera island's ground height (the journey walks on it)
+float fenerTerrain(float x, float z);   // both islands' ground (the player walks on it); below 0 is the sea
 // A top-down map of the world (same height functions and instances as the renderer): PNG.
 bool fenerMap(const FenerScene& s, const Config& cfg, const std::string& path);
 void fenerCamera(const FenerView& v, unsigned int width, unsigned int height, FCamera& cam);

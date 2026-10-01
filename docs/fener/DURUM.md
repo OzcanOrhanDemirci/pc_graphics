@@ -3,6 +3,14 @@
 > Tek kaynak durum panosu. Plan ve Özcan'ın tarifi `docs/fener/PLAN.md`'de.
 
 ## Şu an
+- **2026-10-01 · Oyuncu kipi (merak, Özcan'ın isteği).** *"İnce detaylarla hiç uğraşma, ben mümkünatını görmek istiyorum
+  [...] tab tuşuyla oyuncu-sahne arasında geçiş yapabilelim. Mevcut hali dursun [...] 3. tab da karşı adaya ışınlanalım.
+  O deniz fenerinin yakından halini de görmek isterim, bir şey değiştirme."* `fener.exe` içinde **Tab**: sahne →
+  oyuncu (A'da) → oyuncu (fener adası, kulenin dibi) → sahne. WASD, fare, Shift koş, Boşluk zıpla, F12 ekran görüntüsü.
+  Kinematik gövde: yer yüksekliği analitik (iki ada), gövde çarpışması daire (8 m ızgara), kule ve kulübe engel, derin
+  suda yüzme (göz su yüzünün 25 cm üstünde). Dünyaya dokunulmadı. Ölçüldü (`--player-test`): zıplama 1,16 m (hesap 1,17),
+  koşu 8 sn'de 61 m (gövde sürtünmesiyle), kuleye yürüyünce 5,05 m'de durur, koyda yüzer; pencerede `--autotest-player`
+  Tab/zıpla/ışınlan/geri dön akışı 88-108 fps. Kareler `docs/fener/kareler/oyuncu_*`.
 - **2026-10-01 · Sahne 2 kapandı.** Özcan: "Çok güzel oldu. Görev tamamlandı." Açmak: `build\fener.exe`. Sanat cilası
   (aşağıdaki "Açık" maddeleri) yapılmadan kapandı; istenirse açılır.
 - **2026-10-01 · F2 + yolculuk çalışıyor.** Kuşbakışı harita (`--map`), A ve B kilitli, Space ile A → B orman içinden
