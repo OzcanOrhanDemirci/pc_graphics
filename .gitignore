@@ -1,0 +1,9 @@
+# Third-party pieces are fetched, not committed (third_party/fetch.sh)
+third_party/*
+!third_party/fetch.sh
+# Build output, renders, captures
+build/
+out/
+tools/smoke/out/
+*.exr
+__pycache__/
