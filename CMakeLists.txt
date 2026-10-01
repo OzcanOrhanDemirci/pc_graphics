@@ -15,6 +15,8 @@ add_executable(stress
     src/image_io.cpp
     src/gpu_stats.cpp
     src/photons.cu
+    src/kernels.cu
+    src/denoiser.cpp
     ${TP}/tinyexr/miniz.c)
 
 target_include_directories(stress PRIVATE

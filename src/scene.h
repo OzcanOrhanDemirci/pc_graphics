@@ -42,6 +42,9 @@ struct Scene {
     std::vector<Emitter> emitters;
     float3 hazeMin, hazeMax;
     float3 sunDir;
+    // live mode animates these sphere ranges around their rest positions
+    int dustBegin = 0, dustEnd = 0, bubbleBegin = 0, bubbleEnd = 0;
+    std::vector<float4> restSpheres;
 
     int addMaterial(const Material& m) { materials.push_back(m); return int(materials.size()) - 1; }
     void addTriangle(float3 a, float3 b, float3 c, int mat);
@@ -54,6 +57,8 @@ struct Scene {
 };
 
 Scene buildScene(const Config& cfg);
+// Positions of the drifting things (dust, bubbles) at time t, into s.spheres.
+void animateScene(Scene& s, float t);
 void cameraFromPreset(const CameraPreset& p, unsigned int width, unsigned int height, Camera& cam);
 
 // Spectral helpers on the host

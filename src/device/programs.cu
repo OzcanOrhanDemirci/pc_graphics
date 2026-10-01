@@ -125,8 +125,9 @@ static __forceinline__ __device__ void fetchTriangle(int prim, float2 bary, floa
     if (dot(ns, ng) < 0.0f) ns = ng;
 }
 
-static __forceinline__ __device__ Hit traceRadiance(float3 o, float3 d, float tmax, bool reorder = true) {
-    optixTraverse(params.handle, o, d, 0.0f, tmax, 0.0f, OptixVisibilityMask(255), OPTIX_RAY_FLAG_DISABLE_ANYHIT,
+// Visibility masks: 1 everything that shapes the light, 2 dust (only camera rays see it).
+static __forceinline__ __device__ Hit traceRadiance(float3 o, float3 d, float tmax, bool reorder = true, unsigned int mask = 1u) {
+    optixTraverse(params.handle, o, d, 0.0f, tmax, 0.0f, OptixVisibilityMask(mask), OPTIX_RAY_FLAG_DISABLE_ANYHIT,
                   RAY_RADIANCE, RAY_TYPES, RAY_RADIANCE);
     Hit h;
     h.hit = optixHitObjectIsHit();
@@ -172,7 +173,7 @@ static __forceinline__ __device__ float4 traceShadow(float3 o, float3 d, float t
     unsigned int vis = 0u;
     unsigned int t0 = f2u(1.0f), t1 = f2u(1.0f), t2 = f2u(1.0f), t3 = f2u(1.0f);
     unsigned int l0 = f2u(lambda.x), l1 = f2u(lambda.y), l2 = f2u(lambda.z), l3 = f2u(lambda.w);
-    optixTrace(params.handle, o, d, 0.0f, tmax, 0.0f, OptixVisibilityMask(255),
+    optixTrace(params.handle, o, d, 0.0f, tmax, 0.0f, OptixVisibilityMask(1u),
                OPTIX_RAY_FLAG_TERMINATE_ON_FIRST_HIT | OPTIX_RAY_FLAG_DISABLE_CLOSESTHIT, RAY_SHADOW, RAY_TYPES, RAY_SHADOW,
                vis, t0, t1, t2, t3, l0, l1, l2, l3);
     if (!vis) return f4(0.0f);
@@ -747,8 +748,8 @@ static __forceinline__ __device__ PathOut tracePath(unsigned int px, unsigned in
     const float rad = fminf(0.42f * sqrtf(-2.0f * logf(fmaxf(1e-7f, ug.x))), 1.5f);
     const float jx = 0.5f + rad * cosf(2.0f * M_PIf * ug.y), jy = 0.5f + rad * sinf(2.0f * M_PIf * ug.y);
     const Camera& cam = params.cam;
-    const float sx = ((px + jx) / params.width) * 2.0f - 1.0f;
-    const float sy = 1.0f - ((py + jy) / params.height) * 2.0f;
+    const float sx = ((px + jx) / params.renderWidth) * 2.0f - 1.0f;
+    const float sy = 1.0f - ((py + jy) / params.renderHeight) * 2.0f;
     float3 d = cam.fwd + cam.right * (sx * cam.tanHalfX) + cam.up * (sy * cam.tanHalfY);
     float3 o = cam.pos;
     if (cam.lensRadius > 0.0f) {
@@ -775,11 +776,11 @@ static __forceinline__ __device__ PathOut tracePath(unsigned int px, unsigned in
     const int maxDepth = params.furnace ? 4096 : params.maxDepth;
 
     for (int depth = 0; depth < maxDepth; ++depth) {
-        const Hit h = traceRadiance(o, d, 1e16f);
+        const Hit h = traceRadiance(o, d, 1e16f, true, nonDelta == 0 ? 3u : 1u);
         const float tSeg = h.hit ? h.t : 1e16f;
         segDist += tSeg;
 
-        if (medium == IOR_AIR && hazeActive()) {
+        if (medium == IOR_AIR && hazeActive() && (params.hazeAllSegments || nonDelta == 0)) {
             float t0, t1;
             if (hazeSegment(o, d, tSeg, t0, t1)) {
                 if (params.enableBeams && params.numBeams > 0 && nonDelta == 0)
@@ -845,8 +846,10 @@ static __forceinline__ __device__ PathOut tracePath(unsigned int px, unsigned in
         const float3 wo = -d;
         if (!out.aov) {
             out.aov = true;
-            out.albedo = make_float3(1, 1, 1) * (0.25f * hsum(s.albedo));
-            out.normal = s.ns;
+            // albedo guide in linear sRGB: the reflectance spectrum under an equal-energy white, normalised
+            const float3 a = xyzToLinearSRGB(spectrumToXYZ(s.albedo, wl));
+            out.albedo = make_float3(a.x / 1.2049f, a.y / 0.9483f, a.z / 0.9088f);
+            out.normal = s.ng;   // geometric: the bump normals made the denoiser draw streaks on the plaster
         }
         if (params.enablePhotons && params.numPhotons > 0 && nonDelta < params.gatherDepth) {
             const float3 c = gatherCaustics(s, wo) * throughputGray(beta, wl);
@@ -891,13 +894,18 @@ static __forceinline__ __device__ PathOut tracePath(unsigned int px, unsigned in
 
 extern "C" __global__ void __raygen__render() {
     const uint3 idx = optixGetLaunchIndex();
-    const unsigned int pix = idx.y * params.width + idx.x;
+    const unsigned int pix = idx.y * params.renderWidth + idx.x;
     const long long c0 = clock64();
     float3 sum = make_float3(0, 0, 0), sumC = make_float3(0, 0, 0), alb = make_float3(0, 0, 0), nrm = make_float3(0, 0, 0);
     float n = 0.0f;
     for (unsigned int s = 0; s < params.sppPerLaunch; ++s) {
         Rng rng = makeRng(pix, params.frame * params.sppPerLaunch + s, 0xA511E9B3u ^ (params.seed * 0x9E3779B9u));
-        const PathOut r = tracePath(idx.x, idx.y, rng);
+        PathOut r = tracePath(idx.x, idx.y, rng);
+        if (params.sampleClampY > 0.0f) {   // live mode: fireflies would become blotches in the denoiser
+            float3 base = r.xyz - r.causticXyz;
+            if (base.y > params.sampleClampY) base = base * (params.sampleClampY / base.y);
+            r.xyz = base + r.causticXyz;
+        }
         const float v = r.xyz.x + r.xyz.y + r.xyz.z + r.causticXyz.x;
         if (!isfinite(v)) {
             atomicAdd(params.nanCounter, 1u);
@@ -910,14 +918,29 @@ extern "C" __global__ void __raygen__render() {
         n += 1.0f;
     }
     const bool reset = params.frame == 0;
+    if (params.liveAlpha > 0.0f && !reset) {
+        // live mode: exponential moving average, normalised to one sample (w stays 1)
+        const float k = params.liveAlpha / n, kc = params.liveAlphaCaustic / n;
+        auto ema = [](float4 old, float3 s, float wNew, float alpha) {
+            return make_float4(old.x * (1.0f - alpha) + s.x * wNew, old.y * (1.0f - alpha) + s.y * wNew, old.z * (1.0f - alpha) + s.z * wNew, 1.0f);
+        };
+        params.accum[pix] = ema(params.accum[pix], sum, k, params.liveAlpha);
+        params.causticAccum[pix] = ema(params.causticAccum[pix], sumC, kc, params.liveAlphaCaustic);
+        params.aovAlbedo[pix] = ema(params.aovAlbedo[pix], alb, k, params.liveAlpha);
+        params.aovNormal[pix] = ema(params.aovNormal[pix], nrm, k, params.liveAlpha);
+        params.heat[pix] = float(clock64() - c0);
+        return;
+    }
+    const float wn = params.liveAlpha > 0.0f ? 1.0f / n : 1.0f;   // live mode keeps w = 1 from the first frame
+    const float nn = params.liveAlpha > 0.0f ? 1.0f : n;
     float4 a = reset ? f4(0.0f) : params.accum[pix];
-    params.accum[pix] = a + make_float4(sum.x, sum.y, sum.z, n);
+    params.accum[pix] = a + make_float4(sum.x * wn, sum.y * wn, sum.z * wn, nn);
     float4 c = reset ? f4(0.0f) : params.causticAccum[pix];
-    params.causticAccum[pix] = c + make_float4(sumC.x, sumC.y, sumC.z, n);
+    params.causticAccum[pix] = c + make_float4(sumC.x * wn, sumC.y * wn, sumC.z * wn, nn);
     float4 aa = reset ? f4(0.0f) : params.aovAlbedo[pix];
-    params.aovAlbedo[pix] = aa + make_float4(alb.x, alb.y, alb.z, n);
+    params.aovAlbedo[pix] = aa + make_float4(alb.x * wn, alb.y * wn, alb.z * wn, nn);
     float4 an = reset ? f4(0.0f) : params.aovNormal[pix];
-    params.aovNormal[pix] = an + make_float4(nrm.x, nrm.y, nrm.z, n);
+    params.aovNormal[pix] = an + make_float4(nrm.x * wn, nrm.y * wn, nrm.z * wn, nn);
     params.heat[pix] = float(clock64() - c0);
 }
 
@@ -962,26 +985,53 @@ static __forceinline__ __device__ float3 heatColor(float t) {
     return make_float3(saturate(1.5f * t * 2.0f - 0.5f), saturate(sinf(t * M_PIf)), saturate(1.0f - 2.0f * t));
 }
 
+// Reads a render-resolution buffer at an output pixel: identical sizes index directly, the upscaled live mode
+// interpolates bilinearly (sample counts in w are constant there).
+static __forceinline__ __device__ float4 renderBuffer(const float4* buf, unsigned int x, unsigned int y) {
+    if (params.renderWidth == params.width) return buf[y * params.width + x];
+    const float fx = (x + 0.5f) * params.renderWidth / params.width - 0.5f, fy = (y + 0.5f) * params.renderHeight / params.height - 0.5f;
+    const int x0 = max(0, min(int(floorf(fx)), int(params.renderWidth) - 1)), y0 = max(0, min(int(floorf(fy)), int(params.renderHeight) - 1));
+    const int x1 = min(x0 + 1, int(params.renderWidth) - 1), y1 = min(y0 + 1, int(params.renderHeight) - 1);
+    const float tx = saturate(fx - x0), ty = saturate(fy - y0);
+    const unsigned int W = params.renderWidth;
+    return (buf[y0 * W + x0] * (1.0f - tx) + buf[y0 * W + x1] * tx) * (1.0f - ty) + (buf[y1 * W + x0] * (1.0f - tx) + buf[y1 * W + x1] * tx) * ty;
+}
+
 extern "C" __global__ void __raygen__tonemap() {
     const uint3 idx = optixGetLaunchIndex();
     const unsigned int pix = idx.y * params.width + idx.x;
     float3 rgb;
     bool linearOut = true;
     if (params.view == 1 || params.view == 2) {
-        const float4 a = params.view == 1 ? params.aovAlbedo[pix] : params.aovNormal[pix];
+        const float4 a = renderBuffer(params.view == 1 ? params.aovAlbedo : params.aovNormal, idx.x, idx.y);
         rgb = make_float3(a.x, a.y, a.z) * (1.0f / fmaxf(a.w, 1.0f));
         if (params.view == 2) rgb = rgb * 0.5f + make_float3(0.5f, 0.5f, 0.5f);
         linearOut = false;
     } else if (params.view == 4) {
-        rgb = heatColor(params.heat[pix] / (params.exposure * 2.0e6f));
+        rgb = heatColor(params.heat[(idx.y * params.renderHeight / params.height) * params.renderWidth + idx.x * params.renderWidth / params.width] /
+                        (params.exposure * 2.0e6f));
         linearOut = false;
     } else {
-        const float4 a = params.view == 3 ? params.causticAccum[pix] : params.accum[pix];
+        const bool den = params.denoised && params.view == 0;
+        const float4 a = renderBuffer(params.view == 3 || den ? params.causticAccum : params.accum, idx.x, idx.y);
         const float3 raw = make_float3(a.x, a.y, a.z) * (1.0f / fmaxf(a.w, 1.0f)) * params.exposure;
         const float* m = params.wbMatrix;
         const float3 xyz = make_float3(m[0] * raw.x + m[1] * raw.y + m[2] * raw.z, m[3] * raw.x + m[4] * raw.y + m[5] * raw.z,
                                        m[6] * raw.x + m[7] * raw.y + m[8] * raw.z);
-        rgb = agx(gamutCompress(xyzToLinearSRGB(xyz), xyz.y));
+        float3 lin = xyzToLinearSRGB(xyz);
+        float Y = xyz.y;
+        if (den && params.denoisedCaustic) {   // live mode: the caustic layer comes denoised as well
+            const float4 dc = params.denoisedCaustic[pix];
+            lin = make_float3(dc.x, dc.y, dc.z) * params.exposure;
+            Y = 0.2126f * lin.x + 0.7152f * lin.y + 0.0722f * lin.z;
+        }
+        if (den) {   // the denoised diffuse/glossy light plus the caustics, which never went through the denoiser
+            const float4 dn = params.denoised[pix];
+            const float3 d = make_float3(dn.x, dn.y, dn.z) * params.exposure;
+            lin = lin + d;
+            Y += 0.2126f * d.x + 0.7152f * d.y + 0.0722f * d.z;
+        }
+        rgb = agx(gamutCompress(lin, Y));
     }
     float3 enc = linearOut ? make_float3(srgbOetf(rgb.x), srgbOetf(rgb.y), srgbOetf(rgb.z)) : rgb;
     // blue-noise dither with a triangular distribution of +-1 LSB

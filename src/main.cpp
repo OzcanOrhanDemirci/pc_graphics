@@ -59,6 +59,10 @@ struct App {
     double start = 0;
     unsigned int photonsDefault = 0;
     float autoEvTarget = 0.0f;
+    bool headlessDenoise = false;
+    bool denoise = true;
+    bool liveDenoiseCaustics = true;
+    unsigned int denoiseUntil = 8192;
 
     void loadConfig() {
         cfg = Config();
@@ -76,6 +80,7 @@ struct App {
         p.hazeSigmaA = cfg.f("haze.sigma_a", 0.002f);
         p.hazeG = cfg.f("haze.g", 0.65f);
         p.hazeBeamFraction = cfg.f("haze.beam_fraction", 0.75f);
+        p.hazeAllSegments = 1;
         p.maxDepth = cfg.i("path.max_depth", 12);
         p.enableSunPatch = cfg.i("path.sun_patch", 0);
         p.waterDepthTint = cfg.f("water.tint", 0.05f);
@@ -90,6 +95,9 @@ struct App {
         p.skyMapFraction = cfg.f("sky.map_fraction", 0.0f);
         p.debugFlags = cfg.i("debug.flags", 0);
         p.enablePhotons = cfg.i("photon.enable", 1);
+        denoise = cfg.i("denoise.enable", 1) != 0;
+        liveDenoiseCaustics = cfg.i("live.denoise_caustics", 0) != 0;
+        denoiseUntil = unsigned(cfg.f("denoise.until", 8192.0f));
         p.gatherDepth = cfg.i("photon.gather_depth", 2);
         renderer.photonRadius0 = cfg.f("photon.radius", 0.01f);
         renderer.photonsPerFrame = unsigned(cfg.f("photon.count", 1048576.0f));
@@ -104,6 +112,32 @@ struct App {
         renderer.uploadScene(scene);
         setCamera(camera);
         renderer.updateSky();
+    }
+    // live mode: the scene moves (water, dust, bubbles); the accumulation becomes an exponential average
+    void setLive(bool on) {
+        Params& p = renderer.params();
+        p.liveAlpha = on ? cfg.f("live.alpha", 0.12f) : 0.0f;
+        p.liveAlphaCaustic = on ? cfg.f("live.alpha_caustic", 0.06f) : 0.0f;
+        p.sampleClampY = on ? cfg.f("live.clamp", 0.25f) : 0.0f;
+        p.maxDepth = on ? cfg.i("live.max_depth", 6) : cfg.i("path.max_depth", 12);
+        p.hazeAllSegments = on ? cfg.i("live.haze_all", 0) : 1;
+        renderer.useTemporalDenoiser = on && cfg.i("live.temporal", 1) != 0;
+        renderer.setHalfResolution(on && renderer.useTemporalDenoiser && cfg.i("live.upscale", 1) != 0);
+        if (renderer.useTemporalDenoiser) p.liveAlpha = cfg.f("live.alpha_temporal", 1.0f);   // the denoiser keeps the history
+        renderer.resetDenoiseHistory();
+        renderer.photonRadius0 = on ? cfg.f("live.photon_radius", 0.016f) : cfg.f("photon.radius", 0.01f);
+        renderer.photonsPerFrame = unsigned(on ? cfg.f("live.photon_count", 4194304.0f) : cfg.f("photon.count", 1048576.0f));
+        p.beamFraction = on ? cfg.f("live.beam_fraction", 0.03f) : cfg.f("photon.beam_fraction", 0.125f);
+        renderer.liveRadius = on;
+        if (!on) { animateScene(scene, p.time = cfg.f("time", 0.0f)); renderer.updateSpheres(scene); }
+        renderer.resetAccumulation();
+    }
+    void liveStep(float t) {
+        Params& p = renderer.params();
+        p.time = t;
+        animateScene(scene, t);
+        renderer.updateSpheres(scene);
+        renderer.renderFrame();
     }
     void setCamera(int k) {
         camera = (k % int(scene.cameras.size()) + int(scene.cameras.size())) % int(scene.cameras.size());
@@ -215,6 +249,62 @@ static int runHeadless(App& app, int spp, const std::string& out) {
         std::printf("auto exposure: median Y %.4g -> EV %.2f\n", med, app.ev);
     }
     app.saveCapture(out);
+    if (app.headlessDenoise) {
+        app.renderer.denoise(0.0f);
+        app.renderer.tonemap();
+        app.renderer.downloadOutput(app.pixels);
+        writePNG(out + "_dn.png", int(app.width), int(app.height), reinterpret_cast<const unsigned char*>(app.pixels.data()));
+        std::printf("denoised %s_dn.png (%.1f ms)\n", out.c_str(), app.renderer.denoiseMs());
+        app.renderer.clearDenoised();
+    }
+    return 0;
+}
+
+// Live mode without a window: frames at a fixed rate, per-pass timings, flicker = mean absolute difference of
+// consecutive displayed frames (8-bit), and a few frames written for inspection.
+static int runLiveHeadless(App& app, int frames, float fps, const std::string& out) {
+    app.setLive(true);
+    std::vector<uchar4> prev, cur;
+    double sumRender = 0, sumPhot = 0, sumDn = 0, sumTone = 0, sumWall = 0, sumFlicker = 0, sumFlickerStatic = 0;
+    int counted = 0;
+    std::filesystem::create_directories(std::filesystem::path(out).parent_path());
+    for (int f = 0; f < frames; ++f) {
+        const double t0 = nowSec();
+        app.liveStep(float(f) / fps);
+        app.renderer.params().ditherFrame = f;
+        if (app.denoise) app.renderer.denoise(0.0f, app.liveDenoiseCaustics);
+        app.renderer.tonemap();
+        app.renderer.downloadOutput(cur);
+        const double wall = nowSec() - t0;
+        const PassTimes& t = app.renderer.times();
+        if (f >= 10) {   // after the exponential average settles
+            sumRender += t.render; sumPhot += t.photons + t.grid; sumDn += app.renderer.denoiseMs(); sumTone += t.tonemap; sumWall += wall;
+            if (!prev.empty()) {
+                double d = 0, ds = 0;
+                size_t ns = 0;
+                for (size_t i = 0; i < cur.size(); ++i) {
+                    const double e = std::abs(int(cur[i].x) - int(prev[i].x)) + std::abs(int(cur[i].y) - int(prev[i].y)) + std::abs(int(cur[i].z) - int(prev[i].z));
+                    d += e;
+                    // a region with nothing moving: the upper middle of the frame (walls, above the dust beams)
+                    const size_t x = i % app.width, y = i / app.width;
+                    if (x > app.width / 2 && x < app.width * 7 / 8 && y > app.height / 12 && y < app.height / 3) { ds += e; ++ns; }
+                }
+                sumFlicker += d / (3.0 * cur.size());
+                sumFlickerStatic += ns ? ds / (3.0 * ns) : 0.0;
+            }
+            ++counted;
+        }
+        if (f == 10 || f == frames / 2 || f == frames - 1) {
+            char name[64];
+            std::snprintf(name, sizeof(name), "_f%03d.png", f);
+            writePNG(out + name, int(app.width), int(app.height), reinterpret_cast<const unsigned char*>(cur.data()));
+        }
+        prev = cur;
+    }
+    if (counted > 1)
+        std::printf("live %ux%u: frame %.1f ms wall (%.1f fps) = path %.1f + photons %.1f + denoise %.1f + tonemap %.2f ms; flicker %.3f / 255 (static region %.3f)\n",
+                    app.width, app.height, 1000.0 * sumWall / counted, counted / sumWall, sumRender / counted, sumPhot / counted, sumDn / counted,
+                    sumTone / counted, sumFlicker / (counted - 1), sumFlickerStatic / (counted - 1));
     return 0;
 }
 
@@ -282,7 +372,7 @@ static int runWindow(App& app, bool windowed, bool autotest) {
     uchar4* pinned = nullptr;
     cudaMallocHost(&pinned, size_t(app.width) * app.height * sizeof(uchar4));
 
-    double lastStats = 0, fpsT = nowSec();
+    double lastStats = 0, fpsT = nowSec(), lastDenoise = 0, liveStart = nowSec();
     int fpsFrames = 0;
     float fps = 0;
     GpuStats stats;
@@ -302,11 +392,17 @@ static int runWindow(App& app, bool windowed, bool autotest) {
         }
         if (pressed(GLFW_KEY_ESCAPE)) break;
         if (pressed(GLFW_KEY_H)) app.hud = !app.hud;
-        if (pressed(GLFW_KEY_SPACE)) { app.live = !app.live; app.renderer.resetAccumulation(); }
+        if (pressed(GLFW_KEY_SPACE)) {
+            app.live = !app.live;
+            app.setLive(app.live);
+            liveStart = nowSec();
+            say(app.live ? "CANLI" : "DURAGAN");
+        }
         if (pressed(GLFW_KEY_R)) app.renderer.resetAccumulation();
         if (pressed(GLFW_KEY_C)) app.setCamera(app.camera + 1);
         if (pressed(GLFW_KEY_P)) { p.enablePhotons = !p.enablePhotons; app.renderer.resetAccumulation(); say(std::string("fotonlar ") + (p.enablePhotons ? "acik" : "kapali")); }
         if (pressed(GLFW_KEY_V)) { p.enableHaze = !p.enableHaze; app.renderer.resetAccumulation(); say(std::string("pus ") + (p.enableHaze ? "acik" : "kapali")); }
+        if (pressed(GLFW_KEY_D)) { app.denoise = !app.denoise; say(std::string("gurultu giderici ") + (app.denoise ? "acik" : "kapali")); }
         if (pressed(GLFW_KEY_G)) { p.enableSunPatch = !p.enableSunPatch; app.renderer.resetAccumulation(); say(std::string("gunes lekesi baglantisi ") + (p.enableSunPatch ? "acik" : "kapali")); }
         if (pressed(GLFW_KEY_N)) { p.enableNee = !p.enableNee; app.renderer.resetAccumulation(); say(std::string("NEE ") + (p.enableNee ? "acik" : "kapali")); }
         for (int k = 0; k < 6; ++k)
@@ -333,13 +429,22 @@ static int runWindow(App& app, bool windowed, bool autotest) {
         // render: in still mode keep accumulating for ~30 ms per displayed frame
         const double t0 = nowSec();
         if (app.live) {
-            p.time = float(nowSec() - app.start);
-            app.renderer.resetAccumulation();
-            app.renderer.renderFrame();
+            app.liveStep(float(nowSec() - liveStart));
         } else {
             do { app.renderer.renderFrame(); } while (nowSec() - t0 < 0.030);
         }
         p.ditherFrame = app.live ? int(app.renderer.frame()) : 0;
+        // AI denoiser: every frame in live mode; in still mode at most four times a second, then the last result
+        // is shown (the caustics on top are always current). Past denoise.until samples the raw image converges.
+        const unsigned int spp = app.renderer.samplesPerPixel();
+        if (app.denoise && p.view == 0 && (app.live || spp < app.denoiseUntil)) {
+            if (app.live || nowSec() - lastDenoise > 0.25 || spp < 16) {
+                app.renderer.denoise(0.0f, app.live && app.liveDenoiseCaustics);
+                lastDenoise = nowSec();
+            } else {
+                app.renderer.reuseDenoised();
+            }
+        }
         app.renderer.tonemap();
         cudaMemcpy(pinned, p.output, size_t(app.width) * app.height * sizeof(uchar4), cudaMemcpyDeviceToHost);
 
@@ -373,11 +478,11 @@ static int runWindow(App& app, bool windowed, bool autotest) {
             char b[512];
             const PassTimes& t = app.renderer.times();
             std::snprintf(b, sizeof(b),
-                          "%s  %.1f fps   path %.1f ms   ton %.2f ms   %u spp   EV %+.2f\n"
-                          "%.0f W / %.0f W   %u MHz   %u C   kamera %d   gorunum %d   foton %s  pus %s  NEE %s",
-                          app.live ? "CANLI" : "DURAGAN", fps, t.render, t.tonemap, app.renderer.samplesPerPixel(), app.ev,
-                          stats.watts, stats.limitWatts, stats.smClockMHz, stats.tempC, app.camera, p.view,
-                          p.enablePhotons ? "+" : "-", p.enableHaze ? "+" : "-", p.enableNee ? "+" : "-");
+                          "%s  %.1f fps   yol %.1f ms   foton %.1f ms   gg %.1f ms   ton %.2f ms   %u spp   EV %+.2f\n"
+                          "%.0f W / %.0f W   %u MHz   %u C   kamera %d   gorunum %d   foton %s  pus %s  NEE %s  gg %s",
+                          app.live ? "CANLI" : "DURAGAN", fps, t.render, t.photons + t.grid, app.renderer.denoiseMs(), t.tonemap,
+                          app.renderer.samplesPerPixel(), app.ev, stats.watts, stats.limitWatts, stats.smClockMHz, stats.tempC, app.camera,
+                          p.view, p.enablePhotons ? "+" : "-", p.enableHaze ? "+" : "-", p.enableNee ? "+" : "-", app.denoise ? "+" : "-");
             // bottom left: the top left corner belongs to Ozcan's RTSS overlay
             drawText(24, float(fbh) - 64.0f, b, 2.0f);
             if (nowSec() < messageUntil) drawText(24, float(fbh) - 100.0f, message, 2.0f);
@@ -396,6 +501,7 @@ int main(int argc, char** argv) {
     bool headless = false, windowed = false, selftest = false, compileOnly = false, furnace = false, autotest = false;
     int spp = 64, view = 0, sppPerLaunch = 1;
     unsigned int seed = 0;
+    int liveFrames = 0;
     std::string out;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
@@ -408,6 +514,8 @@ int main(int argc, char** argv) {
         else if (a == "--autotest") autotest = true;
         else if (a == "--auto-ev") app.autoEvTarget = std::stof(next());
         else if (a == "--seed") seed = unsigned(std::stoul(next()));
+        else if (a == "--denoise") app.headlessDenoise = true;
+        else if (a == "--live") liveFrames = std::stoi(next());
         else if (a == "--spp") spp = std::stoi(next());
         else if (a == "--spp-per-launch") sppPerLaunch = std::stoi(next());
         else if (a == "--out") out = next();
@@ -444,7 +552,8 @@ int main(int argc, char** argv) {
     std::printf("scene: %zu triangles, %zu spheres, %zu materials, %zu portals\n", app.scene.indices.size(), app.scene.spheres.size(),
                 app.scene.materials.size(), app.scene.portals.size());
     int rc = 0;
-    if (headless) rc = runHeadless(app, spp, out.empty() ? app.root + "/captures/headless_" + timestamp() : out);
+    if (headless && liveFrames > 0) rc = runLiveHeadless(app, liveFrames, 30.0f, out.empty() ? app.root + "/captures/live_" + timestamp() : out);
+    else if (headless) rc = runHeadless(app, spp, out.empty() ? app.root + "/captures/headless_" + timestamp() : out);
     else rc = runWindow(app, windowed, autotest);
     gpuStatsShutdown();
     app.renderer.shutdown();

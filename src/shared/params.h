@@ -83,17 +83,24 @@ struct Params {
     float4* aovNormal;
     float* heat;                 // per-pixel GPU clock cycles of the last launch
     uchar4* output;
-    unsigned int width, height;
+    unsigned int width, height;  // output (display) size
+    unsigned int renderWidth, renderHeight;  // path tracing size: equal in still mode, half in upscaled live mode
     unsigned int frame;          // frames accumulated so far (seeds the sampler)
     unsigned int sppPerLaunch;
     unsigned int seed;           // decorrelates independent renders of the same frame (noise measurements)
+    float liveAlpha;             // live mode: exponential blend weight of the new frame (0: progressive average)
+    float liveAlphaCaustic;      // same for the caustic buffer
+    int hazeAllSegments;         // single scattering on every path segment (1) or only before the first surface (0)
+    float sampleClampY;          // live mode: a path sample's luminance is clamped to this (0: no clamp, unbiased)
     int view;                    // 0 beauty, 1 albedo, 2 normal, 3 caustics, 4 heat, 5 relative noise
     float exposure;              // linear multiplier before tone mapping
     const float* blueNoise;      // 128 x 128, values in [0,1)
     unsigned long long noiseTex; // cudaTextureObject_t: baked tileable 2D gradient noise (value, d/du, d/dv, second noise)
     float4* noiseBake;           // bake target, NOISE_TEX x NOISE_TEX
     int ditherFrame;
-    float wbMatrix[9];           // XYZ -> XYZ chromatic adaptation (Bradford), row major: camera white balance
+    float wbMatrix[9];
+    const float4* denoised;      // denoised linear sRGB without caustics (null: show the raw accumulation)
+    const float4* denoisedCaustic;// live mode: the caustic layer denoised too (null: raw caustics on top)           // XYZ -> XYZ chromatic adaptation (Bradford), row major: camera white balance
 
     // ---- scene
     OptixTraversableHandle handle;

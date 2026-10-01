@@ -72,6 +72,8 @@ bool Renderer::init(unsigned int width, unsigned int height, const std::string& 
     const size_t n = size_t(width) * height;
     params_.width = width;
     params_.height = height;
+    params_.renderWidth = width;
+    params_.renderHeight = height;
     params_.accum = devAlloc<float4>(n);
     params_.causticAccum = devAlloc<float4>(n);
     params_.aovAlbedo = devAlloc<float4>(n);
@@ -356,9 +358,18 @@ void Renderer::uploadScene(const Scene& s) {
     frame_ = 0;
 }
 
+void Renderer::updateSpheres(const Scene& s) {
+    if (s.spheres.empty()) return;
+    CUDA_CHECK(cudaMemcpyAsync(const_cast<float4*>(params_.spheres), s.spheres.data(), s.spheres.size() * sizeof(float4), cudaMemcpyHostToDevice,
+                               stream_));
+    CUDA_CHECK(cudaStreamSynchronize(stream_));
+    buildAccel(s);
+}
+
 void Renderer::buildAccel(const Scene& s) {
     if (gasTri_) cudaFree(gasTri_);
     if (gasSph_) cudaFree(gasSph_);
+    gasSph_ = nullptr;
     if (ias_) cudaFree(ias_);
     if (instances_) cudaFree(instances_);
     gasTri_ = gasSph_ = ias_ = instances_ = nullptr;
@@ -386,13 +397,14 @@ void Renderer::buildAccel(const Scene& s) {
         std::memcpy(in.transform, id, sizeof(id));
         in.instanceId = 0;
         in.sbtOffset = 0;
-        in.visibilityMask = 255;
+        in.visibilityMask = 1u;
         in.flags = OPTIX_INSTANCE_FLAG_NONE;
         in.traversableHandle = h;
         inst.push_back(in);
     }
     if (!s.spheres.empty()) {
-        // custom primitives: one AABB per sphere, intersected by __intersection__sphere
+        // custom primitives: one AABB per sphere, intersected by __intersection__sphere. Two GASes: the glass,
+        // water and bubbles (seen by every ray, mask 1) and the dust (camera rays only, mask 2).
         std::vector<OptixAabb> boxes(s.spheres.size());
         for (size_t i = 0; i < s.spheres.size(); ++i) {
             const float4 c = s.spheres[i];
@@ -401,26 +413,35 @@ void Renderer::buildAccel(const Scene& s) {
         if (aabbs_) cudaFree(aabbs_);
         CUDA_CHECK(cudaMalloc(&aabbs_, boxes.size() * sizeof(OptixAabb)));
         CUDA_CHECK(cudaMemcpy(aabbs_, boxes.data(), boxes.size() * sizeof(OptixAabb), cudaMemcpyHostToDevice));
-        OptixBuildInput bi{};
-        bi.type = OPTIX_BUILD_INPUT_TYPE_CUSTOM_PRIMITIVES;
-        CUdeviceptr aabbPtr = CUdeviceptr(aabbs_);
-        bi.customPrimitiveArray.aabbBuffers = &aabbPtr;
-        bi.customPrimitiveArray.numPrimitives = unsigned(boxes.size());
-        bi.customPrimitiveArray.strideInBytes = sizeof(OptixAabb);
-        const unsigned int flags[1] = {OPTIX_GEOMETRY_FLAG_NONE};
-        bi.customPrimitiveArray.flags = flags;
-        bi.customPrimitiveArray.numSbtRecords = 1;
-        OptixTraversableHandle h = 0;
-        gasSph_ = buildGAS(context_, bi, OPTIX_BUILD_FLAG_PREFER_FAST_TRACE, h);
-        OptixInstance in{};
-        const float id[12] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0};
-        std::memcpy(in.transform, id, sizeof(id));
-        in.instanceId = 1;
-        in.sbtOffset = 2;
-        in.visibilityMask = 255;
-        in.flags = OPTIX_INSTANCE_FLAG_NONE;
-        in.traversableHandle = h;
-        inst.push_back(in);
+        const unsigned int dustBegin = s.dustEnd > s.dustBegin ? unsigned(s.dustBegin) : unsigned(boxes.size());
+        const unsigned int ranges[2][2] = {{0u, dustBegin}, {dustBegin, unsigned(boxes.size())}};
+        void** gases[2] = {&gasSph_, &gasDust_};
+        if (gasDust_) { cudaFree(gasDust_); gasDust_ = nullptr; }
+        for (int g = 0; g < 2; ++g) {
+            const unsigned int first = ranges[g][0], count = ranges[g][1] - ranges[g][0];
+            if (count == 0) continue;
+            OptixBuildInput bi{};
+            bi.type = OPTIX_BUILD_INPUT_TYPE_CUSTOM_PRIMITIVES;
+            CUdeviceptr aabbPtr = CUdeviceptr(aabbs_) + first * sizeof(OptixAabb);
+            bi.customPrimitiveArray.aabbBuffers = &aabbPtr;
+            bi.customPrimitiveArray.numPrimitives = count;
+            bi.customPrimitiveArray.strideInBytes = sizeof(OptixAabb);
+            bi.customPrimitiveArray.primitiveIndexOffset = first;      // optixGetPrimitiveIndex stays global
+            const unsigned int flags[1] = {OPTIX_GEOMETRY_FLAG_NONE};
+            bi.customPrimitiveArray.flags = flags;
+            bi.customPrimitiveArray.numSbtRecords = 1;
+            OptixTraversableHandle h = 0;
+            *gases[g] = buildGAS(context_, bi, OPTIX_BUILD_FLAG_PREFER_FAST_TRACE, h);
+            OptixInstance in{};
+            const float id[12] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0};
+            std::memcpy(in.transform, id, sizeof(id));
+            in.instanceId = 1;
+            in.sbtOffset = 2;
+            in.visibilityMask = g == 0 ? 1u : 2u;
+            in.flags = OPTIX_INSTANCE_FLAG_NONE;
+            in.traversableHandle = h;
+            inst.push_back(in);
+        }
     }
     CUDA_CHECK(cudaMalloc(&instances_, inst.size() * sizeof(OptixInstance)));
     CUDA_CHECK(cudaMemcpy(instances_, inst.data(), inst.size() * sizeof(OptixInstance), cudaMemcpyHostToDevice));
@@ -504,7 +525,7 @@ void Renderer::tracePhotons() {
     params_.numBeams = 0;
     launch(rgPhotons_, photonsPerFrame, 1, &times_.photons);
     buildBeams();
-    const float r = photonRadius0 * std::pow(float(params_.photonFrame + 1), -1.0f / 6.0f);
+    const float r = liveRadius ? photonRadius0 : photonRadius0 * std::pow(float(params_.photonFrame + 1), -1.0f / 6.0f);
     params_.gatherRadius = r;
     params_.cellSize = 2.0f * r;
     cudaEventRecord(ev0_, stream_);
@@ -524,7 +545,7 @@ void Renderer::buildBeams() {
     n = std::min(n, params_.beamCapacity);
     params_.numBeams = 0;
     if (!params_.enableBeams || n == 0) return;
-    params_.beamRadius = beamRadius0 * std::pow(float(params_.photonFrame + 1), -1.0f / 3.0f);
+    params_.beamRadius = liveRadius ? beamRadius0 : beamRadius0 * std::pow(float(params_.photonFrame + 1), -1.0f / 3.0f);
     if (!beamBoxes_) {
         CUDA_CHECK(cudaMalloc(&beamBoxes_, size_t(params_.beamCapacity) * BEAM_PIECES * sizeof(OptixAabb)));
         OptixBuildInput bi{};
@@ -564,9 +585,48 @@ void Renderer::buildBeams() {
 
 void Renderer::renderFrame() {
     params_.frame = frame_;
+    params_.denoised = nullptr;      // stale once more samples arrive
+    params_.denoisedCaustic = nullptr;
     tracePhotons();
-    launch(rgRender_, width_, height_, &times_.render);
+    launch(rgRender_, params_.renderWidth, params_.renderHeight, &times_.render);
     ++frame_;
+}
+
+void Renderer::setHalfResolution(bool half) {
+    params_.renderWidth = half ? width_ / 2 : width_;
+    params_.renderHeight = half ? height_ / 2 : height_;
+    frame_ = 0;
+    params_.photonFrame = 0;
+}
+
+void Renderer::denoise(float blend, bool caustics) {
+    if (halfResolution()) {
+        if (!upscaleReady_) {
+            upscaleReady_ = upscaleDenoiser_.create(context_, params_.renderWidth, params_.renderHeight, true, true);
+            if (!upscaleReady_) { std::fprintf(stderr, "upscaling denoiser unavailable\n"); return; }
+        }
+        upscaleDenoiser_.run(params_, blend, stream_, caustics);
+        params_.denoised = upscaleDenoiser_.output();
+        params_.denoisedCaustic = caustics ? upscaleDenoiser_.causticOutput() : nullptr;
+        return;
+    }
+    if (useTemporalDenoiser) {
+        if (!temporalReady_) {
+            temporalReady_ = temporalDenoiser_.create(context_, width_, height_, true);
+            if (!temporalReady_) { std::fprintf(stderr, "temporal denoiser unavailable\n"); useTemporalDenoiser = false; return; }
+        }
+        temporalDenoiser_.run(params_, blend, stream_, caustics);
+        params_.denoised = temporalDenoiser_.output();
+        params_.denoisedCaustic = caustics ? temporalDenoiser_.causticOutput() : nullptr;
+        return;
+    }
+    if (!denoiserReady_) {
+        denoiserReady_ = denoiser_.create(context_, width_, height_);
+        if (!denoiserReady_) { std::fprintf(stderr, "denoiser unavailable\n"); return; }
+    }
+    denoiser_.run(params_, blend, stream_, caustics);
+    params_.denoised = denoiser_.output();
+    params_.denoisedCaustic = caustics ? denoiser_.causticOutput() : nullptr;
 }
 
 void Renderer::tonemap() {

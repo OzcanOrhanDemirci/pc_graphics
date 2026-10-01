@@ -266,8 +266,11 @@ Scene buildScene(const Config& cfg) {
     const float prismZ = cfg.f("prism.z", 2.4f);
     const float3 prismPos = cfg.v3("prism.pos", make_float3(beamX(cfg.i("prism.slit", 1), prismZ), 0.0f, prismZ));
     const float pedestalH = cfg.f("pedestal.height", 0.95f);
-    s.addBox(make_float3(prismPos.x - 0.22f, 0.0f, prismPos.z - 0.22f), make_float3(prismPos.x + 0.22f, pedestalH, prismPos.z + 0.22f), mConcrete);
-    const float prismSide = cfg.f("prism.side", 0.16f), prismH = cfg.f("prism.height", 0.30f);
+    // a slender column with a thin top plate: a small shadow in the beam (a block cast a dark wedge through the haze)
+    const float colHalf = cfg.f("pedestal.column", 0.06f), plateHalf = cfg.f("pedestal.plate", 0.17f), plateT = 0.035f;
+    s.addBox(make_float3(prismPos.x - colHalf, 0.0f, prismPos.z - colHalf), make_float3(prismPos.x + colHalf, pedestalH - plateT, prismPos.z + colHalf), mConcrete);
+    s.addBox(make_float3(prismPos.x - plateHalf, pedestalH - plateT, prismPos.z - plateHalf), make_float3(prismPos.x + plateHalf, pedestalH, prismPos.z + plateHalf), mConcrete);
+    const float prismSide = cfg.f("prism.side", 0.20f), prismH = cfg.f("prism.height", 0.40f);
     addPrism(s, make_float3(prismPos.x, pedestalH, prismPos.z), prismSide, prismH, cfg.f("prism.yaw", 20.0f), mPrism);
     s.emitters.push_back({make_float3(prismPos.x - prismSide, pedestalH, prismPos.z - prismSide),
                           make_float3(prismPos.x + prismSide, pedestalH + prismH, prismPos.z + prismSide)});
@@ -284,6 +287,7 @@ Scene buildScene(const Config& cfg) {
 
     // soap bubbles drifting in the light sheet
     const int nb = cfg.i("bubbles", 5);
+    s.bubbleBegin = int(s.spheres.size());
     for (int k = 0; k < nb; ++k) {
         const float fz = std::fmod(0.754878f * (k + 1), 1.0f), fy = std::fmod(0.569840f * (k + 1), 1.0f);
         const float z = 0.9f + 3.6f * fz;
@@ -292,6 +296,33 @@ Scene buildScene(const Config& cfg) {
         s.spheres.push_back(make_float4(c.x, c.y, c.z, 0.035f + 0.045f * std::fmod(0.43f * (k + 2), 1.0f)));
         s.sphereMaterial.push_back(mFilm);
     }
+
+    s.bubbleEnd = int(s.spheres.size());
+
+    // dust motes floating in the sunbeams: points of each slit's beam (a random point of the opening, carried
+    // inwards along the sun), sparse, sub-millimetre; out of focus they become the lens's nine-bladed bokeh
+    {
+        Material dust = makeMat(MAT_DUST, make_float3(0.75f, 0.72f, 0.66f));
+        const int mDust = s.addMaterial(dust);
+        const int perSlit = cfg.i("dust.per_slit", 1500);
+        s.dustBegin = int(s.spheres.size());
+        const float el0 = cfg.f("sun.elevation", 10.0f) * 3.14159265f / 180.0f, az0 = cfg.f("sun.azimuth", 20.0f) * 3.14159265f / 180.0f;
+        const float3 sd = normalize(make_float3(std::sin(az0) * std::cos(el0), std::sin(el0), -std::cos(az0) * std::cos(el0)));
+        unsigned int seed = 12345u;
+        auto rnd = [&]() { seed = seed * 1664525u + 1013904223u; return (seed >> 8) * (1.0f / 16777216.0f); };
+        for (int k = 0; k < slitCount; ++k)
+            for (int n = 0; n < perSlit; ++n) {
+                const float3 q = make_float3(slitX + k * slitStep + rnd() * slitW, rnd() * H, 0.0f);
+                const float3 c = q - sd * (0.3f + 7.5f * rnd());
+                if (c.x < 0.05f || c.x > L - 0.05f || c.y < 0.05f || c.y > H - 0.05f || c.z < 0.05f || c.z > W - 0.05f) continue;
+                const float r = 0.00025f + 0.0006f * rnd() * rnd();
+                s.spheres.push_back(make_float4(c.x, c.y, c.z, r));
+                s.sphereMaterial.push_back(mDust);
+            }
+        s.dustEnd = int(s.spheres.size());
+    }
+
+    s.restSpheres = s.spheres;
 
     // ---- sun
     const float el = cfg.f("sun.elevation", 10.0f) * 3.14159265f / 180.0f;
@@ -302,9 +333,9 @@ Scene buildScene(const Config& cfg) {
     s.hazeMax = make_float3(L, H, W);
 
     // ---- cameras
+    s.cameras.push_back({"alcak", make_float3(2.2f, 0.55f, 6.4f), make_float3(9.5f, 1.2f, 2.0f), 28.0f, 5.6f, 0.0f});
+    s.cameras.push_back({"orta", make_float3(3.4f, 1.45f, 6.2f), make_float3(9.8f, 1.05f, 2.6f), 32.0f, 4.0f, 0.0f});
     s.cameras.push_back({"kose", make_float3(1.3f, 1.5f, 6.6f), make_float3(9.0f, 1.1f, 0.5f), 24.0f, 5.6f, 0.0f});
-    s.cameras.push_back({"giris", make_float3(0.75f, 1.55f, 4.6f), make_float3(6.0f, 1.05f, 2.4f), 32.0f, 4.0f, 0.0f});
-    s.cameras.push_back({"prizma", make_float3(2.6f, 1.25f, 4.2f), make_float3(5.6f, 1.08f, 2.4f), 50.0f, 2.8f, 0.0f});
     s.cameras.push_back({"havuz", make_float3(10.3f, 1.6f, 6.4f), make_float3(4.0f, 1.0f, 2.6f), 28.0f, 5.6f, 0.0f});
     s.cameras.push_back({"plan", make_float3(L * 0.5f, H - 0.05f, W * 0.5f), make_float3(L * 0.5f, 0.0f, W * 0.5f - 0.01f), 9.0f, 0.0f, 0.0f});
     return s;
@@ -481,4 +512,22 @@ void whiteBalanceMatrix(float kelvin, float out[9]) {
             for (int k = 0; k < 3; ++k) v += Bi[r][k] * (ld[k] / ls[k]) * B[k][c];
             out[r * 3 + c] = float(v);
         }
+}
+
+void animateScene(Scene& s, float t) {
+    // dust: slow, smooth wandering of a few centimetres (sums of incommensurate sines), a faint settling drift
+    for (int i = s.dustBegin; i < s.dustEnd; ++i) {
+        const float4 r = s.restSpheres[i];
+        const float p = float(i) * 1.618034f;
+        s.spheres[i] = make_float4(r.x + 0.025f * std::sin(0.31f * t + p) + 0.012f * std::sin(0.83f * t + 2.1f * p),
+                                   r.y + 0.020f * std::sin(0.23f * t + 1.7f * p) - 0.004f * t + 0.3f * std::floor(0.004f * t / 0.3f),
+                                   r.z + 0.025f * std::sin(0.27f * t + 0.6f * p) + 0.010f * std::sin(0.71f * t + 3.3f * p), r.w);
+    }
+    // bubbles: lazy loops through the light
+    for (int i = s.bubbleBegin; i < s.bubbleEnd; ++i) {
+        const float4 r = s.restSpheres[i];
+        const float p = float(i - s.bubbleBegin) * 2.39996f;
+        s.spheres[i] = make_float4(r.x + 0.18f * std::sin(0.071f * t + p), r.y + 0.10f * std::sin(0.053f * t + 1.3f * p),
+                                   r.z + 0.15f * std::sin(0.047f * t + 0.7f * p), r.w);
+    }
 }
