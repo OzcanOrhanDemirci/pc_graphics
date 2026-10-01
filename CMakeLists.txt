@@ -7,38 +7,45 @@ set(CMAKE_CUDA_STANDARD 20)
 set(CMAKE_CUDA_ARCHITECTURES 89)
 set(TP ${CMAKE_SOURCE_DIR}/third_party)
 
-# Host programs. The OptiX device programs (src/scenes/*/device) are compiled at run time with NVRTC.
-# Everything but the entry point is compiled once (pc_core): the shared core, the interface kit and the scenes.
+# One application, pc_graphics.exe: the gallery of scenes and each scene's command-line tools.
+#   src/app      the application (window, gallery, loading, the interface over a scene, the scene registry)
+#   src/ui       the interface kit (shapes, images, text in IBM Plex)
+#   src/core     what the scenes share (settings, images, GPU readings, bloom)
+#   src/scenes   one folder per scene: host code, and device/ with its OptiX programs (compiled at run time by NVRTC)
 add_library(pc_core OBJECT
+    src/app/app.cpp
+    src/app/overlay.cpp
+    src/app/registry.cpp
+    src/ui/ui.cpp
     src/core/config.cpp
     src/core/image_io.cpp
     src/core/gpu_stats.cpp
     src/core/bloom.cu
+    src/scenes/altinsaat/altinsaat_app.cpp
+    src/scenes/altinsaat/altinsaat_live.cpp
     src/scenes/altinsaat/altinsaat_renderer.cpp
     src/scenes/altinsaat/altinsaat_world.cpp
     src/scenes/altinsaat/photons.cu
     src/scenes/altinsaat/kernels.cu
     src/scenes/altinsaat/denoiser.cpp
     src/scenes/fener/fener_app.cpp
+    src/scenes/fener/fener_live.cpp
     src/scenes/fener/fener_renderer.cpp
     src/scenes/fener/fener_scene.cpp
-    src/scenes/yikim/geom.cpp
-    src/scenes/yikim/phys.cu
-    src/scenes/yikim/yikim_scenes.cpp
-    src/scenes/yikim/yikim_tests.cpp
     src/scenes/yikim/yikim_app.cpp
+    src/scenes/yikim/yikim_live.cpp
     src/scenes/yikim/yikim_renderer.cpp
     src/scenes/yikim/yikim_filter.cu
-    src/scenes/yikim/quake.cpp
+    src/scenes/yikim/yikim_scenes.cpp
+    src/scenes/yikim/yikim_tests.cpp
     src/scenes/yikim/building.cpp
+    src/scenes/yikim/geom.cpp
+    src/scenes/yikim/phys.cu
+    src/scenes/yikim/quake.cpp
     ${TP}/tinyexr/miniz.c)
-add_executable(pc_graphics src/scenes/altinsaat/altinsaat_app.cpp $<TARGET_OBJECTS:pc_core>)
-add_executable(fener src/scenes/altinsaat/altinsaat_app.cpp $<TARGET_OBJECTS:pc_core>)
-target_compile_definitions(fener PRIVATE PC_DEFAULT_SCENE_FENER)
-add_executable(yikim src/scenes/altinsaat/altinsaat_app.cpp $<TARGET_OBJECTS:pc_core>)
-target_compile_definitions(yikim PRIVATE PC_DEFAULT_SCENE_YIKIM)
+add_executable(pc_graphics src/app/main.cpp $<TARGET_OBJECTS:pc_core>)
 
-foreach(t pc_core pc_graphics fener yikim)
+foreach(t pc_core pc_graphics)
     target_include_directories(${t} PRIVATE
         src
         ${TP}/cuda/include
@@ -59,7 +66,7 @@ foreach(t pc_core pc_graphics fener yikim)
     endif()
 endforeach()
 
-foreach(t pc_graphics fener yikim)
+foreach(t pc_graphics)
     target_link_libraries(${t} PRIVATE
         ${TP}/cuda/lib/x64/cudart_static.lib
         ${TP}/cuda/lib/x64/cuda.lib

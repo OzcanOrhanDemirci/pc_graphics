@@ -672,8 +672,12 @@ unsigned int Renderer::nanCount() {
     return n;
 }
 
+// The OptiX objects; the device memory goes with the application's device reset after every scene (app.cpp).
 void Renderer::shutdown() {
     cudaDeviceSynchronize();
+    denoiser_.destroy();
+    temporalDenoiser_.destroy();
+    upscaleDenoiser_.destroy();
     if (pipeline_) optixPipelineDestroy(pipeline_);
     for (auto g : groups_) optixProgramGroupDestroy(g);
     if (module_) optixModuleDestroy(module_);

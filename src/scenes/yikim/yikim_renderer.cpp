@@ -567,11 +567,14 @@ void YikimRenderer::download(std::vector<uchar4>& out) {
     YCUDA(cudaMemcpy(out.data(), p_.output, out.size() * sizeof(uchar4), cudaMemcpyDeviceToHost));
 }
 
+// everything init, the denoiser and the programs allocated: the application opens and closes scenes many times
 void YikimRenderer::shutdown() {
+    if (!ctx_) return;
+    YCUDA(cudaDeviceSynchronize());
     freeWorld();
     if (dn_) optixDenoiserDestroy(dn_);
-    filter_.destroy();
     dn_ = nullptr;
+    filter_.destroy();
     if (pipeline_) optixPipelineDestroy(pipeline_);
     for (auto g : groups_) optixProgramGroupDestroy(g);
     if (module_) optixModuleDestroy(module_);
@@ -580,4 +583,21 @@ void YikimRenderer::shutdown() {
     module_ = nullptr;
     ctx_ = nullptr;
     groups_.clear();
+    void* bufs[] = {p_.accum, p_.output, p_.albedoAcc, p_.normalAcc, p_.motion, p_.gbuf, p_.dnIn, p_.dnAlbedo, p_.dnNormal, dPickBody_, dPickHit_,
+                    dnState_, dnScratch_, dnGuideA_, dnGuideB_, dnOut_, dnPrevOut_, dnIntensity_, dnAvg_,
+                    reinterpret_cast<void*>(dParams_), reinterpret_cast<void*>(rg_), reinterpret_cast<void*>(rgPick_), reinterpret_cast<void*>(rgPrep_),
+                    reinterpret_cast<void*>(rgTone_), reinterpret_cast<void*>(miss_), reinterpret_cast<void*>(hit_)};
+    for (void* b : bufs)
+        if (b) cudaFree(b);
+    p_ = YikimParams{};
+    dPickBody_ = nullptr;
+    dPickHit_ = nullptr;
+    dnState_ = dnScratch_ = dnGuideA_ = dnGuideB_ = nullptr;
+    dnOut_ = dnPrevOut_ = nullptr;
+    dnIntensity_ = dnAvg_ = nullptr;
+    dParams_ = rg_ = rgPick_ = rgPrep_ = rgTone_ = miss_ = hit_ = 0;
+    for (cudaEvent_t* e : {&e0_, &e1_, &evXf_, &eMid_})
+        if (*e) { cudaEventDestroy(*e); *e = nullptr; }
+    if (stream_) cudaStreamDestroy(stream_);
+    stream_ = nullptr;
 }

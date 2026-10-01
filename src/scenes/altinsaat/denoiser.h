@@ -13,6 +13,7 @@ public:
     // width/height: the input; with upscale the output is twice as large (TEMPORAL_UPSCALE2X when temporal)
     bool create(OptixDeviceContext ctx, unsigned int width, unsigned int height, bool temporal = false, bool upscale = false);
     void resetHistory() { history_ = false; }
+    void destroy();   // the OptiX denoiser and every buffer (before its device context goes)
     bool temporal() const { return temporal_; }
     // accum/caustic/albedo/normal as accumulated by __raygen__render; output: linear sRGB (white balanced),
     // caustics excluded. blend: 0 fully denoised, 1 untouched.

@@ -1,0 +1,404 @@
+#include "app/app.h"
+#include "core/gpu_stats.h"
+#include "core/image_io.h"
+#include "ui/gl_api.h"
+
+#include <cuda_runtime.h>
+
+#include <algorithm>
+#include <chrono>
+#include <cmath>
+#include <cstdio>
+#include <ctime>
+#include <filesystem>
+
+namespace app {
+
+bool Input::pressed(int key) const { return std::find(pressedKeys.begin(), pressedKeys.end(), key) != pressedKeys.end(); }
+
+namespace {
+
+double nowSec() {
+    using namespace std::chrono;
+    return duration<double>(steady_clock::now().time_since_epoch()).count();
+}
+std::string stamp() {
+    std::time_t t = std::time(nullptr);
+    char b[64];
+    std::strftime(b, sizeof(b), "%Y%m%d_%H%M%S", std::localtime(&t));
+    return b;
+}
+App* g_app = nullptr;
+void keyCb(GLFWwindow*, int key, int, int action, int mods) { if (g_app) g_app->onKey(key, action, mods); }
+void scrollCb(GLFWwindow*, double, double dy) { if (g_app) g_app->onScroll(dy); }
+void buttonCb(GLFWwindow*, int button, int action, int) { if (g_app) g_app->onMouseButton(button, action); }
+
+}   // namespace
+
+// ---------------------------------------------------------------------------------------------------
+void App::onKey(int key, int action, int mods) {
+    mods_ = mods;
+    if (action == GLFW_PRESS && key >= 0) keyQueue_.push_back(key);
+}
+void App::onScroll(double dy) { scroll_ += dy; }
+void App::onMouseButton(int button, int action) {
+    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) leftClick_ = true;
+}
+
+bool App::consume(int key) {
+    auto it = std::find(keyQueue_.begin(), keyQueue_.end(), key);
+    if (it == keyQueue_.end()) return false;
+    keyQueue_.erase(it);
+    return true;
+}
+
+void App::toast(const std::string& text) {
+    std::lock_guard<std::mutex> lock(toastMx_);
+    toasts_.push_back({text, nowSec()});
+    if (toasts_.size() > 3) toasts_.erase(toasts_.begin());
+    std::printf("%s\n", text.c_str());
+    std::fflush(stdout);
+}
+
+void App::captureMouse(bool on) {
+    if (on == mouseCaptured_) return;
+    mouseCaptured_ = on;
+    glfwSetInputMode(win_, GLFW_CURSOR, on ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+    if (glfwRawMouseMotionSupported()) glfwSetInputMode(win_, GLFW_RAW_MOUSE_MOTION, on ? GLFW_TRUE : GLFW_FALSE);
+    glfwGetCursorPos(win_, &mouseX_, &mouseY_);
+    prevMouseX_ = mouseX_;
+    prevMouseY_ = mouseY_;
+}
+
+std::string App::capturePath() {
+    std::filesystem::create_directories(opt_.root + "/captures");
+    const std::string id = sceneIndex_ >= 0 ? infos_[sceneIndex_].id : std::string("galeri");
+    return opt_.root + "/captures/" + id + "_" + stamp();
+}
+
+void App::saveFramebuffer(const std::string& path) {
+    std::vector<unsigned char> px(size_t(fbw_) * fbh_ * 4), flipped(px.size());
+    glReadBuffer(GL_BACK);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glReadPixels(0, 0, fbw_, fbh_, GL_RGBA, GL_UNSIGNED_BYTE, px.data());
+    for (int y = 0; y < fbh_; ++y) std::copy_n(&px[size_t(fbh_ - 1 - y) * fbw_ * 4], size_t(fbw_) * 4, &flipped[size_t(y) * fbw_ * 4]);
+    for (size_t i = 3; i < flipped.size(); i += 4) flipped[i] = 255;
+    std::filesystem::create_directories(std::filesystem::path(path).parent_path());
+    writePNG(path, fbw_, fbh_, flipped.data());
+    std::printf("arayuz goruntusu: %s\n", path.c_str());
+}
+
+// ---------------------------------------------------------------------------------------------------
+void App::openScene(int index) {
+    sceneIndex_ = index;
+    scene_ = registry()[index].make();
+    help_ = false;
+    hud_ = true;
+    {
+        std::lock_guard<std::mutex> lock(loadMx_);
+        loadShared_ = LoadState();
+        loadShared_.label = "Hazırlanıyor";
+    }
+    mode_ = Mode::Loading;
+    modeT0_ = nowSec();
+    cancelLoad_ = false;
+    loading_ = true;
+    Scene* sc = scene_.get();
+    loader_ = std::thread([this, sc] {
+        LoadState st;
+        while (!st.done && st.error.empty() && !cancelLoad_) {
+            sc->load(*this, st);
+            std::lock_guard<std::mutex> lock(loadMx_);
+            loadShared_ = st;
+        }
+        loading_ = false;
+    });
+}
+
+void App::closeScene() {
+    if (loader_.joinable()) {
+        cancelLoad_ = true;
+        loader_.join();
+    }
+    captureMouse(false);
+    if (scene_) {
+        scene_->unload();
+        scene_.reset();
+        // whatever a scene left on the GPU goes now: a clean device for the next one (it comes back on first use)
+        cudaDeviceSynchronize();
+        cudaDeviceReset();
+        size_t freeB = 0, totalB = 0;
+        cudaMemGetInfo(&freeB, &totalB);
+        std::printf("sahne kapandi: ekran karti bellegi bos %.0f / %.0f MB\n", freeB / 1048576.0, totalB / 1048576.0);
+    }
+    ui::freeImage(frame_);
+    {
+        std::lock_guard<std::mutex> lock(toastMx_);
+        toasts_.clear();
+    }
+    mode_ = Mode::Gallery;
+    modeT0_ = nowSec();
+    glfwSwapInterval(1);
+}
+
+// ---------------------------------------------------------------------------------------------------
+void App::frameGallery(double now, double dt) {
+    const int n = int(infos_.size());
+    auto select = [&](int i) {
+        i = (i % n + n) % n;
+        if (i != selected_) { prevSelected_ = selected_; selected_ = i; selChangedAt_ = now; }
+    };
+    if (consume(GLFW_KEY_DOWN) || consume(GLFW_KEY_S)) select(selected_ + 1);
+    if (consume(GLFW_KEY_UP) || consume(GLFW_KEY_W)) select(selected_ - 1);
+    for (int i = 0; i < n && i < 9; ++i)
+        if (consume(GLFW_KEY_1 + i)) select(i);
+    hovered_ = -1;
+    for (int i = 0; i < int(entryRects_.size()); ++i)
+        if (entryRects_[i].contains(float(mouseX_), float(mouseY_))) hovered_ = i;
+    if (leftClick_) {
+        if (hovered_ >= 0) select(hovered_);
+        else if (openButton_.contains(float(mouseX_), float(mouseY_))) keyQueue_.push_back(GLFW_KEY_ENTER);
+    }
+    selAnim_ += (float(selected_) - selAnim_) * float(1.0 - std::exp(-dt * 14.0));
+    if (consume(GLFW_KEY_ENTER) || consume(GLFW_KEY_KP_ENTER)) { openScene(selected_); return; }
+    if (consume(GLFW_KEY_ESCAPE)) { quit_ = true; return; }
+    drawGallery(now);
+}
+
+void App::frameLoading(double now) {
+    LoadState st;
+    {
+        std::lock_guard<std::mutex> lock(loadMx_);
+        st = loadShared_;
+    }
+    if (consume(GLFW_KEY_ESCAPE)) { closeScene(); return; }
+    if (!loading_) {
+        if (loader_.joinable()) loader_.join();
+        if (!st.error.empty()) {
+            failure_ = st.error;   // the scene goes (unload, device reset) when the message is dismissed
+            mode_ = Mode::Failed;
+            modeT0_ = now;
+        } else if (st.done) {
+            mode_ = Mode::Running;
+            modeT0_ = now;
+            sceneT0_ = sceneLast_ = now;
+            keyQueue_.clear();
+            glfwSwapInterval(0);
+            return;
+        }
+    }
+    drawLoading(now);
+}
+
+void App::frameRunning(double now, double dt) {
+    // the application's keys first; the rest belong to the scene
+    if (consume(GLFW_KEY_ESCAPE)) {
+        if (help_) help_ = false;
+        else { closeScene(); return; }
+    }
+    if (consume(GLFW_KEY_F1)) help_ = !help_;
+    if (consume(GLFW_KEY_H)) hud_ = !hud_;
+    const bool shot = consume(GLFW_KEY_F12);
+    if (consume(GLFW_KEY_F5) && infos_[sceneIndex_].reloadable) scene_->reload(*this);
+
+    Input in;
+    in.now = now - sceneT0_;
+    in.dt = std::min(0.1, dt);
+    in.pressedKeys = keyQueue_;
+    keyQueue_.clear();
+    GLFWwindow* w = win_;
+    in.down = [w](int k) { return glfwGetKey(w, k) == GLFW_PRESS; };
+    in.shift = glfwGetKey(win_, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(win_, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
+    in.ctrl = glfwGetKey(win_, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS || glfwGetKey(win_, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS;
+    in.mouseX = float(mouseX_);
+    in.mouseY = float(mouseY_);
+    in.mouseDX = float(mouseX_ - prevMouseX_);
+    in.mouseDY = float(mouseY_ - prevMouseY_);
+    in.leftClicked = leftClick_ && !help_;
+    in.leftDown = glfwGetMouseButton(win_, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+    in.rightDown = glfwGetMouseButton(win_, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
+    in.scroll = float(scroll_);
+    in.view = view_;
+    scene_->frame(*this, in);
+    if (shot) scene_->screenshot(*this);
+
+    int iw = 0, ih = 0;
+    const void* px = scene_->image(iw, ih);
+    if (px && iw > 0) ui::updateImage(frame_, px, iw, ih);
+
+    Status st;
+    scene_->status(st);
+    ui::begin(fbw_, fbh_);
+    ui::clear(ui::Color{0, 0, 0, 1.0f});
+    if (frame_.valid()) {
+        const float s = std::min(float(fbw_) / frame_.w, float(fbh_) / frame_.h);
+        view_ = ui::Rect{0.5f * (fbw_ - frame_.w * s), 0.5f * (fbh_ - frame_.h * s), frame_.w * s, frame_.h * s};
+        ui::image(frame_, view_);
+    }
+    // the first second: the picture rises out of black, the panel slides in
+    const float fade = float(std::min(1.0, (now - modeT0_) / 0.6));
+    if (fade < 1.0f) ui::rect(ui::Rect{0, 0, float(fbw_), float(fbh_)}, ui::hex(0x000000, 1.0f - fade * fade * (3.0f - 2.0f * fade)));
+    if (hud_) drawHud(now, st);
+    if (help_) drawHelp(now);
+    drawToasts(now);
+    ui::end();
+}
+
+void App::frameFailed(double now) {
+    if (consume(GLFW_KEY_ESCAPE) || consume(GLFW_KEY_ENTER) || leftClick_) { closeScene(); return; }
+    drawFailed(now);
+}
+
+// ---------------------------------------------------------------------------------------------------
+// --autotest: the whole application once through, by the same paths as real keys; captures of the composed screen
+void App::autotestStep(double now) {
+    while (scriptAt_ < script_.size() && now >= scriptWaitUntil_) {
+        const Step& s = script_[scriptAt_];
+        if (s.kind == 3 && mode_ != Mode::Running) {
+            if (mode_ == Mode::Failed) { std::printf("autotest: sahne yuklenemedi: %s\n", failure_.c_str()); quit_ = true; }
+            return;
+        }
+        if (s.kind == 4 && mode_ != Mode::Gallery) return;
+        ++scriptAt_;
+        switch (s.kind) {
+        case 0: scriptWaitUntil_ = now + s.seconds; return;
+        case 1: keyQueue_.push_back(s.key); break;
+        case 2: pendingShot_ = s.name; return;   // taken after this frame is drawn
+        case 5:
+            std::printf("autotest %s: %.1f fps, kare %.1f ms\n", s.name.c_str(), fps_, frameMs_);
+            if (scene_) {
+                Status st;
+                scene_->status(st);
+                for (const Metric& m : st.metrics) std::printf("    %s %s\n", m.label.c_str(), m.value.c_str());
+            }
+            std::fflush(stdout);
+            break;
+        case 6: quit_ = true; return;
+        default: break;
+        }
+    }
+}
+
+int App::run(const Options& opt) {
+    opt_ = opt;
+    g_app = this;
+    for (const Entry& e : registry()) infos_.push_back(e.info());
+    if (!glfwInit()) { std::printf("glfwInit failed\n"); return 1; }
+    GLFWmonitor* mon = glfwGetPrimaryMonitor();
+    const GLFWvidmode* vm = glfwGetVideoMode(mon);
+    glfwWindowHint(GLFW_AUTO_ICONIFY, GLFW_FALSE);   // losing focus must not minimise it (a minimised window's swap can stall)
+    if (opt.windowed) {
+        win_ = glfwCreateWindow(1280, 720, "pc_graphics", nullptr, nullptr);
+    } else {
+        glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
+        glfwWindowHint(GLFW_REFRESH_RATE, vm->refreshRate);
+        win_ = glfwCreateWindow(vm->width, vm->height, "pc_graphics", mon, nullptr);
+    }
+    if (!win_) { std::printf("window creation failed\n"); return 1; }
+    glfwMakeContextCurrent(win_);
+    glfwSwapInterval(1);
+    glfwSetKeyCallback(win_, keyCb);
+    glfwSetScrollCallback(win_, scrollCb);
+    glfwSetMouseButtonCallback(win_, buttonCb);
+    std::printf("GL_RENDERER: %s, monitor %dx%d @ %d Hz\n", reinterpret_cast<const char*>(glGetString(GL_RENDERER)), vm->width, vm->height,
+                vm->refreshRate);
+    std::string err;
+    if (!ui::init(opt.root, err)) { std::printf("arayuz baslatilamadi: %s\n", err.c_str()); return 1; }
+    {
+        cudaDeviceProp prop{};
+        if (cudaGetDeviceProperties(&prop, 0) == cudaSuccess) gpuName_ = prop.name;
+        const std::string nv = "NVIDIA ";
+        if (gpuName_.rfind(nv, 0) == 0) gpuName_ = gpuName_.substr(nv.size());
+    }
+    gpuStatsInit();
+    for (const SceneInfo& si : infos_) {
+        Picture p;
+        p.sharp = ui::loadImage(opt.root + "/" + si.image, 1920);
+        p.soft = ui::loadBlurred(opt.root + "/" + si.image, 480, 3);
+        pictures_.push_back(p);
+    }
+    if (opt.autotest) {
+        auto wait = [&](double s) { script_.push_back({0, s, 0, ""}); };
+        auto key = [&](int k) { script_.push_back({1, 0, k, ""}); };
+        auto shot = [&](const std::string& n) { script_.push_back({2, 0, 0, n}); };
+        auto running = [&] { script_.push_back({3, 0, 0, ""}); };
+        auto gallery = [&] { script_.push_back({4, 0, 0, ""}); };
+        auto log = [&](const std::string& n) { script_.push_back({5, 0, 0, n}); };
+        wait(1.5); shot("galeri_1");
+        key(GLFW_KEY_DOWN); wait(0.8); shot("galeri_2");
+        key(GLFW_KEY_DOWN); wait(0.8); shot("galeri_3");
+        for (int s = 0; s < int(infos_.size()); ++s) {
+            key(GLFW_KEY_1 + s); wait(0.4); key(GLFW_KEY_ENTER); wait(0.25); shot(infos_[s].id + "_yukleniyor");
+            running(); wait(5.0); log(infos_[s].id); shot(infos_[s].id + "_arayuz");
+            key(GLFW_KEY_F1); wait(0.5); shot(infos_[s].id + "_yardim"); key(GLFW_KEY_F1);
+            if (infos_[s].id == "altinsaat") { key(GLFW_KEY_SPACE); wait(6.0); log("altinsaat canli"); shot("altinsaat_canli"); }
+            if (infos_[s].id == "fener") {
+                key(GLFW_KEY_SPACE); wait(6.0); log("fener yolculuk"); shot("fener_yolculuk");
+                key(GLFW_KEY_TAB); wait(2.0); shot("fener_oyuncu"); key(GLFW_KEY_TAB); key(GLFW_KEY_TAB);
+            }
+            if (infos_[s].id == "yikim") { key(GLFW_KEY_7); key(GLFW_KEY_SPACE); wait(9.0); log("yikim deprem 7"); shot("yikim_deprem"); key(GLFW_KEY_G); wait(1.0); }
+            key(GLFW_KEY_H); wait(0.3); shot(infos_[s].id + "_arayuzsuz"); key(GLFW_KEY_H);
+            key(GLFW_KEY_ESCAPE); gallery(); wait(0.8);
+        }
+        shot("galeri_son");
+        script_.push_back({6, 0, 0, ""});
+    }
+    if (!opt.startScene.empty()) {
+        for (int i = 0; i < int(infos_.size()); ++i)
+            if (infos_[i].id == opt.startScene) { selected_ = i; selAnim_ = float(i); openScene(i); }
+    }
+
+    double last = nowSec();
+    fpsT0_ = last;
+    while (!glfwWindowShouldClose(win_) && !quit_) {
+        glfwPollEvents();
+        const double now = nowSec(), dt = now - last;
+        last = now;
+        if (opt.autotest) autotestStep(now);
+        if (glfwGetWindowAttrib(win_, GLFW_ICONIFIED)) { glfwWaitEventsTimeout(0.05); last = nowSec(); continue; }
+        glfwGetCursorPos(win_, &mouseX_, &mouseY_);
+        glfwGetFramebufferSize(win_, &fbw_, &fbh_);
+        S_.s = float(fbh_) / 1440.0f;
+        if (now - lastStats_ > 0.5) {
+            const GpuStats g = gpuStatsRead();
+            gpuW_ = g.watts;
+            gpuC_ = float(g.tempC);
+            lastStats_ = now;
+        }
+        const double f0 = nowSec();
+        auto dispatch = [&](double step) {
+            switch (mode_) {
+            case Mode::Gallery: frameGallery(now, step); break;
+            case Mode::Loading: frameLoading(now); break;
+            case Mode::Running: frameRunning(now, step); break;
+            case Mode::Failed: frameFailed(now); break;
+            }
+        };
+        const Mode before = mode_;
+        dispatch(dt);
+        if (mode_ != before && !quit_) dispatch(0.0);   // the new screen draws this frame (no stale picture)
+        if (quit_) break;
+        if (mode_ != Mode::Running) keyQueue_.clear();
+        leftClick_ = false;
+        scroll_ = 0.0;
+        prevMouseX_ = mouseX_;
+        prevMouseY_ = mouseY_;
+        if (!pendingShot_.empty()) {
+            saveFramebuffer(opt_.root + "/captures/arayuz/" + pendingShot_ + ".png");
+            pendingShot_.clear();
+        }
+        frameMs_ = float((nowSec() - f0) * 1000.0);
+        ++fpsFrames_;
+        if (now - fpsT0_ > 0.5) { fps_ = float(fpsFrames_ / (now - fpsT0_)); fpsFrames_ = 0; fpsT0_ = now; }
+        glfwSwapBuffers(win_);
+    }
+    closeScene();
+    for (Picture& p : pictures_) { ui::freeImage(p.sharp); ui::freeImage(p.soft); }
+    ui::shutdown();
+    gpuStatsShutdown();
+    glfwDestroyWindow(win_);
+    glfwTerminate();
+    return 0;
+}
+
+}   // namespace app

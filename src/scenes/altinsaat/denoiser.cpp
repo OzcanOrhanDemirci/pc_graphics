@@ -65,6 +65,21 @@ bool Denoiser::create(OptixDeviceContext ctx, unsigned int width, unsigned int h
     return true;
 }
 
+void Denoiser::destroy() {
+    if (denoiser_) optixDenoiserDestroy(denoiser_);
+    denoiser_ = nullptr;
+    void* bufs[] = {state_, scratch_, in_, albedo_, normal_, out_, inC_, outC_, intensity_, avgColor_, prevOut_, flow_, guideA_, guideB_};
+    for (void* b : bufs)
+        if (b) cudaFree(b);
+    state_ = scratch_ = guideA_ = guideB_ = nullptr;
+    in_ = albedo_ = normal_ = out_ = inC_ = outC_ = prevOut_ = flow_ = nullptr;
+    intensity_ = avgColor_ = nullptr;
+    if (e0_) cudaEventDestroy(e0_);
+    if (e1_) cudaEventDestroy(e1_);
+    e0_ = e1_ = nullptr;
+    history_ = false;
+}
+
 void Denoiser::run(const Params& p, float blend, cudaStream_t stream, bool caustics) {
     cudaEventRecord(e0_, stream);
     launchDenoisePrep(p, in_, albedo_, normal_, inC_, stream);

@@ -347,6 +347,7 @@ void FenerRenderer::downloadHdr(std::vector<float4>& out) {
     CUDA_CHECK(cudaMemcpy(out.data(), params_.hdr, out.size() * sizeof(float4), cudaMemcpyDeviceToHost));
 }
 
+// The OptiX objects; the device memory goes with the application's device reset after every scene (app.cpp).
 void FenerRenderer::shutdown() {
     cudaDeviceSynchronize();
     if (pipeline_) optixPipelineDestroy(pipeline_);
