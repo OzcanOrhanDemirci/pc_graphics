@@ -13,6 +13,9 @@ struct Piece {           // an axis-aligned box that becomes one body
     double3 lo, hi;
     int kind;
     int body = -1;
+    unsigned color = 0;  // 0: by kind
+    float density = 0;   // 0: by kind
+    float rho = -1;      // steel ratio at its interfaces (< 0: by kind)
 };
 
 struct FrameSpec {
@@ -24,10 +27,24 @@ struct FrameSpec {
     double beamSeg = 1.0, slabPanel = 1.0;      // target segment lengths
     float densityConcrete = 2500.0f, densitySlab = 4500.0f;   // slab: + finishes and contents (~2 kN/m^2)
     float rhoColumn = 0.010f, rhoBeam = 0.008f, rhoSlab = 0.004f;   // steel ratios
+    std::vector<double> heights;                // storey heights, ground first (empty: storeys x storeyH)
+    int matBrick = -1;                          // interfaces touching a wall use it (set by the builder)
+    double level(int st) const {                // the floor level of storey st (top of storey st-1)
+        double y = 0;
+        for (int k = 0; k < st; ++k) y += k < int(heights.size()) ? heights[k] : storeyH;
+        return y;
+    }
 };
 
-// glue every pair of touching pieces (shared face area > minArea) with an interface; the ground (y = 0) too
+// glue every pair of touching pieces (shared face area > minArea) with an interface; the ground (y = 0) too.
+// Interfaces touching a wall use spec.matBrick (when set), the rest mat.
 void glueTouching(PhysWorld& w, std::vector<Piece>& pieces, int mat, const FrameSpec& spec, bool groundBond);
+// the bodies of the pieces (density and colour by kind unless the piece sets them)
+void addPieceBodies(PhysWorld& w, std::vector<Piece>& pieces, const FrameSpec& spec);
+// columns, beams and slab panels of the frame (no bodies yet)
+void addFramePieces(const FrameSpec& spec, std::vector<Piece>& pieces);
+void splitRange(double a, double b, double target, std::vector<double>& cuts);   // n ~ (b-a)/target equal parts
+unsigned kindColor(int kind);
 // fibres over a rectangle: centre c, unit axes u, v (in the face), half sizes a, b; steel spread over the perimeter
 std::vector<FiberDesc> fibreGrid(float3 c, float3 u, float3 v, float a, float b, float steelArea);
 
@@ -41,5 +58,5 @@ int buildCantilever(PhysWorld& w, int segments, float segLen, float b, float h, 
 void buildPile(PhysWorld& w, int count, unsigned seed);
 // the reinforced-concrete frame; returns the pieces (body indices filled in)
 std::vector<Piece> buildFrame(PhysWorld& w, const FrameSpec& spec, const PhysMaterial& concrete);
-FrameSpec frameSpecFromConfig(const Config& cfg);
+FrameSpec frameSpecFromConfig(const Config& cfg, const std::string& prefix = "frame.");
 PhysMaterial concreteFromConfig(const Config& cfg);

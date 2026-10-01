@@ -3,6 +3,15 @@
 > Tek kaynak durum panosu. Plan ve Özcan'ın sözleri `docs/yikim/PLAN.md`'de.
 
 ## Şu an
+- **2026-10-01 · Y1 (apartman) benim tarafımda bitti; Özcan'ın gözü bekleniyor.** 5 kat (dükkânlı zemin 3,5 m + 4 × 2,9 m),
+  3 × 4 açıklık (12 × 16 m), kolon 30×50, tuğla dolgu duvarlar (pencere ve balkon kapısı boşluklu), ön balkonlar, düz
+  çatı + korkuluk + binaya bağlı olmayan 3 su deposu ve 3 güneş kollektörü: 3007 cisim, 6857 arayüz, 44 378 lif.
+  Klipler: `captures/yikim/y1_kolon_kaldirma.mp4` (ön iki hattın 8 zemin kat kolonu kaldırılır: ön yarı göçer, arka
+  yarı ayakta), `y1_deprem_izmir_bayrakli.mp4` (2020 Bayraklı: bina ayakta, korkuluklar ve duvar blokları dökülür),
+  `y1_deprem_kocaeli_yarimca.mp4` (1999 Yarımca: yumuşak kat göçmesi). `scene = bina` varsayılan, `scene = cerceve` Y0.
+- **2026-10-01 · Y0 kapandı, Y1 (apartman) başladı.** Özcan, iki klip üzerine: *"fizik yeterince iyi duruyor ya hız ve
+  hissiyat olarak. Devam edebilirsin."* Çatı kararı: **düz çatı + su depoları ve güneş kollektörleri** (binaya bağlı
+  değil, depremde kayar ve düşer).
 - **2026-10-01 · Y0: fizik çekirdeği + sade görüntü + iki klip; Özcan'ın gözü bekleniyor** ("ağırlık hissi").
   Testler 19/21 (kalan iki: konsol kirişin elastik yumuşaklığı). Klipler `captures/yikim/y0_kolon_kirma.mp4` (ön hattaki
   üç kolon sökülür, ön açıklıklar göçer, döşemeler arka hattan asılı kalır) ve `y0_deprem_pazarcik_x1.5.mp4` (Pazarcık
@@ -14,8 +23,8 @@
 ## Fazlar
 | Faz | Durum | Not |
 |---|---|---|
-| Y0 Fizik çekirdeği | ✅ benim tarafım | çözücü, testler, sade görüntü, iki klip; Özcan'ın gözü bekleniyor |
-| Y1 Bina | ⏳ | |
+| Y0 Fizik çekirdeği | ✅ 10-01 | çözücü, testler, sade görüntü, iki klip; Özcan: hız ve his yeterli |
+| Y1 Bina | ✅ benim tarafım | apartman, testler, üç klip; kesit ısı haritası yapılmadı (tanı araçları yetti); Özcan'ın gözü bekleniyor |
 | Y2 Deprem | ⏳ | kayıtlar hazır (aşağıda) |
 | Y3 Kırılma görünümü | ⏳ | |
 | Y4 Toz | ⏳ | |
@@ -67,6 +76,21 @@ taşıyor); üç kolon (bütün ön hat) sökülünce ön açıklıklar 1,4-2,5 
 sökülünce 1 katta da 2 katta da tam göçer (talep ~243 kN·m, kapasite ~90). Deprem: Pazarcık ×1,0 → çatı ötelemesi %2,5,
 kalıcı eğilme, kopma yok; ×1,5 → yumuşak kat göçmesi; Antakya ×1,0 → %0,12, hasarsız.
 
+**Apartman (Y1):** oturduktan sonra 10 sn kopma 0, sünme 0,1 mm; birinci periyot (x) **0,452 s** (yönetmelik formülü
+0,07·H^0,75 = 0,54 s; dolgu katılaştırır). Fizik 12-20 ms/kare (40×2), canlı için Y6'da hızlanmalı. Gerçek kayıtlar
+(en güçlü anından 15 sn önce başlar, `deprem.offset = -1`):
+
+| Kayıt (×1) | Yatay tepe | Sonuç |
+|---|---|---|
+| 2020 Bayraklı | 0,12 g | ayakta, %0,6 öteleme, korkuluklar ve bazı duvarlar dökülür |
+| 1999 İzmit | 0,25 g | ayakta (%0,3); düzeltmeden önceki bir koşuda kısmi göçme |
+| 1999 Yarımca | 0,34 g | **sınırda:** 3 koşunun 2'sinde tam göçme (atomik toplamlar yüzünden deterministik değil) |
+| 2023 Antakya | 0,67 g | tam göçme |
+| 2023 Pazarcık | 2,25 g (bileşen) | tam göçme |
+
+Kolon kaldırma (zemin kat): 2 köşe kolonu → ayakta; ön hattın 4'ü → ayakta (üst katlar dolgu + çerçeve kafes kutu,
+döşeme donatısı çekme başlığı); ön iki hattın 8'i → ön yarı göçer.
+
 **Bilinen sınır:** uzun rijit zincirler (konsol) varsayılan ayarda yumuşak; 60×2'de 1,9× (7,5 ms). Binanın gerçek
 yumuşaklığı Y1'de doğal periyotla ölçülecek; gerekirse alt adım artar.
 
@@ -95,6 +119,24 @@ yumuşaklığı Y1'de doğal periyotla ölçülecek; gerekirse alt adım artar.
   8,7 cm sarkıp durdu, iki kolonu sökülen çerçeve sarkmadı. Çarpan alt adım içinde biriktirildi (standart XPBD:
   dl = -(C + α̃λ)/(w + α̃)), sınır toplama uygulandı; konsol 4,7 m düştü. Kesitleri tek başına sınayan "mafsal"
   testleri bu yüzden var: çerçevenin davranışı ancak parçaları doğruysa yorumlanabilir.
+
+## Y1'de öğrenilenler (ölçülerek)
+- **Yerçekimi bir anda açılınca uzun bina ilk karelerde jöle gibi sarkar:** balkon serbest düşmenin yarısıyla iniyor,
+  ince korkuluk tabanı kırılıyordu (528 kopuk lif). Yerçekimi 0,5 sn'de yumuşakça açılıp bina 2 sn görünmeden oturunca
+  kopma 0, çatlak 12. Tanı sırası: sonsuz dayanım (yapıştırma doğru) → balkonsuz (kopma yok) → ilk kopan bağlar
+  (balkon-korkuluk) → o bağın kare kare izi (balkon ilk karede 0,085 m/s iniyor).
+- **Bağları kesilen ama üstü yüklü kolon kolon olmaya devam eder:** dört katın altında temas ve sürtünmeyle taşıyor;
+  8 kolon kesilip itildi, hiçbiri kımıldamadı. "Kolon kaldırma" = cismin sahneden çıkması (`removeBody`).
+- **İç içe geçmeyi düzeltmek alt adımlar boyunca hız biriktirir:** düşen enkazın zemine gömdüğü blok 22-52 m/s ile
+  fırladı (yakalayıcı: `--set test.catch=22`). Hız geçişinde ayrılma hızı, sekme hızı ya da önceki ayrılma hızı ile
+  2 m/s'nin büyüğüne kırpıldı; tek karede fırlama kalmadı, en hızlı parça 16-23 m/s (devrilen yapının sürüklediği).
+- **Ayar dosyasında "x, y, z" ilk virgülde okumayı durduruyordu** (`sscanf("%f %f %f")`): kamera, itme yönü sessizce
+  varsayılandaydı. Virgül de kabul ediliyor.
+- **Kayıtların en güçlü anı farklı saniyelerde** (Pazarcık 39, İzmit 52,5, Yarımca 59,9 (yatay vektör), Antakya 72,4):
+  sabit 25 sn başlangıç Antakya'yı ve Yarımca'yı sessiz kısmında oynattı ("hasarsız" sonucu yanlıştı). Otomatik başlangıç.
+- **Akış yarışı:** sıfırlayan `cudaMemset` varsayılan akışta, fizik engellemeyen akışta; ikinci dünyanın ilk karesinde
+  yerçekimi 0 kaldı (kutu bir kare geç düştü). Yüklemenin sonunda aygıt eşzamanlanıyor.
+- **Eşikteki yapı kaotiktir:** aynı kayıt aynı binayı bir koşuda yıkıp bir koşuda yıkmayabilir; tek koşudan hüküm verme.
 
 ## Deprem kayıtları (`assets/deprem/`, `src/yikim/quake.*`)
 ESM (esm-db.eu, işlenmiş MP, hesapsız indirilebilir) ve AFAD TADAS (misafir girişi). İvme cm/s², hepsi ayrıştırılıp

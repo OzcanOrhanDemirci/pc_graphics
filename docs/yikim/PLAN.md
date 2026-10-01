@@ -33,6 +33,12 @@ gerçekçi hissettiren bir binanın gerçekçi şekilde yıkılması. Özcan (20
 
 Varsayılan (Özcan'a söylendi, itiraz gelmedi): sahnede insan yok.
 
+### Faz kararları
+| Ne | Karar |
+|---|---|
+| Y0 kapanışı (2026-10-01) | Özcan: *"fizik yeterince iyi duruyor ya hız ve hissiyat olarak. Devam edebilirsin."* |
+| Çatı (Y1) | **Düz çatı + su depoları + güneş kollektörleri**, binaya bağlı değil (kiremit çatı seçilmedi) |
+
 ## 2 · Veri
 
 Özcan'ın isteğiyle araştırma yalnız gerekli veriye indirildi: gerçek deprem ivme kayıtları (kaynak ve lisansıyla,
@@ -63,8 +69,8 @@ da "oyun" der?** Sıralama, en ucuz bozulandan:
   göçme biçimi). Üstte 4 normal kat, kat başına 2 daire.
 - Betonarme çerçeve: kolonlar, kirişler, döşemeler; zayıf beton (sınıfı araştırmadan), düz donatı, seyrek etriye.
 - Tuğla dolgu duvarlar (dış ve iç), sıva ve boya; PVC çerçeveli pencereler; konsol balkonlar ve korkulukları.
-- Çatı: araştırmaya göre ya ahşap çatı + kiremit ya da düz çatı + su deposu ve güneş kollektörleri (ikisi de
-  düşerken güçlü ipucu). Seçim ilk kaba binada Özcan'a sorulur.
+- Çatı: düz beton teras, alçak korkuluk duvarı; üstünde binaya bağlı olmayan su depoları ve güneş kollektörleri
+  (Özcan'ın seçimi, 2026-10-01).
 - Çevre sade: sokak, kaldırım, karşı tarafta basit sabit komşu cepheler (ışık sekmesi ve ölçek için).
 
 ## 5 · Teknik yol

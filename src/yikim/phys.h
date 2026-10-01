@@ -83,10 +83,15 @@ public:
     void upload();                 // to the GPU; colours the interface graph
     void step(float dt);           // one frame: broad phase once, then params.substeps substeps
     void download();               // positions, rotations, velocities to the host arrays below
+    void settle(float seconds, float ramp, float dt);   // gravity ramped up, then rest; time restarts at 0
     void profile(float dt);        // one frame kernel by kernel (events), printed
     void setGroundMotion(double3 pos) { groundTarget_ = pos; }   // where the ground is at the end of the next step
     void breakBody(int b);         // every interface of the body breaks (interaction)
     void setVelocity(int b, float3 v, float3 w);   // a push (interaction, scenarios)
+    // the body is gone (an explosive charge, "notional removal"): its interfaces break, it is parked far below the
+    // ground and frozen. Cutting a loaded column's bonds is not enough: wedged under the floors it still carries them
+    // by contact and friction (measured: eight cut and kicked columns stayed put under four storeys).
+    void removeBody(int b);
     std::vector<float> damage();   // per body: share of its interfaces' fibres cracked or broken (display)
     PhysStats stats();             // counts (reads the fibres back: not every frame)
     // per fibre, in interfaceDescs order: flags (1 cracked, 2 crushed, 4 broken) and last force (interface frame:
@@ -94,11 +99,14 @@ public:
     void fibres(std::vector<unsigned>& flags, std::vector<float3>& force);
     // contact patches of the last substep: normal force J / h^2 summed over the patches touching body b (N)
     float patchForce(int b);
+    struct PatchInfo { int other; float force; float3 n; };
+    std::vector<PatchInfo> patchesOf(int b);   // the last substep's contact patches touching body b
 
     // write the 3x4 object-to-world transform of body (first + i) into an array of OptixInstance (stride bytes)
     void writeTransforms(void* instances, size_t strideBytes, int first, int count, void* stream = nullptr);
 
     PhysParams params;
+    float gravityScale = 1.0f;     // share of params.gravity applied (settle ramps it)
     double time = 0;
     // host state
     std::vector<BodyInfo> info;
@@ -118,6 +126,7 @@ private:
     bool uploaded_ = false;
     int lastPairs_ = 0;
     int frame_ = 0;
+    float gravityNow_ = 9.81f;
     float lastH_ = 0.0f;
     std::vector<char> graphKey_;
     std::vector<double3> groundSteps_;

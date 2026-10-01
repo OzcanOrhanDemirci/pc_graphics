@@ -1,5 +1,6 @@
 // Scene 3 "Yikim": physics tests (yikim.exe --test). Each prints a number against its expectation; the thresholds
 // were written before the first run. Exit code 0 only if all pass.
+#include "yikim/building.h"
 #include "yikim/yikim_scenes.h"
 
 #include <algorithm>
@@ -76,11 +77,13 @@ void testFreeFall(const Config&) {
         w.step(kDt);
         w.download();
         const double bottom = w.pos[1].y - 0.5;
-        if (tTouch < 0 && bottom <= 0.001) {   // within a millimetre: the contact holds it at -slop at most
+        // the impact frame: the fall stops (the downward speed drops by more than a frame of gravity could add back).
+        // "Bottom within 1 mm at the frame's end" missed it when the box had already bounced off by then.
+        if (tTouch < 0 && k > 0 && -w.vel[1].y < prevVdown - 1.0) {
             // the bottom crossed y = 0 inside this frame: from the measured state of the previous frame, under g
             tTouch = prevT + (-prevVdown + std::sqrt(prevVdown * prevVdown + 2.0 * g * prevBottom)) / g;
         }
-        if (g_cfg && g_cfg->i("test.verbose", 0) && k >= 40 && k <= 75)
+        if (g_cfg && g_cfg->i("test.verbose", 0) && (k <= 3 || (k >= 44 && k <= 48)))
             std::printf("      t=%.3f  alt %.4f m  v (%.3f %.3f %.3f)  w (%.3f %.3f %.3f)\n", w.time, bottom, w.vel[1].x, w.vel[1].y, w.vel[1].z, w.angVel[1].x,
                         w.angVel[1].y, w.angVel[1].z);
         prevBottom = bottom;
@@ -386,6 +389,57 @@ void testFrame(const Config& cfg) {
     std::printf("      (catlak lif %d)\n", st.cracked);
 }
 
+// the apartment block: settles (gravity ramped) and stands 10 s with no fibre broken; then a push shaped like the
+// first mode (v = 0.05 m/s * y / H) and the roof's free swing gives the first period. Thresholds written before the
+// first run: no broken fibre, sag < 2 cm, T1 between 0.2 and 1.0 s (code formula 0.07 H^0.75 = 0.54 s for 15 m;
+// infills stiffen a real one).
+void testBuilding(const Config& cfg) {
+    PhysWorld w;
+    const ApartmentSpec as = apartmentSpecFromConfig(cfg);
+    Apartment ap = buildApartment(w, as, concreteFromConfig(cfg), brickFromConfig(cfg));
+    applyParams(w);
+    w.upload();
+    w.settle(cfg.f("phys.settle_seconds", 2.0f), cfg.f("phys.settle_ramp", 0.5f), kDt);
+    w.download();
+    const std::vector<double3> start = w.pos;
+    for (int k = 0; k < 60 * 10; ++k) w.step(kDt);
+    w.download();
+    double sag = 0;
+    for (size_t i = 1; i < w.pos.size(); ++i) sag = std::max(sag, start[i].y - w.pos[i].y);
+    PhysStats st = w.stats();
+    std::printf("      bina: %d govde, %d arayuz, %d lif, %d renk, fizik %.2f ms/kare, cati %.1f m\n", st.bodies, st.interfaces, st.fibres, st.colours,
+                st.ms, ap.height);
+    report("bina: oturduktan sonra 10 sn, kirik lif", st.broken == 0, "%.0f", double(st.broken), "%.0f", 0.0);
+    report("bina: 10 sn'de en buyuk cokme", sag < 0.02, "%.4f m", sag, "< %.2f m", 0.02);
+    std::printf("      (catlak lif %d)\n", st.cracked);
+    // the first period: a first-mode-shaped push along x, the roof's swing about its mean
+    std::vector<int> roof;
+    for (const Piece& p : ap.pieces)
+        if (p.kind != PK_WALL && p.hi.y > ap.height - 1e-6) roof.push_back(p.body);
+    for (size_t i = 1; i < w.info.size(); ++i)
+        if (!w.kinematic[i]) w.setVelocity(int(i), make_float3(float(0.05 * w.pos[i].y / ap.height), 0.0f, 0.0f), make_float3(0, 0, 0));
+    std::vector<double> xs, ts;
+    for (int k = 0; k < 60 * 4; ++k) {
+        w.step(kDt);
+        w.download();
+        double x = 0;
+        for (int b : roof) x += w.pos[b].x - start[b].x;
+        xs.push_back(x / roof.size());
+        ts.push_back(w.time);
+    }
+    double mean = 0;
+    for (double x : xs) mean += x;
+    mean /= xs.size();
+    std::vector<double> ups;
+    for (size_t k = 1; k < xs.size(); ++k)
+        if (xs[k - 1] < mean && xs[k] >= mean) ups.push_back(ts[k - 1] + (ts[k] - ts[k - 1]) * (mean - xs[k - 1]) / (xs[k] - xs[k - 1]));
+    const double T = ups.size() >= 3 ? (ups.back() - ups.front()) / (ups.size() - 1) : 0.0;
+    double amp = 0;
+    for (double x : xs) amp = std::max(amp, std::fabs(x - mean));
+    report("bina: 1. dogal periyot (x)", T > 0.2 && T < 1.0, "%.3f s", T, "0,2..1,0 s (formul %.2f)", 0.07 * std::pow(ap.height, 0.75));
+    std::printf("      (cati genligi %.1f mm, %zu gecis)\n", amp * 1000.0, ups.size());
+}
+
 }   // namespace
 
 int runYikimTests(const Config& cfg, const std::string& only) {
@@ -393,7 +447,7 @@ int runYikimTests(const Config& cfg, const std::string& only) {
     std::printf("YIKIM fizik testleri (alt adim %d)\n", cfg.i("phys.substeps", 20));
     struct T { const char* name; void (*fn)(const Config&); };
     const T tests[] = {{"dusme", testFallTiming}, {"dusme", testFreeFall}, {"yigin", testStacks}, {"egim", testSlope},
-                       {"konsol", testCantilever}, {"mafsal", testHinge}, {"enerji", testEnergy}, {"cerceve", testFrame}};
+                       {"konsol", testCantilever}, {"mafsal", testHinge}, {"enerji", testEnergy}, {"cerceve", testFrame}, {"bina", testBuilding}};
     for (const T& t : tests)
         if (only.empty() || only == t.name) t.fn(cfg);
     int fails = 0;

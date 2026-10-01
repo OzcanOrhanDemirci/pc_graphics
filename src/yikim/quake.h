@@ -13,6 +13,7 @@ struct QuakeRecord {
     double dt = 0;
     std::vector<double3> acc, vel, disp;   // world axes: x east, y up, z north (m/s^2, m/s, m)
     double pga = 0;                          // horizontal peak, m/s^2
+    double tPeak = 0;                        // when it comes (s from the record's start)
     double duration() const { return acc.empty() ? 0.0 : dt * (acc.size() - 1); }
     double3 displacement(double t) const;    // linear interpolation, zero outside
     bool load(const std::string& east, const std::string& north, const std::string& up, std::string& err);

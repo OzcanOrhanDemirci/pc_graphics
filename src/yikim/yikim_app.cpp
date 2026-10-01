@@ -6,6 +6,7 @@
 //   options: --scenario kolon|sarsinti, --spp N, --width W, --height H, --set key=value, --root dir
 #include "image_io.h"
 #include "scene.h"   // Config
+#include "yikim/building.h"
 #include "yikim/quake.h"
 #include "yikim/yikim_renderer.h"
 #include "yikim/yikim_scenes.h"
@@ -36,6 +37,7 @@ struct YikimApp {
     std::vector<std::string> overrides;
     PhysWorld world;
     std::vector<Piece> pieces;
+    std::vector<int> loose;      // unglued bodies (roof tanks)
     FrameSpec spec;
     YikimRenderer renderer;
     unsigned int width = 1280, height = 720;
@@ -64,10 +66,28 @@ struct YikimApp {
         world.params.restitution = cfg.f("phys.restitution", world.params.restitution);
     }
     void build() {
-        spec = frameSpecFromConfig(cfg);
-        pieces = buildFrame(world, spec, concreteFromConfig(cfg));
+        if (cfg.values.count("scene") && cfg.values.at("scene") == "cerceve") {
+            spec = frameSpecFromConfig(cfg);
+            pieces = buildFrame(world, spec, concreteFromConfig(cfg));
+            loose.clear();
+        } else {
+            const ApartmentSpec as = apartmentSpecFromConfig(cfg);
+            PhysMaterial mc = concreteFromConfig(cfg), mb = brickFromConfig(cfg);
+            if (cfg.i("test.elastic", 0))   // diagnosis: nothing can break; what still falls is not glued
+                for (PhysMaterial* m : {&mc, &mb}) m->ft = m->fc = m->cohesion = m->fy = 1e12f;
+            Apartment ap = buildApartment(world, as, mc, mb);
+            spec = as.frame;
+            pieces = std::move(ap.pieces);
+            loose = std::move(ap.loose);
+        }
         applyPhysics();
         world.upload();
+        {   // the building settles under its own weight before anything happens (hidden)
+            const double t0 = ynow();
+            world.settle(cfg.f("phys.settle_seconds", 2.0f), cfg.f("phys.settle_ramp", 0.5f), 1.0f / 60.0f);
+            const PhysStats st = world.stats();
+            std::printf("oturma: %.1f s, kirik lif %d, catlak %d (%.1f s surdu)\n", cfg.f("phys.settle_seconds", 2.0f), st.broken, st.cracked, ynow() - t0);
+        }
         removed = false;
         quakeOn = false;
         std::printf("dunya: %zu govde, %zu arayuz\n", world.info.size(), world.interfaceDescs.size());
@@ -119,13 +139,17 @@ struct YikimApp {
                 const double x = ij[c] * spec.spanX, z = ij[c + 1] * spec.spanZ;
                 int n = 0;
                 for (const Piece& p : pieces)
-                    if (p.kind == PK_COLUMN && p.hi.y <= spec.storeyH + 1e-6 && std::fabs((p.lo.x + p.hi.x) * 0.5 - x) < 0.01 &&
+                    if (p.kind == PK_COLUMN && p.hi.y <= spec.level(1) + 1e-6 && std::fabs((p.lo.x + p.hi.x) * 0.5 - x) < 0.01 &&
                         std::fabs((p.lo.z + p.hi.z) * 0.5 - z) < 0.01) {
-                        world.breakBody(p.body);
-                        world.setVelocity(p.body, push, make_float3(0.0f, 0.0f, 1.5f));
+                        if (cfg.i("kolon.remove", 1)) {
+                            world.removeBody(p.body);   // gone: an explosive charge
+                        } else {                        // cut and shoved (a light frame lets go; a loaded one does not)
+                            world.breakBody(p.body);
+                            world.setVelocity(p.body, push, make_float3(0.0f, 0.0f, 1.5f));
+                        }
                         ++n;
                     }
-                std::printf("t=%.2f s: kolon (%d, %d) kirildi (%d parca)\n", t, ij[c], ij[c + 1], n);
+                std::printf("t=%.2f s: kolon (%d, %d) %s (%d parca)\n", t, ij[c], ij[c + 1], cfg.i("kolon.remove", 1) ? "kaldirildi" : "kirildi", n);
             }
             removed = true;
         }
@@ -134,10 +158,12 @@ struct YikimApp {
             if (quakeLoad(cfg.i("deprem.record", 0), root, quake, err)) {
                 quakeOn = true;
                 quakeT0 = t;
-                quakeOffset = cfg.f("deprem.offset", 25.0f);
+                // where the record starts playing: deprem.offset seconds, or (negative) 15 s before its strongest moment
+                quakeOffset = cfg.f("deprem.offset", -1.0f);
+                if (quakeOffset < 0) quakeOffset = std::max(0.0, quake.tPeak - 15.0);
                 quakeScale = cfg.f("deprem.scale", 1.0f);
-                std::printf("t=%.2f s: deprem %s, PGA %.2f g, x%.2f, kaydin %.0f. saniyesinden\n", t, quake.name.c_str(), quake.pga / 9.81, quakeScale,
-                            quakeOffset);
+                std::printf("t=%.2f s: deprem %s, yatay tepe ivme %.2f g (kaydin %.1f. sn), x%.2f, kaydin %.1f. saniyesinden\n", t, quake.name.c_str(),
+                            quake.pga / 9.81, quake.tPeak, quakeScale, quakeOffset);
             } else {
                 std::printf("deprem kaydi yuklenemedi: %s\n", err.c_str());
             }
@@ -170,6 +196,11 @@ static int runClip(YikimApp& app, double seconds, double still, unsigned spp, co
         if (p.hi.y > roofY - 1e-6) roof.push_back(p.body);
     std::vector<double3> start;
     double maxDrift = 0, maxDrop = 0, tMaxDrift = 0;
+    bool caught = false;
+    std::vector<float3> prevVel;
+    float fastest = 0;
+    int fastestBody = -1;
+    double fastestT = 0, fastestY = 0;
     for (int k = 0; k <= frames; ++k) {
         const double t = k * dt;
         app.events(t);
@@ -192,6 +223,111 @@ static int runClip(YikimApp& app, double seconds, double still, unsigned spp, co
             const double drift = std::sqrt(dx * dx + dz * dz);
             if (drift > maxDrift) { maxDrift = drift; tMaxDrift = t; }
             maxDrop = std::max(maxDrop, -dy);
+        }
+        // diagnosis (test.watch = body, test.watch_from = s): the body frame by frame, with its living interfaces
+        if (app.cfg.i("test.watch", -1) > 0 && t >= app.cfg.f("test.watch_from", 0.0f) && t <= app.cfg.f("test.watch_from", 0.0f) + 0.4) {
+            const int b = app.cfg.i("test.watch", -1);
+            std::vector<unsigned> fl;
+            std::vector<float3> fo;
+            app.world.fibres(fl, fo);
+            size_t fi = 0;
+            std::string ifs;
+            for (const InterfaceDesc& d : app.world.interfaceDescs) {
+                int alive = 0;
+                float fmax = 0;
+                for (size_t q = 0; q < d.fibers.size(); ++q, ++fi)
+                    if (!(fl[fi] & 4u)) { ++alive; fmax = std::max(fmax, length(fo[fi])); }
+                if ((d.a == b || d.b == b) && alive) {
+                    char buf[96];
+                    std::snprintf(buf, sizeof(buf), " [%d-%d %d lif, %.0f N]", d.a, d.b, alive, fmax);
+                    ifs += buf;
+                }
+            }
+            std::printf("      izle t=%.3f  y %.2f  v (%.1f %.1f %.1f) |v| %.1f  w %.1f  canli arayuz:%s\n", t, app.world.pos[b].y, app.world.vel[b].x,
+                        app.world.vel[b].y, app.world.vel[b].z, length(app.world.vel[b]), length(app.world.angVel[b]), ifs.c_str());
+        }
+        // catcher (test.catch = speed): the first piece that jumps above it (3x its last frame's speed) is reported
+        if (app.cfg.f("test.catch", 0.0f) > 0.0f && !caught) {
+            if (prevVel.size() == app.world.vel.size())
+                for (size_t i = 1; i < app.world.vel.size() && !caught; ++i) {
+                    const float sp = length(app.world.vel[i]), sp0 = length(prevVel[i]);
+                    if (app.world.kinematic[i] || sp < app.cfg.f("test.catch", 0.0f) || sp < 3.0f * sp0) continue;
+                    caught = true;
+                    const int b = int(i);
+                    std::printf("YAKALANDI t=%.3f govde %d (tur %d, %.0f kg) y %.2f: |v| %.1f -> %.1f m/s, v (%.1f %.1f %.1f)\n", t, b, app.world.info[b].tag,
+                                app.world.info[b].mass, app.world.pos[b].y, sp0, sp, app.world.vel[b].x, app.world.vel[b].y, app.world.vel[b].z);
+                    std::vector<unsigned> fl;
+                    std::vector<float3> fo;
+                    app.world.fibres(fl, fo);
+                    size_t fi = 0;
+                    for (const InterfaceDesc& d : app.world.interfaceDescs) {
+                        int alive = 0;
+                        float fmax = 0;
+                        for (size_t q = 0; q < d.fibers.size(); ++q, ++fi)
+                            if (!(fl[fi] & 4u)) { ++alive; fmax = std::max(fmax, length(fo[fi])); }
+                        if ((d.a == b || d.b == b) && alive)
+                            std::printf("    arayuz %d-%d: %d canli lif, en buyuk kuvvet %.0f N\n", d.a, d.b, alive, fmax);
+                    }
+                    for (const PhysWorld::PatchInfo& pi : app.world.patchesOf(b))
+                        std::printf("    temas: govde %d (tur %d, %.0f kg, |v| %.1f), normal kuvvet %.0f N, n (%.2f %.2f %.2f)\n", pi.other,
+                                    pi.other > 0 ? app.world.info[pi.other].tag : -1, app.world.info[pi.other].mass, length(app.world.vel[pi.other]), pi.force,
+                                    pi.n.x, pi.n.y, pi.n.z);
+                }
+            prevVel = app.world.vel;
+        }
+        // the fastest piece: a fall from the roof is ~17 m/s; much more is energy the solver made up
+        for (size_t i = 1; i < app.world.vel.size(); ++i) {
+            if (app.world.kinematic[i]) continue;
+            const float sp = length(app.world.vel[i]);
+            if (sp > fastest) {
+                fastest = sp;
+                fastestBody = int(i);
+                fastestT = t;
+                fastestY = app.world.pos[i].y;
+            }
+        }
+        // diagnosis (test.trace = interface index): one interface frame by frame
+        if (app.cfg.i("test.trace", -1) >= 0 && k <= 12) {
+            const int ti = app.cfg.i("test.trace", -1);
+            std::vector<unsigned> fl;
+            std::vector<float3> fo;
+            app.world.fibres(fl, fo);
+            size_t fi = 0;
+            for (int q = 0; q < ti; ++q) fi += app.world.interfaceDescs[q].fibers.size();
+            const InterfaceDesc& d = app.world.interfaceDescs[ti];
+            app.world.download();
+            std::printf("      iz t=%.3f  a=%d v(%.3f %.3f %.3f) w(%.2f %.2f %.2f)  b=%d v(%.3f %.3f %.3f) w(%.2f %.2f %.2f)\n", t, d.a, app.world.vel[d.a].x,
+                        app.world.vel[d.a].y, app.world.vel[d.a].z, app.world.angVel[d.a].x, app.world.angVel[d.a].y, app.world.angVel[d.a].z, d.b,
+                        app.world.vel[d.b].x, app.world.vel[d.b].y, app.world.vel[d.b].z, app.world.angVel[d.b].x, app.world.angVel[d.b].y,
+                        app.world.angVel[d.b].z);
+            std::printf("         lifler:");
+            for (size_t q = 0; q < d.fibers.size(); ++q) std::printf(" [%u %.0f %.0f %.0f]", fl[fi + q], fo[fi + q].x, fo[fi + q].y, fo[fi + q].z);
+            std::printf("\n");
+        }
+        // diagnosis (test.verbose): the first interfaces to break, by the kinds they join and where
+        static bool reportedBreak = false;
+        if (app.cfg.i("test.verbose", 0) && !reportedBreak && k > 0 && k % 3 == 0) {
+            std::vector<unsigned> fl;
+            std::vector<float3> fo;
+            app.world.fibres(fl, fo);
+            size_t fi = 0;
+            int shown = 0;
+            const char* kn[] = {"kolon", "kiris", "doseme", "duvar", "diger"};
+            for (const InterfaceDesc& d : app.world.interfaceDescs) {
+                int broken = 0, cracked = 0;
+                for (size_t q = 0; q < d.fibers.size(); ++q, ++fi) {
+                    if (fl[fi] & 4u) ++broken;
+                    if (fl[fi] & 1u) ++cracked;
+                }
+                if (broken > 0 && shown < 12) {
+                    const int ka = app.world.info[d.a].tag, kb = app.world.info[d.b].tag;
+                    std::printf("      [%d] t=%.2f kirik %d/%zu (catlak %d)  %s-%s  yuz (%.2f %.2f %.2f) normal (%.0f %.0f %.0f)\n", int(&d - app.world.interfaceDescs.data()), t, broken, d.fibers.size(),
+                                cracked, ka >= 0 ? kn[ka] : "zemin", kb >= 0 ? kn[kb] : "zemin", d.fibers[0].p.x, d.fibers[0].p.y, d.fibers[0].p.z,
+                                d.n.x, d.n.y, d.n.z);
+                    ++shown;
+                }
+            }
+            if (shown) reportedBreak = true;
         }
         const bool shoot = clip ? (k % 2 == 0) : (k == frames);
         if (!shoot) continue;
@@ -217,6 +353,11 @@ static int runClip(YikimApp& app, double seconds, double still, unsigned spp, co
     std::printf("%d kare; fizik ort. %.2f ms/kare, goruntu ort. %.1f ms/kare\n", shots, physMs / std::max(1, frames), rendMs / std::max(1, shots));
     std::printf("cati: zemine gore en buyuk yatay oteleme %.3f m (t=%.2f s, yukseklige oran %.2f%%), en buyuk cokme %.3f m\n", maxDrift, tMaxDrift,
                 100.0 * maxDrift / roofY, maxDrop);
+    {
+        const double fall = std::sqrt(2.0 * 9.81 * (roofY + 1.0));
+        std::printf("en hizli parca: %.1f m/s (govde %d, tur %d, t=%.2f s, y=%.1f m); catidan serbest dusus %.1f m/s\n", fastest, fastestBody,
+                    fastestBody > 0 ? app.world.info[fastestBody].tag : -1, fastestT, fastestY, fall);
+    }
     if (app.cfg.i("test.verbose", 0)) {   // the pieces that sank most (the broken-out ones excluded: they fell on purpose)
         std::vector<int> order;
         for (const Piece& p : app.pieces) order.push_back(p.body);

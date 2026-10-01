@@ -39,7 +39,8 @@ bool QuakeRecord::load(const std::string& e, const std::string& n, const std::st
     pga = 0;
     for (size_t i = 0; i < N; ++i) {
         acc[i] = d3(c[0][i], c[2][i], c[1][i]);   // east -> x, up -> y, north -> z
-        pga = std::max(pga, std::sqrt(c[0][i] * c[0][i] + c[1][i] * c[1][i]));
+        const double ah = std::sqrt(c[0][i] * c[0][i] + c[1][i] * c[1][i]);
+        if (ah > pga) { pga = ah; tPeak = dt * i; }
     }
     for (size_t i = 1; i < N; ++i) {
         vel[i] = vel[i - 1] + (acc[i] + acc[i - 1]) * (0.5 * dt);

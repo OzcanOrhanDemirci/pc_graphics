@@ -97,6 +97,7 @@ struct DevWorld {
     cudaStream_t stream = nullptr;
     double3* groundPath = nullptr;   // the ground's position at the end of each substep of this frame
     int* frameDev = nullptr;
+    float* gravityDev = nullptr;     // this frame's gravity (ramped up while a world settles)
     int maxSubsteps = 0;
     cudaGraph_t graph = nullptr;
     cudaGraphExec_t graphExec = nullptr;
@@ -119,9 +120,10 @@ __device__ __forceinline__ float genInvMass(float im, float3 iI, float4 q, float
 // ------------------------------------------------------------------------------------------------------------
 // integrate
 // ------------------------------------------------------------------------------------------------------------
-__global__ void kIntegrate(DevWorld W, float h, float g, int substep, float maxSpeed) {
+__global__ void kIntegrate(DevWorld W, float h, int substep, float maxSpeed) {
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= W.n) return;
+    const float g = *W.gravityDev;
     const double3 groundPos = W.groundPath[substep];
     W.vOld[i] = W.v[i];
     W.wOld[i] = W.w[i];
@@ -707,9 +709,13 @@ __global__ void kPatchVelocities(DevWorld W, float h, PhysParams prm, float g) {
         const float vnOld = dot(vao - vbo, c.n);
         const float e = fabsf(vn) <= 2.0f * g * h ? 0.0f : prm.restitution;
         const float target = fmaxf(-e * vnOld, 0.0f);
-        if (vn < target) {
+        // the other side: separating faster than the bounce, or than the pair was already separating, is velocity the
+        // position pass made up pushing an overlap out. It is capped at maxDepenetration; otherwise it piles up over
+        // the substeps (measured: a block pressed into the ground by falling debris shot up at 22-52 m/s).
+        const float ceilVn = fmaxf(fmaxf(target, vnOld), prm.maxDepenetration);
+        if (vn < target || vn > ceilVn) {
             const float wn = genInvMass(ima, iIa, qa, c.ra, c.n) + genInvMass(imb, iIb, qb, c.rb, c.n);
-            if (wn > 0.0f) P = P + c.n * ((target - vn) / wn);
+            if (wn > 0.0f) P = P + c.n * (((vn < target ? target : ceilVn) - vn) / wn);
         }
         // torsion
         float3 L = make_float3(0, 0, 0);   // angular impulse on a
@@ -878,6 +884,7 @@ void PhysWorld::freeDevice() {
     if (d_->graph) cudaGraphDestroy(d_->graph);
     if (d_->groundPath) cudaFree(d_->groundPath);
     if (d_->frameDev) cudaFree(d_->frameDev);
+    if (d_->gravityDev) cudaFree(d_->gravityDev);
     if (d_->stream) cudaStreamDestroy(d_->stream);
     if (d_->e0) cudaEventDestroy(d_->e0);
     if (d_->e1) cudaEventDestroy(d_->e1);
@@ -1176,10 +1183,15 @@ void PhysWorld::upload() {
     W.maxSubsteps = 1024;
     W.groundPath = dmalloc<double3>(W.maxSubsteps);
     W.frameDev = dmalloc<int>(1);
+    W.gravityDev = dmalloc<float>(1);
     graphKey_.clear();
     PCHECK(cudaEventCreate(&W.e0));
     PCHECK(cudaEventCreate(&W.e1));
     groundPrev_ = groundTarget_ = pos[0];
+    // the zeroing memsets above ran on the legacy default stream, which the physics stream (non-blocking) does not wait
+    // for: without this a memset could land after the first frame's inputs and zero them (measured: the first frame of
+    // a second world fell with no gravity, one frame late on the ground)
+    PCHECK(cudaDeviceSynchronize());
     uploaded_ = true;
 }
 
@@ -1209,6 +1221,8 @@ void PhysWorld::step(float dt) {
     for (int s = 0; s < S; ++s) groundSteps_[s] = groundPrev_ + (groundTarget_ - groundPrev_) * (double(s + 1) / S);
     PCHECK(cudaMemcpyAsync(W.groundPath, groundSteps_.data(), S * sizeof(double3), cudaMemcpyHostToDevice, st));
     PCHECK(cudaMemcpyAsync(W.frameDev, &frame_, sizeof(int), cudaMemcpyHostToDevice, st));
+    gravityNow_ = params.gravity * gravityScale;
+    PCHECK(cudaMemcpyAsync(W.gravityDev, &gravityNow_, sizeof(float), cudaMemcpyHostToDevice, st));
     PCHECK(cudaEventRecord(W.e0, st));
     // broad phase, once per frame
     kBoxes<<<blocks(n), 128, 0, st>>>(W, dt, params.margin);
@@ -1225,7 +1239,7 @@ void PhysWorld::step(float dt) {
         PCHECK(cudaStreamBeginCapture(st, cudaStreamCaptureModeThreadLocal));
         const int contactBlocks = std::max(1, std::min(blocks(W.maxPairs * 32, 128), 2048));
         for (int s = 0; s < S; ++s) {
-            kIntegrate<<<blocks(n), 128, 0, st>>>(W, h, params.gravity, s, params.maxSpeed);
+            kIntegrate<<<blocks(n), 128, 0, st>>>(W, h, s, params.maxSpeed);
             solveInterfaces(h, st);
             PCHECK(cudaMemsetAsync(W.nPatches, 0, sizeof(int), st));
             kContacts<<<contactBlocks, 128, 0, st>>>(W, h, params);
@@ -1286,7 +1300,7 @@ void PhysWorld::profile(float dt) {
     });
     const int contactBlocks = std::max(1, std::min(blocks(W.maxPairs * 32, 128), 2048));
     for (int s = 0; s < S; ++s) {
-        timed(1, [&] { kIntegrate<<<blocks(n), 128, 0, st>>>(W, h, params.gravity, s, params.maxSpeed); });
+        timed(1, [&] { kIntegrate<<<blocks(n), 128, 0, st>>>(W, h, s, params.maxSpeed); });
         timed(2, [&] {
             solveInterfaces(h, st);
         });
@@ -1312,6 +1326,20 @@ void PhysWorld::profile(float dt) {
     std::printf("= %.2f ms\n", tot);
     cudaEventDestroy(ev[0]);
     cudaEventDestroy(ev[1]);
+}
+
+// load a freshly built world gently: gravity ramps from zero (smoothstep) over ramp seconds, then the world rests for
+// the remaining time. Switching full gravity on at once drops a tall frame like jelly for the first frames (solver
+// stiffness is limited) and the jolt broke thin parapets at rest (measured: a balcony fell at half of g at first).
+void PhysWorld::settle(float seconds, float ramp, float dt) {
+    const int frames = int(seconds / dt + 0.5f);
+    for (int k = 0; k < frames; ++k) {
+        const float t = std::min(1.0f, (k + 1) * dt / std::max(ramp, 1e-3f));
+        gravityScale = t * t * (3.0f - 2.0f * t);
+        step(dt);
+    }
+    gravityScale = 1.0f;
+    time = 0;
 }
 
 void PhysWorld::download() {
@@ -1342,6 +1370,26 @@ void PhysWorld::setVelocity(int b, float3 v, float3 w) {
     if (!uploaded_ || b <= 0 || b >= d_->n) return;
     PCHECK(cudaMemcpy(d_->v + b, &v, sizeof(float3), cudaMemcpyHostToDevice));
     PCHECK(cudaMemcpy(d_->w + b, &w, sizeof(float3), cudaMemcpyHostToDevice));
+}
+
+void PhysWorld::removeBody(int b) {
+    if (!uploaded_ || b <= 0 || b >= d_->n) return;
+    breakBody(b);
+    double3 x;
+    PCHECK(cudaMemcpy(&x, d_->x + b, sizeof(double3), cudaMemcpyDeviceToHost));
+    x.y = -1000.0;
+    const unsigned one = 1u;
+    const float zero = 0.0f;
+    const float3 z3 = make_float3(0, 0, 0);
+    PCHECK(cudaMemcpy(d_->x + b, &x, sizeof(double3), cudaMemcpyHostToDevice));
+    PCHECK(cudaMemcpy(d_->xPrev + b, &x, sizeof(double3), cudaMemcpyHostToDevice));
+    PCHECK(cudaMemcpy(d_->kin + b, &one, sizeof(unsigned), cudaMemcpyHostToDevice));
+    PCHECK(cudaMemcpy(d_->invMass + b, &zero, sizeof(float), cudaMemcpyHostToDevice));
+    PCHECK(cudaMemcpy(d_->invI + b, &z3, sizeof(float3), cudaMemcpyHostToDevice));
+    PCHECK(cudaMemcpy(d_->v + b, &z3, sizeof(float3), cudaMemcpyHostToDevice));
+    PCHECK(cudaMemcpy(d_->w + b, &z3, sizeof(float3), cudaMemcpyHostToDevice));
+    kinematic[b] = 1u;
+    invMass[b] = 0.0f;
 }
 
 std::vector<float> PhysWorld::damage() {
@@ -1408,6 +1456,19 @@ float PhysWorld::patchForce(int b) {
     for (const DPatch& c : P)
         if (c.a == b || c.b == b) f += c.J / (h * h);
     return f;
+}
+
+std::vector<PhysWorld::PatchInfo> PhysWorld::patchesOf(int b) {
+    std::vector<PatchInfo> out;
+    if (!uploaded_) return out;
+    int np = 0;
+    PCHECK(cudaMemcpy(&np, d_->nPatches, sizeof(int), cudaMemcpyDeviceToHost));
+    np = std::min(np, d_->maxPatches);
+    std::vector<DPatch> P(np);
+    if (np) PCHECK(cudaMemcpy(P.data(), d_->patches, np * sizeof(DPatch), cudaMemcpyDeviceToHost));
+    for (const DPatch& c : P)
+        if (c.a == b || c.b == b) out.push_back({c.a == b ? c.b : c.a, c.J / (lastH_ * lastH_), c.a == b ? c.n : c.n * -1.0f});
+    return out;
 }
 
 void PhysWorld::writeTransforms(void* instances, size_t stride, int first, int count, void* stream) {

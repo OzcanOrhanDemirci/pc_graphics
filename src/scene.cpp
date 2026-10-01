@@ -36,7 +36,10 @@ float3 Config::v3(const std::string& key, float3 def) const {
     auto it = values.find(key);
     if (it == values.end()) return def;
     float3 r = def;
-    std::sscanf(it->second.c_str(), "%f %f %f", &r.x, &r.y, &r.z);
+    std::string v = it->second;
+    for (char& ch : v)
+        if (ch == ',') ch = ' ';   // "x, y, z" and "x y z" both (a comma used to stop the read silently after x)
+    std::sscanf(v.c_str(), "%f %f %f", &r.x, &r.y, &r.z);
     return r;
 }
 

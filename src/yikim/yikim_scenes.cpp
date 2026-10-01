@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
-static unsigned kindColor(int kind) {
+unsigned kindColor(int kind) {
     switch (kind) {
     case PK_COLUMN: return 0x9a9a96;
     case PK_BEAM: return 0xa8a49c;
@@ -64,7 +64,7 @@ void glueTouching(PhysWorld& w, std::vector<Piece>& P, int mat, const FrameSpec&
             d.b = 0;
             d.n = make_float3(0, -1, 0);
             d.len = float(P[i].hi.y - P[i].lo.y) * 0.5f + 0.3f;   // the footing below grade
-            d.mat = mat;
+            d.mat = P[i].kind == PK_WALL && spec.matBrick >= 0 ? spec.matBrick : mat;
             const float As = steelRatio(P[i].kind, P[i].kind, spec) * float(4.0 * ax * az);
             d.fibers = fibreGrid(make_float3(float((P[i].lo.x + P[i].hi.x) * 0.5), 0.0f, float((P[i].lo.z + P[i].hi.z) * 0.5)),
                                  make_float3(1, 0, 0), make_float3(0, 0, 1), float(ax), float(az), As);
@@ -95,9 +95,9 @@ void glueTouching(PhysWorld& w, std::vector<Piece>& P, int mat, const FrameSpec&
                 d.b = B.body;
                 d.n = n;
                 d.len = float(((aHi - aLo) + (bHi - bLo)) * 0.5);
-                d.mat = mat;
+                d.mat = (A.kind == PK_WALL || B.kind == PK_WALL) && spec.matBrick >= 0 ? spec.matBrick : mat;
                 const float area = float((hi1 - lo1) * (hi2 - lo2));
-                d.fibers = fibreGrid(f3(c), u, v, float(hi1 - lo1) * 0.5f, float(hi2 - lo2) * 0.5f, steelRatio(A.kind, B.kind, spec) * area);
+                d.fibers = fibreGrid(f3(c), u, v, float(hi1 - lo1) * 0.5f, float(hi2 - lo2) * 0.5f, (A.rho >= 0 || B.rho >= 0 ? std::max(A.rho, B.rho) : steelRatio(A.kind, B.kind, spec)) * area);
                 w.addInterface(d);
             }
         }
@@ -175,21 +175,18 @@ void buildPile(PhysWorld& w, int count, unsigned seed) {
 // ---------------------------------------------------------------------------------------------------------
 // the reinforced-concrete frame
 // ---------------------------------------------------------------------------------------------------------
-static void splitRange(double a, double b, double target, std::vector<double>& cuts) {
+void splitRange(double a, double b, double target, std::vector<double>& cuts) {
     const int n = std::max(1, int(std::round((b - a) / target)));
     cuts.clear();
     for (int i = 0; i <= n; ++i) cuts.push_back(a + (b - a) * i / n);
 }
 
-std::vector<Piece> buildFrame(PhysWorld& w, const FrameSpec& s, const PhysMaterial& concrete) {
-    w.clear();
-    const int mat = w.addMaterial(concrete);
-    std::vector<Piece> P;
+void addFramePieces(const FrameSpec& s, std::vector<Piece>& P) {
     auto X = [&](int i) { return i * s.spanX; };
     auto Z = [&](int j) { return j * s.spanZ; };
     std::vector<double> cuts;
     for (int st = 0; st < s.storeys; ++st) {
-        const double y0 = st * s.storeyH, y1 = (st + 1) * s.storeyH;
+        const double y0 = s.level(st), y1 = s.level(st + 1);
         // columns: foot (hinge zone), shaft, joint (beam depth)
         const double ys[4] = {y0, y0 + s.hingeLen, y1 - s.beamD, y1};
         for (int i = 0; i <= s.baysX; ++i)
@@ -220,35 +217,46 @@ std::vector<Piece> buildFrame(PhysWorld& w, const FrameSpec& s, const PhysMateri
                         P.push_back({d3(cx[a], y1 - s.slabT, cz[b]), d3(cx[a + 1], y1, cz[b + 1]), PK_SLAB});
             }
     }
+}
+
+void addPieceBodies(PhysWorld& w, std::vector<Piece>& P, const FrameSpec& s) {
     for (Piece& p : P) {
-        const float rho = p.kind == PK_SLAB ? s.densitySlab : s.densityConcrete;
-        p.body = w.addBody(polyAabb(p.lo, p.hi), rho, false, p.kind, kindColor(p.kind));
+        const float rho = p.density > 0 ? p.density : p.kind == PK_SLAB ? s.densitySlab : s.densityConcrete;
+        p.body = w.addBody(polyAabb(p.lo, p.hi), rho, false, p.kind, p.color ? p.color : kindColor(p.kind));
     }
+}
+
+std::vector<Piece> buildFrame(PhysWorld& w, const FrameSpec& s, const PhysMaterial& concrete) {
+    w.clear();
+    const int mat = w.addMaterial(concrete);
+    std::vector<Piece> P;
+    addFramePieces(s, P);
+    addPieceBodies(w, P, s);
     glueTouching(w, P, mat, s, true);
     return P;
 }
 
-FrameSpec frameSpecFromConfig(const Config& c) {
+FrameSpec frameSpecFromConfig(const Config& c, const std::string& pre) {
     FrameSpec s;
-    s.baysX = c.i("frame.bays_x", s.baysX);
-    s.baysZ = c.i("frame.bays_z", s.baysZ);
-    s.storeys = c.i("frame.storeys", s.storeys);
-    s.spanX = c.f("frame.span_x", float(s.spanX));
-    s.spanZ = c.f("frame.span_z", float(s.spanZ));
-    s.storeyH = c.f("frame.storey_h", float(s.storeyH));
-    s.colX = c.f("frame.col_x", float(s.colX));
-    s.colZ = c.f("frame.col_z", float(s.colZ));
-    s.beamW = c.f("frame.beam_w", float(s.beamW));
-    s.beamD = c.f("frame.beam_d", float(s.beamD));
-    s.slabT = c.f("frame.slab_t", float(s.slabT));
-    s.hingeLen = c.f("frame.hinge_len", float(s.hingeLen));
-    s.beamSeg = c.f("frame.beam_seg", float(s.beamSeg));
-    s.slabPanel = c.f("frame.slab_panel", float(s.slabPanel));
-    s.densityConcrete = c.f("frame.density", s.densityConcrete);
-    s.densitySlab = c.f("frame.density_slab", s.densitySlab);
-    s.rhoColumn = c.f("frame.rho_column", s.rhoColumn);
-    s.rhoBeam = c.f("frame.rho_beam", s.rhoBeam);
-    s.rhoSlab = c.f("frame.rho_slab", s.rhoSlab);
+    s.baysX = c.i(pre + "bays_x", s.baysX);
+    s.baysZ = c.i(pre + "bays_z", s.baysZ);
+    s.storeys = c.i(pre + "storeys", s.storeys);
+    s.spanX = c.f(pre + "span_x", float(s.spanX));
+    s.spanZ = c.f(pre + "span_z", float(s.spanZ));
+    s.storeyH = c.f(pre + "storey_h", float(s.storeyH));
+    s.colX = c.f(pre + "col_x", float(s.colX));
+    s.colZ = c.f(pre + "col_z", float(s.colZ));
+    s.beamW = c.f(pre + "beam_w", float(s.beamW));
+    s.beamD = c.f(pre + "beam_d", float(s.beamD));
+    s.slabT = c.f(pre + "slab_t", float(s.slabT));
+    s.hingeLen = c.f(pre + "hinge_len", float(s.hingeLen));
+    s.beamSeg = c.f(pre + "beam_seg", float(s.beamSeg));
+    s.slabPanel = c.f(pre + "slab_panel", float(s.slabPanel));
+    s.densityConcrete = c.f(pre + "density", s.densityConcrete);
+    s.densitySlab = c.f(pre + "density_slab", s.densitySlab);
+    s.rhoColumn = c.f(pre + "rho_column", s.rhoColumn);
+    s.rhoBeam = c.f(pre + "rho_beam", s.rhoBeam);
+    s.rhoSlab = c.f(pre + "rho_slab", s.rhoSlab);
     return s;
 }
 
