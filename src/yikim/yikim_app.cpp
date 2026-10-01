@@ -8,6 +8,7 @@
 #include "image_io.h"
 #include "scene.h"   // Config
 #include "yikim/building.h"
+#include "yikim/fly_camera.h"
 #include "yikim/quake.h"
 #include "yikim/yikim_renderer.h"
 #include "yikim/yikim_scenes.h"
@@ -561,20 +562,12 @@ static int runWindow(YikimApp& app, bool windowed, bool autotest) {
     cudaMallocHost(reinterpret_cast<void**>(&pinned), size_t(app.width) * app.height * sizeof(uchar4));
     double frameMs = 0.0;
 
-    // the free camera: yaw (0 looks along +z), pitch
+    // the free camera (fly_camera.h)
     YCamera& cam = app.renderer.params().cam;
-    float3 camPos = cam.pos;
-    float yaw = std::atan2(cam.fwd.x, cam.fwd.z), pitch = std::asin(std::max(-1.0f, std::min(1.0f, cam.fwd.y)));
-    float fovDeg = app.cfg.f("camera.fov", 50.0f);
-    auto applyCam = [&]() {
-        const float3 f = make_float3(std::sin(yaw) * std::cos(pitch), std::sin(pitch), std::cos(yaw) * std::cos(pitch));
-        cam.pos = camPos;
-        cam.fwd = normalize(f);
-        cam.right = normalize(cross(cam.fwd, make_float3(0, 1, 0)));
-        cam.up = cross(cam.right, cam.fwd);
-        cam.tanHalfY = std::tan(0.5f * fovDeg * 3.14159265f / 180.0f);
-        cam.tanHalfX = cam.tanHalfY * float(app.width) / float(app.height);
-    };
+    FlyCamera fly;
+    fly.lookAt(cam.pos, cam.pos + cam.fwd);
+    fly.fovDeg = app.cfg.f("camera.fov", 50.0f);
+    auto applyCam = [&]() { fly.apply(cam, app.width, app.height); };
     applyCam();
 
     const float speeds[3] = {1.0f, 0.25f, 0.1f};
@@ -658,32 +651,22 @@ static int runWindow(YikimApp& app, bool windowed, bool autotest) {
         glfwGetCursorPos(win, &mx, &my);
         const bool rmb = glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
         if (rmb && looking) {
-            const float sens = app.cfg.f("camera.mouse", 0.0025f);
-            yaw += float(mx - mouseX) * sens;
-            pitch = std::max(-1.5f, std::min(1.5f, pitch - float(my - mouseY) * sens));
+            fly.look(float(mx - mouseX), float(my - mouseY), app.cfg.f("camera.mouse", 0.0025f));
             if (mx != mouseX || my != mouseY) camMoved = true;
         }
         looking = rmb;
         mouseX = mx;
         mouseY = my;
-        if (g_yscroll != 0.0) { fovDeg = std::max(15.0f, std::min(90.0f, fovDeg - float(g_yscroll) * 3.0f)); g_yscroll = 0.0; camMoved = true; }
+        if (g_yscroll != 0.0) { fly.fovDeg = std::max(15.0f, std::min(90.0f, fly.fovDeg - float(g_yscroll) * 3.0f)); g_yscroll = 0.0; camMoved = true; }
         if (g_yclick) { click = true; clickCtrl = g_yclickCtrl; clickX = mx; clickY = my; g_yclick = false; }
         const double now = fnow2();
         const float realDt = float(std::min(0.1, now - last));
         last = now;
-        {   // WASD + Q/E, Shift faster
-            const float3 f = make_float3(std::sin(yaw), 0.0f, std::cos(yaw)), r = make_float3(std::cos(yaw), 0.0f, -std::sin(yaw));
-            float3 mv = make_float3(0, 0, 0);
-            if (glfwGetKey(win, GLFW_KEY_W) == GLFW_PRESS) mv = mv + f;
-            if (glfwGetKey(win, GLFW_KEY_S) == GLFW_PRESS) mv = mv - f;
-            if (glfwGetKey(win, GLFW_KEY_D) == GLFW_PRESS) mv = mv + r;
-            if (glfwGetKey(win, GLFW_KEY_A) == GLFW_PRESS) mv = mv - r;
-            if (glfwGetKey(win, GLFW_KEY_E) == GLFW_PRESS) mv.y += 1.0f;
-            if (glfwGetKey(win, GLFW_KEY_Q) == GLFW_PRESS) mv.y -= 1.0f;
-            if (dot(mv, mv) > 0.0f) {
-                const float v = (glfwGetKey(win, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS ? 24.0f : 7.0f) * realDt;
-                camPos = camPos + normalize(mv) * v;
-                camPos.y = std::max(camPos.y, 0.3f);
+        {   // WASD + E/Q, Shift faster
+            auto key = [&](int k) { return glfwGetKey(win, k) == GLFW_PRESS ? 1.0f : 0.0f; };
+            const float inF = key(GLFW_KEY_W) - key(GLFW_KEY_S), inR = key(GLFW_KEY_D) - key(GLFW_KEY_A), inU = key(GLFW_KEY_E) - key(GLFW_KEY_Q);
+            if (inF != 0.0f || inR != 0.0f || inU != 0.0f) {
+                fly.move(inF, inR, inU, (key(GLFW_KEY_LEFT_SHIFT) > 0.0f ? 24.0f : 7.0f) * realDt);
                 camMoved = true;
             }
         }

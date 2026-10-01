@@ -1,6 +1,7 @@
 // Scene 3 "Yikim": physics tests (yikim.exe --test). Each prints a number against its expectation; the thresholds
 // were written before the first run. Exit code 0 only if all pass.
 #include "yikim/building.h"
+#include "yikim/fly_camera.h"
 #include "yikim/yikim_scenes.h"
 
 #include <algorithm>
@@ -485,6 +486,34 @@ void testBuilding(const Config& cfg) {
     std::printf(" mm)\n");
 }
 
+// The free camera's directions against the picture: a point straight ahead must move to the screen's left when the
+// camera steps right (D) and when the view turns right (mouse dragged right). Özcan found both mirrored (10-02).
+void testControls(const Config&) {
+    FlyCamera c;
+    c.lookAt(make_float3(-15.0f, 9.0f, -17.0f), make_float3(6.0f, 6.5f, 7.0f));
+    YCamera cam{};
+    c.apply(cam, 1920, 1080);
+    const float3 ahead = cam.pos + cam.fwd * 20.0f;
+    FlyCamera m = c;
+    m.move(0.0f, 1.0f, 0.0f, 1.0f);   // D
+    YCamera cm{};
+    m.apply(cm, 1920, 1080);
+    report("kontrol: D ile saga adim, onumuzdeki nokta", screenX(cm, ahead) < -0.01f, "x %.3f", screenX(cm, ahead), "< 0 (%.0f: sola kayar)", 0.0);
+    FlyCamera l = c;
+    l.look(100.0f, 0.0f, 0.0025f);    // mouse right
+    YCamera cl{};
+    l.apply(cl, 1920, 1080);
+    report("kontrol: fare saga, onumuzdeki nokta", screenX(cl, ahead) < -0.01f, "x %.3f", screenX(cl, ahead), "< 0 (%.0f: sola kayar)", 0.0);
+    FlyCamera w = c;
+    w.move(1.0f, 0.0f, 0.0f, 1.0f);   // W: nearer, still ahead
+    YCamera cw{};
+    w.apply(cw, 1920, 1080);
+    report("kontrol: W ileri, nokta yaklasir", length(ahead - cw.pos) < length(ahead - cam.pos), "%.2f m", length(ahead - cw.pos), "< %.2f m", length(ahead - cam.pos));
+    FlyCamera u = c;
+    u.look(0.0f, 100.0f, 0.0025f);    // mouse down: look down
+    report("kontrol: fare asagi, bakis asagi", u.forward().y < c.forward().y, "%.3f", u.forward().y, "< %.3f", c.forward().y);
+}
+
 }   // namespace
 
 int runYikimTests(const Config& cfg, const std::string& only) {
@@ -492,7 +521,7 @@ int runYikimTests(const Config& cfg, const std::string& only) {
     std::printf("YIKIM fizik testleri (alt adim %d)\n", cfg.i("phys.substeps", 20));
     struct T { const char* name; void (*fn)(const Config&); };
     const T tests[] = {{"dusme", testFallTiming}, {"dusme", testFreeFall}, {"yigin", testStacks}, {"egim", testSlope},
-                       {"konsol", testCantilever}, {"mafsal", testHinge}, {"enerji", testEnergy}, {"determinizm", testDeterminism}, {"cerceve", testFrame}, {"bina", testBuilding}};
+                       {"konsol", testCantilever}, {"mafsal", testHinge}, {"enerji", testEnergy}, {"determinizm", testDeterminism}, {"cerceve", testFrame}, {"bina", testBuilding}, {"kontrol", testControls}};
     for (const T& t : tests)
         if (only.empty() || only == t.name) t.fn(cfg);
     int fails = 0;
