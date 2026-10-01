@@ -3,6 +3,8 @@
 > Tek kaynak durum panosu. Plan ve Özcan'ın tarifi `docs/fener/PLAN.md`'de.
 
 ## Şu an
+- **2026-10-01 · Sahne 2 kapandı.** Özcan: "Çok güzel oldu. Görev tamamlandı." Açmak: `buildener.exe`. Sanat cilası
+  (aşağıdaki "Açık" maddeleri) yapılmadan kapandı; istenirse açılır.
 - **2026-10-01 · F2 + yolculuk çalışıyor.** Kuşbakışı harita (`--map`), A ve B kilitli, Space ile A → B orman içinden
   yolculuk (778 m, ~70 sn, yumuşak kalkış/duruş, yolda tekrar Space geri döner). Kareler `docs/fener/kareler/F2_*`.
   Açık: yakın köknar kalitesi (karton testere görünümü), ormanda huzmeyle beyaza dönen iğneler, çisenti, göz kamaşması
