@@ -27,7 +27,10 @@ src/
     altinsaat/  sahne 1 · Altın Saat (spektral yol izleyici)
     fener/      sahne 2 · Fener (gerçek zamanlı hacimsel ışık)
     yikim/      sahne 3 · Yıkım (ekran kartında fizik çözücü)
-    tanecik/    sahne 4 · Tanecik (tanecik fiziği ve insan; yapım aşamasında)
+    laboratuvar/ sahne 4 · Laboratuvar (sıvı ve tanecik fiziği, ağır çekim kayıtları)
+      particles.*       tanecik çözücüsü (PBF, XPBD bağlar, şekil eşleme, taneler)  surface.* sıvı yüzeyi
+      lab_world.*       beş deneyin kurulumu ve adımı (kaba ya da ince)  lab_record.* ince kayıt, işçi iş parçacığı
+      lab_kernels.cu    çözücü, kayıt ve çizici arası küçük çekirdekler  weapons.* gerçek yükler, balistik
       <sahne>_app.h     bir çalıştırmanın durumu (renderer, ayarlar, dünya)
       <sahne>_app.cpp   komut satırı araçları (pencere olmadan kareler, testler)
       <sahne>_live.cpp  uygulamadaki canlı sahne: app::Scene

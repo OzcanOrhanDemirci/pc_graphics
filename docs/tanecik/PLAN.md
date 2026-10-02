@@ -1,3 +1,6 @@
+> 🗄️ **ARŞİV (2026-10-03).** Sahne 4 "Laboratuvar"a döndü (sıvı ve tanecik fiziği, ağır çekim); insan yolu fikir
+> olarak kaldı. Kod `tanecik-insan-arsiv` etiketinde. Güncel sahne: `docs/laboratuvar/`.
+
 # PLAN · sahne 4: "Tanecik" (tanecik fiziği ve insan fiziği)
 
 > Tek kaynak plan. 2026-10-02'de Özcan'la konuşularak yazıldı, Özcan onayladı. Durum ve ölçümler

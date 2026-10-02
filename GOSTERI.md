@@ -2,9 +2,9 @@
 
 ## Açmak
 `C:\dev\pc_graphics\build\pc_graphics.exe` — çift tıkla. Birincil monitörde kenarlıksız tam ekran **galeri** açılır:
-solda üç sahne, sağda seçilenin resmi ve açıklaması.
+solda dört sahne, sağda seçilenin resmi ve açıklaması.
 
-- **↑ / ↓** (ya da **1-3**, ya da fare) seç, **Enter** (ya da **Sahneyi aç** düğmesi) aç.
+- **↑ / ↓** (ya da **1-4**, ya da fare) seç, **Enter** (ya da **Sahneyi aç** düğmesi) aç.
 - **A** (ya da **Ayrıntılar** düğmesi): resmin üstünde sahnenin nasıl yapıldığı, teknik başlıklarla; **Esc** kapatır.
 - **L** (ya da sağ üstte **TR | EN**): uygulamanın dili, Türkçe ↔ İngilizce; seçim hatırlanır. İngilizce rehber: `DEMO.md`.
 - Açılan sahne birkaç saniye yükleme ekranında hazırlanır (sahne 1'in programları ilk açılışta daha uzun derlenir).
@@ -74,3 +74,29 @@ saniye görünmeden kendi ağırlığıyla oturur. Odak fizik.
 biriktiğini izle; zemin kat kolonlarına top at, gücü değiştirerek (ölçüldü: dengeli top köşe ve kenar kolonu kırar, en hafifi
 kıpırdatmaz, göktaşı apartmanı da gökdeleni de tek atışta yıkar); çöküşü **T** ile ağır çekimde izle, kırık kolon uçlarına uçup demirlere yakından bak.
 Ayarlar `scenes/yikim.cfg` (bina, malzemeler, çözücü, kamera, güneş).
+
+## 04 · Laboratuvar — ağır çekim fotoğraf masası: su, bal, kum, su balonu, karpuz
+Koyu set, arkada yumuşak ışık paneli. Panelin en üstünde **Deney** (ya da **1-5**). Her şey tanecik, fizik ne derse o.
+**Hızlı anlar kayıt:** tetik kaba dünyada hemen oynar (sol altta **Kaba önizleme**), ince dünya arka planda
+hesaplanır (**İnce hesap %…**, alttaki çubuk); **Zaman** çubuğuna tıklayınca hesaplanan kısım hemen izlenir. Bitince bir
+kez gerçek hızda oynar, sonra serbest inceleme. Video yok: saklanan fiziktir, her açıdan canlı çizilir.
+
+| Deney | Ne yap |
+|---|---|
+| **Su** | **Yükseklik** çubuğu (12-45 cm; bırakınca beher yeniden kurulur), **Boşluk** ya da **Dök**: beher bardağa dökülür, yüksekten sıçrar ve taşar |
+| **Bal** | canlı; **sol tıkla sürükle**: kaşık imleci izler · **Akış**, **Yükseklik** çubukları · **Boşluk** akıt / durdur |
+| **Kum** | canlı; **sol tıkla sürükle**: huni imleci izler (behere doldur ya da masaya yığ) · **B** ya da **Çelik bilye bırak** |
+| **Su balonu** | balona **sol tık** (tıkladığın yere iğne) ya da **Boşluk** (önden) |
+| **Karpuz** | **Mermi** çubuğu (5,56 → 7,62×51 → .50 BMG, gerçek yükler), karpuza **sol tık** (kameradan ateş) ya da **Boşluk** (yandan, ortadan) |
+
+| Tuş | Ne yapar |
+|---|---|
+| **T** | hız: ×1, ×1/10, ×1/100 (canlıda da, kayıtta da; panelde **Hız**) |
+| **P** | durdur / oynat (kayıt bitmişse baştan oynatır) · **← / →** kayıtta 10 ms geri / ileri (**Shift** ile 100 ms) |
+| **sağ tık + fare** | bak · **WASD** baktığın yöne git · **E / Q** yukarı / aşağı · **Shift** hızlı · **tekerlek** ileri / geri · **C** kamerayı deneye döndür |
+| **R** | yeniden kur (kayıttayken canlıya dön) |
+
+**Dene:** balonu patlat, kayıt bitince **Zaman**'ı başa çek, **×1/100** seç ve **P**: lastik 20-30 ms'de soyulurken su bir
+an balon biçiminde durur. Suyu en yüksekten (45 cm) dök, sıçramayı ×1/10'da dondurup etrafında dolaş. Kumu bir yere
+yığ (koni ~32°), sonra huniyi behere götür; yığına bilye bırak. Karpuzu ×1/100'de izle: önce şişer, sonra kabuk açılır.
+Ayarlar `scenes/laboratuvar.cfg` (F5 ile).

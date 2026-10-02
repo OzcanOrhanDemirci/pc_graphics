@@ -1,9 +1,16 @@
 # DURUM · pc_graphics uygulaması
 
 > Uygulamanın tek kaynak durum panosu. Mimari ve yeni sahne ekleme: `docs/MIMARI.md`. Sahnelerin kendi panoları:
-> `docs/altinsaat/`, `docs/fener/`, `docs/yikim/`, `docs/tanecik/` (PLAN.md ve DURUM.md).
+> `docs/altinsaat/`, `docs/fener/`, `docs/yikim/`, `docs/laboratuvar/` (PLAN.md ve DURUM.md); `docs/tanecik/` arşiv.
 
 ## Şu an
+- **2026-10-03 (gece, Özcan uyurken otonom) · Sahne 4 artık "Laboratuvar"** (ağır çekim fotoğraf masası). İnsan / manken
+  yolu kapandı (Özcan: fikir olarak kalsın), kodu `tanecik-insan-arsiv` etiketinde, belgeleri `docs/tanecik/` (arşiv).
+  Beş deney: su dökme, bal, kum, su balonu, karpuz; hızlı anlar arka planda ince hesaplanan **kayıt** (video değil,
+  fizik saklanır), bal ve kum canlı. T1 çözücüsü, sıvı yüzeyi ve silah modülü sahneye taşındı (`src/scenes/laboratuvar/`).
+  Galeride 04 (deniz yeşili). Plan, ölçümler, kararlar ve **NE DOĞRULANMADI**: `docs/laboratuvar/DURUM.md`.
+  Ajan dalları: `tanecik-suzgec` (gürültü süzgeci) eski çiziciye bağlıydı, birleştirilmedi; Laboratuvar OptiX'in
+  yapay zekâ gürültü gidericisini (AOV) kullanıyor. `tanecik-denge` insan için, birleştirilmedi (dal duruyor).
 - **2026-10-02 (gece) · Sahne 4 "Tanecik" başladı** (tanecik fiziği ve insan fiziği). Plan Özcan'la konuşuldu ve
   onaylandı: `docs/tanecik/PLAN.md`. T0 (görünüm) bitti, galeride 04 (vurgu rengi deniz yeşili `#6FC2B4`). Galeri
   başlığındaki sahne sayısı artık kayıttan ("dört sahne"), liste satırları sahne sayısına göre kısalır (beşinci sahnede

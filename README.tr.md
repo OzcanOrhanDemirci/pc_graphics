@@ -25,16 +25,19 @@
 Bilgisayar grafiğini sanat yönetimi olarak çalışmak için kişisel bir atölye: bir dizi sahne, her biri kendi
 oturumunda tek ve dar bir hedefle. Oyun motoru da değil, performans testi de değil. İlk sahne ışığın matematiksel
 olarak doğru olmasıyla, ikincisi güzellikle, üçüncüsü fizikle ilgiliydi: gerçek hissettiren bir binanın gerçek
-hissettiren biçimde yıkılması.
+hissettiren biçimde yıkılması. Dördüncüsü bir ağır çekim fotoğraf masası: sıvılar ve taneler, ince hesaplanıp ağır
+çekimde izlenir.
 
 Hepsi tek bir makine için (2560×1440 IPS monitörü süren bir RTX 4080) C++, CUDA ve OptiX ile yazıldı; altında motor
 yok. Sahne 1 spektral bir yol izleyicidir: referans görüntüye yakınsayan **durağan kip** ve NVIDIA'nın yapay zekâ
 gürültü gidericisiyle saniyede 20-30 kare tutan **canlı kip**. Sahne 2 gerçek zamanlı, hacimsel bir gece. Sahne 3
-kendi yazdığımız bir katı cisim ve kırılma çözücüsü; sade bir gündüz ışın izleyicisiyle çiziliyor.
+kendi yazdığımız bir katı cisim ve kırılma çözücüsü; sade bir gündüz ışın izleyicisiyle çiziliyor. Sahne 4 bir tanecik
+çözücüsü (sıvılar, taneler, kopabilen bağlar); hızlı anları arka planda ince hesaplanır ve video olarak değil, fizik
+olarak saklanır.
 
 ## Uygulama
 
-Üç sahne tek bir programda yaşıyor. Program bir galeriyle açılır; sahne bir yükleme ekranının arkasında yüklenir
+Dört sahne tek bir programda yaşıyor. Program bir galeriyle açılır; sahne bir yükleme ekranının arkasında yüklenir
 (programları derlenir, dünyası kurulur; bunlar ayrı bir iş parçacığında yapıldığı için pencere canlı kalır) ve sonra hepsi
 için aynı olan bir arayüzün altında çalışır: kim ve ne sol altta, süreler sağ üstte, çıkış yolu sağ altta, tuşlar F1'de.
 Sol alttaki panel fareyle kullanılır: sahne oraya seçenek sıraları, kaydırma çubukları ve düğmeler koyabilir (Yıkım'da
@@ -50,7 +53,7 @@ Esc her zaman geri götürür; kapanan sahne ekran kartını bütünüyle geri v
 
 Görünüm tek bir yazı ailesiyle kurulu, IBM Plex: adlar için Serif, sözcükler için Sans, sayılar ve tuşlar için Mono.
 Resimlerin üstünde koyu cam paneller ve her sahneye ışığından alınmış tek bir vurgu rengi: sıcak altın, soğuk mavi,
-güvenlik turuncusu. Bir sahne; renderer'ı, ayarları ve OptiX programlarıyla bir klasör ve sahne kaydında tek bir
+güvenlik turuncusu, deniz yeşili. Bir sahne; renderer'ı, ayarları ve OptiX programlarıyla bir klasör ve sahne kaydında tek bir
 satırdır; sözleşme ve yeni sahne eklemek [docs/MIMARI.md](docs/MIMARI.md)'de.
 
 ## Sahneler
@@ -126,6 +129,64 @@ bir güneşli gün; emek fiziğe gitti.
 Canlı çalışır: 1080p, RTX 4080'de gürültü giderici açıkken saniyede ~50 kare, fizik ve görüntü ekran kartında yan yana.
 Büyüklüğü (3-9) ve süreyi (büyüklüğün kendi süresinden durdurana kadar) panelden fareyle ya da tuşla seç, başlat;
 tıklayıp yıkım topu at, zamanı onda birine kadar yavaşlat.
+
+### 4 · Laboratuvar · Ekim 2026
+
+Bir ağır çekim fotoğraf masası: koyu bir set, deneyin arkasında büyük yumuşak bir ışık paneli, sıvı fotoğrafçılığının
+klasik ışığı (cam ve sıvı kırılan kenarlarıyla okunur). Beş deney, hepsi kendi yazdığımız tek çözücüde tanecik, fizik
+ne derse o:
+
+- **Su** eğilen bir beherden bardağa dökülür, 12 ile 45 cm arasından: sıçrar, taşar, masada birikir.
+- **Bal** kaşıktan cam tabağa (canlı, kaşığı fareyle gezdir): yığılır, yavaşça yayılır, kehribar.
+- **Kum** huniden masaya ve behere (canlı): 32,5° ile yığılır (kuru kum 30-35°); çelik bilye bırakılabilir.
+- **Su balonu** masada, iğneyle delinir: lastik 20-30 ms'de geri soyulurken su bir an balon biçiminde kalır, sonra çöker.
+- **Karpuz** tüfekle vurulur (5,56, 7,62×51, .50 BMG; gerçek yükler): birkaç milisaniye şişer, sonra kabuğu taç gibi
+  açılır.
+
+![Sahne 4: iğneden 24 ms sonra su balonu, lastik geri soyuluyor, su hâlâ balon biçiminde](docs/images/lab-balon.jpg)
+
+Hızlı olanlar **kaydedilir**: tetik kaba dünyada hemen oynar (önizleme olduğu yazar), ince dünya (1,5-2,5 mm tanecik,
+150 bine kadar) aynı girdileri bir işçi iş parçacığında hesaplar, saniyenin 1/600'ü ile 1/1000'i aralıklarla ekran
+kartında saklar. Hesaplanan kısım hemen izlenir, video yüklenir gibi; bitince bir kez gerçek hızda oynar, sonra
+serbest: zaman çubuğunda gez, 1/10 ya da 1/100'e yavaşlat, dondur, WASD ile etrafında dolaş. Hiçbiri video değil:
+saklanan fiziktir, her açıdan canlı çizilir. Bal ve kum yalnız canlı, çünkü akışları sahnenin kendisi.
+
+| Dökme (ince kayıt, 1,45 sn) | Canlı dökülen kum: 32,5°'lik koni |
+| --- | --- |
+| ![Eğik bir beherden bardağa tek, düzgün bir şerit hâlinde dökülen su](docs/images/lab-su.jpg) | ![Boş bir cam beherin yanında kum konisi, yukarıdan taneler düşüyor](docs/images/lab-kum.jpg) |
+
+![Balon 0'dan 70 ms'ye: 10 ms'de delik, lastik soyuluyor, su çöküyor](docs/images/lab-balon-seri.jpg)
+
+| Cam tabakta bal | Karpuzdan geçen 7,62×51 mermi, 0-24 ms |
+| --- | --- |
+| ![Cam tabakta kehribar bir bal gölü, kaşıktan düşen bir damla](docs/images/lab-bal.jpg) | ![Karpuz şişiyor, sonra kabuğu patlayarak açılıyor](docs/images/lab-karpuz-seri.jpg) |
+
+Nasıl yapıldığı ve yolda neyin ölçüldüğü (çalışma günlüğünde hepsi:
+[docs/laboratuvar/DURUM.md](docs/laboratuvar/DURUM.md)):
+
+- **Tek çözücü** (NVIDIA FleX'in yolu): su ve bal için Position Based Fluids, lastik ve karpuz için XPBD bağları, çelik
+  bilye için şekil eşleme, kum için taneler; bütün bağlarını yitiren karpuz taneciği suyuna döner. Cam kaplar camın
+  yüzeyinde tek katman kinematik tanecik, onu eğen elle birlikte hareket eder.
+- **Su** dudaktan ancak biraz viskozite, yapışma ve yüzey gerilimiyle tek şerit olarak çıkıyor (onlarsız hemen
+  erişteye bölünüyordu; dört varyant kareyle kıyaslandı).
+- **Kum** önce sıvı gibi yayıldı (taneciğin temasları arasında itme gibi paylaşılan sürtünme kaymasının yalnız bir
+  kısmını durduruyor): sürtünmeyi kök payla paylaşmak, daha çok geçiş ve hız düzeyinde durgun sürtünme yığını 0°'den
+  32,5°'ye getirdi, eşik ölçerek seçildi (`--lab-test kum`).
+- **Balonun** gerili lastiği, bağlarına alt adım başına yeterli geçiş verilene kadar suyun ağırlığıyla yırtıldı (kaba
+  balonu tutan ayar ince balonu tutmadı: XPBD'nin sertliği çözünürlüğe bağlı); gerilimi oturma sırasında yavaşça
+  verilir; yırtığın ucuna, kaba kafesin orada toplayamadığı gerilim verilir.
+- **Balın** viskozitesi her taneciğin kendi komşularına göre alınır (ince ip de gövde kadar koyu olur), alt adımda
+  tekrarlanır; bal en yeni katmanlarını tutan bir memeden çıkar. Tek ince ip yerine iri damlalarla akıyor (açık, aşağıda).
+- **Karpuzun** kabuğu iki katman (yeşil deri, açık kabuk), yuvalı bir kaidede; bağlarında doğal kusurlar var (özdeş
+  bağlar hep birden kırılıp kırıntı oluyordu); merminin yolu eski Tanecik sahnesinin jele kalibre balistiğinden.
+- **Görüntü:** OptiX ile yol izleme; kalınlıklı cam ve kırılan sıvılar tam Fresnel ile, bardaktaki su camla tek arayüzden
+  geçer (yüzeyleri arasındaki kıl kadar hava yoksa ayna olurdu); yüzeyler her karede taneciklerden kurulur (anizotropik
+  çekirdekler); kum, tane ölçeğinde dokulu bir yüzey ve ince taneler; karede 4 örnek ve OptiX yapay zekâ gürültü
+  gidericisi.
+
+Açık: bal kıvrılan ince bir ip yerine damlıyor (gerilmeye karşı koyan viskoz gerilim PBF'te yok; örtük viskozite ya da
+MPM sonraki adım); karpuz parçaları keskin kırık değil yumuşak yüzeyler olarak çiziliyor; balon asılı değil masada
+(asılıyken hafif lastik suyun ağırlığını düğüme zamanında taşıyamadı).
 
 ## Sahne 1: neyi hesaplıyor
 
@@ -328,7 +389,7 @@ derleme istemez: sahnede **F5**'e bas.
 
 ```bat
 build\pc_graphics.exe                       :: galeri, birincil monitörde kenarlıksız tam ekran
-build\pc_graphics.exe --scene yikim         :: doğrudan bir sahneye (altinsaat, fener, yikim); Esc galeriye götürür
+build\pc_graphics.exe --scene yikim         :: doğrudan bir sahneye (altinsaat, fener, yikim, laboratuvar); Esc galeriye götürür
 build\pc_graphics.exe --windowed            :: 1280x720 pencerede
 build\pc_graphics.exe --set anahtar=deger   :: sahnelerin bir ayarı (scenes/<sahne>.cfg), tekrarlanabilir
 build\pc_graphics.exe --lang en             :: İngilizce (ya da tr); yoksa galeride son seçilen
@@ -342,13 +403,13 @@ build\pc_graphics.exe --autotest            :: bütün uygulama bir kez, betikle
 | H | arayüzü gizle |
 | F12 | sahnenin ekran görüntüsü (`captures\<sahne>_<tarih>`; sahne 1 doğrusal EXR de yazar) |
 | F5 | sahnenin ayarlarını yeniden oku, OptiX programlarını yeniden derle (sahne 1 ve 2) |
-| ↑ ↓, 1-3, Enter, fare | galeride seç ve aç |
+| ↑ ↓, 1-4, Enter, fare | galeride seç ve aç |
 | A | galeride sahnenin ayrıntıları (nasıl yapıldı) |
 | L | galeride dil: Türkçe ↔ İngilizce (sağ üstte TR \| EN) |
 
-| Sahne 1 · Altın Saat | Sahne 2 · Fener | Sahne 3 · Yıkım |
-| --- | --- | --- |
-| Boşluk durağan ↔ canlı · C sonraki kamera · ↑ ↓ pozlama · ← → odak · R sıfırla · P, V, N, D, G fotonlar, pus, doğrudan ışık örneklemesi, gürültü giderici, güneş lekeleri · 1-5 güzel, albedo, normal, kostikler, maliyet | Boşluk A ↔ B yürü · B öbür bakışa atla · P zamanı durdur · ← → zaman ∓1 sn · ↑ ↓ pozlama · 1-5 görünümler · Tab birinci şahıs (WASD, fare, Shift koş, Boşluk zıpla) | panelde Yapı: apartman, gökdelen, ev · 3-9 büyüklük · ← → süre (en sonda: durdurana kadar) · Boşluk başlat ya da durdur (panelde fareyle de) · T ağır çekim · P durdur · sol tık yıkım topu (saniyede en çok bir) · ↑ ↓ topun gücü · R baştan kur · sağ tık bak · WASD, E/Q uç · Shift hızlı · tekerlek yakınlaş · B donatı · G gürültü giderici |
+| Sahne 1 · Altın Saat | Sahne 2 · Fener | Sahne 3 · Yıkım | Sahne 4 · Laboratuvar |
+| --- | --- | --- | --- |
+| Boşluk durağan ↔ canlı · C sonraki kamera · ↑ ↓ pozlama · ← → odak · R sıfırla · P, V, N, D, G fotonlar, pus, doğrudan ışık örneklemesi, gürültü giderici, güneş lekeleri · 1-5 güzel, albedo, normal, kostikler, maliyet | Boşluk A ↔ B yürü · B öbür bakışa atla · P zamanı durdur · ← → zaman ∓1 sn · ↑ ↓ pozlama · 1-5 görünümler · Tab birinci şahıs (WASD, fare, Shift koş, Boşluk zıpla) | panelde Yapı: apartman, gökdelen, ev · 3-9 büyüklük · ← → süre (en sonda: durdurana kadar) · Boşluk başlat ya da durdur (panelde fareyle de) · T ağır çekim · P durdur · sol tık yıkım topu (saniyede en çok bir) · ↑ ↓ topun gücü · R baştan kur · sağ tık bak · WASD, E/Q uç · Shift hızlı · tekerlek yakınlaş · B donatı · G gürültü giderici | 1-5 deney · Boşluk dök, akıt, durdur · sol tık iğne, ateş; balda ve kumda sürükle: gezdir · B çelik bilye · T hız ×1, ×1/10, ×1/100 · P durdur ya da oynat · ← → kayıtta adım · sağ tık bak · WASD, E/Q uç · R yeniden kur |
 
 Sahnelerin araçları pencere olmadan, aynı programdan çalışır:
 
@@ -360,6 +421,8 @@ build\pc_graphics.exe --scene fener --headless --frames 64 --out captures\ad
 build\pc_graphics.exe --scene fener --map captures\harita.png
 build\pc_graphics.exe --scene yikim --test                                          :: çözücünün fizik testleri
 build\pc_graphics.exe --scene yikim --clip sarsinti --seconds 40 --set deprem.magnitude=7 --out captures\yikim\ad
+build\pc_graphics.exe --scene laboratuvar --still --deney balon --tetik --kayit --t 0.024 --spp 192 --out captures\x.png
+build\pc_graphics.exe --scene laboratuvar --lab-test                                :: deneylerin ölçümleri
 ```
 
 Her sahnenin listesi `src/scenes/<sahne>/<sahne>_app.cpp` başında. Gösteri için kısa rehber: [GOSTERI.md](GOSTERI.md) (İngilizcesi [DEMO.md](DEMO.md)).
@@ -376,6 +439,7 @@ src/
     altinsaat/        sahne 1: spektral yol izleyici, foton ızgarası, yapay zekâ gürültü giderici; device/ OptiX programları
     fener/            sahne 2: dünya üretimi, gerçek zamanlı ışık hattı, oyuncu; device/
     yikim/            sahne 3: kabuklar, ekran kartı çözücüsü (phys.cu), bina, depremler, testler, gürültü süzgeci; device/
+    laboratuvar/      sahne 4: tanecik çözücüsü, sıvı yüzeyleri, deneyler, kayıtlar, balistik; device/
 scenes/               sahnelerin ayarları (<sahne>.cfg)
 assets/               yazı tipleri (IBM Plex), galeri resimleri, mavi gürültü dokusu, deprem kayıtları (ESM, AFAD TADAS)
 tools/                EXR istatistikleri, FLIP ve RMSE karşılaştırması, gürültü haritaları, temas tabakaları, prizma planlayıcı, değer etütleri

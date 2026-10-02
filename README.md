@@ -25,16 +25,18 @@
 A personal workshop for computer graphics as art direction: a series of scenes, each in its own session with one
 narrow goal. It is not a game engine and it is not a benchmark. The first scene was about light being mathematically
 right, the second about beauty, the third about physics: a building that feels real coming down in a way that feels
-real.
+real. The fourth is a high-speed photography table: liquids and grains, computed finely, watched in slow motion.
 
 Everything is written for one machine (an RTX 4080 driving a 2560×1440 IPS monitor) in C++, CUDA and OptiX, with no
 engine underneath. Scene 1 is a spectral path tracer with a **still mode** that accumulates towards a reference image
 and a **live mode** that keeps 20 to 30 frames per second with NVIDIA's AI denoiser. Scene 2 is a real-time volumetric
-night. Scene 3 is a rigid-body and fracture solver of its own, drawn by a plain daylight ray tracer.
+night. Scene 3 is a rigid-body and fracture solver of its own, drawn by a plain daylight ray tracer. Scene 4 is a
+particle solver (fluids, grains, breakable bonds) whose fast moments are recomputed finely in the background and
+kept as physics, not video.
 
 ## The application
 
-The three scenes live in one program. It opens on a gallery; a scene loads behind a loading screen (its programs
+The four scenes live in one program. It opens on a gallery; a scene loads behind a loading screen (its programs
 compile and its world is built on a worker thread, so the window stays alive) and then runs under an interface that is
 the same for all of them: who and what at the bottom left, timings at the top right, the way out at the bottom right,
 the keys on F1. The panel at the bottom left takes the mouse: a scene can put rows of choices, sliders and buttons there
@@ -49,7 +51,8 @@ speaks Turkish or English (TR | EN at the top right of the gallery, or L); the c
 ![Scene 3 during a magnitude 7 earthquake: the scene's name and state, clickable magnitudes, the length slider, the stop button, the shaking's progress, timings](docs/images/app-scene.jpg)
 
 The look is one family for everything, IBM Plex: Serif for names, Sans for words, Mono for numbers and keys. Dark glass
-panels over the pictures, and one accent colour per scene, taken from its light: warm gold, cold blue, safety orange.
+panels over the pictures, and one accent colour per scene, taken from its light: warm gold, cold blue, safety orange,
+sea green.
 A scene is a folder with its renderer, its settings and its OptiX programs, plus one line in the scene registry;
 [docs/MIMARI.md](docs/MIMARI.md) (Turkish) describes the contract and how to add one.
 
@@ -126,6 +129,69 @@ with the mouse or with keys, start it; click to throw a wrecking ball, slow time
 | A wrecking ball hits a corner column (4.2 t, 14 m/s) | The column's foot thrown out, the column hanging askew, its bars bare |
 | --- | --- |
 | ![A cast steel ball striking a ground-storey corner column, which breaks and leans](docs/images/yikim-top-1.jpg) | ![Two seconds later: the column's lower piece on the ground, the rest hanging askew from the beam](docs/images/yikim-top-2.jpg) |
+
+### 4 · Laboratory *(Laboratuvar)* · October 2026
+
+A high-speed photography table: a dark set with a large soft panel behind the experiment, the classic light of liquid
+photography (glass and liquids read by their refracted edges). Five experiments, all of particles in one solver of
+our own, whatever the physics says:
+
+- **Water** poured from a tilting beaker into a tumbler, from 12 to 45 cm: it splashes, overflows, pools on the table.
+- **Honey** off a dipper onto a glass dish (live, drag the dipper with the mouse): it piles, spreads slowly, amber.
+- **Sand** from a funnel onto the table and into a beaker (live): it heaps at 32.5° (dry sand: 30-35°); drop a steel ball.
+- **A water balloon** on the table, pricked with a needle: the rubber peels back in 20-30 ms while the water keeps the
+  balloon's shape for a moment, then slumps.
+- **A watermelon** shot with a rifle (5.56, 7.62×51, .50 BMG; real loads): it swells for a few milliseconds, then the
+  rind opens like a crown.
+
+![Scene 4: a water balloon 24 ms after the needle, the rubber peeling back, the water still balloon-shaped](docs/images/lab-balon.jpg)
+
+The fast ones are **recorded**: the trigger plays at once on a coarse world (marked as a preview), while a fine world
+(1.5-2.5 mm particles, up to 150,000 of them) computes the same inputs on a worker thread and keeps every 1/600 to
+1/1000 of a second on the GPU. What is computed can be watched at once, like a video loading; when it is done it plays
+once at real speed, then it is free: scrub the time bar, slow down to 1/10 or 1/100, freeze, fly round it with WASD.
+Nothing is a video: what is kept is the physics, drawn live from any view. Honey and sand are only live, since their
+flowing is the scene.
+
+| The pour (fine recording, 1.45 s) | Sand, poured live: a 32.5° cone |
+| --- | --- |
+| ![Water pouring from a tilted beaker into a tumbler in one smooth rope](docs/images/lab-su.jpg) | ![A cone of sand beside an empty glass beaker, grains falling from above](docs/images/lab-kum.jpg) |
+
+![The balloon from 0 to 70 ms: the hole at 10 ms, the rubber peeling, the water slumping](docs/images/lab-balon-seri.jpg)
+
+| Honey on a glass dish | A 7.62×51 round through a watermelon, 0 to 24 ms |
+| --- | --- |
+| ![An amber pool of honey in a glass dish, a glob falling from the dipper](docs/images/lab-bal.jpg) | ![The watermelon swelling, then its rind bursting open](docs/images/lab-karpuz-seri.jpg) |
+
+How each is made, and what was measured on the way (the Turkish working journal has it all,
+[docs/laboratuvar/DURUM.md](docs/laboratuvar/DURUM.md)):
+
+- **One solver** (after NVIDIA FleX): Position Based Fluids for water and honey, XPBD bonds for rubber and melon,
+  shape matching for the steel ball, grains for sand; a melon particle that has lost all its bonds turns to juice.
+  Glass ware is one layer of kinematic particles over the glass's surface, moved with the hand that tilts it.
+- **Water** leaves the lip as one rope only with a little viscosity, cohesion and surface tension (without them it
+  frayed into noodles at once; four variants compared by eye).
+- **Sand** ran flat like a liquid at first (friction shared among a grain's contacts like the push stops only a part
+  of its sliding): friction shared by the square root, more passes, and static friction at the velocity level brought
+  the pile from 0° to 32.5°, the threshold chosen by measuring (`--lab-test kum`).
+- **The balloon's** stretched rubber tore under the water's weight until its bonds had enough passes a substep (the
+  same settings that held a coarse balloon failed a fine one: XPBD's stiffness depends on resolution); its stretch is
+  brought in slowly while it settles; a tear's tip is given the stress a coarse lattice cannot concentrate there.
+- **Honey's** viscosity is taken over each particle's own neighbours (a thin thread is then as thick as the bulk),
+  repeated a substep, and it leaves a nozzle that holds its newest layers. It drips in globs rather than one thin rope
+  (an open problem, see below).
+- **The melon's** rind is two layers (green skin, pale rind) on a cup-shaped stand; its bonds carry natural flaws
+  (identical bonds all broke at once, into crumbs); the bullet's path comes from the gelatin-calibrated ballistics of
+  the earlier Tanecik scene.
+- **The picture:** path tracing with OptiX; thick glass and refracting liquids with exact Fresnel, a liquid in its
+  glass crossing one interface (the hair of air between their surfaces would otherwise mirror); surfaces rebuilt from
+  the particles every frame (anisotropic kernels); sand drawn as a surface with grain-sized texture plus fine grains;
+  4 samples a frame and the OptiX AI denoiser.
+
+Open: honey drips instead of a coiling thread (viscous stress that resists stretching is what PBF lacks; implicit
+viscosity or MPM would be the next step); melon fragments are drawn as soft rebuilt surfaces, not sharp fractures; the
+balloon rests on the table rather than hanging (hanging, the light rubber could not carry the water's weight to the
+knot in time).
 
 ## What scene 1 computes
 
@@ -338,7 +404,7 @@ rebuild: press **F5** in the scene.
 
 ```bat
 build\pc_graphics.exe                       :: the gallery, borderless full screen on the primary monitor
-build\pc_graphics.exe --scene yikim         :: straight into a scene (altinsaat, fener, yikim); Esc leads to the gallery
+build\pc_graphics.exe --scene yikim         :: straight into a scene (altinsaat, fener, yikim, laboratuvar); Esc leads to the gallery
 build\pc_graphics.exe --windowed            :: in a 1280x720 window
 build\pc_graphics.exe --set key=value       :: a setting of the scenes (scenes/<id>.cfg), repeatable
 build\pc_graphics.exe --lang en             :: English (or tr); otherwise the one chosen last in the gallery
@@ -352,13 +418,13 @@ build\pc_graphics.exe --autotest            :: the whole application once throug
 | H | hide the interface |
 | F12 | screenshot of the scene (`captures\<scene>_<date>`; scene 1 also writes a linear EXR) |
 | F5 | reload the scene's settings and recompile its OptiX programs (scenes 1 and 2) |
-| ↑ ↓, 1 to 3, Enter, mouse | choose and open in the gallery |
+| ↑ ↓, 1 to 4, Enter, mouse | choose and open in the gallery |
 | A | the scene's details in the gallery (how it was made) |
 | L | the language in the gallery: Turkish ↔ English (TR \| EN at the top right) |
 
-| Scene 1 · Golden Hour | Scene 2 · Lighthouse | Scene 3 · Collapse |
-| --- | --- | --- |
-| Space still ↔ live · C next camera · ↑ ↓ exposure · ← → focus · R reset · P, V, N, D, G photons, haze, next-event estimation, denoiser, sun patches · 1 to 5 beauty, albedo, normal, caustics, cost | Space walk A ↔ B · B jump to the other view · P pause time · ← → time ∓1 s · ↑ ↓ exposure · 1 to 5 views · Tab first-person walk (WASD, mouse, Shift run, Space jump) | the panel's Building: apartment block, tower, house · 3 to 9 magnitude · ← → length (at the end: until stopped) · Space start or stop (with the mouse on the panel too) · T slow motion · P pause · left click wrecking ball (at most one a second) · ↑ ↓ its power · R rebuild · right mouse look · WASD, E/Q fly · Shift faster · wheel zoom · B bars · G denoising |
+| Scene 1 · Golden Hour | Scene 2 · Lighthouse | Scene 3 · Collapse | Scene 4 · Laboratory |
+| --- | --- | --- | --- |
+| Space still ↔ live · C next camera · ↑ ↓ exposure · ← → focus · R reset · P, V, N, D, G photons, haze, next-event estimation, denoiser, sun patches · 1 to 5 beauty, albedo, normal, caustics, cost | Space walk A ↔ B · B jump to the other view · P pause time · ← → time ∓1 s · ↑ ↓ exposure · 1 to 5 views · Tab first-person walk (WASD, mouse, Shift run, Space jump) | the panel's Building: apartment block, tower, house · 3 to 9 magnitude · ← → length (at the end: until stopped) · Space start or stop (with the mouse on the panel too) · T slow motion · P pause · left click wrecking ball (at most one a second) · ↑ ↓ its power · R rebuild · right mouse look · WASD, E/Q fly · Shift faster · wheel zoom · B bars · G denoising | 1 to 5 experiment · Space pour, run, stop · left click needle, fire; honey and sand: drag to move · B steel ball · T speed ×1, ×1/10, ×1/100 · P pause or play · ← → step a recording · right mouse look · WASD, E/Q fly · R set up again |
 
 The scenes' tools run without a window, from the same program:
 
@@ -370,6 +436,8 @@ build\pc_graphics.exe --scene fener --headless --frames 64 --out captures\name
 build\pc_graphics.exe --scene fener --map captures\harita.png
 build\pc_graphics.exe --scene yikim --test                                          :: the solver's physical tests
 build\pc_graphics.exe --scene yikim --clip sarsinti --seconds 40 --set deprem.magnitude=7 --out captures\yikim\name
+build\pc_graphics.exe --scene laboratuvar --still --deney balon --tetik --kayit --t 0.024 --spp 192 --out captures\x.png
+build\pc_graphics.exe --scene laboratuvar --lab-test                                :: the experiments' measurements
 ```
 
 Each scene's list is at the top of its `src/scenes/<scene>/<scene>_app.cpp`. A short Turkish guide for a demonstration
@@ -387,6 +455,7 @@ src/
     altinsaat/        scene 1: spectral path tracer, photon grid, AI denoiser; device/ its OptiX programs
     fener/            scene 2: world generation, real-time light pipeline, player; device/
     yikim/            scene 3: hulls, the GPU solver (phys.cu), the building, earthquakes, tests, denoising filter; device/
+    laboratuvar/      scene 4: the particle solver, liquid surfaces, experiments, recordings, ballistics; device/
 scenes/               the scenes' settings (<scene>.cfg)
 assets/               fonts (IBM Plex), gallery pictures, blue-noise texture, earthquake records (ESM, AFAD TADAS)
 tools/                EXR statistics, FLIP and RMSE comparison, noise maps, contact sheets, prism planner, value studies

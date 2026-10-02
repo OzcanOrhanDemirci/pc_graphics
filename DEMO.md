@@ -4,9 +4,9 @@
 
 ## Opening
 `C:\dev\pc_graphics\build\pc_graphics.exe` — double-click it. The **gallery** opens full screen, borderless, on the
-primary monitor: the three scenes on the left, the selected one's picture and description on the right.
+primary monitor: the four scenes on the left, the selected one's picture and description on the right.
 
-- **↑ / ↓** (or **1-3**, or the mouse) to choose, **Enter** (or the **Open scene** button) to open.
+- **↑ / ↓** (or **1-4**, or the mouse) to choose, **Enter** (or the **Open scene** button) to open.
 - **A** (or the **Details** button): how the scene was made, over its picture, under technical headings; **Esc** closes it.
 - **L** (or **TR | EN** at the top right): the application's language, Turkish ↔ English; the choice is remembered.
   `--lang en` on the command line does the same.
@@ -81,3 +81,31 @@ build up over a long shaking; balls at the ground-storey columns at different po
 a corner or an edge column, the lightest does not move it, the meteor brings down the apartments or the tower in one throw); a collapse in slow
 motion with **T**, then fly up to the broken column ends and look at the bars. Settings in `scenes/yikim.cfg` (buildings,
 materials, solver, camera, sun).
+
+## 04 · Laboratory — a high-speed photography table: water, honey, sand, a water balloon, a watermelon
+A dark set, a soft light panel behind. At the top of the panel **Experiment** (or **1-5**). Everything is particles,
+whatever the physics says. **Fast moments are recorded:** the trigger plays at once on a coarse world (**Coarse
+preview** at the bottom left), a fine world computes behind (**Fine pass …%**, the bar at the bottom); click the **Time**
+bar to watch what is computed so far. When it is done it plays once at real speed, then it is yours to look at. No video:
+what is kept is the physics, drawn live from any view.
+
+| Experiment | What to do |
+|---|---|
+| **Water** | the **Height** slider (12-45 cm; let go and the beaker is set up again), **Space** or **Pour**: the beaker pours into the glass; from high up it splashes and overflows |
+| **Honey** | live; **left-drag**: the dipper follows the cursor · **Flow**, **Height** sliders · **Space** run / stop |
+| **Sand** | live; **left-drag**: the funnel follows the cursor (fill the beaker or heap the table) · **B** or **Drop a steel ball** |
+| **Water balloon** | **left click** the balloon (a needle where you click) or **Space** (from the front) |
+| **Watermelon** | the **Round** slider (5.56 → 7.62×51 → .50 BMG, real loads), **left click** the melon (fired from the camera) or **Space** (from the side, through the middle) |
+
+| Key | What it does |
+|---|---|
+| **T** | speed: ×1, ×1/10, ×1/100 (live and in a recording; **Speed** on the panel) |
+| **P** | pause / play (a finished recording plays from the start) · **← / →** 10 ms back / on in a recording (100 ms with **Shift**) |
+| **right drag** | look · **WASD** move where you look · **E / Q** up / down · **Shift** fast · **wheel** forward / back · **C** camera back to the experiment |
+| **R** | set up again (from a recording: back to live) |
+
+**Try:** pop the balloon, when the recording is done pull **Time** back to the start, pick **×1/100** and **P**: the
+rubber peels back in 20-30 ms while the water keeps the balloon's shape for a moment. Pour the water from the highest
+(45 cm), freeze the splash at ×1/10 and fly round it. Heap the sand in one place (a cone of ~32°), then take the funnel
+to the beaker; drop a ball on the heap. Watch the melon at ×1/100: first it swells, then the rind opens.
+Settings `scenes/laboratuvar.cfg` (F5).
