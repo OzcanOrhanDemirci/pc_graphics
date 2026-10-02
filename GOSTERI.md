@@ -47,7 +47,7 @@ Ayarlar `scenes/fener.cfg` (F5 ile anında).
 
 ## 03 · Yıkım — betonarme yapılar, deprem ve kırılma
 Panelin en üstünde **Yapı**: **Apartman** (5 kat, zemin katta dükkânlar), **Gökdelen** (30 kat, 97 m, beton çekirdek,
-camlı lobi), **Ev** (tek kat, beşik çatı, baca). Seçince yapı yeniden kurulur ve kamera ona döner. Açılırken yapı iki
+camlı lobi), **Ev** (tek kat, beşik çatı, baca), **Sismik** (26 kat ve iğne, taban izolasyonlu, cam cephe: 9'da bile ayakta). Seçince yapı yeniden kurulur ve kamera ona döner. Açılırken yapı iki
 saniye görünmeden kendi ağırlığıyla oturur. Odak fizik.
 
 | Tuş | Ne yapar |

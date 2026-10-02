@@ -3,6 +3,38 @@
 > Tek kaynak durum panosu. Plan ve Özcan'ın sözleri `docs/yikim/PLAN.md`'de.
 
 ## Şu an
+- **2026-10-02 (gece, en en son) · Dördüncü yapı: sismik izolasyonlu kule.** Özcan: *"Japonların binaları var ya hani.
+  Sallandıkça sallanıyor ama yıkılmıyor. [...] Bu 4.bina da gökdelen olacak ama işte bu sallanma özellikli olacak.
+  Şekli, estetiği de daha modern olursa daha güzel olur."* Kararları: *"yalnız izolasyon, yansımalı cam, tabanı geniş
+  yukarı doğru incelen o en ucunda iğne gibi hale gelen gökdelenlerden"*, hedef *"9 Depremine zar zor dayanması [...]
+  8 de minimal yıkılma. 7 de neredeyse hasar yok"*, *"aşırı uğraşmana gerek yok"*.
+  - **Yapı** (`buildSpireTower`, `yapi = sismik`, panelde "Sismik"): üç kademe (5×5, 3×3, 1×1 açıklık; 10 + 10 + 6
+    kat, her biri alttakinin ortasında) ve 27 m'lik çelik iğne, toplam ~123 m; 5.142 parça. Her açıklıkta tek büyük cam
+    panel, koyu antrasit çerçeve. 1 m'lik beton radye zemine yapışık değil, **kauçuk izolatörlerin** üstünde:
+    yanlamasına yumuşak (kule onların üstünde 3,5 sn periyotla salınır; rijitlik toplam kütleden hesaplanır), düşeyde
+    sert, hiç kırılmaz (malzemeye `G` kesme modülü eklendi: fizikteki tek değişiklik). Radyenin çevresinde 0,9 m'lik
+    hendek, zemine yapışık bir bordürle: zemin onunla birlikte sallanır, kule süzülür. Beton 40 MPa, donatı 420 MPa
+    (yeni bir kule; öteki yapıların 16 / 220'si 26 katın altında kolon ayağında eziliyordu).
+  - **Cam:** çizicide yeni malzeme: koyu bir renk üstünde ayna yansıması, payı Schlick Fresnel'iyle (kaplamalı cam,
+    F0 0,25); yansıma bir kez izlenir: başka bir parça ya da zemin her zamanki gibi aydınlatılır, yoksa gök ve güneş.
+  - **Ayarlama** (ölçerek): izolasyon 3 sn, sıradan beton: 8 ve 9'da taban katları ezildi, kule çöktü (80 bin kırık
+    lif); yastık en çok 0,5 m kaydı, bordüre çarpmadı. Yüksek dayanımlı malzeme ve 3,5 sn ile 8 ve 9'da ayakta, ama
+    iğne 8'de kırbaç gibi kopup düştü; içi boş (1.200 kg/m³) ve ayağı sağlam (%6 donatı) iğne yerinde kaldı.
+  - **Ölçüldü** (sarsıntı bittikten ~8 sn sonra; öteleme yastıktaki kaymayla birlikte):
+
+    | Büyüklük | Kırık lif (105 bin) | Sonuç |
+    | --- | --- | --- |
+    | 5 | 0 | hasarsız |
+    | 6 | 0 | hasarsız, öteleme 8 cm |
+    | 7 | 324 | neredeyse hasarsız, öteleme ~1 m |
+    | 8 | 5.478 | birkaç cam panel, iğne yerinde, tepe 6 cm iner |
+    | 9 | 17.219 | ayakta: kademelerde ve zemin katta boşluklar, düşen cam ve parçalar; tepe 12 cm iner |
+
+  - **Pencerede** (`--autotest`): ayakta 46 fps, 8'in ortasında 41 fps (fizik 22 ms; dünya gerçeğin ~%74'ü). Fizik
+    ayakta ~17,5 ms: arayüz geçişi gökdelenden uzun (profilde 14,8 / 11,0 ms) ama renk sayısı değil (10 / 9 renk);
+    sebebi bulunmadı, açık.
+  - Tanı: `--set test.iso=1` (her saniye tabanın zemine göre kayması); klipteki "dunya:" satırı renk sayısını da yazar.
+    `--autotest` sismik kuleyi 8'de sallar.
 - **2026-10-02 (gece, en son) · Topun en güçlüsü artık bir göktaşı.** Özcan: *"topun max gücünü çok arttırabilelim.
   Eğlence amaçlı. Son hali cidden abartı olsun. Gökdelen sağlam olduğu için şuanki en güçlü zarar veriyor ama
   yıkamıyor."*
@@ -472,7 +504,8 @@ düzeltmesinden sonra) farkı parantezde.
 | 8 · Yıkıcı | göçer, çatı 13,5 m iner | ölçülmedi | göçer, çatı 2,4 m iner |
 | 9 · Felaket | göçer, çatı 12,7 m iner (11,5) | göçer (çatı 96 m) | göçer, çatı 2,4 m iner |
 
-Gökdelen sütunu çekirdek donatısız yapıldıktan sonra yeniden ölçüldü (5, 6, 7, 9): nitelik aynı.
+Gökdelen sütunu çekirdek donatısız yapıldıktan sonra yeniden ölçüldü (5, 6, 7, 9): nitelik aynı. Dördüncü yapı,
+sismik izolasyonlu kule: 5 ve 6 hasarsız, 7 324 kırık lif, 8 5.478 (birkaç cam), 9 17.219 (ayakta, boşluklarla); yukarıda.
 
 ## Büyüklükler (10-02, temas payı düzeltmesinden önce; `--scene yikim --clip sarsinti --still T --set deprem.magnitude=M`)
 Dalga kaynakları: 3-4 Bayraklı, 5-6 İzmit, 7 Yarımca, 8-9 Antakya. Bina ölçümü sarsıntı bittikten ~8 sn sonra.

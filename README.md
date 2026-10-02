@@ -94,10 +94,11 @@ fog when the camera is inside it is correct and flat.
 
 ### 3 · Collapse *(Yıkım)* · October 2026
 
-Three buildings of the same concrete, steel and brick. A five-storey apartment block of the kind that fills Turkish
+Four buildings. Three of the same concrete, steel and brick. A five-storey apartment block of the kind that fills Turkish
 towns: shops behind glass on a tall ground storey, brick infill, balconies, a flat roof with water tanks and solar
 collectors. A thirty-storey tower, 97 m: a frame around a plain-concrete core, a glass lobby at the front. And a one-storey
-house with a gable roof: ridge beam, gable walls, a chimney. Earthquakes from magnitude 3 to 9 shake the ground under
+house with a gable roof: ridge beam, gable walls, a chimney. And a seismic tower after Japanese practice: glass in
+three tiers narrowing to a steel spire, on rubber isolators, so that it sways and glides but stands. Earthquakes from magnitude 3 to 9 shake the ground under
 them, each made from a real strong-motion record, or the viewer throws a wrecking ball with the mouse. The light is a plain sunny day on purpose; the effort went into the physics.
 
 ![Scene 3: the apartment block coming down in a magnitude 8 earthquake](docs/images/yikim.jpg)
@@ -117,6 +118,10 @@ with the mouse or with keys, start it; click to throw a wrecking ball, slow time
 | The tower: 30 storeys, 97 m, 8,404 pieces | The house: gable roof, 456 pieces |
 | --- | --- |
 | ![A thirty-storey reinforced-concrete tower with a glass lobby at the front](docs/images/yikim-gokdelen.jpg) | ![A one-storey house with a tiled gable roof and a chimney](docs/images/yikim-ev.jpg) |
+
+| The seismic tower: 26 storeys and a spire, ~123 m, 5,142 pieces, on base isolators |
+| --- |
+| ![A dark glass tower in three tiers narrowing to a steel spire](docs/images/yikim-sismik.jpg) |
 
 | A wrecking ball hits a corner column (4.2 t, 14 m/s) | The column's foot thrown out, the column hanging askew, its bars bare |
 | --- | --- |
@@ -206,6 +211,8 @@ holds together under real earthquake records.
 | **Bonds** | 6,857 interfaces carrying 44,378 fibres, after the applied element method: concrete cracks in tension and crushes in compression (30 % residual), bars yield and snap at 6 cm of plastic elongation, shear is cohesion and then friction plus dowel action. What exceeds a capacity becomes a permanent offset, so a column that has hinged stays bent. |
 | **Solver** | XPBD on the GPU, 40 substeps a frame. Interfaces are solved Gauss-Seidel in 13 graph colours (the lower bound: the most interfaces on one body), with the multiplier accumulated across passes so capacities bound the total force. Contacts are Jacobi, and both bodies of a pair take the same share (one over the larger of their contact counts), so a pair keeps its momentum. The substep loop is a CUDA graph with branches: the interfaces on a high-priority branch while the contacts work on a copy of the poses taken after the integration (Jacobi between the two). Standing, its time comes from the colour passes more than from the piece count (11-15 ms for both the apartment block and the tower with 2.8 times as many pieces); during the tower's collapse 20-23 ms. |
 | **Contact** | A narrow phase lists the pairs whose boxes can touch (one thread a pair); then eight lanes a pair, four pairs to a warp, and the big pairs (two slabs pancaked face to face) a whole warp each on a branch of their own. Sample points, in chunks culled by their boxes, against the other hull's planes; normal corrections averaged within the pair, then one friction impulse at the patch centre with static and dynamic budgets and anchors (as in PhysX), torsional friction and restitution. |
+| **Base isolation** | The seismic tower's mat is not bonded to the ground: it rests on rubber, a material soft across (its shear modulus set so that the tower on it swings with a period of 3.5 s, longer than an earthquake's strong shaking) and stiff in compression, that never breaks; a curb round a moat rides with the ground. High-strength concrete (40 MPa) and bars (420 MPa). Measured: nothing breaks at 6, a few panes at 8, at 9 it stands with holes in it. |
+| **Glass** | A dark tint under a mirror reflection whose share follows Schlick's Fresnel (a coated pane); the reflection is traced once and lit like everything else. |
 | **Determinism** | Contact and interface sums in 2⁻⁴⁰ fixed point instead of floating-point atomics, and nothing else left to the order threads arrive in (the friction anchors' table is rebuilt between frames): the same earthquake brings the same building down the same way, every run. One gap is open: the tower's collapse matches to 24 s, and has once parted later. |
 | **Damping** | 5.3 % of critical, measured from free vibration: mass-proportional, relative to the ground, bonded bodies only, with capped accelerations so falling debris stays free. |
 | **Earthquakes** | By magnitude, 3 to 9: what the building feels from a quake of that size some 15 km away. Each is made from the waveform of a real strong-motion record (ESM and AFAD TADAS: 2023 Antakya, 1999 Yarımca and İzmit, 2020 Bayraklı), cut to the strong-motion length that size brings, played faster for the small ones, scaled to that size's peak ground acceleration and baseline-corrected so the ground ends where it started; then integrated twice to the ground's displacement. A game's scale, not a seismological one: magnitude alone does not fix the shaking. Longer, or until stopped, the strong part becomes a seamless loop: its end blended into its start, integrated around the loop with the mean of acceleration and velocity taken out (the ground does not drift), played under an envelope with the record's own rise and fall. Stopping fades the ground out over 1.5 s. |

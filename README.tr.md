@@ -93,10 +93,11 @@ saçılımın ~100 katından 5 katına indirildi; kamera içindeyken bütün sis
 
 ### 3 · Yıkım · Ekim 2026
 
-Aynı beton, çelik ve tuğladan üç yapı. Türkiye'nin kasabalarını dolduran türden beş katlı bir apartman: yüksek zemin
+Dört yapı. Üçü aynı beton, çelik ve tuğladan. Türkiye'nin kasabalarını dolduran türden beş katlı bir apartman: yüksek zemin
 katta camlı dükkânlar, tuğla dolgu duvarlar, balkonlar, su depoları ve güneş kollektörleriyle düz çatı. Otuz katlı, 97
 metrelik bir gökdelen: donatısız beton çekirdeğin çevresinde bir çerçeve, önde camlı bir lobi. Ve beşik çatılı, tek katlı bir
-ev: mahya kirişi, beşik duvarları, baca. Zemini büyüklüğü 3'ten 9'a kadar depremler sallıyor (her biri gerçek bir
+ev: mahya kirişi, beşik duvarları, baca. Ve Japon uygulamasından esinli sismik bir kule: üç kademede incelip çelik
+bir iğneyle biten cam bir gövde, kauçuk izolatörlerin üstünde; sallanır, süzülür ama ayakta kalır. Zemini büyüklüğü 3'ten 9'a kadar depremler sallıyor (her biri gerçek bir
 kuvvetli yer hareketi kaydından türetildi), ya da izleyen kişi yapıya fareyle yıkım topu fırlatıyor. Işık bilerek sade
 bir güneşli gün; emek fiziğe gitti.
 
@@ -113,6 +114,10 @@ bir güneşli gün; emek fiziğe gitti.
 | Gökdelen: 30 kat, 97 m, 8.404 parça | Ev: beşik çatı, 456 parça |
 | --- | --- |
 | ![Otuz katlı betonarme gökdelen, önde camlı lobi](docs/images/yikim-gokdelen.jpg) | ![Beşik çatılı tek katlı ev, kiremit rengi çatı ve baca](docs/images/yikim-ev.jpg) |
+
+| Sismik kule: 26 kat ve iğne, ~123 m, 5.142 parça, taban izolasyonlu |
+| --- |
+| ![Üç kademede incelip çelik bir iğneyle biten koyu camlı kule](docs/images/yikim-sismik.jpg) |
 
 | Yıkım topu köşe kolona çarpar (4,2 t, 14 m/s) | Kolonun ayağı fırlamış, kolon eğik asılı, demirler açıkta |
 | --- | --- |
@@ -204,6 +209,8 @@ kayıtları altında dağılmayan bir çözücü.
 | **Bağlar** | 44.378 lif taşıyan 6.857 arayüz, uygulamalı eleman yönteminden (AEM) esinli: beton çekmede çatlar, basınçta ezilir (%30 kalan dayanım), donatı akar ve 6 cm plastik uzamada kopar, kayma önce kohezyon sonra sürtünme + dübel. Kapasiteyi aşan kısım kalıcı ofset olur: mafsallaşan kolon eğik kalır. |
 | **Çözücü** | Ekran kartında XPBD, karede 40 alt adım. Arayüzler 13 graf renginde Gauss-Seidel ile çözülür (alt sınır: bir cisme değen en çok arayüz); çarpan geçişler boyunca biriktirilir, kapasite toplam kuvveti sınırlar. Temaslar Jacobi: bir çiftin iki cismi de aynı payı alır (1 / ikisinin temas sayısından büyüğü), çiftin momentumu korunur. Alt adım döngüsü kollu bir CUDA Graph: arayüzler yüksek öncelikli bir kolda, temaslar onlarla aynı anda, entegrasyondan hemen sonraki konumların kopyası üzerinde (ikisi arasında Jacobi). Ayakta süre parça sayısından çok renk geçişlerinden gelir (apartman ve 2,8 kat parçalı gökdelen 11-15 ms); gökdelenin göçüşünde 20-23 ms. |
 | **Temas** | Önce dar faz kutuları değebilecek çiftleri listeler (çift başına bir iş parçacığı); sonra çift başına 8 şerit, bir warp'ta dört çift; büyük çiftler (üst üste çöken iki döşeme) kendi kollarında birer tam warp'la. Örnek noktalar, kutularıyla elenen gruplar hâlinde, ötekinin kabuk düzlemlerine karşı; normal düzeltmeler çift içinde ortalanır, sonra yama merkezinde statik ve dinamik bütçeli, çapalı (PhysX gibi) tek sürtünme; burulma sürtünmesi ve sekme. |
+| **Taban izolasyonu** | Sismik kulenin radyesi zemine yapışık değil: kauçuğa oturuyor; yanlamasına yumuşak (kesme modülü, kule üstünde 3,5 sn periyotla salınsın diye: depremin güçlü kısmından uzun), düşeyde sert ve hiç kırılmayan bir malzeme; hendeğin çevresindeki bordür zeminle birlikte sallanır. Yüksek dayanımlı beton (40 MPa) ve donatı (420 MPa). Ölçülen: 6'da hiçbir şey kırılmaz, 8'de birkaç cam, 9'da boşluklarla ayakta. |
+| **Cam** | Koyu bir rengin üstünde ayna yansıması, payı Schlick Fresnel'iyle (kaplamalı cam); yansıma bir kez izlenir ve her şey gibi aydınlatılır. |
 | **Determinizm** | Temas ve arayüz toplamları kayan noktalı atomikler yerine 2⁻⁴⁰ sabit noktada, iş parçacıklarının varış sırasına başka bir şey de bırakılmadı (sürtünme çapası tablosu kareler arasında yeniden kurulur): aynı deprem aynı binayı her koşuda aynı biçimde yıkar. Bir açık var: gökdelenin göçüşü 24. sn'ye kadar aynı, sonrasında bir kez ayrıldı. |
 | **Sönüm** | Serbest titreşimden ölçülen kritik sönümün %5,3'ü: kütleye orantılı, zemine göre, yalnız bağlı cisimlere, ivmesi sınırlı (düşen enkaz serbest kalır). |
 | **Depremler** | Büyüklüğe göre, 3'ten 9'a: binanın ~15 km ötedeki o büyüklükte bir depremden hissettiği. Her biri gerçek bir kuvvetli yer hareketi kaydının dalgasından (ESM ve AFAD TADAS: 2023 Antakya, 1999 Yarımca ve İzmit, 2020 Bayraklı): o büyüklüğün getirdiği güçlü sarsıntı süresi kadar kesilir, küçükler daha hızlı oynatılır, o büyüklüğün tepe yer ivmesine ölçeklenir, taban çizgisi düzeltilir (zemin başladığı yerde durur); sonra iki kez integre edilip yer değiştirmeye çevrilir. Bir oyunun ölçeği, sismolojinin değil: sarsıntıyı büyüklük tek başına belirlemez. Daha uzun ya da durdurana kadar süren sarsıntıda güçlü kısım dikişsiz bir döngü olur: sonu başına karışır, ivmenin ve hızın ortalaması döngü boyunca çıkarılarak integre edilir (zemin kaymaz), kaydın kendi yükseliş ve sönüşüyle bir zarfın altında oynar. Durdurmak zemini 1,5 sn'de dindirir. |
