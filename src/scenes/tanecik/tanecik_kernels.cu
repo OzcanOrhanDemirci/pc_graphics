@@ -2,12 +2,13 @@
 
 namespace {
 
-__global__ void kGather(const float3* pos, const float* tint, const uint32_t* idx, int n, float3* outPos, float* outTint) {
+__global__ void kGather(const float3* pos, const float* tint, const uint32_t* idx, int n, float3* outPos, float* outTint, bool hideLiquid) {
     const int k = blockIdx.x * blockDim.x + threadIdx.x;
     if (k >= n) return;
     const uint32_t i = idx ? idx[k] : uint32_t(k);
-    outPos[k] = pos[i];
-    outTint[k] = tint ? tint[i] : 0.0f;
+    const float t = tint ? tint[i] : 0.0f;
+    outPos[k] = hideLiquid && t >= 0.5f ? make_float3(__int_as_float(0x7fc00000), 0.0f, 0.0f) : pos[i];
+    outTint[k] = t;
 }
 
 __device__ float3 turn(const float* m, float3 v) {
@@ -34,9 +35,10 @@ __global__ void kSkin(const SkinBind* bind, int nv, const float3* particles, con
 
 }   // namespace
 
-void launchGatherParticles(const float3* pos, const float* tint, const uint32_t* idx, int n, float3* outPos, float* outTint, cudaStream_t s) {
+void launchGatherParticles(const float3* pos, const float* tint, const uint32_t* idx, int n, float3* outPos, float* outTint, bool hideLiquid,
+                           cudaStream_t s) {
     if (n <= 0) return;
-    kGather<<<(n + 255) / 256, 256, 0, s>>>(pos, tint, idx, n, outPos, outTint);
+    kGather<<<(n + 255) / 256, 256, 0, s>>>(pos, tint, idx, n, outPos, outTint, hideLiquid);
 }
 
 void launchSkin(const SkinBind* bind, int vertices, const float3* particles, const uint8_t* particleBone, const float* boneXf, float3* outPos,

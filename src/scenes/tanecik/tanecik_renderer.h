@@ -5,6 +5,7 @@
 #include "scenes/tanecik/body.h"
 #include "scenes/tanecik/body_graph.h"
 #include "scenes/tanecik/tanecik_params.h"
+#include "scenes/tanecik/surface.h"
 
 #include <cuda_runtime.h>
 #include <optix.h>
@@ -26,6 +27,11 @@ public:
     // which particles are drawn (indices into the solver's arrays) and how large; then their positions each frame
     void setParticleSubset(const std::vector<uint32_t>& idx, float radius);
     void updateParticles(const float3* dPos, const float* dTint);   // device; dTint may be null
+    bool hideLiquidParticles = true;                        // a particle that is liquid (tint >= 0.5) is drawn by the surface
+    // the free liquid: its surface built from the particles every frame (FluidSurface), droplets as spheres
+    bool initLiquid(int maxParticles, int maxVertices, int maxTriangles, int maxBlocks, float floorY);
+    void updateLiquid(const float3* dPos, const float* dWeight, int n, float radius);   // weight <= 0: not liquid
+    const FluidSurface& liquid() const { return fluid_; }
     void setVisible(TKind k, bool on);                      // hidden instances are skipped by every ray
     bool visible(TKind k) const { return visible_[k]; }
     void render(unsigned int spp, bool accumulate);         // adds spp samples (accumulate) or starts afresh
@@ -76,7 +82,10 @@ private:
     Gas spheres_;
     void buildSpheres();
     // the top level
-    bool visible_[4] = {true, true, true, true};
+    bool visible_[TK_KINDS] = {true, true, true, true, true, true};
+    FluidSurface fluid_;
+    Gas liquidGas_, dropsGas_;
+    bool liquidReady_ = false;
     OptixInstance* dInstances_ = nullptr;
     Gas ias_;
     void buildIAS();

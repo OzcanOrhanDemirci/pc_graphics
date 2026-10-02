@@ -4,6 +4,8 @@
 //                     tinted shell in the glass look: at each crossing Fresnel reflection, a frosted share scattered
 //                     like skin, the rest passes on, tinted by the shell's optical depth over |cos| (so the silhouette
 //                     deepens in colour); bones and particles show inside. In the skin look it is opaque, with a sheen.
+//                     The free liquid (a surface rebuilt every frame, and droplets as spheres) is a wet mirror over a
+//                     dark body.
 #include <optix.h>
 #include "scenes/tanecik/tanecik_params.h"
 #include "shared/display.h"
@@ -51,8 +53,12 @@ static __forceinline__ __device__ Hit trace(float3 o, float3 d, float tmin, floa
     h.prim = optixHitObjectGetPrimitiveIndex();
     if (h.kind == TK_PARTICLES) {
         h.n = normalize(o + d * h.t - params.particles[h.prim]);
+    } else if (h.kind == TK_DROPS) {
+        const float4 s = params.drops[h.prim];
+        h.n = normalize(o + d * h.t - make_float3(s.x, s.y, s.z));
     } else {
-        const TMesh m = params.meshes[h.kind == TK_BONES ? 2u + (id >> 8) : h.kind];   // a bone: its rest mesh, placed
+        // a bone: its rest mesh, placed by its instance; the liquid: this frame's surface
+        const TMesh m = h.kind == TK_LIQUID ? params.liquid : params.meshes[h.kind == TK_BONES ? 2u + (id >> 8) : h.kind];
         const uint3 tri = m.idx[h.prim];
         const float2 b = optixHitObjectGetTriangleBarycentrics();
         const float3 ns = optixHitObjectTransformNormalFromObjectToWorldSpace(m.nrm[tri.x] * (1.0f - b.x - b.y) + m.nrm[tri.y] * b.x + m.nrm[tri.z] * b.y);
@@ -168,6 +174,15 @@ static __forceinline__ __device__ float3 radiance(float3 o, float3 d, Rng& r) {
                 continue;
             }
             alb = params.skinAlbedo;
+        } else if (h.kind == TK_LIQUID || h.kind == TK_DROPS) {
+            // blood: a wet mirror (Fresnel) over a dark, all but opaque body
+            if (r.next() < fresnel(params.liquidF0, c)) {
+                d = reflect3(d, nn);
+                o = p + nn * 1e-4f;
+                specular = true;
+                continue;
+            }
+            alb = params.liquidAlbedo;
         } else if (h.kind == TK_PARTICLES) {
             const float k = params.particleTint ? params.particleTint[h.prim] : 0.0f;
             alb = lerp3(params.tissueAlbedo, params.liquidAlbedo, k);

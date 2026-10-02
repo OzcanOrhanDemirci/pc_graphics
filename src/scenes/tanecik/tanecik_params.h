@@ -9,7 +9,7 @@
 #endif
 
 // what an instance is: the low byte of its instance id; the bones carry their bone in the next byte
-enum TKind : unsigned int { TK_STUDIO = 0, TK_SKIN = 1, TK_BONES = 2, TK_PARTICLES = 3 };
+enum TKind : unsigned int { TK_STUDIO = 0, TK_SKIN = 1, TK_BONES = 2, TK_PARTICLES = 3, TK_LIQUID = 4, TK_DROPS = 5, TK_KINDS = 6 };
 
 struct TMesh {
     const float3* pos;
@@ -39,6 +39,8 @@ struct TanecikParams {
     const float3* particles;       // sphere centres (the instance TK_PARTICLES), its primitive index
     const float* particleTint;     // per sphere: 0 tissue .. 1 freed liquid (display)
     float particleRadius;          // as drawn (m)
+    TMesh liquid;                  // the free liquid's surface (rebuilt every frame from its particles)
+    const float4* drops;           // its droplets: centre, radius (the instance TK_DROPS)
     TCamera cam;
     // the look
     int glass;                     // 1 the glass figure, 0 opaque skin
@@ -47,6 +49,7 @@ struct TanecikParams {
     float skinFrost;               // glass: the share of light the shell scatters (gives it form)
     float skinF0;                  // Fresnel at normal incidence
     float skinGloss;               // opaque skin: Phong exponent of its sheen
+    float liquidF0;                // the liquid's Fresnel at normal incidence (a wet mirror over its colour)
     float3 boneAlbedo, tissueAlbedo, liquidAlbedo, studioAlbedo;
     // light
     TRectLight lights[T_MAX_LIGHTS];

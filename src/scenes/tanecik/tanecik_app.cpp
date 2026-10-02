@@ -5,6 +5,7 @@
 //   --scene tanecik --stats      the body's numbers: particles, volume, mass, per bone, skin layer, the meshes, the graph
 //   --still ... --poz dirsek|kol|diz|egil|karma   the bones turned by hand (no physics): the skin and bones follow
 //   --scene tanecik --surface-test [ad]   the liquid's surface (tanecik_surface_test.cpp)
+//   --still ... --kan-deneme      a still pool and a trickle of blood placed by hand (no physics): the liquid's look
 #include "scenes/tanecik/tanecik_app.h"
 #include "scenes/tanecik/body_graph.h"
 #include "core/image_io.h"
@@ -71,7 +72,7 @@ int runTanecikCli(int argc, char** argv) {
     std::string surfaceTest;
     bool surface = false;
     std::string out, look = "cam", parts = "hepsi", poseName;
-    bool still = false, doStats = false;
+    bool still = false, doStats = false, bloodTest = false;
     unsigned spp = 512;
     std::vector<std::pair<std::string, std::string>> camSet;
     for (int i = 1; i < argc; ++i) {
@@ -84,6 +85,7 @@ int runTanecikCli(int argc, char** argv) {
         else if (a == "--look") look = next();
         else if (a == "--particles") parts = next();
         else if (a == "--poz") poseName = next();
+        else if (a == "--kan-deneme") bloodTest = true;
         else if (a == "--spp") spp = unsigned(std::stoi(next()));
         else if (a == "--width") app.width = unsigned(std::stoi(next()));
         else if (a == "--height") app.height = unsigned(std::stoi(next()));
@@ -139,6 +141,31 @@ int runTanecikCli(int argc, char** argv) {
         if (all || poseName == "egil") turn[B_CHEST] = make_float3(1, 0, 0) * (25 * d);
         app.applyPose(turn);
         std::printf("poz: %s\n", poseName.c_str());
+    }
+    if (bloodTest) {   // a pool by his left foot, a trickle from his left hand into it: placed, not simulated
+        const float s = app.body.spacing, r = 0.5f * s;
+        std::vector<float3> p;
+        unsigned h = 12345u;
+        auto rnd = [&]() { h ^= h << 13; h ^= h >> 17; h ^= h << 5; return (h & 0xffffff) / 16777216.0f - 0.5f; };
+        const float3 c = make_float3(0.36f, 0.0f, 0.32f);
+        for (int layer = 0; layer < 2; ++layer)
+            for (float x = -0.26f; x <= 0.26f; x += s)
+                for (float z = -0.2f; z <= 0.2f; z += s) {
+                    const float e = (x * x) / (0.26f * 0.26f) + (z * z) / (0.2f * 0.2f);   // an uneven oval, thinner at the rim
+                    if (e > 1.0f || (layer == 1 && e > 0.55f)) continue;
+                    p.push_back(c + make_float3(x + 0.15f * s * rnd(), r + layer * s * 0.95f, z + 0.15f * s * rnd()));
+                }
+        const float3 tip = restJoints().handTip;
+        for (float y = tip.y - 0.01f; y > 2.0f * s; y -= s * (y > 0.4f ? 1.0f : 1.8f))   // a thread, breaking into drops lower down
+            p.push_back(make_float3(tip.x + 0.02f + 0.1f * s * rnd(), y, tip.z + 0.1f * s * rnd()));
+        float3* dp = nullptr;
+        cudaMalloc(reinterpret_cast<void**>(&dp), p.size() * sizeof(float3));
+        cudaMemcpy(dp, p.data(), p.size() * sizeof(float3), cudaMemcpyHostToDevice);
+        app.renderer.updateLiquid(dp, nullptr, int(p.size()), r);
+        cudaDeviceSynchronize();
+        std::printf("kan denemesi: %zu tanecik, %d ucgen, %d damla, %.2f ms\n", p.size(), app.renderer.liquid().triangleCount(),
+                    app.renderer.liquid().dropletCount(), app.renderer.liquid().lastMs);
+        cudaFree(dp);   // the surface keeps its own buffers
     }
     t0 = tnow();
     const unsigned batch = 16;

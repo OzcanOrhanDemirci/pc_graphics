@@ -70,7 +70,7 @@ bool TanecikRenderer::init(unsigned int width, unsigned int height, const std::s
     p_.accum = talloc<float4>(size_t(width) * height);
     p_.output = talloc<uchar4>(size_t(width) * height);
     TCUDA(cudaMalloc(reinterpret_cast<void**>(&dParams_), sizeof(TanecikParams)));
-    dInstances_ = talloc<OptixInstance>(4 + B_COUNT);
+    dInstances_ = talloc<OptixInstance>(TK_KINDS + B_COUNT);
     dRadius_ = talloc<float>(1);
     dBoneXf_ = talloc<float>(12 * B_COUNT);
     setBoneXforms(boneXf_);
@@ -348,8 +348,90 @@ void TanecikRenderer::setParticleSubset(const std::vector<uint32_t>& idx, float 
 
 void TanecikRenderer::updateParticles(const float3* dPos, const float* dTint) {
     if (particleCount_ <= 0) return;
-    launchGatherParticles(dPos, dTint, dSubset_, particleCount_, dCentres_, dTint_, stream_);
+    launchGatherParticles(dPos, dTint, dSubset_, particleCount_, dCentres_, dTint_, hideLiquidParticles, stream_);
     buildSpheres();
+    buildIAS();
+}
+
+bool TanecikRenderer::initLiquid(int maxParticles, int maxVertices, int maxTriangles, int maxBlocks, float floorY) {
+    fluid_.settings.floorY = floorY;
+    liquidReady_ = fluid_.init(maxParticles, maxVertices, maxTriangles, maxBlocks);
+    return liquidReady_;
+}
+
+void TanecikRenderer::updateLiquid(const float3* dPos, const float* dWeight, int n, float radius) {
+    if (!liquidReady_) return;
+    fluid_.build(dPos, dWeight, n, radius, stream_);
+    // the surface: rebuilt (its topology changes every frame)
+    liquidGas_.handle = 0;
+    if (fluid_.triangleCount() > 0) {
+        OptixBuildInput bi{};
+        bi.type = OPTIX_BUILD_INPUT_TYPE_TRIANGLES;
+        CUdeviceptr verts = CUdeviceptr(fluid_.vertices());
+        bi.triangleArray.vertexFormat = OPTIX_VERTEX_FORMAT_FLOAT3;
+        bi.triangleArray.vertexStrideInBytes = sizeof(float3);
+        bi.triangleArray.numVertices = unsigned(fluid_.vertexCount());
+        bi.triangleArray.vertexBuffers = &verts;
+        bi.triangleArray.indexFormat = OPTIX_INDICES_FORMAT_UNSIGNED_INT3;
+        bi.triangleArray.indexStrideInBytes = sizeof(uint3);
+        bi.triangleArray.numIndexTriplets = unsigned(fluid_.triangleCount());
+        bi.triangleArray.indexBuffer = CUdeviceptr(fluid_.indices());
+        const unsigned int flags[1] = {OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT};
+        bi.triangleArray.flags = flags;
+        bi.triangleArray.numSbtRecords = 1;
+        OptixAccelBuildOptions ao{};
+        ao.buildFlags = OPTIX_BUILD_FLAG_PREFER_FAST_BUILD;
+        ao.operation = OPTIX_BUILD_OPERATION_BUILD;
+        OptixAccelBufferSizes sz{};
+        TOPTIX(optixAccelComputeMemoryUsage(ctx_, &ao, &bi, 1, &sz));
+        Gas& g = liquidGas_;
+        if (sz.tempSizeInBytes > g.tempSize) {
+            if (g.temp) cudaFree(g.temp);
+            TCUDA(cudaMalloc(&g.temp, sz.tempSizeInBytes));
+            g.tempSize = sz.tempSizeInBytes;
+        }
+        if (sz.outputSizeInBytes > g.outSize) {
+            if (g.out) cudaFree(g.out);
+            TCUDA(cudaMalloc(&g.out, sz.outputSizeInBytes));
+            g.outSize = sz.outputSizeInBytes;
+        }
+        TOPTIX(optixAccelBuild(ctx_, stream_, &ao, &bi, 1, CUdeviceptr(g.temp), g.tempSize, CUdeviceptr(g.out), g.outSize, &g.handle, nullptr, 0));
+    }
+    p_.liquid = {fluid_.vertices(), fluid_.normals(), fluid_.indices()};
+    // the droplets: spheres of their own radius (centre and radius interleaved, 16 bytes each)
+    dropsGas_.handle = 0;
+    if (fluid_.dropletCount() > 0) {
+        OptixBuildInput bi{};
+        bi.type = OPTIX_BUILD_INPUT_TYPE_SPHERES;
+        CUdeviceptr vb = CUdeviceptr(fluid_.droplets()), rb = CUdeviceptr(reinterpret_cast<const char*>(fluid_.droplets()) + 12);
+        bi.sphereArray.vertexBuffers = &vb;
+        bi.sphereArray.vertexStrideInBytes = sizeof(float4);
+        bi.sphereArray.numVertices = unsigned(fluid_.dropletCount());
+        bi.sphereArray.radiusBuffers = &rb;
+        bi.sphereArray.radiusStrideInBytes = sizeof(float4);
+        bi.sphereArray.singleRadius = 0;
+        const unsigned int flags[1] = {OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT};
+        bi.sphereArray.flags = flags;
+        bi.sphereArray.numSbtRecords = 1;
+        OptixAccelBuildOptions ao{};
+        ao.buildFlags = OPTIX_BUILD_FLAG_PREFER_FAST_BUILD;
+        ao.operation = OPTIX_BUILD_OPERATION_BUILD;
+        OptixAccelBufferSizes sz{};
+        TOPTIX(optixAccelComputeMemoryUsage(ctx_, &ao, &bi, 1, &sz));
+        Gas& g = dropsGas_;
+        if (sz.tempSizeInBytes > g.tempSize) {
+            if (g.temp) cudaFree(g.temp);
+            TCUDA(cudaMalloc(&g.temp, sz.tempSizeInBytes));
+            g.tempSize = sz.tempSizeInBytes;
+        }
+        if (sz.outputSizeInBytes > g.outSize) {
+            if (g.out) cudaFree(g.out);
+            TCUDA(cudaMalloc(&g.out, sz.outputSizeInBytes));
+            g.outSize = sz.outputSizeInBytes;
+        }
+        TOPTIX(optixAccelBuild(ctx_, stream_, &ao, &bi, 1, CUdeviceptr(g.temp), g.tempSize, CUdeviceptr(g.out), g.outSize, &g.handle, nullptr, 0));
+    }
+    p_.drops = fluid_.droplets();
     buildIAS();
 }
 
@@ -367,7 +449,7 @@ void TanecikRenderer::buildIAS() {
         if (xf) std::memcpy(oi.transform, xf, 12 * sizeof(float));
         else oi.transform[0] = oi.transform[5] = oi.transform[10] = 1.0f;
         oi.instanceId = kind | (sub << 8);
-        oi.sbtOffset = kind == TK_PARTICLES ? 1 : 0;
+        oi.sbtOffset = kind == TK_PARTICLES || kind == TK_DROPS ? 1 : 0;   // OptiX's sphere intersection
         oi.visibilityMask = 1;
         oi.flags = OPTIX_INSTANCE_FLAG_NONE;
         oi.traversableHandle = h;
@@ -379,6 +461,8 @@ void TanecikRenderer::buildIAS() {
         for (int b = 0; b < B_COUNT && 2 + b < int(gas_.size()); ++b) add(gas_[2 + b].handle, TK_BONES, unsigned(b), boneXf_[b].m);
     }
     add(spheres_.handle, TK_PARTICLES, 0, nullptr);
+    add(liquidGas_.handle, TK_LIQUID, 0, nullptr);
+    add(dropsGas_.handle, TK_DROPS, 0, nullptr);
     if (inst.empty()) { p_.handle = 0; return; }
     TCUDA(cudaMemcpyAsync(dInstances_, inst.data(), inst.size() * sizeof(OptixInstance), cudaMemcpyHostToDevice, stream_));
     OptixBuildInput bi{};
@@ -433,6 +517,10 @@ void TanecikRenderer::shutdown() {
     freeMeshes();
     freeParticles();
     freeGas(ias_);
+    freeGas(liquidGas_);
+    freeGas(dropsGas_);
+    fluid_.destroy();
+    liquidReady_ = false;
     if (pipeline_) optixPipelineDestroy(pipeline_);
     for (auto g : groups_) optixProgramGroupDestroy(g);
     if (module_) optixModuleDestroy(module_);
