@@ -67,6 +67,9 @@ struct TanecikParams {
     float skinF0;                  // Fresnel at normal incidence
     float skinGloss;               // opaque skin: Phong exponent of its sheen
     float liquidF0;                // the liquid's Fresnel at normal incidence (a wet mirror over its colour)
+    int liquidClear;               // 0 opaque (blood); 1 clear: it refracts (liquidIor) and tints what passes through
+    float liquidIor;
+    float3 liquidSigma;            // clear liquid: absorption per metre (water barely; honey strongly, towards amber)
     float3 boneAlbedo, tissueAlbedo, liquidAlbedo, studioAlbedo;
     // light
     TRectLight lights[T_MAX_LIGHTS];

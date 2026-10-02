@@ -132,6 +132,9 @@ struct TanecikApp {
         p.skinF0 = cfg.f(glass ? "cam.f0" : "deri.f0", glass ? 0.04f : 0.028f);
         p.skinGloss = cfg.f("deri.parlaklik", 30.0f);
         p.liquidF0 = cfg.f("sivi.f0", 0.03f);
+        p.liquidClear = cfg.i("sivi.berrak", 0);
+        p.liquidIor = cfg.f("sivi.kirilma", 1.33f);
+        p.liquidSigma = cfg.v3("sivi.sogurma", make_float3(0.45f, 0.06f, 0.02f));
         p.stainAlbedo = cfg.v3("leke.renk", make_float3(0.16f, 0.028f, 0.022f));
         p.stainDepth = cfg.f("leke.derinlik", 0.15f);
         p.boneAlbedo = cfg.v3("kemik.renk", make_float3(0.78f, 0.72f, 0.60f));

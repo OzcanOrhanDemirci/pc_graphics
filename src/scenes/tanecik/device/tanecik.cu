@@ -118,6 +118,16 @@ static __forceinline__ __device__ float3 shadow(float3 o, float3 d, float tmax) 
     for (int i = 0; i < 16; ++i) {
         const Hit h = trace(o, d, 1e-4f, tmax);
         if (!h.hit) return T;
+        if ((h.kind == TK_LIQUID || h.kind == TK_DROPS) && params.liquidClear) {
+            // through a clear liquid, straight (its caustics are not traced): Fresnel at each crossing, absorbed on
+            // the way out over the stretch inside
+            const float cc = fabsf(dot(h.n, d));
+            T = T * (1.0f - fresnel(params.liquidF0, cc));
+            if (dot(h.n, d) > 0.0f) T = T * exp3(params.liquidSigma * (-h.t));
+            o = o + d * h.t;
+            tmax -= h.t;
+            continue;
+        }
         if (h.kind != TK_SKIN || !params.glass) return make_float3(0, 0, 0);
         T = T * shellPass(fabsf(dot(h.n, d)));
         if (maxc(T) < 1e-4f) return make_float3(0, 0, 0);
@@ -152,14 +162,25 @@ static __forceinline__ __device__ float3 glossy(float3 d, float3 n, float e, Rng
     return Frame::from(rr).toWorld(make_float3(s * cosf(phi), s * sinf(phi), c));
 }
 
+// exact Fresnel for a dielectric (unpolarised); cosI > 0, eta = n_from / n_to; 1 at total internal reflection
+static __forceinline__ __device__ float fresnelDielectric(float cosI, float eta, float& cosT) {
+    const float s2 = eta * eta * fmaxf(0.0f, 1.0f - cosI * cosI);
+    if (s2 >= 1.0f) { cosT = 0.0f; return 1.0f; }
+    cosT = sqrtf(1.0f - s2);
+    const float rs = (eta * cosI - cosT) / (eta * cosI + cosT), rp = (cosI - eta * cosT) / (cosI + eta * cosT);
+    return 0.5f * (rs * rs + rp * rp);
+}
+
 static __forceinline__ __device__ float3 radiance(float3 o, float3 d, Rng& r) {
     float3 T = make_float3(1, 1, 1), L = make_float3(0, 0, 0);
+    bool inLiquid = false;   // a clear liquid: the ray travels inside it (absorbs on the way)
     // the soft boxes count when seen along a specular chain (else they were sampled directly), but not straight from
     // the camera: a photographer keeps them out of the frame, their reflections are what shows
     bool specular = true;
     int diffuse = 0;
     for (int depth = 0; depth < 40; ++depth) {
         const Hit h = trace(o, d, 0.0f, 1e30f);
+        if (inLiquid && h.hit) T = T * exp3(params.liquidSigma * (-h.t));
         float3 Le;
         if (depth > 0 && lightHit(o, d, h.hit ? h.t : 1e30f, Le)) {
             if (specular) L = L + T * Le;
@@ -187,6 +208,22 @@ static __forceinline__ __device__ float3 radiance(float3 o, float3 d, Rng& r) {
                 continue;
             }
             alb = params.skinAlbedo;
+        } else if ((h.kind == TK_LIQUID || h.kind == TK_DROPS) && params.liquidClear) {
+            // a clear liquid: reflect or refract (exact Fresnel); the surface's outward normal says in or out (a puddle
+            // is open onto the floor: a ray inside meets the floor and goes on inside)
+            const bool entering = dot(h.n, d) < 0.0f;
+            const float eta = entering ? 1.0f / params.liquidIor : params.liquidIor;
+            float cosT;
+            const float F = fresnelDielectric(c, eta, cosT);
+            if (r.next() < F) {
+                d = reflect3(d, nn);
+                o = p + nn * 1e-4f;
+            } else {
+                d = normalize(d * eta + nn * (eta * c - cosT));
+                o = p - nn * 1e-4f;
+                inLiquid = entering;
+            }
+            continue;
         } else if (h.kind == TK_LIQUID || h.kind == TK_DROPS) {
             // blood: a wet mirror (Fresnel) over a dark, all but opaque body
             if (r.next() < fresnel(params.liquidF0, c)) {
