@@ -31,6 +31,7 @@ const BoneInfo& boneInfo(int b);
 struct RestJoints {
     float3 shoulder, elbow, wrist, handTip;
     float3 hip, knee, ankle, heel, toe;
+    float3 neckTop, neckBase, chestLow, lumbarLow;   // the spine's joints, on the midline
 };
 const RestJoints& restJoints();
 inline float3 mirrorX(float3 p) { return make_float3(-p.x, p.y, p.z); }
@@ -56,6 +57,18 @@ struct BodyParticles {
 BodyParticles fillBody(const Mannequin& m, float spacing, float jitter = 0.0f);
 
 TriMesh skinMesh(const Mannequin& m, float cell);   // the surface sdf = 0, surface nets on a grid of this cell (m)
-TriMesh skeletonMesh();                             // the bones as drawn (ivory): skull, spine, ribs, limbs
+// the skeleton: primitives, each on its bone (skull, spine, ribs, pelvis, limbs). The bones' meshes and the particles
+// that are bone come from the same list.
+struct BonePrim {
+    enum Kind { Capsule, Ellipsoid, Tube } kind = Capsule;
+    int bone = 0;
+    float3 a{}, b{};                  // capsule: its ends; ellipsoid: centre (a) and radii (b)
+    float ra = 0, rb = 0;             // capsule: radii at a and b; tube: its radius (ra)
+    std::vector<float3> pts;          // tube: the polyline (a rib)
+    int nu = 16, nv = 6;              // mesh resolution
+};
+const std::vector<BonePrim>& skeleton();
+float bonePrimDistance(const BonePrim& q, float3 p);   // < 0 inside
+TriMesh skeletonMesh(int bone = -1);                   // one bone's mesh, or (-1) all of them
 // the studio: a white cyclorama, the floor curving up into a back wall at z = wallZ, cove radius r
 TriMesh studioMesh(float wallZ, float r, float height, float halfWidth, float frontZ);

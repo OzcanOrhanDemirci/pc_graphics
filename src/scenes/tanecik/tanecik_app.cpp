@@ -4,6 +4,7 @@
 //       one picture of the figure in the studio, accumulated (no window)
 //   --scene tanecik --stats      the body's numbers: particles, volume, mass, per bone, skin layer, the meshes
 #include "scenes/tanecik/tanecik_app.h"
+#include "scenes/tanecik/body_graph.h"
 #include "core/image_io.h"
 
 #include <chrono>
@@ -37,6 +38,25 @@ int stats(TanecikApp& app) {
     for (const float3& p : app.skin.pos) { top = std::max(top, p.y); lo = std::min(lo, p.y); }
     std::printf("deri: %zu kose, %zu ucgen, boy %.3f m (taban %.3f)\n", app.skin.pos.size(), app.skin.idx.size(), top, lo);
     std::printf("kemik: %zu kose, %zu ucgen\n", app.bones.pos.size(), app.bones.idx.size());
+    // the body as the physics will see it: kinds, bonds, bone clusters, joints
+    const double t1 = tnow();
+    const float s = b.spacing;
+    const BodyGraph g = buildBodyGraph(b, app.cfg.f("beden.bag_yaricap", 1.5f) * s, app.cfg.f("beden.kemik_en_az", 0.75f) * s);
+    std::printf("cizge (%.2f s): doku %zu, deri %zu, kemik %zu tanecik\n", tnow() - t1, g.countKind(PK_TISSUE), g.countKind(PK_SKIN), g.countKind(PK_BONE));
+    std::printf("  bag: %zu (doku %zu, deri zari %zu, kemige %zu), tanecik basina %.1f\n", g.bonds.size(), g.countBonds(BK_TISSUE), g.countBonds(BK_SKIN),
+                g.countBonds(BK_ATTACH), 2.0 * g.bonds.size() / std::max<size_t>(1, b.pos.size()));
+    std::vector<int> deg(b.pos.size(), 0);
+    for (const BodyBond& bd : g.bonds) { ++deg[bd.a]; ++deg[bd.b]; }
+    size_t orphans = 0, weak = 0;
+    for (size_t i = 0; i < deg.size(); ++i) {
+        if (g.kind[i] == PK_BONE) continue;   // a bone particle is held by its cluster
+        orphans += deg[i] == 0;
+        weak += deg[i] > 0 && deg[i] < 4;
+    }
+    std::printf("  bagsiz doku/deri tanecigi: %zu, 4'ten az bagli: %zu\n", orphans, weak);
+    std::printf("  kemik kumeleri:");
+    for (int k = 0; k < B_COUNT; ++k) std::printf(" %s %zu%s", boneInfo(k).name, g.boneParticles[k].size(), k + 1 < B_COUNT ? "," : "\n");
+    std::printf("  eklem: %zu\n", g.joints.size());
     return 0;
 }
 
