@@ -3,6 +3,10 @@
 > Tek kaynak durum panosu. Plan ve Özcan'ın sözleri `docs/yikim/PLAN.md`'de.
 
 ## Şu an
+- **2026-10-02 (gece, kapanış) · Kamera baktığı yöne uçar.** Özcan: *"w ya basınca düz gitmek yerine kemeranın yönüne
+  göre ileri gidebilir"*. W/S artık bakış yönünde (yukarı bakınca yükselir, aşağı bakınca alçalır); A/D yatay, E/Q
+  dikey kaldı; yerden 0,3 m'nin altına inmez. Yeni test `kontrol: yukari bakip W, kamera yukselir` (kontrol 5/5;
+  bütün testler 33/35, aynı iki konsol).
 - **2026-10-02 (gece, en en son) · Dördüncü yapı: sismik izolasyonlu kule.** Özcan: *"Japonların binaları var ya hani.
   Sallandıkça sallanıyor ama yıkılmıyor. [...] Bu 4.bina da gökdelen olacak ama işte bu sallanma özellikli olacak.
   Şekli, estetiği de daha modern olursa daha güzel olur."* Kararları: *"yalnız izolasyon, yansımalı cam, tabanı geniş

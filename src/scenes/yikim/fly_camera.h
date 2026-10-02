@@ -29,9 +29,10 @@ struct FlyCamera {
         yaw -= dx * sensitivity;
         pitch = std::max(-1.5f, std::min(1.5f, pitch - dy * sensitivity));
     }
-    // inputs in -1..1: forward (W/S), right (D/A), up (E/Q); dist in metres
+    // inputs in -1..1: forward (W/S, where the view points: looking up, W climbs), right (D/A, level), up (E/Q);
+    // dist in metres. (W went level; Özcan: "kemeranın yönüne göre ileri gidebilir")
     void move(float inForward, float inRight, float inUp, float dist) {
-        const float3 f = make_float3(std::sin(yaw), 0.0f, std::cos(yaw));
+        const float3 f = forward();
         float3 mv = f * inForward + right() * inRight + make_float3(0.0f, inUp, 0.0f);
         if (dot(mv, mv) <= 0.0f) return;
         pos = pos + normalize(mv) * dist;

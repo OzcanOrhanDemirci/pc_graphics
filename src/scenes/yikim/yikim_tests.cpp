@@ -513,6 +513,11 @@ void testControls(const Config&) {
     FlyCamera u = c;
     u.look(0.0f, 100.0f, 0.0025f);    // mouse down: look down
     report("kontrol: fare asagi, bakis asagi", u.forward().y < c.forward().y, "%.3f", u.forward().y, "< %.3f", c.forward().y);
+    FlyCamera v = c;
+    v.look(0.0f, -300.0f, 0.0025f);   // look up, then W: it climbs
+    const float y0 = v.pos.y;
+    v.move(1.0f, 0.0f, 0.0f, 1.0f);
+    report("kontrol: yukari bakip W, kamera yukselir", v.pos.y > y0 + 0.1f, "%.2f m", v.pos.y - y0, "> %.2f m", 0.1);
 }
 
 // The quake for any length (quake.h). Longer than a magnitude's own it loops the record's strong part: where the

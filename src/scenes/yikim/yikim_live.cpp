@@ -78,7 +78,7 @@ public:
                    {{L("Sol tık", "Left click"), L("Yıkım topu at (saniyede en çok bir)", "Throw a wrecking ball (at most one a second)")},
                     {"↑|↓", L("Topun gücü", "The ball's power")}, {"R", L("Binayı baştan kur", "Rebuild the building")}}},
                   {L("Kamera", "Camera"),
-                   {{L("Sağ tık|Fare", "Right click|Mouse"), L("Bak", "Look")}, {"W|A|S|D", L("Uç", "Fly")},
+                   {{L("Sağ tık|Fare", "Right click|Mouse"), L("Bak", "Look")}, {"W|A|S|D", L("Uç (W baktığın yöne)", "Fly (W where you look)")},
                     {"E|Q", L("Yukarı / aşağı", "Up / down")}, {"Shift", L("Hızlı", "Fast")}, {L("Tekerlek", "Wheel"), L("Yakınlaş", "Zoom")}}},
                   {L("Görüntü", "Picture"),
                    {{"B", L("Donatıyı göster / gizle", "Show / hide the bars")},

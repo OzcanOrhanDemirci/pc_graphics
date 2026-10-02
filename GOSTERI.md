@@ -57,7 +57,7 @@ saniye görünmeden kendi ağırlığıyla oturur. Odak fizik.
 | **Boşluk** | depremi başlat / durdur (paneldeki düğme de); durdurunca zemin 1,5 sn'de diner |
 | **sol tık** | tıkladığın yere bir **yıkım topu** gelir (döküm çelik), saniyede en çok bir. Kırılıp devrilmeye fizik karar verir |
 | **↑ / ↓** | topun gücü (paneldeki **Top** çubuğu): sol uç hafif ve yavaş (0,5 t, kolonu kıpırdatmaz), çentik dengeli (4,2 t), sağ uç **göktaşı** (5 m çap, 520 t, saatte 396 km: tek atışta gökdeleni yıkar) |
-| **sağ tık + fare** | bak · **WASD** uç · **E / Q** yukarı / aşağı · **Shift** hızlı · **tekerlek** yakınlaş |
+| **sağ tık + fare** | bak · **WASD** uç (**W** baktığın yöne: yukarı bakınca yükselir) · **E / Q** yukarı / aşağı · **Shift** hızlı · **tekerlek** yakınlaş |
 | **T** | ağır çekim (×1, ×0,25, ×0,1) · **P** zamanı durdur · **R** binayı baştan kur |
 | **B** | donatı demirlerini göster / gizle · **G** gürültü giderici (hızlı süzgeç → yapay zekâ → ham) |
 

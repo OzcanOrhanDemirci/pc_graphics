@@ -63,7 +63,7 @@ to it. On opening, the building settles under its own weight for two seconds, un
 | **Space** | start / stop the earthquake (the panel's button too); stopped, the ground calms down over 1.5 s |
 | **left click** | a **wrecking ball** (cast steel) comes at what you clicked, at most one a second. The physics decides what breaks and topples |
 | **↑ / ↓** | the ball's power (the **Ball** slider on the panel): the left end light and slow (0.5 t, it does not move a column), the notch balanced (4.2 t), the right end a **meteor** (5 m across, 520 t, 396 km/h: one brings the tower down) |
-| **right click + mouse** | look · **WASD** fly · **E / Q** up / down · **Shift** faster · **wheel** zoom |
+| **right click + mouse** | look · **WASD** fly (**W** where you look: look up and it climbs) · **E / Q** up / down · **Shift** faster · **wheel** zoom |
 | **T** | slow motion (×1, ×0.25, ×0.1) · **P** pause time · **R** rebuild the building |
 | **B** | show / hide the reinforcing bars · **G** denoising (fast filter → AI → raw) |
 
