@@ -50,10 +50,12 @@ public:
                "peak acceleration and integrated twice into the ground's motion. For longer or endless shaking the record's "
                "strong part becomes a seamless loop.")},
             {L("Yıkım topu", "Wrecking ball"),
-             L("Tıklanan yere bakış yönünden döküm çelik bir top gelir. Gücü çubukla: yarım ton ve saatte 29 km'den 11 ton ve saatte "
-               "252 km'ye. Top da öteki parçalar gibi bir cisim; neyin kırılıp devrileceğine çözücü karar verir.",
+             L("Tıklanan yere bakış yönünden döküm çelik bir top gelir. Gücü çubukla: yarım ton ve saatte 29 km'den, çapı 5 m, "
+               "500 ton ve saatte 400 km'lik bir göktaşına. Top da öteki parçalar gibi bir cisim; neyin kırılıp devrileceğine "
+               "çözücü karar verir.",
                "A cast steel ball comes from where you look to where you click. Its power is a slider: from half a tonne at 29 "
-               "km/h to 11 tonnes at 252 km/h. The ball is a body like the others; the solver decides what breaks and topples.")},
+               "km/h to a meteor 5 m across, 500 tonnes at 400 km/h. The ball is a body like the others; the solver decides what "
+               "breaks and topples.")},
             {L("Aynı deprem, aynı yıkım", "Same quake, same collapse"),
              L("Temas ve bağ toplamları kayan noktalı atomikler yerine sabit noktada tutulur: aynı deprem aynı binayı her seferinde "
                "aynı biçimde yıkar. Sınırdaki yapıyı ölçebilmek bunu gerektirdi.",
@@ -469,7 +471,7 @@ private:
         if (std::fabs(power_ - 0.5f) < 0.03f) power_ = 0.5f;
     }
     static const char* powerName(float u) {   // what a throw of this power did to the corner column (docs/yikim/DURUM.md)
-        return u < 0.2f ? L("Hafif", "Light") : u < 0.45f ? L("Orta", "Medium") : u <= 0.55f ? L("Dengeli", "Balanced") : u < 0.85f ? L("Ağır", "Heavy") : L("Mermi", "Bullet");
+        return u < 0.2f ? L("Hafif", "Light") : u < 0.45f ? L("Orta", "Medium") : u <= 0.55f ? L("Dengeli", "Balanced") : u < 0.85f ? L("Ağır", "Heavy") : L("Göktaşı", "Meteor");
     }
     PhysStats stats_;
     static constexpr float kSpeeds[3] = {1.0f, 0.25f, 0.1f};
