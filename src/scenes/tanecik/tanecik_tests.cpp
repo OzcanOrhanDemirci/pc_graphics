@@ -1,9 +1,10 @@
 // Scene 4 "Tanecik": the particle solver's tests and clips (T1).
-//   --scene tanecik --test [dusus|hacim|baraj|balon|butce|tekrar]   measurements, each with its criterion (PASS / FAIL)
+//   --scene tanecik --test [dusus|hacim|baraj|balon|birikinti|dokme|sivilasma|tekrar|butce]
+//                                                                      measurements, each with its criterion (PASS / FAIL)
 //   --scene tanecik --clip baraj|balon [--seconds S] [--out dir]     30 fps frames and an mp4 (ffmpeg), particles as spheres
 // Settings: scenes/tanecik.cfg, fizik.* (the solver) and test.* (the scenarios); --set key=value overrides them.
 // Proving a test can fail: --set fizik.yogunluk=0 (no density constraint: hacim fails), --set fizik.baglar=0 (no
-// bonds: balon fails).
+// bonds: balon fails), --set fizik.yapisma=0 (no cohesion: birikinti fails).
 #include "scenes/tanecik/particles.h"
 #include "scenes/tanecik/tanecik_app.h"
 #include "core/image_io.h"
@@ -348,7 +349,7 @@ int testBalon(const Config& c) {
         PStats st = w.stats();
         w.readPositions(x);
         BalloonState bs = balloonState(b, x, s);
-        const bool hold = bs.leaked < 0.01f && st.broken == 0 && st.densityMean < 0.03f;
+        const bool hold = bs.leaked < 0.01f && st.broken == 0 && st.densityMean < 0.03f && bs.skinTop - bs.skinBottom > R;
         std::printf("balon 1 (yerde 2 sn): %d deri + %d su tanecigi, %d bag; disari cikan su %.2f%%, kopan bag %d, su yogunluk sapmasi ort %.2f%%; "
                     "boy %.3f m (ilk %.3f), adim %.2f ms  [olcut: <1%% su, 0 bag, <3%%] %s\n",
                     b.skinCount, b.fluidCount, st.bonds, 100 * bs.leaked, st.broken, 100 * st.densityMean, bs.skinTop - bs.skinBottom, 2 * R, st.ms,
@@ -459,6 +460,85 @@ int testBirikinti(const Config& c) {
     return ok ? 0 : 1;
 }
 
+// pouring: a tap 30 cm up feeds a box 20 x 20 cm for two seconds (appendFluid, a 4 x 4 particle stream at 1 m/s);
+// everything added stays and settles, the level is the poured volume over the box's floor
+int testDokme(const Config& c) {
+    ParticleWorld w;
+    const float s = spacingOf(c);
+    w.begin(s);
+    applyPhysics(w, c);
+    const float side = 0.2f;
+    w.params.box = true;
+    w.params.boxLo = make_float3(-0.5f * side, 0, -0.5f * side);
+    w.params.boxHi = make_float3(0.5f * side, 10.0f, 0.5f * side);
+    w.addParticles(lattice(make_float3(-2 * s, 0, -2 * s), 4, 1, 4, s), 1000.0f, 0);   // a first layer on the floor
+    w.reserve(8000);
+    w.commit();
+    const float speed = 1.0f;
+    int poured = 16;
+    double carry = 0.0;
+    for (int f = 0; f < 180; ++f) {
+        if (f < 120) {   // a column of layers, each a spacing below the last, at the tap's speed
+            carry += speed / 60.0 / s;
+            std::vector<float3> p, v;
+            while (carry >= 1.0) {
+                carry -= 1.0;
+                for (int z = 0; z < 4; ++z)
+                    for (int x = 0; x < 4; ++x) {
+                        p.push_back(make_float3((x - 1.5f) * s, 0.3f - float(carry) * s, (z - 1.5f) * s));
+                        v.push_back(make_float3(0, -speed, 0));
+                    }
+            }
+            poured += w.appendFluid(p, v, 1000.0f);
+        }
+        w.step(1.0f / 60.0f);
+    }
+    for (int f = 0; f < 120; ++f) w.step(1.0f / 60.0f);
+    const PStats st = w.stats();
+    std::vector<float3> x;
+    w.readPositions(x);
+    std::vector<float> ys;
+    for (const float3& p : x) ys.push_back(p.y + 0.5f * s);
+    std::sort(ys.begin(), ys.end());
+    const float level = ys[size_t(0.99 * (ys.size() - 1))];
+    const float expect = poured * s * s * s / (side * side);
+    const bool ok = w.count() == poured && st.maxSpeed < 0.5f && std::fabs(level - expect) < 1.5f * s;
+    std::printf("dokme: %d tanecik eklendi (dunyada %d), seviye %.1f mm (beklenen %.1f), en hizli %.2f m/s, adim %.2f ms  "
+                "[olcut: hepsi, dinlenir (< 0.5 m/s), seviye +-1.5 aralik] %s\n",
+                poured, w.count(), 1000 * level, 1000 * expect, st.maxSpeed, st.ms, verdict(ok));
+    return ok ? 0 : 1;
+}
+
+// liquefying: a bonded block of a PG_LIQUEFY group; the bonds in a sphere are cut: the particles that lost them all
+// turn liquid and run out, the rest stays solid
+int testSivilasma(const Config& c) {
+    ParticleWorld w;
+    const float s = spacingOf(c);
+    w.begin(s);
+    applyPhysics(w, c);
+    const int m = 16;
+    const int g = w.addGroup(PG_LIQUEFY);
+    const int first = w.addParticles(lattice(make_float3(-0.5f * m * s, 0, -0.5f * m * s), m, m, m, s), 1000.0f, g);
+    w.bondWithin(first, m * m * m, 1.75f * s, 1e-6f, 0.5f, 0.5f);
+    w.commit();
+    for (int f = 0; f < 30; ++f) w.step(1.0f / 60.0f);
+    const float3 centre = make_float3(0, (m - 0.5f) * s, 0);   // the top face's middle: a crater
+    const float r = 4.0f * s;
+    const int cut = w.breakBondsInSphere(centre, r);
+    for (int f = 0; f < 90; ++f) w.step(1.0f / 60.0f);
+    std::vector<uint8_t> fl;
+    w.readFluid(fl);
+    int liquid = 0;
+    for (uint8_t b : fl) liquid += b;
+    // a particle loses all its bonds when it, or every partner it had, is inside the sphere: about the sphere's
+    // particles that lie inside the block
+    const float inside = 0.5f * (4.0f / 3.0f) * 3.14159265f * r * r * r / (s * s * s);
+    const bool ok = liquid > 0.3f * inside && liquid < 2.0f * inside;
+    std::printf("sivilasma: %d bag kesildi, %d tanecik sivilasti (kesilen kurenin bloktaki hacmi ~%.0f tanecik)  [olcut: 0.3x - 2x] %s\n", cut, liquid,
+                inside, verdict(ok));
+    return ok ? 0 : 1;
+}
+
 int testButce(const Config& c) {
     const float s = spacingOf(c);
     const int sizes[3] = {46, 58, 82};   // ~97k, ~195k, ~551k
@@ -487,6 +567,44 @@ int testButce(const Config& c) {
         std::printf("  %7d tanecik, %d alt adim x %d yineleme: %.2f ms/kare\n", count, std::max(1, c.i("fizik.alt_adim", 20)), std::max(1, c.i("fizik.yineleme", 1)),
                     best);
     }
+    return 0;
+}
+
+// what a body costs (for T2's planning, not a physics test): the mannequin's particles (body.h), one bonded group per
+// bone (bonds within 1.75 spacings, stiff tissue), no joints between bones; it falls to the floor in pieces while timed
+int testBedenButce(const Config& c) {
+    const float s = c.f("beden.aralik", 0.007f);
+    Mannequin man;
+    const BodyParticles body = fillBody(man, s);
+    float best = 1e9f;
+    int bonds = 0, count = 0;
+    for (int rep = 0; rep < 3; ++rep) {
+        ParticleWorld w;
+        w.begin(s);
+        applyPhysics(w, c);
+        w.params.gravityRamp = 0.3f;
+        for (int b = 0; b < B_COUNT; ++b) {
+            std::vector<float3> p;
+            for (size_t i = 0; i < body.pos.size(); ++i)
+                if (body.bone[i] == b) p.push_back(body.pos[i]);
+            if (p.empty()) continue;
+            const int g = w.addGroup(PG_LIQUEFY);
+            const int first = w.addParticles(p, 1060.0f, g);
+            w.bondWithin(first, int(p.size()), 1.75f * s, 1e-7f, 0.5f, 0.5f);
+        }
+        w.commit();
+        for (int f = 0; f < 10; ++f) w.step(1.0f / 60.0f);
+        float sum = 0.0f;
+        for (int f = 0; f < 20; ++f) {
+            w.step(1.0f / 60.0f);
+            sum += w.stats().ms;
+        }
+        best = std::min(best, sum / 20.0f);
+        bonds = w.stats().bonds;
+        count = w.count();
+    }
+    std::printf("beden butcesi (3 tekrarin en kucugu): %d tanecik, %d bag, %d alt adim x %d bag yinelemesi: %.2f ms/kare\n", count, bonds,
+                std::max(1, c.i("fizik.alt_adim", 20)), std::max(1, c.i("fizik.bag_yineleme", 2)), best);
     return 0;
 }
 
@@ -557,9 +675,12 @@ int runTanecikTests(TanecikApp& app, const std::string& only) {
     run("baraj", testBaraj);
     run("balon", testBalon);
     run("birikinti", testBirikinti);
+    run("dokme", testDokme);
+    run("sivilasma", testSivilasma);
     run("tekrar", testTekrar);
     run("butce", testButce);
-    if (!ran) { std::printf("bilinmeyen test: %s (dusus, hacim, baraj, balon, birikinti, tekrar, butce)\n", only.c_str()); return 2; }
+    run("beden_butce", testBedenButce);
+    if (!ran) { std::printf("bilinmeyen test: %s (dusus, hacim, baraj, balon, birikinti, dokme, sivilasma, tekrar, butce, beden_butce)\n", only.c_str()); return 2; }
     std::printf("tanecik testleri: %d test, %d basarisiz (%.1f s)\n", ran, fails, tnow() - t0);
     return fails ? 1 : 0;
 }
@@ -597,10 +718,10 @@ int runTanecikClip(TanecikApp& app, const std::string& name, const std::string& 
     };
     if (name == "baraj") {
         const DamBreak d = setupDam(w, c);
-        app.orbit.target = make_float3(1.6f * d.a, 0.35f * d.a, 0.5f * d.depth);
+        app.orbit.target = make_float3(3.0f * d.a, 0.5f * d.a, 0.5f * d.depth);
         app.orbit.yaw = 0.0f;
         app.orbit.pitch = 0.25f;
-        app.orbit.dist = 5.5f * d.a;
+        app.orbit.dist = 9.0f * d.a;
         app.orbit.fovDeg = 35.0f;
         app.orbit.apply(P.cam, app.width, app.height);
         const int frames = int((seconds > 0 ? seconds : 2.5) * 30);

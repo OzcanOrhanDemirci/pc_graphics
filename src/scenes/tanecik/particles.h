@@ -6,8 +6,8 @@
 //            (Akinci et al. 2013). Solid particles count in a fluid particle's density and feel its reaction, so
 //            water presses on a balloon's skin and the skin holds it (two-way, momentum-conserving).
 //   solid    particles of a group keep their partners through BONDS: XPBD distance constraints (compliance, a
-//            breaking strain, a crushing strain); unbonded solids of different groups (or of a self-colliding one)
-//            touch: kept 2r apart, with friction. A RIGID group is shape-matched (one body; Mueller et al. 2005, the
+//            breaking strain, a crushing strain), solved colour by colour (Gauss-Seidel); solids of different groups
+//            touch: kept 2r apart, with friction (a group's own particles do not touch each other). A RIGID group is shape-matched (one body; Mueller et al. 2005, the
 //            rotation by Mueller et al. 2016). A LIQUEFY group's particle turns liquid once its last bond breaks.
 //   planes   the ground (y = 0) and an optional box (an aquarium), with friction.
 //   time     many small substeps with one iteration each (Macklin et al. 2019, "Small Steps in Physics Simulation").
@@ -25,8 +25,8 @@
 // a group's kind
 enum PGroupFlags : uint32_t {
     PG_RIGID = 1u << 0,      // shape-matched: moves as one rigid body
-    PG_SELF = 1u << 1,       // its unbonded particles collide with each other
     PG_LIQUEFY = 1u << 2,    // a particle that has lost all its bonds becomes liquid
+    // (a group's own particles never touch each other: no self-collision yet; its bonds hold it together)
 };
 
 struct PParams {
@@ -73,16 +73,19 @@ public:
 
     // ---- building (host), then commit() uploads it all
     void begin(float spacing);                 // empties the world; spacing = 2 * radius (m)
+    void reserve(int particles) { reserve_ = particles; }   // room for this many (appendFluid adds into it)
     int addGroup(uint32_t flags);              // a new group (1, 2, ...); group 0 is free fluid
     // particles at rest: density (kg/m^3) gives each a mass of density * spacing^3; group 0 = fluid. A group's
     // particles must be added in one run (rigid groups are reduced over their contiguous range).
     int addParticles(const std::vector<float3>& pos, float density, int group, const std::vector<float3>* vel = nullptr);
     // bonds between the particles in [first, first + count) closer than maxDist (rest length = their distance now)
     int bondWithin(int first, int count, float maxDist, float compliance, float breakStrain, float crushStrain);
+    void addBond(int a, int b, float compliance, float breakStrain, float crushStrain);   // rest length = their distance now
     void commit();
     // ---- running
     void step(float dt, cudaStream_t s = 0);   // one frame: substeps * iterations
-    void appendFluid(const std::vector<float3>& pos, const std::vector<float3>& vel, float density);   // pouring (no bonds)
+    // pouring (no bonds): returns how many fitted (the capacity is fixed at commit: reserve)
+    int appendFluid(const std::vector<float3>& pos, const std::vector<float3>& vel, float density);
     void placeGroup(int group, float3 offset, float3 velocity);   // a rigid group: its rest shape moved by offset, moving
     int breakBondsInSphere(float3 c, float r);  // every bond with an end inside: broken (a shot, for the tests); returns how many
     // ---- reading
@@ -113,7 +116,9 @@ private:
         uint32_t flags = 0;
     };
     float s_ = 0.007f;
-    int n_ = 0, cap_ = 0, nb_ = 0;
+    int n_ = 0, cap_ = 0, nb_ = 0, reserve_ = 0;
+    int nPad_ = 0;                 // the count the kernels cover: n_ and inert padding up to a block of 4096
+    void pad(int n);
     double time_ = 0.0;
     float S0_ = 1.0f, D0_ = 1.0f, fluidInvMass_ = 1.0f;
     // host mirror
@@ -137,6 +142,8 @@ private:
     float *psi_ = nullptr, *psis_ = nullptr;   // boundary weights (Akinci et al. 2012), particle and sorted order
     unsigned long long* code_ = nullptr;   // each sorted slot's cell (hash collisions are told apart by it)
     float* lam_ = nullptr;         // density multipliers, sorted order
+    float* rhos_ = nullptr;        // rho / rho0, sorted order
+    uint8_t* nbrFlag_ = nullptr;   // per slot: fluid around, another group around (see kNeighbours)
     int *cellStart_ = nullptr, *cellEnd_ = nullptr;
     int tableBits_ = 10;
     int* nbr_ = nullptr;           // neighbour slots, kMaxNbr per slot
@@ -151,6 +158,9 @@ private:
     uint8_t* bBroken_ = nullptr;
     int *csrStart_ = nullptr, *csrBond_ = nullptr;   // per particle: its bonds (bond index, high bit: it is end b)
     int* degree_ = nullptr;        // live bonds now
+    int* initDeg_ = nullptr;       // bonds at commit
+    uint8_t* sleepOk_ = nullptr;   // may skip its own neighbour search (see SleepArgs in the .cu)
+    uint8_t *markPrev_ = nullptr, *markNext_ = nullptr;
     // groups
     int ng_ = 0, nRigid_ = 0;
     int* rigidList_ = nullptr;     // the rigid groups

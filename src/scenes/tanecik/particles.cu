@@ -127,13 +127,38 @@ __global__ void kCellRanges(int n, const uint32_t* keySorted, int* start, int* e
 }
 
 // every particle's neighbours within h, in a fixed order (cells in order, slots ascending)
-__global__ void kNeighbours(int n, int stride, const float4* xs, const unsigned long long* code, const int* start, const int* end, float h2, float invH,
-                            uint32_t mask, int* nbr, int* nbrCount, float* stat) {
+// flags (per slot): NB_FLUID some fluid within h, NB_OTHER a solid of another group within h (a possible contact). A
+// solid particle with neither (the inside of a bone, of a cube) skips the density and contact loops.
+// Sleeping (SleepArgs): a bonded particle that still has every bond it started with, in a group where that is the most anyone has
+// (the inside of a body part, shielded by its outer layers), skips its own search too, unless last substep someone of
+// another group, or fluid, found it within h (mark). Both sides of any contact or coupling then search: the marks see
+// to it one substep ahead (h - 2r of approach a substep is ~7 m/s at 20 substeps).
+constexpr uint8_t NB_FLUID = 1, NB_OTHER = 2;
+struct SleepArgs {
+    const uint32_t* idSorted;
+    const uint8_t* ok;            // per particle: may sleep (full bonds at commit)
+    const int* degree;            // live bonds now
+    const int* initial;           // bonds at commit
+    const uint8_t* markPrev;      // found by another group or fluid last substep
+    uint8_t* markNext;
+};
+__global__ void kNeighbours(int n, int stride, const float4* xs, const uint32_t* phs, const unsigned long long* code, const int* start, const int* end,
+                            float h2, float invH, uint32_t mask, int* nbr, int* nbrCount, uint8_t* flags, float* stat, SleepArgs sl) {
     const int k = blockIdx.x * blockDim.x + threadIdx.x;
     if (k >= n) return;
+    const uint32_t pk = phs[k];
+    {
+        const uint32_t i = sl.idSorted[k];
+        if (!(pk & PF_FLUID) && sl.ok[i] && sl.degree[i] == sl.initial[i] && !sl.markPrev[i]) {
+            nbrCount[k] = 0;
+            flags[k] = 0;
+            return;
+        }
+    }
     const float3 p = xyz(xs[k]);
     const int3 c = cellOf(p, invH);
     int cnt = 0;
+    uint8_t fl = 0;
     bool overflow = false;
     int* out = nbr + k;   // column-major: neighbour q of slot k at q * stride + k (a warp's reads are coalesced)
     for (int dz = -1; dz <= 1; ++dz)
@@ -151,9 +176,15 @@ __global__ void kNeighbours(int n, int stride, const float4* xs, const unsigned 
                     if (dot(r, r) >= h2) continue;
                     if (cnt < kMaxNbr) out[size_t(cnt++) * stride] = j;
                     else overflow = true;
+                    const uint32_t pj = phs[j];
+                    if (pj & PF_FLUID) fl |= NB_FLUID;
+                    else if ((pj & PF_GROUP) != (pk & PF_GROUP) || (pk & PF_FLUID)) fl |= NB_OTHER;
+                    // a solid found by fluid or by another group must search next substep (the same value from every writer)
+                    if (!(pj & PF_FLUID) && ((pk & PF_FLUID) || (pj & PF_GROUP) != (pk & PF_GROUP))) sl.markNext[sl.idSorted[j]] = 1;
                 }
             }
     nbrCount[k] = cnt;
+    flags[k] = fl;
     if (overflow) atomicAdd(&stat[4], 1.0f);
 }
 
@@ -197,11 +228,12 @@ struct DensityArgs {
 
 // the density multiplier of every fluid particle (sorted order); its density for the stats
 __global__ void kLambda(int n, int stride, const float4* xs, const uint32_t* phs, const float* psis, const int* nbr, const int* nbrCount,
-                        const uint32_t* idSorted, float* lam, float* rho, DensityArgs a) {
+                        const uint32_t* idSorted, float* lam, float* rho, float* rhos, DensityArgs a) {
     const int k = blockIdx.x * blockDim.x + threadIdx.x;
     if (k >= n) return;
     if (!(phs[k] & PF_FLUID) || !a.on) {
         lam[k] = 0.0f;
+        rhos[k] = 1.0f;
         if (!(phs[k] & PF_FLUID)) rho[idSorted[k]] = 0.0f;
         return;
     }
@@ -231,7 +263,7 @@ __global__ void kLambda(int n, int stride, const float4* xs, const uint32_t* phs
         gi += wg * (1.0f / a.S0);
     }
     float C = sum / a.S0 - 1.0f;
-    rho[idSorted[k]] = sum / a.S0;
+    rho[idSorted[k]] = rhos[k] = sum / a.S0;
     if (a.unilateral) C = fmaxf(C, 0.0f);
     lam[k] = -C / (dot(gi, gi) + g2 + a.eps);
 }
@@ -248,7 +280,8 @@ struct DeltaArgs {
 
 // every particle's correction: density (its own constraint and its fluid neighbours') and contacts with the solids
 // of other groups, shared in Jacobi fashion so that a pair's two ends get equal and opposite impulses
-__global__ void kDelta(int n, int stride, const float4* xs, const uint32_t* phs, const float* psis, const uint32_t* idSorted, const int* nbr, const int* nbrCount, const float* lam,
+__global__ void kDelta(int n, int stride, const float4* xs, const uint32_t* phs, const float* psis, const uint8_t* flags, const uint32_t* idSorted, const int* nbr,
+                       const int* nbrCount, const float* lam,
                        const float4* x0, const uint8_t* contacts, uint8_t* contactsNext, float4* dx, DeltaArgs a) {
     const int k = blockIdx.x * blockDim.x + threadIdx.x;
     if (k >= n) return;
@@ -260,7 +293,7 @@ __global__ void kDelta(int n, int stride, const float4* xs, const uint32_t* phs,
     const bool fi = (ph & PF_FLUID) != 0;
     const uint32_t gi = ph & PF_GROUP;
     float3 acc = make_float3(0, 0, 0);
-    if (wi <= 0.0f) {   // kinematic
+    if (wi <= 0.0f || (!fi && !flags[k])) {   // kinematic, or a solid inside its own group: nothing to do
         dx[i] = make_float4(0, 0, 0, 0);
         contactsNext[i] = 0;
         return;
@@ -534,11 +567,10 @@ __global__ void kScatterVel(int n, const uint32_t* idSorted, const float4* vs, f
 
 // vs: velocities in sorted order
 __global__ void kDivLambda(int n, int stride, const float4* xs, const uint32_t* phs, const float* psis, const int* nbr, const int* nbrCount,
-                           const uint32_t* idSorted, const float4* vs, const float* rho, float* lam, DensityArgs a) {
+                           const float4* vs, const float* rhos, float* lam, DensityArgs a) {
     const int k = blockIdx.x * blockDim.x + threadIdx.x;
     if (k >= n) return;
     if (!(phs[k] & PF_FLUID)) { lam[k] = 0.0f; return; }
-    const uint32_t i = idSorted[k];
     const float3 p = xyz(xs[k]);
     const float3 vi = xyz(vs[k]);
     float D = 0.0f, g2 = 0.0f;
@@ -563,18 +595,19 @@ __global__ void kDivLambda(int n, int stride, const float4* xs, const uint32_t* 
         D += dot(vi, wg);
         gi += wg;
     }
-    if (rho[i] < 1.0f) D = fmaxf(D, 0.0f);
+    if (rhos[k] < 1.0f) D = fmaxf(D, 0.0f);
     lam[k] = -D / (dot(gi, gi) + g2 + a.eps);
 }
 
 // adds the correction to vs (sorted) directly: every multiplier was computed before, nothing here reads velocities
-__global__ void kDivDelta(int n, int stride, const float4* xs, const uint32_t* phs, const float* psis, const int* nbr, const int* nbrCount, const float* lam,
-                          float4* vs, DensityArgs a) {
+__global__ void kDivDelta(int n, int stride, const float4* xs, const uint32_t* phs, const float* psis, const uint8_t* flags, const int* nbr, const int* nbrCount,
+                          const float* lam, float4* vs, DensityArgs a) {
     const int k = blockIdx.x * blockDim.x + threadIdx.x;
     if (k >= n) return;
     const float4 xi = xs[k];
     const float3 p = xyz(xi);
     const bool fi = (phs[k] & PF_FLUID) != 0;
+    if (!fi && !(flags[k] & NB_FLUID)) return;
     float3 acc = make_float3(0, 0, 0);
     if (xi.w > 0.0f) {
         const float lamI = lam[k];
@@ -620,28 +653,26 @@ __global__ void kNormals(int n, int stride, const float4* xs, const uint32_t* ph
 }
 
 // ns: the normals (kNormals), or null when there is no surface tension
-__global__ void kFluidForces(int n, int stride, const float4* xs, const uint32_t* phs, const uint32_t* idSorted, const int* nbr, const int* nbrCount, const float4* vs,
-                             const float* rho, const float4* ns, float4* out, Kern K, float S0, float xsph, float cohesion, float cohPeak, float tension,
+__global__ void kFluidForces(int n, int stride, const float4* xs, const uint32_t* phs, const int* nbr, const int* nbrCount, const float4* vs,
+                             const float* rhos, const float4* ns, float4* out, Kern K, float S0, float xsph, float cohesion, float cohPeak, float tension,
                              float dt) {
     const int k = blockIdx.x * blockDim.x + threadIdx.x;
     if (k >= n) return;
-    const uint32_t i = idSorted[k];
     if (!(phs[k] & PF_FLUID) || xs[k].w <= 0.0f) { out[k] = vs[k]; return; }
     const float3 p = xyz(xs[k]);
     const float3 vi = xyz(vs[k]);
     float3 visc = make_float3(0, 0, 0), coh = make_float3(0, 0, 0);
-    const float ri = fmaxf(rho[i], 0.5f);
+    const float ri = fmaxf(rhos[k], 0.5f);
     const int m = nbrCount[k];
     for (int q = 0; q < m; ++q) {
         const int j = nbr[size_t(q) * stride + k];
         if (!(phs[j] & PF_FLUID)) continue;
-        const uint32_t idj = idSorted[j];
         const float3 r = p - xyz(xs[j]);
         const float r2 = dot(r, r);
         visc += (xyz(vs[j]) - vi) * (W(K, r2) / S0);
         if (cohesion > 0.0f || tension > 0.0f) {
             const float d = sqrtf(r2);
-            const float kij = 2.0f / (ri + fmaxf(rho[idj], 0.5f));   // Akinci's correction: less pull where the fluid is full
+            const float kij = 2.0f / (ri + fmaxf(rhos[j], 0.5f));   // Akinci's correction: less pull where the fluid is full
             if (cohesion > 0.0f && d > 1e-9f) coh += r * (-cohesion * kij * cohesionSpline(d, K.h) / (cohPeak * d));
             if (ns) coh += (xyz(ns[k]) - xyz(ns[j])) * (-tension * kij);   // curvature: the surface pulls itself flat
         }
@@ -691,6 +722,23 @@ __global__ void kBreakSphere(int nb, const int2* ends, const float4* x, uint8_t*
         broken[b] = 1;
         atomicAdd(counter, 1);
     }
+}
+
+__global__ void kPad(int first, int count, float4* x, float4* x0, float4* v, float* w, uint32_t* phase, float* psi, int* csrStart, int csrTotal,
+                     uint8_t* sleepOk, int* degree, int* initDeg, uint8_t* markPrev) {
+    const int k = blockIdx.x * blockDim.x + threadIdx.x;
+    if (k >= count) return;
+    const int i = first + k;
+    const float4 p = make_float4(1.0e4f + float(i % 256), 1.0e4f, float(i / 256), 0.0f);   // a metre apart: no neighbours
+    x[i] = x0[i] = p;
+    v[i] = make_float4(0, 0, 0, 0);
+    w[i] = 0.0f;
+    phase[i] = 0;   // solid, of no group (group 0 is otherwise only fluid), kinematic
+    psi[i] = 1.0f;
+    csrStart[i + 1] = csrTotal;
+    sleepOk[i] = 1;   // never searches (no bonds to lose, nobody near to mark it)
+    degree[i] = initDeg[i] = 0;
+    markPrev[i] = 0;
 }
 
 __global__ void kExport(int n, const float4* x, const uint32_t* phase, float3* pos, float* disp) {
@@ -746,7 +794,7 @@ static Profiler g_prof;
 void ParticleWorld::begin(float spacing) {
     destroy();
     s_ = spacing;
-    n_ = nb_ = 0;
+    n_ = nb_ = reserve_ = 0;
     time_ = 0.0;
     hx_.clear();
     hv_.clear();
@@ -817,6 +865,12 @@ int ParticleWorld::bondWithin(int first, int count, float maxDist, float complia
     return int(hbonds_.size()) - before;
 }
 
+void ParticleWorld::addBond(int a, int b, float compliance, float breakStrain, float crushStrain) {
+    const float4 p = hx_[a], q = hx_[b];
+    const float d = std::sqrt((p.x - q.x) * (p.x - q.x) + (p.y - q.y) * (p.y - q.y) + (p.z - q.z) * (p.z - q.z));
+    hbonds_.push_back({a, b, d, compliance, breakStrain, crushStrain});
+}
+
 void ParticleWorld::allocate(int cap, int bondCap) {
     cap_ = cap;
     x_ = dalloc<float4>(cap);
@@ -841,6 +895,8 @@ void ParticleWorld::allocate(int cap, int bondCap) {
     psis_ = dalloc<float>(cap);
     code_ = dalloc<unsigned long long>(cap);
     lam_ = dalloc<float>(cap);
+    rhos_ = dalloc<float>(cap);
+    nbrFlag_ = dalloc<uint8_t>(cap);
     nbr_ = dalloc<int>(size_t(cap) * kMaxNbr);
     nbrCount_ = dalloc<int>(cap);
     tableBits_ = 10;
@@ -858,6 +914,10 @@ void ParticleWorld::allocate(int cap, int bondCap) {
     csrStart_ = dalloc<int>(size_t(cap) + 1);
     csrBond_ = dalloc<int>(size_t(bondCap) * 2);
     degree_ = dalloc<int>(cap);
+    initDeg_ = dalloc<int>(cap);
+    sleepOk_ = dalloc<uint8_t>(cap);
+    markPrev_ = dalloc<uint8_t>(cap);
+    markNext_ = dalloc<uint8_t>(cap);
     stat_ = dalloc<float>(8);
     wallTable_ = dalloc<float2>(kWallTable);
     PCUDA(cudaEventCreate(&e0_));
@@ -871,11 +931,11 @@ void ParticleWorld::freeAll() {
     if (!x_) return;
     cudaDeviceSynchronize();
     dfree(x_), dfree(x0_), dfree(v_), dfree(dx_), dfree(q_), dfree(w_), dfree(phase_), dfree(rho_), dfree(contacts_), dfree(contactsNext_);
-    dfree(key_), dfree(keySorted_), dfree(id_), dfree(idSorted_), dfree(xs_), dfree(vs_), dfree(ns_), dfree(phs_), dfree(psi_), dfree(psis_), dfree(code_), dfree(lam_), dfree(nbr_), dfree(nbrCount_);
+    dfree(key_), dfree(keySorted_), dfree(id_), dfree(idSorted_), dfree(xs_), dfree(vs_), dfree(ns_), dfree(phs_), dfree(psi_), dfree(psis_), dfree(code_), dfree(lam_), dfree(rhos_), dfree(nbrFlag_), dfree(nbr_), dfree(nbrCount_);
     dfree(cellStart_), dfree(cellEnd_);
     if (sortTemp_) cudaFree(sortTemp_);
     sortTemp_ = nullptr;
-    dfree(bEnds_), dfree(bProp_), dfree(bLam_), dfree(bCorr_), dfree(bBroken_), dfree(csrStart_), dfree(csrBond_), dfree(degree_);
+    dfree(bEnds_), dfree(bProp_), dfree(bLam_), dfree(bCorr_), dfree(bBroken_), dfree(csrStart_), dfree(csrBond_), dfree(degree_), dfree(initDeg_), dfree(sleepOk_), dfree(markPrev_), dfree(markNext_);
     dfree(groups_), dfree(groupFrame_), dfree(rigidList_), dfree(stat_), dfree(wallTable_);
     nRigid_ = 0;
     if (e0_) cudaEventDestroy(e0_);
@@ -922,7 +982,7 @@ void ParticleWorld::commit() {
     const int n = int(hx_.size());
     const int nb = int(hbonds_.size());
     freeAll();
-    allocate(std::max(n + n / 4, 1024), std::max(nb, 1));
+    allocate(std::max(std::max(n + n / 4, 1024), reserve_), std::max(nb, 1));
     n_ = n;
     nb_ = nb;
     // kernel constants on the lattice: S0 (density of a full lattice) and D0 (the multiplier's denominator there)
@@ -1070,6 +1130,26 @@ void ParticleWorld::commit() {
         PCUDA(cudaMemcpy(csrBond_, cb.data(), cb.size() * sizeof(int), cudaMemcpyHostToDevice));
     }
     PCUDA(cudaMemcpy(csrStart_, cs.data(), cs.size() * sizeof(int), cudaMemcpyHostToDevice));
+    {   // who may sleep: a bonded particle with as many bonds as anyone in its group has
+        std::vector<int> deg(static_cast<size_t>(n));
+        std::vector<int> gmax(hgroups_.size(), 0);
+        for (int i = 0; i < n; ++i) {
+            deg[i] = cs[i + 1] - cs[i];
+            const uint32_t ph = hphase_[i];
+            if (!(ph & PF_FLUID)) gmax[ph & PF_GROUP] = std::max(gmax[ph & PF_GROUP], deg[i]);
+        }
+        std::vector<uint8_t> ok(static_cast<size_t>(n), 0), one(static_cast<size_t>(n), 1);
+        for (int i = 0; i < n; ++i) {
+            const uint32_t ph = hphase_[i];
+            ok[i] = !(ph & PF_FLUID) && (ph & PF_GROUP) > 0 && gmax[ph & PF_GROUP] > 0 && deg[i] == gmax[ph & PF_GROUP] && !std::getenv("TANECIK_UYUMA_YOK");
+        }
+        PCUDA(cudaMemcpy(initDeg_, deg.data(), size_t(n) * sizeof(int), cudaMemcpyHostToDevice));
+        PCUDA(cudaMemcpy(degree_, deg.data(), size_t(n) * sizeof(int), cudaMemcpyHostToDevice));
+        PCUDA(cudaMemcpy(sleepOk_, ok.data(), size_t(n), cudaMemcpyHostToDevice));
+        PCUDA(cudaMemcpy(markPrev_, one.data(), size_t(n), cudaMemcpyHostToDevice));   // the first substep: everyone searches
+    }
+    nPad_ = n;
+    pad(n);
     if (std::getenv("TANECIK_VERBOSE"))
         std::printf("dunya: %d tanecik, %d bag (%d renk), %d grup, S0 %.4g, D0 %.4g\n", n, nb, colours, ng_, S0_, D0_);
 }
@@ -1091,7 +1171,7 @@ void ParticleWorld::step(float dt, cudaStream_t st) {
     PCUDA(cudaEventRecord(e0_, st));
     const bool useGraph = !g_prof.on && !std::getenv("TANECIK_GRAFIKSIZ");
     if (useGraph) {
-        if (!graph_ || graphDt_ != dt || graphN_ != n_ || std::memcmp(&graphP_, &params, sizeof(PParams)) != 0) {
+        if (!graph_ || graphDt_ != dt || graphN_ != nPad_ || std::memcmp(&graphP_, &params, sizeof(PParams)) != 0) {
             if (graph_) cudaGraphExecDestroy(graph_);
             graph_ = nullptr;
             cudaGraph_t gr;
@@ -1101,7 +1181,7 @@ void ParticleWorld::step(float dt, cudaStream_t st) {
             PCUDA(cudaGraphInstantiate(&graph_, gr, 0));
             cudaGraphDestroy(gr);
             graphDt_ = dt;
-            graphN_ = n_;
+            graphN_ = nPad_;
             std::memcpy(&graphP_, &params, sizeof(PParams));
         }
         PCUDA(cudaGraphLaunch(graph_, st));
@@ -1115,6 +1195,8 @@ void ParticleWorld::step(float dt, cudaStream_t st) {
 }
 
 void ParticleWorld::record(float dt, cudaStream_t st) {
+    // every launch covers the padded count: appended particles take padding slots without a new graph
+    const int n_ = nPad_;
     const PParams& P = params;
     const int subs = std::max(1, P.substeps);
     const float h = P.kernel * s_;
@@ -1142,16 +1224,19 @@ void ParticleWorld::record(float dt, cudaStream_t st) {
         PCUDA(cudaMemsetAsync(cellStart_, 0xff, (size_t(1) << tableBits_) * sizeof(int), st));
         kCellRanges<<<nB, kBlock, 0, st>>>(n_, keySorted_, cellStart_, cellEnd_);
         g_prof.mark("hucre");
-        kNeighbours<<<nB, kBlock, 0, st>>>(n_, cap_, xs_, code_, cellStart_, cellEnd_, h * h, invH, mask, nbr_, nbrCount_, stat_);
+        PCUDA(cudaMemsetAsync(markNext_, 0, size_t(n_), st));
+        kNeighbours<<<nB, kBlock, 0, st>>>(n_, cap_, xs_, phs_, code_, cellStart_, cellEnd_, h * h, invH, mask, nbr_, nbrCount_, nbrFlag_, stat_,
+                                           SleepArgs{idSorted_, sleepOk_, degree_, initDeg_, markPrev_, markNext_});
+        PCUDA(cudaMemcpyAsync(markPrev_, markNext_, size_t(n_), cudaMemcpyDeviceToDevice, st));
         g_prof.mark("komsu");
         if (nb_) PCUDA(cudaMemsetAsync(bLam_, 0, size_t(nb_) * sizeof(float), st));
         const int iters = std::max(1, P.iterations), bondIters = std::max(1, P.bondIterations);
         for (int it = 0; it < std::max(iters, bondIters); ++it) {
             if (it < iters) {   // density and contacts
                 if (it > 0) kReorder<<<nB, kBlock, 0, st>>>(n_, idSorted_, x_, w_, phase_, psi_, xs_, nullptr, nullptr, nullptr, invH);
-                kLambda<<<nB, kBlock, 0, st>>>(n_, cap_, xs_, phs_, psis_, nbr_, nbrCount_, idSorted_, lam_, rho_, da);
+                kLambda<<<nB, kBlock, 0, st>>>(n_, cap_, xs_, phs_, psis_, nbr_, nbrCount_, idSorted_, lam_, rho_, rhos_, da);
                 g_prof.mark("lambda");
-                kDelta<<<nB, kBlock, 0, st>>>(n_, cap_, xs_, phs_, psis_, idSorted_, nbr_, nbrCount_, lam_, x0_, contacts_, contactsNext_, dx_, dl);
+                kDelta<<<nB, kBlock, 0, st>>>(n_, cap_, xs_, phs_, psis_, nbrFlag_, idSorted_, nbr_, nbrCount_, lam_, x0_, contacts_, contactsNext_, dx_, dl);
                 kApply<<<nB, kBlock, 0, st>>>(n_, x_, dx_);
                 g_prof.mark("delta");
             }
@@ -1178,14 +1263,14 @@ void ParticleWorld::record(float dt, cudaStream_t st) {
             kGatherVel<<<nB, kBlock, 0, st>>>(n_, idSorted_, v_, vs_);
             if (div)
                 for (int it = 0; it < P.divergenceIters; ++it) {
-                    kDivLambda<<<nB, kBlock, 0, st>>>(n_, cap_, xs_, phs_, psis_, nbr_, nbrCount_, idSorted_, vs_, rho_, lam_, da);
-                    kDivDelta<<<nB, kBlock, 0, st>>>(n_, cap_, xs_, phs_, psis_, nbr_, nbrCount_, lam_, vs_, da);
+                    kDivLambda<<<nB, kBlock, 0, st>>>(n_, cap_, xs_, phs_, psis_, nbr_, nbrCount_, vs_, rhos_, lam_, da);
+                    kDivDelta<<<nB, kBlock, 0, st>>>(n_, cap_, xs_, phs_, psis_, nbrFlag_, nbr_, nbrCount_, lam_, vs_, da);
                 }
             g_prof.mark("diverjans");
-            if (visc) {
+            if (visc) {   // every substep: once a frame (with the frame's step) was measured impulsive (a puddle never settled)
                 const float xs = 1.0f - std::pow(1.0f - std::min(P.xsph, 0.99f), sdt * 60.0f);
                 if (P.tension > 0.0f) kNormals<<<nB, kBlock, 0, st>>>(n_, cap_, xs_, phs_, nbr_, nbrCount_, ns_, K, S0_);
-                kFluidForces<<<nB, kBlock, 0, st>>>(n_, cap_, xs_, phs_, idSorted_, nbr_, nbrCount_, vs_, rho_, P.tension > 0.0f ? ns_ : nullptr, dx_, K, S0_, xs,
+                kFluidForces<<<nB, kBlock, 0, st>>>(n_, cap_, xs_, phs_, nbr_, nbrCount_, vs_, rhos_, P.tension > 0.0f ? ns_ : nullptr, dx_, K, S0_, xs,
                                                     P.cohesion, cohPeak, P.tension, sdt);
                 kScatterVel<<<nB, kBlock, 0, st>>>(n_, idSorted_, dx_, v_);
             } else {
@@ -1213,10 +1298,23 @@ void ParticleWorld::record(float dt, cudaStream_t st) {
     g_prof.end();
 }
 
-void ParticleWorld::appendFluid(const std::vector<float3>& pos, const std::vector<float3>& vel, float density) {
+// the padded count: n rounded up to a block of 4096 (capped by the capacity), the slots past n made inert
+void ParticleWorld::pad(int n) {
+    const int want = std::min(cap_, (n + 4095) / 4096 * 4096);
+    if (want <= nPad_ && nPad_ > n) return;
+    const int from = n, count = std::max(want, n) - n;
+    nPad_ = std::max(want, n);
+    if (count <= 0) return;
+    int total = 0;
+    PCUDA(cudaMemcpy(&total, csrStart_ + n, sizeof(int), cudaMemcpyDeviceToHost));
+    kPad<<<blocks(count), kBlock, 0, stream_>>>(from, count, x_, x0_, v_, w_, phase_, psi_, csrStart_, total, sleepOk_, degree_, initDeg_, markPrev_);
+    PCUDA(cudaStreamSynchronize(stream_));
+}
+
+int ParticleWorld::appendFluid(const std::vector<float3>& pos, const std::vector<float3>& vel, float density) {
     PCUDA(cudaStreamSynchronize(stream_));
     const int k = int(std::min<size_t>(pos.size(), size_t(cap_ - n_)));
-    if (k <= 0) return;
+    if (k <= 0) return 0;
     std::vector<float4> x(k), v(k);
     std::vector<float> w(size_t(k), 1.0f / (density * s_ * s_ * s_));
     std::vector<uint32_t> ph(size_t(k), PF_FLUID);
@@ -1231,6 +1329,9 @@ void ParticleWorld::appendFluid(const std::vector<float3>& pos, const std::vecto
     PCUDA(cudaMemcpy(phase_ + n_, ph.data(), k * sizeof(uint32_t), cudaMemcpyHostToDevice));
     const std::vector<float> one(size_t(k), 1.0f);
     PCUDA(cudaMemcpy(psi_ + n_, one.data(), k * sizeof(float), cudaMemcpyHostToDevice));
+    PCUDA(cudaMemset(sleepOk_ + n_, 0, size_t(k)));   // liquid never sleeps
+    PCUDA(cudaMemset(degree_ + n_, 0, size_t(k) * sizeof(int)));
+    PCUDA(cudaMemset(initDeg_ + n_, 0, size_t(k) * sizeof(int)));
     // the bond lists of the new particles are empty
     std::vector<int> cs(size_t(k), 0);
     int last = 0;
@@ -1238,6 +1339,8 @@ void ParticleWorld::appendFluid(const std::vector<float3>& pos, const std::vecto
     std::fill(cs.begin(), cs.end(), last);
     PCUDA(cudaMemcpy(csrStart_ + n_ + 1, cs.data(), k * sizeof(int), cudaMemcpyHostToDevice));
     n_ += k;
+    if (n_ > nPad_ || n_ == nPad_) pad(n_);   // past the padding: a new block (the graph is captured again)
+    return k;
 }
 
 void ParticleWorld::placeGroup(int group, float3 offset, float3 velocity) {
