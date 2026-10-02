@@ -23,8 +23,8 @@ const char* deneyKey(Deney d);            // the settings' prefix: "su", "bal", 
 inline bool deneyRecorded(Deney d) { return d == Deney::Su || d == Deney::Balon || d == Deney::Karpuz; }
 
 // what a particle is drawn as (the renderer: a surface each; DC_NONE not drawn: glass walls, a stand)
-enum DrawCode : uint8_t { DC_NONE = 0, DC_WATER = 1, DC_HONEY = 2, DC_SAND = 3, DC_RUBBER = 4, DC_RIND = 5, DC_FLESH = 6, DC_JUICE = 7, DC_STEEL = 8 };
-constexpr int kDrawCodes = 9;
+enum DrawCode : uint8_t { DC_NONE = 0, DC_WATER = 1, DC_HONEY = 2, DC_SAND = 3, DC_RUBBER = 4, DC_RIND = 5, DC_FLESH = 6, DC_JUICE = 7, DC_STEEL = 8, DC_PITH = 9 };
+constexpr int kDrawCodes = 10;   // DC_RIND the green skin, DC_PITH the white rind under it
 
 // what the panel sets: the inputs a recording keeps with its trigger (0..1 each, read per experiment)
 struct LabInputs {

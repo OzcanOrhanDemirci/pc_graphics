@@ -96,8 +96,8 @@ void LaboratuvarApp::applyLook() {
 
 void LaboratuvarApp::setCamera(Deney d) {
     const std::string k = std::string("kamera.") + deneyKey(d);
-    const float3 defPos[kDeneyCount] = {{0.12f, 0.24f, 0.95f}, {0.0f, 0.16f, 0.50f}, {0.02f, 0.17f, 0.58f}, {0.0f, 0.15f, 0.50f}, {0.0f, 0.16f, 0.62f}};
-    const float3 defAim[kDeneyCount] = {{-0.03f, 0.20f, 0.0f}, {0.0f, 0.06f, 0.0f}, {0.03f, 0.07f, 0.0f}, {0.0f, 0.06f, 0.0f}, {0.0f, 0.12f, 0.0f}};
+    const float3 defPos[kDeneyCount] = {{0.12f, 0.24f, 0.95f}, {0.0f, 0.16f, 0.50f}, {0.02f, 0.17f, 0.58f}, {0.0f, 0.17f, 0.62f}, {0.10f, 0.26f, 1.25f}};
+    const float3 defAim[kDeneyCount] = {{-0.03f, 0.20f, 0.0f}, {0.0f, 0.06f, 0.0f}, {0.03f, 0.07f, 0.0f}, {0.0f, 0.06f, 0.0f}, {0.0f, 0.17f, 0.0f}};
     cam.lookAt(cfg.v3(k + ".konum", defPos[int(d)]), cfg.v3(k + ".hedef", defAim[int(d)]));
     cam.fovDeg = cfg.f(k + ".fov", cfg.f("kamera.fov", 30.0f));
     cam.apply(renderer.params().cam, width, height);
@@ -142,7 +142,10 @@ void LaboratuvarApp::setupScene(Deney d, int maxParticles, const std::vector<uin
     LMaterial rind = mat(LM_DIFFUSE, cfg.v3("karpuz.kabuk_renk", make_float3(0.03f, 0.085f, 0.02f)), 0.05f, 90.0f);
     rind.pattern = LP_RIND;
     const int mRind = add(rind);
-    const int mFlesh = add(mat(LM_WET, cfg.v3("karpuz.et_renk", make_float3(0.70f, 0.07f, 0.08f)), 0.03f, 5000.0f));
+    LMaterial flesh = mat(LM_WET, cfg.v3("karpuz.et_renk", make_float3(0.86f, 0.12f, 0.15f)), 0.035f, 5000.0f);
+    flesh.pattern = LP_FLESH;
+    const int mFlesh = add(flesh);
+    const int mPith = add(mat(LM_WET, cfg.v3("karpuz.ic_kabuk_renk", make_float3(0.62f, 0.72f, 0.46f)), 0.03f, 3000.0f));
     LMaterial juice = mat(LM_LIQUID, make_float3(1, 1, 1));
     juice.ior = 1.34f;
     juice.sigma = cfg.v3("karpuz.su_sogurma", make_float3(6.0f, 110.0f, 80.0f));
@@ -186,6 +189,7 @@ void LaboratuvarApp::setupScene(Deney d, int maxParticles, const std::vector<uin
         FluidSurfaceSettings k = S;
         k.smoothing = cfg.f("karpuz.yuzey_yumusatma", 0.6f);
         surface(DC_RIND, mRind, k);
+        surface(DC_PITH, mPith, k);
         surface(DC_FLESH, mFlesh, k);
         surface(DC_JUICE, mJuice, S);
     }

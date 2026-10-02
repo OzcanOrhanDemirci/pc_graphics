@@ -37,7 +37,8 @@ HostMesh dipperMesh(float headRadius, float headLength, float handleRadius, floa
 Profile funnelProfile(float rTop, float rNeck, float coneHeight, float stemLength, float wall);
 // a watermelon's shape: an ellipsoid (radii), a lattice of particles inside it, each tagged rind (within `rind` of the
 // surface; its outer part dark) or flesh
-void watermelonFill(float3 radii, float rind, float spacing, unsigned seed, std::vector<float3>& pos, std::vector<uint8_t>& isRind);
+// isRind: 0 flesh, 1 the white rind, 2 the green skin (within skin of the surface)
+void watermelonFill(float3 radii, float rind, float skin, float spacing, unsigned seed, std::vector<float3>& pos, std::vector<uint8_t>& isRind);
 
 // a 3x4 row-major transform: rotation about z by angle (rad) around pivot, then translated
 void xfRotateZ(float out[12], float angle, float3 pivot, float3 translate);

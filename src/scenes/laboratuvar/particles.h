@@ -19,6 +19,7 @@
 
 #include <cuda_runtime.h>
 
+#include <cmath>
 #include <cstdint>
 #include <vector>
 
@@ -104,6 +105,16 @@ public:
     int bondWithin(int first, int count, float maxDist, float compliance, float breakStrain, float crushStrain);
     void addBond(int a, int b, float compliance, float breakStrain, float crushStrain);   // rest length = their distance now
     int bondCount() const { return int(hbonds_.size()); }
+    // bonds [from, to): each breaking strain times a draw spread about 1 (a natural material's flaws: cracks find the
+    // weak paths and it comes apart in chunks; identical bonds all break at once, into crumbs). Lognormal, sigma.
+    void varyBreakStrain(int from, int to, float sigma, unsigned seed) {
+        for (int k = from; k < to && k < int(hbonds_.size()); ++k) {
+            unsigned h = unsigned(k) * 2654435761u + seed * 97u;
+            auto u = [&h]() { h ^= h >> 16; h *= 0x7feb352dU; h ^= h >> 15; h *= 0x846ca68bU; h ^= h >> 16; return ((h >> 8) + 0.5f) / 16777216.0f; };
+            const float z = std::sqrt(-2.0f * std::log(u())) * std::cos(6.2831853f * u());
+            hbonds_[size_t(k)].breakStrain *= std::exp(sigma * z - 0.5f * sigma * sigma);
+        }
+    }
     // after commit: every bond's rest length times f (a membrane's stretch brought in slowly while it settles)
     void scaleAllBondRest(float f);
     // bonds [from, to) made shorter (f < 1) or longer at rest: a stretched membrane (a balloon's rubber) pulls from the start

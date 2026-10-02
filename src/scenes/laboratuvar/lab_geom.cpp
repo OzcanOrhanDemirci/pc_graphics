@@ -321,15 +321,17 @@ HostMesh dipperMesh(float headR, float headL, float handleR, float handleL) {
     return revolve(q, 48);
 }
 
-void watermelonFill(float3 R, float rind, float s, unsigned seed, std::vector<float3>& pos, std::vector<uint8_t>& isRind) {
+void watermelonFill(float3 R, float rind, float skin, float s, unsigned seed, std::vector<float3>& pos, std::vector<uint8_t>& isRind) {
     const int nx = int(std::ceil(R.x / s)), ny = int(std::ceil(R.y / s)), nz = int(std::ceil(R.z / s));
     int k = 0;
     for (int z = -nz; z <= nz; ++z)
         for (int y = -ny; y <= ny; ++y)
             for (int x = -nx; x <= nx; ++x, ++k) {
                 const unsigned h = seed * 7919u + unsigned(k) * 2654435761u;
-                const float3 p = make_float3(x * s + (hashF(h) - 0.5f) * 0.1f * s, y * s + (hashF(h + 1) - 0.5f) * 0.1f * s,
-                                             z * s + (hashF(h + 2) - 0.5f) * 0.1f * s);
+                // jittered a third of a spacing: a regular lattice shows its layers through the surface (rings round
+                // the view axis on the melon's face)
+                const float j = 0.35f;
+                const float3 p = make_float3(x * s + (hashF(h) - 0.5f) * j * s, y * s + (hashF(h + 1) - 0.5f) * j * s, z * s + (hashF(h + 2) - 0.5f) * j * s);
                 const float3 q = make_float3(p.x / R.x, p.y / R.y, p.z / R.z);
                 const float e = std::sqrt(dot(q, q));
                 // distance to the surface, roughly: (1 - e) times the local radius
@@ -337,7 +339,7 @@ void watermelonFill(float3 R, float rind, float s, unsigned seed, std::vector<fl
                 const float d = (1.0f - e) * rl;
                 if (d < 0.5f * s) continue;
                 pos.push_back(p);
-                isRind.push_back(d < rind ? 1 : 0);
+                isRind.push_back(d < skin ? 2 : d < rind ? 1 : 0);
             }
 }
 

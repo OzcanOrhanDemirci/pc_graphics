@@ -392,22 +392,36 @@ void LabWorld::buildKarpuz() {
     identity(prop[P_STAND].xf);
     const float3 R = cfg.v3("karpuz.yaricap", make_float3(0.085f, 0.075f, 0.085f));
     const float3 c = make_float3(0.0f, standH + R.y - 0.004f, 0.0f);
-    // the stand: a short cylinder, its top as one layer of particles (the melon sits on it)
+    // the stand: its top a shallow cup that follows the melon's underside, one layer of particles a spacing under it
+    // (on a flat top a round melon is in neutral balance and rolled off while it settled: measured)
     {
         std::vector<float3> top;
         const float rr = cfg.f("karpuz.kaide_yaricap", 0.05f);
-        for (const float2& q : disc(rr, 0.75f * s, 0.0f)) top.push_back(make_float3(q.x, standH - 0.5f * s, q.y));
+        for (const float2& q : disc(rr, 0.75f * s, 0.0f)) {
+            // the ellipsoid's lower surface over (x, z), lowered by a spacing
+            const float u = q.x / R.x, w = q.y / R.z;
+            const float yy = -R.y * std::sqrt(std::max(0.0f, 1.0f - u * u - w * w));
+            top.push_back(make_float3(q.x, c.y + yy - 1.0f * s, q.y));
+        }
         const int g = pw.addGroup(0);
         addHeld(top, P_STAND, g);
     }
     std::vector<float3> pos;
     std::vector<uint8_t> isRind;
-    watermelonFill(R, cfg.f("karpuz.kabuk", 0.011f), s, 3u, pos, isRind);
+    watermelonFill(R, cfg.f("karpuz.kabuk", 0.011f), std::max(cfg.f("karpuz.deri", 0.003f), 1.6f * s)   /* two particles at least: a one-particle skin shows the white under it in rings (lattice planes) */, s, 3u, pos, isRind);
     std::vector<float3> rind, flesh;
-    for (size_t i = 0; i < pos.size(); ++i) (isRind[i] ? rind : flesh).push_back(c + pos[i]);
+    std::vector<uint8_t> rindCode;
+    for (size_t i = 0; i < pos.size(); ++i) {
+        if (isRind[i]) {
+            rind.push_back(c + pos[i]);
+            rindCode.push_back(isRind[i] == 2 ? DC_RIND : DC_PITH);
+        } else {
+            flesh.push_back(c + pos[i]);
+        }
+    }
     const int gR = pw.addGroup(0);
     const int rFirst = pw.addParticles(rind, cfg.f("karpuz.kabuk_yogunluk", 950.0f), gR);
-    code.insert(code.end(), rind.size(), DC_RIND);
+    code.insert(code.end(), rindCode.begin(), rindCode.end());
     const int gF = pw.addGroup(PG_LIQUEFY);
     const int fFirst = pw.addParticles(flesh, cfg.f("karpuz.et_yogunluk", 1000.0f), gF);
     code.insert(code.end(), flesh.size(), DC_FLESH);
@@ -415,6 +429,7 @@ void LabWorld::buildKarpuz() {
     // a bond of a lattice of spacing s stands for a stiffness ~ E s (Young's modulus): its compliance 1 / (E s), so
     // the melon is as stiff at any spacing
     const float cRind = 1.0f / (cfg.f("karpuz.kabuk_E", 15e6f) * s), cFlesh = 1.0f / (cfg.f("karpuz.et_E", 1.0e6f) * s);
+    const int b0 = pw.bondCount();
     pw.bondWithin(rFirst, int(rind.size()), reach, cRind, cfg.f("karpuz.kabuk_kopma", 0.05f), 0.5f);
     pw.bondWithin(fFirst, int(flesh.size()), reach, cFlesh, cfg.f("karpuz.et_kopma", 0.10f), 0.5f);
     // rind to flesh: across the boundary, as weak as the flesh
@@ -438,6 +453,8 @@ void LabWorld::buildKarpuz() {
                     }
         }
     }
+    // flaws: the same draw at any spacing per bond number is not the same material, but its spread is
+    pw.varyBreakStrain(b0, pw.bondCount(), cfg.f("karpuz.kusur", 0.6f), 11u);
     boxLo = make_float3(-1.2f, -0.01f, -1.2f);
     boxHi = make_float3(1.2f, 1.2f, 1.2f);
 }
@@ -555,7 +572,7 @@ void LabWorld::trigger(const LabEvent& e) {
         auto key = [&](int xx, int yy, int zz) { return (long long)(xx + 100000) * 40000000000LL + (long long)(yy + 100000) * 200000LL + (long long)(zz + 100000); };
         // every cell within a spacing of a melon particle (a lattice point's own cell alone leaves holes)
         for (size_t i = 0; i < x.size(); ++i)
-            if (code[i] == DC_RIND || code[i] == DC_FLESH) {
+            if (code[i] == DC_RIND || code[i] == DC_PITH || code[i] == DC_FLESH) {
                 const int cx = int(std::floor(x[i].x / cell)), cy = int(std::floor(x[i].y / cell)), cz = int(std::floor(x[i].z / cell));
                 for (int dz = -1; dz <= 1; ++dz)
                     for (int dy = -1; dy <= 1; ++dy)
@@ -580,7 +597,7 @@ void LabWorld::trigger(const LabEvent& e) {
             // to those on the path
             std::vector<int> onPath;
             for (size_t i = 0; i < x.size(); ++i) {
-                if (code[i] != DC_RIND && code[i] != DC_FLESH) continue;
+                if (code[i] != DC_RIND && code[i] != DC_PITH && code[i] != DC_FLESH) continue;
                 const float3 w = x[i] - a;
                 const float t = dot(w, d);
                 if (t < 0.0f || t > sg.s1 - sg.s0) continue;
