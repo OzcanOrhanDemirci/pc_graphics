@@ -9,6 +9,7 @@
 //   --still ... --kan-deneme      a still pool and a trickle of blood placed by hand (no physics): the liquid's look
 //   --scene tanecik --weapons-test [ad]   weapons and blast (tanecik_weapons_test.cpp)
 //   --scene tanecik --balance-test [ad] / --balance-clip <N s>   standing and pushed (tanecik_balance_test.cpp)
+//   --scene tanecik --test [ad]  the particle solver's tests; --clip <ad> [--seconds S]: its clips (tanecik_tests.cpp)
 #include "scenes/tanecik/tanecik_app.h"
 #include "scenes/tanecik/body_graph.h"
 #include "core/image_io.h"
@@ -16,6 +17,9 @@
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+
+int runTanecikTests(TanecikApp& app, const std::string& only);
+int runTanecikClip(TanecikApp& app, const std::string& name, const std::string& out, double seconds);
 
 namespace {
 
@@ -83,6 +87,9 @@ int runTanecikCli(int argc, char** argv) {
     bool still = false, doStats = false, bloodTest = false, skelTest = false;
     std::string skelOnly, skelClip, balOnly, balClip;
     bool balTest = false;
+    bool test = false;
+    std::string only, clip;
+    double seconds = -1.0;
     unsigned spp = 512;
     std::vector<std::pair<std::string, std::string>> camSet;
     for (int i = 1; i < argc; ++i) {
@@ -93,6 +100,9 @@ int runTanecikCli(int argc, char** argv) {
         else if (a == "--stats") doStats = true;
         else if (a == "--surface-test") { surface = true; if (i + 1 < argc && argv[i + 1][0] != '-') surfaceTest = next(); }
         else if (a == "--weapons-test") return runWeaponsTests(i + 1 < argc && argv[i + 1][0] != '-' ? std::string(argv[i + 1]) : std::string());
+        else if (a == "--test") { test = true; if (i + 1 < argc && argv[i + 1][0] != '-') only = next(); }
+        else if (a == "--clip") clip = next();
+        else if (a == "--seconds") seconds = std::stod(next());
         else if (a == "--look") look = next();
         else if (a == "--particles") parts = next();
         else if (a == "--poz") poseName = next();
@@ -122,6 +132,8 @@ int runTanecikCli(int argc, char** argv) {
     if (!balClip.empty()) return runBalanceClip(app, std::stof(balClip), out.empty() ? app.root + "/captures/tanecik/denge_" + balClip : out);
     if (!skelClip.empty()) return runSkeletonClip(app, skelClip, out.empty() ? app.root + "/captures/tanecik/iskelet_" + skelClip : out);
     if (surface) return runSurfaceTests(app, surfaceTest);
+    if (test) return runTanecikTests(app, only);
+    if (!clip.empty()) return runTanecikClip(app, clip, out, seconds);
     if (!still) {
         std::printf("tanecik: --still or --stats (the live scene opens from the application)\n");
         return 2;
