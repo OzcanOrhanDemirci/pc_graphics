@@ -47,6 +47,7 @@ add_library(pc_core OBJECT
     src/scenes/tanecik/body_graph.cpp
     src/scenes/tanecik/tanecik_kernels.cu
     src/scenes/tanecik/skeleton_sim.cu
+    src/scenes/tanecik/balance.cpp
     src/scenes/tanecik/tanecik_skeleton_test.cpp
     src/scenes/tanecik/tanecik_app.cpp
     src/scenes/tanecik/tanecik_live.cpp

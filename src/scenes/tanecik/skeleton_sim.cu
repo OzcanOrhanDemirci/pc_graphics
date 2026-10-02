@@ -1,5 +1,6 @@
 #include "scenes/tanecik/skeleton_sim.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 
@@ -107,8 +108,80 @@ __device__ void solveJoint(SkelBody* bodies, const SkelJoint& j) {
     }
 }
 
+// the muscle: the child's rotation relative to the parent pulled towards the target, softly (XPBD compliance per
+// substep) and no harder than its strength (an angular impulse of at most maxTorque * h per substep)
+__device__ void solveMuscle(SkelBody& A, SkelBody& B, const SkelJoint& j, float h) {
+    if (j.maxTorque <= 0.0f) return;
+    // the error, in the parent's frame: what the relative rotation has beyond the target
+    const float4 rel = qmul(qconj(A.q), B.q);
+    float4 e = qmul(rel, qconj(j.target));
+    if (e.w < 0.0f) e = make_float4(-e.x, -e.y, -e.z, -e.w);
+    const float3 el = make_float3(e.x, e.y, e.z) * 2.0f;          // small-angle rotation vector, parent frame
+    const float3 corr = qrot(A.q, el);                             // world: A turning this way would close it
+    const float th = sqrtf(dot(corr, corr));
+    if (th < 1e-7f) return;
+    const float3 n = corr / th;
+    const float w = dot(n, invI(A, n)) + dot(n, invI(B, n));
+    if (w <= 0.0f) return;
+    const float at = j.compliance / (h * h);
+    float lam = th / (w + at);                                     // angular impulse x h (XPBD units)
+    lam = fminf(lam, j.maxTorque * h * h);                         // the muscle's strength
+    const float3 p = n * lam;
+    qturn(A.q, invI(A, p));
+    qturn(B.q, invI(B, -p));
+}
+
+// the ground under one body: its contact points that sink below the ground pushed up, their mean shared (Jacobi: a flat
+// foot rises by the depth, not by the depth times its points); friction at the patch's centre, against how far that
+// point slid this substep: static within muS times the normal correction so far, else slowed by muD
+__device__ void solveGround(SkelBody& b, const float3* pts, int2 range, float radius, float muS, float muD, float& normalSum) {
+    if (b.invMass <= 0.0f || range.y <= 0) return;
+    float3 lin = make_float3(0, 0, 0), ang = make_float3(0, 0, 0), centre = make_float3(0, 0, 0);
+    int count = 0;
+    float depth = 0.0f;
+    for (int k = 0; k < range.y; ++k) {
+        const float3 r = qrot(b.q, pts[range.x + k]);
+        const float3 p = b.x + r;
+        const float pen = radius - p.y;
+        if (pen <= 0.0f) continue;
+        const float3 n = make_float3(0, 1, 0);
+        const float3 rn = cross(r, n);
+        const float w = b.invMass + dot(rn, invI(b, rn));
+        const float lam = pen / w;
+        lin = lin + n * lam;
+        ang = ang + cross(r, n * lam);
+        centre = centre + p;
+        depth = fmaxf(depth, pen);
+        ++count;
+    }
+    if (count == 0) return;
+    const float inv = 1.0f / count;
+    b.x = b.x + lin * (b.invMass * inv);
+    qturn(b.q, invI(b, ang * inv));
+    normalSum += sqrtf(dot(lin, lin)) * inv;
+    // friction at the centre of the contact
+    centre = centre * inv;
+    const float3 r = centre - b.x;
+    const float3 rl = qrot(qconj(b.q), r);
+    const float3 prev = b.xPrev + qrot(b.qPrev, rl);
+    float3 slide = centre - prev;
+    slide.y = 0.0f;
+    const float s = sqrtf(dot(slide, slide));
+    if (s < 1e-9f) return;
+    const float3 t = slide / s;
+    const float3 rt = cross(r, t);
+    const float w = b.invMass + dot(rt, invI(b, rt));
+    float lam = s / w;   // what stops it
+    const float limS = muS * normalSum, limD = muD * normalSum;
+    if (lam > limS) lam = fminf(lam, limD);
+    const float3 p = t * (-lam);
+    b.x = b.x + p * b.invMass;
+    qturn(b.q, invI(b, cross(r, p)));
+}
+
 // one substep, every body and joint (they are few: one thread, Gauss-Seidel in a fixed order: it repeats exactly)
-__global__ void kStep(SkelBody* bodies, int nb, const SkelJoint* joints, int nj, float h, float3 g, int iters, float damping) {
+__global__ void kStep(SkelBody* bodies, int nb, const SkelJoint* joints, int nj, float h, float3 g, int iters, float damping, const float3* pts,
+                      const int2* range, SkelGround ground) {
     if (threadIdx.x != 0 || blockIdx.x != 0) return;
     for (int i = 0; i < nb; ++i) {
         SkelBody& b = bodies[i];
@@ -126,8 +199,14 @@ __global__ void kStep(SkelBody* bodies, int nb, const SkelJoint* joints, int nj,
         const float4 r = qmul(make_float4(b.w.x, b.w.y, b.w.z, 0.0f), b.q);
         b.q = qnormalize(make_float4(b.q.x + 0.5f * h * r.x, b.q.y + 0.5f * h * r.y, b.q.z + 0.5f * h * r.z, b.q.w + 0.5f * h * r.w));
     }
-    for (int it = 0; it < iters; ++it)
+    float normalSum[B_COUNT];
+    for (int i = 0; i < nb; ++i) normalSum[i] = 0.0f;
+    for (int it = 0; it < iters; ++it) {
+        for (int k = 0; k < nj; ++k) solveMuscle(bodies[joints[k].a], bodies[joints[k].b], joints[k], h);
+        if (ground.on)
+            for (int i = 0; i < nb; ++i) solveGround(bodies[i], pts, range[i], ground.radius, ground.muStatic, ground.muDynamic, normalSum[i]);
         for (int k = 0; k < nj; ++k) solveJoint(bodies, joints[k]);
+    }
     for (int i = 0; i < nb; ++i) {
         SkelBody& b = bodies[i];
         if (b.invMass <= 0.0f) { b.v = b.w = make_float3(0, 0, 0); continue; }
@@ -219,6 +298,9 @@ bool SkeletonSim::init(const BodyGraph& g, const BodyParticles& body, float part
         j.lo = jd.lo;
         j.hi = jd.hi;
         j.swing = jd.swing;
+        j.target = make_float4(0, 0, 0, 1);
+        j.compliance = 0.0f;
+        j.maxTorque = 0.0f;
         hJoints_.push_back(j);
     }
     nj_ = int(hJoints_.size());
@@ -230,10 +312,13 @@ bool SkeletonSim::init(const BodyGraph& g, const BodyParticles& body, float part
 }
 
 void SkeletonSim::destroy() {
-    if (dBodies_) cudaFree(dBodies_);
-    if (dJoints_) cudaFree(dJoints_);
+    for (void* p : {static_cast<void*>(dBodies_), static_cast<void*>(dJoints_), static_cast<void*>(dPts_), static_cast<void*>(dRange_)})
+        if (p) cudaFree(p);
     dBodies_ = nullptr;
     dJoints_ = nullptr;
+    dPts_ = nullptr;
+    dRange_ = nullptr;
+    ground_ = SkelGround{};
     nb_ = nj_ = 0;
 }
 
@@ -294,7 +379,60 @@ void SkeletonSim::setVelocity(float3 v, float3 w) {
 }
 
 void SkeletonSim::step(float h, float3 gravity, int iterations, float jointDamping, cudaStream_t s) {
-    kStep<<<1, 1, 0, s>>>(dBodies_, nb_, dJoints_, nj_, h, gravity, iterations, jointDamping);
+    kStep<<<1, 1, 0, s>>>(dBodies_, nb_, dJoints_, nj_, h, gravity, iterations, jointDamping, dPts_, dRange_, ground_);
+}
+
+void SkeletonSim::setGround(const BodyGraph& g, const BodyParticles& body, const SkelGround& ground, int every) {
+    std::vector<float3> pts;
+    std::vector<int2> range(nb_, make_int2(0, 0));
+    std::vector<int> seen(nb_, 0);
+    for (int b = 0; b < nb_; ++b) {
+        range[b].x = int(pts.size());
+        const bool foot = b == B_FOOT_L || b == B_FOOT_R;
+        for (size_t i = 0; i < body.pos.size(); ++i) {
+            if (g.bone[i] != b || g.kind[i] != PK_SKIN) continue;
+            const bool sole = foot && body.pos[i].y < 0.02f;   // a foot stands on all of its sole
+            if (!sole && (seen[b]++ % every) != 0) continue;
+            pts.push_back(body.pos[i] - hRest_[b].x0);
+        }
+        range[b].y = int(pts.size()) - range[b].x;
+    }
+    if (dPts_) cudaFree(dPts_);
+    if (dRange_) cudaFree(dRange_);
+    cudaMalloc(reinterpret_cast<void**>(&dPts_), std::max<size_t>(1, pts.size()) * sizeof(float3));
+    cudaMalloc(reinterpret_cast<void**>(&dRange_), range.size() * sizeof(int2));
+    cudaMemcpy(dPts_, pts.data(), pts.size() * sizeof(float3), cudaMemcpyHostToDevice);
+    cudaMemcpy(dRange_, range.data(), range.size() * sizeof(int2), cudaMemcpyHostToDevice);
+    ground_ = ground;
+    ground_.on = true;
+}
+
+void SkeletonSim::setMuscles(const std::vector<float4>& target, const std::vector<float>& compliance, const std::vector<float>& maxTorque) {
+    for (int k = 0; k < nj_; ++k) {
+        hJoints_[k].target = target[k];
+        hJoints_[k].compliance = compliance[k];
+        hJoints_[k].maxTorque = maxTorque[k];
+    }
+    cudaMemcpy(dJoints_, hJoints_.data(), sizeof(SkelJoint) * nj_, cudaMemcpyHostToDevice);
+}
+
+void SkeletonSim::readBodies(std::vector<SkelBody>& out) const {
+    out.resize(nb_);
+    cudaMemcpy(out.data(), dBodies_, sizeof(SkelBody) * nb_, cudaMemcpyDeviceToHost);
+}
+
+void SkeletonSim::push(int bone, float3 J, float3 at) {
+    SkelBody b;
+    cudaMemcpy(&b, dBodies_ + bone, sizeof(SkelBody), cudaMemcpyDeviceToHost);
+    b.v = b.v + J * b.invMass;
+    b.w = b.w + invI(b, cross(at - b.x, J));
+    cudaMemcpy(dBodies_ + bone, &b, sizeof(SkelBody), cudaMemcpyHostToDevice);
+}
+
+float SkeletonSim::totalMass() const {
+    float m = 0.0f;
+    for (float x : mass_) m += x;
+    return m;
 }
 
 void SkeletonSim::transforms(Xform out[B_COUNT]) {

@@ -29,6 +29,18 @@ struct SkelJoint {
     float3 axis;               // rest, the same in both frames: hinge axis, or the ball's twist axis (the child's direction)
     float3 ref;                // rest, a unit vector perpendicular to axis (angles are measured from it)
     float lo, hi, swing;       // hinge: range; ball: twist range and swing cone (radians)
+    // the muscle: pulls the child's rotation relative to the parent (in the parent's frame; rest = identity) towards
+    // target, softly (compliance, rad per N m) and at most this strong (N m); 0: limp
+    float4 target;
+    float compliance;
+    float maxTorque;
+};
+
+// the ground under the bones: each body's contact points (rest offsets from its centre of mass), friction
+struct SkelGround {
+    float radius = 0.0035f;    // a contact point is a particle's centre: it touches at this height
+    float muStatic = 0.8f, muDynamic = 0.6f;
+    bool on = false;
 };
 
 struct SkelStats {
@@ -53,6 +65,14 @@ public:
     // one substep of length h: predict under gravity, solve the joints (iterations), velocities; damping: a share of
     // each joint's relative angular velocity taken out per second (a ragdoll's joints are not frictionless)
     void step(float h, float3 gravity, int iterations, float jointDamping, cudaStream_t s);
+    // the ground: contact points from each segment's skin particles (every n-th, the soles all), then on
+    void setGround(const BodyGraph& g, const BodyParticles& body, const SkelGround& ground, int every);
+    // the muscles: per joint (in the graph's order) a target, a compliance and a strength; copied before the next step
+    void setMuscles(const std::vector<float4>& target, const std::vector<float>& compliance, const std::vector<float>& maxTorque);
+    void readBodies(std::vector<SkelBody>& out) const;     // the bodies now (a controller reads them every frame)
+    void push(int bone, float3 impulse, float3 at);         // an impulse (N s) at a world point of a bone
+    float mass(int bone) const { return mass_[bone]; }
+    float totalMass() const;
     void transforms(Xform out[B_COUNT]);                  // where each bone is (p = R (p0 - x0) + x): readback
     SkelStats stats(float3 gravity);                      // readback and measure
     const std::vector<SkelJoint>& joints() const { return hJoints_; }
@@ -65,4 +85,7 @@ private:
     std::vector<SkelJoint> hJoints_;
     std::vector<float> mass_;
     int nb_ = 0, nj_ = 0;
+    float3* dPts_ = nullptr;        // contact points, rest offsets, by body
+    int2* dRange_ = nullptr;        // per body: first, count
+    SkelGround ground_;
 };
