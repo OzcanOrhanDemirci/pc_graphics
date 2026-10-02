@@ -119,6 +119,20 @@ public:
             moved_ = true;
         }
         t_.orbit.apply(t_.renderer.params().cam, t_.width, t_.height);
+        // left click: what is under the cursor (the tools aim with this from T4)
+        if (in.leftClicked && in.view.w > 0.0f) {
+            const float rx = (in.mouseX - in.view.x) / in.view.w * t_.width, ry = (in.mouseY - in.view.y) / in.view.h * t_.height;
+            if (rx >= 0 && ry >= 0 && rx < t_.width && ry < t_.height) {
+                const TPick p = t_.renderer.pick(rx, ry);
+                std::string what = p.kind == TK_SKIN        ? L("deri", "skin")
+                                   : p.kind == TK_BONES     ? std::string(L("kemik: ", "bone: ")) + boneInfo(p.index).name
+                                   : p.kind == TK_PARTICLES ? std::string(L("tanecik: ", "particle: ")) + boneInfo(t_.graph.bone[size_t(p.index)]).name
+                                   : p.kind == TK_STUDIO    ? L("zemin", "floor")
+                                   : p.kind < 0             ? L("boşluk", "nothing")
+                                                            : L("sıvı", "liquid");
+                host.toast(what + " · " + theme::num(p.pos.x, 2) + ", " + theme::num(p.pos.y, 2) + ", " + theme::num(p.pos.z, 2) + " m");
+            }
+        }
         // a still view gathers samples; a moving one starts afresh
         t_.renderer.render(spp_, !moved_ && t_.renderer.params().samples < 8192);
         moved_ = false;

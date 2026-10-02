@@ -217,6 +217,30 @@ static __forceinline__ __device__ float3 radiance(float3 o, float3 d, Rng& r) {
     return L;
 }
 
+// what is under a pixel: one thread
+extern "C" __global__ void __raygen__pick() {
+    const TCamera& C = params.cam;
+    const float u = (params.pickPixel.x / params.width) * 2.0f - 1.0f, v = 1.0f - (params.pickPixel.y / params.height) * 2.0f;
+    const float3 d = normalize(C.fwd + C.right * (u * C.tanHalfX) + C.up * (v * C.tanHalfY));
+    const Hit h = trace(C.pos, d, 0.0f, 1e30f);
+    TPick p;
+    p.dir = d;
+    if (!h.hit) {
+        p.kind = -1;
+        p.index = -1;
+        p.t = 1e30f;
+        p.pos = C.pos;
+        p.normal = -d;
+    } else {
+        p.kind = int(h.kind);
+        p.index = h.kind == TK_BONES ? int(optixHitObjectGetInstanceId() >> 8) : int(h.prim);
+        p.t = h.t;
+        p.pos = C.pos + d * h.t;
+        p.normal = dot(h.n, d) < 0.0f ? h.n : -h.n;
+    }
+    *params.pickOut = p;
+}
+
 extern "C" __global__ void __raygen__render() {
     const uint3 ix = optixGetLaunchIndex();
     const unsigned int px = ix.x, py = ix.y;

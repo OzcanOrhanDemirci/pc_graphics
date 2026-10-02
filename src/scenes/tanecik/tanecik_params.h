@@ -29,6 +29,15 @@ struct TRectLight {                // a soft box: centre, half-extents (its two 
 
 #define T_MAX_LIGHTS 4
 
+// what is under a pixel (__raygen__pick): the first thing the camera's ray meets, glass skin included
+struct TPick {
+    int kind;                      // TKind, -1 nothing
+    int index;                     // the bone (TK_BONES), the drawn sphere (TK_PARTICLES, TK_DROPS), the triangle (meshes)
+    float t;                       // distance along the ray
+    float3 pos, normal;            // world; the normal faces the camera
+    float3 dir;                    // the ray's direction
+};
+
 struct TanecikParams {
     unsigned int width, height;
     float4* accum;                 // linear RGB summed over the samples of this image
@@ -65,4 +74,6 @@ struct TanecikParams {
     float3 ambient;                // what escapes the studio sees (a large white tent)
     int maxDiffuse;                // diffuse bounces
     float exposure;
+    float2 pickPixel;              // render pixels
+    TPick* pickOut;
 };

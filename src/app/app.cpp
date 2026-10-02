@@ -517,6 +517,8 @@ int App::run(const Options& opt) {
             }
             if (infos_[s].id == "tanecik") {
                 // the look by the panel (skin, then glass with sparse particles), the camera round him, the bones off
+                mouse(0.50f, 0.42f); wait(0.1); click(); wait(0.3);      // what is under the cursor: his chest
+                mouse(0.50f, 0.92f); wait(0.1); click(); wait(0.3);      // the floor
                 control("gorunum", 1); wait(3.0); shot("tanecik_deri");
                 control("gorunum", 0); control("tanecik", 1); wait(3.0); shot("tanecik_seyrek");
                 mouse(0.50f, 0.50f); right(true); wait(0.1);

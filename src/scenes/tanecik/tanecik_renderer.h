@@ -39,6 +39,8 @@ public:
     void setVisible(TKind k, bool on);                      // hidden instances are skipped by every ray
     bool visible(TKind k) const { return visible_[k]; }
     void render(unsigned int spp, bool accumulate);         // adds spp samples (accumulate) or starts afresh
+    // what is under render pixel (x, y); a particle's index is the solver's (through the drawn subset)
+    TPick pick(float x, float y);
     void download(std::vector<uchar4>& out);
     void downloadTo(uchar4* hostPinned);
     TanecikParams& params() { return p_; }
@@ -55,7 +57,9 @@ private:
     OptixPipeline pipeline_ = nullptr;
     std::vector<OptixProgramGroup> groups_;
     OptixShaderBindingTable sbt_{};
-    CUdeviceptr rg_ = 0, miss_ = 0, hit_ = 0, dParams_ = 0;
+    CUdeviceptr rg_ = 0, rgPick_ = 0, miss_ = 0, hit_ = 0, dParams_ = 0;
+    TPick* dPick_ = nullptr;
+    std::vector<uint32_t> subset_;
     cudaStream_t stream_ = nullptr;
     cudaEvent_t e0_ = nullptr, e1_ = nullptr;
     TanecikParams p_{};

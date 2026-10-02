@@ -9,6 +9,32 @@
   `tanecik-yuzey`); bitince `main`'e birleştirilecek.
 - **2026-10-02 · Plan onaylandı, T0 başladı.** Özcan: *"Onaylıyorum. Başlayabilirsin."*
 
+## T2 hazırlığı · ajanlar çalışırken (2026-10-02 gece)
+Fiziğe dokunmadan, çözücü gelince bağlanacak parçalar (Özcan: *"Sen agentler çalışırken başka bir işe devam et"*):
+
+- **İskelet tek kaynakta** (`skeleton()`): kemiğe etiketli parçalar (kapsül, elipsoid, kaburga tüpü). Kemiklerin ağı da,
+  kemik sayılacak tanecikler de buradan (önce iki ayrı yerde yazılıydı).
+- **Bedenin fizik çizgesi** (`body_graph.*`, düz veri): doku / deri / kemik tanecikleri (kemik parçasının içindeki
+  tanecik o kemiğe geçer; ince kemik en az 0,75 aralık yarıçapla aranır), komşu bağları 1,5 aralıkta: doku (aynı ya da
+  eklemle komşu kemik; iki uyluk birbirine bağlanmaz), deri zarı, kemiğe tutunma (yalnız kendi kemiğine). 7 mm'de
+  **1,04 milyon bağ** (doku 874 bin, deri zarı 102 bin, kemiğe 63 bin), tanecik başına 12; bağsız tanecik 0. Kemik
+  kümeleri 129 (el) ile 5.957 (kafatası) tanecik. **16 eklem:** omurga ve boyun, omuz, kalça, bilek, ayak bileği top
+  eklem (koni + burulma sınırı); dirsek ve diz menteşe (dirsek eli öne, diz ayağı arkaya büker). `--stats` yazdırır.
+- **İleri kinematik** (`forwardKinematics`) ve **fiziksiz duruş sınaması** `--still --poz dirsek|kol|diz|egil|karma`:
+  kemikler, tanecikler ve deri birlikte izliyor (kareler `captures/tanecik/v/montaj_poz.png`). Omuzda küçük bir yırtık:
+  kemik dönerken esneyecek doku yok (fizik gelince kapanır).
+- **Çizici hareketli veriye hazır:** kemik başına bir örnek ve dönüşümü; deri her köşesiyle dört deri taneciğine bağlı,
+  pay kemiklerinin dönüşüyle çevrilir (`tanecik_kernels.cu`, deri yapısı her karede hızlı yeniden kurulur); çizilen
+  tanecikler ekran kartındaki konumlardan toplanır; sıvıya dönen tanecik küre olarak çizilmez.
+- **Sıvı yüzeyi birleştirildi** (ajan dalı `tanecik-yuzey`, testleri main'de 8/8) ve çizicide: yüzey ağı + kendi
+  yarıçaplı damlalar; **kan malzemesi** Fresnel'li ıslak ayna ve koyu opak gövde (0,13 0,006 0,006).
+  `--kan-deneme`: elle yerleştirilmiş birikinti ve damla ipi (fizik yok).
+- **Zemin tuval:** 6 m'lik leke haritası (3072², ~2 mm), oturan sıvı buraya işlenir (litre/m², toplam korunur), kurumuş
+  kan rengi (0,16 0,028 0,022). Hangi taneciğin oturduğuna fizik karar verecek.
+- **Fareyle seçme** (`__raygen__pick`): tıklanan şeyin türü, kemiği / taneciği (çözücünün sırasıyla), konumu ve
+  normali. Canlı pencerede sol tık şimdilik ne olduğunu bildirir; araçlar T4'te bununla nişan alacak.
+- **Paralel ajanlar:** çözücü çekirdeği (sürüyor), silah ve patlama fiziği modülü (sürüyor, dal `tanecik-silah`).
+
 ## T0 · görünüm (2026-10-02)
 Açmak: galeride 04, ya da `build\pc_graphics.exe --scene tanecik`. Kareler komut satırından:
 `--scene tanecik --still --look cam|deri --particles hepsi|seyrek|yok [--yaw --pitch --dist --target --fov --spp]`;
@@ -20,7 +46,7 @@ bedenin sayıları `--scene tanecik --stats`.
   oradan kurulur, T2'de fiziğin kemikleri de oradan kurulacak (önce sayılar iki yerde yazılıydı; bacak duruşunu
   genişletince iskelet geride kaldı).
 - **Tanecikler:** 7 mm kübik kafes, bir tanecik küresinin sığdığı her yerde (uzaklık ≤ −aralık/2); her biri en yakın
-  parçanın kemiğine ait. **172.555 tanecik**, 59,2 L (yarım aralıklık deri payı hariç), deri katmanı %19. Kemik başına:
+  parçanın kemiğine ait. **173.652 tanecik**, 59,6 L (yarım aralıklık deri payı hariç), deri katmanı %18. Kemik başına:
   göğüs 46 bin, leğen 22 bin, bel 20 bin, uyluk 17 bin, kafa 9,5 bin, el 781. Kafes %25 kaydırılır (hücre başına
   sabit karma: her seferinde aynı beden); düzenli kafes camın ardında kareli kâğıt gibi okunuyordu (%12 yetmedi).
 - **Deri:** uzaklık alanından yüzey ağları (4 mm hücre), köşeler yüzeye çekilir, normaller alanın eğiminden; 148 bin

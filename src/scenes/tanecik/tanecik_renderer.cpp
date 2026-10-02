@@ -73,6 +73,7 @@ bool TanecikRenderer::init(unsigned int width, unsigned int height, const std::s
     dInstances_ = talloc<OptixInstance>(TK_KINDS + B_COUNT);
     dRadius_ = talloc<float>(1);
     dBoneXf_ = talloc<float>(12 * B_COUNT);
+    dPick_ = talloc<TPick>(1);
     setBoneXforms(boneXf_);
     return true;
 }
@@ -120,7 +121,7 @@ bool TanecikRenderer::compileDevice(std::string& log) {
     bo.builtinISModuleType = OPTIX_PRIMITIVE_TYPE_SPHERE;
     r = optixBuiltinISModuleGet(ctx_, &mco, &pco, &bo, &sphereModule);
     if (r != OPTIX_SUCCESS) { log = std::string("optixBuiltinISModuleGet: ") + optixGetErrorString(r); return false; }
-    OptixProgramGroupDesc d[4];
+    OptixProgramGroupDesc d[5];
     std::memset(d, 0, sizeof(d));
     d[0].kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
     d[0].raygen.module = module;
@@ -130,16 +131,19 @@ bool TanecikRenderer::compileDevice(std::string& log) {
     d[3].kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;   // spheres: OptiX's own intersection
     d[3].hitgroup.moduleIS = sphereModule;
     d[3].hitgroup.entryFunctionNameIS = nullptr;
-    std::vector<OptixProgramGroup> groups(4);
+    d[4].kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
+    d[4].raygen.module = module;
+    d[4].raygen.entryFunctionName = "__raygen__pick";
+    std::vector<OptixProgramGroup> groups(5);
     OptixProgramGroupOptions go{};
     olen = sizeof(olog);
-    r = optixProgramGroupCreate(ctx_, d, 4, &go, olog, &olen, groups.data());
+    r = optixProgramGroupCreate(ctx_, d, 5, &go, olog, &olen, groups.data());
     if (r != OPTIX_SUCCESS) { log = std::string("optixProgramGroupCreate: ") + optixGetErrorString(r) + "\n" + olog; return false; }
     OptixPipelineLinkOptions lo{};
     lo.maxTraceDepth = 1;
     OptixPipeline pipeline = nullptr;
     olen = sizeof(olog);
-    r = optixPipelineCreate(ctx_, &pco, &lo, groups.data(), 4, olog, &olen, &pipeline);
+    r = optixPipelineCreate(ctx_, &pco, &lo, groups.data(), 5, olog, &olen, &pipeline);
     if (r != OPTIX_SUCCESS) { log = std::string("optixPipelineCreate: ") + optixGetErrorString(r) + "\n" + olog; return false; }
     TOPTIX(optixPipelineSetStackSizeFromCallDepths(pipeline, 1, 0, 0, 0, 2));
     TCUDA(cudaDeviceSynchronize());
@@ -158,10 +162,12 @@ bool TanecikRenderer::compileDevice(std::string& log) {
     if (!rg_) TCUDA(cudaMalloc(reinterpret_cast<void**>(&rg_), sizeof(TRecord)));
     if (!miss_) TCUDA(cudaMalloc(reinterpret_cast<void**>(&miss_), sizeof(TRecord)));
     if (!hit_) TCUDA(cudaMalloc(reinterpret_cast<void**>(&hit_), 2 * sizeof(TRecord)));
+    if (!rgPick_) TCUDA(cudaMalloc(reinterpret_cast<void**>(&rgPick_), sizeof(TRecord)));
     record(groups_[0], rg_, 0);
     record(groups_[1], miss_, 0);
     record(groups_[2], hit_, 0);
     record(groups_[3], hit_, 1);
+    record(groups_[4], rgPick_, 0);
     sbt_ = {};
     sbt_.raygenRecord = rg_;
     sbt_.missRecordBase = miss_;
@@ -336,6 +342,7 @@ void TanecikRenderer::setParticleSubset(const std::vector<uint32_t>& idx, float 
     }
     particleCount_ = n;
     if (n > 0) TCUDA(cudaMemcpyAsync(dSubset_, idx.data(), size_t(n) * sizeof(uint32_t), cudaMemcpyHostToDevice, stream_));
+    subset_ = idx;
     TCUDA(cudaMemcpyAsync(dRadius_, &radius, sizeof(float), cudaMemcpyHostToDevice, stream_));
     p_.particles = dCentres_;
     p_.particleTint = dTint_;
@@ -519,6 +526,23 @@ void TanecikRenderer::render(unsigned int spp, bool accumulate) {
     ++p_.seed;
 }
 
+TPick TanecikRenderer::pick(float x, float y) {
+    p_.pickPixel = make_float2(x, y);
+    p_.pickOut = dPick_;
+    TCUDA(cudaMemcpyAsync(reinterpret_cast<void*>(dParams_), &p_, sizeof(TanecikParams), cudaMemcpyHostToDevice, stream_));
+    OptixShaderBindingTable sbt = sbt_;
+    sbt.raygenRecord = rgPick_;
+    TPick out{};
+    out.kind = -1;
+    if (p_.handle) {
+        TOPTIX(optixLaunch(pipeline_, stream_, dParams_, sizeof(TanecikParams), &sbt, 1, 1, 1));
+        TCUDA(cudaMemcpyAsync(&out, dPick_, sizeof(TPick), cudaMemcpyDeviceToHost, stream_));
+    }
+    TCUDA(cudaStreamSynchronize(stream_));
+    if (out.kind == TK_PARTICLES && out.index >= 0 && out.index < int(subset_.size())) out.index = int(subset_[size_t(out.index)]);   // the solver's index
+    return out;
+}
+
 void TanecikRenderer::downloadTo(uchar4* dst) {
     TCUDA(cudaMemcpyAsync(dst, p_.output, size_t(w_) * h_ * sizeof(uchar4), cudaMemcpyDeviceToHost, stream_));
     TCUDA(cudaStreamSynchronize(stream_));
@@ -550,14 +574,15 @@ void TanecikRenderer::shutdown() {
     ctx_ = nullptr;
     groups_.clear();
     for (void* b : {static_cast<void*>(p_.accum), static_cast<void*>(p_.output), static_cast<void*>(dInstances_), static_cast<void*>(dRadius_),
-                    static_cast<void*>(dBoneXf_), reinterpret_cast<void*>(dParams_), reinterpret_cast<void*>(rg_), reinterpret_cast<void*>(miss_),
-                    reinterpret_cast<void*>(hit_)})
+                    static_cast<void*>(dBoneXf_), static_cast<void*>(dPick_), reinterpret_cast<void*>(dParams_), reinterpret_cast<void*>(rg_),
+                    reinterpret_cast<void*>(rgPick_), reinterpret_cast<void*>(miss_), reinterpret_cast<void*>(hit_)})
         if (b) cudaFree(b);
     p_ = TanecikParams{};
     dInstances_ = nullptr;
     dRadius_ = nullptr;
     dBoneXf_ = nullptr;
-    dParams_ = rg_ = miss_ = hit_ = 0;
+    dPick_ = nullptr;
+    dParams_ = rg_ = rgPick_ = miss_ = hit_ = 0;
     for (cudaEvent_t* e : {&e0_, &e1_})
         if (*e) { cudaEventDestroy(*e); *e = nullptr; }
     if (stream_) cudaStreamDestroy(stream_);
