@@ -67,6 +67,7 @@ struct BodyInfo {     // host copy of what the renderer and the tests need
     unsigned color = 0xffffff;
     float mass = 0;
     float3 localLo, localHi;
+    float sphere = 0;  // a ball's radius (the renderer shades it round); 0: flat faces
 };
 
 struct PhysStats {
@@ -100,6 +101,10 @@ public:
     // ground and frozen. Cutting a loaded column's bonds is not enough: wedged under the floors it still carries them
     // by contact and friction (measured: eight cut and kicked columns stayed put under four storeys).
     void removeBody(int b);
+    // a body kept aside for later (a wrecking ball before it is thrown): frozen far below the ground; launchBody puts
+    // it at x with orientation q, moving at v and w, with its own mass again
+    void parkBody(int b);
+    void launchBody(int b, double3 x, float4 q, float3 v, float3 w);
     std::vector<float> damage();   // per body: share of its interfaces' fibres cracked or broken (display)
     PhysStats stats();             // counts (reads the fibres back: not every frame)
     // per fibre, in interfaceDescs order: flags (1 cracked, 2 crushed, 4 broken) and last force (interface frame:
@@ -128,6 +133,8 @@ public:
     std::vector<float3> vel, angVel;
     std::vector<float> invMass;
     std::vector<float3> invInertia;
+    std::vector<float> invMassFree;        // what a body's inverse mass and inertia are when it moves (kinematic or not)
+    std::vector<float3> invInertiaFree;
     std::vector<unsigned> kinematic;
     std::vector<PhysMaterial> materials;
     std::vector<InterfaceDesc> interfaceDescs;
@@ -150,4 +157,5 @@ private:
     int maxDegree_ = 0;
     void solveInterfaces(float h, void* stream);
     void freeDevice();
+    void writeBody(int b);         // the host state of one body to the GPU (pose, previous pose, velocities, mass, kinematic)
 };

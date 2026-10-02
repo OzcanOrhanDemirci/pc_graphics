@@ -24,6 +24,9 @@ Poly polyBox(double3 c, double3 half, double3 ax = d3(1, 0, 0), double3 ay = d3(
 inline Poly polyAabb(double3 lo, double3 hi) { return polyBox((lo + hi) * 0.5, (hi - lo) * 0.5); }
 // keep the half-space dot(n, p) <= d; the new cap face gets tag. Returns false when nothing is left.
 bool polyClip(Poly& p, double3 n, double d, int tag = 1);
+// a ball of radius r about c: a cube clipped by planes tangent to the sphere in `planes` evenly spread directions
+// (its corners stand a few millimetres outside the sphere at r = 0.35 m and 256 planes)
+Poly polySphere(double3 c, double r, int planes = 256);
 
 struct MassProps {
     double volume = 0;

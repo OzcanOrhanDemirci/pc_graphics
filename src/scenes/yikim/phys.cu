@@ -968,7 +968,8 @@ void PhysWorld::freeDevice() {
 void PhysWorld::clear() {
     freeDevice();
     info.clear(); shapes.clear(); pos.clear(); rot.clear(); vel.clear(); angVel.clear();
-    invMass.clear(); invInertia.clear(); kinematic.clear(); materials.clear(); interfaceDescs.clear();
+    invMass.clear(); invInertia.clear(); invMassFree.clear(); invInertiaFree.clear(); kinematic.clear(); materials.clear();
+    interfaceDescs.clear();
     colours_.clear();
     time = 0;
     groundTarget_ = groundPrev_ = d3(0, 0, 0);
@@ -984,6 +985,8 @@ void PhysWorld::clear() {
     angVel.push_back(make_float3(0, 0, 0));
     invMass.push_back(0.0f);
     invInertia.push_back(make_float3(0, 0, 0));
+    invMassFree.push_back(0.0f);
+    invInertiaFree.push_back(make_float3(0, 0, 0));
     kinematic.push_back(1u);
 }
 
@@ -1022,13 +1025,10 @@ int PhysWorld::addBody(const Poly& ws, float density, bool kin, int tag, unsigne
     rot.push_back(q);
     vel.push_back(make_float3(0, 0, 0));
     angVel.push_back(make_float3(0, 0, 0));
-    if (kin) {
-        invMass.push_back(0.0f);
-        invInertia.push_back(make_float3(0, 0, 0));
-    } else {
-        invMass.push_back(float(1.0 / (mp.volume * density)));
-        invInertia.push_back(make_float3(float(1.0 / (vals[0] * density)), float(1.0 / (vals[1] * density)), float(1.0 / (vals[2] * density))));
-    }
+    invMassFree.push_back(float(1.0 / (mp.volume * density)));
+    invInertiaFree.push_back(make_float3(float(1.0 / (vals[0] * density)), float(1.0 / (vals[1] * density)), float(1.0 / (vals[2] * density))));
+    invMass.push_back(kin ? 0.0f : invMassFree.back());
+    invInertia.push_back(kin ? make_float3(0, 0, 0) : invInertiaFree.back());
     kinematic.push_back(kin ? 1u : 0u);
     uploaded_ = false;
     return int(info.size()) - 1;
@@ -1491,6 +1491,41 @@ void PhysWorld::removeBody(int b) {
     PCHECK(cudaMemcpy(d_->w + b, &z3, sizeof(float3), cudaMemcpyHostToDevice));
     kinematic[b] = 1u;
     invMass[b] = 0.0f;
+}
+
+void PhysWorld::writeBody(int b) {
+    const unsigned k = kinematic[b];
+    PCHECK(cudaMemcpy(d_->x + b, &pos[b], sizeof(double3), cudaMemcpyHostToDevice));
+    PCHECK(cudaMemcpy(d_->xPrev + b, &pos[b], sizeof(double3), cudaMemcpyHostToDevice));
+    PCHECK(cudaMemcpy(d_->q + b, &rot[b], sizeof(float4), cudaMemcpyHostToDevice));
+    PCHECK(cudaMemcpy(d_->qPrev + b, &rot[b], sizeof(float4), cudaMemcpyHostToDevice));
+    for (float3* p : {d_->v, d_->vOld}) PCHECK(cudaMemcpy(p + b, &vel[b], sizeof(float3), cudaMemcpyHostToDevice));
+    for (float3* p : {d_->w, d_->wOld}) PCHECK(cudaMemcpy(p + b, &angVel[b], sizeof(float3), cudaMemcpyHostToDevice));
+    PCHECK(cudaMemcpy(d_->invMass + b, &invMass[b], sizeof(float), cudaMemcpyHostToDevice));
+    PCHECK(cudaMemcpy(d_->invI + b, &invInertia[b], sizeof(float3), cudaMemcpyHostToDevice));
+    PCHECK(cudaMemcpy(d_->kin + b, &k, sizeof(unsigned), cudaMemcpyHostToDevice));
+}
+
+void PhysWorld::parkBody(int b) {
+    if (b <= 0 || b >= int(info.size())) return;
+    pos[b].y = -1000.0;
+    vel[b] = angVel[b] = make_float3(0, 0, 0);
+    kinematic[b] = 1u;
+    invMass[b] = 0.0f;
+    invInertia[b] = make_float3(0, 0, 0);
+    if (uploaded_) writeBody(b);
+}
+
+void PhysWorld::launchBody(int b, double3 x, float4 q, float3 v, float3 w) {
+    if (b <= 0 || b >= int(info.size())) return;
+    pos[b] = x;
+    rot[b] = q;
+    vel[b] = v;
+    angVel[b] = w;
+    kinematic[b] = 0u;
+    invMass[b] = invMassFree[b];
+    invInertia[b] = invInertiaFree[b];
+    if (uploaded_) writeBody(b);
 }
 
 std::vector<float> PhysWorld::damage() {

@@ -29,9 +29,22 @@ public:
         i.number = "01";
         i.title = "Altın Saat";
         i.subtitle = "Cam ve taş, tayfına ayrılan güneş";
-        i.description = "Tadao Ando dilinde bir oda: brüt beton, terrazzo, sığ bir havuz. Güneş ufkun sekiz derece üstünde ve yalnız beş dar yarıktan "
-                        "giriyor; huzmelere asılı on dört kristal prizma ışığı tayfına ayırıp duvarlara saçıyor. Her ışın dalga boyuyla hesaplanıyor; "
-                        "hiçbir renk boyanmış değil.";
+        i.description = "Beton bir oda, beş dar yarıktan giren alçak güneş ve huzmelere asılı on dört kristal prizma. Prizmalar ışığı "
+                        "renklerine ayırıp duvarlara ve pusa saçıyor.";
+        i.details = {
+            {"Işık nasıl hesaplanıyor", "Spektral yol izleme: her ışın 360-830 nm arasından dört dalga boyu taşır. Hiçbir renk boyanmış "
+                                        "değil; camın kırılma indisi dalga boyuyla değiştiği için tayflar kendiliğinden çıkar, CIE 1931 "
+                                        "gözlemcisiyle renge çevrilir."},
+            {"Güneş ve gök", "5778 K kara cisim bir güneş; ışığı Rayleigh, aerosol ve ozon soğurmalı bir atmosferden geçer, ufka yakın "
+                             "güneş bu yüzden turuncudur. Gök aynı atmosferden hesaplanmış spektral bir haritadır."},
+            {"Kostikler", "Prizmaların ve suyun duvara düşürdüğü tayflar fotonlarla bulunur: güneşten cama gönderilen fotonlar ekran "
+                          "kartında bir ızgaraya dizilir (aşamalı foton haritası). Pustaki renkli yelpazeler foton ışınlarıyla."},
+            {"Malzemeler", "Brüt beton, pirinç şeritli terrazzo, sıva, SF11 ve BK7 cam, su, sabun filmi (ince film girişimi). Yüzey "
+                           "ayrıntısı bir kez dokuya pişirilir: kare 2,3 kat hızlandı."},
+            {"Durağan ve canlı", "Durağan kipte örnekler sınırsız birikir, yapay zekâ gürültü gidericisi albedo ve normal kılavuzuyla "
+                                 "temizler. Canlı kipte 1280×720 çizilir, OptiX'in zamansal modeli 1440p'ye büyütür: 24 fps."},
+            {"Donanım", "C++20, CUDA ve OptiX 9.1; oyun motoru yok, RTX 4080'in ışın izleme çekirdeklerinde. Işınlar malzemelerine göre "
+                        "yeniden sıralanır; bu olmadan altı kat yavaştı."}};
         i.tags = {"Spektral yol izleme", "Foton haritası", "Yapay zekâ gürültü giderici"};
         i.image = "assets/gallery/altinsaat.jpg";
         i.accent = 0xE6B566;

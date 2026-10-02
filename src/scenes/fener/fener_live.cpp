@@ -19,8 +19,21 @@ public:
         i.number = "02";
         i.title = "Fener";
         i.subtitle = "Siste dönen bir huzme, gece ve orman";
-        i.description = "Playdead'in Inside'ı tarzında bir gece: dönen huzmeyi taşıyacak kadar yoğun sis, kara köknar silüetleri, tek sıcak pencere. "
-                        "İki sabit bakış arasında 778 metrelik bir orman yolculuğu, gözün karanlığa uyumuyla. Tab ile adalarda yürünebilir.";
+        i.description = "Sisli bir gece: siste dönen bir fener huzmesi, kara köknarlar ve tek sıcak pencere. İki bakış arasında orman "
+                        "içinden yürünür; istersen adalarda kendin dolaşırsın.";
+        i.details = {
+            {"Hacimsel ışık", "Sis gerçek bir ortam olarak hesaplanır: her pikselde ışın sisin içinde yürür, fenerin ve ayın ışığını "
+                              "gölgeleriyle toplar. Huzme bu yüzden ağaçların ve kulenin ardında kesilir."},
+            {"Gerçek zamanlı", "1440p'de kare başına 7,6 ms: yüzeyler, tam çözünürlükte hacim, zamansal birikim, TAA ve parlama. Az "
+                               "örnek, mavi gürültü ve önceki karelerin birikimiyle temiz kalır."},
+            {"Dünya", "İki ada yükseklik alanıyla; deniz kırk dalganın toplamından analitik bir yüzey. Orman altı çeşit köknarın yaklaşık "
+                      "32 bin örneği; ışın izleme donanımı yüz milyonlarca üçgeni örnekleyerek taşır."},
+            {"Sanat kararları", "Gerçek siste huzmenin ileri saçılımı yanına göre ~100 kat güçlüdür; kamera huzmenin içindeyken bütün sis "
+                                "düz beyaza döner. Oran 5'e indirildi. Göz, ormanın karanlığına yarı yolda uyar."},
+            {"Yolculuk ve oyuncu", "Boşluk kamerayı iki bakış arasında 778 m orman içinden yürütür. Tab birinci şahıs kipine geçer: "
+                                   "yer yüksekliği adaların kendisinden, ağaçlar ve kule engel, derin suda yüzülür."},
+            {"Görüntü", "Renk RGB'de (tayfsal değil), ACES ton eşleme ve soğuk gölgelerle; 8 bit panelde bantlanmasın diye mavi gürültüyle "
+                        "titreştirilir."}};
         i.tags = {"Gerçek zamanlı hacimsel ışık", "Zamansal birikim", "Oyuncu kipi"};
         i.image = "assets/gallery/fener.jpg";
         i.accent = 0x86B3DA;

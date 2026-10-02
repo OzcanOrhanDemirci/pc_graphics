@@ -23,13 +23,28 @@ public:
         i.number = "03";
         i.title = "Yıkım";
         i.subtitle = "Betonarme bir apartman, deprem ve kırılma";
-        i.description = "Beş katlı bir apartman: 3.007 parça, 44.378 lifli bağ. Beton çatlar ve ezilir, donatı akar ve kopar; çözücü ekran kartında, "
-                        "her karede kırk alt adım. 3'ten 9'a kadar her büyüklük gerçek bir kayıttan türetildi; fareyle kolon patlatılabilir.";
+        i.description = "Beş katlı betonarme bir apartman. 3'ten 9'a kadar depremlerle sarsılır, çatlar, gerekirse çöker; tıkladığın yere bir yıkım "
+                        "topu çarpar.";
+        i.details = {
+            {"Kendi fizik çözücümüz", "Oyun motoru ya da hazır fizik kütüphanesi yok: ekran kartında XPBD, karede 40 alt adım. Bina 3.007 katı "
+                                      "parçadan kurulu; her birinin kendi kabuğu, kütlesi ve eylemsizliği var."},
+            {"Beton ve donatı", "Parçalar 44.378 lifle birbirine bağlı. Beton çekmede çatlar, basınçta ezilir; donatı akar ve 6 cm uzayınca "
+                                "kopar. Kapasiteyi aşan kısım kalıcı olur: mafsallaşan kolon eğik kalır."},
+            {"Depremler", "Her büyüklük gerçek bir kuvvetli yer hareketi kaydından (AFAD, ESM): o büyüklüğün süresine kesilir, tepe ivmesine "
+                          "ölçeklenir, iki kez integre edilip zeminin hareketine çevrilir. Daha uzun ya da sürekli sarsıntıda kaydın güçlü "
+                          "kısmı dikişsiz bir döngüye dönüşür."},
+            {"Yıkım topu", "Tıklanan yere bakış yönünden döküm çelik bir top gelir: 4,1 ton (Ctrl ile 11,4 ton), saatte 50 km. Top da öteki "
+                           "parçalar gibi bir cisim; neyin kırılıp devrileceğine çözücü karar verir."},
+            {"Aynı deprem, aynı yıkım", "Temas ve bağ toplamları kayan noktalı atomikler yerine sabit noktada tutulur: aynı deprem aynı binayı "
+                                       "her seferinde aynı biçimde yıkar. Sınırdaki yapıyı ölçebilmek bunu gerektirdi."},
+            {"Görüntü", "OptiX ile ışın izleme: yumuşak gölgeli güneş, gök ve zeminden bir sekme. Piksel başına altı örnek; gren, her parçanın "
+                        "hareketini izleyen kendi süzgecimizle temizlenir (1080p'de 2,4 ms)."}};
         i.tags = {"Kendi fizik çözücüsü", "Gerçek deprem kayıtları", "Canlı"};
         i.image = "assets/gallery/yikim.jpg";
         i.accent = 0xE5764A;
-        i.keys = {{"Deprem", {{"3–9", "Büyüklüğü seç"}, {"Boşluk", "Depremi başlat / durdur"}, {"T", "Ağır çekim: ×1, ×0,25, ×0,1"}, {"P", "Zamanı durdur"}}},
-                  {"Müdahale", {{"Sol tık", "Tıklanan yeri patlat"}, {"Ctrl|Sol tık", "Büyük patlama"}, {"R", "Binayı baştan kur"}}},
+        i.keys = {{"Deprem", {{"3–9", "Büyüklüğü seç"}, {"←|→", "Süre: kısalt / uzat (en sonda: durdurana kadar)"}, {"Boşluk", "Depremi başlat / durdur"},
+                              {"T", "Ağır çekim: ×1, ×0,25, ×0,1"}, {"P", "Zamanı durdur"}}},
+                  {"Müdahale", {{"Sol tık", "Yıkım topu (4,1 ton)"}, {"Ctrl|Sol tık", "Ağır top (11,4 ton)"}, {"R", "Binayı baştan kur"}}},
                   {"Kamera", {{"Sağ tık|Fare", "Bak"}, {"W|A|S|D", "Uç"}, {"E|Q", "Yukarı / aşağı"}, {"Shift", "Hızlı"}, {"Tekerlek", "Yakınlaş"}}},
                   {"Görüntü", {{"B", "Donatıyı göster / gizle"}, {"G", "Gürültü giderici: süzgeç, yapay zekâ, ham"}}}};
         return i;
@@ -113,22 +128,22 @@ public:
             speedIdx_ = (speedIdx_ + 1) % 3;
             host.toast(speedIdx_ == 0 ? "Gerçek hız" : speedIdx_ == 1 ? "Ağır çekim ×0,25" : "Ağır çekim ×0,1");
         }
+        // the quake: keys and the panel's controls do the same things
         for (int m = quakeMagnitudeMin(); m <= quakeMagnitudeMax(); ++m)
-            if (in.pressed(GLFW_KEY_0 + m) || in.pressed(GLFW_KEY_KP_0 + m)) {
-                magnitude_ = m;
-                if (y_.quakeOn) y_.stopQuake();
-                const QuakeMagnitude* q = quakeMagnitude(m);
-                host.toast("Büyüklük " + std::to_string(m) + " · " + q->label + " — Boşluk ile başlat");
-            }
-        if (in.pressed(GLFW_KEY_SPACE)) {
-            if (y_.quakeOn) { y_.stopQuake(); host.toast("Deprem durduruldu"); }
-            else if (y_.startQuake(magnitude_, y_.world.time)) host.toast("Deprem: büyüklük " + std::to_string(magnitude_) + " · " + quakeMagnitude(magnitude_)->label);
+            if (in.pressed(GLFW_KEY_0 + m) || in.pressed(GLFW_KEY_KP_0 + m)) chooseMagnitude(host, m);
+        if (in.pressed(GLFW_KEY_LEFT)) stepLength(-1);
+        if (in.pressed(GLFW_KEY_RIGHT)) stepLength(+1);
+        if (in.pressed(GLFW_KEY_SPACE)) startOrStop(host);
+        for (const app::ControlEvent& e : in.events) {
+            if (e.id == "buyukluk") chooseMagnitude(host, quakeMagnitudeMin() + e.item);
+            else if (e.id == "sure") lengthFromSlider(e.value);
+            else if (e.id == "deprem") startOrStop(host);
         }
         if (in.pressed(GLFW_KEY_R) && rebuildIn_ == 0) {
             rebuildIn_ = 2;
             host.toast("Bina yeniden kuruluyor…");
         }
-        // mouse: right button looks, left button blasts, the wheel zooms
+        // mouse: right button looks, left button throws a wrecking ball at what is under it, the wheel zooms
         if (in.rightDown && looking_ && (in.mouseDX != 0.0f || in.mouseDY != 0.0f)) {
             fly_.look(in.mouseDX, in.mouseDY, y_.cfg.f("camera.mouse", 0.0025f));
             camMoved_ = true;
@@ -149,11 +164,7 @@ public:
             const float rx = (in.mouseX - in.view.x) / in.view.w * y_.width, ry = (in.mouseY - in.view.y) / in.view.h * y_.height;
             if (rx >= 0 && ry >= 0 && rx < y_.width && ry < y_.height) {
                 float4 hit;
-                const int body = y_.renderer.pick(rx, ry, hit);
-                if (body > 0) {
-                    const int n = y_.blast(make_float3(hit.x, hit.y, hit.z), in.ctrl ? 1.3f : 0.55f);
-                    host.toast(std::to_string(n) + " parça patlatıldı");
-                }
+                if (y_.renderer.pick(rx, ry, hit) > 0) y_.strike(y_.renderer.params().cam.pos, make_float3(hit.x, hit.y, hit.z), in.ctrl);
             }
         }
         // draw the current state while the GPU computes the next one: the transforms are read first (an event), the
@@ -203,17 +214,56 @@ public:
         s.metrics.push_back({"Görüntü", num(y_.renderer.lastMs, 1) + " ms"});
         s.metrics.push_back({"Kırık bağ lifi", std::to_string(stats_.broken) + " / " + std::to_string(stats_.fibres)});
         s.metrics.push_back({"Zaman", num(y_.world.time, 1) + " sn"});
-        s.selector.title = "Büyüklük";
-        for (int m = quakeMagnitudeMin(); m <= quakeMagnitudeMax(); ++m) s.selector.items.push_back(std::to_string(m));
-        s.selector.active = magnitude_ - quakeMagnitudeMin();
-        if (const QuakeMagnitude* q = quakeMagnitude(magnitude_))
-            s.selector.detail = std::string(q->label) + " · tepe ivme " + num(q->pgaG, q->pgaG < 0.1 ? 3 : 2) + " g · " + num(q->window, 0) +
-                                " sn güçlü sarsıntı" + (y_.quakeOn ? "" : " · Boşluk ile başlat");
+        {   // the magnitude
+            app::Control c;
+            c.kind = app::Control::Kind::Choice;
+            c.id = "buyukluk";
+            c.title = "Büyüklük";
+            for (int m = quakeMagnitudeMin(); m <= quakeMagnitudeMax(); ++m) c.items.push_back(std::to_string(m));
+            c.active = magnitude_ - quakeMagnitudeMin();
+            if (const QuakeMagnitude* q = quakeMagnitude(magnitude_))
+                c.detail = std::string(q->label) + " · tepe ivme " + num(q->pgaG, q->pgaG < 0.1 ? 3 : 2) + " g";
+            s.controls.push_back(c);
+        }
+        const double own = quakeOwnSeconds(magnitude_);
+        {   // how long: the notch is the magnitude's own length, the far end "until stopped"
+            app::Control c;
+            c.kind = app::Control::Kind::Slider;
+            c.id = "sure";
+            c.title = "Süre";
+            c.value = length_ == Length::Endless ? 1.0f : sliderOf(seconds());
+            c.mark = sliderOf(own);
+            c.text = length_ == Length::Endless ? "∞" : num(seconds(), 0) + " sn";
+            c.detail = length_ == Length::Own       ? "Bu büyüklüğün kendi süresi"
+                       : length_ == Length::Endless ? "Durdurana kadar sürer"
+                                                    : "Kendi süresi " + num(own, 0) + " sn";
+            const bool differs = y_.quakeOn && (y_.quake.endless() != (length_ == Length::Endless) ||
+                                                (!y_.quake.endless() && std::fabs(y_.quake.length - seconds()) > 0.5) || y_.quakeMag != magnitude_);
+            if (differs && !y_.quake.stopping()) c.detail += " · bir sonraki depremde";
+            s.controls.push_back(c);
+        }
+        {   // start, stop
+            app::Control c;
+            c.kind = app::Control::Kind::Button;
+            c.id = "deprem";
+            c.keys = "Boşluk";
+            if (!y_.quakeOn) { c.text = "Depremi başlat"; c.strong = true; }
+            else if (!y_.quake.stopping()) c.text = "Depremi durdur";
+            else { c.text = "Sarsıntı diniyor"; c.enabled = false; }
+            s.controls.push_back(c);
+        }
         if (y_.quakeOn) {
-            const double p = y_.quakeProgress(y_.world.time);
-            s.progress = float(p);
-            s.progressLabel = "Sarsıntı · büyüklük " + std::to_string(y_.quakeMag) + " · " + num(p * y_.quake.duration(), 1) + " / " +
-                              num(y_.quake.duration(), 0) + " sn";
+            const double t = y_.quakeTime(y_.world.time);
+            const std::string head = "Sarsıntı · büyüklük " + std::to_string(y_.quakeMag) + " · ";
+            if (y_.quake.endless()) {   // no end: a travelling light; dying down: the bar empties over the fade
+                s.progress = y_.quake.stopping() ? float(1.0 - std::min(1.0, (t - y_.quake.stopAt) / QuakePlay::kStopFade)) : 0.0f;
+                s.progressEndless = !y_.quake.stopping();
+                s.progressLabel = head + num(t, 0) + " sn" + (y_.quake.stopping() ? " · diniyor" : " · durdurana kadar");
+            } else {
+                const double p = y_.quake.progress(t);
+                s.progress = float(p);
+                s.progressLabel = head + num(p * y_.quake.length, 1) + " / " + num(y_.quake.length, 0) + " sn" + (y_.quake.stopping() ? " · diniyor" : "");
+            }
         }
     }
 
@@ -233,6 +283,67 @@ public:
     ~YikimLive() override { unload(); }
 
 private:
+    // the next quake's length: the magnitude's own (the notch), one chosen on the slider, or until stopped
+    enum class Length { Own, Chosen, Endless };
+    Length length_ = Length::Own;
+    double chosen_ = 0.0;
+    // the slider: seconds on a log scale over most of the track, "until stopped" at its far end
+    static constexpr double kShortest = 2.0, kLongest = 180.0;
+    static constexpr float kSpan = 0.9f;   // the share of the track the seconds take
+    static float sliderOf(double s) {
+        return float(kSpan * std::log(std::max(s, kShortest) / kShortest) / std::log(kLongest / kShortest));
+    }
+    double seconds() const {   // < 0: until stopped
+        return length_ == Length::Endless ? -1.0 : length_ == Length::Chosen ? chosen_ : quakeOwnSeconds(magnitude_);
+    }
+    void setLength(double s) {   // seconds, rounded; at the magnitude's own: Own
+        const double own = quakeOwnSeconds(magnitude_);
+        if (std::fabs(sliderOf(s) - sliderOf(own)) < 0.02f) { length_ = Length::Own; return; }
+        length_ = Length::Chosen;
+        chosen_ = s < 60.0 ? std::round(s) : 5.0 * std::round(s / 5.0);
+    }
+    void lengthFromSlider(float u) {
+        if (u > 0.5f * (kSpan + 1.0f)) { length_ = Length::Endless; return; }
+        setLength(kShortest * std::pow(kLongest / kShortest, std::min(u, kSpan) / kSpan));
+    }
+    void stepLength(int dir) {   // the arrows: through round lengths and the magnitude's own; past the longest, until stopped
+        static const double kStops[] = {2, 3, 4, 5, 6, 8, 10, 12, 15, 20, 25, 30, 40, 50, 60, 75, 90, 120, 150, 180};
+        std::vector<double> stops(std::begin(kStops), std::end(kStops));
+        stops.push_back(quakeOwnSeconds(magnitude_));
+        std::sort(stops.begin(), stops.end());
+        if (length_ == Length::Endless) {
+            if (dir < 0) setLength(kLongest);
+            return;
+        }
+        const double now = seconds();
+        if (dir > 0) {
+            for (double s : stops)
+                if (s > now + 1e-6) { setLength(s); return; }
+            length_ = Length::Endless;
+        } else {
+            for (auto it = stops.rbegin(); it != stops.rend(); ++it)
+                if (*it < now - 1e-6) { setLength(*it); return; }
+        }
+    }
+    void chooseMagnitude(app::Host& host, int m) {
+        if (m == magnitude_ || !quakeMagnitude(m)) return;
+        magnitude_ = m;
+        if (length_ == Length::Chosen) setLength(chosen_);   // a chosen length that is this magnitude's own becomes its own
+        if (y_.quakeOn && !y_.quake.stopping()) {
+            y_.stopQuake(y_.world.time);
+            host.toast("Büyüklük " + std::to_string(m) + ": süren deprem diniyor");
+        }
+    }
+    void startOrStop(app::Host& host) {
+        if (y_.quakeOn) {
+            if (!y_.quake.stopping()) y_.stopQuake(y_.world.time);
+            return;
+        }
+        if (y_.startQuake(magnitude_, seconds(), y_.world.time))
+            host.toast("Deprem: büyüklük " + std::to_string(magnitude_) + " · " + quakeMagnitude(magnitude_)->label +
+                       (seconds() < 0.0 ? std::string(" · durdurana kadar") : " · " + theme::num(seconds(), 0) + " sn"));
+    }
+
     app::SceneInfo info_ = describe();
     YikimApp y_;
     FlyCamera fly_;

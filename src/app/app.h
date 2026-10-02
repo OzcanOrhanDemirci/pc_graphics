@@ -14,6 +14,7 @@
 #include <vector>
 
 struct GLFWwindow;
+struct GLFWcursor;
 
 namespace app {
 
@@ -64,11 +65,14 @@ private:
     void drawHelp(double now);
     void drawToasts(double now);
     void drawFailed(double now);
-    float keyCaps(float x, float y, const std::string& keys, float height);
+    void drawDetails(const ui::Rect& area, float alpha);
+    float keyCaps(float x, float y, const std::string& keys, float height, float alpha = 1.0f, bool dark = false);
     float keyHint(float x, float y, const std::string& keys, const std::string& what);
     void saveFramebuffer(const std::string& path);
     bool consume(int key);
     void autotestStep(double now);
+    std::vector<ControlEvent> panelInput(bool& clickTaken, bool& pressTaken);   // the panel's controls, before the scene's frame
+    void setHandCursor(bool on);
 
     Options opt_;
     GLFWwindow* win_ = nullptr;
@@ -84,8 +88,10 @@ private:
     float selAnim_ = 0.0f;                // the highlight glides between entries
     double selChangedAt_ = -10.0;
     int prevSelected_ = 0;
-    ui::Rect openButton_;
+    ui::Rect openButton_, detailsButton_;
     std::vector<ui::Rect> entryRects_;
+    bool details_ = false;                // the gallery's "Ayrıntılar" over the picture
+    double detailsAt_ = -10.0;            // when it was last opened or closed
 
     int sceneIndex_ = -1;
     std::unique_ptr<Scene> scene_;
@@ -94,6 +100,23 @@ private:
     ui::Rect view_;
     bool hud_ = true, help_ = false;
     std::string failure_;
+    // the panel's controls as last drawn: where each can be clicked, and the panels themselves (clicks on them are
+    // not the scene's)
+    struct PanelHit {
+        ui::Rect r;                       // the clickable area
+        ui::Rect track;                   // Slider: the track's span
+        int control, item;                // item: a Choice's choice
+    };
+    std::vector<PanelHit> panelHits_;
+    std::vector<ui::Rect> panels_;
+    std::vector<Control> panelControls_;
+    int hotHit_ = -1;                     // the control under the mouse
+    int dragControl_ = -1;                // a slider being dragged (index into panelControls_)
+    std::string dragId_;
+    ui::Rect dragTrack_;
+    bool pressOnPanel_ = false;           // the left button went down over a panel: the scene does not get that press
+    GLFWcursor* handCursor_ = nullptr;
+    bool handShown_ = false;
 
     // loading on a worker thread
     std::thread loader_;
@@ -111,7 +134,7 @@ private:
     bool leftClick_ = false;
     double mouseX_ = 0, mouseY_ = 0, prevMouseX_ = 0, prevMouseY_ = 0;
     bool mouseCaptured_ = false;
-    bool virtualMouse_ = false, virtualRight_ = false;   // --autotest drives the mouse
+    bool virtualMouse_ = false, virtualRight_ = false, virtualLeft_ = false;   // --autotest drives the mouse
     double virtualX_ = 0.0, virtualY_ = 0.0;
 
     // timing
@@ -124,7 +147,8 @@ private:
     // --autotest: a script of keys, waits and framebuffer captures
     struct Step {
         // 0 wait s, 1 key, 2 capture name, 3 wait until running, 4 wait until gallery, 5 log, 6 quit,
-        // 7 mouse to (fx, fy) of the screen, 8 left click, 9 right button (key: 1 down, 0 up)
+        // 7 mouse to (fx, fy) of the screen, 8 left click, 9 right button (key: 1 down, 0 up), 10 left button held
+        // (key: 1 down, a press; 0 up)
         int kind;
         double seconds;
         int key;

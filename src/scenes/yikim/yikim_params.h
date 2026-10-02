@@ -16,6 +16,7 @@ struct YMesh {                 // one body's hull, in its body frame
 struct YBody {                 // per instance (instance index = body index - 1)
     float3 albedo;
     float damage;              // 0..1: share of the body's fibres cracked or broken (display only)
+    float sphere;              // a ball's radius: shaded with the sphere's normal; 0: the faces' own
 };
 
 struct YCamera {

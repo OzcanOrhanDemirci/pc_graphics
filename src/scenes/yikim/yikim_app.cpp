@@ -37,7 +37,7 @@ static int runClip(YikimApp& app, double seconds, double still, unsigned spp, co
     double maxDrift = 0, maxDrop = 0, tMaxDrift = 0;
     bool caught = false;
     std::vector<float3> prevVel;
-    float fastest = 0;
+    float fastest = 0, ballFastest = 0;
     int fastestBody = -1;
     double fastestT = 0, fastestY = 0;
     std::vector<float3> kickPrev;
@@ -160,9 +160,14 @@ static int runClip(YikimApp& app, double seconds, double still, unsigned spp, co
             }
             kickPrev = app.world.vel;
         }
-        // the fastest piece: a fall from the roof is ~17 m/s; much more is energy the solver made up
+        // the fastest piece: a fall from the roof is ~17 m/s; much more is energy the solver made up (a thrown ball
+        // is counted on its own)
         for (size_t i = 1; i < app.world.vel.size(); ++i) {
             if (app.world.kinematic[i]) continue;
+            if (app.world.info[i].sphere > 0.0f) {
+                ballFastest = std::max(ballFastest, length(app.world.vel[i]));
+                continue;
+            }
             const float sp = length(app.world.vel[i]);
             if (sp > fastest) {
                 fastest = sp;
@@ -245,6 +250,20 @@ static int runClip(YikimApp& app, double seconds, double still, unsigned spp, co
         const double fall = std::sqrt(2.0 * 9.81 * (roofY + 1.0));
         std::printf("en hizli parca: %.1f m/s (govde %d, tur %d, t=%.2f s, y=%.1f m); catidan serbest dusus %.1f m/s\n", fastest, fastestBody,
                     fastestBody > 0 ? app.world.info[fastestBody].tag : -1, fastestT, fastestY, fall);
+    }
+    if (app.struck > 0) {   // the wrecking ball: where it ended, and what the struck column's pieces did
+        app.world.download();
+        const double3 bp = app.world.pos[app.struck];
+        std::printf("yikim topu: en hizli %.1f m/s, son konum (%.2f %.2f %.2f)\n", ballFastest, bp.x, bp.y, bp.z);
+        const float3 ij = app.cfg.v3("darbe.kolon", make_float3(0, 0, 0));
+        const double x = ij.x * app.spec.spanX, z = ij.y * app.spec.spanZ;
+        for (const Piece& p : app.pieces)
+            if (p.kind == PK_COLUMN && p.hi.y <= app.spec.level(1) + 1e-6 && std::fabs((p.lo.x + p.hi.x) * 0.5 - x) < 0.01 &&
+                std::fabs((p.lo.z + p.hi.z) * 0.5 - z) < 0.01) {
+                const double3 d = app.world.pos[p.body] - start[p.body];
+                std::printf("    kolon parcasi %d (y %.2f-%.2f m): yer degistirme %.2f m (yatay %.2f, dusey %.2f)\n", p.body, p.lo.y, p.hi.y,
+                            std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z), std::sqrt(d.x * d.x + d.z * d.z), d.y);
+            }
     }
     if (app.cfg.i("test.verbose", 0)) {   // the pieces that sank most (the broken-out ones excluded: they fell on purpose)
         std::vector<int> order;

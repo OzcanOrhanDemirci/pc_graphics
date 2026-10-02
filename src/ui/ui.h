@@ -81,6 +81,7 @@ float lineHeight(const TextStyle& s);
 float ascent(const TextStyle& s);
 // wrapped into `width`; returns the height used (lineSpacing x line height per line)
 float textWrapped(float x, float y, float width, const std::string& utf8, const TextStyle& s, float lineSpacing = 1.45f, int maxLines = 0);
+float measureWrapped(float width, const std::string& utf8, const TextStyle& s, float lineSpacing = 1.45f);   // the height, drawing nothing
 std::string upperTR(const std::string& utf8);
 
 }   // namespace ui

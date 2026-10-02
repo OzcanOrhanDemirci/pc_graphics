@@ -35,12 +35,16 @@ struct YikimApp {
     YikimRenderer renderer;
     unsigned int width = 1280, height = 720;
     std::string scenario = "kolon";
-    QuakeRecord quake;
+    QuakePlay quake;
     bool quakeOn = false;
     int quakeMag = 0;            // the magnitude playing (quake.h)
     double quakeT0 = 0;          // scenario time at which it starts
     double3 groundBase = {0, 0, 0};
     bool removed = false;
+    // wrecking balls (strike): set aside below the ground until thrown, then the oldest is thrown again
+    std::vector<int> balls, heavyBalls;
+    int nextBall = 0, nextHeavy = 0;
+    int struck = 0;              // the last ball thrown (body), 0: none
 
     void loadConfig() {
         cfg = Config();
@@ -74,6 +78,21 @@ struct YikimApp {
             spec = as.frame;
             pieces = std::move(ap.pieces);
             loose = std::move(ap.loose);
+        }
+        {   // the wrecking balls a click throws: cast steel, frozen far below the ground until then
+            balls.clear();
+            heavyBalls.clear();
+            nextBall = nextHeavy = struck = 0;
+            auto add = [&](std::vector<int>& list, int count, double r) {
+                for (int k = 0; k < count; ++k) {
+                    const int b = world.addBody(polySphere(d3(0, 0, 0), r), cfg.f("darbe.yogunluk", 7850.0f), false, PK_OTHER, 0x3b3c3e);
+                    world.info[b].sphere = float(r);
+                    world.parkBody(b);
+                    list.push_back(b);
+                }
+            };
+            add(balls, cfg.i("darbe.toplar", 6), cfg.f("darbe.yaricap", 0.5f));
+            add(heavyBalls, cfg.i("darbe.agir_toplar", 3), cfg.f("darbe.agir_yaricap", 0.7f));
         }
         applyPhysics();
         world.upload();
@@ -151,13 +170,25 @@ struct YikimApp {
             }
             removed = true;
         }
-        if (scenario == "sarsinti" && !quakeOn && quakeMag == 0 && t >= cfg.f("deprem.time", 1.0f)) startQuake(cfg.i("deprem.magnitude", 7), t);
+        if (scenario == "sarsinti" && !quakeOn && quakeMag == 0 && t >= cfg.f("deprem.time", 1.0f))
+            startQuake(cfg.i("deprem.magnitude", 7), cfg.f("deprem.seconds", 0.0f), t);
+        // darbe: at darbe.time a wrecking ball (darbe.agir: the heavy one) comes along darbe.from (a direction, m) at the
+        // ground-storey column at grid point darbe.kolon, half a metre under its middle
+        if (scenario == "darbe" && !struck && t >= cfg.f("darbe.time", 1.0f)) {
+            const float3 ij = cfg.v3("darbe.kolon", make_float3(0, 0, 0));
+            const float3 p = make_float3(float(ij.x * spec.spanX), float(0.5 * spec.level(1) - 0.5), float(ij.y * spec.spanZ));
+            const float3 from = p + cfg.v3("darbe.from", make_float3(-8.0f, 1.0f, -4.0f));
+            const int b = strike(from, p, cfg.i("darbe.agir", 0) != 0);
+            std::printf("t=%.2f s: yikim topu %d (%.0f kg) kolona (%.0f, %.0f), hedef (%.2f %.2f %.2f)\n", t, b, world.info[b].mass, ij.x, ij.y, p.x, p.y,
+                        p.z);
+        }
         driveQuake(t);
     }
-    // a quake of this magnitude (quake.h) starts at scenario time t; the ground moves relative to where it stands
-    bool startQuake(int magnitude, double t) {
+    // a quake of this magnitude (quake.h) starts at scenario time t, for seconds (0: the magnitude's own, < 0: until
+    // stopped); the ground moves relative to where it stands
+    bool startQuake(int magnitude, double seconds, double t) {
         std::string err;
-        if (!quakeLoadMagnitude(magnitude, root, quake, err)) {
+        if (!quakePlay(magnitude, seconds, root, quake, err)) {
             std::printf("deprem yuklenemedi: %s\n", err.c_str());
             return false;
         }
@@ -165,35 +196,41 @@ struct YikimApp {
         quakeMag = magnitude;
         quakeT0 = t;
         groundBase = world.groundPos();
-        std::printf("t=%.2f s: deprem %s, yatay tepe ivme %.3f g (%.1f. sn), %.1f sn\n", t, quake.name.c_str(), quake.pga / 9.81, quake.tPeak,
-                    quake.duration());
+        if (quake.endless()) std::printf("t=%.2f s: deprem %s, yatay tepe ivme %.3f g, durdurulana kadar\n", t, quake.rec.name.c_str(), quake.rec.pga / 9.81);
+        else std::printf("t=%.2f s: deprem %s, yatay tepe ivme %.3f g (%.1f. sn), %.1f sn\n", t, quake.rec.name.c_str(), quake.rec.pga / 9.81, quake.rec.tPeak,
+                         quake.length);
         return true;
     }
-    void stopQuake() { quakeOn = false; }   // the ground stays where it was
-    double quakeProgress(double t) const { return quakeOn ? std::min(1.0, (t - quakeT0) / std::max(quake.duration(), 1e-6)) : 0.0; }
+    // the ground fades back to rest over QuakePlay::kStopFade
+    void stopQuake(double t) {
+        if (quakeOn) quake.stop(t - quakeT0);
+    }
+    double quakeTime(double t) const { return quakeOn ? t - quakeT0 : 0.0; }
     void driveQuake(double t) {
         if (!quakeOn) return;
         const double tr = t - quakeT0;
-        if (tr > quake.duration()) { quakeOn = false; world.setGroundMotion(groundBase); return; }
+        if (quake.over(tr)) { quakeOn = false; world.setGroundMotion(groundBase); return; }
         world.setGroundMotion(groundBase + quake.displacement(tr));
     }
-    // an explosive charge at p: bodies whose centre is within r are gone, those within 3r are thrown outwards
-    int blast(float3 p, float r) {
-        world.download();
-        int n = 0;
-        for (size_t i = 1; i < world.pos.size(); ++i) {
-            if (world.kinematic[i]) continue;
-            const float3 d = f3(world.pos[i]) - p;
-            const float dl = length(d);
-            if (dl < r) {
-                world.removeBody(int(i));
-                ++n;
-            } else if (dl < 3.0f * r) {
-                const float k = cfg.f("patlama.hiz", 6.0f) * (1.0f - dl / (3.0f * r));
-                world.setVelocity(int(i), world.vel[i] + d * (k / dl), world.angVel[i]);
-            }
-        }
-        return n;
+    // a wrecking ball thrown at p from the direction of `from` (the camera): it appears a few metres short of p and
+    // arrives at darbe.hiz, aimed above the line by what gravity takes on the way. What breaks is the solver's
+    // business: the ball is a body like the others. Returns the ball's body.
+    int strike(float3 from, float3 p, bool heavy) {
+        std::vector<int>& pool = heavy ? heavyBalls : balls;
+        if (pool.empty()) return 0;
+        int& next = heavy ? nextHeavy : nextBall;
+        const int b = pool[size_t(next) % pool.size()];
+        next = (next + 1) % int(pool.size());
+        const float dist = length(p - from);
+        const float3 dir = dist > 1e-4f ? (p - from) * (1.0f / dist) : make_float3(0, 0, 1);
+        const float speed = cfg.f("darbe.hiz", 14.0f);
+        const float s = std::min(cfg.f("darbe.mesafe", 6.0f), std::max(1.5f, dist - 1.0f));   // where it appears, back along the line
+        const float T = s / speed;   // on the way: start + v T - g T^2 / 2 = p
+        const float3 start = p - dir * s;
+        const float3 v = dir * speed + make_float3(0.0f, 0.5f * world.params.gravity * T, 0.0f);
+        world.launchBody(b, d3(start), make_float4(0, 0, 0, 1), v, make_float3(0, 0, 0));
+        struck = b;
+        return b;
     }
 };
 

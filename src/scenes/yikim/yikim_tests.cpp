@@ -2,6 +2,7 @@
 // were written before the first run. Exit code 0 only if all pass.
 #include "scenes/yikim/building.h"
 #include "scenes/yikim/fly_camera.h"
+#include "scenes/yikim/quake.h"
 #include "scenes/yikim/yikim_scenes.h"
 
 #include <algorithm>
@@ -514,6 +515,45 @@ void testControls(const Config&) {
     report("kontrol: fare asagi, bakis asagi", u.forward().y < c.forward().y, "%.3f", u.forward().y, "< %.3f", c.forward().y);
 }
 
+// The quake for any length (quake.h). Longer than a magnitude's own it loops the record's strong part: where the
+// loop wraps, the ground's position, speed and acceleration must not step more than they do from one sample to the
+// next inside it (a step there is a jolt the building would feel every period), and it must not wander off: it may
+// reach about as far from where it started as the magnitude's own record does.
+void testQuakeLoop(const Config&) {
+#ifndef PROJECT_ROOT
+#define PROJECT_ROOT "."
+#endif
+    double seam[3] = {0, 0, 0}, reach = 0;
+    int worstReach = 0;
+    auto hlen = [](double3 v) { return std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z); };
+    for (int m = quakeMagnitudeMin(); m <= quakeMagnitudeMax(); ++m) {
+        QuakePlay loop, own;
+        std::string err;
+        if (!quakePlay(m, -1.0, PROJECT_ROOT, loop, err) || !quakePlay(m, 0.0, PROJECT_ROOT, own, err)) {
+            report("deprem dongusu: kayit yuklenir", false, "%.0f", 0.0, "%.0f", 1.0);
+            std::printf("    %s\n", err.c_str());
+            return;
+        }
+        const std::vector<double3>* series[3] = {&loop.rec.disp, &loop.rec.vel, &loop.rec.acc};
+        for (int k = 0; k < 3; ++k) {
+            const std::vector<double3>& x = *series[k];
+            double inside = 0.0;
+            for (size_t i = 0; i + 1 < x.size(); ++i) inside = std::max(inside, hlen(x[i + 1] - x[i]));
+            seam[k] = std::max(seam[k], hlen(x.front() - x.back()) / std::max(inside, 1e-12));
+        }
+        double far = 0.0, farOwn = 0.0;
+        for (const double3& d : loop.rec.disp) far = std::max(far, hlen(d));
+        for (const double3& d : own.rec.disp) farOwn = std::max(farOwn, hlen(d));
+        if (far / std::max(farOwn, 1e-9) > reach) { reach = far / std::max(farOwn, 1e-9); worstReach = m; }
+        std::printf("      buyukluk %d: dongu %.1f sn, zeminin en uzak gittigi %.3f m (kendi kaydi %.3f m)\n", m, loop.rec.dt * loop.rec.disp.size(), far,
+                    farOwn);
+    }
+    report("deprem dongusu: dikiste yer degistirme / icteki en buyuk adim", seam[0] <= 1.0, "%.2f", seam[0], "<= %.1f", 1.0);
+    report("deprem dongusu: dikiste hiz / icteki en buyuk adim", seam[1] <= 1.0, "%.2f", seam[1], "<= %.1f", 1.0);
+    report("deprem dongusu: dikiste ivme / icteki en buyuk adim", seam[2] <= 1.0, "%.2f", seam[2], "<= %.1f", 1.0);
+    report("deprem dongusu: en uzak / kendi kaydininki (en kotusu " + std::to_string(worstReach) + ")", reach <= 2.0, "%.2f", reach, "<= %.1f", 2.0);
+}
+
 }   // namespace
 
 int runYikimTests(const Config& cfg, const std::string& only) {
@@ -521,7 +561,8 @@ int runYikimTests(const Config& cfg, const std::string& only) {
     std::printf("YIKIM fizik testleri (alt adim %d)\n", cfg.i("phys.substeps", 20));
     struct T { const char* name; void (*fn)(const Config&); };
     const T tests[] = {{"dusme", testFallTiming}, {"dusme", testFreeFall}, {"yigin", testStacks}, {"egim", testSlope},
-                       {"konsol", testCantilever}, {"mafsal", testHinge}, {"enerji", testEnergy}, {"determinizm", testDeterminism}, {"cerceve", testFrame}, {"bina", testBuilding}, {"kontrol", testControls}};
+                       {"konsol", testCantilever}, {"mafsal", testHinge}, {"enerji", testEnergy}, {"determinizm", testDeterminism}, {"cerceve", testFrame}, {"bina", testBuilding}, {"kontrol", testControls},
+                       {"dongu", testQuakeLoop}};
     for (const T& t : tests)
         if (only.empty() || only == t.name) t.fn(cfg);
     int fails = 0;

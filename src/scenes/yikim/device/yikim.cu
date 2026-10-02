@@ -52,9 +52,14 @@ static __forceinline__ __device__ Hit trace(float3 o, float3 d, float tmax) {
     const YMesh m = params.meshes[h.body];
     const uint3 tri = m.idx[prim];
     const float3 v0 = m.pos[tri.x], v1 = m.pos[tri.y], v2 = m.pos[tri.z];
-    h.n = normalize(xformN(cross(v1 - v0, v2 - v0)));
-    if (dot(h.n, d) > 0.0f) h.n = -h.n;
     h.t = optixHitObjectGetRayTmax();
+    if (h.body < params.barInstance && params.bodies[h.body].sphere > 0.0f) {   // a ball: round, not faceted
+        const float* c = params.xfCur + size_t(h.body) * params.xfStride;
+        h.n = normalize(o + d * h.t - make_float3(c[3], c[7], c[11]));
+    } else {
+        h.n = normalize(xformN(cross(v1 - v0, v2 - v0)));
+    }
+    if (dot(h.n, d) > 0.0f) h.n = -h.n;
     return h;
 }
 static __forceinline__ __device__ bool visible(float3 o, float3 d, float tmax) {

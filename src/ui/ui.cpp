@@ -116,9 +116,9 @@ struct Face {
 };
 Face g_faces[int(Font::Count)];
 
-// the letters baked: ASCII, Latin-1, Latin Extended-A (Turkish), dashes and quotes, arrows
+// the letters baked: ASCII, Latin-1, Latin Extended-A (Turkish), dashes and quotes, arrows, minus and infinity
 struct Range { int first, count; };
-const Range kRanges[] = {{32, 95}, {160, 96}, {256, 128}, {0x2010, 0x28}, {0x2190, 4}, {0x2022, 1}, {0x2026, 1}};
+const Range kRanges[] = {{32, 95}, {160, 96}, {256, 128}, {0x2010, 0x28}, {0x2190, 4}, {0x2022, 1}, {0x2026, 1}, {0x2212, 1}, {0x221E, 1}};
 
 struct Baked {
     GLuint tex = 0;
@@ -544,18 +544,18 @@ float measure(const std::string& utf8, const TextStyle& s) {
     return layout(decode(s.upper ? upperTR(utf8) : utf8), s, b, 0, 0, false);
 }
 
-float textWrapped(float x, float y, float width, const std::string& utf8, const TextStyle& s, float lineSpacing, int maxLines) {
+static float wrapped(bool draw, float x, float y, float width, const std::string& utf8, const TextStyle& s, float lineSpacing, int maxLines) {
     const float lh = lineHeight(s) * lineSpacing;
     std::string line, word;
     float yy = y;
     int lines = 0;
     auto flush = [&](bool last) {
         if (maxLines > 0 && lines == maxLines - 1 && !last) {
-            text(x, yy, line + "…", s);
+            if (draw) text(x, yy, line + "…", s);
             ++lines;
             return false;
         }
-        text(x, yy, line, s);
+        if (draw) text(x, yy, line, s);
         yy += lh;
         ++lines;
         line.clear();
@@ -580,6 +580,13 @@ float textWrapped(float x, float y, float width, const std::string& utf8, const 
     }
     if (!line.empty()) flush(true);
     return yy - y;
+}
+
+float textWrapped(float x, float y, float width, const std::string& utf8, const TextStyle& s, float lineSpacing, int maxLines) {
+    return wrapped(true, x, y, width, utf8, s, lineSpacing, maxLines);
+}
+float measureWrapped(float width, const std::string& utf8, const TextStyle& s, float lineSpacing) {
+    return wrapped(false, 0.0f, 0.0f, width, utf8, s, lineSpacing, 0);
 }
 
 }   // namespace ui

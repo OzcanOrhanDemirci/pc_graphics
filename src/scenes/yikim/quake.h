@@ -5,6 +5,7 @@
 #pragma once
 #include "scenes/yikim/ymath.h"
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -39,4 +40,33 @@ struct QuakeMagnitude {
 int quakeMagnitudeMin();
 int quakeMagnitudeMax();
 const QuakeMagnitude* quakeMagnitude(int magnitude);   // null outside 3..9
-bool quakeLoadMagnitude(int magnitude, const std::string& root, QuakeRecord& q, std::string& err);
+// window: the strong-motion length to keep, s (0: the magnitude's own)
+bool quakeLoadMagnitude(int magnitude, const std::string& root, QuakeRecord& q, std::string& err, double window = 0.0);
+
+// The earthquake as the ground plays it, for any length. Up to the magnitude's own length it is the record above, cut
+// to that length (at its own length exactly the measured one). Longer, or until stopped, the record's strong part
+// plays as a seamless loop: its end crossfaded into its start (equal power: the two parts are unrelated, so their
+// energies add), integrated around the loop with the mean taken out of acceleration and velocity, so that velocity and
+// displacement close on themselves (periodic ground motion, no drift), brought in and out by a smooth envelope over the
+// record's own rise and fall. A stop fades the ground back over a moment instead of freezing it (a frozen ground is a
+// jolt: its velocity drops to zero within a step).
+struct QuakePlay {
+    int magnitude = 0;
+    double length = 0.0;          // s of shaking; <= 0: until stopped
+    bool loop = false;
+    QuakeRecord rec;              // the record, or one period of the loop
+    double rise = 0.0, fall = 0.0;
+    double stopAt = -1.0;         // play time at which a stop began (-1: none)
+    double stopGain = 1.0;        // the envelope then
+    static constexpr double kStopFade = 1.5;   // s
+    double gain(double t) const;                // the envelope: 1 for the record until a stop
+    double3 displacement(double t) const;       // where the ground is, relative to where it stood at the start
+    bool over(double t) const;
+    bool endless() const { return length <= 0.0; }
+    bool stopping() const { return stopAt >= 0.0; }
+    void stop(double t);
+    double progress(double t) const { return endless() ? 0.0 : std::min(1.0, std::max(0.0, t / length)); }
+};
+double quakeOwnSeconds(int magnitude);   // the strong-motion length of a magnitude (its record's window)
+// seconds: the shaking's length; 0: the magnitude's own; < 0: until stopped
+bool quakePlay(int magnitude, double seconds, const std::string& root, QuakePlay& q, std::string& err);

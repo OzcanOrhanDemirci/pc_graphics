@@ -37,14 +37,19 @@ std::vector<std::string> splitCaps(const std::string& keys) {
 
 // ---------------------------------------------------------------------------------------------------
 // small pieces
-float App::keyCaps(float x, float y, const std::string& keys, float height) {
-    const ui::TextStyle t = theme::mono(S_, 14.5f);
+// key caps; dark: on a button in the accent colour (dark ink on a slightly darker cap)
+float App::keyCaps(float x, float y, const std::string& keys, float height, float alpha, bool dark) {
+    const ui::TextStyle t = theme::mono(S_, 14.5f, dark ? ui::hex(0x0B0B0C, 0.85f * alpha) : ui::withAlpha(theme::text(), alpha));
     float cx = x;
     for (const std::string& k : splitCaps(keys)) {
         const float w = std::max(height, ui::measure(k, t) + S_(18));
         const ui::Rect r{cx, y, w, height};
-        ui::rect(ui::Rect{r.x, r.y + S_(2), r.w, r.h}, ui::hex(0x000000, 0.35f), S_(7));
-        ui::panel(r, theme::capFill(), theme::capBorder(), S_(7), std::max(1.0f, S_(1)));
+        if (dark) {
+            ui::panel(r, ui::hex(0x000000, 0.12f * alpha), ui::hex(0x000000, 0.25f * alpha), S_(7), std::max(1.0f, S_(1)));
+        } else {
+            ui::rect(ui::Rect{r.x, r.y + S_(2), r.w, r.h}, ui::hex(0x000000, 0.35f * alpha), S_(7));
+            ui::panel(r, ui::withAlpha(theme::capFill(), alpha), ui::withAlpha(theme::capBorder(), alpha), S_(7), std::max(1.0f, S_(1)));
+        }
         ui::text(cx + 0.5f * (w - ui::measure(k, t)), y + 0.5f * (height - ui::lineHeight(t)), k, t);
         cx += w + S_(6);
     }
@@ -119,41 +124,66 @@ void App::drawGallery(double now) {
     ui::image(pictures_[selected_].sharp, card, S_(20), appear * swap, zoom);
     ui::rectGradient(ui::Rect{card.x, card.y + card.h * 0.52f, card.w, card.h * 0.48f}, ui::hex(0x050506, 0.0f), ui::hex(0x050506, 0.78f * appear), S_(20));
     ui::stroke(card, ui::hex(0xFFFFFF, 0.09f * appear), S_(20), std::max(1.0f, S_(1)));
-    {
+    // the details over the picture (A): how far open, 0..1
+    const float detailsOpen = [&] {
+        const float t = smooth(float((now - detailsAt_) / 0.28));
+        return details_ ? t : 1.0f - t;
+    }();
+    {   // the picture's own words step aside while the details cover it
+        const float on = swap * appear * (1.0f - detailsOpen);
         float tx = card.x + S_(44), ty = card.y + card.h - S_(150);
-        ui::text(tx, ty, cur.number + "  ·  " + cur.title, theme::caption(S_, ui::withAlpha(accentText(cur), swap * appear)));
+        ui::text(tx, ty, cur.number + "  ·  " + cur.title, theme::caption(S_, ui::withAlpha(accentText(cur), on)));
         ty += S_(40);
-        ui::text(tx, ty, cur.subtitle, theme::serif(S_, 34.0f, ui::withAlpha(theme::text(), swap * appear)));
+        ui::text(tx, ty, cur.subtitle, theme::serif(S_, 34.0f, ui::withAlpha(theme::text(), on)));
         ty += S_(58);
         float cx = tx;
-        const ui::TextStyle ts = {ui::Font::SansMedium, S_(14.0f), ui::withAlpha(theme::text(), 0.85f * swap * appear), S_(1.2f), true};
+        const ui::TextStyle ts = {ui::Font::SansMedium, S_(14.0f), ui::withAlpha(theme::text(), 0.85f * on), S_(1.2f), true};
         for (const std::string& tag : cur.tags) {
             const float w = ui::measure(tag, ts) + S_(26);
             const ui::Rect pr{cx, ty, w, S_(30)};
-            ui::panel(pr, ui::hex(0x000000, 0.35f * swap * appear), ui::hex(0xFFFFFF, 0.22f * swap * appear), S_(15), std::max(1.0f, S_(1)));
+            ui::panel(pr, ui::hex(0x000000, 0.35f * on), ui::hex(0xFFFFFF, 0.22f * on), S_(15), std::max(1.0f, S_(1)));
             ui::text(cx + S_(13), ty + 0.5f * (S_(30) - ui::lineHeight(ts)), tag, ts);
             cx += w + S_(10);
         }
     }
 
-    // under the picture: what it is, and the way in
+    // over the picture, when asked for: how it is made
+    if (detailsOpen > 0.003f) drawDetails(card, detailsOpen);
+
+    // under the picture: what it is, and the ways in (how it is made; open it)
     const float y2 = card.y + card.h + S_(46);
-    ui::textWrapped(card.x, y2, card.w - S_(470), cur.description, theme::body(S_, ui::withAlpha(theme::muted(), appear * swap)), 1.5f, 4);
     {
+        const float bh = S_(66);
         const ui::TextStyle bt = {ui::Font::SansSemiBold, S_(21.0f), ui::hex(0x0B0B0C), 0.0f, false};
-        const std::string label = "Sahneyi aç";
-        const float capW = ui::measure("Enter", theme::mono(S_, 14.5f)) + S_(18);
-        const float bw = ui::measure(label, bt) + capW + S_(86), bh = S_(66);
-        openButton_ = ui::Rect{card.x + card.w - bw, y2, bw, bh};
-        const bool hot = openButton_.contains(float(mouseX_), float(mouseY_));
-        ui::shadow(openButton_, bh * 0.5f, S_(20), ui::withAlpha(accentOf(cur), 0.35f * appear));
-        ui::rect(openButton_, ui::mix(accentOf(cur, appear), ui::hex(0xFFFFFF, appear), hot ? 0.18f : 0.0f), bh * 0.5f);
-        ui::text(openButton_.x + S_(34), openButton_.y + 0.5f * (bh - ui::lineHeight(bt)), label, bt);
-        const ui::Rect cap{openButton_.x + bw - capW - S_(22), openButton_.y + 0.5f * (bh - S_(30)), capW, S_(30)};
-        ui::panel(cap, ui::hex(0x000000, 0.12f), ui::hex(0x000000, 0.25f), S_(7), std::max(1.0f, S_(1)));
-        const ui::TextStyle ct = theme::mono(S_, 14.5f, ui::hex(0x0B0B0C, 0.85f));
-        ui::text(cap.x + 0.5f * (cap.w - ui::measure("Enter", ct)), cap.y + 0.5f * (cap.h - ui::lineHeight(ct)), "Enter", ct);
+        const float mx = float(mouseX_), my = float(mouseY_);
+        auto capW = [&](const std::string& k) { return std::max(S_(30), ui::measure(k, theme::mono(S_, 14.5f)) + S_(18)); };
+        {   // open: in the scene's colour
+            const std::string label = "Sahneyi aç";
+            const float bw = ui::measure(label, bt) + capW("Enter") + S_(86);
+            openButton_ = ui::Rect{card.x + card.w - bw, y2, bw, bh};
+            const bool hot = openButton_.contains(mx, my);
+            ui::shadow(openButton_, bh * 0.5f, S_(20), ui::withAlpha(accentOf(cur), 0.35f * appear));
+            ui::rect(openButton_, ui::mix(accentOf(cur, appear), ui::hex(0xFFFFFF, appear), hot ? 0.18f : 0.0f), bh * 0.5f);
+            ui::text(openButton_.x + S_(34), openButton_.y + 0.5f * (bh - ui::lineHeight(bt)), label, bt);
+            keyCaps(openButton_.x + bw - capW("Enter") - S_(22), openButton_.y + 0.5f * (bh - S_(30)), "Enter", S_(30), appear, true);
+        }
+        {   // how it is made: glass, before it
+            const std::string label = details_ ? "Ayrıntıları kapat" : "Ayrıntılar";
+            ui::TextStyle dt = bt;
+            dt.font = ui::Font::SansMedium;
+            dt.color = ui::withAlpha(theme::text(), appear);
+            const float bw = ui::measure(label, dt) + capW("A") + S_(86);
+            detailsButton_ = ui::Rect{openButton_.x - S_(16) - bw, y2, bw, bh};
+            const bool hot = detailsButton_.contains(mx, my);
+            const float fill = details_ ? 0.16f : hot ? 0.12f : 0.06f;
+            ui::panel(detailsButton_, ui::hex(0xFFFFFF, fill * appear), ui::hex(0xFFFFFF, (hot || details_ ? 0.34f : 0.20f) * appear), bh * 0.5f,
+                      std::max(1.0f, S_(1)));
+            ui::text(detailsButton_.x + S_(34), detailsButton_.y + 0.5f * (bh - ui::lineHeight(dt)), label, dt);
+            keyCaps(detailsButton_.x + bw - capW("A") - S_(22), detailsButton_.y + 0.5f * (bh - S_(30)), "A", S_(30), appear);
+        }
     }
+    ui::textWrapped(card.x, y2 - S_(4), detailsButton_.x - S_(48) - card.x, cur.description,
+                    theme::body(S_, ui::withAlpha(theme::muted(), appear * swap)), 1.5f, 3);
 
     // the bottom line: keys on the left, the machine on the right
     const float by = H - S_(84);
@@ -161,12 +191,62 @@ void App::drawGallery(double now) {
     float bx = x0;
     bx += keyHint(bx, by, "↑|↓", "Seç") + S_(34);
     bx += keyHint(bx, by, "Enter", "Aç") + S_(34);
-    bx += keyHint(bx, by, "Esc", "Çık");
+    bx += keyHint(bx, by, "A", "Ayrıntılar") + S_(34);
+    bx += keyHint(bx, by, "Esc", details_ ? "Ayrıntıları kapat" : "Çık");
     const std::string sys = gpuName_ + "  ·  OptiX 9.1  ·  CUDA 13.4  ·  " + std::to_string(fbw_) + "×" + std::to_string(fbh_);
     const ui::TextStyle st = theme::mono(S_, 14.0f, theme::faint());
     ui::text(W - S_(150) - ui::measure(sys, st), by + 0.5f * (S_(30) - ui::lineHeight(st)), sys, st);
     drawToasts(now);
     ui::end();
+}
+
+// the gallery's "Ayrıntılar": how the selected scene is made, over its picture, in two columns balanced by height
+void App::drawDetails(const ui::Rect& area, float a) {
+    const SceneInfo& si = infos_[selected_];
+    const ui::Rect P{area.x, area.y + (1.0f - a) * S_(16), area.w, area.h};
+    ui::shadow(P, S_(20), S_(40), ui::hex(0x000000, 0.5f * a));
+    ui::panel(P, ui::hex(0x0B0C0F, 0.975f * a), ui::hex(0xFFFFFF, 0.10f * a), S_(20), std::max(1.0f, S_(1)));
+    const float pad = S_(54);
+    float y = P.y + S_(46);
+    ui::text(P.x + pad, y, si.number + "  ·  " + si.title + "  ·  nasıl yapıldı", theme::caption(S_, ui::withAlpha(accentText(si), a)));
+    y += S_(34);
+    ui::rect(ui::Rect{P.x + pad, y, P.w - 2 * pad, std::max(1.0f, S_(1))}, ui::hex(0xFFFFFF, 0.08f * a));
+    y += S_(30);
+    const float gapC = S_(60), colW = (P.w - 2 * pad - gapC) * 0.5f;
+    const ui::TextStyle head = {ui::Font::SansSemiBold, S_(23.0f), ui::withAlpha(theme::text(), a), 0.0f, false};
+    const ui::TextStyle body = {ui::Font::Sans, S_(20.5f), ui::withAlpha(theme::muted(), a), 0.0f, false};
+    const float spacing = 1.5f, headGap = S_(12), after = S_(40);
+    std::vector<float> hs;
+    float total = 0.0f;
+    for (const Detail& d : si.details) {
+        hs.push_back(ui::lineHeight(head) + headGap + ui::measureWrapped(colW, d.text, body, spacing) + after);
+        total += hs.back();
+    }
+    int split = 0;   // the first `split` sections go left: the taller column as short as the order allows
+    float best = 1e30f, left = 0.0f;
+    for (int i = 0; i <= int(hs.size()); ++i) {
+        if (std::max(left, total - left) < best) { best = std::max(left, total - left); split = i; }
+        if (i < int(hs.size())) left += hs[i];
+    }
+    {   // the columns sit in the middle of the room below the rule (a little high)
+        float tall = 0.0f, l = 0.0f;
+        for (int i = 0; i < int(hs.size()); ++i) l += i < split ? hs[i] : 0.0f;
+        tall = std::max(l, total - l) - after;
+        const float room = P.y + P.h - S_(40) - y;
+        if (tall < room) y += 0.4f * (room - tall);
+    }
+    const ui::Rect clip{P.x, P.y, P.w, P.h - S_(20)};
+    ui::scissor(&clip);
+    float yy[2] = {y, y};
+    for (int i = 0; i < int(si.details.size()); ++i) {
+        const int col = i < split ? 0 : 1;
+        const float x = P.x + pad + col * (colW + gapC);
+        ui::rect(ui::Rect{x, yy[col] + S_(4), S_(3), ui::lineHeight(head) - S_(8)}, accentOf(si, a), S_(1.5f));
+        ui::text(x + S_(16), yy[col], si.details[i].title, head);
+        yy[col] += ui::lineHeight(head) + headGap;
+        yy[col] += ui::textWrapped(x, yy[col], colW, si.details[i].text, body, spacing) + after;
+    }
+    ui::scissor(nullptr);
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -240,7 +320,8 @@ void App::drawHud(double now, const Status& st) {
     const float slide = (1.0f - in) * S_(30);
     const float m = S_(34), pad = S_(22);
 
-    // ---- bottom left: number, name, state; a selector or a progress bar under it
+    // ---- bottom left: number, name, state; the scene's controls under it (titles in one column, their rows lined up);
+    // a progress bar last
     const ui::TextStyle chipT = {ui::Font::SansMedium, S_(15.5f), theme::text(), 0.0f, false};
     const float row1 = S_(34);
     float w1 = 0.0f;
@@ -249,20 +330,43 @@ void App::drawHud(double now, const Status& st) {
         w1 += ui::measure(si.title, theme::caption(S_)) + S_(22);
         for (const Chip& c : st.chips) w1 += ui::measure(c.text, chipT) + S_(28) + S_(8);
     }
-    float h2 = 0.0f, w2 = 0.0f;
     const ui::TextStyle detailT = theme::small(S_);
-    if (!st.selector.items.empty()) {
-        const float seg = S_(48), gap = S_(8);
-        w2 = ui::measure(st.selector.title, theme::caption(S_, theme::faint())) + S_(20) + st.selector.items.size() * (seg + gap) - gap;
-        w2 = std::max(w2, ui::measure(st.selector.detail, detailT));
-        h2 = S_(16) + seg + S_(14) + ui::lineHeight(detailT);
+    const ui::TextStyle titleT = theme::caption(S_, ui::withAlpha(theme::faint(), in));
+    const ui::TextStyle valueT = theme::mono(S_, 17.0f, ui::withAlpha(theme::text(), in));
+    const ui::TextStyle buttonT = {ui::Font::SansSemiBold, S_(18.0f), theme::text(), 0.0f, false};
+    const float seg = S_(48), gap = S_(8), sliderH = S_(40), buttonH = S_(54), rowGap = S_(16), detailGap = S_(10);
+    float titleW = 0.0f, contentW = 0.0f;
+    for (const Control& c : st.controls)
+        if (!c.title.empty()) titleW = std::max(titleW, ui::measure(c.title, titleT) + S_(22));
+    float trackW = S_(300);
+    for (const Control& c : st.controls)
+        if (c.kind == Control::Kind::Choice) trackW = std::max(trackW, float(c.items.size()) * (seg + gap) - gap - S_(90));
+    auto capsWidth = [&](const std::string& keys, float hh) {
+        float w = 0.0f;
+        for (const std::string& k : splitCaps(keys)) w += std::max(hh, ui::measure(k, theme::mono(S_, 14.5f)) + S_(18)) + S_(6);
+        return keys.empty() ? 0.0f : w - S_(6);
+    };
+    for (const Control& c : st.controls) {
+        if (c.kind == Control::Kind::Choice) contentW = std::max(contentW, float(c.items.size()) * (seg + gap) - gap);
+        if (c.kind == Control::Kind::Slider) contentW = std::max(contentW, trackW + S_(22) + std::max(S_(70), ui::measure(c.text, valueT)));
+        if (c.kind == Control::Kind::Button)
+            contentW = std::max(contentW, S_(26) + ui::measure(c.text, buttonT) + S_(30) + capsWidth(c.keys, S_(28)) + S_(14));
+    }
+    float h2 = 0.0f, w2 = st.controls.empty() ? 0.0f : titleW + contentW;
+    for (const Control& c : st.controls) {
+        h2 += rowGap + (c.kind == Control::Kind::Choice ? seg : c.kind == Control::Kind::Slider ? sliderH : buttonH);
+        if (!c.detail.empty()) {
+            h2 += detailGap + ui::lineHeight(detailT);
+            w2 = std::max(w2, titleW + ui::measure(c.detail, detailT));
+        }
     }
     if (st.progress >= 0.0f) {
         w2 = std::max(w2, std::max(S_(420), ui::measure(st.progressLabel, detailT)));
-        h2 += S_(18) + ui::lineHeight(detailT) + S_(10) + S_(4);
+        h2 += S_(20) + ui::lineHeight(detailT) + S_(10) + S_(4);
     }
     const float pw = std::max(w1, w2) + 2 * pad, ph = row1 + h2 + 2 * pad - S_(6);
     const ui::Rect P{m, H - m - ph + slide, pw, ph};
+    panels_.push_back(P);
     ui::shadow(P, S_(18), S_(28), ui::hex(0x000000, 0.45f * in));
     ui::panel(P, ui::withAlpha(theme::glass(), in), ui::withAlpha(theme::glassBorder(), in), S_(18), std::max(1.0f, S_(1)));
     float x = P.x + pad, y = P.y + pad - S_(3);
@@ -283,36 +387,87 @@ void App::drawHud(double now, const Status& st) {
         }
     }
     y += row1;
-    if (!st.selector.items.empty()) {
-        y += S_(16);
-        x = P.x + pad;
-        const float seg = S_(48), gap = S_(8);
-        const ui::TextStyle lt = theme::caption(S_, ui::withAlpha(theme::faint(), in));
-        x += ui::text(x, y + 0.5f * (seg - ui::lineHeight(lt)), st.selector.title, lt) + S_(20);
-        for (int i = 0; i < int(st.selector.items.size()); ++i) {
-            const ui::Rect r{x, y, seg, seg};
-            const bool on = i == st.selector.active;
-            if (on) {
-                ui::shadow(r, S_(12), S_(14), accentOf(si, 0.45f * in));
-                ui::rect(r, accentOf(si, in), S_(12));
-            } else {
-                ui::panel(r, ui::hex(0xFFFFFF, 0.05f * in), ui::hex(0xFFFFFF, 0.14f * in), S_(12), std::max(1.0f, S_(1)));
+    const float cx0 = P.x + pad + titleW;   // where the controls' rows begin
+    for (int ci = 0; ci < int(st.controls.size()); ++ci) {
+        const Control& c = st.controls[ci];
+        y += rowGap;
+        const float rowH = c.kind == Control::Kind::Choice ? seg : c.kind == Control::Kind::Slider ? sliderH : buttonH;
+        if (!c.title.empty()) ui::text(P.x + pad, y + 0.5f * (rowH - ui::lineHeight(titleT)), c.title, titleT);
+        const float mx = float(mouseX_), my = float(mouseY_);   // hover is drawn from where the mouse is now
+        if (c.kind == Control::Kind::Choice) {
+            float sx = cx0;
+            for (int i = 0; i < int(c.items.size()); ++i) {
+                const ui::Rect r{sx, y, seg, seg};
+                const bool on = i == c.active, over = !mouseCaptured_ && r.contains(mx, my);
+                if (on) {
+                    ui::shadow(r, S_(12), S_(14), accentOf(si, 0.45f * in));
+                    ui::rect(r, ui::mix(accentOf(si, in), ui::hex(0xFFFFFF, in), over ? 0.15f : 0.0f), S_(12));
+                } else {
+                    ui::panel(r, ui::hex(0xFFFFFF, (over ? 0.13f : 0.05f) * in), ui::hex(0xFFFFFF, (over ? 0.30f : 0.14f) * in), S_(12),
+                              std::max(1.0f, S_(1)));
+                }
+                const ui::TextStyle it = theme::mono(S_, 20.0f, on ? ui::hex(0x0B0B0C, in) : ui::withAlpha(theme::text(), (over ? 1.0f : 0.85f) * in));
+                ui::text(r.x + 0.5f * (seg - ui::measure(c.items[i], it)), r.y + 0.5f * (seg - ui::lineHeight(it)), c.items[i], it);
+                panelHits_.push_back({r, r, ci, i});
+                sx += seg + gap;
             }
-            const ui::TextStyle it = theme::mono(S_, 20.0f, on ? ui::hex(0x0B0B0C, in) : ui::withAlpha(theme::text(), 0.85f * in));
-            ui::text(r.x + 0.5f * (seg - ui::measure(st.selector.items[i], it)), r.y + 0.5f * (seg - ui::lineHeight(it)), st.selector.items[i], it);
-            x += seg + gap;
+        } else if (c.kind == Control::Kind::Slider) {
+            const float ty = y + 0.5f * sliderH, th = S_(4);
+            const ui::Rect track{cx0, ty - 0.5f * th, trackW, th};
+            const ui::Rect hit{cx0 - S_(14), y, trackW + S_(28), sliderH};
+            const bool over = dragControl_ == ci || (!mouseCaptured_ && hit.contains(mx, my));
+            const float v = std::min(1.0f, std::max(0.0f, c.value));
+            ui::rect(track, ui::hex(0xFFFFFF, 0.14f * in), th * 0.5f);
+            ui::rect(ui::Rect{track.x, track.y, std::max(th, trackW * v), th}, accentOf(si, in), th * 0.5f);
+            if (c.mark >= 0.0f) {   // the notch: the default
+                const float nx = track.x + trackW * std::min(1.0f, c.mark);
+                ui::rect(ui::Rect{nx - S_(1.5f), ty - S_(9), S_(3), S_(18)}, ui::hex(0xFFFFFF, 0.55f * in), S_(1.5f));
+            }
+            const float hx = track.x + trackW * v, hr = over ? S_(12) : S_(10);
+            ui::circle(hx, ty, hr + S_(5), accentOf(si, (over ? 0.35f : 0.20f) * in));
+            ui::circle(hx, ty, hr, ui::withAlpha(theme::text(), in));
+            ui::text(track.x + trackW + S_(22), y + 0.5f * (sliderH - ui::lineHeight(valueT)), c.text, valueT);
+            panelHits_.push_back({hit, ui::Rect{track.x, y, trackW, sliderH}, ci, -1});
+        } else {   // a button across the row
+            const ui::Rect r{cx0, y, contentW, buttonH};
+            const bool over = c.enabled && !mouseCaptured_ && r.contains(mx, my);
+            const float a = (c.enabled ? 1.0f : 0.45f) * in;
+            if (c.strong) {
+                if (c.enabled) ui::shadow(r, buttonH * 0.5f, S_(16), accentOf(si, 0.30f * a));
+                ui::rect(r, ui::mix(accentOf(si, a), ui::hex(0xFFFFFF, a), over ? 0.18f : 0.0f), buttonH * 0.5f);
+            } else {
+                ui::panel(r, ui::hex(0xFFFFFF, (over ? 0.14f : 0.07f) * a), ui::hex(0xFFFFFF, (over ? 0.32f : 0.18f) * a), buttonH * 0.5f,
+                          std::max(1.0f, S_(1)));
+            }
+            ui::TextStyle bt = buttonT;
+            bt.color = c.strong ? ui::hex(0x0B0B0C, a) : ui::withAlpha(theme::text(), a);
+            ui::text(r.x + S_(26), r.y + 0.5f * (buttonH - ui::lineHeight(bt)), c.text, bt);
+            if (!c.keys.empty()) {
+                const float kw = capsWidth(c.keys, S_(28));
+                keyCaps(r.x + r.w - S_(14) - kw, r.y + 0.5f * (buttonH - S_(28)), c.keys, S_(28), a, c.strong);
+            }
+            panelHits_.push_back({r, r, ci, 0});
         }
-        y += seg + S_(14);
-        ui::text(P.x + pad, y, st.selector.detail, theme::small(S_, ui::withAlpha(theme::muted(), in)));
-        y += ui::lineHeight(detailT);
+        y += rowH;
+        if (!c.detail.empty()) {
+            y += detailGap;
+            ui::text(cx0, y, c.detail, theme::small(S_, ui::withAlpha(theme::muted(), in)));
+            y += ui::lineHeight(detailT);
+        }
     }
     if (st.progress >= 0.0f) {
-        y += S_(18);
+        y += S_(20);
         ui::text(P.x + pad, y, st.progressLabel, theme::small(S_, ui::withAlpha(theme::text(), 0.9f * in)));
         y += ui::lineHeight(detailT) + S_(10);
         const float bw = P.w - 2 * pad;
         ui::rect(ui::Rect{P.x + pad, y, bw, S_(4)}, ui::hex(0xFFFFFF, 0.12f * in), S_(2));
-        ui::rect(ui::Rect{P.x + pad, y, std::max(S_(4), bw * std::min(1.0f, st.progress)), S_(4)}, accentOf(si, in), S_(2));
+        if (st.progressEndless) {   // no end: a stretch of light travels along the bar
+            const float g = float(std::fmod(now * 0.45, 1.0)), len = 0.28f;
+            const float x0 = std::max(0.0f, g * (1.0f + len) - len), x1 = std::min(1.0f, g * (1.0f + len));
+            if (x1 > x0) ui::rect(ui::Rect{P.x + pad + bw * x0, y, bw * (x1 - x0), S_(4)}, accentOf(si, in), S_(2));
+        } else {
+            ui::rect(ui::Rect{P.x + pad, y, std::max(S_(4), bw * std::min(1.0f, st.progress)), S_(4)}, accentOf(si, in), S_(2));
+        }
     }
 
     // ---- bottom right: help and the way back
@@ -327,6 +482,7 @@ void App::drawHud(double now, const Status& st) {
         };
         tw = hintW("F1", "Tuşlar") + hintW("H", "Gizle") + hintW("Esc", "Galeri") + 2 * S_(26);
         const ui::Rect R{W - m - tw - 2 * S_(18), H - m - hh - 2 * S_(16) + slide, tw + 2 * S_(18), hh + 2 * S_(16)};
+        panels_.push_back(R);
         ui::panel(R, ui::withAlpha(theme::glass(), in), ui::withAlpha(theme::glassBorder(), in), S_(16), std::max(1.0f, S_(1)));
         float hx = R.x + S_(18);
         hx += keyHint(hx, R.y + S_(16), "F1", "Tuşlar") + S_(26);
@@ -348,6 +504,7 @@ void App::drawHud(double now, const Status& st) {
         const float w = std::max(lw + S_(24) + vw, ui::measure(fpsS, big) + S_(70)) + 2 * S_(20);
         const float h = S_(20) + ui::lineHeight(big) + S_(10) + rows.size() * rowH + S_(14);
         const ui::Rect R{W - m - w, m - slide, w, h};
+        panels_.push_back(R);
         ui::panel(R, ui::withAlpha(theme::glass(), in), ui::withAlpha(theme::glassBorder(), in), S_(16), std::max(1.0f, S_(1)));
         float yy = R.y + S_(16);
         const float fw = ui::text(R.x + S_(20), yy, fpsS, theme::mono(S_, 30.0f, ui::withAlpha(theme::text(), in)));

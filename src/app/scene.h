@@ -1,8 +1,8 @@
 // The contract between the application and its scenes. A scene is a folder under src/scenes with its renderer, its
 // settings (scenes/<id>.cfg) and its OptiX programs; to the application it is this interface: what it is (shown in
-// the gallery), how it loads (in steps, on a worker thread, while the loading screen runs), one frame (input in, an
-// image out), what its interface panel should say, and how it lets go of the GPU. Adding a scene: implement Scene,
-// add one entry to src/app/registry.cpp.
+// the gallery, with how it is made), how it loads (in steps, on a worker thread, while the loading screen runs), one
+// frame (input in, an image out), what its interface panel should say and offer (controls), and how it lets go of
+// the GPU. Adding a scene: implement Scene, add one entry to src/app/registry.cpp.
 #pragma once
 #include "ui/ui.h"
 
@@ -23,12 +23,17 @@ struct KeyGroup {
     std::vector<KeyHelp> items;
 };
 
+struct Detail {                // a paragraph of the gallery's "Ayrıntılar": how the scene is made
+    std::string title, text;
+};
+
 struct SceneInfo {
     std::string id;            // command line and file names: --scene <id>, captures/<id>_...
     std::string number;        // "01"
     std::string title;         // "Altın Saat"
     std::string subtitle;      // one line under the title
-    std::string description;   // a paragraph for the gallery
+    std::string description;   // what it is, in a sentence or two (the gallery, under the picture)
+    std::vector<Detail> details;   // how it is made (the gallery's "Ayrıntılar", in two columns)
     std::vector<std::string> tags;
     std::string image;         // gallery picture, relative to the project root
     uint32_t accent = 0xE8B46A;
@@ -36,7 +41,15 @@ struct SceneInfo {
     bool reloadable = false;   // F5 reloads its settings and programs
 };
 
-// one frame of input, already stripped of the application's own keys
+// what was done to the panel's controls (see Control), by the control's id
+struct ControlEvent {
+    std::string id;
+    int item = -1;                       // Choice: the one clicked; Button: 0
+    float value = 0.0f;                  // Slider: where it is dragged, 0..1 (every frame while the button is held)
+    bool released = false;               // Slider: the drag ended
+};
+
+// one frame of input, already stripped of the application's own keys and of the clicks that went to the panel
 struct Input {
     double now = 0.0, dt = 0.0;          // seconds since the scene started, since the last frame
     std::vector<int> pressedKeys;        // GLFW key codes pressed since the last frame
@@ -47,6 +60,7 @@ struct Input {
     bool leftClicked = false, leftDown = false, rightDown = false;
     float scroll = 0.0f;
     ui::Rect view;                       // where the scene's picture is shown
+    std::vector<ControlEvent> events;    // the panel's controls
     bool pressed(int key) const;
     bool isDown(int key) const { return down && down(key); }
 };
@@ -59,19 +73,31 @@ struct Chip {
 struct Metric {
     std::string label, value;
 };
-struct Selector {                        // a row of choices (the earthquake's magnitude)
-    std::string title;
-    std::vector<std::string> items;
-    int active = -1;
-    std::string detail;                  // about the active one
-    std::string hint;
+// A control on the scene's panel. The application draws it, takes the mouse over it (the scene never sees those
+// clicks) and hands what was done back as events in the next frame's input, by id. The scene stays the owner of
+// the state: it says every frame what the control shows.
+struct Control {
+    enum class Kind { Choice, Slider, Button };
+    Kind kind = Kind::Choice;
+    std::string id;
+    std::string title;                   // on its left, in capitals ("BÜYÜKLÜK"); a button has none
+    std::vector<std::string> items;      // Choice: the choices
+    int active = -1;                     // Choice: the one chosen
+    float value = 0.0f;                  // Slider: the handle, 0..1
+    float mark = -1.0f;                  // Slider: a notch (the default), < 0 none
+    std::string text;                    // Slider: the value in words; Button: its label
+    std::string keys;                    // Button: the key that does the same, on a cap
+    bool strong = false;                 // Button: in the scene's colour
+    bool enabled = true;                 // Button: false shows it dimmed and ignores clicks
+    std::string detail;                  // a line under it
 };
 struct Status {
     std::vector<Chip> chips;
     std::vector<Metric> metrics;         // timings, top right
-    Selector selector;
+    std::vector<Control> controls;       // bottom left, under the scene's name
     std::string progressLabel;           // with progress >= 0: a bar
     float progress = -1.0f;
+    bool progressEndless = false;        // the bar runs without an end (until stopped)
 };
 
 // what the application offers a scene

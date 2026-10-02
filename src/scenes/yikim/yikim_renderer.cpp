@@ -383,6 +383,7 @@ void YikimRenderer::uploadWorld(const PhysWorld& w) {
         auto lin = [](unsigned v) { const float x = v / 255.0f; return x <= 0.04045f ? x / 12.92f : powf((x + 0.055f) / 1.055f, 2.4f); };
         b.albedo = make_float3(lin((c >> 16) & 255), lin((c >> 8) & 255), lin(c & 255));
         b.damage = 0.0f;
+        b.sphere = w.info[i].sphere;
         bodies_.push_back(b);
     }
     bodyInstances_ = int(inst.size());
@@ -421,6 +422,7 @@ void YikimRenderer::uploadWorld(const PhysWorld& w) {
         YBody b;
         b.albedo = make_float3(0.11f, 0.075f, 0.055f);
         b.damage = 0.0f;
+        b.sphere = 0.0f;
         bodies_.push_back(b);
     }
     instanceCount_ = int(inst.size());

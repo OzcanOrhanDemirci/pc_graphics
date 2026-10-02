@@ -214,3 +214,14 @@ float4 quatFromMatrixColumns(const double m[3][3]) {
     }
     return qnormalize(make_float4(float(x), float(y), float(z), float(w)));
 }
+
+Poly polySphere(double3 c, double r, int planes) {
+    Poly p = polyBox(c, d3(r, r, r));
+    const double golden = 3.14159265358979 * (3.0 - std::sqrt(5.0));
+    for (int k = 0; k < planes; ++k) {   // a Fibonacci lattice: directions spread evenly over the sphere
+        const double y = 1.0 - 2.0 * (k + 0.5) / planes, s = std::sqrt(std::max(0.0, 1.0 - y * y)), a = golden * k;
+        const double3 n = d3(s * std::cos(a), y, s * std::sin(a));
+        polyClip(p, n, ddot(n, c) + r, 0);
+    }
+    return p;
+}

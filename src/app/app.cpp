@@ -45,6 +45,59 @@ void App::onMouseButton(int button, int action) {
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) leftClick_ = true;
 }
 
+void App::setHandCursor(bool on) {
+    if (on == handShown_ || !win_) return;
+    handShown_ = on;
+    glfwSetCursor(win_, on ? handCursor_ : nullptr);
+}
+
+// The panel's controls take the mouse before the scene does: hovering (the hand), a click on a choice or a button, a
+// slider's drag (it keeps the mouse until the button is let go, wherever the cursor goes; a press on the track jumps
+// the handle there). A press anywhere on a panel is the panel's: the scene gets neither the click nor the held button.
+// The places come from the frame drawn last.
+std::vector<ControlEvent> App::panelInput(bool& clickTaken, bool& pressTaken) {
+    std::vector<ControlEvent> ev;
+    const float mx = float(mouseX_), my = float(mouseY_);
+    const bool held = virtualLeft_ || glfwGetMouseButton(win_, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+    const bool live = hud_ && !help_ && !mouseCaptured_;
+    hotHit_ = -1;
+    bool overPanel = false;
+    if (live) {
+        for (int k = 0; k < int(panelHits_.size()); ++k) {
+            const Control& c = panelControls_[panelHits_[k].control];
+            if (panelHits_[k].r.contains(mx, my) && (c.kind != Control::Kind::Button || c.enabled)) hotHit_ = k;
+        }
+        for (const ui::Rect& r : panels_) overPanel = overPanel || r.contains(mx, my);
+    }
+    if (leftClick_ && live) {
+        if (hotHit_ >= 0) {
+            const PanelHit& h = panelHits_[hotHit_];
+            const Control& c = panelControls_[h.control];
+            if (c.kind == Control::Kind::Slider) {
+                dragControl_ = h.control;
+                dragId_ = c.id;
+                dragTrack_ = h.track;
+            } else {
+                ev.push_back({c.id, c.kind == Control::Kind::Choice ? h.item : 0, 0.0f, false});
+            }
+        }
+        if (overPanel) pressOnPanel_ = true;
+    }
+    clickTaken = leftClick_ && (overPanel || !dragId_.empty());
+    if (!dragId_.empty()) {
+        const float v = std::min(1.0f, std::max(0.0f, (mx - dragTrack_.x) / std::max(1.0f, dragTrack_.w)));
+        ev.push_back({dragId_, -1, v, !held});
+        if (!held) {
+            dragId_.clear();
+            dragControl_ = -1;
+        }
+    }
+    pressTaken = pressOnPanel_ || !dragId_.empty();
+    if (!held) pressOnPanel_ = false;
+    setHandCursor(hotHit_ >= 0 || !dragId_.empty());
+    return ev;
+}
+
 bool App::consume(int key) {
     auto it = std::find(keyQueue_.begin(), keyQueue_.end(), key);
     if (it == keyQueue_.end()) return false;
@@ -136,6 +189,12 @@ void App::closeScene() {
         std::lock_guard<std::mutex> lock(toastMx_);
         toasts_.clear();
     }
+    panelHits_.clear();
+    panels_.clear();
+    panelControls_.clear();
+    dragId_.clear();
+    dragControl_ = hotHit_ = -1;
+    pressOnPanel_ = false;
     mode_ = Mode::Gallery;
     modeT0_ = nowSec();
     glfwSwapInterval(1);
@@ -153,19 +212,31 @@ void App::frameGallery(double now, double dt) {
     for (int i = 0; i < n && i < 9; ++i)
         if (consume(GLFW_KEY_1 + i)) select(i);
     hovered_ = -1;
+    const float mx = float(mouseX_), my = float(mouseY_);
     for (int i = 0; i < int(entryRects_.size()); ++i)
-        if (entryRects_[i].contains(float(mouseX_), float(mouseY_))) hovered_ = i;
+        if (entryRects_[i].contains(mx, my)) hovered_ = i;
+    auto toggleDetails = [&] {
+        details_ = !details_;
+        detailsAt_ = now;
+    };
     if (leftClick_) {
         if (hovered_ >= 0) select(hovered_);
-        else if (openButton_.contains(float(mouseX_), float(mouseY_))) keyQueue_.push_back(GLFW_KEY_ENTER);
+        else if (openButton_.contains(mx, my)) keyQueue_.push_back(GLFW_KEY_ENTER);
+        else if (detailsButton_.contains(mx, my)) toggleDetails();
     }
+    if (consume(GLFW_KEY_A)) toggleDetails();
+    setHandCursor(hovered_ >= 0 || openButton_.contains(mx, my) || detailsButton_.contains(mx, my));
     selAnim_ += (float(selected_) - selAnim_) * float(1.0 - std::exp(-dt * 14.0));
-    if (consume(GLFW_KEY_ENTER) || consume(GLFW_KEY_KP_ENTER)) { openScene(selected_); return; }
-    if (consume(GLFW_KEY_ESCAPE)) { quit_ = true; return; }
+    if (consume(GLFW_KEY_ENTER) || consume(GLFW_KEY_KP_ENTER)) { setHandCursor(false); openScene(selected_); return; }
+    if (consume(GLFW_KEY_ESCAPE)) {
+        if (details_) toggleDetails();   // Esc closes the details first
+        else { quit_ = true; return; }
+    }
     drawGallery(now);
 }
 
 void App::frameLoading(double now) {
+    setHandCursor(false);
     LoadState st;
     {
         std::lock_guard<std::mutex> lock(loadMx_);
@@ -202,6 +273,8 @@ void App::frameRunning(double now, double dt) {
     if (consume(GLFW_KEY_F5) && infos_[sceneIndex_].reloadable) scene_->reload(*this);
 
     Input in;
+    bool clickTaken = false, pressTaken = false;
+    in.events = panelInput(clickTaken, pressTaken);
     in.now = now - sceneT0_;
     in.dt = std::min(0.1, dt);
     in.pressedKeys = keyQueue_;
@@ -214,8 +287,8 @@ void App::frameRunning(double now, double dt) {
     in.mouseY = float(mouseY_);
     in.mouseDX = float(mouseX_ - prevMouseX_);
     in.mouseDY = float(mouseY_ - prevMouseY_);
-    in.leftClicked = leftClick_ && !help_;
-    in.leftDown = glfwGetMouseButton(win_, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+    in.leftClicked = leftClick_ && !help_ && !clickTaken;
+    in.leftDown = !pressTaken && (virtualLeft_ || glfwGetMouseButton(win_, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS);
     in.rightDown = virtualRight_ || glfwGetMouseButton(win_, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
     in.scroll = float(scroll_);
     in.view = view_;
@@ -238,6 +311,9 @@ void App::frameRunning(double now, double dt) {
     // the first second: the picture rises out of black, the panel slides in
     const float fade = float(std::min(1.0, (now - modeT0_) / 0.6));
     if (fade < 1.0f) ui::rect(ui::Rect{0, 0, float(fbw_), float(fbh_)}, ui::hex(0x000000, 1.0f - fade * fade * (3.0f - 2.0f * fade)));
+    panelHits_.clear();
+    panels_.clear();
+    panelControls_ = st.controls;
     if (hud_) drawHud(now, st);
     if (help_) drawHelp(now);
     drawToasts(now);
@@ -277,6 +353,33 @@ void App::autotestStep(double now) {
         case 7: virtualMouse_ = true; virtualX_ = s.fx * fbw_; virtualY_ = s.fy * fbh_; break;
         case 8: leftClick_ = true; return;   // seen by this frame
         case 9: virtualRight_ = s.key != 0; break;
+        case 10:
+            virtualLeft_ = s.key != 0;
+            if (virtualLeft_) leftClick_ = true;
+            return;
+        case 11:   // a click on a panel control by id (a choice's item: key), where it was last drawn; "@ac", "@ayrintilar":
+                   // the gallery's buttons
+        case 12:   // a press on a slider's track at fx (0..1); let go with a 10
+            if (s.name == "@ac" || s.name == "@ayrintilar") {
+                const ui::Rect& r = s.name == "@ac" ? openButton_ : detailsButton_;
+                virtualMouse_ = true;
+                virtualX_ = r.x + 0.5f * r.w;
+                virtualY_ = r.y + 0.5f * r.h;
+                leftClick_ = true;
+                return;
+            }
+            for (const PanelHit& h : panelHits_) {
+                const Control& c = panelControls_[h.control];
+                if (c.id != s.name || (s.kind == 11 && c.kind == Control::Kind::Choice && h.item != s.key)) continue;
+                virtualMouse_ = true;
+                virtualX_ = s.kind == 12 ? h.track.x + s.fx * h.track.w : h.r.x + 0.5f * h.r.w;
+                virtualY_ = h.r.y + 0.5f * h.r.h;
+                leftClick_ = true;
+                if (s.kind == 12) virtualLeft_ = true;
+                return;
+            }
+            std::printf("autotest: denetim bulunamadi: %s %d\n", s.name.c_str(), s.key);
+            break;
         default: break;
         }
     }
@@ -303,6 +406,7 @@ int App::run(const Options& opt) {
     glfwSetKeyCallback(win_, keyCb);
     glfwSetScrollCallback(win_, scrollCb);
     glfwSetMouseButtonCallback(win_, buttonCb);
+    handCursor_ = glfwCreateStandardCursor(GLFW_HAND_CURSOR);
     std::printf("GL_RENDERER: %s, monitor %dx%d @ %d Hz\n", reinterpret_cast<const char*>(glGetString(GL_RENDERER)), vm->width, vm->height,
                 vm->refreshRate);
     std::string err;
@@ -330,9 +434,17 @@ int App::run(const Options& opt) {
         auto mouse = [&](float fx, float fy) { Step st{7, 0, 0, ""}; st.fx = fx; st.fy = fy; script_.push_back(st); };
         auto click = [&] { script_.push_back({8, 0, 0, ""}); };
         auto right = [&](bool down) { script_.push_back({9, 0, down ? 1 : 0, ""}); };
+        auto left = [&](bool down) { script_.push_back({10, 0, down ? 1 : 0, ""}); };
+        auto control = [&](const std::string& id, int item) { script_.push_back({11, 0, item, id}); };
+        auto slide = [&](const std::string& id, float v) { Step st{12, 0, 0, id}; st.fx = v; script_.push_back(st); };
         wait(1.5); shot("galeri_1");
         key(GLFW_KEY_DOWN); wait(0.8); shot("galeri_2");
         key(GLFW_KEY_DOWN); wait(0.8); shot("galeri_3");
+        // how it is made: A opens it, the next scene's shows in its place, the button closes it
+        key(GLFW_KEY_A); wait(0.6); shot("galeri_ayrintilar_3");
+        key(GLFW_KEY_1); wait(0.6); shot("galeri_ayrintilar_1");
+        key(GLFW_KEY_2); wait(0.6); shot("galeri_ayrintilar_2");
+        control("@ayrintilar", 0); wait(0.6); shot("galeri_ayrintilar_kapandi");
         // the mouse: over the first entry, a click selects it
         mouse(0.18f, 0.43f); wait(0.5); click(); wait(0.6); shot("galeri_fare");
         for (int s = 0; s < int(infos_.size()); ++s) {
@@ -356,8 +468,16 @@ int App::run(const Options& opt) {
                 right(true); wait(0.1);
                 for (int k = 1; k <= 10; ++k) { mouse(0.50f - 0.006f * k, 0.50f); wait(0.03); }
                 right(false); wait(0.3);
-                mouse(0.47f, 0.68f); wait(0.2); click(); wait(1.5); shot("yikim_patlatma");
-                key(GLFW_KEY_7); key(GLFW_KEY_SPACE); wait(9.0); log("yikim deprem 7"); shot("yikim_deprem"); key(GLFW_KEY_G); wait(1.0);
+                mouse(0.47f, 0.68f); wait(0.2); click(); wait(0.25); shot("yikim_top_yolda"); wait(1.5); shot("yikim_top");
+                // the panel by mouse: magnitude 7, the length to "until stopped", start, stop
+                control("buyukluk", 4); wait(0.3);
+                slide("sure", 1.0f); wait(0.1); left(false); wait(0.3); shot("yikim_sure_sonsuz");
+                control("deprem", 0); wait(6.0); log("yikim deprem sonsuz"); shot("yikim_deprem_sonsuz");
+                control("deprem", 0); wait(0.4); shot("yikim_diniyor"); wait(2.0);
+                // near the notch it snaps to the magnitude's own length
+                slide("sure", 0.5f); wait(0.1); left(false); wait(0.3); shot("yikim_sure_kendi");
+                key(GLFW_KEY_R); wait(4.0);
+                key(GLFW_KEY_SPACE); wait(9.0); log("yikim deprem 7"); shot("yikim_deprem"); key(GLFW_KEY_G); wait(1.0);
             }
             key(GLFW_KEY_H); wait(0.3); shot(infos_[s].id + "_arayuzsuz"); key(GLFW_KEY_H);
             key(GLFW_KEY_ESCAPE); gallery(); wait(0.8);
@@ -419,6 +539,7 @@ int App::run(const Options& opt) {
     for (Picture& p : pictures_) { ui::freeImage(p.sharp); ui::freeImage(p.soft); }
     ui::shutdown();
     gpuStatsShutdown();
+    if (handCursor_) glfwDestroyCursor(handCursor_);
     glfwDestroyWindow(win_);
     glfwTerminate();
     return 0;
