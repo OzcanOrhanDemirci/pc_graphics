@@ -211,6 +211,11 @@ public:
                 moved_ = true;
             }
         }
+        if (moved_) {   // autofocus: on what is in the middle of the picture
+            cam.apply(a_.renderer.params().cam, a_.width, a_.height);
+            const LPick c = a_.renderer.pick(0.5f * a_.width, 0.5f * a_.height);
+            if (c.object >= 0 && c.t < 5.0f) cam.focus = c.t * std::max(0.2f, dot(c.dir, cam.forward()));
+        }
         cam.apply(a_.renderer.params().cam, a_.width, a_.height);
         // ---- the mouse on the experiment
         if (rebuildIn_ == 0 && in.view.w > 0.0f) {

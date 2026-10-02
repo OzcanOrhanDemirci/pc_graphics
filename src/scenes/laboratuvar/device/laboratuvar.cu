@@ -396,9 +396,16 @@ extern "C" __global__ void __raygen__render() {
         // the first sample through the pixel's centre: the denoiser's guides stay put while the noise moves
         const float jx = (s == 0 && params.albedoOut) ? 0.5f : r.next(), jy = (s == 0 && params.albedoOut) ? 0.5f : r.next();
         const float u = ((px + jx) / params.width) * 2.0f - 1.0f, v = 1.0f - ((py + jy) / params.height) * 2.0f;
-        const float3 d = normalize(C.fwd + C.right * (u * C.tanHalfX) + C.up * (v * C.tanHalfY));
+        float3 d = normalize(C.fwd + C.right * (u * C.tanHalfX) + C.up * (v * C.tanHalfY));
+        float3 o = C.pos;
+        if (C.aperture > 0.0f && !(s == 0 && params.albedoOut)) {   // a thin lens (the guide sample stays a pinhole)
+            const float3 fp = C.pos + d * (C.focus / fmaxf(dot(d, C.fwd), 1e-3f));
+            const float lr = C.aperture * sqrtf(r.next()), la = 2.0f * M_PIf * r.next();
+            o = C.pos + C.right * (lr * cosf(la)) + C.up * (lr * sinf(la));
+            d = normalize(fp - o);
+        }
         float3 a, n;
-        float3 L = radiance(C.pos, d, r, &a, &n);
+        float3 L = radiance(o, d, r, &a, &n);
         const float mx = maxc(L);
         if (!(mx == mx)) L = make_float3(0, 0, 0);
         else if (mx > 40.0f) L = L * (40.0f / mx);   // fireflies: a rare path through glass to a soft box

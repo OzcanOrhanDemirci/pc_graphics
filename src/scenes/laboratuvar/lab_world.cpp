@@ -210,7 +210,10 @@ void LabWorld::buildSu() {
     identity(prop[P_TUMBLER].xf);
     // the beaker: its pivot (the right rim, mid wall) in its own frame, placed over the tumbler's left rim
     const float3 pivotLocal = make_float3(kBeaker.ri + 0.5f * kBeaker.wall, kBeaker.H, 0.0f);
-    const float3 pivot = make_float3(cfg.f("su.dudak_x", -0.030f), kTumbler.H + h, 0.0f);
+    // the lip over the tumbler, further back the higher it is: the stream leaves it with some speed across and falls
+    // longer from higher up (from 45 cm it missed the glass altogether); a hand pouring from high aims so
+    const float lipX = cfg.f("su.dudak_x", -0.050f) - cfg.f("su.dudak_egim", 0.25f) * std::max(0.0f, h - 0.19f);
+    const float3 pivot = make_float3(lipX, kTumbler.H + h, 0.0f);
     suPivot_ = pivotLocal;
     suBeakerBase_ = pivot - pivotLocal;
     xfRotateZ(prop[P_BEAKER].xf, 0.0f, suPivot_, suBeakerBase_);

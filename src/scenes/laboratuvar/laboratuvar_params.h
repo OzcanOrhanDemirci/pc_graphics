@@ -45,6 +45,8 @@ struct LObject {
 struct LCamera {
     float3 pos, right, up, fwd;   // orthonormal
     float tanHalfX, tanHalfY;
+    float aperture;               // thin lens: the aperture's radius (m), 0 a pinhole
+    float focus;                  // the distance in focus (m, along fwd)
 };
 
 struct LRectLight {              // a soft box: centre, half-extents (its two edges), emitting towards cross(u, v)

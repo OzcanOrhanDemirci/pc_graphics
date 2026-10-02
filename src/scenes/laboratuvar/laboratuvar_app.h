@@ -19,6 +19,7 @@ struct LabCam {
     float3 pos = make_float3(0.0f, 0.15f, 0.6f);
     float yaw = 3.14159265f, pitch = -0.1f;   // yaw 0 looks along +z
     float fovDeg = 30.0f;
+    float aperture = 0.0f, focus = 0.5f;
     float3 forward() const { return make_float3(std::sin(yaw) * std::cos(pitch), std::sin(pitch), std::cos(yaw) * std::cos(pitch)); }
     float3 right() const { return normalize(cross(forward(), make_float3(0, 1, 0))); }
     void lookAt(float3 from, float3 to) {
@@ -44,6 +45,8 @@ struct LabCam {
         cam.up = cross(cam.right, cam.fwd);
         cam.tanHalfY = std::tan(0.5f * fovDeg * 3.14159265f / 180.0f);
         cam.tanHalfX = cam.tanHalfY * float(width) / float(height);
+        cam.aperture = aperture;
+        cam.focus = focus;
     }
 };
 

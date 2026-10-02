@@ -100,6 +100,9 @@ void LaboratuvarApp::setCamera(Deney d) {
     const float3 defAim[kDeneyCount] = {{-0.03f, 0.20f, 0.0f}, {0.0f, 0.06f, 0.0f}, {0.03f, 0.07f, 0.0f}, {0.0f, 0.06f, 0.0f}, {0.0f, 0.17f, 0.0f}, {0.0f, 0.05f, 0.0f}};
     cam.lookAt(cfg.v3(k + ".konum", defPos[int(d)]), cfg.v3(k + ".hedef", defAim[int(d)]));
     cam.fovDeg = cfg.f(k + ".fov", cfg.f("kamera.fov", 30.0f));
+    // a lens: a little depth of field, in focus at the experiment (the live window refocuses on the picture's middle)
+    cam.aperture = cfg.f("kamera.diyafram", 0.0035f);
+    cam.focus = length(cfg.v3(k + ".hedef", defAim[int(d)]) - cam.pos);
     cam.apply(renderer.params().cam, width, height);
 }
 
