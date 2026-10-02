@@ -5,11 +5,12 @@
 solda üç sahne, sağda seçilenin resmi ve açıklaması.
 
 - **↑ / ↓** (ya da **1-3**, ya da fare) seç, **Enter** (ya da **Sahneyi aç** düğmesi) aç.
+- **A** (ya da **Ayrıntılar** düğmesi): resmin üstünde sahnenin nasıl yapıldığı, teknik başlıklarla; **Esc** kapatır.
 - Açılan sahne birkaç saniye yükleme ekranında hazırlanır (sahne 1'in programları ilk açılışta daha uzun derlenir).
 - Her yerde: **Esc** geri (yardım → sahne → galeri → çıkış) · **F1** o sahnenin tuşları · **H** arayüzü gizle ·
   **F12** ekran görüntüsü (`captures/`) · **F5** ayarları ve programları yeniden yükle (sahne 1 ve 2).
-- Sahne üstündeki arayüz: sol altta sahnenin adı ve durumu (ve varsa seçici, ilerleme çubuğu), sağ üstte hız ve
-  süreler, sağ altta tuş ipuçları.
+- Sahne üstündeki arayüz: sol altta sahnenin adı ve durumu (ve varsa fareyle kullanılan denetimler: Yıkım'da
+  büyüklük, süre çubuğu, başlat / durdur; ilerleme çubuğu), sağ üstte hız ve süreler, sağ altta tuş ipuçları.
 
 ## 01 · Altın Saat — cam ve taş, tayfına ayrılan güneş
 Karanlık odaya 5 yarıktan giren güneş, huzmelere asılı 14 kristal prizma, betona saçılan tayflar. **Durağan** başlar:
@@ -48,8 +49,10 @@ Açılırken bina iki saniye görünmeden kendi ağırlığıyla oturur. Odak fi
 
 | Tuş | Ne yapar |
 |---|---|
-| **3-9** | depremin büyüklüğü (sol altta seçili olan, tepe ivmesi ve süresiyle); **Boşluk** başlat / durdur |
-| **sol tık** | tıkladığın yeri patlat (yakındaki parçalar yok olur, çevresi savrulur); **Ctrl + sol tık** büyük patlama |
+| **3-9** | depremin büyüklüğü (sol alttaki panelde fareyle de tıklanır) |
+| **← / →** | süre: kısalt / uzat. Panelde kaydırma çubuğu; çentik büyüklüğün kendi süresi (varsayılan), en sağ **∞**: durdurana kadar |
+| **Boşluk** | depremi başlat / durdur (paneldeki düğme de); durdurunca zemin 1,5 sn'de diner |
+| **sol tık** | tıkladığın yere bir **yıkım topu** gelir (döküm çelik, 4,1 ton); **Ctrl + sol tık** ağır top (11,4 ton). Kırılıp devrilmeye fizik karar verir |
 | **sağ tık + fare** | bak · **WASD** uç · **E / Q** yukarı / aşağı · **Shift** hızlı · **tekerlek** yakınlaş |
 | **T** | ağır çekim (×1, ×0,25, ×0,1) · **P** zamanı durdur · **R** binayı baştan kur |
 | **B** | donatı demirlerini göster / gizle · **G** gürültü giderici (hızlı süzgeç → yapay zekâ → ham) |
@@ -62,6 +65,7 @@ Açılırken bina iki saniye görünmeden kendi ağırlığıyla oturur. Odak fi
 | 8 | yumuşak kat göçmesi: zemin kat gider, bina yan yatıp çöker |
 | 9 | daha uzun ve sert sarsıntı; en güçlü kısım daha geç gelir, sonunda bina tamamen çöker |
 
-**Dene:** 6 ile 8'i art arda (**R** ile baştan kurup) karşılaştır; zemin kat kolonlarını tek tek patlat; çöküşü **T** ile
-ağır çekimde izle, kırık kolon uçlarına uçup demirlere yakından bak.
+**Dene:** 6 ile 8'i art arda (**R** ile baştan kurup) karşılaştır; 7'yi **∞** ile başlatıp uzun sarsıntıda hasarın nasıl
+biriktiğini izle; zemin kat kolonlarına top at (ölçüldü: köşe ve kenar kolon normal topla kırıldı, ağır top içteki bir
+kolonun iki alt parçasını savurdu); çöküşü **T** ile ağır çekimde izle, kırık kolon uçlarına uçup demirlere yakından bak.
 Ayarlar `scenes/yikim.cfg` (bina, malzemeler, çözücü, kamera, güneş).

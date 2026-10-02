@@ -37,11 +37,15 @@ kendi yazdığımız bir katı cisim ve kırılma çözücüsü; sade bir günd�
 Üç sahne tek bir programda yaşıyor. Program bir galeriyle açılır; sahne bir yükleme ekranının arkasında yüklenir
 (programları derlenir, dünyası kurulur; bunlar ayrı bir iş parçacığında yapıldığı için pencere canlı kalır) ve sonra hepsi
 için aynı olan bir arayüzün altında çalışır: kim ve ne sol altta, süreler sağ üstte, çıkış yolu sağ altta, tuşlar F1'de.
+Sol alttaki panel fareyle kullanılır: sahne oraya seçenek sıraları, kaydırma çubukları ve düğmeler koyabilir (Yıkım'da
+büyüklük, süre, başlat/durdur). Galeride her sahnenin kısa bir açıklaması ve **Ayrıntılar**'da nasıl yapıldığı var.
 Esc her zaman geri götürür; kapanan sahne ekran kartını bütünüyle geri verir.
 
-| Galeri | Ortak arayüzün altında bir sahne |
+| Galeri | Ayrıntılar: nasıl yapıldı |
 | --- | --- |
-| ![Galeri: sahneler numaralı bir listede, seçilen sağda büyük, açıklaması ve açma düğmesi](docs/images/app-gallery.jpg) | ![Sahne 3, büyüklük 7 deprem sırasında: sahnenin adı ve durumu, büyüklük seçici, sarsıntının ilerlemesi, süreler](docs/images/app-scene.jpg) |
+| ![Galeri: sahneler numaralı bir listede, seçilen sağda büyük, açıklaması, ayrıntılar ve açma düğmeleri](docs/images/app-gallery.jpg) | ![Galerinin ayrıntılar paneli: sahne 3'ün çözücüsü, malzemesi, depremleri, yıkım topu, determinizmi, görüntüsü](docs/images/app-details.jpg) |
+
+![Sahne 3, büyüklük 7 deprem sırasında: sahnenin adı ve durumu, tıklanan büyüklükler, süre çubuğu, durdurma düğmesi, sarsıntının ilerlemesi, süreler](docs/images/app-scene.jpg)
 
 Görünüm tek bir yazı ailesiyle kurulu, IBM Plex: adlar için Serif, sözcükler için Sans, sayılar ve tuşlar için Mono.
 Resimlerin üstünde koyu cam paneller ve her sahneye ışığından alınmış tek bir vurgu rengi: sıcak altın, soğuk mavi,
@@ -90,8 +94,8 @@ saçılımın ~100 katından 5 katına indirildi; kamera içindeyken bütün sis
 
 Türkiye'nin kasabalarını dolduran türden beş katlı betonarme bir apartman: yüksek zemin katta camlı dükkânlar, tuğla
 dolgu duvarlar, balkonlar, su depoları ve güneş kollektörleriyle düz çatı. Altındaki zemini büyüklüğü 3'ten 9'a kadar
-depremler sallıyor (her biri gerçek bir kuvvetli yer hareketi kaydından türetildi), ya da izleyen kişi kolonlarını
-fareyle patlatıyor. Işık bilerek sade bir güneşli gün; emek fiziğe gitti.
+depremler sallıyor (her biri gerçek bir kuvvetli yer hareketi kaydından türetildi), ya da izleyen kişi binaya fareyle
+yıkım topu fırlatıyor. Işık bilerek sade bir güneşli gün; emek fiziğe gitti.
 
 ![Sahne 3: büyüklük 8 depremde yıkılan apartman](docs/images/yikim.jpg)
 
@@ -103,8 +107,13 @@ fareyle patlatıyor. Işık bilerek sade bir güneşli gün; emek fiziğe gitti.
 | --- | --- |
 | ![Yakın plan: eksik köşe kolonunun üstündeki kirişlerden ve kolondan çıkan eğri demirler](docs/images/yikim-bars.jpg) | ![Büyüklük 9: zemin kat göçüyor, blok yan yatıyor](docs/images/yikim-m9.jpg) |
 
+| Yıkım topu köşe kolona çarpar (4,1 t, 14 m/s) | Kolonun ayağı fırlamış, kolon eğik asılı, demirler açıkta |
+| --- | --- |
+| ![Döküm çelik top zemin kattaki köşe kolona çarpıyor, kolon kırılıp eğiliyor](docs/images/yikim-top-1.jpg) | ![İki saniye sonra: kolonun alt parçası yerde, kalan kısmı kirişten eğik sarkıyor](docs/images/yikim-top-2.jpg) |
+
 Canlı çalışır: 1080p, RTX 4080'de gürültü giderici açıkken saniyede ~50 kare, fizik ve görüntü ekran kartında yan yana.
-3-9 ile büyüklüğü seç, Boşluk ile başlat, tıklayıp parça patlat, zamanı onda birine kadar yavaşlat.
+Büyüklüğü (3-9) ve süreyi (büyüklüğün kendi süresinden durdurana kadar) panelden fareyle ya da tuşla seç, başlat;
+tıklayıp yıkım topu at, zamanı onda birine kadar yavaşlat.
 
 ## Sahne 1: neyi hesaplıyor
 
@@ -190,7 +199,8 @@ kayıtları altında dağılmayan bir çözücü.
 | **Temas** | Cisim çifti başına bir warp: örnek noktalar ötekinin kabuk düzlemlerine karşı, normal düzeltmeler çift içinde ortalanır, sonra yama merkezinde statik ve dinamik bütçeli, çapalı (PhysX gibi) tek sürtünme; burulma sürtünmesi ve sekme. |
 | **Determinizm** | Temas ve arayüz toplamları kayan noktalı atomikler yerine 2⁻⁴⁰ sabit noktada: aynı deprem aynı binayı her koşuda aynı biçimde yıkar. |
 | **Sönüm** | Serbest titreşimden ölçülen kritik sönümün %5,3'ü: kütleye orantılı, zemine göre, yalnız bağlı cisimlere, ivmesi sınırlı (düşen enkaz serbest kalır). |
-| **Depremler** | Büyüklüğe göre, 3'ten 9'a: binanın ~15 km ötedeki o büyüklükte bir depremden hissettiği. Her biri gerçek bir kuvvetli yer hareketi kaydının dalgasından (ESM ve AFAD TADAS: 2023 Antakya, 1999 Yarımca ve İzmit, 2020 Bayraklı): o büyüklüğün getirdiği güçlü sarsıntı süresi kadar kesilir, küçükler daha hızlı oynatılır, o büyüklüğün tepe yer ivmesine ölçeklenir, taban çizgisi düzeltilir (zemin başladığı yerde durur); sonra iki kez integre edilip yer değiştirmeye çevrilir. Bir oyunun ölçeği, sismolojinin değil: sarsıntıyı büyüklük tek başına belirlemez. |
+| **Depremler** | Büyüklüğe göre, 3'ten 9'a: binanın ~15 km ötedeki o büyüklükte bir depremden hissettiği. Her biri gerçek bir kuvvetli yer hareketi kaydının dalgasından (ESM ve AFAD TADAS: 2023 Antakya, 1999 Yarımca ve İzmit, 2020 Bayraklı): o büyüklüğün getirdiği güçlü sarsıntı süresi kadar kesilir, küçükler daha hızlı oynatılır, o büyüklüğün tepe yer ivmesine ölçeklenir, taban çizgisi düzeltilir (zemin başladığı yerde durur); sonra iki kez integre edilip yer değiştirmeye çevrilir. Bir oyunun ölçeği, sismolojinin değil: sarsıntıyı büyüklük tek başına belirlemez. Daha uzun ya da durdurana kadar süren sarsıntıda güçlü kısım dikişsiz bir döngü olur: sonu başına karışır, ivmenin ve hızın ortalaması döngü boyunca çıkarılarak integre edilir (zemin kaymaz), kaydın kendi yükseliş ve sönüşüyle bir zarfın altında oynar. Durdurmak zemini 1,5 sn'de dindirir. |
+| **Yıkım topu** | Tıklanan noktaya kameranın yanından gelen döküm çelik bir top (4,1 t; Ctrl ile 11,4 t), 14 m/s, yerçekimine göre nişanlı. Öteki parçalar gibi bir cisim, 256 teğet düzlemli dışbükey bir kabuk; görüntüde kürenin normaliyle gölgelenir. Kırılmaya ve devrilmeye çözücü karar verir. |
 | **Görüntü** | OptiX: her parça kendi kabuğunun bir örneği, dönüşümleri fizik doğrudan örnek tamponuna yazar, üst yapı her kare yeniden kurulur. Yumuşak gölgeli güneş, gök, zeminden bir sekme, depremle birlikte kayan metre ızgarası. Donatı liflerin durumundan çizilir: tuttukça çatlağın üstünden geçer, koptuğunda eğri filizler olarak çıkar. |
 | **Gürültü giderme** | Karede altı örnek, bir şey hareket ederken grenli. Kendi yazdığımız hafif bir SVGF: ışık (görüntü bölü albedo) her parçanın kendi hareketiyle kareden kareye taşınır, cisim, normal ve uzaklıkla denetlenir, üstünden gölge geçerken yeni karenin komşuluğuna kırpılır; sonra başka cisimde, normalde, derinlik basamağında ve ışık kenarında duran à-trous geçişleri. 1080p'de 2,4 ms. OptiX yapay zekâ gidericisi bir tuş ötede (G): daha da temiz, ama 9,7 ms tutuyor ve ekran kartını paylaşan fiziği yavaşlatıyor. |
 
@@ -244,13 +254,17 @@ Okunmaya değer kararlar:
   daha ucuz bir süzgeci işletiyor: hareketleri tam bilindiği için her yüzey noktası kendi geçmişini taşıyor. İlk
   sürümü, yıkılan binanın gölgesi zeminde kayarken aydınlık lekeler bıraktı; geçmişi yeni karenin komşuluğuna kırpmak
   bunları sildi.
+- **Darbe bir cisimdir, sihir değil.** Tıklama önceleri parçayı dünyadan kaldırıyordu (Özcan: *"kolon pıt diye yok
+  oluyor"*). Şimdi top atılıyor. 1,4 t'luk top köşe kolonu yalnız 7 cm kaydırdı: katı parçalı modelde darbe yerel ezme
+  yapamaz, 2,2 m'lik parçanın tamamına dağılır ve iki bağın kayma kapasitesi momentumu kopma eşiğinden önce yer.
+  4,1 t'luk top kolonun ayağını koparıp gövdesini devirdi; çözücüye hiç dokunulmadı.
 - **Taşıyıcıyı ölç, üstünde duranı değil.** "Çatı ötelemesi" en üstteki parçaların ortalamasıydı, onlar da tuğla
   korkuluktu; savrulan korkuluk, ayakta duran binada çatının 9,7 m düştüğü diye okundu.
 
 **Doğrulanmayanlar:** on katı parçalı 5 m'lik konsol varsayılan alt adım sayısında 2,9 kat yumuşak (uzun katı
 zincirler yavaş yakınsıyor; binanın ölçülen periyodu 0,45 s, yönetmelik formülünün 0,54 s'sine yakın). Bina bir
 mühendislik analiziyle karşılaştırılmadı; çözücünün testleri (serbest düşme, yığın, eğim, enerji, mafsal,
-determinizm, sönüm) fiziksel akıl sağlığı denetimleri, 26'nın 24'ü geçiyor, kalan ikisi konsol. Hareketi kliplerden
+determinizm, sönüm, deprem döngüsü) fiziksel akıl sağlığı denetimleri, 34'ün 32'si geçiyor, kalan ikisi konsol. Hareketi kliplerden
 Özcan değerlendirdi, yazarın gözü değil.
 
 ## Derleme
@@ -291,10 +305,11 @@ build\pc_graphics.exe --autotest            :: bütün uygulama bir kez, betikle
 | F12 | sahnenin ekran görüntüsü (`captures\<sahne>_<tarih>`; sahne 1 doğrusal EXR de yazar) |
 | F5 | sahnenin ayarlarını yeniden oku, OptiX programlarını yeniden derle (sahne 1 ve 2) |
 | ↑ ↓, 1-3, Enter, fare | galeride seç ve aç |
+| A | galeride sahnenin ayrıntıları (nasıl yapıldı) |
 
 | Sahne 1 · Altın Saat | Sahne 2 · Fener | Sahne 3 · Yıkım |
 | --- | --- | --- |
-| Boşluk durağan ↔ canlı · C sonraki kamera · ↑ ↓ pozlama · ← → odak · R sıfırla · P, V, N, D, G fotonlar, pus, doğrudan ışık örneklemesi, gürültü giderici, güneş lekeleri · 1-5 güzel, albedo, normal, kostikler, maliyet | Boşluk A ↔ B yürü · B öbür bakışa atla · P zamanı durdur · ← → zaman ∓1 sn · ↑ ↓ pozlama · 1-5 görünümler · Tab birinci şahıs (WASD, fare, Shift koş, Boşluk zıpla) | 3-9 büyüklük · Boşluk başlat ya da durdur · T ağır çekim · P durdur · sol tık patlat (Ctrl: büyük) · R baştan kur · sağ tık bak · WASD, E/Q uç · Shift hızlı · tekerlek yakınlaş · B donatı · G gürültü giderici |
+| Boşluk durağan ↔ canlı · C sonraki kamera · ↑ ↓ pozlama · ← → odak · R sıfırla · P, V, N, D, G fotonlar, pus, doğrudan ışık örneklemesi, gürültü giderici, güneş lekeleri · 1-5 güzel, albedo, normal, kostikler, maliyet | Boşluk A ↔ B yürü · B öbür bakışa atla · P zamanı durdur · ← → zaman ∓1 sn · ↑ ↓ pozlama · 1-5 görünümler · Tab birinci şahıs (WASD, fare, Shift koş, Boşluk zıpla) | 3-9 büyüklük · ← → süre (en sonda: durdurana kadar) · Boşluk başlat ya da durdur (panelde fareyle de) · T ağır çekim · P durdur · sol tık yıkım topu (Ctrl: ağır top) · R baştan kur · sağ tık bak · WASD, E/Q uç · Shift hızlı · tekerlek yakınlaş · B donatı · G gürültü giderici |
 
 Sahnelerin araçları pencere olmadan, aynı programdan çalışır:
 

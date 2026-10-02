@@ -4,6 +4,20 @@
 > `docs/altinsaat/`, `docs/fener/`, `docs/yikim/` (PLAN.md ve DURUM.md).
 
 ## Şu an
+- **2026-10-02 (gündüz) · Revizeler.** Özcan: *"Gayet güzel olmuş. Küçük revizeler yapalım. Bu sahnelerin açıklama
+  metinlerini şu tarzı bu tarzı demek yerine kısaca özetle. Bir de ayrıntılar diye tıklayınca açılan bir alan yap. Orada
+  teknik detaylardan bahset. [...] Yıkımda depremlerin süresi varsayılan şuanki gibi olsun ama biz değiştirebilelim.
+  Sonsuza kadar da sürdürebilelim. Durduruna kadar yani. Deprem büyüklüklerine mouse ile tıklanabilsin. Süresi kaydırma
+  çubuğu şeklinde ayarlanabilsin. Bir de mouse ile binaya tıklayınca kolon pıt diye yok oluyor ya. Gerçek bir darbe gibi
+  hissettirsin. [...] Biri vurmuş gibi kırılıp devrilsin."*
+  - **Galeri:** açıklamalar bir-iki cümlelik özet (stil adları kalktı); **Ayrıntılar** (düğme ya da A) resmin üstünde
+    "nasıl yapıldı" panelini açar: sahne başına altı başlıkta teknik özet, iki sütunda, yükseklikçe dengeli.
+  - **Sahne paneli artık tıklanır:** sözleşmede `Control` (seçenek sırası, kaydırma çubuğu, düğme). Uygulama çizer, fareyi
+    alır (üstünde el imleci; panele tıklama sahneye geçmez), olanı bir sonraki karede sahneye `events` olarak verir; durum
+    sahnede kalır. Ayrıntı `docs/MIMARI.md`.
+  - **Yıkım:** büyüklükler tıklanır; **süre çubuğu** (çentik: büyüklüğün kendi süresi, varsayılan; uç: ∞ durdurana kadar;
+    ← → ile de); **Depremi başlat / durdur** düğmesi; durdurunca zemin 1,5 sn'de diner (eskiden bir anda donuyordu: sarsıntı).
+    Tıklama artık **yıkım topu** atar (patlatma kalktı). Ayrıntı ve ölçümler `docs/yikim/DURUM.md`.
 - **2026-10-02 · Üç sahne tek uygulamada (gece, Özcan uyurken otonom).** Özcan'ın istekleri, birebir:
   1. *"Yıkım simülasyonunda fare ve klavye hareketleri ters, onları düz yap yani sağa-sağa, sol-sola gitsin."*
   2. *"Yıkım için Türkiyedeki depremleri kaldır, onun yerine onlardan ilham alarak 3 şiddetinde 4 5 6 7 8 9 şeklinde
@@ -45,7 +59,8 @@
 | Sahne 3 | 48-54 fps (deprem sırasında da) |
 | Sahne kapandıktan sonra boş ekran kartı belleği | 14 869 / 14 869 / 14 860 MB (üç sahne, iki tam tur: sızıntı yok) |
 | Taşımadan ve birleştirmeden sonra | üç sahnenin komut satırı kareleri önceki koda göre **bit bit aynı** (640×360, sabit tohum: fark 0) |
-| Testler | Yıkım fizik 24/26 (bilinen iki: konsol), kontrol 4/4, sahne 1 spektral öz-sınama OK |
+| Testler | Yıkım fizik 24/26 (bilinen iki: konsol), kontrol 4/4, deprem döngüsü 4/4 (10-02 gündüz), sahne 1 spektral öz-sınama OK |
+| Revizeden sonra (10-02 gündüz) | Sahne 3 55 fps, sonsuz depremde 49, büyüklük 7'de 50; sahne 1 ve 2 değişmedi; kapanışta boş bellek yine sabit |
 
 ## Öğrenilenler (ölçülerek)
 - **Taşıma sırasında davranışı kilitle:** üç sahneden sabit ayarla kareler, önce kendileriyle tekrar edilebilirliği
@@ -55,11 +70,14 @@
   sahnelerin kendi bırakmaları (düzen); ölçü kapanıştaki boş bellek.
 - **Uzun yükleme ana iş parçacığında pencereyi "yanıt vermiyor"a düşürür:** sahne 1'in derlemesi önbellek boşken 42 sn
   (dosya yolu değişince OptiX önbelleği ıskaladı). Yükleme işçi iş parçacığında; sahneler yüklemede OpenGL kullanmıyor.
+- **Bir yazı tipinde olan harf atlasta olmayabilir:** "∞" ekranda "?" çıktı; IBM Plex'te var, atlasa pişirilen aralıklarda
+  yoktu (eksi işaretiyle birlikte eklendi). Yeni bir simge kullanmadan önce atlas aralıklarına bak (`src/ui/ui.cpp`).
 - **Arayüz ekranlarını görmeden tasarlamak kör uçuştur:** `--autotest` bileşik ekranı (`glReadPixels`) PNG'ye yazıyor;
   ilk turda dört kusur buradan yakalandı (arka plan karartmasında dikey dikiş, önceki sahnenin bildirimi yükleme
   ekranında, Türkçe büyük harfte "â" ve İngilizce adda "İ").
 
 ## Bilinen sınırlar / doğrulanmadı
-- Fare ile galeri (üzerine gelme, tıklama, "Sahneyi aç" düğmesi) ve sahnelerde fareyle bakış otomatik testte sınanmadı
-  (betik yalnız tuş basıyor); kod yolları sahnelerin eski pencerelerindekinin aynısı.
+- Fare otomatik testte sanal: betik imleci koyar ve tıklar (galeri seçimi, iki düğme, Yıkım'da bakış, top, büyüklük,
+  süre çubuğu, başlat/durdur). Gerçek farenin sürüklemesi (çubuğu tutup kaydırmak) ve el imleci gözle denenmedi;
+  Fener'in oyuncu kipinde fareyle bakış hiç sınanmadı.
 - 1440'tan farklı ekranlarda yerleşim yalnız ölçekle uyarlanıyor (1080p ve 4K gözle denenmedi).

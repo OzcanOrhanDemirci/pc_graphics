@@ -3,6 +3,43 @@
 > Tek kaynak durum panosu. Plan ve Özcan'ın sözleri `docs/yikim/PLAN.md`'de.
 
 ## Şu an
+- **2026-10-02 (gündüz) · Yıkım topu, deprem süresi, tıklanan panel.** Özcan: *"Yıkımda depremlerin süresi varsayılan
+  şuanki gibi olsun ama biz değiştirebilelim. Sonsuza kadar da sürdürebilelim. Durduruna kadar yani. Deprem
+  büyüklüklerine mouse ile tıklanabilsin. Süresi kaydırma çubuğu şeklinde ayarlanabilsin. Bir de mouse ile binaya
+  tıklayınca kolon pıt diye yok oluyor ya. Gerçek bir darbe gibi hissettirsin. Ondan pıt diye yok olmasın. Biri vurmuş
+  gibi kırılıp devrilsin. Daha mantıklı olur."*
+  - **Yıkım topu** (`YikimApp::strike`): tıklanan noktaya kameranın yanından döküm çelik bir top gelir; noktanın 6 m
+    önünde belirir, 14 m/s ile varır (yerçekiminin yolda alacağı kadar yukarı nişanlı: tam noktaya düşer). Top öteki
+    parçalar gibi bir cisim (`polySphere`: 256 teğet düzlemle kırpılmış küp; görüntüde kürenin normaliyle düz gölgelenir):
+    neyin kırılıp devrileceğine çözücü karar verir. Kurulurken toplar zeminin 1000 m altında donuk bekler
+    (`parkBody`), atılınca kendi kütleleriyle döner (`launchBody`); 6 normal + 3 ağır, en eskisi yeniden atılır.
+    Patlatma (cismi kaldırma) canlı sahneden kalktı; `kolon` senaryosu komut satırında duruyor.
+  - **Ölçüldü** (`--clip darbe`, köşe kolon (0,0), zemin kat kolonunun ortasının 0,5 m altı):
+
+    | Top | Kolon | Sonuç |
+    | --- | --- | --- |
+    | 0,35 m · 1,4 t | köşe | kolon 7-9 cm kaydı, kırılmadı, top sekip cephe boyunca yuvarlandı |
+    | **0,5 m · 4,1 t** (sol tık) | köşe | ayak parçası 2,1 m fırladı (8,2 m/s), orta parça eğilip asılı kaldı, donatı filizleri; bina ayakta |
+    | 0,5 m · 4,1 t | kenar (1,0) | ayak 0,83 m, orta parça 0,38 m: kırıldı, eğik |
+    | **0,7 m · 11,4 t** (Ctrl) | iç (1,1) | iki alt parça ~7 m savruldu (en hızlı parça 12,9 m/s; top 14 m/s), top binanın altından geçti; bina ayakta (çatı 1 mm) |
+
+    1,4 t'luk top neden yetmedi: katı parçalı modelde darbe yerel ezme yapamaz, bütün 2,2 m'lik parçaya dağılır; iki
+    arayüzün kayma kapasitesi (~930 kN) topun momentumunu ~0,02 sn'de yer, kayma 8 cm kopma eşiğine varmadan biter.
+    Gerçekte çelik topun kısa temas süresi yerel ezme yapardı; burada yetecek enerji kütleyle verildi.
+  - **Deprem süresi** (`QuakePlay`, `quakePlay`): kendi süresinde ve daha kısada kayıt o uzunlukta kesilir (kendi
+    süresinde ölçülen kaydın aynısı: büyüklük 7 yeniden koşuldu, kırık lif 3.024, öteleme %0,66, değişmedi). Daha uzun
+    ya da **durdurana kadar**: kaydın güçlü kısmı **dikişsiz döngü** olur (sonu başına eşit güçle karışır; döngü
+    boyunca ivmenin ve hızın ortalaması çıkarılarak iki kez integre edilir, böylece hız ve yer değiştirme kendi
+    üstüne kapanır, zemin kaymaz), kaydın kendi yükseliş ve sönüşüyle bir zarfın altında oynar. **Durdurmak** zemini
+    1,5 sn'de dindirir (eskiden bir anda donuyordu: hızın tek adımda sıfırlanması bir sarsıntıdır).
+    Test `--test dongu` (4/4): dikişte yer değiştirme, hız ve ivme adımı döngünün içindeki en büyük adımın en çok
+    0,50 / 0,45 / 0,33'ü; zeminin en uzak gittiği kendi kaydınınkinin 0,75-1,08 katı (büyüklük 9: 1,51 m, kaydı 1,45 m).
+  - **Panel:** büyüklükler tıklanır; **süre çubuğu** 2-180 sn (log), çentik büyüklüğün kendi süresi (yakınına
+    bırakınca ona yapışır), en sağ ∞; **← →** yuvarlak sürelerden geçer; **Depremi başlat / durdur** düğmesi (Boşluk).
+    Süre bir sonraki depremde geçerli (sürerken değişirse panel söyler). Sanal fareyle `--autotest`: büyüklük 7'ye
+    tıkla, çubuğu ∞'a çek, başlat (49 fps), durdur (düğme "Sarsıntı diniyor"), çubuğu çentiğe bırak (26 sn).
+  - Testler 28/30 (bilinen iki: konsol) + döngü 4/4. Bekleyen toplar fiziği değiştirmiyor: büyüklük 7 aynı sonucu verdi
+    (kırık lif 3.024, öteleme %0,66); fizik süresi topsuz 14,2-15,3 ms, toplu 14,8-15,3 ms (sıra değiştirilerek, gürültü içinde).
 - **2026-10-02 · Kamera yönleri düzeltildi, depremler büyüklükle (3-9), sahne tek uygulamada.** Özcan (gece, otonom
   çalışma isteği): *"Yıkım simülasyonunda fare ve klavye hareketleri ters, onları düz yap yani sağa-sağa, sol-sola
   gitsin."* ve *"Yıkım için Türkiyedeki depremleri kaldır, onun yerine onlardan ilham alarak 3 şiddetinde 4 5 6 7 8 9

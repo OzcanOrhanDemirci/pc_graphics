@@ -37,11 +37,15 @@ night. Scene 3 is a rigid-body and fracture solver of its own, drawn by a plain 
 The three scenes live in one program. It opens on a gallery; a scene loads behind a loading screen (its programs
 compile and its world is built on a worker thread, so the window stays alive) and then runs under an interface that is
 the same for all of them: who and what at the bottom left, timings at the top right, the way out at the bottom right,
-the keys on F1. Esc always leads back, and a scene that closes gives the GPU back entirely.
+the keys on F1. The panel at the bottom left takes the mouse: a scene can put rows of choices, sliders and buttons there
+(in Yıkım the magnitude, the length, start and stop). The gallery gives each scene a short description, and how it was
+made under **Ayrıntılar** (details). Esc always leads back, and a scene that closes gives the GPU back entirely.
 
-| The gallery | A scene under the shared interface |
+| The gallery | Details: how it was made |
 | --- | --- |
-| ![The gallery: the scenes in a numbered list, the selected one large on the right, its description and an open button](docs/images/app-gallery.jpg) | ![Scene 3 during a magnitude 7 earthquake: the scene's name and state, the magnitude selector, the shaking's progress, timings](docs/images/app-scene.jpg) |
+| ![The gallery: the scenes in a numbered list, the selected one large on the right, its description, the details and open buttons](docs/images/app-gallery.jpg) | ![The gallery's details panel: scene 3's solver, material, earthquakes, wrecking ball, determinism and picture](docs/images/app-details.jpg) |
+
+![Scene 3 during a magnitude 7 earthquake: the scene's name and state, clickable magnitudes, the length slider, the stop button, the shaking's progress, timings](docs/images/app-scene.jpg)
 
 The look is one family for everything, IBM Plex: Serif for names, Sans for words, Mono for numbers and keys. Dark glass
 panels over the pictures, and one accent colour per scene, taken from its light: warm gold, cold blue, safety orange.
@@ -91,8 +95,8 @@ fog when the camera is inside it is correct and flat.
 
 A five-storey reinforced concrete apartment block of the kind that fills Turkish towns: shops behind glass on a tall
 ground storey, brick infill, balconies, a flat roof with water tanks and solar collectors. Earthquakes from magnitude 3
-to 9 shake the ground under it, each made from a real strong-motion record, or the viewer blows its columns out with the
-mouse. The light is a plain sunny day on purpose; the effort went into the physics.
+to 9 shake the ground under it, each made from a real strong-motion record, or the viewer throws a wrecking ball at it
+with the mouse. The light is a plain sunny day on purpose; the effort went into the physics.
 
 ![Scene 3: the apartment block coming down in a magnitude 8 earthquake](docs/images/yikim.jpg)
 
@@ -105,8 +109,12 @@ mouse. The light is a plain sunny day on purpose; the effort went into the physi
 | ![Close up: bent reinforcing bars sticking out of the beams and the column above the missing corner column](docs/images/yikim-bars.jpg) | ![A magnitude 9: the ground storey failing, the block tilting](docs/images/yikim-m9.jpg) |
 
 It runs live at 1080p, about 50 frames per second on the RTX 4080 with the denoising filter on, physics and picture side
-by side on the GPU. Pick a magnitude with 3 to 9, start it with Space, click to blow pieces out, slow time down to a
-tenth.
+by side on the GPU. Pick the magnitude (3 to 9) and the length (the magnitude's own up to until stopped) on the panel
+with the mouse or with keys, start it; click to throw a wrecking ball, slow time down to a tenth.
+
+| A wrecking ball hits a corner column (4.1 t, 14 m/s) | The column's foot thrown out, the column hanging askew, its bars bare |
+| --- | --- |
+| ![A cast steel ball striking a ground-storey corner column, which breaks and leans](docs/images/yikim-top-1.jpg) | ![Two seconds later: the column's lower piece on the ground, the rest hanging askew from the beam](docs/images/yikim-top-2.jpg) |
 
 ## What scene 1 computes
 
@@ -194,7 +202,8 @@ holds together under real earthquake records.
 | **Contact** | One warp per pair of bodies: sample points against the other hull's planes, normal corrections averaged within the pair, then one friction impulse at the patch centre with static and dynamic budgets and anchors (as in PhysX), torsional friction and restitution. |
 | **Determinism** | Contact and interface sums in 2⁻⁴⁰ fixed point instead of floating-point atomics: the same earthquake brings the same building down the same way, every run. |
 | **Damping** | 5.3 % of critical, measured from free vibration: mass-proportional, relative to the ground, bonded bodies only, with capped accelerations so falling debris stays free. |
-| **Earthquakes** | By magnitude, 3 to 9: what the building feels from a quake of that size some 15 km away. Each is made from the waveform of a real strong-motion record (ESM and AFAD TADAS: 2023 Antakya, 1999 Yarımca and İzmit, 2020 Bayraklı), cut to the strong-motion length that size brings, played faster for the small ones, scaled to that size's peak ground acceleration and baseline-corrected so the ground ends where it started; then integrated twice to the ground's displacement. A game's scale, not a seismological one: magnitude alone does not fix the shaking. |
+| **Earthquakes** | By magnitude, 3 to 9: what the building feels from a quake of that size some 15 km away. Each is made from the waveform of a real strong-motion record (ESM and AFAD TADAS: 2023 Antakya, 1999 Yarımca and İzmit, 2020 Bayraklı), cut to the strong-motion length that size brings, played faster for the small ones, scaled to that size's peak ground acceleration and baseline-corrected so the ground ends where it started; then integrated twice to the ground's displacement. A game's scale, not a seismological one: magnitude alone does not fix the shaking. Longer, or until stopped, the strong part becomes a seamless loop: its end blended into its start, integrated around the loop with the mean of acceleration and velocity taken out (the ground does not drift), played under an envelope with the record's own rise and fall. Stopping fades the ground out over 1.5 s. |
+| **Wrecking ball** | A cast steel ball from the camera's side to the clicked point (4.1 t; Ctrl 11.4 t), 14 m/s, aimed for gravity. A body like the others, a convex hull of 256 tangent planes, shaded with the sphere's normal. The solver decides what breaks and what topples. |
 | **Picture** | OptiX: every piece an instance of its own hull, transforms written by the physics straight into the instance buffer, top level rebuilt every frame. Sun with soft shadows, sky, one bounce off the ground, a metre grid that rides the earthquake. Reinforcing bars are drawn from the fibres' state: across a crack while they hold, as bent stubs once they are gone. |
 | **Denoising** | Six samples a frame are grainy while things move. A light SVGF of our own: the lighting (beauty over albedo) is carried along each piece's own motion from frame to frame, checked by body, normal and distance, clamped to the new frame's neighbourhood when a shadow sweeps over it, then a-trous passes that stop at other bodies, normals, depth steps and lighting edges. 2.4 ms at 1080p. The OptiX AI denoiser is one key away (G): cleaner still, but it costs 9.7 ms and slows the physics that shares the GPU. |
 
@@ -253,13 +262,17 @@ Decisions worth reading:
   Rigid bodies make a cheaper filter work well: their motion is known exactly, so each surface point keeps its own
   history. Its first version left lit blotches where a falling building's shadow swept the ground; clamping the history
   to the new frame's neighbourhood removed them.
+- **A blow is a body, not magic.** A click used to take the piece out of the world (Özcan: the column "just vanishes").
+  Now it throws a ball. A 1.4 t ball moved a corner column by only 7 cm: in a model of rigid pieces a blow cannot crush
+  locally, it spreads over the whole 2.2 m piece, and the shear capacity of its two bonds eats the momentum before the
+  slip reaches breaking. A 4.1 t ball broke the column's foot out and toppled the rest; the solver was not touched.
 - **Measure the structure, not what stands on it.** "Roof drift" was averaged over the highest pieces, which were the
   brick parapet; a parapet thrown off read as the roof falling 9.7 m from a building still standing.
 
 **Not verified:** a 5 m cantilever of ten rigid segments is 2.9 times too soft at the default substep count (long rigid
 chains converge slowly; the building's measured period, 0.45 s, is close to the code formula's 0.54 s). The building
 is not checked against an engineering analysis; the solver's tests (free fall, stacking, slopes, energy, hinges,
-determinism, damping) are physical sanity checks, 24 of 26 passing, the two failures being the cantilever. Motion was
+determinism, damping, the earthquake loop) are physical sanity checks, 32 of 34 passing, the two failures being the cantilever. Motion was
 judged by Özcan from clips, not by the author's eye.
 
 ## Building
@@ -300,10 +313,11 @@ build\pc_graphics.exe --autotest            :: the whole application once throug
 | F12 | screenshot of the scene (`captures\<scene>_<date>`; scene 1 also writes a linear EXR) |
 | F5 | reload the scene's settings and recompile its OptiX programs (scenes 1 and 2) |
 | ↑ ↓, 1 to 3, Enter, mouse | choose and open in the gallery |
+| A | the scene's details in the gallery (how it was made) |
 
 | Scene 1 · Altın Saat | Scene 2 · Fener | Scene 3 · Yıkım |
 | --- | --- | --- |
-| Space still ↔ live · C next camera · ↑ ↓ exposure · ← → focus · R reset · P, V, N, D, G photons, haze, next-event estimation, denoiser, sun patches · 1 to 5 beauty, albedo, normal, caustics, cost | Space walk A ↔ B · B jump to the other view · P pause time · ← → time ∓1 s · ↑ ↓ exposure · 1 to 5 views · Tab first-person walk (WASD, mouse, Shift run, Space jump) | 3 to 9 magnitude · Space start or stop · T slow motion · P pause · left click blast (Ctrl: bigger) · R rebuild · right mouse look · WASD, E/Q fly · Shift faster · wheel zoom · B bars · G denoising |
+| Space still ↔ live · C next camera · ↑ ↓ exposure · ← → focus · R reset · P, V, N, D, G photons, haze, next-event estimation, denoiser, sun patches · 1 to 5 beauty, albedo, normal, caustics, cost | Space walk A ↔ B · B jump to the other view · P pause time · ← → time ∓1 s · ↑ ↓ exposure · 1 to 5 views · Tab first-person walk (WASD, mouse, Shift run, Space jump) | 3 to 9 magnitude · ← → length (at the end: until stopped) · Space start or stop (with the mouse on the panel too) · T slow motion · P pause · left click wrecking ball (Ctrl: heavy ball) · R rebuild · right mouse look · WASD, E/Q fly · Shift faster · wheel zoom · B bars · G denoising |
 
 The scenes' tools run without a window, from the same program:
 
