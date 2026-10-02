@@ -7,6 +7,7 @@
 //   --scene tanecik --surface-test [ad]   the liquid's surface (tanecik_surface_test.cpp)
 //   --scene tanecik --skeleton-test [ad] / --skeleton-clip ad   the skeleton's physics alone (tanecik_skeleton_test.cpp)
 //   --still ... --kan-deneme      a still pool and a trickle of blood placed by hand (no physics): the liquid's look
+//   --scene tanecik --weapons-test [ad]   weapons and blast (tanecik_weapons_test.cpp)
 #include "scenes/tanecik/tanecik_app.h"
 #include "scenes/tanecik/body_graph.h"
 #include "core/image_io.h"
@@ -69,6 +70,7 @@ int stats(TanecikApp& app) {
 int runSurfaceTests(TanecikApp& app, const std::string& only);   // tanecik_surface_test.cpp
 int runSkeletonTests(TanecikApp& app, const std::string& only);  // tanecik_skeleton_test.cpp
 int runSkeletonClip(TanecikApp& app, const std::string& name, const std::string& outPrefix);
+int runWeaponsTests(const std::string& only);                      // tanecik_weapons_test.cpp
 
 int runTanecikCli(int argc, char** argv) {
     TanecikApp app;
@@ -86,6 +88,7 @@ int runTanecikCli(int argc, char** argv) {
         else if (a == "--still") still = true;
         else if (a == "--stats") doStats = true;
         else if (a == "--surface-test") { surface = true; if (i + 1 < argc && argv[i + 1][0] != '-') surfaceTest = next(); }
+        else if (a == "--weapons-test") return runWeaponsTests(i + 1 < argc && argv[i + 1][0] != '-' ? std::string(argv[i + 1]) : std::string());
         else if (a == "--look") look = next();
         else if (a == "--particles") parts = next();
         else if (a == "--poz") poseName = next();
