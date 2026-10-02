@@ -46,7 +46,7 @@ Inside tarzı deniz feneri. A "Pencere" bakışında açılır.
 Ayarlar `scenes/fener.cfg` (F5 ile anında).
 
 ## 03 · Yıkım — betonarme yapılar, deprem ve kırılma
-Panelin en üstünde **Yapı**: **Apartman** (5 kat, zemin katta dükkânlar), **Gökdelen** (30 kat, 97 m, perdeli çekirdek,
+Panelin en üstünde **Yapı**: **Apartman** (5 kat, zemin katta dükkânlar), **Gökdelen** (30 kat, 97 m, beton çekirdek,
 camlı lobi), **Ev** (tek kat, beşik çatı, baca). Seçince yapı yeniden kurulur ve kamera ona döner. Açılırken yapı iki
 saniye görünmeden kendi ağırlığıyla oturur. Odak fizik.
 

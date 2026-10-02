@@ -96,7 +96,7 @@ fog when the camera is inside it is correct and flat.
 
 Three buildings of the same concrete, steel and brick. A five-storey apartment block of the kind that fills Turkish
 towns: shops behind glass on a tall ground storey, brick infill, balconies, a flat roof with water tanks and solar
-collectors. A thirty-storey tower, 97 m: a frame around a shear-wall core, a glass lobby at the front. And a one-storey
+collectors. A thirty-storey tower, 97 m: a frame around a plain-concrete core, a glass lobby at the front. And a one-storey
 house with a gable roof: ridge beam, gable walls, a chimney. Earthquakes from magnitude 3 to 9 shake the ground under
 them, each made from a real strong-motion record, or the viewer throws a wrecking ball with the mouse. The light is a plain sunny day on purpose; the effort went into the physics.
 
@@ -202,7 +202,7 @@ holds together under real earthquake records.
 
 | | |
 | --- | --- |
-| **Bodies** | Rigid convex pieces: 3,006 in the apartment block, 8,404 in the tower, 456 in the house (column and beam segments, slab panels, shear walls, brick blocks, balconies, roofs), each with its own hull, mass and inertia. Positions in double precision. Slanting pieces (the roof, the gables) are boxes cut by planes; two pieces cut by the same plane from opposite sides are glued across it, with fibres drawn from a fine sampling of where both are. |
+| **Bodies** | Rigid convex pieces: 3,006 in the apartment block, 8,404 in the tower, 456 in the house (column and beam segments, slab panels, core walls, brick blocks, balconies, roofs), each with its own hull, mass and inertia. Positions in double precision. Slanting pieces (the roof, the gables) are boxes cut by planes; two pieces cut by the same plane from opposite sides are glued across it, with fibres drawn from a fine sampling of where both are. |
 | **Bonds** | 6,857 interfaces carrying 44,378 fibres, after the applied element method: concrete cracks in tension and crushes in compression (30 % residual), bars yield and snap at 6 cm of plastic elongation, shear is cohesion and then friction plus dowel action. What exceeds a capacity becomes a permanent offset, so a column that has hinged stays bent. |
 | **Solver** | XPBD on the GPU, 40 substeps a frame. Interfaces are solved Gauss-Seidel in 13 graph colours (the lower bound: the most interfaces on one body), with the multiplier accumulated across passes so capacities bound the total force. Contacts are Jacobi, and both bodies of a pair take the same share (one over the larger of their contact counts), so a pair keeps its momentum. The substep loop is a CUDA graph with branches: the interfaces on a high-priority branch while the contacts work on a copy of the poses taken after the integration (Jacobi between the two). Standing, its time comes from the colour passes more than from the piece count (11-15 ms for both the apartment block and the tower with 2.8 times as many pieces); during the tower's collapse 20-23 ms. |
 | **Contact** | A narrow phase lists the pairs whose boxes can touch (one thread a pair); then eight lanes a pair, four pairs to a warp, and the big pairs (two slabs pancaked face to face) a whole warp each on a branch of their own. Sample points, in chunks culled by their boxes, against the other hull's planes; normal corrections averaged within the pair, then one friction impulse at the patch centre with static and dynamic budgets and anchors (as in PhysX), torsional friction and restitution. |

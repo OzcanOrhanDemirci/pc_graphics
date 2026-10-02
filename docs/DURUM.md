@@ -4,6 +4,10 @@
 > `docs/altinsaat/`, `docs/fener/`, `docs/yikim/` (PLAN.md ve DURUM.md).
 
 ## Şu an
+- **2026-10-02 (gece, son) · Gökdelenin ortası donatısız beton.** Özcan: *"Merkez çok bağımsız kalıyordu"* (toplarla
+  çevresi yıkılınca ortadaki çekirdek tek başına ayakta kalıyordu). Depremde davranış ve hız aynı; merkez zayıfladı ama
+  orta açıklığın donatılı kolonları onu yine taşıyabiliyor (kısmi, Özcan: *"Biraz bile iyileşse yeterli"*).
+  `docs/yikim/DURUM.md`.
 - **2026-10-02 (gece) · Gökdelenin göçüşü hızlandı.** Özcan: *"gökdelende [...] ağır çekimde gibi yıkılıyor. Bunu
   optimize edip düzeltir misin."* Temas çözümü iki kat hızlı; göçüşte fizik adımı 40-50 → 20-23 ms, pencerede dünya
   gerçeğin ~%35-40'ından %66-73'üne. Sürtünme çapası tablosundaki bir yarış (gökdelen her koşuda farklı yıkılıyordu)

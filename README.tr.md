@@ -95,7 +95,7 @@ saçılımın ~100 katından 5 katına indirildi; kamera içindeyken bütün sis
 
 Aynı beton, çelik ve tuğladan üç yapı. Türkiye'nin kasabalarını dolduran türden beş katlı bir apartman: yüksek zemin
 katta camlı dükkânlar, tuğla dolgu duvarlar, balkonlar, su depoları ve güneş kollektörleriyle düz çatı. Otuz katlı, 97
-metrelik bir gökdelen: perdeli çekirdeğin çevresinde bir çerçeve, önde camlı bir lobi. Ve beşik çatılı, tek katlı bir
+metrelik bir gökdelen: donatısız beton çekirdeğin çevresinde bir çerçeve, önde camlı bir lobi. Ve beşik çatılı, tek katlı bir
 ev: mahya kirişi, beşik duvarları, baca. Zemini büyüklüğü 3'ten 9'a kadar depremler sallıyor (her biri gerçek bir
 kuvvetli yer hareketi kaydından türetildi), ya da izleyen kişi yapıya fareyle yıkım topu fırlatıyor. Işık bilerek sade
 bir güneşli gün; emek fiziğe gitti.
@@ -200,7 +200,7 @@ kayıtları altında dağılmayan bir çözücü.
 
 | | |
 | --- | --- |
-| **Cisimler** | Katı dışbükey parçalar: apartman 3.006, gökdelen 8.404, ev 456 (kolon ve kiriş parçaları, döşeme panelleri, perde duvarlar, tuğla bloklar, balkonlar, çatı); her birinin kendi kabuğu, kütlesi ve eylemsizliği. Konumlar çift duyarlıkta. Eğik parçalar (çatı, beşik) kesme düzlemli kutular; aynı düzlemle karşı yönden kesilmiş iki parça o düzlemden yapıştırılır, kesik yüzlerde lifler ortak bölgenin ince örneklemesinden. |
+| **Cisimler** | Katı dışbükey parçalar: apartman 3.006, gökdelen 8.404, ev 456 (kolon ve kiriş parçaları, döşeme panelleri, çekirdek duvarları, tuğla bloklar, balkonlar, çatı); her birinin kendi kabuğu, kütlesi ve eylemsizliği. Konumlar çift duyarlıkta. Eğik parçalar (çatı, beşik) kesme düzlemli kutular; aynı düzlemle karşı yönden kesilmiş iki parça o düzlemden yapıştırılır, kesik yüzlerde lifler ortak bölgenin ince örneklemesinden. |
 | **Bağlar** | 44.378 lif taşıyan 6.857 arayüz, uygulamalı eleman yönteminden (AEM) esinli: beton çekmede çatlar, basınçta ezilir (%30 kalan dayanım), donatı akar ve 6 cm plastik uzamada kopar, kayma önce kohezyon sonra sürtünme + dübel. Kapasiteyi aşan kısım kalıcı ofset olur: mafsallaşan kolon eğik kalır. |
 | **Çözücü** | Ekran kartında XPBD, karede 40 alt adım. Arayüzler 13 graf renginde Gauss-Seidel ile çözülür (alt sınır: bir cisme değen en çok arayüz); çarpan geçişler boyunca biriktirilir, kapasite toplam kuvveti sınırlar. Temaslar Jacobi: bir çiftin iki cismi de aynı payı alır (1 / ikisinin temas sayısından büyüğü), çiftin momentumu korunur. Alt adım döngüsü kollu bir CUDA Graph: arayüzler yüksek öncelikli bir kolda, temaslar onlarla aynı anda, entegrasyondan hemen sonraki konumların kopyası üzerinde (ikisi arasında Jacobi). Ayakta süre parça sayısından çok renk geçişlerinden gelir (apartman ve 2,8 kat parçalı gökdelen 11-15 ms); gökdelenin göçüşünde 20-23 ms. |
 | **Temas** | Önce dar faz kutuları değebilecek çiftleri listeler (çift başına bir iş parçacığı); sonra çift başına 8 şerit, bir warp'ta dört çift; büyük çiftler (üst üste çöken iki döşeme) kendi kollarında birer tam warp'la. Örnek noktalar, kutularıyla elenen gruplar hâlinde, ötekinin kabuk düzlemlerine karşı; normal düzeltmeler çift içinde ortalanır, sonra yama merkezinde statik ve dinamik bütçeli, çapalı (PhysX gibi) tek sürtünme; burulma sürtünmesi ve sekme. |

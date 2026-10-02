@@ -53,7 +53,7 @@ Settings in `scenes/fener.cfg` (F5 applies them at once).
 
 ## 03 · Collapse — concrete buildings, earthquakes and fracture
 **Building** at the top of the panel: **Apartments** (5 storeys, shops on the ground floor), **Tower** (30 storeys, 97 m,
-shear-wall core, glass lobby), **House** (one storey, gable roof, chimney). Choosing one rebuilds it and turns the camera
+concrete core, glass lobby), **House** (one storey, gable roof, chimney). Choosing one rebuilds it and turns the camera
 to it. On opening, the building settles under its own weight for two seconds, unseen. The point is the physics.
 
 | Key | What it does |

@@ -3,6 +3,25 @@
 > Tek kaynak durum panosu. Plan ve Özcan'ın sözleri `docs/yikim/PLAN.md`'de.
 
 ## Şu an
+- **2026-10-02 (gece, son) · Gökdelenin ortası artık donatısız beton.** Özcan: *"gökdelenin ortasında dikdörtgen bir
+  alan var. [...] top ata ata yıkarken mesela gökdelenin çevresi yıkılıyor ortasında dikdörtgen kat kat alan kalıyor,
+  sonra o da devriliyor ama bütün olarak devriliyor"*, *"fiziği değil, gökdelenin ortasını düzelt sadece"*, *"Merkez çok
+  bağımsız kalıyordu"*, *"Biraz bile iyileşse yeterli."* Ekran görüntüsünde çevresi yıkılmış, 90 m'lik, eğilen tek bir
+  tüp ayakta.
+  - **Sebep:** asansör boşluğunun dört perde duvarı kolon donatısıyla (%1,5) kat kat birbirine ve kirişlere bağlıydı:
+    çevresi giden bir konsol tüp.
+  - **Yapılan:** çekirdek duvarları donatısız beton (`gokdelen.core_rho = 0`; -1 eski hâli). Basınçta taşır, çekilince
+    hiçbir şey tutmaz. Depremde ölçülen aynı: 5 ve 6 kırık 0 (öteleme %0,04 / %0,07), 7 kule devrilir (göçüşte fizik
+    15-22 ms, enkazda 26-27 ms), 9 göçer (çatı 96 m). Oturmada çatlak 1.345 (1.265).
+  - **Denenip bırakılan:** çekirdek yerine her katta kapılı tuğla asansör boşluğu. Orta da diğerleriyle yıkıldı, ama
+    5'te 24, 6'da 619 lif koptu, 7'de kule yerine çöktü ve sıkışık yığında 57 bin temas yaması, adım 53-64 ms: ağır çekim
+    geri geldi.
+  - **Ölçülen sınır** (`darbe.soy`: orta açıklık dışındaki her şey kaldırılır, sonra ortaya mermi gücünde top): orta
+    açıklık iki hâlde de ayakta kalıyor (dört donatılı kolonu ve kirişleri taşıyor). Donatısız çekirdek merkezi zayıflatır,
+    sorunu tamamen çözmez; Özcan'ın onayıyla bu kadar.
+  - Tanı: `darbe.cevre` (çevre kolonlara kat kat top halkaları: `darbe.katlar`, `darbe.kat_bas`, `darbe.kat_adim`,
+    `darbe.aralik`), `darbe.soy`. Panelde gökdelenin notu "camlı lobi". Düzlem döngüsünde ilk dışarıda kalan düzlemde
+    çıkış geri kondu (topun 256 düzlemi var; sonuç aynı). Testler 32/34.
 - **2026-10-02 (gece) · Gökdelenin göçüşü artık ağır çekimde değil: temas iki kat hızlı.** Özcan: *"Sadece gökdelende
   sanırım fps + büyük yapı olmasından dolayı ağır çekimde gibi yıkılıyor. Bunu optimize edip düzeltir misin. Ağır
   çekimde değilken yıkım yavaş yani."* Ara durumda: *"gerçek zamanlı olması şart değil, iyi bir optimizasyon yapmış
@@ -408,7 +427,7 @@ CUDA Graph'la) ve `--set test.profile_at="s s"` (o anda bir kare çekirdek çeki
   ayrı (bir şerit bir çift), çift başına 8 şerit (dört çift bir warp'ta; 4 şerit kötü, 16 aynı), yama başına ~%30.
 - **Paylaşılan bellek her yerde kazandırmaz:** karşı cismin düzlemlerini ve örnek grubunu paylaşılan belleğe önceden
   yüklemek kazandırmadı; blok başına 23 KB doluluğu düşürüp küçük çiftleri yavaşlattı (19 → 31 ns/çift). Kaldırılıp
-  düzlem döngüsü erken çıkışsız yapılınca 19 → 16 ns. İlk yinelemenin noktalarını saklayıp sonrakilerde yalnız onları
+  düzlem döngüsü erken çıkışsız yapılınca 19 → 16 ns (erken çıkış sonra geri kondu: yıkım topunun 256 düzlemi var). İlk yinelemenin noktalarını saklayıp sonrakilerde yalnız onları
   çözmek büyük çiftte işe yaradı (44 → 30 ns), küçükte yavaşlattı: yalnız büyük çiftte.
 - **En büyük tek adım boşta kalan kartı kullanmak:** arayüzler alt adım başına 26 küçük çekirdek, her biri birkaç SM'de;
   kartın geri kalanı bekliyordu. Temaslar arayüzlerle aynı anda (ayrı kolda), zemin temasları da arayüz kolunda:
@@ -437,6 +456,8 @@ düzeltmesinden sonra) farkı parantezde.
 | 7 · Şiddetli | 2.772 (2.791), öteleme %0,60, ayakta | zemin kat gider, kule bütün olarak devrilir | 6 çatlak |
 | 8 · Yıkıcı | göçer, çatı 13,5 m iner | ölçülmedi | göçer, çatı 2,4 m iner |
 | 9 · Felaket | göçer, çatı 12,7 m iner (11,5) | göçer (çatı 96 m) | göçer, çatı 2,4 m iner |
+
+Gökdelen sütunu çekirdek donatısız yapıldıktan sonra yeniden ölçüldü (5, 6, 7, 9): nitelik aynı.
 
 ## Büyüklükler (10-02, temas payı düzeltmesinden önce; `--scene yikim --clip sarsinti --still T --set deprem.magnitude=M`)
 Dalga kaynakları: 3-4 Bayraklı, 5-6 İzmit, 7 Yarımca, 8-9 Antakya. Bina ölçümü sarsıntı bittikten ~8 sn sonra.
