@@ -12,7 +12,7 @@
 [![Display](https://img.shields.io/badge/output-2560%C3%971440%20SDR-555)](#two-modes)
 [![Licence](https://img.shields.io/badge/licence-all%20rights%20reserved-lightgrey)](#licence)
 
-[Scenes](#scenes) · [Scene 1 in depth](#what-scene-1-computes) · [Scene 3 in depth](#scene-3-the-physics) · [Building](#building) · [Running](#running) · [Next](#next-scenes)
+[The application](#the-application) · [Scenes](#scenes) · [Scene 1 in depth](#what-scene-1-computes) · [Scene 3 in depth](#scene-3-the-physics) · [Building](#building) · [Running](#running) · [Layout](#repository-layout)
 
 *[Türkçe](README.tr.md)*
 
@@ -31,6 +31,22 @@ Everything is written for one machine (an RTX 4080 driving a 2560×1440 IPS moni
 engine underneath. Scene 1 is a spectral path tracer with a **still mode** that accumulates towards a reference image
 and a **live mode** that keeps 20 to 30 frames per second with NVIDIA's AI denoiser. Scene 2 is a real-time volumetric
 night. Scene 3 is a rigid-body and fracture solver of its own, drawn by a plain daylight ray tracer.
+
+## The application
+
+The three scenes live in one program. It opens on a gallery; a scene loads behind a loading screen (its programs
+compile and its world is built on a worker thread, so the window stays alive) and then runs under an interface that is
+the same for all of them: who and what at the bottom left, timings at the top right, the way out at the bottom right,
+the keys on F1. Esc always leads back, and a scene that closes gives the GPU back entirely.
+
+| The gallery | A scene under the shared interface |
+| --- | --- |
+| ![The gallery: the scenes in a numbered list, the selected one large on the right, its description and an open button](docs/images/app-gallery.jpg) | ![Scene 3 during a magnitude 7 earthquake: the scene's name and state, the magnitude selector, the shaking's progress, timings](docs/images/app-scene.jpg) |
+
+The look is one family for everything, IBM Plex: Serif for names, Sans for words, Mono for numbers and keys. Dark glass
+panels over the pictures, and one accent colour per scene, taken from its light: warm gold, cold blue, safety orange.
+A scene is a folder with its renderer, its settings and its OptiX programs, plus one line in the scene registry;
+[docs/MIMARI.md](docs/MIMARI.md) (Turkish) describes the contract and how to add one.
 
 ## Scenes
 
@@ -74,23 +90,23 @@ fog when the camera is inside it is correct and flat.
 ### 3 · Collapse *(Yıkım)* · October 2026
 
 A five-storey reinforced concrete apartment block of the kind that fills Turkish towns: shops behind glass on a tall
-ground storey, brick infill, balconies, a flat roof with water tanks and solar collectors. Real earthquake records
-shake the ground under it, or the viewer blows its columns out with the mouse. The light is a plain sunny day on
-purpose; the effort went into the physics.
+ground storey, brick infill, balconies, a flat roof with water tanks and solar collectors. Earthquakes from magnitude 3
+to 9 shake the ground under it, each made from a real strong-motion record, or the viewer blows its columns out with the
+mouse. The light is a plain sunny day on purpose; the effort went into the physics.
 
-![Scene 3: the apartment block coming down under the 2023 Antakya record](docs/images/yikim.jpg)
+![Scene 3: the apartment block coming down in a magnitude 8 earthquake](docs/images/yikim.jpg)
 
-| The same building, 1999 Yarımca record at 1.0× | and at 1.5× |
+| Magnitude 6: the balcony parapets fall | Magnitude 7: the ground storey loses its infill, the frame stands |
 | --- | --- |
-| ![Still standing; brick infill and parapets have fallen](docs/images/yikim-yarimca-1.jpg) | ![Soft-storey collapse](docs/images/yikim-yarimca-15.jpg) |
+| ![After a magnitude 6: the balcony parapets on the ground](docs/images/yikim-m6.jpg) | ![After a magnitude 7: parapets and the ground storey's infill gone, the frame standing](docs/images/yikim-m7.jpg) |
 
-| Bars left where a corner column was blown out | 2023 Pazarcık at 1.0×: standing, stripped of its infill |
+| Bars left where a corner column was blown out | Magnitude 9: the soft storey gives way |
 | --- | --- |
-| ![Close up: bent reinforcing bars sticking out of the beams and the column above the missing corner column](docs/images/yikim-bars.jpg) | ![The building still standing after the Pazarcık record, many infill walls gone](docs/images/yikim-pazarcik.jpg) |
+| ![Close up: bent reinforcing bars sticking out of the beams and the column above the missing corner column](docs/images/yikim-bars.jpg) | ![A magnitude 9: the ground storey failing, the block tilting](docs/images/yikim-m9.jpg) |
 
-It runs live: a full-screen window at 1080p, about 55 frames per second on the RTX 4080 with the denoising filter on
-(60 to 75 raw), physics and picture side by side on the GPU. Click to blow pieces out, start any of the five records,
-slow time down to a tenth.
+It runs live at 1080p, about 50 frames per second on the RTX 4080 with the denoising filter on, physics and picture side
+by side on the GPU. Pick a magnitude with 3 to 9, start it with Space, click to blow pieces out, slow time down to a
+tenth.
 
 ## What scene 1 computes
 
@@ -178,25 +194,28 @@ holds together under real earthquake records.
 | **Contact** | One warp per pair of bodies: sample points against the other hull's planes, normal corrections averaged within the pair, then one friction impulse at the patch centre with static and dynamic budgets and anchors (as in PhysX), torsional friction and restitution. |
 | **Determinism** | Contact and interface sums in 2⁻⁴⁰ fixed point instead of floating-point atomics: the same earthquake brings the same building down the same way, every run. |
 | **Damping** | 5.3 % of critical, measured from free vibration: mass-proportional, relative to the ground, bonded bodies only, with capped accelerations so falling debris stays free. |
-| **Earthquakes** | Five strong-motion records from ESM and AFAD TADAS (2023 Pazarcık and Antakya, 1999 Yarımca and İzmit, 2020 Bayraklı), integrated twice to ground displacement; the ground is a moving kinematic body. Playback starts 15 s before each record's strongest moment. |
+| **Earthquakes** | By magnitude, 3 to 9: what the building feels from a quake of that size some 15 km away. Each is made from the waveform of a real strong-motion record (ESM and AFAD TADAS: 2023 Antakya, 1999 Yarımca and İzmit, 2020 Bayraklı), cut to the strong-motion length that size brings, played faster for the small ones, scaled to that size's peak ground acceleration and baseline-corrected so the ground ends where it started; then integrated twice to the ground's displacement. A game's scale, not a seismological one: magnitude alone does not fix the shaking. |
 | **Picture** | OptiX: every piece an instance of its own hull, transforms written by the physics straight into the instance buffer, top level rebuilt every frame. Sun with soft shadows, sky, one bounce off the ground, a metre grid that rides the earthquake. Reinforcing bars are drawn from the fibres' state: across a crack while they hold, as bent stubs once they are gone. |
 | **Denoising** | Six samples a frame are grainy while things move. A light SVGF of our own: the lighting (beauty over albedo) is carried along each piece's own motion from frame to frame, checked by body, normal and distance, clamped to the new frame's neighbourhood when a shadow sweeps over it, then a-trous passes that stop at other bodies, normals, depth steps and lighting edges. 2.4 ms at 1080p. The OptiX AI denoiser is one key away (G): cleaner still, but it costs 9.7 ms and slows the physics that shares the GPU. |
 
-What the building does (roof drift relative to the ground, deterministic):
+What each magnitude does to the building (deterministic; measured a few seconds after the shaking ends):
 
-| Record | Peak ground acceleration | Result |
-| --- | --- | --- |
-| 2020 Bayraklı ×1 | 0.12 g | stands, drift 0.29 % |
-| 1999 İzmit ×1 | 0.25 g | stands, 0.26 % |
-| 1999 Yarımca ×1 | 0.34 g | stands, 0.70 % |
-| 1999 Yarımca ×1.5 | | soft-storey collapse, the roof comes down 12.5 m |
-| 2023 Antakya ×1 | 0.67 g | collapses, the roof comes down 12.3 m |
-| 2023 Pazarcık ×1 | 2.25 g (one component) | stands, heavily damaged: drift 0.81 %, parapets and much of the infill fall |
-| 2023 Pazarcık ×1.25 | | collapses, the roof comes down 12.1 m |
+| Magnitude | Peak ground acceleration | Strong shaking | Result |
+| --- | --- | --- | --- |
+| 3 · weak | 0.012 g | 3 s | nothing breaks |
+| 4 · light | 0.035 g | 5 s | hairline cracks |
+| 5 · moderate | 0.13 g | 8 s | cracks inside the bonds, nothing falls |
+| 6 · strong | 0.20 g | 14 s | balcony parapets and some ground-storey infill fall |
+| 7 · severe | 0.33 g | 26 s | heavy damage: parapets and the ground storey's infill fall, drift 0.66 %, the frame stands |
+| 8 · destructive | 0.70 g | 32 s | soft-storey collapse: the ground storey goes at 11 s, the block is on the ground by 17 s |
+| 9 · catastrophic | 1.1 g | 45 s | collapse after a longer, harder shaking (the strongest part comes later: ground storey at 14 s) |
 
-Pazarcık ×1 sits right at the threshold: it brought the building down until a modelling bug was fixed at the very end
-(below), and it stands after it. A building at its limit is chaotic; that is why the solver had to become
-deterministic before any of these results meant anything.
+Under the real records at full scale it stood through 2020 Bayraklı, 1999 İzmit and 1999 Yarımca, and fell under 2023
+Antakya and Yarımca ×1.5. Pazarcık's record (3.0 g vector peak) sat right at the threshold: it brought the building down
+until a modelling bug was fixed at the very end (below), and it stands after it. A building at its limit is chaotic;
+that is why the solver had to become deterministic before any of these results meant anything. That record is not
+among the magnitudes: its energy sits in short periods, and scaled until the building falls it throws debris unlike
+anything else.
 
 Decisions worth reading:
 
@@ -250,86 +269,73 @@ driver 617.14), Visual Studio 2026 with the C++ workload (MSVC 14.51, its bundle
 Python 3 for the tools (`numpy`, `pillow`, `OpenEXR`, `flip-evaluator`).
 
 ```bash
-bash third_party/fetch.sh        # CUDA 13.4.2 redistributables, OptiX 9.1 headers, GLFW, stb, tinyexr
+bash third_party/fetch.sh        # CUDA 13.4.2 redistributables, OptiX 9.1 headers, GLFW, stb (incl. stb_truetype), tinyexr
 ```
 
 Nothing is installed and the graphics driver is not touched: CUDA comes as NVIDIA's per-component archives into
 `third_party/`, which is not committed.
 
 ```bat
-cmd /c build.bat                 :: configures once, then builds build\pc_graphics.exe
+cmd /c build.bat                 :: configures once, then builds build\pc_graphics.exe (the one program)
 ```
 
-The OptiX device programs in `src/device/` are compiled at run time with NVRTC, so editing them needs no rebuild:
-press **F5** in the window.
+The OptiX device programs (`src/scenes/<scene>/device/`) are compiled at run time with NVRTC, so editing them needs no
+rebuild: press **F5** in the scene.
 
 ## Running
 
 ```bat
-build\pc_graphics.exe                                   :: borderless full screen, still mode
-build\pc_graphics.exe --headless --spp 2048 --denoise --out captures\name
-build\pc_graphics.exe --headless --live 80 --out captures\live\name
-build\pc_graphics.exe --selftest
-build\pc_graphics.exe --headless --furnace --spp 512 --out captures\furnace
+build\pc_graphics.exe                       :: the gallery, borderless full screen on the primary monitor
+build\pc_graphics.exe --scene yikim         :: straight into a scene (altinsaat, fener, yikim); Esc leads to the gallery
+build\pc_graphics.exe --windowed            :: in a 1280x720 window
+build\pc_graphics.exe --set key=value       :: a setting of the scenes (scenes/<id>.cfg), repeatable
+build\pc_graphics.exe --autotest            :: the whole application once through by script; screens to captures\arayuz
 ```
 
-| Key | |
+| Everywhere | |
 | --- | --- |
-| Space | still ↔ live |
-| C | next camera |
-| H | heads-up display (fps, milliseconds per pass, samples, watts, temperature) |
-| S | screenshot, PNG and linear EXR |
-| ↑ ↓ / ← → | exposure / focus distance |
-| D, P, V, N | denoiser, photons, haze, next-event estimation on and off |
-| 1 to 5 | beauty, albedo, normal, caustics only, cost heat map |
-| F5 | recompile the device programs and reload `scene.cfg` |
+| Esc | back: help → scene → gallery → out |
+| F1 | the scene's keys |
+| H | hide the interface |
+| F12 | screenshot of the scene (`captures\<scene>_<date>`; scene 1 also writes a linear EXR) |
+| F5 | reload the scene's settings and recompile its OptiX programs (scenes 1 and 2) |
+| ↑ ↓, 1 to 3, Enter, mouse | choose and open in the gallery |
 
-Scene parameters (sun, haze, white balance, cameras, crystals) live in `scene.cfg`. A short Turkish guide for the
-demonstration is in [GOSTERI.md](GOSTERI.md).
+| Scene 1 · Altın Saat | Scene 2 · Fener | Scene 3 · Yıkım |
+| --- | --- | --- |
+| Space still ↔ live · C next camera · ↑ ↓ exposure · ← → focus · R reset · P, V, N, D, G photons, haze, next-event estimation, denoiser, sun patches · 1 to 5 beauty, albedo, normal, caustics, cost | Space walk A ↔ B · B jump to the other view · P pause time · ← → time ∓1 s · ↑ ↓ exposure · 1 to 5 views · Tab first-person walk (WASD, mouse, Shift run, Space jump) | 3 to 9 magnitude · Space start or stop · T slow motion · P pause · left click blast (Ctrl: bigger) · R rebuild · right mouse look · WASD, E/Q fly · Shift faster · wheel zoom · B bars · G denoising |
 
-Scene 2 opens with `build\fener.exe` (Space: walk between the two views, Tab: first-person walk; keys in GOSTERI.md).
-Scene 3:
+The scenes' tools run without a window, from the same program:
 
 ```bat
-build\yikim.exe                                         :: full-screen live window
-build\yikim.exe --test                                  :: the solver's physical tests
-build\yikim.exe --clip sarsinti --seconds 40 --set deprem.record=2 --out captures\yikim\name
-build\yikim.exe --clip kolon --still 3 --out captures\yikim\name
+build\pc_graphics.exe --headless --spp 2048 --denoise --out captures\name          :: scene 1 (also with --scene altinsaat)
+build\pc_graphics.exe --headless --live 80 --out captures\live\name
+build\pc_graphics.exe --selftest
+build\pc_graphics.exe --scene fener --headless --frames 64 --out captures\name
+build\pc_graphics.exe --scene fener --map captures\harita.png
+build\pc_graphics.exe --scene yikim --test                                          :: the solver's physical tests
+build\pc_graphics.exe --scene yikim --clip sarsinti --seconds 40 --set deprem.magnitude=7 --out captures\yikim\name
 ```
 
-| Key | |
-| --- | --- |
-| Left click | blast the piece under the cursor (Ctrl: a bigger charge) |
-| Right mouse, WASD, E/Q, Shift, wheel | look, fly, up/down, faster, zoom |
-| Space | start or stop the earthquake |
-| 1 to 5 | record: Pazarcık, Antakya, Yarımca, İzmit, Bayraklı |
-| + / − | intensity in steps of 0.25 |
-| T | slow motion: 1, 0.25, 0.1 |
-| P, B, G, R | pause, reinforcing bars on and off, denoising (filter, AI, raw), rebuild the building |
-| F12, H, Esc | screenshot, hide the text, quit |
-
-Settings for scene 3 (building, materials, solver, camera, sun) are in `scenes/yikim.cfg`; any of them can be
-overridden with `--set key=value`.
+Each scene's list is at the top of its `src/scenes/<scene>/<scene>_app.cpp`. A short Turkish guide for a demonstration
+is in [GOSTERI.md](GOSTERI.md).
 
 ## Repository layout
 
 ```
 src/
-  main.cpp            window, keys, headless and live measurement modes; routes --scene fener and --scene yikim
-  renderer.cpp        OptiX context, NVRTC, pipeline, acceleration structures, launches
-  scene.cpp           the room, materials, cameras, spectral fitting and self-tests
-  photons.cu          photon hash grid (CUB radix sort), beam bounding boxes
-  kernels.cu          denoiser inputs, lens-glare pyramid
-  denoiser.cpp        OptiX AI denoiser: AOV, temporal, temporal 2× upscale
-  fener/              scene 2: world generation, real-time light pipeline, player mode
-  yikim/              scene 3: hulls, the GPU solver (phys.cu), the building, earthquake records, tests, window
-  device/             OptiX programs for the three scenes (compiled at run time)
-  shared/             code shared by host and device: vectors, spectra, parameters, display transform
-scenes/               settings of scenes 2 and 3
+  app/                the application: window, gallery, loading, the interface over a scene, help, scene registry
+  ui/                 the interface kit: rounded panels, shadows, images, text in IBM Plex (OpenGL 2, one GLSL program)
+  core/               what the scenes share: settings files, image reading and writing, GPU readings (NVML), bloom
+  shared/             headers shared by host and device code: vectors, tone mapping, spectra
+  scenes/
+    altinsaat/        scene 1: spectral path tracer, photon grid, AI denoiser; device/ its OptiX programs
+    fener/            scene 2: world generation, real-time light pipeline, player; device/
+    yikim/            scene 3: hulls, the GPU solver (phys.cu), the building, earthquakes, tests, denoising filter; device/
+scenes/               the scenes' settings (<scene>.cfg)
+assets/               fonts (IBM Plex), gallery pictures, blue-noise texture, earthquake records (ESM, AFAD TADAS)
 tools/                EXR statistics, FLIP and RMSE comparison, noise maps, contact sheets, prism planner, value studies
-assets/               blue-noise texture; deprem/: the five earthquake records (ESM, AFAD TADAS)
-docs/                 working journal in Turkish: plan, status board with every measurement, limits report;
-                      fener/ and yikim/ the same for scenes 2 and 3
+docs/                 working journal in Turkish: application status and architecture; one folder per scene (plan, status)
 third_party/fetch.sh  fetches the dependencies; the folder itself is not committed
 ```
 
@@ -343,9 +349,11 @@ third_party/fetch.sh  fetches the dependencies; the folder itself is not committ
 ## Licence
 
 Private repository. All rights reserved. Third-party components are fetched at build time under their own licences:
-the NVIDIA CUDA redistributables and OptiX SDK headers, GLFW (zlib), stb (public domain), tinyexr (BSD). Earthquake
-records: ESM, the Engineering Strong-Motion database (Mascandola et al., doi 10.13127/esm.3), and AFAD TADAS.
+the NVIDIA CUDA redistributables and OptiX SDK headers, GLFW (zlib), stb (public domain), tinyexr (BSD). The IBM Plex
+fonts in `assets/fonts` are under the SIL Open Font License (`assets/fonts/LICENSE.txt`). Earthquake records: ESM, the
+Engineering Strong-Motion database (Mascandola et al., doi 10.13127/esm.3), and AFAD TADAS.
 
 Developed with Claude Code (Anthropic) in long autonomous sessions; the measurements behind every decision are in
-[docs/DURUM.md](docs/DURUM.md), [docs/fener/DURUM.md](docs/fener/DURUM.md) and [docs/yikim/DURUM.md](docs/yikim/DURUM.md),
-and an honest account of where the work on scene 1 went wrong is in [docs/SINIRLAR.md](docs/SINIRLAR.md).
+[docs/DURUM.md](docs/DURUM.md) (the application), [docs/altinsaat/DURUM.md](docs/altinsaat/DURUM.md),
+[docs/fener/DURUM.md](docs/fener/DURUM.md) and [docs/yikim/DURUM.md](docs/yikim/DURUM.md), and an honest account of where
+the work on scene 1 went wrong is in [docs/altinsaat/SINIRLAR.md](docs/altinsaat/SINIRLAR.md).

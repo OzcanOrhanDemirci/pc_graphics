@@ -3,6 +3,22 @@
 > Tek kaynak durum panosu. Plan ve Özcan'ın sözleri `docs/yikim/PLAN.md`'de.
 
 ## Şu an
+- **2026-10-02 · Kamera yönleri düzeltildi, depremler büyüklükle (3-9), sahne tek uygulamada.** Özcan (gece, otonom
+  çalışma isteği): *"Yıkım simülasyonunda fare ve klavye hareketleri ters, onları düz yap yani sağa-sağa, sol-sola
+  gitsin."* ve *"Yıkım için Türkiyedeki depremleri kaldır, onun yerine onlardan ilham alarak 3 şiddetinde 4 5 6 7 8 9
+  şeklinde rihter ölçeğine göre depremleri listele. Yani şu deprem yerine 6 şiddetinde deprem diyelim."*
+  - **Kamera:** görüntünün sağı `ileri × yukarı` (renderer böyle kuruyor); uçuş kodu D için `(cos, 0, -sin)`, yani
+    ekranın solunu kullanıyordu, fare de sapmayı ters yönde artırıyordu. Kamera tek yerde (`fly_camera.h`);
+    `--scene yikim --test kontrol` öndeki bir noktanın D'de ve fare sağa giderken ekranda sola kaydığını sınar (4/4).
+    Uygulama içinde sanal fareyle de doğrulandı: sağ tuşla sağa sürükleyince bina ekranda sola kayıyor.
+  - **Büyüklükler** (`quake.cpp`, `kMagnitudes`): her biri bir gerçek kaydın dalgası; güçlü sarsıntı süresi kadar
+    kesilir (tepeden önce üçte bir), küçükler hızlı oynatılır, o büyüklüğün tepe ivmesine ölçeklenir, kosinüs
+    yükseliş ve sönüşle; kesilen kayıt sonda hareket ettiği için yumuşak bir taban çizgisi düzeltmesi (başta eğimsiz,
+    sonda değeri ve eğimi sıfırlayan kübik; ivmesi ~6d/T², milimetre/s²) zemini başladığı yerde durdurur.
+    Pencerede **3-9** büyüklük, **Boşluk** başlat; **+/-** ve kayıt tuşları kalktı. Ölçümler aşağıda ("Büyüklükler").
+  - Sahne artık `build\pc_graphics.exe`'de, galeriden açılıyor (ortak arayüz: büyüklük seçici, sarsıntı ilerlemesi);
+    `yikim.exe` kalktı, araçlar `--scene yikim --test|--clip|--still`. Kod `src/scenes/yikim/`. Uygulamanın panosu
+    `docs/DURUM.md`.
 - **2026-10-02 · Gren giderildi.** Özcan: *"Görüntü noktacıklı yani çok grenli gibi. Estetik bir durum [...] Bir hata
   olduğunu sanmıyorum. Eğer öyle olması gerekiyorsa düzeltmek yerine nedenini de açıklayabilirsin."* Sebep: ışın
   izleme, gök ışığı (tek kosinüs ışını) ve güneş diski (tek gölge ışını) karede 6 örnekle; dünya durunca örnekler
@@ -237,6 +253,24 @@ yumuşaklığı Y1'de doğal periyotla ölçülecek; gerekirse alt adım artar.
 - **Ayrılma hızı tavanında "önceki ayrılma hızına izin" cırcır oldu** (1,5 → 11,5 → 29 m/s): iç içe geçme sürerken
   tavan yalnız sekme hızı / 2 m/s.
 - **Yakalayıcı "bir karede 3 kat" kuralı iki karede biriken fırlamayı kaçırdı:** izleme (`test.watch`) buldu.
+
+## Büyüklükler (10-02, `--scene yikim --clip sarsinti --still T --set deprem.magnitude=M`)
+Dalga kaynakları: 3-4 Bayraklı, 5-6 İzmit, 7 Yarımca, 8-9 Antakya. Bina ölçümü sarsıntı bittikten ~8 sn sonra.
+
+| Büyüklük | Tepe ivme | Süre (hız) | Bina | Kırık lif |
+|---|---|---|---|---|
+| 3 · Zayıf | 0,012 g | 3 sn (×2,2) | hasarsız, öteleme %0,01 | 0 (38 çatlak) |
+| 4 · Hafif | 0,035 g | 5 sn (×1,8) | kılcal çatlaklar | 0 (1.076 çatlak) |
+| 5 · Orta | 0,13 g | 8 sn (×1,4) | bağlarda çatlak, görünür hasar yok | 157 |
+| 6 · Kuvvetli | 0,20 g | 14 sn (×1,2) | balkon korkulukları ve zemin kat dolgusunun bir kısmı dökülür | 896 |
+| 7 · Şiddetli | 0,33 g | 26 sn | ağır hasar, öteleme %0,66, çerçeve ayakta | 3.024 |
+| 8 · Yıkıcı | 0,70 g | 32 sn | yumuşak kat göçmesi (zemin kat 11. sn, bina 17. sn'de yerde), çatı 12,4 m iner | 22.805 |
+| 9 · Felaket | 1,1 g | 45 sn | göçme (en güçlü kısım daha geç: zemin kat 14. sn, yerde ~21. sn), çatı 12,1 m iner; fırlayan parça diğer göçmeler kadar (yukarı en çok 5 m/s) | 22.811 |
+
+Ayarlama turu (ölçülerek): ilk 7 (0,42 g) binayı yıkıyordu, 6 ile 7 arasında "ağır hasar ama ayakta" basamağı kalmıyordu
+→ 0,33 g. İlk 9, Pazarcık dalgasıyla 4,2 g'ydi: göçüyordu ama parçalar yukarı 14 m/s fırlıyordu (yeni düzeltilen
+fırlama dönmüş sanılırdı) → Antakya dalgası, 1,1 g. Pazarcık ×1 binayı yıkmadığı için (3,0 g yatay vektör, enerjisi kısa
+periyotlarda) büyüklüklerde kullanılmadı.
 
 ## Kapanışta öğrenilenler (ölçülerek)
 - **Pencerede karede iki fizik adımı 30 fps'e kilitledi:** fizik ~15 ms, görüntü 1 ms iken kare 32-35 ms. Gerçek zamanı

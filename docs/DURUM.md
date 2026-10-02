@@ -1,0 +1,65 @@
+# DURUM · pc_graphics uygulaması
+
+> Uygulamanın tek kaynak durum panosu. Mimari ve yeni sahne ekleme: `docs/MIMARI.md`. Sahnelerin kendi panoları:
+> `docs/altinsaat/`, `docs/fener/`, `docs/yikim/` (PLAN.md ve DURUM.md).
+
+## Şu an
+- **2026-10-02 · Üç sahne tek uygulamada (gece, Özcan uyurken otonom).** Özcan'ın istekleri, birebir:
+  1. *"Yıkım simülasyonunda fare ve klavye hareketleri ters, onları düz yap yani sağa-sağa, sol-sola gitsin."*
+  2. *"Yıkım için Türkiyedeki depremleri kaldır, onun yerine onlardan ilham alarak 3 şiddetinde 4 5 6 7 8 9 şeklinde
+     rihter ölçeğine göre depremleri listele."*
+  3. *"3 Tane sahnem oldu. Bu sahnelerin hepsini tek bir uygulamada birleştir. Bu uygulamaya ortak bir arayüz geliştir.
+     [...] Sahneleri değiştirme, arayüzü değiştir. [...] Sıkıcı düz yazılar yerine estetik bir arayüz tasarla. [...]
+     İleride başka başka sahneler, grafikler vs eklenebilir. Buna uygun şekilde ölçeklenebilir olsun."*
+  4. *"Bu 3 güncelleme sonucu ortaya çıkacak yapılması zorunlu veya kritik olan başka bir şeyler olduğunu düşünüyorsan
+     yapmakta [...] özgürsün. [...] Dosya düzenini ve githubı profesyonel ve düzgünce yönet."*
+- Yapılanlar:
+  - **Kamera** (Yıkım): görüntünün sağı `ileri × yukarı`; uçuş kodu tersini kullanıyordu, fare sapması da ters
+    artıyordu. Tek yerde (`fly_camera.h`), `--scene yikim --test kontrol` yönleri görüntüye karşı sınar.
+  - **Depremler büyüklükle (3-9)**; gerçek kayıtların adları arayüzden kalktı, dalgaları kaldı. Ayrıntı ve ölçümler
+    `docs/yikim/DURUM.md`.
+  - **Tek uygulama:** `build\pc_graphics.exe` galeriyle açılır; `fener.exe` ve `yikim.exe` kalktı. Galeri, yükleme ekranı,
+    her sahnenin üstünde aynı arayüz (kimlik ve durum, seçici, ilerleme, hız paneli, tuş ipuçları), F1 yardım, bildirimler.
+    IBM Plex yazı ailesi, sahne başına bir vurgu rengi. Tasarım dili `docs/MIMARI.md`.
+  - **Dosya düzeni:** her sahne kendi klasöründe (`src/scenes/<id>/`, ekran kartı programları `device/` altında,
+    ayarlar `scenes/<id>.cfg`, belgeler `docs/<id>/`); ortak parçalar `src/core`, arayüz kiti `src/ui`, uygulama `src/app`.
+  - **Kritik bulunan:** sahnelerin kapanış yolları eksikti (tek başına çalışırken önemsizdi; aç-kapa ile Yıkım tur başına
+    yüzlerce MB sızdırırdı). Sahneler kaynaklarını bırakıyor, uygulama ardından ekran kartını sıfırlıyor.
+- Açmak: `build\pc_graphics.exe` (çift tık). Tuşlar `GOSTERI.md`, ekranda F1.
+- İş `unified-app` dalında yapılıp doğrulandı, `main`'e birleştirildi.
+
+## Nasıl çalıştırılır
+- Derleme: `cmd /c C:\dev\pc_graphics\build.bat` → `build\pc_graphics.exe` (tek program).
+- Uygulama: `build\pc_graphics.exe` · `--scene <id>` doğrudan sahneye (Esc galeriye) · `--windowed` 1280×720 pencere ·
+  `--set anahtar=değer` sahne ayarı · `--autotest` bütün uygulamayı dolaşır, ekranlar `captures/arayuz/`.
+- Sahnelerin araçları (pencere olmadan): `--scene altinsaat --headless ...` (eskisi gibi `--scene`'siz de),
+  `--scene fener --headless --frames N ...`, `--scene yikim --test`, `--scene yikim --clip sarsinti --set deprem.magnitude=7`.
+  Her birinin listesi kendi `*_app.cpp` başında.
+
+## Ölçümler (RTX 4080, 2560×1440, `--autotest`)
+| Ne | Değer |
+| --- | --- |
+| Sahne 1, durağan | ~10 fps (kare başına ~30 ms örnek + ~94 ms yol izleme başlatması: önceden de böyleydi) |
+| Sahne 1, canlı | 22 fps |
+| Sahne 2 | 80-95 fps (yolculukta da) |
+| Sahne 3 | 48-54 fps (deprem sırasında da) |
+| Sahne kapandıktan sonra boş ekran kartı belleği | 14 869 / 14 869 / 14 860 MB (üç sahne, iki tam tur: sızıntı yok) |
+| Taşımadan ve birleştirmeden sonra | üç sahnenin komut satırı kareleri önceki koda göre **bit bit aynı** (640×360, sabit tohum: fark 0) |
+| Testler | Yıkım fizik 24/26 (bilinen iki: konsol), kontrol 4/4, sahne 1 spektral öz-sınama OK |
+
+## Öğrenilenler (ölçülerek)
+- **Taşıma sırasında davranışı kilitle:** üç sahneden sabit ayarla kareler, önce kendileriyle tekrar edilebilirliği
+  sınandı (fark 0), sonra her adımdan sonra karşılaştırıldı. Büyük yeniden düzenleme bu sayede güvenle yapıldı.
+- **Tek başına çalışan programın kapanışı ile bir uygulamanın içindeki sahnenin kapanışı ayrı şeylerdir:** üç sahnenin
+  `shutdown`'ı yalnız OptiX nesnelerini bırakıyordu. Uygulamada sahne her kapandığında `cudaDeviceReset` (garanti) +
+  sahnelerin kendi bırakmaları (düzen); ölçü kapanıştaki boş bellek.
+- **Uzun yükleme ana iş parçacığında pencereyi "yanıt vermiyor"a düşürür:** sahne 1'in derlemesi önbellek boşken 42 sn
+  (dosya yolu değişince OptiX önbelleği ıskaladı). Yükleme işçi iş parçacığında; sahneler yüklemede OpenGL kullanmıyor.
+- **Arayüz ekranlarını görmeden tasarlamak kör uçuştur:** `--autotest` bileşik ekranı (`glReadPixels`) PNG'ye yazıyor;
+  ilk turda dört kusur buradan yakalandı (arka plan karartmasında dikey dikiş, önceki sahnenin bildirimi yükleme
+  ekranında, Türkçe büyük harfte "â" ve İngilizce adda "İ").
+
+## Bilinen sınırlar / doğrulanmadı
+- Fare ile galeri (üzerine gelme, tıklama, "Sahneyi aç" düğmesi) ve sahnelerde fareyle bakış otomatik testte sınanmadı
+  (betik yalnız tuş basıyor); kod yolları sahnelerin eski pencerelerindekinin aynısı.
+- 1440'tan farklı ekranlarda yerleşim yalnız ölçekle uyarlanıyor (1080p ve 4K gözle denenmedi).

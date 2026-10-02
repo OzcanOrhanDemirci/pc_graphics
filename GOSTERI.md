@@ -1,58 +1,67 @@
 # Gösteri
 
-> **Üç sahne, üç exe** (`C:\dev\pc_graphics\build\`):
-> - `pc_graphics.exe`: sahne 1, "Altın saatte cam ve taş" (bu sayfa).
-> - `fener.exe`: sahne 2, Inside tarzı deniz feneri. Tuşlar: **Boşluk** A'dan B'ye orman içinden yürü (yolda basarsan
->   geri döner) · **B** öbür bakışa atla · **P** zamanı durdur · **← / →** zaman ∓1 sn · **↑ / ↓** pozlama · **S** ekran
->   görüntüsü · **H** gösterge · **F5** `scenes/fener.cfg` ve gölgelendiricileri yeniden yükle · **Esc** çıkış.
->   **Tab** oyuncu kipi (merak, dünya bunun için kurulmadı): 1. Tab kendi adanda A'da, 2. Tab fener adasında kulenin
->   dibinde, 3. Tab sahneye dönüş. Oyuncuyken **WASD** yürü · **fare** bak · **Shift** koş · **Boşluk** zıpla ·
->   **F12** ekran görüntüsü. Ağaç gövdelerine, kuleye ve kulübeye çarparsın; derin suda yüzersin.
-> - `yikim.exe`: sahne 3, betonarme apartmanın depremle ya da senin elinle yıkılması (odak fizik). Açılınca bina iki
->   saniye görünmeden oturur, sonra tam ekran pencere gelir. Tuşlar: **sol tık** tıkladığın yeri patlat (yakındaki
->   parçalar yok olur, çevresi savrulur; **Ctrl + sol tık** büyük patlama) · **sağ tık + fare** bak · **WASD** uç, **E/Q**
->   yukarı/aşağı, **Shift** hızlı · **tekerlek** yakınlaş · **Boşluk** depremi başlat/durdur · **1-5** kayıt (1 Pazarcık
->   2023, 2 Antakya 2023, 3 Yarımca 1999, 4 İzmit 1999, 5 Bayraklı 2020) · **+ / -** şiddet ¼ adımla · **T** ağır çekim
->   (×1, ×0,25, ×0,1) · **P** zamanı durdur · **B** donatı demirlerini göster/gizle · **G** gürültü giderici (hızlı süzgeç
->   → yapay zekâ → ham) · **R** binayı baştan kur · **F12**
->   ekran görüntüsü · **H** yazıları gizle · **Esc** çıkış. Dene: Antakya ×1 (bina göçer), Pazarcık ×1 (eşikte: ağır
->   hasarla ayakta kalır, korkuluklar ve duvarlar dökülür; **+** ile ×1,25'te göçer), Yarımca ×1 ile ×1,5 (aynı bina,
->   iki son); zemin kat kolonlarını tek tek patlat; çöküşü **T** ile ağır çekimde izle, kırık kolon uçlarına uçup
->   demirlere yakından bak.
-
-# Sahne 1 — "Altın saatte cam ve taş"
-
 ## Açmak
-`C:\dev\pc_graphics\build\pc_graphics.exe` — çift tıkla ya da terminalden çalıştır. Birincil monitörde kenarlıksız tam
-ekran açılır (2560×1440), **durağan modda** başlar. İlk kare "gökkuşağı": karanlık odaya 5 yarıktan giren güneş,
-huzmelere asılı 14 kristal prizma, betona saçılan tayflar. Görüntü saniyede ~8 örnek biriktirerek netleşir.
+`C:\dev\pc_graphics\build\pc_graphics.exe` — çift tıkla. Birincil monitörde kenarlıksız tam ekran **galeri** açılır:
+solda üç sahne, sağda seçilenin resmi ve açıklaması.
 
-- İlk saniyeler: yapay zekâ gürültü gidericisiyle okunur bir görüntü.
-- ~30 saniye: temiz.
-- birkaç dakika: referansa çok yakın (8192 örnekten sonra gürültü giderici devreden çıkar, ham görüntü kalır).
+- **↑ / ↓** (ya da **1-3**, ya da fare) seç, **Enter** (ya da **Sahneyi aç** düğmesi) aç.
+- Açılan sahne birkaç saniye yükleme ekranında hazırlanır (sahne 1'in programları ilk açılışta daha uzun derlenir).
+- Her yerde: **Esc** geri (yardım → sahne → galeri → çıkış) · **F1** o sahnenin tuşları · **H** arayüzü gizle ·
+  **F12** ekran görüntüsü (`captures/`) · **F5** ayarları ve programları yeniden yükle (sahne 1 ve 2).
+- Sahne üstündeki arayüz: sol altta sahnenin adı ve durumu (ve varsa seçici, ilerleme çubuğu), sağ üstte hız ve
+  süreler, sağ altta tuş ipuçları.
 
-Bekle ve bak: ışık bıçağı, prizmanın içindeki tayf, perde duvardaki gökkuşağı, köpüklerin ince film renkleri, toz
-zerreleri. Hepsi hesaplanıyor; hiçbiri boyanmış doku değil.
+## 01 · Altın Saat — cam ve taş, tayfına ayrılan güneş
+Karanlık odaya 5 yarıktan giren güneş, huzmelere asılı 14 kristal prizma, betona saçılan tayflar. **Durağan** başlar:
+görüntü örnek biriktirdikçe netleşir (sol alttaki çubuk 8.192 örneğe ilerler; ondan sonra gürültü giderici çekilir,
+ham görüntü kalır).
 
-## Tuşlar
 | Tuş | Ne yapar |
 |---|---|
-| **Boşluk** | durağan ↔ **canlı** (canlı: su dalgalanır, köpükler ve toz süzülür, ~24 fps) |
-| **C** | sonraki kamera (0 gökkuşağı, 1 prizma natürmortu, 2 alçak geniş, 3 orta, 4 köşe, 5 havuz, 6 plan) |
-| **H** | gösterge aç/kapa (sol altta: fps, ms, örnek, W, sıcaklık) |
-| **S** | ekran görüntüsü → `captures/shot_*.png` + `.exr` |
-| **↑ / ↓** | pozlama ±¼ durak |
-| **← / →** | odak uzaklığı |
-| **D** | gürültü giderici aç/kapa (kapatınca ham yol izleme gürültüsü görünür) |
+| **Boşluk** | durağan ↔ **canlı** (canlı: su dalgalanır, köpükler ve toz süzülür, ~22 fps) |
+| **C** | sonraki kamera (gökkuşağı, prizma natürmortu, alçak geniş, orta, köşe, havuz, plan) |
+| **↑ / ↓** | pozlama ±¼ durak · **← / →** odak uzaklığı · **R** birikimi sıfırla |
 | **P / V / N** | fotonlar (kostikler) / pus / doğrudan ışık örneklemesi aç-kapa: ne neyi yapıyor, gör |
+| **D** | gürültü giderici aç/kapa · **G** güneş lekesi bağlantısı |
 | **1-5** | görünüm: güzel, albedo, normal, yalnız kostikler, maliyet ısı haritası |
-| **R** | birikimi sıfırla · **F5** gölgelendiricileri ve `scene.cfg`'yi yeniden yükle · **Esc** çıkış |
 
-## Dene
-- **P**'ye bas: gökkuşağı, prizmanın tayfı ve su desenleri kaybolur. Onlar ayrı bir foton hesabından geliyor.
-- **D**'yi kapat, 1 dakika bekle: gürültü giderici olmadan da aynı görüntüye yakınsıyor (fiziksel doğruluk).
-- **Boşluk** ile canlıya geç: 720p çizilir, yapay zekâ 1440p'ye büyütür. Durağanla farkı prizmada görülür.
+**Dene:** **P**'ye bas: gökkuşağı, prizmanın tayfı ve su desenleri kaybolur (ayrı bir foton hesabından geliyorlar).
+**D**'yi kapat, bir dakika bekle: gürültü giderici olmadan da aynı görüntüye yakınsıyor. **Boşluk** ile canlıya geç:
+720p çizilir, yapay zekâ 1440p'ye büyütür; farkı prizmada görülür. **F12** PNG'nin yanına doğrusal EXR de yazar.
+Ayarlar `scenes/altinsaat.cfg` (F5 ile anında): güneş, pus, beyaz dengesi, pozlama, kameralar, parlama.
 
-## Ayarlar
-`scene.cfg` (F5 ile anında): güneş yüksekliği/yönü, pus yoğunluğu, beyaz dengesi, pozlama, kamera konumları
-(`camera.0.pos = x y z`, `camera.0.target`, `camera.0.focal`, `camera.0.fnumber`), parlama gücü.
+## 02 · Fener — siste dönen bir huzme, gece ve orman
+Inside tarzı deniz feneri. A "Pencere" bakışında açılır.
+
+| Tuş | Ne yapar |
+|---|---|
+| **Boşluk** | A'dan B'ye orman içinden yürü (778 m, ~70 sn; yolda basarsan geri döner; sol altta ilerleme) |
+| **B** | öbür bakışa atla · **P** zamanı durdur · **← / →** zaman ∓1 sn · **↑ / ↓** pozlama |
+| **1-5** | görünüm: son, yalnız yüzey, yalnız hacim, derinlik, normal |
+| **Tab** | oyuncu kipi (merak, dünya bunun için kurulmadı): 1. Tab kendi adanda A'da, 2. Tab fener adasında kulenin dibinde, 3. Tab sahneye dönüş |
+| oyuncuyken | **WASD** yürü · **fare** bak · **Shift** koş · **Boşluk** zıpla; ağaçlara, kuleye, kulübeye çarparsın, derin suda yüzersin |
+
+Ayarlar `scenes/fener.cfg` (F5 ile anında).
+
+## 03 · Yıkım — betonarme bir apartman, deprem ve kırılma
+Açılırken bina iki saniye görünmeden kendi ağırlığıyla oturur. Odak fizik.
+
+| Tuş | Ne yapar |
+|---|---|
+| **3-9** | depremin büyüklüğü (sol altta seçili olan, tepe ivmesi ve süresiyle); **Boşluk** başlat / durdur |
+| **sol tık** | tıkladığın yeri patlat (yakındaki parçalar yok olur, çevresi savrulur); **Ctrl + sol tık** büyük patlama |
+| **sağ tık + fare** | bak · **WASD** uç · **E / Q** yukarı / aşağı · **Shift** hızlı · **tekerlek** yakınlaş |
+| **T** | ağır çekim (×1, ×0,25, ×0,1) · **P** zamanı durdur · **R** binayı baştan kur |
+| **B** | donatı demirlerini göster / gizle · **G** gürültü giderici (hızlı süzgeç → yapay zekâ → ham) |
+
+| Büyüklük | Bina |
+|---|---|
+| 3-5 | sallanır, çatlar; bir şey düşmez |
+| 6 | balkon korkulukları ve zemin kat dolgusunun bir kısmı dökülür |
+| 7 | ağır hasar: korkuluklar ve zemin kat dolgusu dökülür, çerçeve ayakta kalır |
+| 8 | yumuşak kat göçmesi: zemin kat gider, bina yan yatıp çöker |
+| 9 | daha uzun ve sert sarsıntı; en güçlü kısım daha geç gelir, sonunda bina tamamen çöker |
+
+**Dene:** 6 ile 8'i art arda (**R** ile baştan kurup) karşılaştır; zemin kat kolonlarını tek tek patlat; çöküşü **T** ile
+ağır çekimde izle, kırık kolon uçlarına uçup demirlere yakından bak.
+Ayarlar `scenes/yikim.cfg` (bina, malzemeler, çözücü, kamera, güneş).

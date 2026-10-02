@@ -1,6 +1,10 @@
 # DURUM — pc_graphics · sahne 1: "Altın saatte cam ve taş"
 
-> Tek kaynak durum panosu. Her faz sonunda güncellenir; bağlam sıkıştırılınca BASLA.md ile birlikte okunur.
+> Tek kaynak durum panosu. Her faz sonunda güncellenir; bağlam sıkıştırılınca PLAN.md (eski adı BASLA.md) ile birlikte okunur.
+> **2026-10-02:** üç sahne tek uygulamada (`build\pc_graphics.exe`, galeriyle açılır); bu sahnenin kodu
+> `src/scenes/altinsaat/`, ekran kartı programları `src/scenes/altinsaat/device/`, ayarları `scenes/altinsaat.cfg`. Aşağıdaki eski kayıtlar
+> o günün yollarıyla (`src/*.cpp`, `src/device/programs.cu`, `scene.cfg`, `--headless` gibi araçlar artık `--scene altinsaat` ile de). Uygulamanın panosu `docs/DURUM.md`, mimari `docs/MIMARI.md`.
+
 
 ## Şu an
 - **2026-10-01 · Sahne 1 kapandı.** Özcan: "daha güzel olmuş"; "sanat dizaynı, görsel etkileyicilik ayrı bir kavram".

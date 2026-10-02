@@ -12,7 +12,7 @@
 [![Ekran](https://img.shields.io/badge/%C3%A7%C4%B1kt%C4%B1-2560%C3%971440%20SDR-555)](#durağan-ve-canlı)
 [![Lisans](https://img.shields.io/badge/lisans-t%C3%BCm%20haklar%C4%B1%20sakl%C4%B1d%C4%B1r-lightgrey)](#lisans)
 
-[Sahneler](#sahneler) · [Sahne 1 ayrıntı](#sahne-1-neyi-hesaplıyor) · [Sahne 3 ayrıntı](#sahne-3-fizik) · [Derleme](#derleme) · [Çalıştırma](#çalıştırma) · [Sıradaki](#sıradaki-sahneler)
+[Uygulama](#uygulama) · [Sahneler](#sahneler) · [Sahne 1 ayrıntı](#sahne-1-neyi-hesaplıyor) · [Sahne 3 ayrıntı](#sahne-3-fizik) · [Derleme](#derleme) · [Çalıştırma](#çalıştırma) · [Düzen](#depo-düzeni)
 
 *[English](README.md)*
 
@@ -31,6 +31,22 @@ Hepsi tek bir makine için (2560×1440 IPS monitörü süren bir RTX 4080) C++, 
 yok. Sahne 1 spektral bir yol izleyicidir: referans görüntüye yakınsayan **durağan kip** ve NVIDIA'nın yapay zekâ
 gürültü gidericisiyle saniyede 20-30 kare tutan **canlı kip**. Sahne 2 gerçek zamanlı, hacimsel bir gece. Sahne 3
 kendi yazdığımız bir katı cisim ve kırılma çözücüsü; sade bir gündüz ışın izleyicisiyle çiziliyor.
+
+## Uygulama
+
+Üç sahne tek bir programda yaşıyor. Program bir galeriyle açılır; sahne bir yükleme ekranının arkasında yüklenir
+(programları derlenir, dünyası kurulur; bunlar ayrı bir iş parçacığında yapıldığı için pencere canlı kalır) ve sonra hepsi
+için aynı olan bir arayüzün altında çalışır: kim ve ne sol altta, süreler sağ üstte, çıkış yolu sağ altta, tuşlar F1'de.
+Esc her zaman geri götürür; kapanan sahne ekran kartını bütünüyle geri verir.
+
+| Galeri | Ortak arayüzün altında bir sahne |
+| --- | --- |
+| ![Galeri: sahneler numaralı bir listede, seçilen sağda büyük, açıklaması ve açma düğmesi](docs/images/app-gallery.jpg) | ![Sahne 3, büyüklük 7 deprem sırasında: sahnenin adı ve durumu, büyüklük seçici, sarsıntının ilerlemesi, süreler](docs/images/app-scene.jpg) |
+
+Görünüm tek bir yazı ailesiyle kurulu, IBM Plex: adlar için Serif, sözcükler için Sans, sayılar ve tuşlar için Mono.
+Resimlerin üstünde koyu cam paneller ve her sahneye ışığından alınmış tek bir vurgu rengi: sıcak altın, soğuk mavi,
+güvenlik turuncusu. Bir sahne; renderer'ı, ayarları ve OptiX programlarıyla bir klasör ve sahne kaydında tek bir
+satırdır; sözleşme ve yeni sahne eklemek [docs/MIMARI.md](docs/MIMARI.md)'de.
 
 ## Sahneler
 
@@ -73,22 +89,22 @@ saçılımın ~100 katından 5 katına indirildi; kamera içindeyken bütün sis
 ### 3 · Yıkım · Ekim 2026
 
 Türkiye'nin kasabalarını dolduran türden beş katlı betonarme bir apartman: yüksek zemin katta camlı dükkânlar, tuğla
-dolgu duvarlar, balkonlar, su depoları ve güneş kollektörleriyle düz çatı. Altındaki zemini gerçek deprem kayıtları
-sallıyor, ya da izleyen kişi kolonlarını fareyle patlatıyor. Işık bilerek sade bir güneşli gün; emek fiziğe gitti.
+dolgu duvarlar, balkonlar, su depoları ve güneş kollektörleriyle düz çatı. Altındaki zemini büyüklüğü 3'ten 9'a kadar
+depremler sallıyor (her biri gerçek bir kuvvetli yer hareketi kaydından türetildi), ya da izleyen kişi kolonlarını
+fareyle patlatıyor. Işık bilerek sade bir güneşli gün; emek fiziğe gitti.
 
-![Sahne 3: 2023 Antakya kaydı altında yıkılan apartman](docs/images/yikim.jpg)
+![Sahne 3: büyüklük 8 depremde yıkılan apartman](docs/images/yikim.jpg)
 
-| Aynı bina, 1999 Yarımca kaydı ×1,0 | ve ×1,5 |
+| Büyüklük 6: balkon korkulukları dökülür | Büyüklük 7: zemin kat dolgusunu yitirir, çerçeve ayakta |
 | --- | --- |
-| ![Ayakta; tuğla dolgu ve korkuluklar dökülmüş](docs/images/yikim-yarimca-1.jpg) | ![Yumuşak kat göçmesi](docs/images/yikim-yarimca-15.jpg) |
+| ![Büyüklük 6'dan sonra: balkon korkulukları yerde](docs/images/yikim-m6.jpg) | ![Büyüklük 7'den sonra: korkuluklar ve zemin kat dolgusu gitmiş, çerçeve ayakta](docs/images/yikim-m7.jpg) |
 
-| Patlatılan köşe kolonundan kalan demirler | 2023 Pazarcık ×1,0: ayakta, dolgusu dökülmüş |
+| Patlatılan köşe kolonundan kalan demirler | Büyüklük 9: yumuşak kat çöküyor |
 | --- | --- |
-| ![Yakın plan: eksik köşe kolonunun üstündeki kirişlerden ve kolondan çıkan eğri demirler](docs/images/yikim-bars.jpg) | ![Pazarcık kaydından sonra hâlâ ayakta duran bina, dolgu duvarlarının çoğu yok](docs/images/yikim-pazarcik.jpg) |
+| ![Yakın plan: eksik köşe kolonunun üstündeki kirişlerden ve kolondan çıkan eğri demirler](docs/images/yikim-bars.jpg) | ![Büyüklük 9: zemin kat göçüyor, blok yan yatıyor](docs/images/yikim-m9.jpg) |
 
-Canlı çalışır: 1080p tam ekran pencere, RTX 4080'de gürültü giderici açıkken saniyede ~55 kare (ham 60-75), fizik ve
-görüntü ekran kartında yan yana.
-Tıklayıp parça patlat, beş kayıttan birini başlat, zamanı onda birine kadar yavaşlat.
+Canlı çalışır: 1080p, RTX 4080'de gürültü giderici açıkken saniyede ~50 kare, fizik ve görüntü ekran kartında yan yana.
+3-9 ile büyüklüğü seç, Boşluk ile başlat, tıklayıp parça patlat, zamanı onda birine kadar yavaşlat.
 
 ## Sahne 1: neyi hesaplıyor
 
@@ -174,25 +190,27 @@ kayıtları altında dağılmayan bir çözücü.
 | **Temas** | Cisim çifti başına bir warp: örnek noktalar ötekinin kabuk düzlemlerine karşı, normal düzeltmeler çift içinde ortalanır, sonra yama merkezinde statik ve dinamik bütçeli, çapalı (PhysX gibi) tek sürtünme; burulma sürtünmesi ve sekme. |
 | **Determinizm** | Temas ve arayüz toplamları kayan noktalı atomikler yerine 2⁻⁴⁰ sabit noktada: aynı deprem aynı binayı her koşuda aynı biçimde yıkar. |
 | **Sönüm** | Serbest titreşimden ölçülen kritik sönümün %5,3'ü: kütleye orantılı, zemine göre, yalnız bağlı cisimlere, ivmesi sınırlı (düşen enkaz serbest kalır). |
-| **Depremler** | ESM ve AFAD TADAS'tan beş kuvvetli yer hareketi kaydı (2023 Pazarcık ve Antakya, 1999 Yarımca ve İzmit, 2020 Bayraklı), iki kez integre edilip yer değiştirmeye çevrilir; zemin hareket eden kinematik bir cisim. Oynatma her kaydın en güçlü anından 15 sn önce başlar. |
+| **Depremler** | Büyüklüğe göre, 3'ten 9'a: binanın ~15 km ötedeki o büyüklükte bir depremden hissettiği. Her biri gerçek bir kuvvetli yer hareketi kaydının dalgasından (ESM ve AFAD TADAS: 2023 Antakya, 1999 Yarımca ve İzmit, 2020 Bayraklı): o büyüklüğün getirdiği güçlü sarsıntı süresi kadar kesilir, küçükler daha hızlı oynatılır, o büyüklüğün tepe yer ivmesine ölçeklenir, taban çizgisi düzeltilir (zemin başladığı yerde durur); sonra iki kez integre edilip yer değiştirmeye çevrilir. Bir oyunun ölçeği, sismolojinin değil: sarsıntıyı büyüklük tek başına belirlemez. |
 | **Görüntü** | OptiX: her parça kendi kabuğunun bir örneği, dönüşümleri fizik doğrudan örnek tamponuna yazar, üst yapı her kare yeniden kurulur. Yumuşak gölgeli güneş, gök, zeminden bir sekme, depremle birlikte kayan metre ızgarası. Donatı liflerin durumundan çizilir: tuttukça çatlağın üstünden geçer, koptuğunda eğri filizler olarak çıkar. |
 | **Gürültü giderme** | Karede altı örnek, bir şey hareket ederken grenli. Kendi yazdığımız hafif bir SVGF: ışık (görüntü bölü albedo) her parçanın kendi hareketiyle kareden kareye taşınır, cisim, normal ve uzaklıkla denetlenir, üstünden gölge geçerken yeni karenin komşuluğuna kırpılır; sonra başka cisimde, normalde, derinlik basamağında ve ışık kenarında duran à-trous geçişleri. 1080p'de 2,4 ms. OptiX yapay zekâ gidericisi bir tuş ötede (G): daha da temiz, ama 9,7 ms tutuyor ve ekran kartını paylaşan fiziği yavaşlatıyor. |
 
-Binanın yaptığı (çatının zemine göre en büyük ötelemesi, deterministik):
+Her büyüklüğün binaya yaptığı (deterministik; sarsıntı bittikten birkaç saniye sonra ölçüldü):
 
-| Kayıt | Yatay tepe ivme | Sonuç |
-| --- | --- | --- |
-| 2020 Bayraklı ×1 | 0,12 g | ayakta, öteleme %0,29 |
-| 1999 İzmit ×1 | 0,25 g | ayakta, %0,26 |
-| 1999 Yarımca ×1 | 0,34 g | ayakta, %0,70 |
-| 1999 Yarımca ×1,5 | | yumuşak kat göçmesi, çatı 12,5 m iner |
-| 2023 Antakya ×1 | 0,67 g | göçer, çatı 12,3 m iner |
-| 2023 Pazarcık ×1 | 2,25 g (bir bileşen) | ağır hasarla ayakta: öteleme %0,81, korkuluklar ve dolgunun çoğu dökülür |
-| 2023 Pazarcık ×1,25 | | göçer, çatı 12,1 m iner |
+| Büyüklük | Tepe yer ivmesi | Güçlü sarsıntı | Sonuç |
+| --- | --- | --- | --- |
+| 3 · zayıf | 0,012 g | 3 sn | hiçbir şey kırılmaz |
+| 4 · hafif | 0,035 g | 5 sn | kılcal çatlaklar |
+| 5 · orta | 0,13 g | 8 sn | bağlarda çatlaklar, bir şey düşmez |
+| 6 · kuvvetli | 0,20 g | 14 sn | balkon korkulukları ve zemin kat dolgusunun bir kısmı dökülür |
+| 7 · şiddetli | 0,33 g | 26 sn | ağır hasar: korkuluklar ve zemin kat dolgusu dökülür, öteleme %0,66, çerçeve ayakta |
+| 8 · yıkıcı | 0,70 g | 32 sn | yumuşak kat göçmesi: zemin kat 11. sn'de gider, bina 17. sn'de yerdedir |
+| 9 · felaket | 1,1 g | 45 sn | daha uzun ve sert sarsıntıdan sonra göçme (en güçlü kısım daha geç gelir: zemin kat 14. sn'de) |
 
-Pazarcık ×1 tam eşikte: en sonda düzeltilen bir modelleme hatasına kadar binayı yıkıyordu (aşağıda), düzeltmeden
-sonra bina ayakta. Sınırındaki yapı kaotiktir; bu sonuçların bir şey ifade etmesi için çözücünün önce deterministik
-olması gerekti.
+Gerçek kayıtlar tam ölçekte: bina 2020 Bayraklı, 1999 İzmit ve 1999 Yarımca'da ayakta kaldı, 2023 Antakya'da ve
+Yarımca ×1,5'te göçtü. Pazarcık kaydı (3,0 g yatay vektör tepe) tam eşikteydi: en sonda düzeltilen bir modelleme hatasına
+kadar binayı yıkıyordu (aşağıda), düzeltmeden sonra bina ayakta. Sınırındaki yapı kaotiktir; bu sonuçların bir şey ifade
+etmesi için çözücünün önce deterministik olması gerekti. Bu kayıt büyüklükler arasında yok: enerjisi kısa periyotlarda,
+bina göçene kadar ölçeklenince de enkazı başka hiçbir şeye benzemeyen biçimde fırlatıyor.
 
 Okunmaya değer kararlar:
 
@@ -242,86 +260,72 @@ denendi), C++ iş yüküyle Visual Studio 2026 (MSVC 14.51, içindeki CMake ve N
 (`numpy`, `pillow`, `OpenEXR`, `flip-evaluator`).
 
 ```bash
-bash third_party/fetch.sh        # CUDA 13.4.2 dağıtım arşivleri, OptiX 9.1 başlıkları, GLFW, stb, tinyexr
+bash third_party/fetch.sh        # CUDA 13.4.2 dağıtım arşivleri, OptiX 9.1 başlıkları, GLFW, stb (stb_truetype dahil), tinyexr
 ```
 
 Hiçbir şey kurulmaz ve ekran kartı sürücüsüne dokunulmaz: CUDA, NVIDIA'nın bileşen arşivleri olarak git'e
 işlenmeyen `third_party/` klasörüne iner.
 
 ```bat
-cmd /c build.bat                 :: bir kez yapılandırır, sonra build\pc_graphics.exe'yi derler
+cmd /c build.bat                 :: bir kez yapılandırır, sonra build\pc_graphics.exe'yi (tek program) derler
 ```
 
-`src/device/` içindeki OptiX cihaz programları çalışma anında NVRTC ile derlenir; onları düzenlemek yeniden derleme
-istemez: pencerede **F5**'e bas.
+OptiX cihaz programları (`src/scenes/<sahne>/device/`) çalışma anında NVRTC ile derlenir; onları düzenlemek yeniden
+derleme istemez: sahnede **F5**'e bas.
 
 ## Çalıştırma
 
 ```bat
-build\pc_graphics.exe                                   :: kenarlıksız tam ekran, durağan kip
-build\pc_graphics.exe --headless --spp 2048 --denoise --out captures\ad
-build\pc_graphics.exe --headless --live 80 --out captures\live\ad
-build\pc_graphics.exe --selftest
-build\pc_graphics.exe --headless --furnace --spp 512 --out captures\furnace
+build\pc_graphics.exe                       :: galeri, birincil monitörde kenarlıksız tam ekran
+build\pc_graphics.exe --scene yikim         :: doğrudan bir sahneye (altinsaat, fener, yikim); Esc galeriye götürür
+build\pc_graphics.exe --windowed            :: 1280x720 pencerede
+build\pc_graphics.exe --set anahtar=deger   :: sahnelerin bir ayarı (scenes/<sahne>.cfg), tekrarlanabilir
+build\pc_graphics.exe --autotest            :: bütün uygulama bir kez, betikle; ekranlar captures\arayuz altına
 ```
 
-| Tuş | |
+| Her yerde | |
 | --- | --- |
-| Boşluk | durağan ↔ canlı |
-| C | sonraki kamera |
-| H | gösterge (fps, geçiş başına ms, örnek, watt, sıcaklık) |
-| S | ekran görüntüsü, PNG ve doğrusal EXR |
-| ↑ ↓ / ← → | pozlama / odak uzaklığı |
-| D, P, V, N | gürültü giderici, fotonlar, pus, doğrudan ışık örneklemesi aç-kapa |
-| 1-5 | güzel, albedo, normal, yalnız kostikler, maliyet ısı haritası |
-| F5 | cihaz programlarını yeniden derle, `scene.cfg`'yi yeniden oku |
+| Esc | geri: yardım → sahne → galeri → çıkış |
+| F1 | sahnenin tuşları |
+| H | arayüzü gizle |
+| F12 | sahnenin ekran görüntüsü (`captures\<sahne>_<tarih>`; sahne 1 doğrusal EXR de yazar) |
+| F5 | sahnenin ayarlarını yeniden oku, OptiX programlarını yeniden derle (sahne 1 ve 2) |
+| ↑ ↓, 1-3, Enter, fare | galeride seç ve aç |
 
-Sahne parametreleri (güneş, pus, beyaz dengesi, kameralar, kristaller) `scene.cfg` içinde. Gösteri için kısa rehber:
-[GOSTERI.md](GOSTERI.md).
+| Sahne 1 · Altın Saat | Sahne 2 · Fener | Sahne 3 · Yıkım |
+| --- | --- | --- |
+| Boşluk durağan ↔ canlı · C sonraki kamera · ↑ ↓ pozlama · ← → odak · R sıfırla · P, V, N, D, G fotonlar, pus, doğrudan ışık örneklemesi, gürültü giderici, güneş lekeleri · 1-5 güzel, albedo, normal, kostikler, maliyet | Boşluk A ↔ B yürü · B öbür bakışa atla · P zamanı durdur · ← → zaman ∓1 sn · ↑ ↓ pozlama · 1-5 görünümler · Tab birinci şahıs (WASD, fare, Shift koş, Boşluk zıpla) | 3-9 büyüklük · Boşluk başlat ya da durdur · T ağır çekim · P durdur · sol tık patlat (Ctrl: büyük) · R baştan kur · sağ tık bak · WASD, E/Q uç · Shift hızlı · tekerlek yakınlaş · B donatı · G gürültü giderici |
 
-Sahne 2 `build\fener.exe` ile açılır (Boşluk: iki bakış arasında yürü, Tab: birinci şahıs; tuşlar GOSTERI.md'de).
-Sahne 3:
+Sahnelerin araçları pencere olmadan, aynı programdan çalışır:
 
 ```bat
-build\yikim.exe                                         :: tam ekran canlı pencere
-build\yikim.exe --test                                  :: çözücünün fizik testleri
-build\yikim.exe --clip sarsinti --seconds 40 --set deprem.record=2 --out captures\yikim\ad
-build\yikim.exe --clip kolon --still 3 --out captures\yikim\ad
+build\pc_graphics.exe --headless --spp 2048 --denoise --out captures\ad            :: sahne 1 (--scene altinsaat ile de)
+build\pc_graphics.exe --headless --live 80 --out captures\live\ad
+build\pc_graphics.exe --selftest
+build\pc_graphics.exe --scene fener --headless --frames 64 --out captures\ad
+build\pc_graphics.exe --scene fener --map captures\harita.png
+build\pc_graphics.exe --scene yikim --test                                          :: çözücünün fizik testleri
+build\pc_graphics.exe --scene yikim --clip sarsinti --seconds 40 --set deprem.magnitude=7 --out captures\yikim\ad
 ```
 
-| Tuş | |
-| --- | --- |
-| Sol tık | imlecin altındaki parçayı patlat (Ctrl: büyük patlama) |
-| Sağ tık + fare, WASD, E/Q, Shift, tekerlek | bak, uç, yukarı/aşağı, hızlı, yakınlaş |
-| Boşluk | depremi başlat ya da durdur |
-| 1-5 | kayıt: Pazarcık, Antakya, Yarımca, İzmit, Bayraklı |
-| + / − | şiddet, 0,25'lik adımla |
-| T | ağır çekim: 1, 0,25, 0,1 |
-| P, B, G, R | durdur, donatıyı göster/gizle, gürültü giderici (süzgeç, yapay zekâ, ham), binayı baştan kur |
-| F12, H, Esc | ekran görüntüsü, yazıları gizle, çık |
-
-Sahne 3'ün ayarları (bina, malzemeler, çözücü, kamera, güneş) `scenes/yikim.cfg` içinde; her biri
-`--set anahtar=deger` ile ezilebilir.
+Her sahnenin listesi `src/scenes/<sahne>/<sahne>_app.cpp` başında. Gösteri için kısa rehber: [GOSTERI.md](GOSTERI.md).
 
 ## Depo düzeni
 
 ```
 src/
-  main.cpp            pencere, tuşlar, başsız ve canlı ölçüm kipleri; --scene fener ve --scene yikim yönlendirmesi
-  renderer.cpp        OptiX bağlamı, NVRTC, boru hattı, ivme yapıları, başlatmalar
-  scene.cpp           oda, malzemeler, kameralar, spektral uydurma ve seçim testleri
-  photons.cu          foton hash ızgarası (CUB radix sort), ışın sınır kutuları
-  kernels.cu          gürültü giderici girdileri, lens parlaması piramidi
-  denoiser.cpp        OptiX yapay zekâ gürültü gidericisi: AOV, zamansal, zamansal 2× büyütme
-  fener/              sahne 2: dünya üretimi, gerçek zamanlı ışık hattı, oyuncu kipi
-  yikim/              sahne 3: kabuklar, ekran kartı çözücüsü (phys.cu), bina, deprem kayıtları, testler, pencere
-  device/             üç sahnenin OptiX programları (çalışma anında derlenir)
-  shared/             konak ve cihazın ortak kodu: vektörler, tayflar, parametreler, ekran dönüşümü
-scenes/               sahne 2 ve 3'ün ayarları
+  app/                uygulama: pencere, galeri, yükleme, sahnenin üstündeki arayüz, yardım, sahne kaydı
+  ui/                 arayüz kiti: yuvarlak paneller, gölgeler, resimler, IBM Plex metin (OpenGL 2, tek GLSL programı)
+  core/               sahnelerin ortak parçaları: ayar dosyaları, resim okuma-yazma, GPU ölçümleri (NVML), ışıltı
+  shared/             konak ve cihaz kodunun ortak başlıkları: vektörler, ton eşleme, tayflar
+  scenes/
+    altinsaat/        sahne 1: spektral yol izleyici, foton ızgarası, yapay zekâ gürültü giderici; device/ OptiX programları
+    fener/            sahne 2: dünya üretimi, gerçek zamanlı ışık hattı, oyuncu; device/
+    yikim/            sahne 3: kabuklar, ekran kartı çözücüsü (phys.cu), bina, depremler, testler, gürültü süzgeci; device/
+scenes/               sahnelerin ayarları (<sahne>.cfg)
+assets/               yazı tipleri (IBM Plex), galeri resimleri, mavi gürültü dokusu, deprem kayıtları (ESM, AFAD TADAS)
 tools/                EXR istatistikleri, FLIP ve RMSE karşılaştırması, gürültü haritaları, temas tabakaları, prizma planlayıcı, değer etütleri
-assets/               mavi gürültü dokusu; deprem/: beş deprem kaydı (ESM, AFAD TADAS)
-docs/                 Türkçe çalışma günlüğü: plan, her ölçümüyle durum panosu, sınırlar raporu;
-                      fener/ ve yikim/ sahne 2 ve 3 için aynısı
+docs/                 Türkçe çalışma günlüğü: uygulamanın durumu ve mimarisi; her sahneye bir klasör (plan, durum)
 third_party/fetch.sh  bağımlılıkları indirir; klasörün kendisi git'te değil
 ```
 
@@ -335,9 +339,11 @@ third_party/fetch.sh  bağımlılıkları indirir; klasörün kendisi git'te de�
 ## Lisans
 
 Özel depo. Tüm hakları saklıdır. Üçüncü taraf bileşenler derleme sırasında kendi lisanslarıyla indirilir: NVIDIA
-CUDA dağıtım arşivleri ve OptiX SDK başlıkları, GLFW (zlib), stb (kamu malı), tinyexr (BSD). Deprem kayıtları: ESM,
+CUDA dağıtım arşivleri ve OptiX SDK başlıkları, GLFW (zlib), stb (kamu malı), tinyexr (BSD). `assets/fonts`
+altındaki IBM Plex yazı tipleri SIL Open Font License ile (`assets/fonts/LICENSE.txt`). Deprem kayıtları: ESM,
 Engineering Strong-Motion veritabanı (Mascandola ve diğ., doi 10.13127/esm.3) ve AFAD TADAS.
 
 Claude Code (Anthropic) ile uzun otonom oturumlarda geliştirildi; her kararın arkasındaki ölçümler
-[docs/DURUM.md](docs/DURUM.md), [docs/fener/DURUM.md](docs/fener/DURUM.md) ve [docs/yikim/DURUM.md](docs/yikim/DURUM.md)'de,
-sahne 1'de işin nerede yanlış gittiğinin dürüst dökümü [docs/SINIRLAR.md](docs/SINIRLAR.md)'de.
+[docs/DURUM.md](docs/DURUM.md) (uygulama), [docs/altinsaat/DURUM.md](docs/altinsaat/DURUM.md),
+[docs/fener/DURUM.md](docs/fener/DURUM.md) ve [docs/yikim/DURUM.md](docs/yikim/DURUM.md)'de, sahne 1'de işin nerede yanlış
+gittiğinin dürüst dökümü [docs/altinsaat/SINIRLAR.md](docs/altinsaat/SINIRLAR.md)'de.

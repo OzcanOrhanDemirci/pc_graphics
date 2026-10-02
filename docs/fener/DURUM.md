@@ -1,6 +1,10 @@
 # DURUM · sahne 2 "Fener"
 
 > Tek kaynak durum panosu. Plan ve Özcan'ın tarifi `docs/fener/PLAN.md`'de.
+> **2026-10-02:** üç sahne tek uygulamada (`build\pc_graphics.exe`, galeriyle açılır); bu sahnenin kodu
+> `src/scenes/fener/`, ekran kartı programları `src/scenes/fener/device/`, ayarları `scenes/fener.cfg`. Aşağıdaki eski kayıtlar
+> o günün yollarıyla (`src/fener/`, `src/device/fener.cu`, `fener.exe`; şimdi galeriden ya da `--scene fener`). Uygulamanın panosu `docs/DURUM.md`, mimari `docs/MIMARI.md`.
+
 
 ## Şu an
 - **2026-10-01 · Oyuncu kipi (merak, Özcan'ın isteği).** *"İnce detaylarla hiç uğraşma, ben mümkünatını görmek istiyorum
