@@ -9,6 +9,35 @@
   `tanecik-yuzey`); bitince `main`'e birleştirilecek.
 - **2026-10-02 · Plan onaylandı, T0 başladı.** Özcan: *"Onaylıyorum. Başlayabilirsin."*
 
+## T2 + T4 ilk hâl · beden çözücüde, mermiler bedende (2026-10-03 gece)
+Özcan (T1 klipleri): *"Valla çok gerçekçi duruyor, devam et bakalım. Özellikle mankendeki etkileri merak ediyorum, kan da
+çok iyi duruyor"*.
+- **BodySim** (`body_sim.*`): kemik tanecikleri **kinematik** (iskeletin kemiklerini izler; çözücüye kinematik sürüş, hız
+  ekleme, bir taneciğin bütün bağlarını koparma eklendi), her kemiğin eti ayrı sıvılaşan grup (kolun eti göğsünkünden geçmez),
+  bağlar çizgeden (doku 1e-3, deri zarı 2e-4, kemiğe 3e-4 m/N; kopma 0,5 / 0,6 / 0,5). Dinlenmede temas mesafesinde olup
+  kurallarca bağlanmamış 676 çifte **gevşek bağ** (zayıf, çabuk kopar). Manken şimdilik **görünmez ayakta** (leğen tutulur,
+  kaslar duruşu tutar); denge ajanda. Ayakta 3 sn: kopuk bağ 26, son 0,5 sn'de en çok 2,8 mm kayma (ortalama 0,5 mm).
+  - Titreşim: 2 bağ yinelemesinde ~100 tanecik 0,4 m/s'ye kadar titriyor (milimetre altı, görünmez); 4 yinelemede 18
+    taneciğe iner. **XPBD bağ sönümü** (Macklin 2016) denendi: en küçük değerde bile beden dağıldı (19 bin bağ koptu);
+    kodu duruyor, kapalı (`fizik.bag_sonum`), ayrıca incelenecek.
+- **Mermi bedende** (`body_hits.*`): ışın boyunca ortamlar taneciklerden (kemik / doku / hava), mermi `weapons::traceShot`
+  ile; yol üstündekiler momentumu alır, bütün bağlarını yitirir (kana döner); geçici boşluk çevreyi dışa iter (simetrik,
+  net momentum yok); aynı momentum kemiğe de itki. 2 mm adımların taneciksiz kalanları sonraki taneciğe devredilir.
+  Deri, tanecikleri kana dönen ya da 2,5 aralıktan fazla açılan köşelerde yırtılır (önce fırlayan tanecik deriyi iğne
+  gibi uzatıyordu).
+- Klipler (göğse, 2,9 m'den; atıştan sonra 0,6 sn ×0,1 ağır çekim), masaüstünde `Tanecik T4 ilk atislar`:
+
+| Atış | Yol üstünde | Boşlukla itilen | Kopan bağ | Momentum (verilen / bırakılan) |
+|---|---|---|---|---|
+| 9 mm | 36 | 2.927 | 450 | 1,58 / 1,59 N s, 20 cm dokudan çıktı |
+| 7,62×51 | 27 | 4.282 | 349 | 1,34 / 1,42 |
+| .50 BMG | 70 | 5.941 | 775 | 3,05 / 3,05 |
+| 12 kalibre 00 (9 saçma) | 269 | 21.998 | 3.097 | 9,74 / 10,06 |
+
+  Açık: pompalının yarası büyük (~15 cm; boşluğun ittiği doku bağlarını koparıp kalıcı yaraya dönüyor: boşluk payı ve
+  doku kopma gerilimi ayarlanacak); kan saçıntısı tek tanecik damlaları (ince sis yok); manken kemiğiyle neredeyse
+  kıpırdamıyor (gerçekçi: .50 BMG 3 N s, ama görünmez ayak da tutuyor).
+
 ## T1 · tanecik çözücüsü (2026-10-02 gece, ajan dalı `tanecik-cekirdek`, main'de)
 `src/scenes/tanecik/particles.*`, testleri `tanecik_tests.cpp` (`--test [ad]`, `--clip baraj|balon`). FleX yolu: PBF sıvı
 (tek yönlü, çekirdek 1,8 aralık, alt adım başına bir diverjans geçişi: duran tank "kaynıyordu", 40 bin tanecik > 0,1 m/s
