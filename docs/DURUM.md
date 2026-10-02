@@ -4,6 +4,8 @@
 > `docs/altinsaat/`, `docs/fener/`, `docs/yikim/` (PLAN.md ve DURUM.md).
 
 ## Şu an
+- **🏁 2026-10-02 (gece) · Yıkım tamamlandı; sıradaki yeni bir sahne tasarımı (yeni oturumda).** Açık kalanlar
+  `docs/yikim/DURUM.md`'nin başında.
 - **2026-10-02 (gece, kapanış) · Yıkım'da kamera W ile baktığı yöne uçar** (yukarı bakınca yükselir). `docs/yikim/DURUM.md`.
 - **2026-10-02 (gece, en en son) · Yıkım'da dördüncü yapı: sismik izolasyonlu kule** (Özcan: *"Sallandıkça sallanıyor
   ama yıkılmıyor"*). Üç kademeli cam kule ve iğne, kauçuk izolatörler üstünde; çizicide yansımalı cam. 7'de neredeyse

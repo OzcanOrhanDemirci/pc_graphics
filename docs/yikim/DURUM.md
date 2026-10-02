@@ -3,6 +3,9 @@
 > Tek kaynak durum panosu. Plan ve Özcan'ın sözleri `docs/yikim/PLAN.md`'de.
 
 ## Şu an
+- **🏁 2026-10-02 (gece) · Sahne tamamlandı.** Özcan: *"Tamamdır. Yıkım sahnemiz tamamlandı. Yeni bir sahne tasarımına
+  geçeceğiz ama onu artık yeni oturumda yapalım."* Açık kalanlar (istenirse): gökdelenin göçüşünde 24. sn sonrası ikinci
+  bir belirlenimsizlik kaynağı; sismik kulede arayüz geçişinin gökdelenden uzun sürmesi; evin ayakta 19-21 ms'si.
 - **2026-10-02 (gece, kapanış) · Kamera baktığı yöne uçar.** Özcan: *"w ya basınca düz gitmek yerine kemeranın yönüne
   göre ileri gidebilir"*. W/S artık bakış yönünde (yukarı bakınca yükselir, aşağı bakınca alçalır); A/D yatay, E/Q
   dikey kaldı; yerden 0,3 m'nin altına inmez. Yeni test `kontrol: yukari bakip W, kamera yukselir` (kontrol 5/5;
