@@ -96,7 +96,7 @@ void LaboratuvarApp::applyLook() {
 
 void LaboratuvarApp::setCamera(Deney d) {
     const std::string k = std::string("kamera.") + deneyKey(d);
-    const float3 defPos[kDeneyCount] = {{0.12f, 0.24f, 0.95f}, {0.0f, 0.16f, 0.50f}, {0.02f, 0.17f, 0.58f}, {0.0f, 0.17f, 0.62f}, {0.10f, 0.26f, 1.25f}, {0.06f, 0.13f, 0.55f}};
+    const float3 defPos[kDeneyCount] = {{0.12f, 0.24f, 0.95f}, {0.0f, 0.16f, 0.50f}, {0.02f, 0.17f, 0.58f}, {0.0f, 0.2f, 0.78f}, {0.10f, 0.26f, 1.25f}, {0.06f, 0.13f, 0.55f}};
     const float3 defAim[kDeneyCount] = {{-0.03f, 0.20f, 0.0f}, {0.0f, 0.06f, 0.0f}, {0.03f, 0.07f, 0.0f}, {0.0f, 0.06f, 0.0f}, {0.0f, 0.17f, 0.0f}, {0.0f, 0.05f, 0.0f}};
     cam.lookAt(cfg.v3(k + ".konum", defPos[int(d)]), cfg.v3(k + ".hedef", defAim[int(d)]));
     cam.fovDeg = cfg.f(k + ".fov", cfg.f("kamera.fov", 30.0f));
