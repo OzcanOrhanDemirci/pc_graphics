@@ -234,7 +234,7 @@ BodyGraph buildBodyGraph(const BodyParticles& body, float bondRadius, float minB
         auto Q = [&](float3 p) { return s ? mirrorX(p) : p; };
         const int ua = s ? B_UARM_R : B_UARM_L, fa = s ? B_FARM_R : B_FARM_L, ha = s ? B_HAND_R : B_HAND_L;
         const int th = s ? B_THIGH_R : B_THIGH_L, sh = s ? B_SHIN_R : B_SHIN_L, ft = s ? B_FOOT_R : B_FOOT_L;
-        ball(B_CHEST, ua, Q(J.shoulder), Q(J.elbow), 95, 70);
+        ball(B_CHEST, ua, Q(J.shoulder), Q(J.elbow), 120, 70);   // the arm can go overhead (the shoulder blade helps)
         hinge(ua, fa, Q(J.elbow), Q(J.wrist) - Q(J.elbow), fwd, 0, 145);
         ball(fa, ha, Q(J.wrist), Q(J.handTip), 60, 15);
         ball(B_PELVIS, th, Q(J.hip), Q(J.knee), 75, 35);

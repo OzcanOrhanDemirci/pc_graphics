@@ -5,6 +5,7 @@
 //   --scene tanecik --stats      the body's numbers: particles, volume, mass, per bone, skin layer, the meshes, the graph
 //   --still ... --poz dirsek|kol|diz|egil|karma   the bones turned by hand (no physics): the skin and bones follow
 //   --scene tanecik --surface-test [ad]   the liquid's surface (tanecik_surface_test.cpp)
+//   --scene tanecik --skeleton-test [ad] / --skeleton-clip ad   the skeleton's physics alone (tanecik_skeleton_test.cpp)
 //   --still ... --kan-deneme      a still pool and a trickle of blood placed by hand (no physics): the liquid's look
 #include "scenes/tanecik/tanecik_app.h"
 #include "scenes/tanecik/body_graph.h"
@@ -66,13 +67,16 @@ int stats(TanecikApp& app) {
 }   // namespace
 
 int runSurfaceTests(TanecikApp& app, const std::string& only);   // tanecik_surface_test.cpp
+int runSkeletonTests(TanecikApp& app, const std::string& only);  // tanecik_skeleton_test.cpp
+int runSkeletonClip(TanecikApp& app, const std::string& name, const std::string& outPrefix);
 
 int runTanecikCli(int argc, char** argv) {
     TanecikApp app;
     std::string surfaceTest;
     bool surface = false;
     std::string out, look = "cam", parts = "hepsi", poseName;
-    bool still = false, doStats = false, bloodTest = false;
+    bool still = false, doStats = false, bloodTest = false, skelTest = false;
+    std::string skelOnly, skelClip;
     unsigned spp = 512;
     std::vector<std::pair<std::string, std::string>> camSet;
     for (int i = 1; i < argc; ++i) {
@@ -86,6 +90,8 @@ int runTanecikCli(int argc, char** argv) {
         else if (a == "--particles") parts = next();
         else if (a == "--poz") poseName = next();
         else if (a == "--kan-deneme") bloodTest = true;
+        else if (a == "--skeleton-test") { skelTest = true; if (i + 1 < argc && argv[i + 1][0] != '-') skelOnly = next(); }
+        else if (a == "--skeleton-clip") skelClip = next();
         else if (a == "--spp") spp = unsigned(std::stoi(next()));
         else if (a == "--width") app.width = unsigned(std::stoi(next()));
         else if (a == "--height") app.height = unsigned(std::stoi(next()));
@@ -102,6 +108,8 @@ int runTanecikCli(int argc, char** argv) {
     app.loadConfig();
     for (const auto& kv : camSet) app.cfg.set(kv.first, kv.second);
     if (doStats) return stats(app);
+    if (skelTest) return runSkeletonTests(app, skelOnly);
+    if (!skelClip.empty()) return runSkeletonClip(app, skelClip, out.empty() ? app.root + "/captures/tanecik/iskelet_" + skelClip : out);
     if (surface) return runSurfaceTests(app, surfaceTest);
     if (!still) {
         std::printf("tanecik: --still or --stats (the live scene opens from the application)\n");

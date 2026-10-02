@@ -33,6 +33,20 @@ Fiziğe dokunmadan, çözücü gelince bağlanacak parçalar (Özcan: *"Sen agen
   kan rengi (0,16 0,028 0,022). Hangi taneciğin oturduğuna fizik karar verecek.
 - **Fareyle seçme** (`__raygen__pick`): tıklanan şeyin türü, kemiği / taneciği (çözücünün sırasıyla), konumu ve
   normali. Canlı pencerede sol tık şimdilik ne olduğunu bildirir; araçlar T4'te bununla nişan alacak.
+- **Berrak sıvı** (su, bal; T5 için): ışığı kırar (tam Fresnel, iç yansıma), içinde geçtiği yol boyunca soğurur; gölge
+  ışınları içinden düz geçer. `sivi.berrak`, `sivi.kirilma`, `sivi.sogurma`. Kan opak kalır.
+- **İskelet fiziği** (`skeleton_sim.*`, T2'nin çekirdeği): 17 kemik katı cisim (kütle ve eylemsizlik taneciklerinden),
+  16 eklem XPBD (Müller vd. 2020): pivot, menteşe ekseni, menteşe aralığı, top eklemde koni ve burulma; jiroskopik
+  terim; eklem sürtünmesi. Ekran kartında, alt adım başına tek iş parçacığı (16 eklem, sabit sıra: birebir tekrar).
+  Testler (`--skeleton-test`, şimdilik et kemikle katı: bütün uzuv kütleleri): **asılı** (göğsünden asılı, kollar
+  kalkık bırakılır; 5 sn) eklem açıklığı en çok 0,24 mm, sınır aşımı 0,14°, en hızlı 5,0 m/s, enerji 624 → 599 J;
+  **serbest** (yerçekimsiz, 9 rad/s döndürülür; sürtünme yok) açıklık 0,33 mm, aşım 0,80°, açısal momentum %3,7 kaydı.
+  Klip `--skeleton-clip asili`.
+  - Bulunanlar: (1) ilk test 12-20 m/s sıçradı: sebep test duruşuydu (kol 100°, omuz konisi 95°): çözücü 5°'lik aşımı
+    bir alt adımda düzeltip ele hız olarak verdi. Duruş sınırın içine alındı; omuz konisi 120° (kol başın üstüne
+    kalkabilir). Ders: **başlangıç durumunu kısıtlara karşı ölç** (açıklık ve aşım "başlangıç" satırında). (2) Yalnız kemik
+    taneciklerinin kütlesi (el 84 g) kamçı etkisini abartıyor; et kendi fiziğine kavuşunca kemik + bağlı et birlikte
+    taşıyacak. (3) Jiroskopik terim olmadan açısal momentum %6,7 kayıyordu.
 - **Paralel ajanlar:** çözücü çekirdeği (sürüyor), silah ve patlama fiziği modülü (sürüyor, dal `tanecik-silah`).
 
 ## T0 · görünüm (2026-10-02)

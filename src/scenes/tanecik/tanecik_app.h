@@ -99,7 +99,13 @@ struct TanecikApp {
     // the bones turned about their joints (forward kinematics, no physics): particles carried by their bones, the
     // skin riding on them. A test of the drawing's moving parts before the solver drives them.
     void applyPose(const float3 turn[B_COUNT]) {
-        forwardKinematics(graph, turn, Xform(), pose);
+        Xform xf[B_COUNT];
+        forwardKinematics(graph, turn, Xform(), xf);
+        applyTransforms(xf);
+    }
+    // every particle carried by its bone (tissue too: no flesh physics), the skin riding on them
+    void applyTransforms(const Xform xf[B_COUNT]) {
+        for (int b = 0; b < B_COUNT; ++b) pose[b] = xf[b];
         std::vector<float3> p(body.pos.size());
         for (size_t i = 0; i < p.size(); ++i) p[i] = pose[graph.bone[i]].apply(body.pos[i]);
         cudaMemcpy(dPos, p.data(), p.size() * sizeof(float3), cudaMemcpyHostToDevice);
