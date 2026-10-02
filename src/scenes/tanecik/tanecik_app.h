@@ -85,6 +85,10 @@ struct TanecikApp {
         renderer.setBoneXforms(pose);
         uploadParticles();
         // the free liquid's surface: room for every particle of the body and a pool's worth more
+        {   // the floor as a canvas, around him
+            const float size = cfg.f("leke.boy", 6.0f);
+            renderer.initStain(cfg.i("leke.cozunurluk", 3072), make_float2(-0.5f * size, -0.5f * size), size);
+        }
         renderer.initLiquid(int(body.pos.size()) + cfg.i("sivi.ek_tanecik", 300000), cfg.i("sivi.kose", 2000000), cfg.i("sivi.ucgen", 4000000),
                             cfg.i("sivi.blok", 65536), 0.0f);
     }
@@ -128,6 +132,8 @@ struct TanecikApp {
         p.skinF0 = cfg.f(glass ? "cam.f0" : "deri.f0", glass ? 0.04f : 0.028f);
         p.skinGloss = cfg.f("deri.parlaklik", 30.0f);
         p.liquidF0 = cfg.f("sivi.f0", 0.03f);
+        p.stainAlbedo = cfg.v3("leke.renk", make_float3(0.16f, 0.028f, 0.022f));
+        p.stainDepth = cfg.f("leke.derinlik", 0.15f);
         p.boneAlbedo = cfg.v3("kemik.renk", make_float3(0.78f, 0.72f, 0.60f));
         p.tissueAlbedo = cfg.v3("tanecik.renk", make_float3(0.55f, 0.17f, 0.15f));
         p.liquidAlbedo = cfg.v3("sivi.renk", make_float3(0.35f, 0.02f, 0.02f));

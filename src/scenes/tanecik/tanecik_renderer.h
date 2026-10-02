@@ -32,6 +32,10 @@ public:
     bool initLiquid(int maxParticles, int maxVertices, int maxTriangles, int maxBlocks, float floorY);
     void updateLiquid(const float3* dPos, const float* dWeight, int n, float radius);   // weight <= 0: not liquid
     const FluidSurface& liquid() const { return fluid_; }
+    // the floor as a canvas (a square map, metres from mn, res^2 cells): soak listed particles in, wipe it clean
+    void initStain(int res, float2 mn, float size);
+    void soak(const float3* dPos, const uint32_t* dIdx, int n, float litresEach, float footprint);
+    void wipeStain();
     void setVisible(TKind k, bool on);                      // hidden instances are skipped by every ray
     bool visible(TKind k) const { return visible_[k]; }
     void render(unsigned int spp, bool accumulate);         // adds spp samples (accumulate) or starts afresh
@@ -84,6 +88,7 @@ private:
     // the top level
     bool visible_[TK_KINDS] = {true, true, true, true, true, true};
     FluidSurface fluid_;
+    float* dStain_ = nullptr;
     Gas liquidGas_, dropsGas_;
     bool liquidReady_ = false;
     OptixInstance* dInstances_ = nullptr;

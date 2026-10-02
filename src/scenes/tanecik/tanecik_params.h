@@ -41,6 +41,14 @@ struct TanecikParams {
     float particleRadius;          // as drawn (m)
     TMesh liquid;                  // the free liquid's surface (rebuilt every frame from its particles)
     const float4* drops;           // its droplets: centre, radius (the instance TK_DROPS)
+    // the floor as a canvas: liquid that settled was taken out of the simulation and soaked in here (litres per m2,
+    // a square map of stainRes^2 cells from stainMin, stainSize metres on a side; null: none)
+    const float* stain;
+    int stainRes;
+    float2 stainMin;
+    float stainSize;
+    float3 stainAlbedo;            // a soaked-in stain's colour (dried blood on white: a brown red)
+    float stainDepth;              // litres per m2 that make a stain all but opaque
     TCamera cam;
     // the look
     int glass;                     // 1 the glass figure, 0 opaque skin

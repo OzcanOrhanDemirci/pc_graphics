@@ -435,6 +435,24 @@ void TanecikRenderer::updateLiquid(const float3* dPos, const float* dWeight, int
     buildIAS();
 }
 
+void TanecikRenderer::initStain(int res, float2 mn, float size) {
+    if (dStain_) cudaFree(dStain_);
+    dStain_ = talloc<float>(size_t(res) * res);
+    p_.stain = dStain_;
+    p_.stainRes = res;
+    p_.stainMin = mn;
+    p_.stainSize = size;
+}
+
+void TanecikRenderer::soak(const float3* dPos, const uint32_t* dIdx, int n, float litresEach, float footprint) {
+    if (!dStain_) return;
+    launchStain(dPos, dIdx, n, litresEach, footprint, dStain_, p_.stainRes, p_.stainMin, p_.stainSize, stream_);
+}
+
+void TanecikRenderer::wipeStain() {
+    if (dStain_) TCUDA(cudaMemsetAsync(dStain_, 0, size_t(p_.stainRes) * p_.stainRes * sizeof(float), stream_));
+}
+
 void TanecikRenderer::setVisible(TKind k, bool on) {
     if (visible_[k] == on) return;
     visible_[k] = on;
@@ -517,6 +535,8 @@ void TanecikRenderer::shutdown() {
     freeMeshes();
     freeParticles();
     freeGas(ias_);
+    if (dStain_) cudaFree(dStain_);
+    dStain_ = nullptr;
     freeGas(liquidGas_);
     freeGas(dropsGas_);
     fluid_.destroy();

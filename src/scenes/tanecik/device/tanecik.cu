@@ -90,6 +90,19 @@ static __forceinline__ __device__ bool lightHit(float3 o, float3 d, float tmax, 
     return any;
 }
 
+// the floor's colour where liquid soaked in: the stain map, bilinear, its depth turned into cover
+static __forceinline__ __device__ float3 floorAlbedo(float3 p) {
+    if (!params.stain || p.y > 1e-3f) return params.studioAlbedo;
+    const float u = (p.x - params.stainMin.x) / params.stainSize * params.stainRes - 0.5f, v = (p.z - params.stainMin.y) / params.stainSize * params.stainRes - 0.5f;
+    if (u < 0.0f || v < 0.0f || u >= params.stainRes - 1 || v >= params.stainRes - 1) return params.studioAlbedo;
+    const int i = int(u), j = int(v);
+    const float fu = u - i, fv = v - j;
+    const float* s = params.stain + j * params.stainRes + i;
+    const float a = s[0] * (1 - fu) * (1 - fv) + s[1] * fu * (1 - fv) + s[params.stainRes] * (1 - fu) * fv + s[params.stainRes + 1] * fu * fv;
+    const float cover = 1.0f - expf(-a / fmaxf(params.stainDepth, 1e-6f));
+    return lerp3(params.studioAlbedo, params.stainAlbedo, cover);
+}
+
 static __forceinline__ __device__ float3 ambient(float3 d) {
     return params.ambient * (0.8f + 0.2f * fmaxf(d.y, 0.0f));
 }
@@ -189,7 +202,7 @@ static __forceinline__ __device__ float3 radiance(float3 o, float3 d, Rng& r) {
         } else if (h.kind == TK_BONES) {
             alb = params.boneAlbedo;
         } else {
-            alb = params.studioAlbedo;
+            alb = floorAlbedo(p);
         }
         // a diffuse event: the soft boxes directly, then (a few times) the rest of the room
         L = L + T * alb * direct(p, nn, r);

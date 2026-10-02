@@ -162,6 +162,21 @@ int runTanecikCli(int argc, char** argv) {
         cudaMalloc(reinterpret_cast<void**>(&dp), p.size() * sizeof(float3));
         cudaMemcpy(dp, p.data(), p.size() * sizeof(float3), cudaMemcpyHostToDevice);
         app.renderer.updateLiquid(dp, nullptr, int(p.size()), r);
+        {   // and the floor as a canvas: a trail of drops soaked in, leading to the pool (as if he had walked there)
+            std::vector<float3> t;
+            for (int k = 0; k < 60; ++k) {
+                const float u = k / 60.0f;
+                const float3 q = make_float3(0.36f - 0.9f * u + 0.04f * rnd(), 0.0f, 0.32f + 0.7f * u + 0.04f * rnd());
+                for (int m = 0; m < 3 + int(4 * (rnd() + 0.5f)); ++m) t.push_back(q + make_float3(0.012f * rnd(), 0, 0.012f * rnd()));
+            }
+            float3* dt = nullptr;
+            cudaMalloc(reinterpret_cast<void**>(&dt), t.size() * sizeof(float3));
+            cudaMemcpy(dt, t.data(), t.size() * sizeof(float3), cudaMemcpyHostToDevice);
+            const float litres = 1000.0f * s * s * s;   // one particle's volume
+            app.renderer.soak(dt, nullptr, int(t.size()), litres, 2.5f * s);
+            cudaDeviceSynchronize();
+            cudaFree(dt);
+        }
         cudaDeviceSynchronize();
         std::printf("kan denemesi: %zu tanecik, %d ucgen, %d damla, %.2f ms\n", p.size(), app.renderer.liquid().triangleCount(),
                     app.renderer.liquid().dropletCount(), app.renderer.liquid().lastMs);
