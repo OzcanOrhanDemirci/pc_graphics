@@ -3,6 +3,7 @@
 //                   [--dist m] [--target x,y,z] [--fov deg] [--width W --height H] [--out path] [--set key=value]
 //       one picture of the figure in the studio, accumulated (no window)
 //   --scene tanecik --stats      the body's numbers: particles, volume, mass, per bone, skin layer, the meshes
+//   --scene tanecik --surface-test [ad]   the liquid's surface (tanecik_surface_test.cpp)
 #include "scenes/tanecik/tanecik_app.h"
 #include "core/image_io.h"
 
@@ -42,8 +43,12 @@ int stats(TanecikApp& app) {
 
 }   // namespace
 
+int runSurfaceTests(TanecikApp& app, const std::string& only);   // tanecik_surface_test.cpp
+
 int runTanecikCli(int argc, char** argv) {
     TanecikApp app;
+    std::string surfaceTest;
+    bool surface = false;
     std::string out, look = "cam", parts = "hepsi";
     bool still = false, doStats = false;
     unsigned spp = 512;
@@ -54,6 +59,7 @@ int runTanecikCli(int argc, char** argv) {
         if (a == "--scene") next();
         else if (a == "--still") still = true;
         else if (a == "--stats") doStats = true;
+        else if (a == "--surface-test") { surface = true; if (i + 1 < argc && argv[i + 1][0] != '-') surfaceTest = next(); }
         else if (a == "--look") look = next();
         else if (a == "--particles") parts = next();
         else if (a == "--spp") spp = unsigned(std::stoi(next()));
@@ -72,6 +78,7 @@ int runTanecikCli(int argc, char** argv) {
     app.loadConfig();
     for (const auto& kv : camSet) app.cfg.set(kv.first, kv.second);
     if (doStats) return stats(app);
+    if (surface) return runSurfaceTests(app, surfaceTest);
     if (!still) {
         std::printf("tanecik: --still or --stats (the live scene opens from the application)\n");
         return 2;
