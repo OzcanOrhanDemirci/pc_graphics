@@ -45,6 +45,7 @@ add_library(pc_core OBJECT
     src/scenes/yikim/quake.cpp
     src/scenes/tanecik/body.cpp
     src/scenes/tanecik/body_graph.cpp
+    src/scenes/tanecik/tanecik_kernels.cu
     src/scenes/tanecik/tanecik_app.cpp
     src/scenes/tanecik/tanecik_live.cpp
     src/scenes/tanecik/tanecik_renderer.cpp

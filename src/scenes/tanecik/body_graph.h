@@ -41,6 +41,32 @@ struct BodyGraph {
     size_t countBonds(BondKind k) const;
 };
 
+// a bone's placement: 3x4 row-major (rotation | translation), OptiX's instance layout; at rest the identity
+struct Xform {
+    float m[12] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0};
+    float3 apply(float3 p) const {
+        return make_float3(m[0] * p.x + m[1] * p.y + m[2] * p.z + m[3], m[4] * p.x + m[5] * p.y + m[6] * p.z + m[7], m[8] * p.x + m[9] * p.y + m[10] * p.z + m[11]);
+    }
+    float3 rotate(float3 v) const {
+        return make_float3(m[0] * v.x + m[1] * v.y + m[2] * v.z, m[4] * v.x + m[5] * v.y + m[6] * v.z, m[8] * v.x + m[9] * v.y + m[10] * v.z);
+    }
+    Xform operator*(const Xform& b) const;                     // this after b
+    static Xform turnAbout(float3 pivot, float3 axisAngle);   // a rotation (axis * angle, radians) about a point
+};
+
+// forward kinematics from the rest pose: each bone turned about its joint's pivot by an axis-angle (rest-world axes),
+// relative to its parent; the pelvis placed by root. Parents before children.
+void forwardKinematics(const BodyGraph& g, const float3 turn[B_COUNT], const Xform& root, Xform out[B_COUNT]);
+
+// the skin mesh rides on the particles: each vertex on (up to) four skin particles near it, weighted by closeness, and
+// an offset (the vertex minus their weighted centre at rest) that turns with their bones
+struct SkinBind {
+    uint32_t p[4];
+    float w[4];
+    float3 offset, normal;            // at rest
+};
+std::vector<SkinBind> bindSkin(const TriMesh& skin, const BodyParticles& body, const BodyGraph& g);
+
 bool bonesAdjacent(int a, int b);   // the same bone, or parent and child
 // bonds between particles closer than bondRadius; a bone thinner than minBoneRadius takes the particles within that
 // radius of its axis (else a finger bone between lattice points would be empty)

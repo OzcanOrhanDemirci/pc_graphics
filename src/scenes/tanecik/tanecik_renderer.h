@@ -1,8 +1,9 @@
-// Scene 4 "Tanecik": the OptiX side. Four instances: the studio, the skin, the bones (triangle meshes) and the
-// particles (OptiX's built-in spheres, one structure rebuilt when they move). Device program device/tanecik.cu
-// (NVRTC, F5 recompiles).
+// Scene 4 "Tanecik": the OptiX side. Instances: the studio, the skin (rebuilt when it deforms), one per bone (its rest
+// mesh under the bone's transform) and the particles (OptiX's built-in spheres, rebuilt when they move). Device program
+// device/tanecik.cu (NVRTC, F5 recompiles).
 #pragma once
 #include "scenes/tanecik/body.h"
+#include "scenes/tanecik/body_graph.h"
 #include "scenes/tanecik/tanecik_params.h"
 
 #include <cuda_runtime.h>
@@ -16,15 +17,22 @@ public:
     bool init(unsigned int width, unsigned int height, const std::string& root);
     void shutdown();
     bool compileDevice(std::string& log);
-    void uploadMeshes(const TriMesh& studio, const TriMesh& skin, const TriMesh& bones);
-    // the spheres as drawn: centres, a display tint each (0 tissue .. 1 liquid), one radius
-    void uploadParticles(const std::vector<float3>& centres, const std::vector<float>& tint, float radius);
-    void setVisible(TKind k, bool on);                 // hidden instances are skipped by every ray
+    // the meshes at rest; bones: one mesh per bone (B_COUNT)
+    void uploadMeshes(const TriMesh& studio, const TriMesh& skin, const std::vector<TriMesh>& bones);
+    void setBoneXforms(const Xform* xf);                    // B_COUNT: the bones' instances, and the skin's rotations
+    // the skin rides on particles (deformSkin): its binding and every particle's bone
+    void setSkinBinding(const std::vector<SkinBind>& bind, const std::vector<uint8_t>& particleBone);
+    void deformSkin(const float3* dParticles);              // device positions of every particle
+    // which particles are drawn (indices into the solver's arrays) and how large; then their positions each frame
+    void setParticleSubset(const std::vector<uint32_t>& idx, float radius);
+    void updateParticles(const float3* dPos, const float* dTint);   // device; dTint may be null
+    void setVisible(TKind k, bool on);                      // hidden instances are skipped by every ray
     bool visible(TKind k) const { return visible_[k]; }
-    void render(unsigned int spp, bool accumulate);    // adds spp samples (accumulate) or starts afresh
+    void render(unsigned int spp, bool accumulate);         // adds spp samples (accumulate) or starts afresh
     void download(std::vector<uchar4>& out);
     void downloadTo(uchar4* hostPinned);
     TanecikParams& params() { return p_; }
+    cudaStream_t stream() const { return stream_; }
     unsigned int width() const { return w_; }
     unsigned int height() const { return h_; }
     float lastMs = 0.0f;
@@ -41,25 +49,38 @@ private:
     cudaStream_t stream_ = nullptr;
     cudaEvent_t e0_ = nullptr, e1_ = nullptr;
     TanecikParams p_{};
-    // the meshes (studio, skin, bones): their buffers and structures
+    // the meshes: [0] the studio, [1] the skin, [2 + b] bone b; their buffers and structures
+    struct Gas {
+        OptixTraversableHandle handle = 0;
+        void *temp = nullptr, *out = nullptr;
+        size_t tempSize = 0, outSize = 0;
+    };
+    std::vector<TMesh> meshes_;
+    std::vector<int> meshVerts_, meshTris_;
+    std::vector<Gas> gas_;
     std::vector<void*> meshBuffers_;
     TMesh* dMeshes_ = nullptr;
-    OptixTraversableHandle meshGas_[3] = {0, 0, 0};
-    // the particles
+    void buildMeshGas(int k, bool fast);
+    // the skin's deformation
+    SkinBind* dBind_ = nullptr;
+    uint8_t* dParticleBone_ = nullptr;
+    int bindCount_ = 0;
+    Xform boneXf_[B_COUNT];
+    float* dBoneXf_ = nullptr;
+    // the particles drawn
+    uint32_t* dSubset_ = nullptr;
     float3* dCentres_ = nullptr;
     float* dTint_ = nullptr;
     float* dRadius_ = nullptr;
     int particleCount_ = 0, particleCapacity_ = 0;
-    void *sphTemp_ = nullptr, *sphOut_ = nullptr;
-    size_t sphTempSize_ = 0, sphOutSize_ = 0;
-    OptixTraversableHandle sphereGas_ = 0;
+    Gas spheres_;
     void buildSpheres();
     // the top level
     bool visible_[4] = {true, true, true, true};
     OptixInstance* dInstances_ = nullptr;
-    void *iasTemp_ = nullptr, *iasOut_ = nullptr;
-    size_t iasTempSize_ = 0, iasOutSize_ = 0;
+    Gas ias_;
     void buildIAS();
     void freeMeshes();
     void freeParticles();
+    void freeGas(Gas& g);
 };

@@ -2,7 +2,8 @@
 //   --scene tanecik --still [--look cam|deri] [--particles hepsi|seyrek|yok] [--spp N] [--yaw deg] [--pitch deg]
 //                   [--dist m] [--target x,y,z] [--fov deg] [--width W --height H] [--out path] [--set key=value]
 //       one picture of the figure in the studio, accumulated (no window)
-//   --scene tanecik --stats      the body's numbers: particles, volume, mass, per bone, skin layer, the meshes
+//   --scene tanecik --stats      the body's numbers: particles, volume, mass, per bone, skin layer, the meshes, the graph
+//   --still ... --poz dirsek|kol|diz|egil|karma   the bones turned by hand (no physics): the skin and bones follow
 #include "scenes/tanecik/tanecik_app.h"
 #include "scenes/tanecik/body_graph.h"
 #include "core/image_io.h"
@@ -37,12 +38,12 @@ int stats(TanecikApp& app) {
     float top = 0.0f, lo = 1e9f;
     for (const float3& p : app.skin.pos) { top = std::max(top, p.y); lo = std::min(lo, p.y); }
     std::printf("deri: %zu kose, %zu ucgen, boy %.3f m (taban %.3f)\n", app.skin.pos.size(), app.skin.idx.size(), top, lo);
-    std::printf("kemik: %zu kose, %zu ucgen\n", app.bones.pos.size(), app.bones.idx.size());
+    size_t bv = 0, bt = 0;
+    for (const TriMesh& m : app.boneMeshes) { bv += m.pos.size(); bt += m.idx.size(); }
+    std::printf("kemik: %zu kose, %zu ucgen, %zu kemik\n", bv, bt, app.boneMeshes.size());
     // the body as the physics will see it: kinds, bonds, bone clusters, joints
-    const double t1 = tnow();
-    const float s = b.spacing;
-    const BodyGraph g = buildBodyGraph(b, app.cfg.f("beden.bag_yaricap", 1.5f) * s, app.cfg.f("beden.kemik_en_az", 0.75f) * s);
-    std::printf("cizge (%.2f s): doku %zu, deri %zu, kemik %zu tanecik\n", tnow() - t1, g.countKind(PK_TISSUE), g.countKind(PK_SKIN), g.countKind(PK_BONE));
+    const BodyGraph& g = app.graph;
+    std::printf("cizge: doku %zu, deri %zu, kemik %zu tanecik\n", g.countKind(PK_TISSUE), g.countKind(PK_SKIN), g.countKind(PK_BONE));
     std::printf("  bag: %zu (doku %zu, deri zari %zu, kemige %zu), tanecik basina %.1f\n", g.bonds.size(), g.countBonds(BK_TISSUE), g.countBonds(BK_SKIN),
                 g.countBonds(BK_ATTACH), 2.0 * g.bonds.size() / std::max<size_t>(1, b.pos.size()));
     std::vector<int> deg(b.pos.size(), 0);
@@ -64,7 +65,7 @@ int stats(TanecikApp& app) {
 
 int runTanecikCli(int argc, char** argv) {
     TanecikApp app;
-    std::string out, look = "cam", parts = "hepsi";
+    std::string out, look = "cam", parts = "hepsi", poseName;
     bool still = false, doStats = false;
     unsigned spp = 512;
     std::vector<std::pair<std::string, std::string>> camSet;
@@ -76,6 +77,7 @@ int runTanecikCli(int argc, char** argv) {
         else if (a == "--stats") doStats = true;
         else if (a == "--look") look = next();
         else if (a == "--particles") parts = next();
+        else if (a == "--poz") poseName = next();
         else if (a == "--spp") spp = unsigned(std::stoi(next()));
         else if (a == "--width") app.width = unsigned(std::stoi(next()));
         else if (a == "--height") app.height = unsigned(std::stoi(next()));
@@ -108,6 +110,29 @@ int runTanecikCli(int argc, char** argv) {
     std::printf("beden ve sahne (%.2f s): %zu tanecik\n", tnow() - t0, app.body.pos.size());
     app.applyLook(look != "deri");
     app.setCamera();
+    if (!poseName.empty()) {
+        float3 turn[B_COUNT];
+        for (float3& t : turn) t = make_float3(0, 0, 0);
+        auto hingeAxis = [&](int child) {
+            for (const JointDef& j : app.graph.joints)
+                if (j.child == child) return j.axis;
+            return make_float3(1, 0, 0);
+        };
+        const float d = 3.14159265f / 180.0f;
+        const bool all = poseName == "karma";
+        if (all || poseName == "dirsek") turn[B_FARM_L] = hingeAxis(B_FARM_L) * (90 * d);
+        if (all || poseName == "kol") {   // the left arm raised sideways, the elbow a little bent
+            turn[B_UARM_L] = make_float3(0, 0, 1) * (70 * d);
+            if (!all) turn[B_FARM_L] = hingeAxis(B_FARM_L) * (60 * d);
+        }
+        if (all || poseName == "diz") {   // the right thigh forward, the knee bent
+            turn[B_THIGH_R] = make_float3(-1, 0, 0) * (60 * d);
+            turn[B_SHIN_R] = hingeAxis(B_SHIN_R) * (90 * d);
+        }
+        if (all || poseName == "egil") turn[B_CHEST] = make_float3(1, 0, 0) * (25 * d);
+        app.applyPose(turn);
+        std::printf("poz: %s\n", poseName.c_str());
+    }
     t0 = tnow();
     const unsigned batch = 16;
     for (unsigned s = 0; s < spp; s += batch) app.renderer.render(std::min(batch, spp - s), s > 0);
@@ -117,6 +142,7 @@ int runTanecikCli(int argc, char** argv) {
     const std::string path = (out.empty() ? app.root + "/captures/tanecik_" + look : out) + ".png";
     writePNG(path, int(app.width), int(app.height), reinterpret_cast<const unsigned char*>(px.data()));
     std::printf("yazildi: %s\n", path.c_str());
+    app.release();
     app.renderer.shutdown();
     return 0;
 }

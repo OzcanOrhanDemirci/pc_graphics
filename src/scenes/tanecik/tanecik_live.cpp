@@ -165,6 +165,7 @@ public:
     }
 
     void unload() override {
+        t_.release();
         t_.renderer.shutdown();
         if (pinned_) cudaFreeHost(pinned_);
         pinned_ = nullptr;

@@ -8,7 +8,7 @@
 #include <optix_types.h>
 #endif
 
-// what an instance is: its instance id (and, for the meshes, its index into TanecikParams::meshes)
+// what an instance is: the low byte of its instance id; the bones carry their bone in the next byte
 enum TKind : unsigned int { TK_STUDIO = 0, TK_SKIN = 1, TK_BONES = 2, TK_PARTICLES = 3 };
 
 struct TMesh {
@@ -35,7 +35,7 @@ struct TanecikParams {
     uchar4* output;
     unsigned int samples, spp, seed;
     OptixTraversableHandle handle;
-    const TMesh* meshes;           // by kind: studio, skin, bones
+    const TMesh* meshes;           // [0] the studio, [1] the skin, [2 + b] bone b (at rest; its instance places it)
     const float3* particles;       // sphere centres (the instance TK_PARTICLES), its primitive index
     const float* particleTint;     // per sphere: 0 tissue .. 1 freed liquid (display)
     float particleRadius;          // as drawn (m)

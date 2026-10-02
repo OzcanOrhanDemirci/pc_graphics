@@ -46,17 +46,18 @@ static __forceinline__ __device__ Hit trace(float3 o, float3 d, float tmin, floa
     h.hit = optixHitObjectIsHit();
     if (!h.hit) return h;
     h.t = optixHitObjectGetRayTmax();
-    h.kind = optixHitObjectGetInstanceId();
+    const unsigned int id = optixHitObjectGetInstanceId();
+    h.kind = id & 0xffu;
     h.prim = optixHitObjectGetPrimitiveIndex();
     if (h.kind == TK_PARTICLES) {
         h.n = normalize(o + d * h.t - params.particles[h.prim]);
     } else {
-        const TMesh m = params.meshes[h.kind];
+        const TMesh m = params.meshes[h.kind == TK_BONES ? 2u + (id >> 8) : h.kind];   // a bone: its rest mesh, placed
         const uint3 tri = m.idx[h.prim];
         const float2 b = optixHitObjectGetTriangleBarycentrics();
-        const float3 ns = m.nrm[tri.x] * (1.0f - b.x - b.y) + m.nrm[tri.y] * b.x + m.nrm[tri.z] * b.y;
+        const float3 ns = optixHitObjectTransformNormalFromObjectToWorldSpace(m.nrm[tri.x] * (1.0f - b.x - b.y) + m.nrm[tri.y] * b.x + m.nrm[tri.z] * b.y);
         const float3 v0 = m.pos[tri.x], v1 = m.pos[tri.y], v2 = m.pos[tri.z];
-        const float3 ng = normalize(cross(v1 - v0, v2 - v0));
+        const float3 ng = normalize(optixHitObjectTransformNormalFromObjectToWorldSpace(cross(v1 - v0, v2 - v0)));
         h.n = dot(ns, ns) > 1e-12f ? normalize(ns) : ng;
         if (dot(h.n, ng) < 0.0f) h.n = ng;
     }

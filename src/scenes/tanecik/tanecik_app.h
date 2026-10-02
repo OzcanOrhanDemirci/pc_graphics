@@ -3,6 +3,7 @@
 #pragma once
 #include "core/config.h"
 #include "scenes/tanecik/body.h"
+#include "scenes/tanecik/body_graph.h"
 #include "scenes/tanecik/tanecik_renderer.h"
 
 #include <algorithm>
@@ -45,7 +46,12 @@ struct TanecikApp {
     unsigned int width = 1920, height = 1080;
     Mannequin man;
     BodyParticles body;
-    TriMesh studio, skin, bones;
+    TriMesh studio, skin;
+    std::vector<TriMesh> boneMeshes;   // one per bone, at rest
+    BodyGraph graph;
+    std::vector<SkinBind> skinBind;
+    float3* dPos = nullptr;      // every particle's position on the device (what the renderer draws and the skin rides on)
+    Xform pose[B_COUNT];         // the bones' placements now
     OrbitCamera orbit;
     int particleView = 0;        // 0 every particle, 1 a sparse share, 2 none (display only)
 
@@ -61,18 +67,42 @@ struct TanecikApp {
     void build() {
         body = fillBody(man, cfg.f("beden.aralik", 0.007f), cfg.f("beden.titresim", 0.12f));
         skin = skinMesh(man, cfg.f("beden.deri_hucre", 0.004f));
-        bones = skeletonMesh();
+        boneMeshes.clear();
+        for (int b = 0; b < B_COUNT; ++b) boneMeshes.push_back(skeletonMesh(b));
+        const float s = body.spacing;
+        graph = buildBodyGraph(body, cfg.f("beden.bag_yaricap", 1.5f) * s, cfg.f("beden.kemik_en_az", 0.75f) * s);
+        skinBind = bindSkin(skin, body, graph);
+        for (Xform& x : pose) x = Xform();
         studio = studioMesh(cfg.f("studyo.duvar_z", -4.0f), cfg.f("studyo.kavis", 1.6f), cfg.f("studyo.yukseklik", 7.0f), cfg.f("studyo.genislik", 14.0f),
                              cfg.f("studyo.on_z", 14.0f));
     }
     void upload() {
-        renderer.uploadMeshes(studio, skin, bones);
+        renderer.uploadMeshes(studio, skin, boneMeshes);
+        renderer.setSkinBinding(skinBind, graph.bone);
+        release();
+        cudaMalloc(reinterpret_cast<void**>(&dPos), body.pos.size() * sizeof(float3));
+        cudaMemcpy(dPos, body.pos.data(), body.pos.size() * sizeof(float3), cudaMemcpyHostToDevice);
+        renderer.setBoneXforms(pose);
         uploadParticles();
+    }
+    void release() {
+        if (dPos) cudaFree(dPos);
+        dPos = nullptr;
+    }
+    // the bones turned about their joints (forward kinematics, no physics): particles carried by their bones, the
+    // skin riding on them. A test of the drawing's moving parts before the solver drives them.
+    void applyPose(const float3 turn[B_COUNT]) {
+        forwardKinematics(graph, turn, Xform(), pose);
+        std::vector<float3> p(body.pos.size());
+        for (size_t i = 0; i < p.size(); ++i) p[i] = pose[graph.bone[i]].apply(body.pos[i]);
+        cudaMemcpy(dPos, p.data(), p.size() * sizeof(float3), cudaMemcpyHostToDevice);
+        renderer.setBoneXforms(pose);
+        renderer.deformSkin(dPos);
+        renderer.updateParticles(dPos, nullptr);
     }
     // the particles as drawn: all of them, a sparse share (every n-th by a hash, so it does not form a pattern), or none
     void uploadParticles() {
-        std::vector<float3> c;
-        std::vector<float> tint;
+        std::vector<uint32_t> idx;
         const float keep = particleView == 0 ? 1.0f : particleView == 1 ? cfg.f("gorunum.seyrek_pay", 0.2f) : 0.0f;
         for (size_t i = 0; i < body.pos.size(); ++i) {
             unsigned h = unsigned(i) * 2654435761u;
@@ -80,11 +110,11 @@ struct TanecikApp {
             h *= 0x2c1b3c6dU;
             h ^= h >> 12;
             if ((h & 0xffffff) / 16777216.0f >= keep) continue;
-            c.push_back(body.pos[i]);
-            tint.push_back(0.0f);
+            idx.push_back(uint32_t(i));
         }
         const float scale = cfg.f(particleView == 1 ? "gorunum.seyrek_yaricap" : "gorunum.tanecik_yaricap", 0.3f);
-        renderer.uploadParticles(c, tint, scale * body.spacing);
+        renderer.setParticleSubset(idx, scale * body.spacing);
+        renderer.updateParticles(dPos, nullptr);
     }
     void applyLook(bool glass) {
         TanecikParams& p = renderer.params();

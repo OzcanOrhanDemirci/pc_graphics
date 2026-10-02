@@ -1,4 +1,5 @@
 #include "scenes/tanecik/tanecik_renderer.h"
+#include "scenes/tanecik/tanecik_kernels.h"
 
 #include <nvrtc.h>
 #include <optix_stack_size.h>
@@ -69,8 +70,10 @@ bool TanecikRenderer::init(unsigned int width, unsigned int height, const std::s
     p_.accum = talloc<float4>(size_t(width) * height);
     p_.output = talloc<uchar4>(size_t(width) * height);
     TCUDA(cudaMalloc(reinterpret_cast<void**>(&dParams_), sizeof(TanecikParams)));
-    dInstances_ = talloc<OptixInstance>(4);
+    dInstances_ = talloc<OptixInstance>(4 + B_COUNT);
     dRadius_ = talloc<float>(1);
+    dBoneXf_ = talloc<float>(12 * B_COUNT);
+    setBoneXforms(boneXf_);
     return true;
 }
 
@@ -171,71 +174,123 @@ bool TanecikRenderer::compileDevice(std::string& log) {
     return true;
 }
 
+void TanecikRenderer::freeGas(Gas& g) {
+    if (g.temp) cudaFree(g.temp);
+    if (g.out) cudaFree(g.out);
+    g = Gas{};
+}
+
 void TanecikRenderer::freeMeshes() {
     TCUDA(cudaDeviceSynchronize());
     for (void* p : meshBuffers_) cudaFree(p);
     meshBuffers_.clear();
+    for (Gas& g : gas_) freeGas(g);
+    gas_.clear();
+    meshes_.clear();
+    meshVerts_.clear();
+    meshTris_.clear();
     dMeshes_ = nullptr;
-    for (auto& g : meshGas_) g = 0;
+    for (void* p : {static_cast<void*>(dBind_), static_cast<void*>(dParticleBone_)})
+        if (p) cudaFree(p);
+    dBind_ = nullptr;
+    dParticleBone_ = nullptr;
+    bindCount_ = 0;
 }
 
 void TanecikRenderer::freeParticles() {
     TCUDA(cudaDeviceSynchronize());
-    for (void* p : {static_cast<void*>(dCentres_), static_cast<void*>(dTint_), sphTemp_, sphOut_})
+    for (void* p : {static_cast<void*>(dCentres_), static_cast<void*>(dTint_), static_cast<void*>(dSubset_)})
         if (p) cudaFree(p);
     dCentres_ = nullptr;
     dTint_ = nullptr;
-    sphTemp_ = sphOut_ = nullptr;
-    sphTempSize_ = sphOutSize_ = 0;
+    dSubset_ = nullptr;
+    freeGas(spheres_);
     particleCount_ = particleCapacity_ = 0;
-    sphereGas_ = 0;
 }
 
-void TanecikRenderer::uploadMeshes(const TriMesh& studio, const TriMesh& skin, const TriMesh& bones) {
-    freeMeshes();
-    const TriMesh* ms[3] = {&studio, &skin, &bones};
-    TMesh hm[3];
-    for (int k = 0; k < 3; ++k) {
-        const TriMesh& m = *ms[k];
-        float3* dp = talloc<float3>(m.pos.size());
-        float3* dn = talloc<float3>(m.nrm.size());
-        uint3* di = talloc<uint3>(m.idx.size());
-        TCUDA(cudaMemcpy(dp, m.pos.data(), m.pos.size() * sizeof(float3), cudaMemcpyHostToDevice));
-        TCUDA(cudaMemcpy(dn, m.nrm.data(), m.nrm.size() * sizeof(float3), cudaMemcpyHostToDevice));
-        TCUDA(cudaMemcpy(di, m.idx.data(), m.idx.size() * sizeof(uint3), cudaMemcpyHostToDevice));
-        meshBuffers_.insert(meshBuffers_.end(), {dp, dn, di});
-        hm[k] = {dp, dn, di};
-        OptixBuildInput bi{};
-        bi.type = OPTIX_BUILD_INPUT_TYPE_TRIANGLES;
-        CUdeviceptr verts = CUdeviceptr(dp);
-        bi.triangleArray.vertexFormat = OPTIX_VERTEX_FORMAT_FLOAT3;
-        bi.triangleArray.vertexStrideInBytes = sizeof(float3);
-        bi.triangleArray.numVertices = unsigned(m.pos.size());
-        bi.triangleArray.vertexBuffers = &verts;
-        bi.triangleArray.indexFormat = OPTIX_INDICES_FORMAT_UNSIGNED_INT3;
-        bi.triangleArray.indexStrideInBytes = sizeof(uint3);
-        bi.triangleArray.numIndexTriplets = unsigned(m.idx.size());
-        bi.triangleArray.indexBuffer = CUdeviceptr(di);
-        const unsigned int flags[1] = {OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT};
-        bi.triangleArray.flags = flags;
-        bi.triangleArray.numSbtRecords = 1;
-        OptixAccelBuildOptions ao{};
-        ao.buildFlags = OPTIX_BUILD_FLAG_PREFER_FAST_TRACE;
-        ao.operation = OPTIX_BUILD_OPERATION_BUILD;
-        OptixAccelBufferSizes sz{};
-        TOPTIX(optixAccelComputeMemoryUsage(ctx_, &ao, &bi, 1, &sz));
-        void *temp = nullptr, *out = nullptr;
-        TCUDA(cudaMalloc(&temp, sz.tempSizeInBytes));
-        TCUDA(cudaMalloc(&out, sz.outputSizeInBytes));
-        TOPTIX(optixAccelBuild(ctx_, stream_, &ao, &bi, 1, CUdeviceptr(temp), sz.tempSizeInBytes, CUdeviceptr(out), sz.outputSizeInBytes, &meshGas_[k], nullptr, 0));
-        TCUDA(cudaStreamSynchronize(stream_));
-        cudaFree(temp);
-        meshBuffers_.push_back(out);
+// a mesh's structure: built for tracing once (fast: false), or rebuilt quickly every frame it deforms (the skin)
+void TanecikRenderer::buildMeshGas(int k, bool fast) {
+    OptixBuildInput bi{};
+    bi.type = OPTIX_BUILD_INPUT_TYPE_TRIANGLES;
+    CUdeviceptr verts = CUdeviceptr(meshes_[k].pos);
+    bi.triangleArray.vertexFormat = OPTIX_VERTEX_FORMAT_FLOAT3;
+    bi.triangleArray.vertexStrideInBytes = sizeof(float3);
+    bi.triangleArray.numVertices = unsigned(meshVerts_[k]);
+    bi.triangleArray.vertexBuffers = &verts;
+    bi.triangleArray.indexFormat = OPTIX_INDICES_FORMAT_UNSIGNED_INT3;
+    bi.triangleArray.indexStrideInBytes = sizeof(uint3);
+    bi.triangleArray.numIndexTriplets = unsigned(meshTris_[k]);
+    bi.triangleArray.indexBuffer = CUdeviceptr(meshes_[k].idx);
+    const unsigned int flags[1] = {OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT};
+    bi.triangleArray.flags = flags;
+    bi.triangleArray.numSbtRecords = 1;
+    OptixAccelBuildOptions ao{};
+    ao.buildFlags = fast ? OPTIX_BUILD_FLAG_PREFER_FAST_BUILD : OPTIX_BUILD_FLAG_PREFER_FAST_TRACE;
+    ao.operation = OPTIX_BUILD_OPERATION_BUILD;
+    OptixAccelBufferSizes sz{};
+    TOPTIX(optixAccelComputeMemoryUsage(ctx_, &ao, &bi, 1, &sz));
+    Gas& g = gas_[k];
+    if (sz.tempSizeInBytes > g.tempSize) {
+        if (g.temp) cudaFree(g.temp);
+        TCUDA(cudaMalloc(&g.temp, sz.tempSizeInBytes));
+        g.tempSize = sz.tempSizeInBytes;
     }
-    dMeshes_ = talloc<TMesh>(3);
-    TCUDA(cudaMemcpy(dMeshes_, hm, sizeof(hm), cudaMemcpyHostToDevice));
+    if (sz.outputSizeInBytes > g.outSize) {
+        if (g.out) cudaFree(g.out);
+        TCUDA(cudaMalloc(&g.out, sz.outputSizeInBytes));
+        g.outSize = sz.outputSizeInBytes;
+    }
+    TOPTIX(optixAccelBuild(ctx_, stream_, &ao, &bi, 1, CUdeviceptr(g.temp), g.tempSize, CUdeviceptr(g.out), g.outSize, &g.handle, nullptr, 0));
+}
+
+void TanecikRenderer::uploadMeshes(const TriMesh& studio, const TriMesh& skin, const std::vector<TriMesh>& bones) {
+    freeMeshes();
+    std::vector<const TriMesh*> ms = {&studio, &skin};
+    for (const TriMesh& b : bones) ms.push_back(&b);
+    gas_.resize(ms.size());
+    for (const TriMesh* m : ms) {
+        float3* dp = talloc<float3>(m->pos.size());
+        float3* dn = talloc<float3>(m->nrm.size());
+        uint3* di = talloc<uint3>(m->idx.size());
+        TCUDA(cudaMemcpy(dp, m->pos.data(), m->pos.size() * sizeof(float3), cudaMemcpyHostToDevice));
+        TCUDA(cudaMemcpy(dn, m->nrm.data(), m->nrm.size() * sizeof(float3), cudaMemcpyHostToDevice));
+        TCUDA(cudaMemcpy(di, m->idx.data(), m->idx.size() * sizeof(uint3), cudaMemcpyHostToDevice));
+        meshBuffers_.insert(meshBuffers_.end(), {dp, dn, di});
+        meshes_.push_back({dp, dn, di});
+        meshVerts_.push_back(int(m->pos.size()));
+        meshTris_.push_back(int(m->idx.size()));
+    }
+    for (int k = 0; k < int(ms.size()); ++k)
+        if (meshTris_[k] > 0) buildMeshGas(k, k == TK_SKIN);
+    TCUDA(cudaStreamSynchronize(stream_));
+    dMeshes_ = talloc<TMesh>(meshes_.size());
+    TCUDA(cudaMemcpy(dMeshes_, meshes_.data(), meshes_.size() * sizeof(TMesh), cudaMemcpyHostToDevice));
     meshBuffers_.push_back(dMeshes_);
     p_.meshes = dMeshes_;
+    buildIAS();
+}
+
+void TanecikRenderer::setBoneXforms(const Xform* xf) {
+    for (int b = 0; b < B_COUNT; ++b) boneXf_[b] = xf[b];
+    TCUDA(cudaMemcpyAsync(dBoneXf_, boneXf_, sizeof(boneXf_), cudaMemcpyHostToDevice, stream_));
+    if (!gas_.empty()) buildIAS();
+}
+
+void TanecikRenderer::setSkinBinding(const std::vector<SkinBind>& bind, const std::vector<uint8_t>& particleBone) {
+    for (void* p : {static_cast<void*>(dBind_), static_cast<void*>(dParticleBone_)})
+        if (p) cudaFree(p);
+    dBind_ = talloc<SkinBind>(bind.size());
+    dParticleBone_ = talloc<uint8_t>(particleBone.size());
+    TCUDA(cudaMemcpy(dBind_, bind.data(), bind.size() * sizeof(SkinBind), cudaMemcpyHostToDevice));
+    TCUDA(cudaMemcpy(dParticleBone_, particleBone.data(), particleBone.size(), cudaMemcpyHostToDevice));
+    bindCount_ = int(bind.size());
+}
+
+void TanecikRenderer::deformSkin(const float3* dParticles) {
+    if (!bindCount_ || gas_.size() <= TK_SKIN || bindCount_ != meshVerts_[TK_SKIN]) return;
+    launchSkin(dBind_, bindCount_, dParticles, dParticleBone_, dBoneXf_, const_cast<float3*>(meshes_[TK_SKIN].pos),
+               const_cast<float3*>(meshes_[TK_SKIN].nrm), stream_);
+    buildMeshGas(TK_SKIN, true);
     buildIAS();
 }
 
@@ -256,40 +311,45 @@ void TanecikRenderer::buildSpheres() {
     ao.operation = OPTIX_BUILD_OPERATION_BUILD;
     OptixAccelBufferSizes sz{};
     TOPTIX(optixAccelComputeMemoryUsage(ctx_, &ao, &bi, 1, &sz));
-    if (sz.tempSizeInBytes > sphTempSize_) {
-        if (sphTemp_) cudaFree(sphTemp_);
-        TCUDA(cudaMalloc(&sphTemp_, sz.tempSizeInBytes));
-        sphTempSize_ = sz.tempSizeInBytes;
+    Gas& g = spheres_;
+    if (sz.tempSizeInBytes > g.tempSize) {
+        if (g.temp) cudaFree(g.temp);
+        TCUDA(cudaMalloc(&g.temp, sz.tempSizeInBytes));
+        g.tempSize = sz.tempSizeInBytes;
     }
-    if (sz.outputSizeInBytes > sphOutSize_) {
-        if (sphOut_) cudaFree(sphOut_);
-        TCUDA(cudaMalloc(&sphOut_, sz.outputSizeInBytes));
-        sphOutSize_ = sz.outputSizeInBytes;
+    if (sz.outputSizeInBytes > g.outSize) {
+        if (g.out) cudaFree(g.out);
+        TCUDA(cudaMalloc(&g.out, sz.outputSizeInBytes));
+        g.outSize = sz.outputSizeInBytes;
     }
-    TOPTIX(optixAccelBuild(ctx_, stream_, &ao, &bi, 1, CUdeviceptr(sphTemp_), sphTempSize_, CUdeviceptr(sphOut_), sphOutSize_, &sphereGas_, nullptr, 0));
+    TOPTIX(optixAccelBuild(ctx_, stream_, &ao, &bi, 1, CUdeviceptr(g.temp), g.tempSize, CUdeviceptr(g.out), g.outSize, &g.handle, nullptr, 0));
 }
 
-void TanecikRenderer::uploadParticles(const std::vector<float3>& c, const std::vector<float>& tint, float radius) {
-    const int n = int(c.size());
+void TanecikRenderer::setParticleSubset(const std::vector<uint32_t>& idx, float radius) {
+    const int n = int(idx.size());
     if (n > particleCapacity_) {
         freeParticles();
         dCentres_ = talloc<float3>(n);
         dTint_ = talloc<float>(n);
+        dSubset_ = talloc<uint32_t>(n);
         particleCapacity_ = n;
     }
     particleCount_ = n;
-    if (n > 0) {
-        TCUDA(cudaMemcpyAsync(dCentres_, c.data(), size_t(n) * sizeof(float3), cudaMemcpyHostToDevice, stream_));
-        if (tint.size() == c.size()) TCUDA(cudaMemcpyAsync(dTint_, tint.data(), size_t(n) * sizeof(float), cudaMemcpyHostToDevice, stream_));
-        else TCUDA(cudaMemsetAsync(dTint_, 0, size_t(n) * sizeof(float), stream_));
-    }
+    if (n > 0) TCUDA(cudaMemcpyAsync(dSubset_, idx.data(), size_t(n) * sizeof(uint32_t), cudaMemcpyHostToDevice, stream_));
     TCUDA(cudaMemcpyAsync(dRadius_, &radius, sizeof(float), cudaMemcpyHostToDevice, stream_));
     p_.particles = dCentres_;
     p_.particleTint = dTint_;
     p_.particleRadius = radius;
-    if (n > 0) buildSpheres();
-    else sphereGas_ = 0;
-    TCUDA(cudaStreamSynchronize(stream_));
+    if (n == 0) {
+        spheres_.handle = 0;
+        buildIAS();
+    }
+}
+
+void TanecikRenderer::updateParticles(const float3* dPos, const float* dTint) {
+    if (particleCount_ <= 0) return;
+    launchGatherParticles(dPos, dTint, dSubset_, particleCount_, dCentres_, dTint_, stream_);
+    buildSpheres();
     buildIAS();
 }
 
@@ -301,18 +361,24 @@ void TanecikRenderer::setVisible(TKind k, bool on) {
 
 void TanecikRenderer::buildIAS() {
     std::vector<OptixInstance> inst;
-    const OptixTraversableHandle gas[4] = {meshGas_[0], meshGas_[1], meshGas_[2], sphereGas_};
-    for (unsigned k = 0; k < 4; ++k) {
-        if (!gas[k] || !visible_[k]) continue;
+    auto add = [&](OptixTraversableHandle h, unsigned kind, unsigned sub, const float* xf) {
+        if (!h || !visible_[kind]) return;
         OptixInstance oi{};
-        oi.transform[0] = oi.transform[5] = oi.transform[10] = 1.0f;
-        oi.instanceId = k;
-        oi.sbtOffset = k == TK_PARTICLES ? 1 : 0;
+        if (xf) std::memcpy(oi.transform, xf, 12 * sizeof(float));
+        else oi.transform[0] = oi.transform[5] = oi.transform[10] = 1.0f;
+        oi.instanceId = kind | (sub << 8);
+        oi.sbtOffset = kind == TK_PARTICLES ? 1 : 0;
         oi.visibilityMask = 1;
         oi.flags = OPTIX_INSTANCE_FLAG_NONE;
-        oi.traversableHandle = gas[k];
+        oi.traversableHandle = h;
         inst.push_back(oi);
+    };
+    if (gas_.size() >= 2) {
+        add(gas_[TK_STUDIO].handle, TK_STUDIO, 0, nullptr);
+        add(gas_[TK_SKIN].handle, TK_SKIN, 0, nullptr);
+        for (int b = 0; b < B_COUNT && 2 + b < int(gas_.size()); ++b) add(gas_[2 + b].handle, TK_BONES, unsigned(b), boneXf_[b].m);
     }
+    add(spheres_.handle, TK_PARTICLES, 0, nullptr);
     if (inst.empty()) { p_.handle = 0; return; }
     TCUDA(cudaMemcpyAsync(dInstances_, inst.data(), inst.size() * sizeof(OptixInstance), cudaMemcpyHostToDevice, stream_));
     OptixBuildInput bi{};
@@ -324,17 +390,17 @@ void TanecikRenderer::buildIAS() {
     ao.operation = OPTIX_BUILD_OPERATION_BUILD;
     OptixAccelBufferSizes sz{};
     TOPTIX(optixAccelComputeMemoryUsage(ctx_, &ao, &bi, 1, &sz));
-    if (sz.tempSizeInBytes > iasTempSize_) {
-        if (iasTemp_) cudaFree(iasTemp_);
-        TCUDA(cudaMalloc(&iasTemp_, sz.tempSizeInBytes));
-        iasTempSize_ = sz.tempSizeInBytes;
+    if (sz.tempSizeInBytes > ias_.tempSize) {
+        if (ias_.temp) cudaFree(ias_.temp);
+        TCUDA(cudaMalloc(&ias_.temp, sz.tempSizeInBytes));
+        ias_.tempSize = sz.tempSizeInBytes;
     }
-    if (sz.outputSizeInBytes > iasOutSize_) {
-        if (iasOut_) cudaFree(iasOut_);
-        TCUDA(cudaMalloc(&iasOut_, sz.outputSizeInBytes));
-        iasOutSize_ = sz.outputSizeInBytes;
+    if (sz.outputSizeInBytes > ias_.outSize) {
+        if (ias_.out) cudaFree(ias_.out);
+        TCUDA(cudaMalloc(&ias_.out, sz.outputSizeInBytes));
+        ias_.outSize = sz.outputSizeInBytes;
     }
-    TOPTIX(optixAccelBuild(ctx_, stream_, &ao, &bi, 1, CUdeviceptr(iasTemp_), iasTempSize_, CUdeviceptr(iasOut_), iasOutSize_, &p_.handle, nullptr, 0));
+    TOPTIX(optixAccelBuild(ctx_, stream_, &ao, &bi, 1, CUdeviceptr(ias_.temp), ias_.tempSize, CUdeviceptr(ias_.out), ias_.outSize, &p_.handle, nullptr, 0));
     TCUDA(cudaStreamSynchronize(stream_));
 }
 
@@ -366,6 +432,7 @@ void TanecikRenderer::shutdown() {
     TCUDA(cudaDeviceSynchronize());
     freeMeshes();
     freeParticles();
+    freeGas(ias_);
     if (pipeline_) optixPipelineDestroy(pipeline_);
     for (auto g : groups_) optixProgramGroupDestroy(g);
     if (module_) optixModuleDestroy(module_);
@@ -374,14 +441,14 @@ void TanecikRenderer::shutdown() {
     module_ = sphereModule_ = nullptr;
     ctx_ = nullptr;
     groups_.clear();
-    for (void* b : {static_cast<void*>(p_.accum), static_cast<void*>(p_.output), static_cast<void*>(dInstances_), static_cast<void*>(dRadius_), iasTemp_, iasOut_,
-                    reinterpret_cast<void*>(dParams_), reinterpret_cast<void*>(rg_), reinterpret_cast<void*>(miss_), reinterpret_cast<void*>(hit_)})
+    for (void* b : {static_cast<void*>(p_.accum), static_cast<void*>(p_.output), static_cast<void*>(dInstances_), static_cast<void*>(dRadius_),
+                    static_cast<void*>(dBoneXf_), reinterpret_cast<void*>(dParams_), reinterpret_cast<void*>(rg_), reinterpret_cast<void*>(miss_),
+                    reinterpret_cast<void*>(hit_)})
         if (b) cudaFree(b);
     p_ = TanecikParams{};
     dInstances_ = nullptr;
     dRadius_ = nullptr;
-    iasTemp_ = iasOut_ = nullptr;
-    iasTempSize_ = iasOutSize_ = 0;
+    dBoneXf_ = nullptr;
     dParams_ = rg_ = miss_ = hit_ = 0;
     for (cudaEvent_t* e : {&e0_, &e1_})
         if (*e) { cudaEventDestroy(*e); *e = nullptr; }
