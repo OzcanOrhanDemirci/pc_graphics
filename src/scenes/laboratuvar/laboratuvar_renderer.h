@@ -53,6 +53,7 @@ public:
     void buildSurface(int surf, const float3* dPos, const float* dWeight, int n, float radius);
     FluidSurface& surface(int surf) { return *surfaces_[size_t(surf)].fs; }
     void setSurfaceVisible(int surf, bool on);
+    void setDropletsVisible(int surf, bool on);   // its lone particles as spheres (sand: drawn as grains instead)
     void setTransform(int obj, const float xf[12]);           // row-major 3x4, object to world
     void setVisible(int obj, bool on);
     // drawing

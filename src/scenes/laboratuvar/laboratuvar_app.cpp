@@ -132,7 +132,9 @@ void LaboratuvarApp::setupScene(Deney d, int maxParticles, const std::vector<uin
     honey.ior = cfg.f("bal.kirilma", 1.49f);
     honey.sigma = cfg.v3("bal.sogurma", make_float3(23.0f, 77.0f, 260.0f));
     const int mHoney = add(honey);
-    const int mSand = add(mat(LM_DIFFUSE, cfg.v3("kum.renk", make_float3(0.60f, 0.47f, 0.30f))));
+    LMaterial sandM = mat(LM_DIFFUSE, cfg.v3("kum.renk", make_float3(0.62f, 0.47f, 0.29f)));
+    sandM.pattern = LP_SAND;
+    const int mSand = add(sandM);
     LMaterial rubber = mat(LM_SHELL, cfg.v3("balon.renk", make_float3(0.70f, 0.05f, 0.07f)), cfg.f("balon.f0", 0.05f), cfg.f("balon.parlaklik", 150.0f));
     rubber.frost = cfg.f("balon.buzlu", 0.35f);
     rubber.sigma = cfg.v3("balon.optik", make_float3(0.15f, 2.2f, 2.0f));
@@ -172,6 +174,7 @@ void LaboratuvarApp::setupScene(Deney d, int maxParticles, const std::vector<uin
         k.smoothing = cfg.f("kum.yuzey_yumusatma", 0.5f);
         k.dropletSpheres = true;
         surface(DC_SAND, mSand, k);
+        R.setDropletsVisible(surf[DC_SAND], false);   // a lone grain in the air: its fine grains only, no bead
         grainsPer = cfg.i("kum.tane_sayisi", 4);
         grainsCap = maxParticles * grainsPer;
         objGrains = R.addSpheres(grainsCap, mSand, true);
@@ -423,7 +426,7 @@ int runLaboratuvarCli(int argc, char** argv) {
         app.draw(in);
         const double r0 = nowS();
         for (unsigned s = 0; s < spp; s += 4) app.renderer.render(std::min(4u, spp - s), s > 0);
-        std::printf("  t %.3f s: cizim %.0f ms (%u ornek), yuzeyler %.1f ms\n", tt, (nowS() - r0) * 1000.0, spp, app.renderer.surfaceMs);
+        std::printf("  t %.3f s: %d tanecik, cizim %.0f ms (%u ornek)\n", tt, in.n, (nowS() - r0) * 1000.0, spp);
     };
     if (mode == "still") {
         drawAt(t);

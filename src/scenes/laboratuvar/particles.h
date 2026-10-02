@@ -45,6 +45,11 @@ struct PParams {
     float scorrK = 0.0f;         // tensile-instability correction (Macklin & Mueller 2013): k, n, dq (in h)
     float scorrN = 4.0f, scorrDq = 0.2f;
     float xsph = 0.01f;          // XSPH viscosity per 1/60 s (scaled to the substep)
+    // a thick liquid (honey): XSPH over the particle's own neighbours' weight (Shepard), so a thin thread with few
+    // neighbours is as viscous as the bulk (over the full lattice's weight it hardly is: the thread necks and drips),
+    // and repeated: each pass carries the velocity a kernel further (a Jacobi solve towards implicit viscosity)
+    bool xsphShepard = false;
+    int viscPasses = 1;
     float cohesion = 0.0f;       // Akinci et al. 2013 cohesion, m/s^2 at its peak (0: off)
     float tension = 0.0f;        // and its curvature term (surface tension proper), m/s^2 per unit of normal difference
     float adhesion = 0.0f;       // fluid to solid particles (wetting: blood runs down the skin), m/s^2 at its peak (0: off)
@@ -58,6 +63,11 @@ struct PParams {
     // a crack's tip: a bond with an end that has already lost a bond breaks at this share of its breaking strain (a
     // lattice this coarse cannot resolve the stress concentrating at a tear's tip; 1: off)
     float tearTip = 1.0f;
+    // grains: their friction shared among their contacts as share^-grainShare (1: like the push, 0: not at all)
+    float grainShare = 0.5f;
+    // grains: static friction at the velocity level, a grain slower than this (m/s) after a substep stops (a pile's
+    // creep that the positional friction leaves; 0 off)
+    float grainRest = 0.0f;
     float bondDamping = 0.0f;    // s: XPBD damping of the bonds (beta; 0 off): what the bonds leave unsolved does not shake
     bool density = true;         // the fluid's density constraint (off: a test shows the volume is not kept)
     bool wallDensity = true;     // walls count in a fluid particle's density as resting particles would
@@ -106,6 +116,10 @@ public:
     // pouring (no bonds): returns how many fitted (the capacity is fixed at commit: reserve)
     int appendFluid(const std::vector<float3>& pos, const std::vector<float3>& vel, float density);
     int appendGrains(const std::vector<float3>& pos, const std::vector<float3>& vel, float density, int group);   // a PG_GRAIN group's
+    // poured from a nozzle: the new particles are HELD (kinematic, moving at their vel) until released; the stream
+    // below hangs on to them, as honey hangs on a dipper (free from the start, a thin stream falls apart into drops)
+    int appendHeld(const std::vector<float3>& pos, const std::vector<float3>& vel, float density, int grainGroup);   // 0: fluid
+    void release(int first, int count, float density);   // held ones let go: their mass back
     void placeGroup(int group, float3 offset, float3 velocity);   // a rigid group: its rest shape moved by offset, moving
     int breakBondsInSphere(float3 c, float r);  // every bond with an end inside: broken (a shot, for the tests); returns how many
     // ---- driven from outside (the body: bone particles follow the skeleton; shots and blasts push)
@@ -211,7 +225,7 @@ private:
     cudaEvent_t e0_ = nullptr, e1_ = nullptr;
     float lastMs_ = 0.0f;
     void allocate(int cap, int bondCap);
-    int appendPhase(const std::vector<float3>& pos, const std::vector<float3>& vel, float density, uint32_t phase);
+    int appendPhase(const std::vector<float3>& pos, const std::vector<float3>& vel, float density, uint32_t phase, bool held = false);
     void record(float dt, cudaStream_t st);   // one frame's launches (captured into graph_)
     cudaStream_t stream_ = nullptr;
     cudaGraphExec_t graph_ = nullptr;

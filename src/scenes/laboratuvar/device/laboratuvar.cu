@@ -142,6 +142,15 @@ static __device__ float3 albedoAt(const LMaterial& m, const Hit& h, float3 p) {
         const float3 q = h.local;
         const float r = sqrtf(q.x * q.x + q.z * q.z) * 160.0f + 4.0f * fbm(q * 20.0f);
         a = a * (0.75f + 0.25f * (0.5f + 0.5f * sinf(r)));
+    } else if (m.pattern == LP_SAND) {
+        // grains a third of a millimetre across: each cell its own brightness, a few dark (iron minerals), a few pale (quartz)
+        const float g = 0.00035f;
+        const int cx = int(floorf(p.x / g)), cy = int(floorf(p.y / g)), cz = int(floorf(p.z / g));
+        const float r = hash3(cx, cy, cz);
+        float k = 0.72f + 0.5f * hash3(cx + 7, cy - 3, cz + 11);
+        if (r < 0.07f) k = 0.32f;
+        else if (r > 0.94f) k = 1.35f;
+        a = a * k;
     } else if (m.pattern == LP_RIND) {
         // dark green with lighter stripes running pole to pole, mottled (from the object's own frame: a piece of rind
         // keeps its stripes as it flies)
@@ -247,7 +256,15 @@ static __device__ float3 radiance(float3 o, float3 d, Rng& r, float3* aovAlb, fl
         const float3 p = o + d * h.t;
         const int mi = params.objects[h.object].material;
         const LMaterial& m = params.materials[mi];
-        const float3 nn = dot(h.n, d) < 0.0f ? h.n : -h.n;   // the side the ray came from
+        float3 nn = dot(h.n, d) < 0.0f ? h.n : -h.n;   // the side the ray came from
+        if (m.pattern == LP_SAND) {
+            // each grain tilts the surface its own way: sand's matte, sparkling roughness
+            const float g = 0.00035f;
+            const int cx = int(floorf(p.x / g)), cy = int(floorf(p.y / g)), cz = int(floorf(p.z / g));
+            const float3 t = make_float3(hash3(cx, cy, cz + 5) - 0.5f, hash3(cx + 3, cy, cz) - 0.5f, hash3(cx, cy + 9, cz) - 0.5f);
+            const float3 b = normalize(nn + t * 0.9f);
+            if (dot(b, -d) > 0.05f) nn = b;
+        }
         const float c = fminf(1.0f, -dot(nn, d));
         if (m.type == LM_GLASS || m.type == LM_LIQUID) {
             const bool entering = dot(h.n, d) < 0.0f;

@@ -410,6 +410,11 @@ void LabRenderer::setSurfaceVisible(int surf, bool on) {
     iasDirty_ = true;
 }
 
+void LabRenderer::setDropletsVisible(int surf, bool on) {
+    objs_[size_t(surfaces_[size_t(surf)].dropObj)].visible = on;
+    iasDirty_ = true;
+}
+
 void LabRenderer::setTransform(int obj, const float xf[12]) {
     std::memcpy(objs_[size_t(obj)].xf, xf, 12 * sizeof(float));
     iasDirty_ = true;

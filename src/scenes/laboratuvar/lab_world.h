@@ -108,6 +108,11 @@ private:
     void driveHeld(float dt);    // every held prop to its pose at the end of the step
     // emitters (Bal, Kum)
     double emitCarry_ = 0.0;
+    struct HeldLayer {
+        int first, count;
+        double born;
+    };
+    std::vector<HeldLayer> heldLayers_;   // the stream's newest layers, still in the nozzle
     unsigned emitSeed_ = 1;
     int sandGroup_ = 0;
     void emit(float dt);

@@ -276,6 +276,7 @@ struct DeltaArgs {
     float spacing;              // contact distance
     float muS, muD, fluidSolidMu;
     bool density;
+    float grainShare;
     float sor;                  // the density correction's scale (successive over/under-relaxation)
 };
 
@@ -345,6 +346,9 @@ __global__ void kDelta(int n, int stride, const float4* xs, const uint32_t* phs,
         const float3 nrm = r * (1.0f / d);
         const float wr = wi / ws / float(share);
         acc += nrm * (pen * wr);
+        // friction shared less (grains: by the square root of the contacts): divided like the push, a grain resting on six
+        // neighbours stops a sixth of its sliding a pass and creeps, and sand runs flat like a liquid (measured)
+        const float wf = (ph & pj & PF_GRAIN) ? wi / ws / powf(float(share), a.grainShare) : wr;
         ++nc;
         // friction: the pair's relative sliding over this substep
         const float mu_s = (fi || fj) ? a.fluidSolidMu : a.muS, mu_d = (fi || fj) ? a.fluidSolidMu : a.muD;
@@ -355,7 +359,7 @@ __global__ void kDelta(int n, int stride, const float4* xs, const uint32_t* phs,
             const float tl = sqrtf(dot(t, t));
             if (tl > 1e-12f) {
                 const float f = tl < mu_s * pen ? 1.0f : fminf(mu_d * pen / tl, 1.0f);
-                acc += t * (-f * wr);
+                acc += t * (-f * wf);
             }
         }
     }
@@ -549,13 +553,15 @@ __global__ void kPlanes(int n, float4* x, const float4* x0, const uint32_t* phas
     x[i] = make_float4(p.x, p.y, p.z, 0.0f);
 }
 
-__global__ void kVelocity(int n, const float4* x, const float4* x0, float4* v, const float* w, const float4* kv, float invDt, float maxSpeed) {
+__global__ void kVelocity(int n, const float4* x, const float4* x0, float4* v, const float* w, const float4* kv, float invDt, float maxSpeed,
+                          const uint32_t* phase, float grainRest) {
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= n) return;
     if (w[i] <= 0.0f) { v[i] = kv[i]; return; }
     float3 vi = (xyz(x[i]) - xyz(x0[i])) * invDt;
     const float s = sqrtf(dot(vi, vi));
     if (s > maxSpeed) vi = vi * (maxSpeed / s);
+    if (grainRest > 0.0f && (phase[i] & PF_GRAIN) && s < grainRest) vi = make_float3(0, 0, 0);   // static friction, velocity level
     v[i] = make_float4(vi.x, vi.y, vi.z, 0.0f);
 }
 
@@ -663,7 +669,7 @@ __global__ void kNormals(int n, int stride, const float4* xs, const uint32_t* ph
 // ns: the normals (kNormals), or null when there is no surface tension
 __global__ void kFluidForces(int n, int stride, const float4* xs, const uint32_t* phs, const int* nbr, const int* nbrCount, const float4* vs,
                              const float* rhos, const float4* ns, float4* out, Kern K, float S0, float xsph, float cohesion, float cohPeak, float tension,
-                             float dt, float adhesion, float wet) {
+                             float dt, float adhesion, float wet, bool shepard) {
     const int k = blockIdx.x * blockDim.x + threadIdx.x;
     if (k >= n) return;
     if (!(phs[k] & PF_FLUID) || xs[k].w <= 0.0f) { out[k] = vs[k]; return; }
@@ -674,6 +680,7 @@ __global__ void kFluidForces(int n, int stride, const float4* xs, const uint32_t
     const int m = nbrCount[k];
     float3 stick = make_float3(0, 0, 0);
     float3 drag = make_float3(0, 0, 0);
+    float wsum = 0.0f;
     for (int q = 0; q < m; ++q) {
         const int j = nbr[size_t(q) * stride + k];
         if (!(phs[j] & PF_FLUID)) {
@@ -690,7 +697,9 @@ __global__ void kFluidForces(int n, int stride, const float4* xs, const uint32_t
         }
         const float3 r = p - xyz(xs[j]);
         const float r2 = dot(r, r);
-        visc += (xyz(vs[j]) - vi) * (W(K, r2) / S0);
+        const float wij = W(K, r2);
+        visc += (xyz(vs[j]) - vi) * (shepard ? wij : wij / S0);
+        wsum += wij;
         if (cohesion > 0.0f || tension > 0.0f) {
             const float d = sqrtf(r2);
             const float kij = 2.0f / (ri + fmaxf(rhos[j], 0.5f));   // Akinci's correction: less pull where the fluid is full
@@ -698,8 +707,32 @@ __global__ void kFluidForces(int n, int stride, const float4* xs, const uint32_t
             if (ns) coh += (xyz(ns[k]) - xyz(ns[j])) * (-tension * kij);   // curvature: the surface pulls itself flat
         }
     }
+    if (shepard) visc = visc * (1.0f / fmaxf(wsum, 0.05f));
     const float3 d = visc * xsph + coh * dt + stick * dt + drag * wet;
     out[k] = make_float4(vi.x + d.x, vi.y + d.y, vi.z + d.z, 0.0f);
+}
+
+// one more viscosity pass (Shepard-normalised XSPH), fluid only
+__global__ void kViscPass(int n, int stride, const float4* xs, const uint32_t* phs, const int* nbr, const int* nbrCount, const float4* vs, float4* out, Kern K,
+                          float xsph) {
+    const int k = blockIdx.x * blockDim.x + threadIdx.x;
+    if (k >= n) return;
+    if (!(phs[k] & PF_FLUID) || xs[k].w <= 0.0f) { out[k] = vs[k]; return; }
+    const float3 p = xyz(xs[k]);
+    const float3 vi = xyz(vs[k]);
+    float3 visc = make_float3(0, 0, 0);
+    float wsum = 0.0f;
+    const int m = nbrCount[k];
+    for (int q = 0; q < m; ++q) {
+        const int j = nbr[size_t(q) * stride + k];
+        if (!(phs[j] & PF_FLUID)) continue;
+        const float3 r = p - xyz(xs[j]);
+        const float w = W(K, dot(r, r));
+        visc += (xyz(vs[j]) - vi) * w;
+        wsum += w;
+    }
+    if (wsum > 0.0f) visc = visc * (xsph / wsum);
+    out[k] = make_float4(vi.x + visc.x, vi.y + visc.y, vi.z + visc.z, 0.0f);
 }
 
 __global__ void kAddVelocity(int n, float4* v, const float4* dv) {
@@ -1296,7 +1329,7 @@ void ParticleWorld::record(float dt, cudaStream_t st) {
     for (int k = 1; k < 100; ++k) cohPeak = std::max(cohPeak, cohesionSpline(h * k / 100.0f, h));
     const Walls walls{P.density && P.wallDensity ? wallTable_ : nullptr, h, P.box, P.boxLo, P.boxHi};
     DensityArgs da{walls, K, S0_, P.relax * D0_, fluidInvMass_, P.scorrK, P.scorrN, W(K, P.scorrDq * P.scorrDq * h * h), P.unilateral, P.density};
-    DeltaArgs dl{walls, K, S0_, fluidInvMass_, P.scorrK, P.scorrN, W(K, P.scorrDq * P.scorrDq * h * h), D0_ * (1.0f + P.relax), s_, P.muStatic, P.muDynamic, P.fluidSolidMu, P.density, P.sor};
+    DeltaArgs dl{walls, K, S0_, fluidInvMass_, P.scorrK, P.scorrN, W(K, P.scorrDq * P.scorrDq * h * h), D0_ * (1.0f + P.relax), s_, P.muStatic, P.muDynamic, P.fluidSolidMu, P.density, P.grainShare, P.sor};
     PlaneArgs pa{0.5f * s_, P.planeMuStatic, P.planeMuDynamic, P.fluidPlaneMu, P.box, P.boxLo, P.boxHi};
     const int nB = blocks(n_);
     PCUDA(cudaMemsetAsync(stat_, 0, 8 * sizeof(float), st));
@@ -1345,7 +1378,7 @@ void ParticleWorld::record(float dt, cudaStream_t st) {
             }
             g_prof.mark("duzlem_kati");
         }
-        kVelocity<<<nB, kBlock, 0, st>>>(n_, x_, x0_, v_, w_, kv_, 1.0f / sdt, P.maxSpeed);
+        kVelocity<<<nB, kBlock, 0, st>>>(n_, x_, x0_, v_, w_, kv_, 1.0f / sdt, P.maxSpeed, phase_, P.grainRest);
         g_prof.mark("hiz");
         const bool div = P.density && P.divergenceIters > 0, visc = P.xsph > 0.0f || P.cohesion > 0.0f || P.tension > 0.0f || P.adhesion > 0.0f || P.wetDrag > 0.0f;
         if (div || visc) {
@@ -1362,7 +1395,11 @@ void ParticleWorld::record(float dt, cudaStream_t st) {
                 if (P.tension > 0.0f) kNormals<<<nB, kBlock, 0, st>>>(n_, cap_, xs_, phs_, nbr_, nbrCount_, ns_, K, S0_);
                 kFluidForces<<<nB, kBlock, 0, st>>>(n_, cap_, xs_, phs_, nbr_, nbrCount_, vs_, rhos_, P.tension > 0.0f ? ns_ : nullptr, dx_, K, S0_, xs,
                                                     P.cohesion, cohPeak, P.tension, sdt, P.adhesion,
-                                                    1.0f - std::pow(1.0f - std::min(P.wetDrag, 0.99f), sdt * 60.0f));
+                                                    1.0f - std::pow(1.0f - std::min(P.wetDrag, 0.99f), sdt * 60.0f), P.xsphShepard);
+                for (int pass = 1; pass < P.viscPasses; ++pass) {
+                    PCUDA(cudaMemcpyAsync(vs_, dx_, size_t(n_) * sizeof(float4), cudaMemcpyDeviceToDevice, st));
+                    kViscPass<<<nB, kBlock, 0, st>>>(n_, cap_, xs_, phs_, nbr_, nbrCount_, vs_, dx_, K, xs);
+                }
                 kScatterVel<<<nB, kBlock, 0, st>>>(n_, idSorted_, dx_, v_);
             } else {
                 kScatterVel<<<nB, kBlock, 0, st>>>(n_, idSorted_, vs_, v_);
@@ -1411,12 +1448,31 @@ int ParticleWorld::appendGrains(const std::vector<float3>& pos, const std::vecto
     return appendPhase(pos, vel, density, uint32_t(group) | PF_GRAIN);
 }
 
-int ParticleWorld::appendPhase(const std::vector<float3>& pos, const std::vector<float3>& vel, float density, uint32_t phase) {
+int ParticleWorld::appendHeld(const std::vector<float3>& pos, const std::vector<float3>& vel, float density, int grainGroup) {
+    if (grainGroup > 0) {
+        if (grainGroup >= int(hgroups_.size()) || !(hgroups_[grainGroup].flags & PG_GRAIN)) return 0;
+        return appendPhase(pos, vel, density, uint32_t(grainGroup) | PF_GRAIN, true);
+    }
+    return appendPhase(pos, vel, density, PF_FLUID, true);
+}
+
+__global__ void kRelease(int first, int count, float* w, float wv) {
+    const int k = blockIdx.x * blockDim.x + threadIdx.x;
+    if (k < count) w[first + k] = wv;
+}
+
+void ParticleWorld::release(int first, int count, float density) {
+    if (count <= 0 || first < 0 || first + count > n_) return;
+    kRelease<<<blocks(count), kBlock, 0, stream_>>>(first, count, w_, 1.0f / (density * s_ * s_ * s_));
+    PCUDA(cudaStreamSynchronize(stream_));
+}
+
+int ParticleWorld::appendPhase(const std::vector<float3>& pos, const std::vector<float3>& vel, float density, uint32_t phase, bool held) {
     PCUDA(cudaStreamSynchronize(stream_));
     const int k = int(std::min<size_t>(pos.size(), size_t(cap_ - n_)));
     if (k <= 0) return 0;
     std::vector<float4> x(k), v(k);
-    std::vector<float> w(size_t(k), 1.0f / (density * s_ * s_ * s_));
+    std::vector<float> w(size_t(k), held ? 0.0f : 1.0f / (density * s_ * s_ * s_));
     std::vector<uint32_t> ph(size_t(k), phase);
     for (int i = 0; i < k; ++i) {
         x[i] = make_float4(pos[i].x, pos[i].y, pos[i].z, 0.0f);
@@ -1425,6 +1481,7 @@ int ParticleWorld::appendPhase(const std::vector<float3>& pos, const std::vector
     PCUDA(cudaMemcpy(x_ + n_, x.data(), k * sizeof(float4), cudaMemcpyHostToDevice));
     PCUDA(cudaMemcpy(x0_ + n_, x.data(), k * sizeof(float4), cudaMemcpyHostToDevice));
     PCUDA(cudaMemcpy(v_ + n_, v.data(), k * sizeof(float4), cudaMemcpyHostToDevice));
+    if (held) PCUDA(cudaMemcpy(kv_ + n_, v.data(), k * sizeof(float4), cudaMemcpyHostToDevice));   // a held one moves at this
     PCUDA(cudaMemcpy(w_ + n_, w.data(), k * sizeof(float), cudaMemcpyHostToDevice));
     PCUDA(cudaMemcpy(phase_ + n_, ph.data(), k * sizeof(uint32_t), cudaMemcpyHostToDevice));
     const std::vector<float> one(size_t(k), 1.0f);

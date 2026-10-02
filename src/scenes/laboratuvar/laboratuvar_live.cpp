@@ -128,8 +128,8 @@ public:
             if (!a_.initRenderer(log)) { st.error = L("Işın izleme programı derlenemedi.\n", "The ray-tracing program did not compile.\n") + log; return; }
             for (LabInputs& i : in_) i = LabInputs{};
             in_[int(Deney::Su)].height = a_.cfg.f("su.yukseklik_baslangic", 0.25f);
-            in_[int(Deney::Bal)].height = 0.35f;
-            in_[int(Deney::Bal)].flow = 0.35f;
+            in_[int(Deney::Bal)].height = 0.15f;   // low: the honey reaches its pile before a drop pinches off
+            in_[int(Deney::Bal)].flow = 0.6f;
             in_[int(Deney::Kum)].height = 0.4f;
             in_[int(Deney::Kum)].flow = 0.5f;
             st.label = L("Deney kuruluyor: su, beher, bardak", "Setting up the experiment: water, a beaker, a glass");

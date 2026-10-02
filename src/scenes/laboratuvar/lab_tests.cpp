@@ -80,12 +80,50 @@ int testBalon(LaboratuvarApp& app, bool fine) {
     return (held ? 0 : 1) + (popped ? 0 : 1);
 }
 
+// sand poured on one spot of the table for a while: the cone's angle from its height over its base radius
+int testKum(LaboratuvarApp& app) {
+    LabWorld w;
+    LabInputs in;
+    in.nozzle = make_float3(-0.08f, 0.0f, 0.0f);   // away from the beaker
+    in.height = 0.5f;
+    in.flow = app.cfg.f("test.kum.akis", 0.6f);
+    w.build(Deney::Kum, app.cfg, false, in);
+    w.settle(0.1);
+    const double T = app.cfg.f("test.kum.sure", 10.0f);
+    for (int k = 0; k < int(T * 60.0); ++k) w.step(1.0f / 60.0f);
+    in.flowing = false;
+    w.setInputs(in);
+    for (int k = 0; k < 120; ++k) w.step(1.0f / 60.0f);   // let it come to rest
+    std::vector<float3> x;
+    w.pw.readPositions(x);
+    std::vector<float> rad;
+    float H = 0.0f;
+    int n = 0;
+    for (size_t i = 0; i < x.size(); ++i) {
+        if (w.code[i] != DC_SAND) continue;
+        const float dx = x[i].x - in.nozzle.x, dz = x[i].z - in.nozzle.z;
+        const float r = std::sqrt(dx * dx + dz * dz);
+        if (x[i].y < 0.0f || x[i].y > 0.2f) continue;
+        rad.push_back(r);
+        if (r < 2.0f * w.s) H = std::max(H, x[i].y + 0.5f * w.s);
+        ++n;
+    }
+    std::sort(rad.begin(), rad.end());
+    const float R = rad.empty() ? 0.0f : rad[size_t(0.95 * (rad.size() - 1))];
+    const float ang = std::atan2(H, std::max(R, 1e-6f)) * 180.0f / 3.14159265f;
+    const bool ok = ang > 25.0f && ang < 40.0f;
+    std::printf("kum: %d tane (%.2f mm), yigin yuksekligi %.1f mm, taban yaricapi (%%95) %.1f mm: aci %.1f derece  [olcut: 25-40, kuru kum 30-35] %s\n", n,
+                w.s * 1000.0f, H * 1000.0f, R * 1000.0f, ang, verdict(ok));
+    return ok ? 0 : 1;
+}
+
 }   // namespace
 
 int runLabTests(LaboratuvarApp& app, const std::string& only) {
     int fails = 0, ran = 0;
     if (only.empty() || only == "balon") { ++ran; fails += testBalon(app, false); }
     if (only == "balon_ince") { ++ran; fails += testBalon(app, true); }
+    if (only.empty() || only == "kum") { ++ran; fails += testKum(app); }
     if (!ran) { std::printf("bilinmeyen test: %s (balon, balon_ince)\n", only.c_str()); return 2; }
     std::printf("laboratuvar deney testleri: %d test, %d basarisiz\n", ran, fails);
     return fails ? 1 : 0;

@@ -136,6 +136,7 @@ bool LabWorld::build(Deney d, const Config& sceneCfg, bool fine_, const LabInput
     sandGroup_ = 0;
     emitCarry_ = 0.0;
     emitSeed_ = 1;
+    heldLayers_.clear();
     triggered_ = false;
     ev_ = LabEvent{};
     switch (d) {
@@ -611,7 +612,13 @@ void LabWorld::trigger(const LabEvent& e) {
 }
 
 void LabWorld::emit(float dt) {
-    if ((deney != Deney::Bal && deney != Deney::Kum) || !in.flowing) return;
+    if (deney != Deney::Bal && deney != Deney::Kum) return;
+    if (!in.flowing) {   // stopped: what is in the nozzle falls
+        const float density = deney == Deney::Bal ? cfg.f("bal.yogunluk", 1420.0f) : cfg.f("kum.yogunluk", 1600.0f);
+        for (const HeldLayer& h : heldLayers_) pw.release(h.first, h.count, density);
+        heldLayers_.clear();
+        return;
+    }
     const bool honey = deney == Deney::Bal;
     const std::string pre = honey ? "bal." : "kum.";
     const float Q = (cfg.f(pre + "akis_en_az", honey ? 0.5f : 3.0f) + in.flow * (cfg.f(pre + "akis_en_cok", honey ? 5.0f : 25.0f) - cfg.f(pre + "akis_en_az", honey ? 0.5f : 3.0f))) * 1e-6f;   // m^3/s
@@ -632,15 +639,31 @@ void LabWorld::emit(float dt) {
         emitCarry_ -= 1.0;
         const float age = float(emitCarry_) / rate;   // how long ago (in this step) the layer left the nozzle
         const std::vector<float2> dd = disc(std::max(r, 0.6f * s), s, 0.7f * float(emitSeed_));
-        for (const float2& q : dd) {
-            if (keep < 1.0f && hashF(emitSeed_ * 977u + unsigned(pos.size()) * 31u) > keep) continue;
+        for (size_t qi = 0; qi < dd.size(); ++qi) {
+            const float2 q = dd[qi];
+            // thinned to the flow (by the point's own number: a rejected point must not change the next one's draw)
+            if (keep < 1.0f && hashF(emitSeed_ * 977u + unsigned(qi) * 31u) > keep) continue;
             pos.push_back(o + make_float3(q.x, -v0 * age, q.y));
             vel.push_back(make_float3(0, -v0, 0));
         }
         ++emitSeed_;
     }
+    if (std::getenv("LAB_TANI") && emitSeed_ < 40)
+        std::printf("    akit: Q %.2f mL/s, v0 %.3f m/s, %.1f katman/s, disk %zu, pay %.2f, bu adim %zu tanecik\n", Q * 1e6, v0, rate, d0.size(), keep, pos.size());
+    const float density = honey ? cfg.f("bal.yogunluk", 1420.0f) : cfg.f("kum.yogunluk", 1600.0f);
+    // the layers that have left the nozzle (held for a few layers' travel) are let go
+    const double hold = cfg.f(pre + "tutma", 3.0f) * layer / v0;
+    const double now = time();
+    size_t k = 0;
+    while (k < heldLayers_.size() && now - heldLayers_[k].born > hold) {
+        pw.release(heldLayers_[k].first, heldLayers_[k].count, density);
+        ++k;
+    }
+    heldLayers_.erase(heldLayers_.begin(), heldLayers_.begin() + long(k));
     if (pos.empty()) return;
-    const int added = honey ? pw.appendFluid(pos, vel, cfg.f("bal.yogunluk", 1420.0f)) : pw.appendGrains(pos, vel, cfg.f("kum.yogunluk", 1600.0f), sandGroup_);
+    const int first = pw.count();
+    const int added = pw.appendHeld(pos, vel, density, honey ? 0 : sandGroup_);
+    if (added > 0) heldLayers_.push_back({first, added, now});
     code.insert(code.end(), size_t(added), honey ? DC_HONEY : DC_SAND);
 }
 

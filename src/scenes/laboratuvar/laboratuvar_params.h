@@ -19,7 +19,7 @@ enum LMatType : int {
     LM_METAL = 5,     // a polished metal (albedo = its reflectance), glossy (gloss)
 };
 
-enum LPattern : int { LP_NONE = 0, LP_SLATE = 1, LP_BACKDROP = 2, LP_RIND = 3, LP_WOOD = 4 };
+enum LPattern : int { LP_NONE = 0, LP_SLATE = 1, LP_BACKDROP = 2, LP_RIND = 3, LP_WOOD = 4, LP_SAND = 5 };
 
 struct LMaterial {
     int type;
