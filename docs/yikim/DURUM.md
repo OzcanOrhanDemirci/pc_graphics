@@ -3,6 +3,31 @@
 > Tek kaynak durum panosu. Plan ve Özcan'ın sözleri `docs/yikim/PLAN.md`'de.
 
 ## Şu an
+- **2026-10-02 (öğleden sonra) · Topun gücü çubukla, saniyede en çok bir top.** Özcan: *"Top atma güzel olmuş. Bir top
+  atınca 1 saniyeliğine tekrar top atılamasın. spam olmaması için. Bir de deprem şiddeti ayarlamak gibi topun ağırlığını
+  yani gücünü ayarlayabilelim. Kaydırma çubuyla. Mesela şuanki hali dengeli, hafif zarar veriyor güzel. Daha hafif böyle
+  çarpıp pek etki etmeyen seviyeden en güçlüde binanın içinden geçip giden hızlı ve ağır yapabiliriz. Mermi gibi yani.
+  Fizik o topun etkisine göre doğal hesaplanır şuanki gibi."*
+  - **Bekleme:** bir toptan sonra 1 sn (duvar saatiyle; ağır çekim uzatmaz) tıklama yok sayılır. `--autotest`: üç
+    tıklama, ikincisi 0,3 sn sonra: iki top atıldı (günlükte).
+  - **Güç çubuğu** (panelde en üstte "Top"; ↑ ↓ ile de): boy ve hız birlikte (`YikimApp::ballThrow`). Ortası (çentik)
+    bugünkü dengeli atış (0,5 m, 4,1 t, 14 m/s); sola doğru küçük ve yavaş (en hafifi 0,25 m, 0,52 t, 8 m/s), sağa doğru
+    büyük ve çok hızlı (en güçlüsü 0,7 m, 11,4 t, 70 m/s = saatte 252 km), her yarı log ölçekte. Toplar yedi boyda
+    hazır bekler (0,25-0,7 m, her boydan 4); hız sürekli, boy en yakın hazır top. Ctrl ile ağır top kalktı (çubuk onun işini görüyor).
+    Hızlı top daha geriden belirir (çeyrek saniyelik uçuş), görülsün diye.
+  - **Ölçüldü** (`--clip darbe --set darbe.guc=G`; bina her koşuda ayakta, çatı ≤ 1 mm):
+
+    | Güç | Top | Köşe kolon (0,0) | Cephe, 1. kat (x=0, y 4,7, z 6), dik |
+    | --- | --- | --- | --- |
+    | 0 · Hafif | 0,25 m · 0,52 t · 8 m/s | ≤ 1 cm kıpırdadı, top sekti | |
+    | 0,25 · Orta | 0,35 m · 1,4 t · 11 m/s | 2-3 cm, kırılmadı | |
+    | 0,5 · Dengeli | 0,5 m · 4,1 t · 14 m/s | ayağı 2,1 m fırladı, gövde eğik asılı | tuğla katın içinden geçti (363 kırık lif) |
+    | 0,75 · Ağır | 0,6 m · 7,2 t · 31 m/s | orta parça 42 m savruldu (28 m/s) | geçti (443 kırık lif), en hızlı parça 23 m/s |
+    | 1 · Mermi | 0,7 m · 11,4 t · 70 m/s | kolon parçası 98 m savruldu (63 m/s) | geçti, 1.261 kırık lif, tuğla 77 m/s; top 250 m öteye |
+
+    Fırlayan parçanın hızı fiziğin söylediği kadar: ağır topun çarptığı hafif cisim topun hızının en çok (1 + sekme)
+    katını alır (70 × 1,15 ≈ 80 m/s). Fizik süresi bu atışlarda da ~15 ms/kare; en hızlı parça 120 m/s korumasının altında.
+    Dolgu tuğlası dengeli topu bile durdurmuyor: 4 tonluk çelik top tuğla bölmeden geçer (gerçekte de).
 - **2026-10-02 (gündüz) · Yıkım topu, deprem süresi, tıklanan panel.** Özcan: *"Yıkımda depremlerin süresi varsayılan
   şuanki gibi olsun ama biz değiştirebilelim. Sonsuza kadar da sürdürebilelim. Durduruna kadar yani. Deprem
   büyüklüklerine mouse ile tıklanabilsin. Süresi kaydırma çubuğu şeklinde ayarlanabilsin. Bir de mouse ile binaya

@@ -52,7 +52,8 @@ Açılırken bina iki saniye görünmeden kendi ağırlığıyla oturur. Odak fi
 | **3-9** | depremin büyüklüğü (sol alttaki panelde fareyle de tıklanır) |
 | **← / →** | süre: kısalt / uzat. Panelde kaydırma çubuğu; çentik büyüklüğün kendi süresi (varsayılan), en sağ **∞**: durdurana kadar |
 | **Boşluk** | depremi başlat / durdur (paneldeki düğme de); durdurunca zemin 1,5 sn'de diner |
-| **sol tık** | tıkladığın yere bir **yıkım topu** gelir (döküm çelik, 4,1 ton); **Ctrl + sol tık** ağır top (11,4 ton). Kırılıp devrilmeye fizik karar verir |
+| **sol tık** | tıkladığın yere bir **yıkım topu** gelir (döküm çelik), saniyede en çok bir. Kırılıp devrilmeye fizik karar verir |
+| **↑ / ↓** | topun gücü (panelde en üstteki **Top** çubuğu): sol uç hafif ve yavaş (0,5 t, kolonu kıpırdatmaz), çentik dengeli (4,1 t), sağ uç **mermi** (11,4 t, saatte 252 km, binanın içinden geçer) |
 | **sağ tık + fare** | bak · **WASD** uç · **E / Q** yukarı / aşağı · **Shift** hızlı · **tekerlek** yakınlaş |
 | **T** | ağır çekim (×1, ×0,25, ×0,1) · **P** zamanı durdur · **R** binayı baştan kur |
 | **B** | donatı demirlerini göster / gizle · **G** gürültü giderici (hızlı süzgeç → yapay zekâ → ham) |
@@ -66,6 +67,6 @@ Açılırken bina iki saniye görünmeden kendi ağırlığıyla oturur. Odak fi
 | 9 | daha uzun ve sert sarsıntı; en güçlü kısım daha geç gelir, sonunda bina tamamen çöker |
 
 **Dene:** 6 ile 8'i art arda (**R** ile baştan kurup) karşılaştır; 7'yi **∞** ile başlatıp uzun sarsıntıda hasarın nasıl
-biriktiğini izle; zemin kat kolonlarına top at (ölçüldü: köşe ve kenar kolon normal topla kırıldı, ağır top içteki bir
-kolonun iki alt parçasını savurdu); çöküşü **T** ile ağır çekimde izle, kırık kolon uçlarına uçup demirlere yakından bak.
+biriktiğini izle; zemin kat kolonlarına top at, gücü değiştirerek (ölçüldü: dengeli top köşe ve kenar kolonu kırar, en hafifi
+kıpırdatmaz, mermi kolon parçasını 98 m savurur); çöküşü **T** ile ağır çekimde izle, kırık kolon uçlarına uçup demirlere yakından bak.
 Ayarlar `scenes/yikim.cfg` (bina, malzemeler, çözücü, kamera, güneş).

@@ -469,6 +469,11 @@ int App::run(const Options& opt) {
                 for (int k = 1; k <= 10; ++k) { mouse(0.50f - 0.006f * k, 0.50f); wait(0.03); }
                 right(false); wait(0.3);
                 mouse(0.47f, 0.68f); wait(0.2); click(); wait(0.25); shot("yikim_top_yolda"); wait(1.5); shot("yikim_top");
+                // the strongest throw; three clicks, the second within a second of the first: two balls go (the log says)
+                slide("top", 1.0f); wait(0.1); left(false); wait(0.3); shot("yikim_top_guc");
+                mouse(0.40f, 0.45f); wait(0.1); click(); wait(0.3); click(); wait(1.2); click(); wait(0.1); shot("yikim_mermi_yolda");
+                wait(1.5); shot("yikim_mermi");
+                slide("top", 0.52f); wait(0.1); left(false); wait(0.2);   // near the notch: back to the balanced throw
                 // the panel by mouse: magnitude 7, the length to "until stopped", start, stop
                 control("buyukluk", 4); wait(0.3);
                 slide("sure", 1.0f); wait(0.1); left(false); wait(0.3); shot("yikim_sure_sonsuz");

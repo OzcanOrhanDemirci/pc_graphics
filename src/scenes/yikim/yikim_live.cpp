@@ -33,8 +33,8 @@ public:
             {"Depremler", "Her büyüklük gerçek bir kuvvetli yer hareketi kaydından (AFAD, ESM): o büyüklüğün süresine kesilir, tepe ivmesine "
                           "ölçeklenir, iki kez integre edilip zeminin hareketine çevrilir. Daha uzun ya da sürekli sarsıntıda kaydın güçlü "
                           "kısmı dikişsiz bir döngüye dönüşür."},
-            {"Yıkım topu", "Tıklanan yere bakış yönünden döküm çelik bir top gelir: 4,1 ton (Ctrl ile 11,4 ton), saatte 50 km. Top da öteki "
-                           "parçalar gibi bir cisim; neyin kırılıp devrileceğine çözücü karar verir."},
+            {"Yıkım topu", "Tıklanan yere bakış yönünden döküm çelik bir top gelir. Gücü çubukla: yarım ton ve saatte 29 km'den 11 ton ve "
+                           "saatte 252 km'ye. Top da öteki parçalar gibi bir cisim; neyin kırılıp devrileceğine çözücü karar verir."},
             {"Aynı deprem, aynı yıkım", "Temas ve bağ toplamları kayan noktalı atomikler yerine sabit noktada tutulur: aynı deprem aynı binayı "
                                        "her seferinde aynı biçimde yıkar. Sınırdaki yapıyı ölçebilmek bunu gerektirdi."},
             {"Görüntü", "OptiX ile ışın izleme: yumuşak gölgeli güneş, gök ve zeminden bir sekme. Piksel başına altı örnek; gren, her parçanın "
@@ -44,7 +44,7 @@ public:
         i.accent = 0xE5764A;
         i.keys = {{"Deprem", {{"3–9", "Büyüklüğü seç"}, {"←|→", "Süre: kısalt / uzat (en sonda: durdurana kadar)"}, {"Boşluk", "Depremi başlat / durdur"},
                               {"T", "Ağır çekim: ×1, ×0,25, ×0,1"}, {"P", "Zamanı durdur"}}},
-                  {"Müdahale", {{"Sol tık", "Yıkım topu (4,1 ton)"}, {"Ctrl|Sol tık", "Ağır top (11,4 ton)"}, {"R", "Binayı baştan kur"}}},
+                  {"Müdahale", {{"Sol tık", "Yıkım topu at (saniyede en çok bir)"}, {"↑|↓", "Topun gücü"}, {"R", "Binayı baştan kur"}}},
                   {"Kamera", {{"Sağ tık|Fare", "Bak"}, {"W|A|S|D", "Uç"}, {"E|Q", "Yukarı / aşağı"}, {"Shift", "Hızlı"}, {"Tekerlek", "Yakınlaş"}}},
                   {"Görüntü", {{"B", "Donatıyı göster / gizle"}, {"G", "Gürültü giderici: süzgeç, yapay zekâ, ham"}}}};
         return i;
@@ -95,6 +95,7 @@ public:
             y_.renderer.denoiseMode = y_.cfg.i("display.denoise", 1);
             y_.renderer.filterPasses(y_.cfg.i("display.filter_passes", 4));
             magnitude_ = std::min(std::max(y_.cfg.i("deprem.magnitude", 6), quakeMagnitudeMin()), quakeMagnitudeMax());
+            power_ = std::min(1.0f, std::max(0.0f, y_.cfg.f("darbe.guc", 0.5f)));
             cudaMallocHost(reinterpret_cast<void**>(&pinned_), size_t(y_.width) * y_.height * sizeof(uchar4));
             stats_ = y_.world.stats();
             st.fraction = 1.0f;
@@ -133,11 +134,14 @@ public:
             if (in.pressed(GLFW_KEY_0 + m) || in.pressed(GLFW_KEY_KP_0 + m)) chooseMagnitude(host, m);
         if (in.pressed(GLFW_KEY_LEFT)) stepLength(-1);
         if (in.pressed(GLFW_KEY_RIGHT)) stepLength(+1);
+        if (in.pressed(GLFW_KEY_UP)) setPower(power_ + 0.1f);
+        if (in.pressed(GLFW_KEY_DOWN)) setPower(power_ - 0.1f);
         if (in.pressed(GLFW_KEY_SPACE)) startOrStop(host);
         for (const app::ControlEvent& e : in.events) {
             if (e.id == "buyukluk") chooseMagnitude(host, quakeMagnitudeMin() + e.item);
             else if (e.id == "sure") lengthFromSlider(e.value);
             else if (e.id == "deprem") startOrStop(host);
+            else if (e.id == "top") setPower(e.value);
         }
         if (in.pressed(GLFW_KEY_R) && rebuildIn_ == 0) {
             rebuildIn_ = 2;
@@ -160,11 +164,16 @@ public:
             }
         }
         fly_.apply(y_.renderer.params().cam, y_.width, y_.height);
-        if (in.leftClicked && in.view.w > 0.0f) {   // the cursor in render pixels
+        // a ball at most once a second (wall clock: slow motion does not stretch it), so that clicks do not pile up
+        if (in.leftClicked && in.view.w > 0.0f && in.now - lastThrow_ >= kThrowEvery) {   // the cursor in render pixels
             const float rx = (in.mouseX - in.view.x) / in.view.w * y_.width, ry = (in.mouseY - in.view.y) / in.view.h * y_.height;
             if (rx >= 0 && ry >= 0 && rx < y_.width && ry < y_.height) {
                 float4 hit;
-                if (y_.renderer.pick(rx, ry, hit) > 0) y_.strike(y_.renderer.params().cam.pos, make_float3(hit.x, hit.y, hit.z), in.ctrl);
+                if (y_.renderer.pick(rx, ry, hit) > 0) {
+                    y_.strike(y_.renderer.params().cam.pos, make_float3(hit.x, hit.y, hit.z), power_);
+                    lastThrow_ = in.now;
+                    std::printf("yikim topu atildi: guc %.2f, t=%.2f s\n", power_, in.now);
+                }
             }
         }
         // draw the current state while the GPU computes the next one: the transforms are read first (an event), the
@@ -214,8 +223,21 @@ public:
         s.metrics.push_back({"Görüntü", num(y_.renderer.lastMs, 1) + " ms"});
         s.metrics.push_back({"Kırık bağ lifi", std::to_string(stats_.broken) + " / " + std::to_string(stats_.fibres)});
         s.metrics.push_back({"Zaman", num(y_.world.time, 1) + " sn"});
+        {   // the ball's power: size and speed together; the notch is the balanced throw
+            const YikimApp::BallThrow bt = y_.ballThrow(power_);
+            app::Control c;
+            c.kind = app::Control::Kind::Slider;
+            c.id = "top";
+            c.title = "Top";
+            c.value = power_;
+            c.mark = 0.5f;
+            c.text = num(bt.mass / 1000.0, bt.mass < 1000.0f ? 2 : 1) + " t";
+            c.detail = std::string(powerName(power_)) + " · saatte " + num(bt.speed * 3.6, 0) + " km · çap " + num(2.0 * bt.radius, 1) + " m";
+            s.controls.push_back(c);
+        }
         {   // the magnitude
             app::Control c;
+            c.section = true;
             c.kind = app::Control::Kind::Choice;
             c.id = "buyukluk";
             c.title = "Büyüklük";
@@ -352,6 +374,16 @@ private:
     int magnitude_ = 6, speedIdx_ = 0, frameNo_ = 0, rebuildIn_ = 0;
     bool paused_ = false, looking_ = false, camMoved_ = true;
     double tick_ = 0.0, lastStats_ = -1.0;
+    float power_ = 0.5f;                       // the ball's power (YikimApp::ballThrow), 0..1
+    double lastThrow_ = -10.0;                 // when the last ball went (input time, s)
+    static constexpr double kThrowEvery = 1.0;
+    void setPower(float u) {   // near the notch it is the balanced throw
+        power_ = std::min(1.0f, std::max(0.0f, u));
+        if (std::fabs(power_ - 0.5f) < 0.03f) power_ = 0.5f;
+    }
+    static const char* powerName(float u) {   // what a throw of this power did to the corner column (docs/yikim/DURUM.md)
+        return u < 0.2f ? "Hafif" : u < 0.45f ? "Orta" : u <= 0.55f ? "Dengeli" : u < 0.85f ? "Ağır" : "Mermi";
+    }
     PhysStats stats_;
     static constexpr float kSpeeds[3] = {1.0f, 0.25f, 0.1f};
 };

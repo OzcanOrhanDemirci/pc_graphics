@@ -41,10 +41,15 @@ struct YikimApp {
     double quakeT0 = 0;          // scenario time at which it starts
     double3 groundBase = {0, 0, 0};
     bool removed = false;
-    // wrecking balls (strike): set aside below the ground until thrown, then the oldest is thrown again
-    std::vector<int> balls, heavyBalls;
-    int nextBall = 0, nextHeavy = 0;
+    // wrecking balls (strike): a pool per size, set aside below the ground until thrown; the oldest is thrown again
+    std::vector<float> ballSizes;              // radii, m
+    std::vector<std::vector<int>> ballPools;   // bodies, per size
+    std::vector<int> ballNext;
     int struck = 0;              // the last ball thrown (body), 0: none
+    struct BallThrow {
+        int size = -1;           // index into ballSizes
+        float radius = 0, speed = 0, mass = 0;
+    };
 
     void loadConfig() {
         cfg = Config();
@@ -79,20 +84,33 @@ struct YikimApp {
             pieces = std::move(ap.pieces);
             loose = std::move(ap.loose);
         }
-        {   // the wrecking balls a click throws: cast steel, frozen far below the ground until then
-            balls.clear();
-            heavyBalls.clear();
-            nextBall = nextHeavy = struck = 0;
-            auto add = [&](std::vector<int>& list, int count, double r) {
-                for (int k = 0; k < count; ++k) {
+        {   // the wrecking balls a click throws: cast steel in a few sizes (the power picks one), frozen far below the
+            // ground until then
+            ballSizes.clear();
+            ballPools.clear();
+            ballNext.clear();
+            struck = 0;
+            const auto it = cfg.values.find("darbe.boylar");
+            const std::string list = it == cfg.values.end() ? std::string("0.25 0.3 0.35 0.42 0.5 0.6 0.7") : it->second;
+            for (const char* c = list.c_str(); *c;) {
+                char* end = nullptr;
+                const double r = std::strtod(c, &end);
+                if (end == c) { ++c; continue; }
+                c = end;
+                if (r > 0.05) ballSizes.push_back(float(r));
+            }
+            std::sort(ballSizes.begin(), ballSizes.end());
+            for (float r : ballSizes) {
+                std::vector<int> pool;
+                for (int k = 0; k < std::max(1, cfg.i("darbe.toplar", 4)); ++k) {
                     const int b = world.addBody(polySphere(d3(0, 0, 0), r), cfg.f("darbe.yogunluk", 7850.0f), false, PK_OTHER, 0x3b3c3e);
-                    world.info[b].sphere = float(r);
+                    world.info[b].sphere = r;
                     world.parkBody(b);
-                    list.push_back(b);
+                    pool.push_back(b);
                 }
-            };
-            add(balls, cfg.i("darbe.toplar", 6), cfg.f("darbe.yaricap", 0.5f));
-            add(heavyBalls, cfg.i("darbe.agir_toplar", 3), cfg.f("darbe.agir_yaricap", 0.7f));
+                ballPools.push_back(pool);
+                ballNext.push_back(0);
+            }
         }
         applyPhysics();
         world.upload();
@@ -172,14 +190,16 @@ struct YikimApp {
         }
         if (scenario == "sarsinti" && !quakeOn && quakeMag == 0 && t >= cfg.f("deprem.time", 1.0f))
             startQuake(cfg.i("deprem.magnitude", 7), cfg.f("deprem.seconds", 0.0f), t);
-        // darbe: at darbe.time a wrecking ball (darbe.agir: the heavy one) comes along darbe.from (a direction, m) at the
+        // darbe: at darbe.time a wrecking ball of power darbe.guc comes along darbe.from (a direction, m) at the
         // ground-storey column at grid point darbe.kolon, half a metre under its middle
         if (scenario == "darbe" && !struck && t >= cfg.f("darbe.time", 1.0f)) {
             const float3 ij = cfg.v3("darbe.kolon", make_float3(0, 0, 0));
-            const float3 p = make_float3(float(ij.x * spec.spanX), float(0.5 * spec.level(1) - 0.5), float(ij.y * spec.spanZ));
+            float3 p = make_float3(float(ij.x * spec.spanX), float(0.5 * spec.level(1) - 0.5), float(ij.y * spec.spanZ));
+            if (cfg.values.count("darbe.hedef")) p = cfg.v3("darbe.hedef", p);   // a point instead of a column
             const float3 from = p + cfg.v3("darbe.from", make_float3(-8.0f, 1.0f, -4.0f));
-            const int b = strike(from, p, cfg.i("darbe.agir", 0) != 0);
-            std::printf("t=%.2f s: yikim topu %d (%.0f kg) kolona (%.0f, %.0f), hedef (%.2f %.2f %.2f)\n", t, b, world.info[b].mass, ij.x, ij.y, p.x, p.y,
+            const BallThrow bt = ballThrow(cfg.f("darbe.guc", 0.5f));
+            const int b = strike(from, p, cfg.f("darbe.guc", 0.5f));
+            std::printf("t=%.2f s: yikim topu %d (r %.2f m, %.0f kg, %.0f m/s), hedef (%.2f %.2f %.2f)\n", t, b, bt.radius, bt.mass, bt.speed, p.x, p.y,
                         p.z);
         }
         driveQuake(t);
@@ -212,19 +232,40 @@ struct YikimApp {
         if (quake.over(tr)) { quakeOn = false; world.setGroundMotion(groundBase); return; }
         world.setGroundMotion(groundBase + quake.displacement(tr));
     }
-    // a wrecking ball thrown at p from the direction of `from` (the camera): it appears a few metres short of p and
-    // arrives at darbe.hiz, aimed above the line by what gravity takes on the way. What breaks is the solver's
-    // business: the ball is a body like the others. Returns the ball's body.
-    int strike(float3 from, float3 p, bool heavy) {
-        std::vector<int>& pool = heavy ? heavyBalls : balls;
-        if (pool.empty()) return 0;
-        int& next = heavy ? nextHeavy : nextBall;
+    // The power of a throw, 0..1: size (cast steel, so mass) and speed together. 0.5 is the balanced throw (darbe.yaricap
+    // at darbe.hiz); towards 0 smaller and slower (darbe.min_*), towards 1 bigger and far faster (darbe.max_*), each half
+    // on a log scale. The size is the nearest of the balls that exist.
+    BallThrow ballThrow(float u) const {
+        BallThrow t;
+        if (ballSizes.empty()) return t;
+        u = std::min(1.0f, std::max(0.0f, u));
+        auto between = [](float a, float b, float x) { return a * std::pow(b / a, x); };
+        const float r0 = cfg.f("darbe.min_yaricap", 0.25f), r1 = cfg.f("darbe.yaricap", 0.5f), r2 = cfg.f("darbe.max_yaricap", 0.7f);
+        const float v0 = cfg.f("darbe.min_hiz", 8.0f), v1 = cfg.f("darbe.hiz", 14.0f), v2 = cfg.f("darbe.max_hiz", 70.0f);
+        const float r = u <= 0.5f ? between(r0, r1, u / 0.5f) : between(r1, r2, (u - 0.5f) / 0.5f);
+        t.speed = u <= 0.5f ? between(v0, v1, u / 0.5f) : between(v1, v2, (u - 0.5f) / 0.5f);
+        t.size = 0;
+        for (int k = 1; k < int(ballSizes.size()); ++k)
+            if (std::fabs(std::log(ballSizes[k] / r)) < std::fabs(std::log(ballSizes[t.size] / r))) t.size = k;
+        t.radius = ballSizes[t.size];
+        t.mass = world.info[ballPools[t.size][0]].mass;
+        return t;
+    }
+    // a wrecking ball of this power thrown at p from the direction of `from` (the camera): it appears a few metres short
+    // of p (further back when fast, so that it is seen) and arrives at its speed, aimed above the line by what gravity
+    // takes on the way. What breaks is the solver's business: the ball is a body like the others. Returns the body.
+    int strike(float3 from, float3 p, float power) {
+        const BallThrow bt = ballThrow(power);
+        if (bt.size < 0) return 0;
+        std::vector<int>& pool = ballPools[bt.size];
+        int& next = ballNext[bt.size];
         const int b = pool[size_t(next) % pool.size()];
         next = (next + 1) % int(pool.size());
         const float dist = length(p - from);
         const float3 dir = dist > 1e-4f ? (p - from) * (1.0f / dist) : make_float3(0, 0, 1);
-        const float speed = cfg.f("darbe.hiz", 14.0f);
-        const float s = std::min(cfg.f("darbe.mesafe", 6.0f), std::max(1.5f, dist - 1.0f));   // where it appears, back along the line
+        const float speed = bt.speed;
+        // where it appears, back along the line: darbe.mesafe, or a quarter second of flight when that is more
+        const float s = std::min(std::max(cfg.f("darbe.mesafe", 6.0f), 0.25f * speed), std::max(1.5f, dist - 1.0f));
         const float T = s / speed;   // on the way: start + v T - g T^2 / 2 = p
         const float3 start = p - dir * s;
         const float3 v = dir * speed + make_float3(0.0f, 0.5f * world.params.gravity * T, 0.0f);

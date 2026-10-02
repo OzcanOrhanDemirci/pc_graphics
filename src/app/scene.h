@@ -90,6 +90,7 @@ struct Control {
     bool strong = false;                 // Button: in the scene's colour
     bool enabled = true;                 // Button: false shows it dimmed and ignores clicks
     std::string detail;                  // a line under it
+    bool section = false;                // a thin rule above it: the start of another group
 };
 struct Status {
     std::vector<Chip> chips;

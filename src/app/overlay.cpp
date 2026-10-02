@@ -353,7 +353,9 @@ void App::drawHud(double now, const Status& st) {
             contentW = std::max(contentW, S_(26) + ui::measure(c.text, buttonT) + S_(30) + capsWidth(c.keys, S_(28)) + S_(14));
     }
     float h2 = 0.0f, w2 = st.controls.empty() ? 0.0f : titleW + contentW;
+    const float sectionGap = S_(20);   // a group's rule: space above and below it
     for (const Control& c : st.controls) {
+        if (c.section) h2 += 2.0f * sectionGap;
         h2 += rowGap + (c.kind == Control::Kind::Choice ? seg : c.kind == Control::Kind::Slider ? sliderH : buttonH);
         if (!c.detail.empty()) {
             h2 += detailGap + ui::lineHeight(detailT);
@@ -390,6 +392,11 @@ void App::drawHud(double now, const Status& st) {
     const float cx0 = P.x + pad + titleW;   // where the controls' rows begin
     for (int ci = 0; ci < int(st.controls.size()); ++ci) {
         const Control& c = st.controls[ci];
+        if (c.section) {
+            y += sectionGap;
+            ui::rect(ui::Rect{P.x + pad, y + rowGap * 0.5f, P.w - 2 * pad, std::max(1.0f, S_(1))}, ui::hex(0xFFFFFF, 0.08f * in));
+            y += sectionGap;
+        }
         y += rowGap;
         const float rowH = c.kind == Control::Kind::Choice ? seg : c.kind == Control::Kind::Slider ? sliderH : buttonH;
         if (!c.title.empty()) ui::text(P.x + pad, y + 0.5f * (rowH - ui::lineHeight(titleT)), c.title, titleT);

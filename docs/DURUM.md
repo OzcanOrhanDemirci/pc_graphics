@@ -18,6 +18,10 @@
   - **Yıkım:** büyüklükler tıklanır; **süre çubuğu** (çentik: büyüklüğün kendi süresi, varsayılan; uç: ∞ durdurana kadar;
     ← → ile de); **Depremi başlat / durdur** düğmesi; durdurunca zemin 1,5 sn'de diner (eskiden bir anda donuyordu: sarsıntı).
     Tıklama artık **yıkım topu** atar (patlatma kalktı). Ayrıntı ve ölçümler `docs/yikim/DURUM.md`.
+- **2026-10-02 (öğleden sonra) · Topun gücü, bekleme.** Özcan: *"Bir top atınca 1 saniyeliğine tekrar top atılamasın [...]
+  topun ağırlığını yani gücünü ayarlayabilelim. Kaydırma çubuğuyla [...] Mermi gibi yani."* Panelde en üstte **Top**
+  çubuğu (boy ve hız birlikte, çentik dengeli atış), saniyede en çok bir top. Sözleşmeye `Control::section` (bir
+  denetim grubunun üstüne ince çizgi). Ölçümler `docs/yikim/DURUM.md`.
 - **2026-10-02 · Üç sahne tek uygulamada (gece, Özcan uyurken otonom).** Özcan'ın istekleri, birebir:
   1. *"Yıkım simülasyonunda fare ve klavye hareketleri ters, onları düz yap yani sağa-sağa, sol-sola gitsin."*
   2. *"Yıkım için Türkiyedeki depremleri kaldır, onun yerine onlardan ilham alarak 3 şiddetinde 4 5 6 7 8 9 şeklinde

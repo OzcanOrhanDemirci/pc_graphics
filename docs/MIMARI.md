@@ -67,6 +67,7 @@ eder; çizmez, fareye bakmaz:
 | `Slider` | çubuk (`value` 0..1), çentik (`mark`: varsayılan), sağında değer (`text`) | `value`: sürüklenen yer, düğme basılıyken her kare; bırakınca `released` |
 | `Button` | düğme (`text`), aynı işi yapan tuş (`keys`), vurgulu (`strong`), kapalı (`enabled = false`) | tıklandı |
 
+Bir denetimde `section` açıksa üstüne ince bir çizgi çekilir: yeni bir grup (Yıkım'da top, sonra deprem).
 Uygulama başlıkları tek sütunda hizalar, satırları aynı genişliğe getirir, altına `detail` satırını yazar; üstüne
 gelinince el imleci ve vurgu. Panellere (sağ üst ve sağ alt dahil) basılan fare sahneye geçmez: Yıkım'da düğmeye
 tıklamak top atmaz. Durumun sahibi sahnedir: çubuğu bırakılan yere oturtmak (yuvarlamak, çentiğe yapıştırmak) onun işi,
