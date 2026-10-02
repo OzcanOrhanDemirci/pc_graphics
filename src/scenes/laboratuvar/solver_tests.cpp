@@ -1,12 +1,12 @@
-// Scene 4 "Tanecik": the particle solver's tests and clips (T1).
-//   --scene tanecik --test [dusus|hacim|baraj|balon|birikinti|dokme|sivilasma|tekrar|butce]
+// Scene 4 "Laboratuvar": the particle solver's tests (built in T1 of the earlier "Tanecik").
+//   --scene laboratuvar --test [dusus|hacim|baraj|balon|birikinti|dokme|sivilasma|tekrar|butce]
 //                                                                      measurements, each with its criterion (PASS / FAIL)
-//   --scene tanecik --clip baraj|balon [--seconds S] [--out dir]     30 fps frames and an mp4 (ffmpeg), particles as spheres
-// Settings: scenes/tanecik.cfg, fizik.* (the solver) and test.* (the scenarios); --set key=value overrides them.
+//   --scene laboratuvar --clip baraj|balon [--seconds S] [--out dir]     30 fps frames and an mp4 (ffmpeg), particles as spheres
+// Settings: scenes/laboratuvar.cfg, fizik.* (the solver) and test.* (the scenarios); --set key=value overrides them.
 // Proving a test can fail: --set fizik.yogunluk=0 (no density constraint: hacim fails), --set fizik.baglar=0 (no
 // bonds: balon fails), --set fizik.yapisma=0 (no cohesion: birikinti fails).
-#include "scenes/tanecik/particles.h"
-#include "scenes/tanecik/tanecik_app.h"
+#include "scenes/laboratuvar/particles.h"
+#include "core/config.h"
 #include "core/image_io.h"
 
 #include <algorithm>
@@ -18,7 +18,7 @@
 #include <string>
 #include <vector>
 
-// the solver's settings from scenes/tanecik.cfg (fizik.*); the body (body_sim.cpp) uses it too
+// the solver's settings from scenes/laboratuvar.cfg (fizik.*); the body (body_sim.cpp) uses it too
 void applyPhysics(ParticleWorld& w, const Config& c) {
     PParams& p = w.params;
     p.substeps = c.i("fizik.alt_adim", p.substeps);
@@ -578,42 +578,6 @@ int testButce(const Config& c) {
 
 // what a body costs (for T2's planning, not a physics test): the mannequin's particles (body.h), one bonded group per
 // bone (bonds within 1.75 spacings, stiff tissue), no joints between bones; it falls to the floor in pieces while timed
-int testBedenButce(const Config& c) {
-    const float s = c.f("beden.aralik", 0.007f);
-    Mannequin man;
-    const BodyParticles body = fillBody(man, s);
-    float best = 1e9f;
-    int bonds = 0, count = 0;
-    for (int rep = 0; rep < 3; ++rep) {
-        ParticleWorld w;
-        w.begin(s);
-        applyPhysics(w, c);
-        w.params.gravityRamp = 0.3f;
-        for (int b = 0; b < B_COUNT; ++b) {
-            std::vector<float3> p;
-            for (size_t i = 0; i < body.pos.size(); ++i)
-                if (body.bone[i] == b) p.push_back(body.pos[i]);
-            if (p.empty()) continue;
-            const int g = w.addGroup(PG_LIQUEFY);
-            const int first = w.addParticles(p, 1060.0f, g);
-            w.bondWithin(first, int(p.size()), 1.75f * s, 1e-7f, 0.5f, 0.5f);
-        }
-        w.commit();
-        for (int f = 0; f < 10; ++f) w.step(1.0f / 60.0f);
-        float sum = 0.0f;
-        for (int f = 0; f < 20; ++f) {
-            w.step(1.0f / 60.0f);
-            sum += w.stats().ms;
-        }
-        best = std::min(best, sum / 20.0f);
-        bonds = w.stats().bonds;
-        count = w.count();
-    }
-    std::printf("beden butcesi (3 tekrarin en kucugu): %d tanecik, %d bag, %d alt adim x %d bag yinelemesi: %.2f ms/kare\n", count, bonds,
-                std::max(1, c.i("fizik.alt_adim", 20)), std::max(1, c.i("fizik.bag_yineleme", 2)), best);
-    return 0;
-}
-
 int testTekrar(const Config& c) {
     const float s = spacingOf(c);
     std::vector<float3> run[2];
@@ -638,57 +602,9 @@ int testTekrar(const Config& c) {
     return same ? 0 : 1;
 }
 
-// ---- clips: the world drawn as spheres by the scene's renderer
-
-// the solids as spheres, the liquid as its surface (FluidSurface, the scene's clear liquid); straight from the solver's
-// device arrays
-struct ClipRig {
-    TanecikApp& app;
-    std::vector<uchar4> px;
-    std::string dir;
-    int frame = 0;
-    float3* dPos = nullptr;
-    float* dTint = nullptr;
-    int cap = 0, lastN = -1;
-    bool surface = true;
-    ~ClipRig() {
-        if (dPos) cudaFree(dPos);
-        if (dTint) cudaFree(dTint);
-    }
-    void shoot(ParticleWorld& w, unsigned spp, const std::vector<float>* customTint = nullptr) {
-        const int n = w.count();
-        if (n > cap) {
-            if (dPos) cudaFree(dPos);
-            if (dTint) cudaFree(dTint);
-            cudaMalloc(reinterpret_cast<void**>(&dPos), size_t(n) * sizeof(float3));
-            cudaMalloc(reinterpret_cast<void**>(&dTint), size_t(n) * sizeof(float));
-            cap = n;
-        }
-        w.exportPositions(dPos);
-        if (customTint) cudaMemcpy(dTint, customTint->data(), size_t(n) * sizeof(float), cudaMemcpyHostToDevice);
-        else w.exportDisplay(dTint);
-        cudaDeviceSynchronize();
-        if (n != lastN) {
-            std::vector<uint32_t> idx(static_cast<size_t>(n));
-            for (int i = 0; i < n; ++i) idx[size_t(i)] = uint32_t(i);
-            app.renderer.setParticleSubset(idx, 0.5f * w.spacing());
-            lastN = n;
-        }
-        app.renderer.hideLiquidParticles = surface && !customTint;
-        app.renderer.updateParticles(dPos, dTint);
-        if (surface && !customTint) app.renderer.updateLiquid(dPos, dTint, n, 0.5f * w.spacing());
-        app.renderer.render(spp, false);
-        app.renderer.download(px);
-        char name[512];
-        std::snprintf(name, sizeof(name), "%s/f_%05d.png", dir.c_str(), frame++);
-        writePNG(name, int(app.width), int(app.height), reinterpret_cast<const unsigned char*>(px.data()));
-    }
-};
-
 }   // namespace
 
-int runTanecikTests(TanecikApp& app, const std::string& only) {
-    const Config& c = app.cfg;
+int runSolverTests(const Config& c, const std::string& only) {
     const double t0 = tnow();
     int fails = 0, ran = 0;
     auto run = [&](const char* name, int (*fn)(const Config&)) {
@@ -705,104 +621,8 @@ int runTanecikTests(TanecikApp& app, const std::string& only) {
     run("sivilasma", testSivilasma);
     run("tekrar", testTekrar);
     run("butce", testButce);
-    run("beden_butce", testBedenButce);
-    if (!ran) { std::printf("bilinmeyen test: %s (dusus, hacim, baraj, balon, birikinti, dokme, sivilasma, tekrar, butce, beden_butce)\n", only.c_str()); return 2; }
-    std::printf("tanecik testleri: %d test, %d basarisiz (%.1f s)\n", ran, fails, tnow() - t0);
+    if (!ran) { std::printf("bilinmeyen test: %s (dusus, hacim, baraj, balon, birikinti, dokme, sivilasma, tekrar, butce)\n", only.c_str()); return 2; }
+    std::printf("cozucu testleri: %d test, %d basarisiz (%.1f s)\n", ran, fails, tnow() - t0);
     return fails ? 1 : 0;
 }
 
-int runTanecikClip(TanecikApp& app, const std::string& name, const std::string& out, double seconds) {
-    if (name != "baraj" && name != "balon") { std::printf("bilinmeyen klip: %s (baraj, balon)\n", name.c_str()); return 2; }
-    app.width = unsigned(app.cfg.i("test.klip.genislik", 1280));
-    app.height = unsigned(app.cfg.i("test.klip.yukseklik", 720));
-    app.renderer.init(app.width, app.height, app.root);
-    std::string log;
-    if (!app.renderer.compileDevice(log)) { std::printf("DERLEME HATASI\n%s\n", log.c_str()); return 1; }
-    app.build();
-    app.upload();
-    app.applyLook(false);
-    app.renderer.setVisible(TK_SKIN, false);
-    app.renderer.setVisible(TK_BONES, false);
-    TanecikParams& P = app.renderer.params();
-    P.liquidAlbedo = app.cfg.v3("test.klip.su_renk", make_float3(0.10f, 0.28f, 0.55f));
-    // water: clear, a little blue-green over a hand's breadth (the surface draws it; the spheres are the solids)
-    P.liquidClear = 1;
-    P.liquidIor = 1.33f;
-    P.liquidSigma = app.cfg.v3("test.klip.su_sogurma", make_float3(3.0f, 0.8f, 0.35f));
-    P.liquidF0 = 0.02f;
-    P.tissueAlbedo = app.cfg.v3("test.klip.deri_renk", make_float3(0.75f, 0.30f, 0.10f));
-    ClipRig rig{app};
-    rig.dir = (out.empty() ? app.root + "/captures/tanecik_t1_" + name : out);
-    std::system(("mkdir \"" + rig.dir + "\" 2>nul").c_str());
-    const unsigned spp = unsigned(app.cfg.i("test.klip.spp", 24));
-    const Config& c = app.cfg;
-    ParticleWorld w;
-    const double t0 = tnow();
-    double physMs = 0;
-    int steps = 0;
-    auto advance = [&](int n) {
-        for (int k = 0; k < n; ++k) {
-            w.step(1.0f / 60.0f);
-            physMs += w.stats().ms;
-            ++steps;
-        }
-    };
-    if (name == "baraj") {
-        const DamBreak d = setupDam(w, c);
-        app.orbit.target = make_float3(3.0f * d.a, 0.5f * d.a, 0.5f * d.depth);
-        app.orbit.yaw = 0.0f;
-        app.orbit.pitch = 0.25f;
-        app.orbit.dist = 9.0f * d.a;
-        app.orbit.fovDeg = 35.0f;
-        app.orbit.apply(P.cam, app.width, app.height);
-        const int frames = int((seconds > 0 ? seconds : 2.5) * 30);
-        for (int f = 0; f < frames; ++f) {
-            rig.shoot(w, spp);
-            advance(2);
-        }
-    } else {
-        // three balloons: the left one is shot, a light cube falls on the middle one, a heavy one on the right
-        const float s = spacingOf(c);
-        w.begin(s);
-        applyPhysics(w, c);
-        w.params.gravityRamp = 0.3f;
-        const float R = c.f("test.balon.yaricap", 0.1f), gap = 0.32f;
-        Balloon b[3];
-        for (int k = 0; k < 3; ++k) b[k] = addBalloon(w, c, make_float3((k - 1) * gap, R + 0.5f * s + 0.002f, 0), R);
-        const Cube light = addCube(w, c.f("test.balon.kup", 0.12f), c.f("test.balon.hafif_kup", 100.0f), make_float3(5, 5, 5));
-        const Cube heavy = addCube(w, c.f("test.balon.kup", 0.12f), c.f("test.balon.agir_kup", 7850.0f), make_float3(-5, 5, 5));
-        w.commit();
-        app.orbit.target = make_float3(0, 0.16f, 0);
-        app.orbit.yaw = 0.0f;
-        app.orbit.pitch = 0.22f;
-        app.orbit.dist = 1.9f;
-        app.orbit.fovDeg = 35.0f;
-        app.orbit.apply(P.cam, app.width, app.height);
-        const int frames = int((seconds > 0 ? seconds : 6.0) * 30);
-        std::vector<float3> x;
-        for (int f = 0; f < frames; ++f) {
-            if (f == 30) {   // 1 s: the shot
-                w.readPositions(x);
-                const BalloonState bs = balloonState(b[0], x, s);
-                (void)bs;
-                w.breakBondsInSphere(balloonSide(b[0], x, -1.0f), c.f("test.balon.delik", 2.5f) * s);
-            }
-            if (f == 45) {   // 1.5 s: the cubes
-                w.readPositions(x);
-                const float drop = c.f("test.balon.kup_yukseklik", 0.3f);
-                const BalloonState m = balloonState(b[1], x, s), r = balloonState(b[2], x, s);
-                w.placeGroup(light.group, make_float3(m.skinCentre.x, m.skinTop + 0.5f * light.side + drop, 0) - make_float3(5, 5, 5), make_float3(0, 0, 0));
-                w.placeGroup(heavy.group, make_float3(r.skinCentre.x, r.skinTop + 0.5f * heavy.side + drop, 0) - make_float3(-5, 5, 5), make_float3(0, 0, 0));
-            }
-            rig.shoot(w, spp);
-            advance(2);
-        }
-    }
-    const std::string mp4 = rig.dir + ".mp4";
-    const std::string cmd = "ffmpeg -loglevel error -y -framerate 30 -i \"" + rig.dir + "/f_%05d.png\" -c:v libx264 -pix_fmt yuv420p -crf 18 \"" + mp4 + "\"";
-    const int rc = std::system(cmd.c_str());
-    std::printf("%d kare, fizik ort. %.2f ms/adim (%.1f s); %s %s\n", rig.frame, physMs / std::max(1, steps), tnow() - t0, rc == 0 ? "video:" : "VIDEO YAPILAMADI:",
-                mp4.c_str());
-    app.renderer.shutdown();
-    return 0;
-}

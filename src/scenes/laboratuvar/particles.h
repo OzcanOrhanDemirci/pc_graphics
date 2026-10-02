@@ -26,6 +26,7 @@
 enum PGroupFlags : uint32_t {
     PG_RIGID = 1u << 0,      // shape-matched: moves as one rigid body
     PG_LIQUEFY = 1u << 2,    // a particle that has lost all its bonds becomes liquid
+    PG_GRAIN = 1u << 3,      // its particles touch each other too, with friction (sand); no bonds
     // (a group's own particles never touch each other: no self-collision yet; its bonds hold it together)
 };
 
@@ -89,11 +90,17 @@ public:
     // bonds between the particles in [first, first + count) closer than maxDist (rest length = their distance now)
     int bondWithin(int first, int count, float maxDist, float compliance, float breakStrain, float crushStrain);
     void addBond(int a, int b, float compliance, float breakStrain, float crushStrain);   // rest length = their distance now
+    int bondCount() const { return int(hbonds_.size()); }
+    // bonds [from, to) made shorter (f < 1) or longer at rest: a stretched membrane (a balloon's rubber) pulls from the start
+    void scaleBondRest(int from, int to, float f) {
+        for (int k = from; k < to && k < int(hbonds_.size()); ++k) hbonds_[size_t(k)].rest *= f;
+    }
     void commit();
     // ---- running
     void step(float dt, cudaStream_t s = 0);   // one frame: substeps * iterations
     // pouring (no bonds): returns how many fitted (the capacity is fixed at commit: reserve)
     int appendFluid(const std::vector<float3>& pos, const std::vector<float3>& vel, float density);
+    int appendGrains(const std::vector<float3>& pos, const std::vector<float3>& vel, float density, int group);   // a PG_GRAIN group's
     void placeGroup(int group, float3 offset, float3 velocity);   // a rigid group: its rest shape moved by offset, moving
     int breakBondsInSphere(float3 c, float r);  // every bond with an end inside: broken (a shot, for the tests); returns how many
     // ---- driven from outside (the body: bone particles follow the skeleton; shots and blasts push)
@@ -197,6 +204,7 @@ private:
     cudaEvent_t e0_ = nullptr, e1_ = nullptr;
     float lastMs_ = 0.0f;
     void allocate(int cap, int bondCap);
+    int appendPhase(const std::vector<float3>& pos, const std::vector<float3>& vel, float density, uint32_t phase);
     void record(float dt, cudaStream_t st);   // one frame's launches (captured into graph_)
     cudaStream_t stream_ = nullptr;
     cudaGraphExec_t graph_ = nullptr;

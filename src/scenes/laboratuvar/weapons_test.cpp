@@ -1,7 +1,7 @@
 // Scene 4 "Tanecik": tests of the weapons and blast module (weapons.h). Each prints measured against reference and
 // GECTI / KALDI with its tolerance; the references and their sources are in weapons.cpp's header comment.
 //   --scene tanecik --weapons-test [yukler|jel|korunum|patlama|kilic|kirmizi]   (none: all)
-#include "scenes/tanecik/weapons.h"
+#include "scenes/laboratuvar/weapons.h"
 
 #include <algorithm>
 #include <cmath>

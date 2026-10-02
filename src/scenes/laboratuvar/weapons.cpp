@@ -1,4 +1,4 @@
-#include "scenes/tanecik/weapons.h"
+#include "scenes/laboratuvar/weapons.h"
 
 #include <algorithm>
 #include <cmath>

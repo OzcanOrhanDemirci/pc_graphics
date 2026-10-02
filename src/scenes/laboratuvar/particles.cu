@@ -7,7 +7,7 @@
 // (w_f a water particle's inverse mass), which keeps momentum: a heavy solid moves less than the water it holds.
 // Each particle gathers its own correction: a fluid particle from its constraint and its fluid neighbours', a solid
 // one from the constraints of the fluid around it.
-#include "scenes/tanecik/particles.h"
+#include "scenes/laboratuvar/particles.h"
 
 #include <cub/device/device_radix_sort.cuh>
 
@@ -33,6 +33,7 @@ namespace {
 constexpr int kMaxSubsteps = 256;
 constexpr uint32_t PF_FLUID = 1u << 31;
 constexpr uint32_t PF_GROUP = 0x00ffffffu;
+constexpr uint32_t PF_GRAIN = 1u << 30;   // a grain: touches the other grains of its own group too (sand)
 constexpr int kMaxNbr = 96;
 constexpr int kBlock = 256;
 constexpr float kWaterDensity = 1000.0f;
@@ -178,9 +179,9 @@ __global__ void kNeighbours(int n, int stride, const float4* xs, const uint32_t*
                     else overflow = true;
                     const uint32_t pj = phs[j];
                     if (pj & PF_FLUID) fl |= NB_FLUID;
-                    else if ((pj & PF_GROUP) != (pk & PF_GROUP) || (pk & PF_FLUID)) fl |= NB_OTHER;
+                    else if ((pj & PF_GROUP) != (pk & PF_GROUP) || (pk & PF_FLUID) || (pk & pj & PF_GRAIN)) fl |= NB_OTHER;
                     // a solid found by fluid or by another group must search next substep (the same value from every writer)
-                    if (!(pj & PF_FLUID) && ((pk & PF_FLUID) || (pj & PF_GROUP) != (pk & PF_GROUP))) sl.markNext[sl.idSorted[j]] = 1;
+                    if (!(pj & PF_FLUID) && ((pk & PF_FLUID) || (pj & PF_GROUP) != (pk & PF_GROUP) || (pk & pj & PF_GRAIN))) sl.markNext[sl.idSorted[j]] = 1;
                 }
             }
     nbrCount[k] = cnt;
@@ -332,8 +333,8 @@ __global__ void kDelta(int n, int stride, const float4* xs, const uint32_t* phs,
                 accD += gradW(a.K, r, d) * ((wi / a.wf) * lam[j] * psis[k] / a.S0);
             }
         }
-        // contact: at least one solid, from different groups
-        if ((fi && fj) || (!fi && !fj && (pj & PF_GROUP) == gi)) continue;
+        // contact: at least one solid, from different groups (grains: from any)
+        if ((fi && fj) || (!fi && !fj && (pj & PF_GROUP) == gi && !(ph & pj & PF_GRAIN))) continue;
         if (d >= a.spacing || d <= 1e-9f) continue;
         const float wj = xj4.w;
         const float ws = wi + wj;
@@ -902,7 +903,7 @@ int ParticleWorld::addParticles(const std::vector<float3>& pos, float density, i
         const float3 v = vel ? (*vel)[k] : make_float3(0, 0, 0);
         hv_.push_back(make_float4(v.x, v.y, v.z, 0.0f));
         hw_.push_back(w);
-        hphase_.push_back(group == 0 ? PF_FLUID : uint32_t(group));
+        hphase_.push_back(group == 0 ? PF_FLUID : uint32_t(group) | ((hgroups_[group].flags & PG_GRAIN) ? PF_GRAIN : 0u));
     }
     return first;
 }
@@ -1396,12 +1397,21 @@ void ParticleWorld::pad(int n) {
 }
 
 int ParticleWorld::appendFluid(const std::vector<float3>& pos, const std::vector<float3>& vel, float density) {
+    return appendPhase(pos, vel, density, PF_FLUID);
+}
+
+int ParticleWorld::appendGrains(const std::vector<float3>& pos, const std::vector<float3>& vel, float density, int group) {
+    if (group <= 0 || group >= int(hgroups_.size()) || !(hgroups_[group].flags & PG_GRAIN)) return 0;
+    return appendPhase(pos, vel, density, uint32_t(group) | PF_GRAIN);
+}
+
+int ParticleWorld::appendPhase(const std::vector<float3>& pos, const std::vector<float3>& vel, float density, uint32_t phase) {
     PCUDA(cudaStreamSynchronize(stream_));
     const int k = int(std::min<size_t>(pos.size(), size_t(cap_ - n_)));
     if (k <= 0) return 0;
     std::vector<float4> x(k), v(k);
     std::vector<float> w(size_t(k), 1.0f / (density * s_ * s_ * s_));
-    std::vector<uint32_t> ph(size_t(k), PF_FLUID);
+    std::vector<uint32_t> ph(size_t(k), phase);
     for (int i = 0; i < k; ++i) {
         x[i] = make_float4(pos[i].x, pos[i].y, pos[i].z, 0.0f);
         v[i] = i < int(vel.size()) ? make_float4(vel[i].x, vel[i].y, vel[i].z, 0.0f) : make_float4(0, 0, 0, 0);

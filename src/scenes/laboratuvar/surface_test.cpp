@@ -1,9 +1,9 @@
 // Scene 4 "Tanecik": tests of the liquid's surface (surface.h), and pictures of it.
-//   --scene tanecik --surface-test [kure|damla|duz|kirmizi|zemin|tekrar|butce|gas|goruntu]   (none: all but goruntu)
+//   --scene laboratuvar --surface-test [kure|damla|duz|kirmizi|zemin|tekrar|butce|gas|goruntu]   (none: all but goruntu)
 // Settings (--set): yuzey.hucre, yuzey.destek, yuzey.komsu, yuzey.yumusatma, yuzey.esneme, yuzey.en_az_komsu,
 // yuzey.seviye, yuzey.damla, yuzey.anizotropik, yuzey.izdusum, yuzey.damla_kure, yuzey.yumusatma_tur, yuzey.zemin (FluidSurfaceSettings).
-#include "scenes/tanecik/surface.h"
-#include "scenes/tanecik/tanecik_app.h"
+#include "scenes/laboratuvar/surface.h"
+#include "core/config.h"
 #include "core/image_io.h"
 
 #include <optix.h>
@@ -549,122 +549,11 @@ bool testTekrar(const FluidSurfaceSettings& S) {
 
 // ---- pictures: the mesh in the studio, where the skin goes (opaque skin, and the glass shell)
 
-void picture(TanecikApp& app, const HostMesh& m, float3 target, float dist, float pitchDeg, float yawDeg, bool glass, const std::string& path, unsigned spp) {
-    TriMesh tm;
-    tm.pos = m.v;
-    tm.nrm = m.n;
-    tm.idx = m.t;
-    // the droplets as little meshed spheres in the same material (this renderer's spheres have one radius for all)
-    for (const float4& d : m.drops) {
-        const unsigned base = unsigned(tm.pos.size());
-        const int nu = 12, nv = 8;
-        for (int j = 0; j <= nv; ++j)
-            for (int i = 0; i <= nu; ++i) {
-                const float th = 3.14159265f * j / nv, ph = 2.0f * 3.14159265f * i / nu;
-                const float3 n = make_float3(std::sin(th) * std::cos(ph), std::cos(th), std::sin(th) * std::sin(ph));
-                tm.pos.push_back(make_float3(d.x, d.y, d.z) + n * d.w);
-                tm.nrm.push_back(n);
-            }
-        for (int j = 0; j < nv; ++j)
-            for (int i = 0; i < nu; ++i) {   // counter-clockwise from outside
-                const unsigned a = base + unsigned(j * (nu + 1) + i), b = a + 1, c = a + unsigned(nu + 1), e = c + 1;
-                if (j > 0) tm.idx.push_back(make_uint3(a, b, c));
-                if (j < nv - 1) tm.idx.push_back(make_uint3(b, e, c));
-            }
-    }
-    app.renderer.uploadMeshes(app.studio, tm, {});
-    app.renderer.setParticleSubset({}, kRadius);
-    app.applyLook(glass);
-    if (glass) {   // closer to water than to skin: barely tinted, no frost
-        TanecikParams& p = app.renderer.params();
-        p.shellOptical = make_float3(0.06f, 0.03f, 0.02f);
-        p.skinFrost = 0.0f;
-        p.skinF0 = 0.02f;
-    }
-    app.orbit.target = target;
-    app.orbit.dist = dist;
-    app.orbit.pitch = pitchDeg / kDeg;
-    app.orbit.yaw = yawDeg / kDeg;
-    app.orbit.fovDeg = 30.0f;
-    app.orbit.apply(app.renderer.params().cam, app.width, app.height);
-    for (unsigned s = 0; s < spp; s += 16) app.renderer.render(16, s > 0);
-    std::vector<uchar4> px;
-    app.renderer.download(px);
-    writePNG(path, int(app.width), int(app.height), reinterpret_cast<const unsigned char*>(px.data()));
-    std::printf("  yazildi: %s (%zu ucgen, %zu damla)\n", path.c_str(), m.t.size(), m.drops.size());
-}
-
-bool testGoruntu(TanecikApp& app, const FluidSurfaceSettings& S) {
-    std::printf("[goruntu] kure, levha, sicrama: deri ve cam gorunumunde\n");
-    app.width = 1280;
-    app.height = 720;
-    app.renderer.init(app.width, app.height, app.root);
-    std::string log;
-    if (!app.renderer.compileDevice(log)) { std::printf("DERLEME HATASI\n%s\n", log.c_str()); return false; }
-    app.studio = studioMesh(app.cfg.f("studyo.duvar_z", -4.0f), app.cfg.f("studyo.kavis", 1.6f), app.cfg.f("studyo.yukseklik", 7.0f),
-                            app.cfg.f("studyo.genislik", 14.0f), app.cfg.f("studyo.on_z", 14.0f));
-    const std::string dir = app.root + "/captures/yuzey/";
-    std::filesystem::create_directories(dir);
-    FluidSurfaceSettings SF = S;   // everything here rests on the studio floor
-    if (SF.floorY < -1e29f) SF.floorY = 0.0f;
-    Runner R(SF);
-    struct Shot { std::string name; std::vector<float3> p; float3 target; float dist, pitch, yaw; };
-    std::vector<Shot> shots;
-    shots.push_back({"kure", relaxedBall(make_float3(0, 0.1f, 0), 0.1f), make_float3(0, 0.1f, 0), 0.9f, 12.0f, 25.0f});
-    shots.push_back({"levha", box(make_float3(-0.15f, 0.0f, -0.15f), make_float3(0.15f, 0.056f, 0.15f), 0.15f), make_float3(0, 0.03f, 0), 0.9f, 22.0f, 30.0f});
-    shots.push_back({"sicrama", splash(0.3f, 400), make_float3(0, 0.12f, 0), 1.3f, 14.0f, 20.0f});
-    for (const Shot& s : shots) {
-        R.build(s.p);
-        const HostMesh m = R.mesh();
-        std::printf("  %s: %zu tanecik, %.2f ms\n", s.name.c_str(), s.p.size(), R.fs.lastMs);
-        picture(app, m, s.target, s.dist, s.pitch, s.yaw, false, dir + s.name + "_deri.png", 256);
-        picture(app, m, s.target, s.dist, s.pitch, s.yaw, true, dir + s.name + "_cam.png", 256);
-    }
-    // the beads the surface replaces: the same splash (and the ball) as spheres
-    for (int which : {2, 0}) {
-        const Shot& s = shots[which];
-        TriMesh none;
-        none.pos = {make_float3(0, -1, 0), make_float3(0.001f, -1, 0), make_float3(0, -1, 0.001f)};
-        none.nrm = {make_float3(0, 1, 0), make_float3(0, 1, 0), make_float3(0, 1, 0)};
-        none.idx = {make_uint3(0, 1, 2)};
-        app.renderer.uploadMeshes(app.studio, none, {});
-        {   // the particles on the device, every one drawn, all of them liquid
-            float3* dp = nullptr;
-            float* dt = nullptr;
-            cudaMalloc(reinterpret_cast<void**>(&dp), s.p.size() * sizeof(float3));
-            cudaMalloc(reinterpret_cast<void**>(&dt), s.p.size() * sizeof(float));
-            cudaMemcpy(dp, s.p.data(), s.p.size() * sizeof(float3), cudaMemcpyHostToDevice);
-            const std::vector<float> ones(s.p.size(), 1.0f);
-            cudaMemcpy(dt, ones.data(), ones.size() * sizeof(float), cudaMemcpyHostToDevice);
-            std::vector<uint32_t> idx(s.p.size());
-            for (size_t k = 0; k < idx.size(); ++k) idx[k] = uint32_t(k);
-            app.renderer.setParticleSubset(idx, kRadius);
-            app.renderer.updateParticles(dp, dt);
-            cudaDeviceSynchronize();
-            cudaFree(dp);
-            cudaFree(dt);
-        }
-        app.applyLook(false);
-        app.orbit.target = s.target;
-        app.orbit.dist = s.dist;
-        app.orbit.pitch = s.pitch / kDeg;
-        app.orbit.yaw = s.yaw / kDeg;
-        app.orbit.apply(app.renderer.params().cam, app.width, app.height);
-        for (unsigned k = 0; k < 256; k += 16) app.renderer.render(16, k > 0);
-        std::vector<uchar4> px;
-        app.renderer.download(px);
-        writePNG(dir + s.name + "_tanecik.png", int(app.width), int(app.height), reinterpret_cast<const unsigned char*>(px.data()));
-        std::printf("  yazildi: %s%s_tanecik.png (kure olarak tanecikler)\n", dir.c_str(), s.name.c_str());
-    }
-    app.renderer.shutdown();
-    return true;
-}
-
 }   // namespace
 
-int runSurfaceTests(TanecikApp& app, const std::string& only) {
-    const FluidSurfaceSettings S = settingsFrom(app.cfg);
-    gSlabJitter = app.cfg.f("test.titresim", -1.0f);
+int runSurfaceTests(const Config& cfg, const std::string& only) {
+    const FluidSurfaceSettings S = settingsFrom(cfg);
+    gSlabJitter = cfg.f("test.titresim", -1.0f);
     std::printf("yuzey ayarlari: hucre %.2f, destek %.2f, komsu %.2f, yumusatma %.2f, esneme %.1f, en az komsu %d, seviye %.2f, damla %.2f, anizotropik %d, "
                 "izdusum %d\n",
                 S.cellScale, S.supportScale, S.neighbourScale, S.smoothing, S.maxStretch, S.minNeighbours, S.iso, S.dropletRadius, S.anisotropic ? 1 : 0,
@@ -684,7 +573,6 @@ int runSurfaceTests(TanecikApp& app, const std::string& only) {
     t("tekrar", [&] { return testTekrar(S); });
     t("butce", [&] { return testButce(S); });
     t("gas", [&] { return testGas(S); });
-    t("goruntu", [&] { return testGoruntu(app, S); });
     if (!run) { std::printf("bilinmeyen test: %s\n", only.c_str()); return 2; }
     std::printf("yuzey testleri: %d / %d gecti\n", run - failed, run);
     return failed ? 1 : 0;

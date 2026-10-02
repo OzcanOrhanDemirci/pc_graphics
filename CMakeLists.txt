@@ -43,26 +43,20 @@ add_library(pc_core OBJECT
     src/scenes/yikim/geom.cpp
     src/scenes/yikim/phys.cu
     src/scenes/yikim/quake.cpp
-    src/scenes/tanecik/body.cpp
-    src/scenes/tanecik/body_graph.cpp
-    src/scenes/tanecik/tanecik_kernels.cu
-    src/scenes/tanecik/skeleton_sim.cu
-    src/scenes/tanecik/balance.cpp
-    src/scenes/tanecik/tanecik_balance_test.cpp
-    src/scenes/tanecik/body_sim.cpp
-    src/scenes/tanecik/body_hits.cpp
-    src/scenes/tanecik/body_world.cpp
-    src/scenes/tanecik/tanecik_body_test.cpp
-    src/scenes/tanecik/tanecik_skeleton_test.cpp
-    src/scenes/tanecik/tanecik_app.cpp
-    src/scenes/tanecik/tanecik_live.cpp
-    src/scenes/tanecik/tanecik_renderer.cpp
-    src/scenes/tanecik/surface.cu
-    src/scenes/tanecik/tanecik_surface_test.cpp
-    src/scenes/tanecik/weapons.cpp
-    src/scenes/tanecik/tanecik_weapons_test.cpp
-    src/scenes/tanecik/particles.cu
-    src/scenes/tanecik/tanecik_tests.cpp
+    src/scenes/laboratuvar/particles.cu
+    src/scenes/laboratuvar/surface.cu
+    src/scenes/laboratuvar/weapons.cpp
+    src/scenes/laboratuvar/solver_tests.cpp
+    src/scenes/laboratuvar/surface_test.cpp
+    src/scenes/laboratuvar/weapons_test.cpp
+    src/scenes/laboratuvar/lab_geom.cpp
+    src/scenes/laboratuvar/lab_kernels.cu
+    src/scenes/laboratuvar/lab_world.cpp
+    src/scenes/laboratuvar/lab_record.cpp
+    src/scenes/laboratuvar/lab_tests.cpp
+    src/scenes/laboratuvar/laboratuvar_renderer.cpp
+    src/scenes/laboratuvar/laboratuvar_app.cpp
+    src/scenes/laboratuvar/laboratuvar_live.cpp
     ${TP}/tinyexr/miniz.c)
 add_executable(pc_graphics src/app/main.cpp $<TARGET_OBJECTS:pc_core>)
 

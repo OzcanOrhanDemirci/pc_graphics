@@ -1,4 +1,4 @@
-#include "scenes/tanecik/surface.h"
+#include "scenes/laboratuvar/surface.h"
 #include "shared/vec.h"
 
 #include <cub/block/block_reduce.cuh>
