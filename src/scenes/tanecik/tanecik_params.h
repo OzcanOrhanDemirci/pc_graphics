@@ -1,0 +1,57 @@
+// Scene 4 "Tanecik": launch parameters shared by the host and the device program (device/tanecik.cu).
+// A small path tracer for a photo studio: a white cyclorama, rectangular soft boxes, a figure whose skin is either a
+// tinted glass shell (the inside shows: bones and particles) or opaque skin.
+#pragma once
+#include "shared/vec.h"
+
+#if !defined(__CUDACC_RTC__)
+#include <optix_types.h>
+#endif
+
+// what an instance is: its instance id (and, for the meshes, its index into TanecikParams::meshes)
+enum TKind : unsigned int { TK_STUDIO = 0, TK_SKIN = 1, TK_BONES = 2, TK_PARTICLES = 3 };
+
+struct TMesh {
+    const float3* pos;
+    const float3* nrm;
+    const uint3* idx;
+};
+
+struct TCamera {
+    float3 pos, right, up, fwd;    // orthonormal
+    float tanHalfX, tanHalfY;
+};
+
+struct TRectLight {                // a soft box: centre, half-extents (its two edges), emitting towards cross(u, v)
+    float3 c, u, v;
+    float3 Le;                     // radiance
+};
+
+#define T_MAX_LIGHTS 4
+
+struct TanecikParams {
+    unsigned int width, height;
+    float4* accum;                 // linear RGB summed over the samples of this image
+    uchar4* output;
+    unsigned int samples, spp, seed;
+    OptixTraversableHandle handle;
+    const TMesh* meshes;           // by kind: studio, skin, bones
+    const float3* particles;       // sphere centres (the instance TK_PARTICLES), its primitive index
+    const float* particleTint;     // per sphere: 0 tissue .. 1 freed liquid (display)
+    float particleRadius;          // as drawn (m)
+    TCamera cam;
+    // the look
+    int glass;                     // 1 the glass figure, 0 opaque skin
+    float3 skinAlbedo;             // opaque skin, and the glass shell's frosted part
+    float3 shellOptical;           // glass: the shell's optical depth at normal incidence (sigma * thickness), per channel
+    float skinFrost;               // glass: the share of light the shell scatters (gives it form)
+    float skinF0;                  // Fresnel at normal incidence
+    float skinGloss;               // opaque skin: Phong exponent of its sheen
+    float3 boneAlbedo, tissueAlbedo, liquidAlbedo, studioAlbedo;
+    // light
+    TRectLight lights[T_MAX_LIGHTS];
+    int lightCount;
+    float3 ambient;                // what escapes the studio sees (a large white tent)
+    int maxDiffuse;                // diffuse bounces
+    float exposure;
+};

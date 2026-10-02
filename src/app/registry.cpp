@@ -17,6 +17,11 @@ app::SceneInfo info();
 std::unique_ptr<app::Scene> make();
 int cli(int argc, char** argv);
 }
+namespace tanecik {
+app::SceneInfo info();
+std::unique_ptr<app::Scene> make();
+int cli(int argc, char** argv);
+}
 
 namespace app {
 
@@ -25,6 +30,7 @@ const std::vector<Entry>& registry() {
         {altinsaat::info, altinsaat::make, altinsaat::cli},
         {fener::info, fener::make, fener::cli},
         {yikim::info, yikim::make, yikim::cli},
+        {tanecik::info, tanecik::make, tanecik::cli},
     };
     return scenes;
 }
