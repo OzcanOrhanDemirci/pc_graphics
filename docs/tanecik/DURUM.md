@@ -9,6 +9,26 @@
   `tanecik-yuzey`); bitince `main`'e birleştirilecek.
 - **2026-10-02 · Plan onaylandı, T0 başladı.** Özcan: *"Onaylıyorum. Başlayabilirsin."*
 
+## Kanama ve canlı silahlar · sürüyor (2026-10-03 gece)
+Özcan (ilk atış klipleri): *"Etki olarak iyi duruyor da parçacıklar akmıyor yani kan akmıyor."* Doğru: yalnız yol üstündeki
+birkaç düzine tanecik kana dönüp 60 m/s ile saçılıyordu.
+- **Kanama** (çözücüde `addBleed`, `bleedFade`): giriş ve çıkış deliğinin çevresindeki (3 cm) ve kanal boyundaki bağlar kendi
+  hızıyla kopar (karma ile birebir), pıhtılaşmayla söner. 9 mm'de kan 37 → 5 sn'de 679 tanecik (~230 mL). **Yara basıncı**
+  (`woundPressure`): delik çevresindeki sıvı dışa itilir. **Islatma** (`fizik.islatma`, `fizik.islak_surtunme`; varsayılan
+  kapalı): sıvı katıya yapışır ve onunla sürüklenir.
+- **Sonuç: kan hâlâ akmıyor.** Sıvıya dönen taneciklerin çoğu yaranın cebinde, yırtık dokunun arkasında kalıyor; dışarı
+  çıkanlar basınçla (0,4 m/s) deriden kopup serbest düşüyor; ıslatma 20'de birkaç damla deriye yapışıyor ama akmıyor.
+  Sıradaki: kanın dışarı yolu (ceple deliği bağlayan akış; basınç deriye teğet), deride ince akıntı (ıslatma + sürtünme
+  ayarı), çok damla birleşip akıntı olsun diye yeterli hacim. Klipler `captures/tanecik/beden_kanama*.mp4` (masaüstüne
+  kopyalanmadı).
+- **Canlı pencere** (`BodyWorld`, `tanecik_live.cpp`): tabanca / tüfek / pompalı (1, 2, 3), gerçekçi sınırlı güç çubuğu
+  (yükün adı, kütle, hız, momentum, 70 kg'a en çok hız), sol tıkla kameradan imlecin altına atış, T ağır çekim, P zamanı
+  durdur (kamera döner), R yeni manken. Ayaktayken iskelette zemin teması kapalı (kare 103 → 35 ms, 27 fps).
+  Bulunan: 4 m'deki kameradan her atış ıska geçiyordu (mermi yolunun ortam haritası namludan 3 m'ydi); artık bedenin hemen
+  önünden başlar. **Doğrulanmadı:** düzeltmeden sonraki otomatik testte tıklamalar arka duvara düştü (sahne daha hızlı
+  yüklendiği için betiğin adımları kaymış olabilir); canlı pencerede bir isabet henüz görülmedi.
+- Ajanlar: süzgeç ve denge sürüyor; Özcan: bunlar bitince yeni ajan yok (kota).
+
 ## T2 + T4 ilk hâl · beden çözücüde, mermiler bedende (2026-10-03 gece)
 Özcan (T1 klipleri): *"Valla çok gerçekçi duruyor, devam et bakalım. Özellikle mankendeki etkileri merak ediyorum, kan da
 çok iyi duruyor"*.
