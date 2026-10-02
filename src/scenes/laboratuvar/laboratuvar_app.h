@@ -74,7 +74,8 @@ struct LaboratuvarApp {
     int objGrains = -1, objBall = -1, objMembrane = -1;
     int grainsPer = 0, grainsCap = 0;
     uint3* dMemTris = nullptr;
-    int memTris = 0;
+    int memTris = 0, memTrisCap = 0;
+    const std::vector<uint3>* memSource = nullptr;   // whose triangles are uploaded
     int* dMemCount = nullptr;
     float* dWeight = nullptr;
     int weightCap = 0;
@@ -84,6 +85,8 @@ struct LaboratuvarApp {
     // the experiment's set, props, surfaces (maxParticles: the most particles a picture will have)
     void setupScene(Deney d, int maxParticles, const std::vector<uint3>* membraneTris = nullptr);
     void draw(const DrawInput& in);
+    // the balloon's membrane triangles (the coarse world's, or a recording's fine ones)
+    void setMembraneTris(const std::vector<uint3>& tris);
     void applyLook();
     void setCamera(Deney d);
     void release();

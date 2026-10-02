@@ -55,6 +55,9 @@ struct PParams {
     float fluidSolidMu = 0.0f;   // fluid along solid particles (water slips along rubber, skin, a cube)
     float maxSpeed = 60.0f;      // m/s guard
     float bleedFade = 4.0f;      // s: a wound's bleeding fades over this (clotting)
+    // a crack's tip: a bond with an end that has already lost a bond breaks at this share of its breaking strain (a
+    // lattice this coarse cannot resolve the stress concentrating at a tear's tip; 1: off)
+    float tearTip = 1.0f;
     float bondDamping = 0.0f;    // s: XPBD damping of the bonds (beta; 0 off): what the bonds leave unsolved does not shake
     bool density = true;         // the fluid's density constraint (off: a test shows the volume is not kept)
     bool wallDensity = true;     // walls count in a fluid particle's density as resting particles would
@@ -91,6 +94,8 @@ public:
     int bondWithin(int first, int count, float maxDist, float compliance, float breakStrain, float crushStrain);
     void addBond(int a, int b, float compliance, float breakStrain, float crushStrain);   // rest length = their distance now
     int bondCount() const { return int(hbonds_.size()); }
+    // after commit: every bond's rest length times f (a membrane's stretch brought in slowly while it settles)
+    void scaleAllBondRest(float f);
     // bonds [from, to) made shorter (f < 1) or longer at rest: a stretched membrane (a balloon's rubber) pulls from the start
     void scaleBondRest(int from, int to, float f) {
         for (int k = from; k < to && k < int(hbonds_.size()); ++k) hbonds_[size_t(k)].rest *= f;
@@ -129,6 +134,8 @@ public:
     std::vector<uint8_t> readBroken() const;
     std::vector<int2> readBrokenEnds() const;            // the two particles of every broken bond
     PStats stats();
+    float lastStepMs() const { return lastMs_; }   // the GPU time of the last step()
+    cudaStream_t stream() const { return stream_; }   // its own (non-blocking): work feeding a step goes here
     float restDensityLattice() const { return S0_; }   // the kernel sum of a full lattice (density units, see .cu)
     void destroy();
     ~ParticleWorld() { destroy(); }

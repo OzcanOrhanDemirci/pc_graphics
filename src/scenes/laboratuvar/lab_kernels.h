@@ -28,5 +28,8 @@ void launchGather(const float3* pos, const uint8_t* codes, const uint32_t* idx, 
 // normals accumulated from the kept faces. Returns the kept count through *count (device int).
 void launchMembrane(const float3* pos, int first, const uint3* tris, int nTris, float tear, uint3* outTris, int* count, float3* verts, float3* nrm,
                     int nVerts, cudaStream_t s);
+// the denoiser: the accumulation's mean (times exposure) as its input; its output tone-mapped to the display
+void launchDenoisePrep(const float4* accum, unsigned samples, float exposure, int n, float4* out, cudaStream_t s);
+void launchTonemap(const float4* lin, int w, int h, unsigned seed, uchar4* out, cudaStream_t s);
 // the mean of a range of positions as a sphere of radius r (a steel ball drawn whole)
 void launchCentre(const float3* pos, int first, int count, float r, float4* out, cudaStream_t s);

@@ -32,6 +32,7 @@ struct LabInputs {
     float flow = 0.5f;      // Bal, Kum: the flow
     float power = 0.5f;     // Karpuz: the load (weapons.h gunLoad rifle, u)
     float3 nozzle = make_float3(0, 0, 0);   // Bal, Kum: where over the table (x, z) the stream falls
+    bool flowing = true;    // Bal, Kum: the stream runs
 };
 
 // a trigger (what a recording replays at its time zero)
@@ -92,6 +93,7 @@ public:
 
 private:
     double t0_ = 0.0, tTrigger_ = 0.0;
+    float restScale_ = 1.0f, restTarget_ = 1.0f;   // the balloon's membrane: its rest length now and when settled
     bool triggered_ = false;
     LabEvent ev_;
     // kinematic glass (one range per held prop): rest positions in its frame, the device copies

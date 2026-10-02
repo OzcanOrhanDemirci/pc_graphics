@@ -64,6 +64,8 @@ public:
     cudaStream_t stream() const { return stream_; }
     unsigned int width() const { return w_; }
     unsigned int height() const { return h_; }
+    bool denoise = true;       // the OptiX AI denoiser (AOV, albedo and normal guides) over the accumulation
+    float denoiseMs = 0.0f;
     float lastMs = 0.0f;       // the last render
     float surfaceMs = 0.0f;    // the surfaces built since the last render
 
@@ -121,4 +123,14 @@ private:
     void freeGas(Gas& g);
     void uploadObjects();
     void buildIAS();
+    // the denoiser
+    OptixDenoiser dn_ = nullptr;
+    void *dnState_ = nullptr, *dnScratch_ = nullptr;
+    size_t dnStateSize_ = 0, dnScratchSize_ = 0;
+    float4 *dnIn_ = nullptr, *dnOut_ = nullptr;
+    float* dnIntensity_ = nullptr;
+    float* dnAvg_ = nullptr;
+    void createDenoiser();
+    void runDenoiser();
+    void freeDenoiser();
 };

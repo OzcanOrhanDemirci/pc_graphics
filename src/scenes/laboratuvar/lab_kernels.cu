@@ -1,4 +1,5 @@
 #include "scenes/laboratuvar/lab_kernels.h"
+#include "shared/display.h"
 
 namespace {
 
@@ -133,7 +134,31 @@ __global__ void kCentre(const float3* pos, int first, int count, float r, float4
     }
 }
 
+__global__ void kDenoisePrep(const float4* acc, float k, int n, float4* out) {
+    const int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= n) return;
+    const float4 a = acc[i];
+    out[i] = make_float4(a.x * k, a.y * k, a.z * k, 1.0f);
+}
+__global__ void kTonemap(const float4* lin, int w, int h, unsigned seed, uchar4* out) {
+    const int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= w * h) return;
+    const float4 a = lin[i];
+    float3 c = agx(make_float3(fmaxf(a.x, 0.0f), fmaxf(a.y, 0.0f), fmaxf(a.z, 0.0f)));
+    const unsigned hh = hashU(unsigned(i) * 9781u + seed * 6271u);
+    const float dn = (hashF(hh) + hashF(hh + 1) - 1.0f) / 255.0f;
+    out[i] = make_uchar4((unsigned char)(saturate(srgbOetf(c.x) + dn) * 255.0f + 0.5f), (unsigned char)(saturate(srgbOetf(c.y) + dn) * 255.0f + 0.5f),
+                         (unsigned char)(saturate(srgbOetf(c.z) + dn) * 255.0f + 0.5f), 255);
+}
+
 }   // namespace
+
+void launchDenoisePrep(const float4* accum, unsigned samples, float exposure, int n, float4* out, cudaStream_t s) {
+    if (n > 0) kDenoisePrep<<<nb(n), kB, 0, s>>>(accum, exposure / float(samples > 0 ? samples : 1), n, out);
+}
+void launchTonemap(const float4* lin, int w, int h, unsigned seed, uchar4* out, cudaStream_t s) {
+    if (w * h > 0) kTonemap<<<nb(w * h), kB, 0, s>>>(lin, w, h, seed, out);
+}
 
 void launchTransform(const float3* rest, int n, const float xf[12], float3* out, cudaStream_t s) {
     if (n <= 0) return;

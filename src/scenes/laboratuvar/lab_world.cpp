@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <unordered_map>
 
@@ -120,6 +121,8 @@ bool LabWorld::build(Deney d, const Config& sceneCfg, bool fine_, const LabInput
     applyPhysics(pw, cfg);
     if (fine) {   // smaller particles move as far in fewer of their own sizes: the same substeps per second suffice
         pw.params.substeps = cfg.i(pre + "ince_alt_adim", pw.params.substeps);
+        // a finer membrane has more bonds between its ends: Gauss-Seidel needs more passes for the same stiffness
+        pw.params.bondIterations = cfg.i(pre + "ince_bag_yineleme", pw.params.bondIterations);
     }
     code.clear();
     for (bool& u : propUsed) u = false;
@@ -153,7 +156,26 @@ void LabWorld::settle(double seconds, double dt) {
     const double ramp = pw.params.gravityRamp;
     pw.params.gravityRamp = float(std::min(0.4, seconds * 0.5));
     const int frames = int(std::ceil(seconds / dt));
-    for (int k = 0; k < frames; ++k) pw.step(float(dt));
+    for (int k = 0; k < frames; ++k) {
+        if (restTarget_ != restScale_) {
+            // a stretched membrane's rest length brought in over the first half of the settling (at once, the light
+            // rubber would snap inwards faster than the water can push back, and tear: measured, 4133 of 31256 bonds)
+            const float u = std::min(1.0f, float((k + 1) * dt / std::max(0.05, 0.5 * seconds)));
+            const float want = 1.0f + (restTarget_ - 1.0f) * smoothstepf(0.0f, 1.0f, u);
+            pw.scaleAllBondRest(want / restScale_);
+            restScale_ = want;
+        }
+        pw.step(float(dt));
+        if (std::getenv("LAB_TANI") && (k + 1) % std::max(1, int(0.1 / dt)) == 0) {
+            const PStats st = pw.stats();
+            std::printf("    oturma %.2f s: dinlenme payi %.2f, kopuk bag %d, en hizli %.2f m/s, en buyuk sikisma %.1f%%\n", (k + 1) * dt, restScale_, st.broken,
+                        st.maxSpeed, st.densityMax * 100.0f);
+        }
+    }
+    if (restTarget_ != restScale_) {
+        pw.scaleAllBondRest(restTarget_ / restScale_);
+        restScale_ = restTarget_;
+    }
     pw.params.gravityRamp = float(ramp);
     t0_ = pw.time();
 }
@@ -255,9 +277,13 @@ void LabWorld::buildKum() {
 // length is a share of the inflated one, so the rubber's tension holds the water's pressure), water inside
 
 void LabWorld::buildBalon() {
-    propUsed[P_HOOK] = true;
     const float R = cfg.f("balon.yaricap", 0.06f);
     const float3 c = cfg.v3("balon.merkez", make_float3(0.0f, 0.20f, 0.0f));
+    // hung by its knot (balon.asili 1) or resting on the table (0): hanging, the light rubber does not carry the
+    // water's weight up to the knot in time with a few iterations a substep (it tore off at the knot at once,
+    // measured: docs/laboratuvar/DURUM.md); on the table the table carries it
+    const bool hung = cfg.i("balon.asili", 0) != 0;
+    propUsed[P_HOOK] = hung;
     translation(prop[P_HOOK].xf, c + make_float3(0, R, 0));
     std::vector<float3> skin, water;
     const float a = cfg.f("balon.deri_aralik", 0.85f) * s;   // the membrane's lattice: a little closer than the water's
@@ -280,7 +306,7 @@ void LabWorld::buildBalon() {
     membraneFirst = pw.addParticles(skin, cfg.f("balon.deri_yogunluk", 1100.0f) * 0.0008f / s, gSkin);   // rubber 0.8 mm thick, over a spacing
     membraneCount = int(skin.size());
     code.insert(code.end(), skin.size(), DC_RUBBER);
-    {
+    if (hung) {
         // the cap: Fibonacci points are sorted by height (q = 0 at the top): the first few are the knot
         const float capR = cfg.f("balon.dugum_yaricap", 0.006f);
         int cap = 0;
@@ -290,7 +316,9 @@ void LabWorld::buildBalon() {
     const int b0 = pw.bondCount();
     pw.bondWithin(membraneFirst, membraneCount, cfg.f("balon.bag_uzaklik", 1.6f) * a, cfg.f("balon.uyum", 2e-4f), cfg.f("balon.kopma", 1.0f),
                   cfg.f("balon.ezilme", 0.9f));
-    pw.scaleBondRest(b0, pw.bondCount(), cfg.f("balon.on_gerilme", 0.6f));
+    (void)b0;   // the stretch comes in while it settles (settle(): from 1 to balon.on_gerilme)
+    restScale_ = 1.0f;
+    restTarget_ = cfg.f("balon.on_gerilme", 0.6f);
     // the membrane's triangles, for the drawing: the convex hull of points on a sphere is its triangulation; a
     // cheap way: each point to its neighbours sorted by angle (a Delaunay-like fan), kept where three agree
     {
@@ -383,8 +411,11 @@ void LabWorld::buildKarpuz() {
     const int fFirst = pw.addParticles(flesh, cfg.f("karpuz.et_yogunluk", 1000.0f), gF);
     code.insert(code.end(), flesh.size(), DC_FLESH);
     const float reach = cfg.f("karpuz.bag_uzaklik", 1.5f) * s;
-    pw.bondWithin(rFirst, int(rind.size()), reach, cfg.f("karpuz.kabuk_uyum", 2e-6f), cfg.f("karpuz.kabuk_kopma", 0.06f), 0.5f);
-    pw.bondWithin(fFirst, int(flesh.size()), reach, cfg.f("karpuz.et_uyum", 5e-5f), cfg.f("karpuz.et_kopma", 0.12f), 0.5f);
+    // a bond of a lattice of spacing s stands for a stiffness ~ E s (Young's modulus): its compliance 1 / (E s), so
+    // the melon is as stiff at any spacing
+    const float cRind = 1.0f / (cfg.f("karpuz.kabuk_E", 15e6f) * s), cFlesh = 1.0f / (cfg.f("karpuz.et_E", 1.0e6f) * s);
+    pw.bondWithin(rFirst, int(rind.size()), reach, cRind, cfg.f("karpuz.kabuk_kopma", 0.05f), 0.5f);
+    pw.bondWithin(fFirst, int(flesh.size()), reach, cFlesh, cfg.f("karpuz.et_kopma", 0.10f), 0.5f);
     // rind to flesh: across the boundary, as weak as the flesh
     {
         std::unordered_map<long long, std::vector<int>> grid;
@@ -402,7 +433,7 @@ void LabWorld::buildKarpuz() {
                         if (it == grid.end()) continue;
                         for (int i : it->second)
                             if (length(rind[size_t(i)] - p) < reach)
-                                pw.addBond(rFirst + i, fFirst + int(j), cfg.f("karpuz.et_uyum", 5e-5f), cfg.f("karpuz.et_kopma", 0.12f), 0.5f);
+                                pw.addBond(rFirst + i, fFirst + int(j), cFlesh, cfg.f("karpuz.et_kopma", 0.10f), 0.5f);
                     }
         }
     }
@@ -433,7 +464,7 @@ HostMesh labPropMesh(Deney d, int id) {
         return revolve(p, 96);
     }
     case LabWorld::P_HOOK: {
-        if (d != Deney::Balon) return HostMesh{};
+        if (d != Deney::Balon || true) return HostMesh{};   // the balloon rests on the table (buildBalon)
         // a thin steel rod from far above down to a small clip at the knot (its frame: the knot at the origin)
         Profile p;
         p.push_back({0.0f, -0.004f, false});
@@ -472,7 +503,7 @@ void LabWorld::placeProps() {
 void LabWorld::driveHeld(float dt) {
     for (Held& h : held_) {
         if (!(deney == Deney::Su && h.propId == P_BEAKER)) continue;   // only the pouring beaker moves
-        launchTransform(h.dRest, h.count, prop[h.propId].xf, h.dTarget, nullptr);
+        launchTransform(h.dRest, h.count, prop[h.propId].xf, h.dTarget, pw.stream());   // ordered before the drive (same stream)
         pw.driveKinematic(h.dIdx, h.dTarget, h.count, dt);
     }
 }
@@ -495,8 +526,20 @@ void LabWorld::trigger(const LabEvent& e) {
         c = c * (1.0f / std::max(1, ballCount));
         pw.placeGroup(ballGroup, e.a - c, make_float3(0, 0, 0));
     } else if (e.kind == LabEvent::Prick && membraneFirst >= 0) {
-        // a needle: the bonds of the membrane within a few millimetres of the point are cut
-        pw.breakBondsInSphere(e.a, cfg.f("balon.igne", 0.004f));
+        // a needle: the bonds of the membrane within a few millimetres of the point are cut (at its nearest membrane
+        // particle: a recording's finer balloon sags a little differently). From now on a tear's tip runs: a bond
+        // next to a broken one breaks sooner (the stress a coarse lattice cannot concentrate at the tip). Not before:
+        // the few bonds the resting balloon loses to the solver's noise (2 of 31256) are not flaws a real one has.
+        std::vector<float3> x;
+        pw.readPositions(x);
+        int near = membraneFirst;
+        float best = 1e9f;
+        for (int i = membraneFirst; i < membraneFirst + membraneCount; ++i) {
+            const float d = length(x[size_t(i)] - e.a);
+            if (d < best) { best = d; near = i; }
+        }
+        pw.breakBondsInSphere(x[size_t(near)], cfg.f("balon.igne", 0.004f));
+        pw.params.tearTip = cfg.f("balon.yirtilma_ucu", 0.5f);
     } else if (e.kind == LabEvent::Shot) {
         // a rifle bullet along the ray a -> b through the melon: its path (weapons.h, calibrated in gelatin) gives
         // each step's momentum, energy and cavity; the particles near the path take them
@@ -509,8 +552,14 @@ void LabWorld::trigger(const LabEvent& e) {
         std::unordered_map<long long, int> occ;
         const float cell = s;
         auto key = [&](int xx, int yy, int zz) { return (long long)(xx + 100000) * 40000000000LL + (long long)(yy + 100000) * 200000LL + (long long)(zz + 100000); };
+        // every cell within a spacing of a melon particle (a lattice point's own cell alone leaves holes)
         for (size_t i = 0; i < x.size(); ++i)
-            if (code[i] == DC_RIND || code[i] == DC_FLESH) occ[key(int(std::floor(x[i].x / cell)), int(std::floor(x[i].y / cell)), int(std::floor(x[i].z / cell)))] = 1;
+            if (code[i] == DC_RIND || code[i] == DC_FLESH) {
+                const int cx = int(std::floor(x[i].x / cell)), cy = int(std::floor(x[i].y / cell)), cz = int(std::floor(x[i].z / cell));
+                for (int dz = -1; dz <= 1; ++dz)
+                    for (int dy = -1; dy <= 1; ++dy)
+                        for (int dx = -1; dx <= 1; ++dx) occ[key(cx + dx, cy + dy, cz + dz)] = 1;
+            }
         const float maxLen = length(e.b - e.a) + 0.5f;
         const MediumAt medium = [&](float t) {
             const float3 p = e.a + d * t;
@@ -562,7 +611,7 @@ void LabWorld::trigger(const LabEvent& e) {
 }
 
 void LabWorld::emit(float dt) {
-    if (deney != Deney::Bal && deney != Deney::Kum) return;
+    if ((deney != Deney::Bal && deney != Deney::Kum) || !in.flowing) return;
     const bool honey = deney == Deney::Bal;
     const std::string pre = honey ? "bal." : "kum.";
     const float Q = (cfg.f(pre + "akis_en_az", honey ? 0.5f : 3.0f) + in.flow * (cfg.f(pre + "akis_en_cok", honey ? 5.0f : 25.0f) - cfg.f(pre + "akis_en_az", honey ? 0.5f : 3.0f))) * 1e-6f;   // m^3/s

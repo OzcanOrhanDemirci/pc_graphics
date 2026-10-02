@@ -515,16 +515,24 @@ int App::run(const Options& opt) {
                 key(GLFW_KEY_SPACE); wait(2.0);
                 control("yapi", 0); wait(6.0);
             }
-            if (infos_[s].id == "tanecik") {
-                // the look by the panel (skin, then glass with sparse particles), the camera round him, the bones off
-                mouse(0.50f, 0.42f); wait(0.1); click(); wait(0.3);      // what is under the cursor: his chest
-                mouse(0.50f, 0.92f); wait(0.1); click(); wait(0.3);      // the floor
-                control("gorunum", 1); wait(3.0); shot("tanecik_deri");
-                control("gorunum", 0); control("tanecik", 1); wait(3.0); shot("tanecik_seyrek");
-                mouse(0.50f, 0.50f); right(true); wait(0.1);
-                for (int k = 1; k <= 12; ++k) { mouse(0.50f + 0.01f * k, 0.50f); wait(0.03); }
-                right(false); wait(3.0); shot("tanecik_donus");
-                key(GLFW_KEY_K); wait(2.0); shot("tanecik_kemiksiz"); key(GLFW_KEY_K); control("tanecik", 0); wait(0.5);
+            if (infos_[s].id == "laboratuvar") {
+                // every experiment: live, its trigger, the fine recording as it computes and when it plays; the panel
+                // by mouse (the time bar, the speed)
+                wait(1.0); shot("lab_su_canli");
+                control("eylem", 0); wait(1.2); log("lab su onizleme"); shot("lab_su_onizleme");
+                wait(9.0); log("lab su kayit"); shot("lab_su_kayit");
+                wait(6.0); shot("lab_su_bitti");
+                slide("zaman", 0.35f); wait(0.1); left(false); control("hiz", 1); control("durdur", 0); wait(2.0); shot("lab_su_yavas");
+                control("deney", 1); wait(6.0); log("lab bal"); shot("lab_bal");
+                mouse(0.45f, 0.70f); left(true); wait(0.1);
+                for (int k = 1; k <= 20; ++k) { mouse(0.45f + 0.004f * k, 0.70f); wait(0.05); }
+                left(false); wait(3.0); shot("lab_bal_gezdi");
+                control("deney", 2); wait(10.0); log("lab kum"); shot("lab_kum");
+                key(GLFW_KEY_B); wait(2.0); shot("lab_kum_bilye");
+                control("deney", 3); wait(4.0); shot("lab_balon");
+                control("eylem", 0); wait(0.6); shot("lab_balon_onizleme"); wait(12.0); log("lab balon kayit"); shot("lab_balon_kayit");
+                control("deney", 4); wait(4.0); shot("lab_karpuz");
+                control("eylem", 0); wait(0.6); shot("lab_karpuz_onizleme"); wait(14.0); log("lab karpuz kayit"); shot("lab_karpuz_kayit");
             }
             key(GLFW_KEY_H); wait(0.3); shot(infos_[s].id + "_arayuzsuz"); key(GLFW_KEY_H);
             key(GLFW_KEY_ESCAPE); gallery(); wait(0.8);

@@ -411,7 +411,7 @@ __global__ void kBonds(int first, int count, const int2* ends, const float4* pro
 }
 
 // a bond stretched past its breaking strain, or squeezed past its crushing strain, is gone
-__global__ void kBondBreak(int nb, const int2* ends, const float4* prop, uint8_t* broken, const float4* x) {
+__global__ void kBondBreak(int nb, const int2* ends, const float4* prop, uint8_t* broken, const float4* x, const int* degree, const int* initDeg, float tip) {
     const int b = blockIdx.x * blockDim.x + threadIdx.x;
     if (b >= nb || broken[b]) return;
     const int2 e = ends[b];
@@ -419,7 +419,8 @@ __global__ void kBondBreak(int nb, const int2* ends, const float4* prop, uint8_t
     const float3 r = make_float3(pa.x - pb.x, pa.y - pb.y, pa.z - pb.z);
     const float4 pr = prop[b];
     const float strain = (sqrtf(dot(r, r)) - pr.x) / pr.x;
-    if (strain > pr.z || -strain > pr.w) broken[b] = 1;
+    const float lim = (tip < 1.0f && (degree[e.x] < initDeg[e.x] || degree[e.y] < initDeg[e.y])) ? pr.z * tip : pr.z;
+    if (strain > lim || -strain > pr.w) broken[b] = 1;
 }
 
 // live bonds per particle; a liquefying group's particle with none left becomes liquid
@@ -751,6 +752,11 @@ __global__ void kAddVel(int n, const uint32_t* idx, const float3* dv, float4* v,
     vi.z += dv[k].z;
     v[i] = vi;
 }
+__global__ void kScaleRest(int nb, float4* prop, float f) {
+    const int b = blockIdx.x * blockDim.x + threadIdx.x;
+    if (b < nb) prop[b].x *= f;
+}
+
 __global__ void kBreakMarked(int nb, const int2* ends, const uint8_t* mark, uint8_t* broken, int* counter) {
     const int b = blockIdx.x * blockDim.x + threadIdx.x;
     if (b >= nb || broken[b]) return;
@@ -1364,7 +1370,7 @@ void ParticleWorld::record(float dt, cudaStream_t st) {
             g_prof.mark("xsph");
         }
         if (nb_ && P.bonds) {
-            kBondBreak<<<blocks(nb_), kBlock, 0, st>>>(nb_, bEnds_, bProp_, bBroken_, x_);
+            kBondBreak<<<blocks(nb_), kBlock, 0, st>>>(nb_, bEnds_, bProp_, bBroken_, x_, degree_, initDeg_, P.tearTip);
             kDegree<<<nB, kBlock, 0, st>>>(n_, csrStart_, csrBond_, bBroken_, degree_, phase_, groups_);
         }
         std::swap(contacts_, contactsNext_);
@@ -1447,6 +1453,12 @@ void ParticleWorld::placeGroup(int group, float3 offset, float3 velocity) {
     kPlace<<<blocks(G.count), kBlock, 0, stream_>>>(G.first, G.count, x_, x0_, v_, q_, c0 + offset, velocity);
     const float4 fr[2] = {make_float4(c0.x + offset.x, c0.y + offset.y, c0.z + offset.z, 0.0f), make_float4(0, 0, 0, 1)};
     PCUDA(cudaMemcpyAsync(groupFrame_ + 2 * group, fr, sizeof(fr), cudaMemcpyHostToDevice, stream_));
+    PCUDA(cudaStreamSynchronize(stream_));
+}
+
+void ParticleWorld::scaleAllBondRest(float f) {
+    if (nb_ <= 0) return;
+    kScaleRest<<<blocks(nb_), kBlock, 0, stream_>>>(nb_, bProp_, f);
     PCUDA(cudaStreamSynchronize(stream_));
 }
 

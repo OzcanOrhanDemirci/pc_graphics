@@ -1,4 +1,5 @@
 #include "scenes/laboratuvar/laboratuvar_renderer.h"
+#include "scenes/laboratuvar/lab_kernels.h"
 
 #include <nvrtc.h>
 #include <optix_stack_size.h>
@@ -477,14 +478,82 @@ void LabRenderer::buildIAS() {
     LOPTIX(optixAccelBuild(ctx_, stream_, &ao, &bi, 1, CUdeviceptr(ias_.temp), ias_.tempSize, CUdeviceptr(ias_.out), ias_.outSize, &p_.handle, nullptr, 0));
 }
 
+namespace {
+OptixImage2D limage(void* d, unsigned w, unsigned h) {
+    OptixImage2D im{};
+    im.data = CUdeviceptr(d);
+    im.width = w;
+    im.height = h;
+    im.pixelStrideInBytes = sizeof(float4);
+    im.rowStrideInBytes = w * sizeof(float4);
+    im.format = OPTIX_PIXEL_FORMAT_FLOAT4;
+    return im;
+}
+}   // namespace
+
+void LabRenderer::createDenoiser() {
+    OptixDenoiserOptions o{};
+    o.guideAlbedo = 1;
+    o.guideNormal = 1;
+    LOPTIX(optixDenoiserCreate(ctx_, OPTIX_DENOISER_MODEL_KIND_AOV, &o, &dn_));
+    OptixDenoiserSizes sz{};
+    LOPTIX(optixDenoiserComputeMemoryResources(dn_, w_, h_, &sz));
+    dnStateSize_ = sz.stateSizeInBytes;
+    dnScratchSize_ = sz.withoutOverlapScratchSizeInBytes;
+    LCUDA(cudaMalloc(&dnState_, dnStateSize_));
+    LCUDA(cudaMalloc(&dnScratch_, dnScratchSize_));
+    dnIn_ = lalloc<float4>(size_t(w_) * h_);
+    dnOut_ = lalloc<float4>(size_t(w_) * h_);
+    dnIntensity_ = lalloc<float>(1);
+    dnAvg_ = lalloc<float>(3);
+    if (!p_.albedoOut) p_.albedoOut = lalloc<float4>(size_t(w_) * h_);
+    if (!p_.normalOut) p_.normalOut = lalloc<float4>(size_t(w_) * h_);
+    LOPTIX(optixDenoiserSetup(dn_, stream_, w_, h_, CUdeviceptr(dnState_), dnStateSize_, CUdeviceptr(dnScratch_), dnScratchSize_));
+    LCUDA(cudaStreamSynchronize(stream_));
+}
+
+void LabRenderer::freeDenoiser() {
+    if (dn_) optixDenoiserDestroy(dn_);
+    dn_ = nullptr;
+    for (void* p : {dnState_, dnScratch_, static_cast<void*>(dnIn_), static_cast<void*>(dnOut_), static_cast<void*>(dnIntensity_), static_cast<void*>(dnAvg_)})
+        if (p) cudaFree(p);
+    dnState_ = dnScratch_ = nullptr;
+    dnIn_ = dnOut_ = nullptr;
+    dnIntensity_ = dnAvg_ = nullptr;
+}
+
+void LabRenderer::runDenoiser() {
+    const int n = int(w_ * h_);
+    launchDenoisePrep(p_.accum, p_.samples, p_.exposure, n, dnIn_, stream_);
+    OptixDenoiserLayer layer{};
+    layer.input = limage(dnIn_, w_, h_);
+    layer.output = limage(dnOut_, w_, h_);
+    layer.type = OPTIX_DENOISER_AOV_TYPE_BEAUTY;
+    OptixDenoiserGuideLayer g{};
+    g.albedo = limage(p_.albedoOut, w_, h_);
+    g.normal = limage(p_.normalOut, w_, h_);
+    LOPTIX(optixDenoiserComputeIntensity(dn_, stream_, &layer.input, CUdeviceptr(dnIntensity_), CUdeviceptr(dnScratch_), dnScratchSize_));
+    LOPTIX(optixDenoiserComputeAverageColor(dn_, stream_, &layer.input, CUdeviceptr(dnAvg_), CUdeviceptr(dnScratch_), dnScratchSize_));
+    OptixDenoiserParams dp{};
+    dp.hdrIntensity = CUdeviceptr(dnIntensity_);
+    dp.hdrAverageColor = CUdeviceptr(dnAvg_);
+    dp.blendFactor = 0.0f;
+    LOPTIX(optixDenoiserInvoke(dn_, stream_, &dp, CUdeviceptr(dnState_), dnStateSize_, &g, &layer, 1, 0, 0, CUdeviceptr(dnScratch_), dnScratchSize_));
+    launchTonemap(dnOut_, int(w_), int(h_), p_.seed, p_.output, stream_);
+}
+
 void LabRenderer::render(unsigned int spp, bool accumulate) {
     if (objsDirty_) uploadObjects();
     if (iasDirty_) buildIAS();
+    if (denoise && !dn_) createDenoiser();
     if (!accumulate) p_.samples = 0;
     p_.spp = spp;
     LCUDA(cudaMemcpyAsync(reinterpret_cast<void*>(dParams_), &p_, sizeof(LabParams), cudaMemcpyHostToDevice, stream_));
     LCUDA(cudaEventRecord(e0_, stream_));
     if (p_.handle) LOPTIX(optixLaunch(pipeline_, stream_, dParams_, sizeof(LabParams), &sbt_, w_, h_, 1));
+    p_.samples += spp;
+    if (denoise && p_.handle) runDenoiser();
+    p_.samples -= spp;
     LCUDA(cudaEventRecord(e1_, stream_));
     LCUDA(cudaEventSynchronize(e1_));
     LCUDA(cudaEventElapsedTime(&lastMs, e0_, e1_));
@@ -527,6 +596,7 @@ void LabRenderer::shutdown() {
     LCUDA(cudaDeviceSynchronize());
     clearObjects();
     freeGas(ias_);
+    freeDenoiser();
     if (pipeline_) optixPipelineDestroy(pipeline_);
     for (auto g : groups_) optixProgramGroupDestroy(g);
     if (module_) optixModuleDestroy(module_);

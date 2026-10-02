@@ -46,7 +46,8 @@ void LaboratuvarApp::release() {
     dMemCount = nullptr;
     dWeight = nullptr;
     weightCap = 0;
-    memTris = 0;
+    memTris = memTrisCap = 0;
+    memSource = nullptr;
 }
 
 namespace {
@@ -95,8 +96,8 @@ void LaboratuvarApp::applyLook() {
 
 void LaboratuvarApp::setCamera(Deney d) {
     const std::string k = std::string("kamera.") + deneyKey(d);
-    const float3 defPos[kDeneyCount] = {{0.12f, 0.24f, 0.95f}, {0.0f, 0.16f, 0.50f}, {0.02f, 0.17f, 0.58f}, {0.0f, 0.18f, 0.62f}, {0.0f, 0.16f, 0.62f}};
-    const float3 defAim[kDeneyCount] = {{-0.03f, 0.20f, 0.0f}, {0.0f, 0.06f, 0.0f}, {0.03f, 0.07f, 0.0f}, {0.0f, 0.15f, 0.0f}, {0.0f, 0.12f, 0.0f}};
+    const float3 defPos[kDeneyCount] = {{0.12f, 0.24f, 0.95f}, {0.0f, 0.16f, 0.50f}, {0.02f, 0.17f, 0.58f}, {0.0f, 0.15f, 0.50f}, {0.0f, 0.16f, 0.62f}};
+    const float3 defAim[kDeneyCount] = {{-0.03f, 0.20f, 0.0f}, {0.0f, 0.06f, 0.0f}, {0.03f, 0.07f, 0.0f}, {0.0f, 0.06f, 0.0f}, {0.0f, 0.12f, 0.0f}};
     cam.lookAt(cfg.v3(k + ".konum", defPos[int(d)]), cfg.v3(k + ".hedef", defAim[int(d)]));
     cam.fovDeg = cfg.f(k + ".fov", cfg.f("kamera.fov", 30.0f));
     cam.apply(renderer.params().cam, width, height);
@@ -187,17 +188,25 @@ void LaboratuvarApp::setupScene(Deney d, int maxParticles, const std::vector<uin
     }
     objMembrane = -1;
     release();
-    if (d == Deney::Balon && membraneTris && !membraneTris->empty()) {
-        memTris = int(membraneTris->size());
-        cudaMalloc(reinterpret_cast<void**>(&dMemTris), membraneTris->size() * sizeof(uint3));
-        cudaMemcpy(dMemTris, membraneTris->data(), membraneTris->size() * sizeof(uint3), cudaMemcpyHostToDevice);
+    if (d == Deney::Balon) {
+        // room for the fine recording's membrane too (it has more particles and faces than the live one)
+        memTrisCap = std::max(cfg.i("balon.ucgen_kapasite", 160000), membraneTris ? int(membraneTris->size()) : 0);
+        cudaMalloc(reinterpret_cast<void**>(&dMemTris), size_t(memTrisCap) * sizeof(uint3));
         cudaMalloc(reinterpret_cast<void**>(&dMemCount), sizeof(int));
-        objMembrane = R.addDynamicMesh(maxParticles, memTris, mRubber);
+        objMembrane = R.addDynamicMesh(maxParticles, memTrisCap, mRubber);
+        if (membraneTris) setMembraneTris(*membraneTris);
     }
     weightCap = maxParticles;
     cudaMalloc(reinterpret_cast<void**>(&dWeight), size_t(weightCap) * sizeof(float));
     applyLook();
     setCamera(d);
+}
+
+void LaboratuvarApp::setMembraneTris(const std::vector<uint3>& tris) {
+    if (!dMemTris) return;
+    memTris = std::min(int(tris.size()), memTrisCap);
+    if (memTris > 0) cudaMemcpy(dMemTris, tris.data(), size_t(memTris) * sizeof(uint3), cudaMemcpyHostToDevice);
+    memSource = &tris;
 }
 
 void LaboratuvarApp::draw(const DrawInput& in) {
