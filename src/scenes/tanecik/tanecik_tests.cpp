@@ -18,14 +18,7 @@
 #include <string>
 #include <vector>
 
-namespace {
-
-double tnow() {
-    using namespace std::chrono;
-    return duration<double>(steady_clock::now().time_since_epoch()).count();
-}
-
-// the solver's settings from the cfg (fizik.*)
+// the solver's settings from scenes/tanecik.cfg (fizik.*); the body (body_sim.cpp) uses it too
 void applyPhysics(ParticleWorld& w, const Config& c) {
     PParams& p = w.params;
     p.substeps = c.i("fizik.alt_adim", p.substeps);
@@ -50,7 +43,17 @@ void applyPhysics(ParticleWorld& w, const Config& c) {
     p.maxSpeed = c.f("fizik.en_hiz", p.maxSpeed);
     p.density = c.i("fizik.yogunluk", 1) != 0;
     p.bonds = c.i("fizik.baglar", 1) != 0;
+    p.bondDamping = c.f("fizik.bag_sonum", p.bondDamping);
 }
+
+namespace {
+
+double tnow() {
+    using namespace std::chrono;
+    return duration<double>(steady_clock::now().time_since_epoch()).count();
+}
+
+// the solver's settings from the cfg (fizik.*)
 
 std::vector<float3> lattice(float3 lo, int nx, int ny, int nz, float s) {
     std::vector<float3> v;

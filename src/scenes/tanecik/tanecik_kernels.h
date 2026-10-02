@@ -15,5 +15,8 @@ void launchStain(const float3* pos, const uint32_t* idx, int n, float litresEach
                  cudaStream_t s);
 // each skin vertex: its particles' weighted centre now, plus its rest offset and normal turned by their bones' rotations
 // (blended by the same weights); boneXf: B_COUNT transforms of 12 floats, particleBone: each particle's bone
-void launchSkin(const SkinBind* bind, int vertices, const float3* particles, const uint8_t* particleBone, const float* boneXf, float3* outPos,
-                float3* outNrm, cudaStream_t s);
+// tint (may be null): a vertex any of whose particles turned liquid (>= 0.5) is torn: a NaN position (OptiX leaves its
+// triangles out: a hole in the skin)
+// tearDistance > 0: so too a vertex one of whose particles is that far from their weighted centre (pulled out of the wound)
+void launchSkin(const SkinBind* bind, int vertices, const float3* particles, const uint8_t* particleBone, const float* boneXf, const float* tint,
+                float tearDistance, float3* outPos, float3* outNrm, cudaStream_t s);

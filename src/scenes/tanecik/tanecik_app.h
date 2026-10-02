@@ -70,7 +70,7 @@ struct TanecikApp {
         boneMeshes.clear();
         for (int b = 0; b < B_COUNT; ++b) boneMeshes.push_back(skeletonMesh(b));
         const float s = body.spacing;
-        graph = buildBodyGraph(body, cfg.f("beden.bag_yaricap", 1.5f) * s, cfg.f("beden.kemik_en_az", 0.75f) * s);
+        graph = buildBodyGraph(body, cfg.f("beden.bag_yaricap", 1.5f) * s, cfg.f("beden.kemik_en_az", 0.75f) * s, s);
         skinBind = bindSkin(skin, body, graph);
         for (Xform& x : pose) x = Xform();
         studio = studioMesh(cfg.f("studyo.duvar_z", -4.0f), cfg.f("studyo.kavis", 1.6f), cfg.f("studyo.yukseklik", 7.0f), cfg.f("studyo.genislik", 14.0f),
@@ -79,6 +79,7 @@ struct TanecikApp {
     void upload() {
         renderer.uploadMeshes(studio, skin, boneMeshes);
         renderer.setSkinBinding(skinBind, graph.bone);
+        renderer.skinTearDistance = cfg.f("deri.yirtilma", 2.5f) * body.spacing;
         release();
         cudaMalloc(reinterpret_cast<void**>(&dPos), body.pos.size() * sizeof(float3));
         cudaMemcpy(dPos, body.pos.data(), body.pos.size() * sizeof(float3), cudaMemcpyHostToDevice);

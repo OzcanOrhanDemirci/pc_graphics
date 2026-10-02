@@ -127,7 +127,7 @@ size_t BodyGraph::countBonds(BondKind k) const {
 
 bool bonesAdjacent(int a, int b) { return a == b || boneInfo(a).parent == b || boneInfo(b).parent == a; }
 
-BodyGraph buildBodyGraph(const BodyParticles& body, float bondRadius, float minBoneRadius) {
+BodyGraph buildBodyGraph(const BodyParticles& body, float bondRadius, float minBoneRadius, float contactDistance) {
     BodyGraph g;
     const int n = int(body.pos.size());
     g.kind.resize(n);
@@ -181,14 +181,19 @@ BodyGraph buildBodyGraph(const BodyParticles& body, float bondRadius, float minB
                         if (d2 > r2) continue;
                         const uint8_t ki = g.kind[i], kj = g.kind[j];
                         const int bi = g.bone[i], bj = g.bone[j];
+                        const bool touching = d2 < contactDistance * contactDistance;
                         uint8_t kind;
                         if (ki == PK_BONE && kj == PK_BONE) continue;   // a bone holds itself; bones meet at joints
                         if (ki == PK_BONE || kj == PK_BONE) {
-                            if (bi != bj) continue;                     // flesh holds only to its own bone
-                            kind = BK_ATTACH;
+                            if (bi != bj) {                             // flesh holds only to its own bone
+                                if (!touching) continue;
+                                kind = BK_LOOSE;
+                            } else kind = BK_ATTACH;
                         } else {
-                            if (!bonesAdjacent(bi, bj)) continue;       // the two thighs touch, they do not grow together
-                            kind = ki == PK_SKIN && kj == PK_SKIN ? BK_SKIN : BK_TISSUE;
+                            if (!bonesAdjacent(bi, bj)) {               // the two thighs touch, they do not grow together
+                                if (!touching) continue;
+                                kind = BK_LOOSE;
+                            } else kind = ki == PK_SKIN && kj == PK_SKIN ? BK_SKIN : BK_TISSUE;
                         }
                         per[i].push_back({uint32_t(i), j, std::sqrt(d2), kind});
                     }

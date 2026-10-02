@@ -23,11 +23,12 @@ public:
     void setBoneXforms(const Xform* xf);                    // B_COUNT: the bones' instances, and the skin's rotations
     // the skin rides on particles (deformSkin): its binding and every particle's bone
     void setSkinBinding(const std::vector<SkinBind>& bind, const std::vector<uint8_t>& particleBone);
-    void deformSkin(const float3* dParticles);              // device positions of every particle
+    void deformSkin(const float3* dParticles, const float* dTint = nullptr);   // device positions (and liquid shares: tears)
     // which particles are drawn (indices into the solver's arrays) and how large; then their positions each frame
     void setParticleSubset(const std::vector<uint32_t>& idx, float radius);
     void updateParticles(const float3* dPos, const float* dTint);   // device; dTint may be null
-    bool hideLiquidParticles = true;                        // a particle that is liquid (tint >= 0.5) is drawn by the surface
+    bool hideLiquidParticles = true;
+    float skinTearDistance = 0.0f;                          // m; > 0: the skin tears where its particles are pulled this far apart                        // a particle that is liquid (tint >= 0.5) is drawn by the surface
     // the free liquid: its surface built from the particles every frame (FluidSurface), droplets as spheres
     bool initLiquid(int maxParticles, int maxVertices, int maxTriangles, int maxBlocks, float floorY);
     void updateLiquid(const float3* dPos, const float* dWeight, int n, float radius);   // weight <= 0: not liquid

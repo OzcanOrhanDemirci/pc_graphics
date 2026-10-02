@@ -82,7 +82,7 @@ __device__ inline float3 xyz(float4 a) { return make_float3(a.x, a.y, a.z); }
 
 // ---- the substep
 
-__global__ void kPredict(int n, float4* x, float4* x0, float4* v, const float* w, const float* gSub, float dt) {
+__global__ void kPredict(int n, float4* x, float4* x0, float4* v, const float* w, const float4* kv, const float* gSub, float dt) {
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= n) return;
     const float g = *gSub;
@@ -90,7 +90,7 @@ __global__ void kPredict(int n, float4* x, float4* x0, float4* v, const float* w
     const float4 xi = x[i];
     x0[i] = xi;
     if (w[i] > 0.0f) vi.y -= g * dt;
-    else vi = make_float4(0, 0, 0, 0);
+    else vi = kv[i];   // kinematic: moves as it is driven (driveKinematic), nothing pushes it
     v[i] = vi;
     x[i] = make_float4(xi.x + vi.x * dt, xi.y + vi.y * dt, xi.z + vi.z * dt, 0.0f);
 }
@@ -375,8 +375,11 @@ __global__ void kApply(int n, float4* x, const float4* dx) {
 }
 
 // one colour of bonds: no two share a particle, so each moves its two ends directly (XPBD)
-__global__ void kBonds(int first, int count, const int2* ends, const float4* prop, float* lamB, const uint8_t* broken, float4* x, const float* w,
-                       float invDt2) {
+// XPBD distance with damping (Macklin et al. 2016, "XPBD", eq. 26): gamma = alpha~ beta / h damps the motion along the
+// bond within the substep (x - x0), so a convergence-limited solve does not leave its residual as velocity noise (a body at
+// rest shook at up to 0.4 m/s with 2 bond iterations: measured); beta = 0: plain XPBD
+__global__ void kBonds(int first, int count, const int2* ends, const float4* prop, float* lamB, const uint8_t* broken, float4* x, const float4* x0,
+                       const float* w, float invDt2, float gammaPerCompliance) {
     const int b = first + blockIdx.x * blockDim.x + threadIdx.x;
     if (b >= first + count || broken[b]) return;
     const int2 e = ends[b];
@@ -390,7 +393,10 @@ __global__ void kBonds(int first, int count, const int2* ends, const float4* pro
     const float4 pr = prop[b];
     const float C = d - pr.x;
     const float at = pr.y * invDt2;
-    const float dl = (-C - at * lamB[b]) / (ws + at);
+    const float gamma = pr.y * gammaPerCompliance;
+    const float4 qa = x0[e.x], qb = x0[e.y];
+    const float vrel = (r.x * ((pa.x - qa.x) - (pb.x - qb.x)) + r.y * ((pa.y - qa.y) - (pb.y - qb.y)) + r.z * ((pa.z - qa.z) - (pb.z - qb.z))) / d;
+    const float dl = (-C - at * lamB[b] - gamma * vrel) / ((1.0f + gamma) * ws + at);
     lamB[b] += dl;
     const float3 g = r * (dl / d);
     pa.x += g.x * wa;
@@ -541,10 +547,10 @@ __global__ void kPlanes(int n, float4* x, const float4* x0, const uint32_t* phas
     x[i] = make_float4(p.x, p.y, p.z, 0.0f);
 }
 
-__global__ void kVelocity(int n, const float4* x, const float4* x0, float4* v, const float* w, float invDt, float maxSpeed) {
+__global__ void kVelocity(int n, const float4* x, const float4* x0, float4* v, const float* w, const float4* kv, float invDt, float maxSpeed) {
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= n) return;
-    if (w[i] <= 0.0f) { v[i] = make_float4(0, 0, 0, 0); return; }
+    if (w[i] <= 0.0f) { v[i] = kv[i]; return; }
     float3 vi = (xyz(x[i]) - xyz(x0[i])) * invDt;
     const float s = sqrtf(dot(vi, vi));
     if (s > maxSpeed) vi = vi * (maxSpeed / s);
@@ -713,6 +719,34 @@ __global__ void kPlace(int first, int count, float4* x, float4* x0, float4* v, c
     v[i] = make_float4(vel.x, vel.y, vel.z, 0.0f);
 }
 
+__global__ void kDrive(int n, const uint32_t* idx, const float3* target, const float4* x, float4* kv, float invDt) {
+    const int k = blockIdx.x * blockDim.x + threadIdx.x;
+    if (k >= n) return;
+    const uint32_t i = idx[k];
+    const float3 d = (target[k] - xyz(x[i])) * invDt;
+    kv[i] = make_float4(d.x, d.y, d.z, 0.0f);
+}
+__global__ void kAddVel(int n, const uint32_t* idx, const float3* dv, float4* v, const float* w) {
+    const int k = blockIdx.x * blockDim.x + threadIdx.x;
+    if (k >= n) return;
+    const uint32_t i = idx[k];
+    if (w[i] <= 0.0f) return;
+    float4 vi = v[i];
+    vi.x += dv[k].x;
+    vi.y += dv[k].y;
+    vi.z += dv[k].z;
+    v[i] = vi;
+}
+__global__ void kBreakMarked(int nb, const int2* ends, const uint8_t* mark, uint8_t* broken, int* counter) {
+    const int b = blockIdx.x * blockDim.x + threadIdx.x;
+    if (b >= nb || broken[b]) return;
+    const int2 e = ends[b];
+    if (mark[e.x] || mark[e.y]) {
+        broken[b] = 1;
+        atomicAdd(counter, 1);
+    }
+}
+
 __global__ void kBreakSphere(int nb, const int2* ends, const float4* x, uint8_t* broken, float3 c, float r2, int* counter) {
     const int b = blockIdx.x * blockDim.x + threadIdx.x;
     if (b >= nb || broken[b]) return;
@@ -876,6 +910,7 @@ void ParticleWorld::allocate(int cap, int bondCap) {
     x_ = dalloc<float4>(cap);
     x0_ = dalloc<float4>(cap);
     v_ = dalloc<float4>(cap);
+    kv_ = dalloc<float4>(cap);
     dx_ = dalloc<float4>(cap);
     q_ = dalloc<float4>(cap);
     w_ = dalloc<float>(cap);
@@ -930,7 +965,7 @@ void ParticleWorld::allocate(int cap, int bondCap) {
 void ParticleWorld::freeAll() {
     if (!x_) return;
     cudaDeviceSynchronize();
-    dfree(x_), dfree(x0_), dfree(v_), dfree(dx_), dfree(q_), dfree(w_), dfree(phase_), dfree(rho_), dfree(contacts_), dfree(contactsNext_);
+    dfree(x_), dfree(x0_), dfree(v_), dfree(kv_), dfree(dx_), dfree(q_), dfree(w_), dfree(phase_), dfree(rho_), dfree(contacts_), dfree(contactsNext_);
     dfree(key_), dfree(keySorted_), dfree(id_), dfree(idSorted_), dfree(xs_), dfree(vs_), dfree(ns_), dfree(phs_), dfree(psi_), dfree(psis_), dfree(code_), dfree(lam_), dfree(rhos_), dfree(nbrFlag_), dfree(nbr_), dfree(nbrCount_);
     dfree(cellStart_), dfree(cellEnd_);
     if (sortTemp_) cudaFree(sortTemp_);
@@ -1214,7 +1249,7 @@ void ParticleWorld::record(float dt, cudaStream_t st) {
     g_prof.begin(st);
     for (int s = 0; s < subs; ++s) {
         const float sdt = dt / float(subs);
-        kPredict<<<nB, kBlock, 0, st>>>(n_, x_, x0_, v_, w_, gSub_ + s, sdt);
+        kPredict<<<nB, kBlock, 0, st>>>(n_, x_, x0_, v_, w_, kv_, gSub_ + s, sdt);
         g_prof.mark("tahmin");
         // neighbours
         kKeys<<<nB, kBlock, 0, st>>>(n_, x_, key_, id_, invH, mask);
@@ -1242,9 +1277,10 @@ void ParticleWorld::record(float dt, cudaStream_t st) {
             }
             if (nb_ && P.bonds && it < bondIters) {
                 const float invDt2 = 1.0f / (sdt * sdt);
+                const float gammaK = P.bondDamping / (sdt * sdt * sdt);   // gamma = alpha~ beta / h = compliance * beta / h^3
                 for (size_t c = 0; c + 1 < colourOffset_.size(); ++c) {
                     const int f = colourOffset_[c], cnt = colourOffset_[c + 1] - f;
-                    if (cnt > 0) kBonds<<<blocks(cnt), kBlock, 0, st>>>(f, cnt, bEnds_, bProp_, bLam_, bBroken_, x_, w_, invDt2);
+                    if (cnt > 0) kBonds<<<blocks(cnt), kBlock, 0, st>>>(f, cnt, bEnds_, bProp_, bLam_, bBroken_, x_, x0_, w_, invDt2, gammaK);
                 }
             }
             g_prof.mark("bag");
@@ -1255,7 +1291,7 @@ void ParticleWorld::record(float dt, cudaStream_t st) {
             }
             g_prof.mark("duzlem_kati");
         }
-        kVelocity<<<nB, kBlock, 0, st>>>(n_, x_, x0_, v_, w_, 1.0f / sdt, P.maxSpeed);
+        kVelocity<<<nB, kBlock, 0, st>>>(n_, x_, x0_, v_, w_, kv_, 1.0f / sdt, P.maxSpeed);
         g_prof.mark("hiz");
         const bool div = P.density && P.divergenceIters > 0, visc = P.xsph > 0.0f || P.cohesion > 0.0f || P.tension > 0.0f;
         if (div || visc) {
@@ -1354,6 +1390,45 @@ void ParticleWorld::placeGroup(int group, float3 offset, float3 velocity) {
     const float4 fr[2] = {make_float4(c0.x + offset.x, c0.y + offset.y, c0.z + offset.z, 0.0f), make_float4(0, 0, 0, 1)};
     PCUDA(cudaMemcpyAsync(groupFrame_ + 2 * group, fr, sizeof(fr), cudaMemcpyHostToDevice, stream_));
     PCUDA(cudaStreamSynchronize(stream_));
+}
+
+void ParticleWorld::setKinematic(int first, int count) {
+    for (int i = first; i < first + count && i < int(hw_.size()); ++i) hw_[size_t(i)] = 0.0f;
+}
+
+void ParticleWorld::driveKinematic(const uint32_t* dIdx, const float3* dTarget, int n, float dt, cudaStream_t s) {
+    if (n <= 0) return;
+    kDrive<<<blocks(n), kBlock, 0, s ? s : stream_>>>(n, dIdx, dTarget, x_, kv_, 1.0f / dt);
+}
+
+void ParticleWorld::addVelocity(const std::vector<uint32_t>& idx, const std::vector<float3>& dv) {
+    const int n = int(idx.size());
+    if (n <= 0) return;
+    uint32_t* di = dalloc<uint32_t>(n);
+    float3* dd = dalloc<float3>(n);
+    PCUDA(cudaMemcpy(di, idx.data(), size_t(n) * sizeof(uint32_t), cudaMemcpyHostToDevice));
+    PCUDA(cudaMemcpy(dd, dv.data(), size_t(n) * sizeof(float3), cudaMemcpyHostToDevice));
+    kAddVel<<<blocks(n), kBlock, 0, stream_>>>(n, di, dd, v_, w_);
+    PCUDA(cudaStreamSynchronize(stream_));
+    cudaFree(di);
+    cudaFree(dd);
+}
+
+int ParticleWorld::breakBondsOf(const std::vector<uint32_t>& particles) {
+    if (!nb_ || particles.empty()) return 0;
+    std::vector<uint8_t> mark(size_t(n_), 0);
+    for (uint32_t i : particles)
+        if (int(i) < n_) mark[i] = 1;
+    uint8_t* dm = dalloc<uint8_t>(n_);
+    int* cnt = dalloc<int>(1);
+    PCUDA(cudaMemcpy(dm, mark.data(), size_t(n_), cudaMemcpyHostToDevice));
+    kBreakMarked<<<blocks(nb_), kBlock, 0, stream_>>>(nb_, bEnds_, dm, bBroken_, cnt);
+    PCUDA(cudaStreamSynchronize(stream_));
+    int hcount = 0;
+    PCUDA(cudaMemcpy(&hcount, cnt, sizeof(int), cudaMemcpyDeviceToHost));
+    cudaFree(dm);
+    cudaFree(cnt);
+    return hcount;
 }
 
 int ParticleWorld::breakBondsInSphere(float3 c, float r) {

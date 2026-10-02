@@ -15,10 +15,17 @@ __device__ float3 turn(const float* m, float3 v) {
     return make_float3(m[0] * v.x + m[1] * v.y + m[2] * v.z, m[4] * v.x + m[5] * v.y + m[6] * v.z, m[8] * v.x + m[9] * v.y + m[10] * v.z);
 }
 
-__global__ void kSkin(const SkinBind* bind, int nv, const float3* particles, const uint8_t* particleBone, const float* boneXf, float3* outPos, float3* outNrm) {
+__global__ void kSkin(const SkinBind* bind, int nv, const float3* particles, const uint8_t* particleBone, const float* boneXf, const float* tint,
+                      float tearDistance, float3* outPos, float3* outNrm) {
     const int v = blockIdx.x * blockDim.x + threadIdx.x;
     if (v >= nv) return;
     const SkinBind b = bind[v];
+    if (tint)
+        for (int k = 0; k < 4; ++k)
+            if (b.w[k] > 0.0f && tint[b.p[k]] >= 0.5f) {
+                outPos[v] = make_float3(__int_as_float(0x7fc00000), 0.0f, 0.0f);
+                return;
+            }
     float3 c = make_float3(0, 0, 0), off = make_float3(0, 0, 0), n = make_float3(0, 0, 0);
     for (int k = 0; k < 4; ++k) {
         if (b.w[k] <= 0.0f) continue;
@@ -28,6 +35,15 @@ __global__ void kSkin(const SkinBind* bind, int nv, const float3* particles, con
         off = off + turn(m, b.offset) * b.w[k];
         n = n + turn(m, b.normal) * b.w[k];
     }
+    if (tearDistance > 0.0f)
+        for (int k = 0; k < 4; ++k) {
+            if (b.w[k] <= 0.0f) continue;
+            const float3 d = particles[b.p[k]] - c;
+            if (dot(d, d) > tearDistance * tearDistance) {
+                outPos[v] = make_float3(__int_as_float(0x7fc00000), 0.0f, 0.0f);
+                return;
+            }
+        }
     outPos[v] = c + off;
     const float l = sqrtf(dot(n, n));
     outNrm[v] = l > 1e-12f ? n / l : b.normal;
@@ -73,8 +89,8 @@ void launchGatherParticles(const float3* pos, const float* tint, const uint32_t*
     kGather<<<(n + 255) / 256, 256, 0, s>>>(pos, tint, idx, n, outPos, outTint, hideLiquid);
 }
 
-void launchSkin(const SkinBind* bind, int vertices, const float3* particles, const uint8_t* particleBone, const float* boneXf, float3* outPos,
-                float3* outNrm, cudaStream_t s) {
+void launchSkin(const SkinBind* bind, int vertices, const float3* particles, const uint8_t* particleBone, const float* boneXf, const float* tint,
+                float tearDistance, float3* outPos, float3* outNrm, cudaStream_t s) {
     if (vertices <= 0) return;
-    kSkin<<<(vertices + 255) / 256, 256, 0, s>>>(bind, vertices, particles, particleBone, boneXf, outPos, outNrm);
+    kSkin<<<(vertices + 255) / 256, 256, 0, s>>>(bind, vertices, particles, particleBone, boneXf, tint, tearDistance, outPos, outNrm);
 }

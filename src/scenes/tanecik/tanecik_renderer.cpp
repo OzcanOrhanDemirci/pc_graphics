@@ -292,9 +292,9 @@ void TanecikRenderer::setSkinBinding(const std::vector<SkinBind>& bind, const st
     bindCount_ = int(bind.size());
 }
 
-void TanecikRenderer::deformSkin(const float3* dParticles) {
+void TanecikRenderer::deformSkin(const float3* dParticles, const float* dTint) {
     if (!bindCount_ || gas_.size() <= TK_SKIN || bindCount_ != meshVerts_[TK_SKIN]) return;
-    launchSkin(dBind_, bindCount_, dParticles, dParticleBone_, dBoneXf_, const_cast<float3*>(meshes_[TK_SKIN].pos),
+    launchSkin(dBind_, bindCount_, dParticles, dParticleBone_, dBoneXf_, dTint, skinTearDistance, const_cast<float3*>(meshes_[TK_SKIN].pos),
                const_cast<float3*>(meshes_[TK_SKIN].nrm), stream_);
     buildMeshGas(TK_SKIN, true);
     buildIAS();

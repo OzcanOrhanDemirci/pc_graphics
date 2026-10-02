@@ -11,7 +11,10 @@ enum PartKind : uint8_t { PK_TISSUE = 0, PK_SKIN = 1, PK_BONE = 2 };
 enum BondKind : uint8_t {
     BK_TISSUE = 0,   // tissue to tissue (or to skin), within a bone or across a joint
     BK_SKIN = 1,     // skin to skin: the membrane
-    BK_ATTACH = 2    // tissue or skin to its own bone
+    BK_ATTACH = 2,   // tissue or skin to its own bone
+    BK_LOOSE = 3     // any other pair closer than the contact distance at rest (the jittered lattice puts some there): weak
+                     // and quick to break, else the solver's contact would push them apart against their neighbours' bonds
+                     // (measured: 132 particles shaking at up to 0.4 m/s in a body at rest)
 };
 
 struct BodyBond {
@@ -70,4 +73,4 @@ std::vector<SkinBind> bindSkin(const TriMesh& skin, const BodyParticles& body, c
 bool bonesAdjacent(int a, int b);   // the same bone, or parent and child
 // bonds between particles closer than bondRadius; a bone thinner than minBoneRadius takes the particles within that
 // radius of its axis (else a finger bone between lattice points would be empty)
-BodyGraph buildBodyGraph(const BodyParticles& body, float bondRadius, float minBoneRadius);
+BodyGraph buildBodyGraph(const BodyParticles& body, float bondRadius, float minBoneRadius, float contactDistance = 0.0f);
