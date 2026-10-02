@@ -3,6 +3,38 @@
 > Tek kaynak durum panosu. Plan ve Özcan'ın sözleri `docs/yikim/PLAN.md`'de.
 
 ## Şu an
+- **2026-10-02 (gece) · Gökdelenin göçüşü artık ağır çekimde değil: temas iki kat hızlı.** Özcan: *"Sadece gökdelende
+  sanırım fps + büyük yapı olmasından dolayı ağır çekimde gibi yıkılıyor. Bunu optimize edip düzeltir misin. Ağır
+  çekimde değilken yıkım yavaş yani."* Ara durumda: *"gerçek zamanlı olması şart değil, iyi bir optimizasyon yapmış
+  olduk. %70-80 yeterli."* Sonra: *"belirgin iyileştiyse artık yeterli. İşleri toparlayıp tamamlayabilirsin."*
+  - **Sebep:** pencere karede en çok bir fizik adımı atar; adım 16,7 ms'yi geçince dünya yavaşlar. Gökdelenin göçüşünde
+    adım 40-50 ms'ydi. Payı temas: enkaz yığınında çift başına ~18 gerçekten iç içe nokta, alt adım başına 4 yineleme,
+    karede 40 alt adım.
+  - **Ölçüldü** (gökdelen 7; `--set test.perf=1`: her saniye adımın ortalaması ve en kötüsü):
+
+    | | Önce | Şimdi |
+    | --- | --- | --- |
+    | Ayakta | 11,5 ms | 11-12 ms |
+    | Göçüş (t 20-28 sn) | 40-48 ms | 20-23 ms |
+    | Enkaz otururken (t 30-35 sn, ~26 bin temas yaması) | 49-50 ms | 25-29 ms |
+    | Pencerede (`--autotest`, dünya saati / duvar saati) | ~15-25 fps | göçüşte 40-53 fps; dünya gerçeğin %73'ü (göçüş), %66'sı (göçüş sonu ve enkaz) |
+
+  - **Yapılanlar** (`phys.cu`; ayrıntı "Mimari" ve "Hızlandırmada öğrenilenler"): ayrı dar faz (`kNarrow`, çift başına
+    bir iş parçacığı); çift başına 8 şerit (`kTile`, bir warp'ta dört çift); toplam örneği 256'yı aşan büyük çiftler
+    tam warp'la yan kolda, ilk yinelemenin noktalarını saklayıp yeniden çözer; örnekler kutulu 32'lik gruplarda;
+    temaslar arayüzlerle aynı anda (arayüzler ve zemin temasları yüksek öncelikli kolda, temaslar entegrasyon sonrası
+    konumların kopyasında); çiftin konumu float yer değiştirme; `__launch_bounds__(128, 4)`.
+  - **Determinizm:** ölçerken gökdelenin 7'deki göçüşü iki koşuda farklı çıktı (24. sn'de 50 bin / 101 bin kırık lif);
+    kaydedilmiş kod da öyleydi, apartmanınki değildi. Sebep sürtünme çapası tablosu (yolda başka çiftin bayat yuvasını
+    kapmak); tablo artık kareler arasında yeniden kuruluyor. Gökdelen 7 dört koşuda 24. sn'ye kadar birebir, apartman 8
+    iki koşuda birebir. **Açık:** gökdelenin 35. sn'si iki koşuda ayrıldı (çatı ötelemesi 75,3 / 76,6 m); ikinci bir
+    kaynak var, bulunmadı.
+  - Testler 32/34 (aynı iki konsol). Üç yapının tablosu yeniden ölçüldü (aşağıda); nitelik aynı, apartmanın 9'unda çatı
+    11,5 yerine 12,7 m iner. Köşe kolona dengeli top: ayak 3,0 m fırladı, gövde devrilip 1,65 m indi.
+  - **Açık (önceden de):** ev ayakta 19-21 ms (gerçek zamanın ~%85'i): profilde 28 ms'nin 20,6'sı arayüz renk geçişleri,
+    temas değil; evin graf boyaması çok renkli.
+  - Tanı: `--set test.perf=1` (saniye saniye fizik), `--set test.profile_at="s s"` (o an bir kare çekirdek çekirdek,
+    temas geçişinin parçaları ayrı); `--autotest` artık gökdeleni 7'de göçertip dünya saatini yazar.
 - **2026-10-02 (akşam) · Üç yapı: apartman, gökdelen, ev; çözücüde temas payı düzeltildi.** Özcan: *"yıkım moduna 3 çeşit
   bina ekleyelim. Biri zaten bu apartman. Diğeri gökdelen olsun. Çok upuzun bir bina. Gerçekçi upuzun. Zaten beton ve
   duvar temelimiz hazır. Sadece şekli değiştireceğiz. Bir de yer evi olsun. Yine aynı malzemelerle daha basit villamsız
@@ -196,13 +228,18 @@
 - **Çözücü: XPBD, küçük adımlar.** Varsayılan 40 alt adım × 2 arayüz geçişi, 60 Hz kare. Arayüzler graf boyamayla
   renklenir, renk renk Gauss-Seidel; arayüz içinde lifler sırayla, dönmeler birinci dereceden (arayüz başına bir kez
   matris). Konumlar double (20 m'de float 2 µm çözer, alt adım hareketi µm).
-- **Temas: çift başına bir warp.** Bir cismin örnek noktaları (yüze 5 mm içeri çekilmiş köşe, kenar ve yüz noktaları)
-  ötekinin düzlemlerine karşı. Her yinelemede noktaların normal düzeltmesinin ortalaması, sonra yamanın merkezinde tek
-  sürtünme; 4 yineleme. **Sürtünme çapası** (PhysX gibi): ilk temasta yama merkezi iki cisme iğnelenir, statik sürtünme
+- **Temas: önce dar faz, sonra çift başına 8 şerit** (10-02 gecesine kadar çift başına bir warp; bkz. "Hızlandırmada
+  öğrenilenler"). Dar faz çift başına bir iş parçacığıyla kutu testini yapar, değebilecek çiftleri listeler; bir warp
+  dört çifti çözer, iki cismin toplam örneği 256'yı aşan büyük çiftler tam warp'la yan kolda. Bir cismin örnek noktaları
+  (yüze 5 mm içeri çekilmiş köşe, kenar ve yüz noktaları; kutusu olan 32'lik yakın gruplarda, karşı kutuya erişmeyen
+  grup atlanır) ötekinin düzlemlerine karşı. Her yinelemede noktaların normal düzeltmesinin ortalaması, sonra yamanın
+  merkezinde tek sürtünme; 4 yineleme (büyük çift sonraki yinelemelerde ilkinin bulduğu noktaları yeniden çözer). **Sürtünme çapası** (PhysX gibi): ilk temasta yama merkezi iki cisme iğnelenir, statik sürtünme
   iğneleri μs·N bütçesiyle birleştirir; tutamazsa kayar (bütçe μd·N, iğneler taşınır). Hız geçişi yalnız kalan
   bütçeyi harcar; çarpma katsayısı ve burulma sürtünmesi yama merkezinde. Cisimler arası Jacobi (çift sayısına bölünür).
 - **Alt adım döngüsü bir CUDA Graph**; ayar ya da dt değişince yeniden yakalanır. Zemin = 0. cisim (kinematik),
-  her alt adımın zemin konumu cihaza yazılır (deprem için hazır).
+  her alt adımın zemin konumu cihaza yazılır (deprem için hazır). Alt adımda arayüzler (ardından zemin temasları)
+  yüksek öncelikli bir kolda, cisim temasları onlarla aynı anda: temaslar entegrasyondan hemen sonraki konumların
+  kopyasını okur, düzeltmeleri `kApply`'da arayüzlerin düzelttiği konumlara eklenir (iki grup arasında Jacobi).
 
 ## Ölçümler (RTX 4080, `--test`, varsayılan 40×2)
 | Test | Ölçülen | Beklenen |
@@ -357,21 +394,49 @@ yumuşaklığı Y1'de doğal periyotla ölçülecek; gerekirse alt adım artar.
   tavan yalnız sekme hızı / 2 m/s.
 - **Yakalayıcı "bir karede 3 kat" kuralı iki karede biriken fırlamayı kaçırdı:** izleme (`test.watch`) buldu.
 
-## Büyüklükler, üç yapı (10-02 akşam, temas payı düzeltmesinden sonra; `--set yapi=... --set deprem.magnitude=M`)
-Ölçüm sarsıntı bittikten ~8 sn sonra. En hızlı parça her koşuda yapının tepesinden serbest düşüşün altında (apartman
-17,5 / 17,8, gökdelen 43,7 / 43,8, ev 7,6 / 11,6 m/s).
+## Hızlandırmada öğrenilenler (10-02 gece, ölçülerek)
+Gökdelenin göçüşü: fizik adımı 40-50 → 20-23 ms. Ölçü `--set test.perf=1` (her saniye adımın ortalaması ve en kötüsü,
+CUDA Graph'la) ve `--set test.profile_at="s s"` (o anda bir kare çekirdek çekirdek; temas geçişinin parçaları ayrı).
+- **İlk sezgi ölçülünce boş çıktı:** nokta başına double farkları ve kuaterniyon eylemsizliği dışarı almak (4080 double'ı
+  float'ın 1/64'ü hızında koşar) ölçülebilir kazanç vermedi. Temas çekirdeğinin bölümlerine `clock64` sayacı koyunca
+  yük göründü: sonraki yinelemelerin yeniden taramaları %56, ilk tarama %30, sürtünme %5. Alt adım başına 3,3 milyon
+  örnek testinin onda biri karşı kutudaydı, onların %90'ı gerçekten iç içe (enkaz yığını).
+- **Sonucu değiştiren kestirme kullanılamaz:** temas yinelemesi 4 → 1, adım 16 ms; ama gökdelen 7'de hiç yıkılmadı.
+- **Çekirdek hesapla değil beklemeyle sınırlı:** `__launch_bounds__(128, 4)` (166 → 128 yazmaç, biraz taşma) %20-25
+  kazandırdı; SM başına blok sayısını 2-3'e kısmak (arayüzlere yer açmak için) %40 kötüleştirdi; uzak örnek gruplarını
+  atlamak testlerin %90'ını attı ama süreyi yalnız ~%8 kısalttı. Kazandıranlar bekleme zincirini paylaştıranlar: dar faz
+  ayrı (bir şerit bir çift), çift başına 8 şerit (dört çift bir warp'ta; 4 şerit kötü, 16 aynı), yama başına ~%30.
+- **Paylaşılan bellek her yerde kazandırmaz:** karşı cismin düzlemlerini ve örnek grubunu paylaşılan belleğe önceden
+  yüklemek kazandırmadı; blok başına 23 KB doluluğu düşürüp küçük çiftleri yavaşlattı (19 → 31 ns/çift). Kaldırılıp
+  düzlem döngüsü erken çıkışsız yapılınca 19 → 16 ns. İlk yinelemenin noktalarını saklayıp sonrakilerde yalnız onları
+  çözmek büyük çiftte işe yaradı (44 → 30 ns), küçükte yavaşlattı: yalnız büyük çiftte.
+- **En büyük tek adım boşta kalan kartı kullanmak:** arayüzler alt adım başına 26 küçük çekirdek, her biri birkaç SM'de;
+  kartın geri kalanı bekliyordu. Temaslar arayüzlerle aynı anda (ayrı kolda), zemin temasları da arayüz kolunda:
+  24,5-27 → 19-22 ms.
+- **Paralelleştirince determinizmi yeniden sına; büyük sahnede:** iki yeni yarış önceden kapatıldı (dar faz bağın canlı
+  sayısını arayüzler yazarken okuyordu → alt adım başındaki kopya `aliveC`; büyük çiftin noktaları atomik sayaçla
+  kaydediliyordu → ballot ile örnek sırası). Gökdelen yine de iki koşuda farklı çıktı; kaydedilmiş kod da öyleydi:
+  sürtünme çapası tablosunda bayat yuvayı yolda kapmak (bkz. `anchorSlot`). Yığın testi ve apartman bunu göstermiyordu.
+  Düzeltmeden sonra gökdelen 7 dört koşuda 24. sn'ye kadar birebir; ama 35. sn'de iki koşu ayrıldı (çatı ötelemesi
+  75,3 / 76,6 m). **Açık:** bir kaynak daha var, bulunmadı (iş toparlanırken bırakıldı).
+- **Ölçüm gürültüsü ve betik:** aynı kod farklı saatlerde ±%10 oynadı (ayakta 10,9 ile 12,2 ms); küçük farkı tek
+  koşudan okuma, A/B'yi aynı oturumda arka arkaya yap. A/B betiğim bir sürümü kendi üstüne kopyalayamayınca sessizce
+  eskisini derleyip ölçtü ("fark yok" diye okundu); betik artık kopyalayamazsa duruyor.
+
+## Büyüklükler, üç yapı (10-02 gece, temas hızlandırmasından sonra; `--set yapi=... --set deprem.magnitude=M`)
+Ölçüm sarsıntı bittikten ~8 sn sonra, her biri bir koşu. En hızlı parça her koşuda yapının tepesinden serbest düşüşün
+altında (apartman 17,5 / 17,8, gökdelen 43,6 / 43,8, ev 7,3 / 11,6 m/s). Bir önceki ölçümden (10-02 akşam, temas payı
+düzeltmesinden sonra) farkı parantezde.
 
 | Büyüklük | Apartman | Gökdelen | Ev |
 |---|---|---|---|
 | 3 · Zayıf | kırık 0 (25 çatlak) | ölçülmedi | ölçülmedi |
-| 4 · Hafif | kırık 0 (974 çatlak) | ölçülmedi | ölçülmedi |
-| 5 · Orta | 116 kırık lif, öteleme %0,06 | kırık 0, öteleme %0,04 | kırık 0 |
-| 6 · Kuvvetli | 730, korkuluklar dökülür | kırık 0, öteleme %0,07 (kılcal çatlaklar) | 2 çatlak |
-| 7 · Şiddetli | 2.791, öteleme %0,59, ayakta | zemin kat gider, kule bütün olarak devrilir | 6 çatlak |
+| 4 · Hafif | kırık 0 (965 çatlak; 974) | ölçülmedi | ölçülmedi |
+| 5 · Orta | 130 kırık lif (116), öteleme %0,06 | kırık 0, öteleme %0,04 | kırık 0 |
+| 6 · Kuvvetli | 815 (730), korkuluklar dökülür | kırık 0, öteleme %0,07 (kılcal çatlaklar) | 2 çatlak |
+| 7 · Şiddetli | 2.772 (2.791), öteleme %0,60, ayakta | zemin kat gider, kule bütün olarak devrilir | 6 çatlak |
 | 8 · Yıkıcı | göçer, çatı 13,5 m iner | ölçülmedi | göçer, çatı 2,4 m iner |
-| 9 · Felaket | göçer, çatı 11,5 m iner | göçer (çatı 96 m) | göçer, çatı 2,3 m iner (*) |
-
-(*) Evin 5, 7 ve 9'u temas payı düzeltmesinden önce ölçüldü.
+| 9 · Felaket | göçer, çatı 12,7 m iner (11,5) | göçer (çatı 96 m) | göçer, çatı 2,4 m iner |
 
 ## Büyüklükler (10-02, temas payı düzeltmesinden önce; `--scene yikim --clip sarsinti --still T --set deprem.magnitude=M`)
 Dalga kaynakları: 3-4 Bayraklı, 5-6 İzmit, 7 Yarımca, 8-9 Antakya. Bina ölçümü sarsıntı bittikten ~8 sn sonra.

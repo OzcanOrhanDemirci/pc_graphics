@@ -4,6 +4,11 @@
 > `docs/altinsaat/`, `docs/fener/`, `docs/yikim/` (PLAN.md ve DURUM.md).
 
 ## Şu an
+- **2026-10-02 (gece) · Gökdelenin göçüşü hızlandı.** Özcan: *"gökdelende [...] ağır çekimde gibi yıkılıyor. Bunu
+  optimize edip düzeltir misin."* Temas çözümü iki kat hızlı; göçüşte fizik adımı 40-50 → 20-23 ms, pencerede dünya
+  gerçeğin ~%35-40'ından %66-73'üne. Sürtünme çapası tablosundaki bir yarış (gökdelen her koşuda farklı yıkılıyordu)
+  düzeltildi; 24. sn sonrası için bir kaynak açık. `--autotest` gökdeleni 7'de göçertip dünya saatini yazar. Ayrıntı ve
+  ölçümler `docs/yikim/DURUM.md`.
 - **2026-10-02 (akşam) · İngilizce, üç yapı.** Özcan: *"Şimdi projeme ingilizce dil desteği ekle. Tüm proje ingilizce de
   olabilsin. Ayrıca yıkım moduna 3 çeşit bina ekleyelim. [...] Diğeri gökdelen olsun. Çok upuzun bir bina. Gerçekçi
   upuzun. [...] Bir de yer evi olsun. [...] Üçgen çatılı falan."*

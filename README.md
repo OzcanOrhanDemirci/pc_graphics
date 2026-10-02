@@ -204,16 +204,16 @@ holds together under real earthquake records.
 | --- | --- |
 | **Bodies** | Rigid convex pieces: 3,006 in the apartment block, 8,404 in the tower, 456 in the house (column and beam segments, slab panels, shear walls, brick blocks, balconies, roofs), each with its own hull, mass and inertia. Positions in double precision. Slanting pieces (the roof, the gables) are boxes cut by planes; two pieces cut by the same plane from opposite sides are glued across it, with fibres drawn from a fine sampling of where both are. |
 | **Bonds** | 6,857 interfaces carrying 44,378 fibres, after the applied element method: concrete cracks in tension and crushes in compression (30 % residual), bars yield and snap at 6 cm of plastic elongation, shear is cohesion and then friction plus dowel action. What exceeds a capacity becomes a permanent offset, so a column that has hinged stays bent. |
-| **Solver** | XPBD on the GPU, 40 substeps a frame. Interfaces are solved Gauss-Seidel in 13 graph colours (the lower bound: the most interfaces on one body), with the multiplier accumulated across passes so capacities bound the total force. Contacts are Jacobi, and both bodies of a pair take the same share (one over the larger of their contact counts), so a pair keeps its momentum. The substep loop is a CUDA graph; its time comes from the colour passes more than from the piece count (~15-17 ms for both the apartment block and the tower with 2.8 times as many pieces). |
-| **Contact** | One warp per pair of bodies: sample points against the other hull's planes, normal corrections averaged within the pair, then one friction impulse at the patch centre with static and dynamic budgets and anchors (as in PhysX), torsional friction and restitution. |
-| **Determinism** | Contact and interface sums in 2⁻⁴⁰ fixed point instead of floating-point atomics: the same earthquake brings the same building down the same way, every run. |
+| **Solver** | XPBD on the GPU, 40 substeps a frame. Interfaces are solved Gauss-Seidel in 13 graph colours (the lower bound: the most interfaces on one body), with the multiplier accumulated across passes so capacities bound the total force. Contacts are Jacobi, and both bodies of a pair take the same share (one over the larger of their contact counts), so a pair keeps its momentum. The substep loop is a CUDA graph with branches: the interfaces on a high-priority branch while the contacts work on a copy of the poses taken after the integration (Jacobi between the two). Standing, its time comes from the colour passes more than from the piece count (11-15 ms for both the apartment block and the tower with 2.8 times as many pieces); during the tower's collapse 20-23 ms. |
+| **Contact** | A narrow phase lists the pairs whose boxes can touch (one thread a pair); then eight lanes a pair, four pairs to a warp, and the big pairs (two slabs pancaked face to face) a whole warp each on a branch of their own. Sample points, in chunks culled by their boxes, against the other hull's planes; normal corrections averaged within the pair, then one friction impulse at the patch centre with static and dynamic budgets and anchors (as in PhysX), torsional friction and restitution. |
+| **Determinism** | Contact and interface sums in 2⁻⁴⁰ fixed point instead of floating-point atomics, and nothing else left to the order threads arrive in (the friction anchors' table is rebuilt between frames): the same earthquake brings the same building down the same way, every run. One gap is open: the tower's collapse matches to 24 s, and has once parted later. |
 | **Damping** | 5.3 % of critical, measured from free vibration: mass-proportional, relative to the ground, bonded bodies only, with capped accelerations so falling debris stays free. |
 | **Earthquakes** | By magnitude, 3 to 9: what the building feels from a quake of that size some 15 km away. Each is made from the waveform of a real strong-motion record (ESM and AFAD TADAS: 2023 Antakya, 1999 Yarımca and İzmit, 2020 Bayraklı), cut to the strong-motion length that size brings, played faster for the small ones, scaled to that size's peak ground acceleration and baseline-corrected so the ground ends where it started; then integrated twice to the ground's displacement. A game's scale, not a seismological one: magnitude alone does not fix the shaking. Longer, or until stopped, the strong part becomes a seamless loop: its end blended into its start, integrated around the loop with the mean of acceleration and velocity taken out (the ground does not drift), played under an envelope with the record's own rise and fall. Stopping fades the ground out over 1.5 s. |
 | **Wrecking ball** | A cast steel ball from the camera's side to the clicked point, at most one a second. Its power is a slider: size and speed together, from 0.52 t at 8 m/s (it barely moves a column) through the balanced 4.2 t at 14 m/s (breaks a corner column's foot out) to 11.4 t at 70 m/s (straight through the building), aimed for gravity. A body like the others, a convex hull of 256 tangent planes, shaded with the sphere's normal. The solver decides what breaks and what topples. |
 | **Picture** | OptiX: every piece an instance of its own hull, transforms written by the physics straight into the instance buffer, top level rebuilt every frame. Sun with soft shadows, sky, one bounce off the ground, a metre grid that rides the earthquake. Reinforcing bars are drawn from the fibres' state: across a crack while they hold, as bent stubs once they are gone. |
 | **Denoising** | Six samples a frame are grainy while things move. A light SVGF of our own: the lighting (beauty over albedo) is carried along each piece's own motion from frame to frame, checked by body, normal and distance, clamped to the new frame's neighbourhood when a shadow sweeps over it, then a-trous passes that stop at other bodies, normals, depth steps and lighting edges. 2.4 ms at 1080p. The OptiX AI denoiser is one key away (G): cleaner still, but it costs 9.7 ms and slows the physics that shares the GPU. |
 
-What each magnitude does to the three buildings (deterministic; measured ~8 s after the shaking ends; the fastest piece
+What each magnitude does to the three buildings (one run each, measured ~8 s after the shaking ends; the fastest piece
 in every run stays below a free fall from the building's top):
 
 | Magnitude | Peak ground acceleration | Strong shaking | Apartment block | Tower | House |
@@ -222,9 +222,9 @@ in every run stays below a free fall from the building's top):
 | 4 · light | 0.035 g | 5 s | hairline cracks | not measured | not measured |
 | 5 · moderate | 0.13 g | 8 s | cracks inside the bonds, nothing falls | nothing breaks | nothing breaks |
 | 6 · strong | 0.20 g | 14 s | balcony parapets and some ground-storey infill fall | hairline cracks, drift 0.07 % | two cracks |
-| 7 · severe | 0.33 g | 26 s | heavy damage, drift 0.59 %, the frame stands | soft storey: the lobby storey fails, the tower topples whole | six cracks |
+| 7 · severe | 0.33 g | 26 s | heavy damage, drift 0.60 %, the frame stands | soft storey: the lobby storey fails, the tower topples whole | six cracks |
 | 8 · destructive | 0.70 g | 32 s | soft-storey collapse, the roof drops 13.5 m | not measured | collapses |
-| 9 · catastrophic | 1.1 g | 45 s | collapse, the roof drops 11.5 m | collapses | collapses |
+| 9 · catastrophic | 1.1 g | 45 s | collapse, the roof drops 12.7 m | collapses | collapses |
 
 Under the real records at full scale (the apartment block, before the contact-share fix) it stood through 2020 Bayraklı, 1999 İzmit and 1999 Yarımca, and fell under 2023
 Antakya and Yarımca ×1.5. Pazarcık's record (3.0 g vector peak) sat right at the threshold: it brought the building down
@@ -269,6 +269,19 @@ Decisions worth reading:
   Rigid bodies make a cheaper filter work well: their motion is known exactly, so each surface point keeps its own
   history. Its first version left lit blotches where a falling building's shadow swept the ground; clamping the history
   to the new frame's neighbourhood removed them.
+- **A slow physics step is a slow world.** The window takes at most one step a frame, so the tower's collapse at
+  40 to 50 ms a step ran at a third of real time. A clock in each part of the contact kernel showed where the time went:
+  scanning the samples again in the later iterations (56 %) and the first scan (30 %), waiting on memory more than
+  computing. Cheaper arithmetic per point gave nothing measurable; a shortcut that changed the physics (one contact
+  iteration instead of four: 16 ms) left the tower standing at magnitude 7. What helped: a narrow phase of one thread
+  a pair, eight lanes a pair instead of a warp, the big pairs on a branch of their own reusing their first iteration's
+  points, and the contacts running alongside the interfaces, whose 26 small kernels a substep had left most of the GPU
+  idle. 20 to 23 ms during the collapse.
+- **Measuring it twice found a race.** Run twice, the tower's collapse came out differently (50 and 101 thousand
+  broken fibres at the same moment); the apartment block's did not. A pair could take another pair's stale slot in the
+  friction anchors' hash table on its way, and the anchor behind it was reset or not depending on which pair came
+  first. The table is rebuilt between frames now and a pair looks for its own entry first: the runs match to 24 s.
+  Past that they parted once (the roof's drift 75.3 against 76.6 m): a second source, not found yet.
 - **A cut face may share only a thin band.** The house's slanting roof and gables are boxes cut by planes; their bonds
   first came from a 4 x 4 grid spread over the box's face, and where the shared part was a thin slanting band the ridge
   got no fibre at all: 163 fibres broke while the house settled under its own weight. Sampling the shared part finely
