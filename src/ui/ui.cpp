@@ -477,10 +477,13 @@ void scissor(const Rect* r) {
 }
 
 // ---- text
+static bool g_turkishCase = true;
+void setTurkishCase(bool on) { g_turkishCase = on; }
+
 std::string upperTR(const std::string& s) {
     std::string out;
     for (int cp : decode(s)) {
-        if (cp == 'i') cp = 0x130;                     // i -> İ
+        if (cp == 'i') cp = g_turkishCase ? 0x130 : 'I';   // i -> İ (Turkish), I (English)
         else if (cp == 0x131) cp = 'I';                // ı -> I
         else if (cp >= 'a' && cp <= 'z') cp -= 32;
         else if (cp >= 0xE0 && cp <= 0xFE && cp != 0xF7) cp -= 32;            // Latin-1: ç ö ü â ...

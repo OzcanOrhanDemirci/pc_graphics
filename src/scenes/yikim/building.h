@@ -1,4 +1,6 @@
-// Scene 3 "Yikim": the apartment block. A 1990s reinforced-concrete frame (ground-floor shops, four floors of flats)
+// Scene 3 "Yikim": the buildings, all of the same concrete, steel and brick: the apartment block, a tower and a house.
+//
+// The apartment block: a 1990s reinforced-concrete frame (ground-floor shops, four floors of flats)
 // with hollow-brick infill walls and their window and door openings, front balconies, a flat roof with a parapet,
 // and water tanks and solar collectors standing loose on the roof. Every wall is a stack of blocks glued to each other
 // and to the frame with weak mortar (brick material); the shops' glass front leaves the ground storey soft.
@@ -22,13 +24,48 @@ struct ApartmentSpec {
     unsigned paint = 0xd9b99b, frameColor = 0xb8b4ac, tankColor = 0x2a2c30, collectorColor = 0x1f3550;
 };
 
-struct Apartment {
+struct Building {   // what a builder made
     std::vector<Piece> pieces;   // glued (frame, walls, balconies, parapets)
     std::vector<int> loose;      // bodies standing unglued on the roof
     double height = 0;           // roof level
     double width = 0, depth = 0; // footprint along x and z
 };
 
-Apartment buildApartment(PhysWorld& w, const ApartmentSpec& s, const PhysMaterial& concrete, const PhysMaterial& brick);
+Building buildApartment(PhysWorld& w, const ApartmentSpec& s, const PhysMaterial& concrete, const PhysMaterial& brick);
 ApartmentSpec apartmentSpecFromConfig(const Config& cfg);
 PhysMaterial brickFromConfig(const Config& cfg);
+
+// The tower: a reinforced-concrete frame around a shear-wall core (the lift shaft in the middle bay, no floor inside
+// it), brick infill with large windows on every side, a glass lobby at the front of the ground storey, a parapet. The
+// columns are larger than the apartment's (a frame of 30x50 cm columns would crush under twenty storeys); the
+// materials are the same.
+struct TowerSpec {
+    FrameSpec frame;
+    double coreT = 0.30, coreSeg = 2.2;          // core walls: thickness, segment length
+    double wallExt = 0.20, blockW = 1.5, blockH = 1.0;
+    float densityWall = 1100.0f;
+    double winW = 2.4, winH = 1.6, sill = 0.8;
+    double parapet = 1.0;
+    bool lobby = true;                           // the ground storey's front is glass (no wall): a soft storey
+    unsigned paint = 0xcfc8bc, frameColor = 0xb8b4ac;
+};
+Building buildTowerBlock(PhysWorld& w, const TowerSpec& s, const PhysMaterial& concrete, const PhysMaterial& brick);
+TowerSpec towerSpecFromConfig(const Config& cfg);
+
+// The house: one storey under its ceiling slab, brick walls with windows and a front door, and a gable roof: sloping
+// slabs (tiles on boards: light) meeting at the ridge, resting on concrete eave blocks along the long sides and on the
+// triangular brick gable walls, with a chimney. Pieces cut by the roof's planes are glued across them.
+struct HouseSpec {
+    FrameSpec frame;
+    double wallExt = 0.20, wallInt = 0.10, blockW = 0.9, blockH = 0.6;
+    float densityWall = 1100.0f;
+    double winW = 1.2, winH = 1.2, sill = 0.9, doorW = 1.0, doorH = 2.2;
+    double pitchDeg = 30.0, roofT = 0.12;        // roof slope and slab thickness
+    double overhang = 0.5, gableOverhang = 0.3;  // past the eaves and past the gable walls
+    double roofStrip = 1.6, eaveGap = 0.10;      // strip width along the ridge; the eave blocks' height at the outer edge
+    float densityRoof = 1000.0f;
+    bool roof = true, ridge = true, chimney = true;   // false: without (diagnosis)
+    unsigned paint = 0xe6dac4, frameColor = 0xb8b4ac, roofColor = 0x9b4a32, chimneyColor = 0x8a4b3a;
+};
+Building buildHouse(PhysWorld& w, const HouseSpec& s, const PhysMaterial& concrete, const PhysMaterial& brick);
+HouseSpec houseSpecFromConfig(const Config& cfg);

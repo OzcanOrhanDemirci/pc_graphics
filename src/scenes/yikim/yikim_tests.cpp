@@ -417,7 +417,7 @@ void testFrame(const Config& cfg) {
 void testBuilding(const Config& cfg) {
     PhysWorld w;
     const ApartmentSpec as = apartmentSpecFromConfig(cfg);
-    Apartment ap = buildApartment(w, as, concreteFromConfig(cfg), brickFromConfig(cfg));
+    Building ap = buildApartment(w, as, concreteFromConfig(cfg), brickFromConfig(cfg));
     applyParams(w);
     w.upload();
     w.settle(cfg.f("phys.settle_seconds", 2.0f), cfg.f("phys.settle_ramp", 0.5f), kDt);

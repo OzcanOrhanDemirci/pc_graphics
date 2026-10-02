@@ -53,6 +53,48 @@ static float steelRatio(int ka, int kb, const FrameSpec& s) {
     return std::min(r(ka), r(kb));
 }
 
+Poly piecePoly(const Piece& p) {
+    Poly q = polyAabb(p.lo, p.hi);
+    for (const PieceCut& c : p.cuts) polyClip(q, c.n, c.d, 0);
+    return q;
+}
+
+bool pieceContains(const Piece& p, double3 x, double eps) {
+    if (x.x < p.lo.x - eps || x.y < p.lo.y - eps || x.z < p.lo.z - eps || x.x > p.hi.x + eps || x.y > p.hi.y + eps || x.z > p.hi.z + eps)
+        return false;
+    for (const PieceCut& c : p.cuts)
+        if (ddot(c.n, x) > c.d + eps) return false;
+    return true;
+}
+
+// A cut piece owns only part of its box's faces, often a thin slanting band (where two roof slabs meet, a gable's
+// sloping edge): a 4 x 4 grid laid over the whole rectangle missed it (measured: the ridge got no fibre at all, the
+// gable tops carried the roof alone and tore while the house settled). The rectangle (centre c, axes u, v, half sizes
+// a, b) is sampled finely instead, the samples inside both pieces kept, and up to 16 of them, evenly in order, become
+// the fibres, sharing the kept area and the steel (ratio rho).
+static std::vector<FiberDesc> sharedFibres(float3 c, float3 u, float3 v, float a, float b, const Piece& A, const Piece* B, float rho) {
+    const int G = 24;
+    std::vector<float3> kept;
+    for (int i = 0; i < G; ++i)
+        for (int j = 0; j < G; ++j) {
+            const float3 x = c + u * (a * ((2.0f * i + 1.0f) / G - 1.0f)) + v * (b * ((2.0f * j + 1.0f) / G - 1.0f));
+            if (pieceContains(A, d3(x), 1e-5) && (!B || pieceContains(*B, d3(x), 1e-5))) kept.push_back(x);
+        }
+    std::vector<FiberDesc> out;
+    if (kept.empty()) return out;
+    const float area = 4.0f * a * b / float(G * G) * float(kept.size());
+    const int M = std::min<int>(16, int(kept.size()));
+    for (int k = 0; k < M; ++k) {
+        FiberDesc f;
+        f.p = kept[size_t(k) * kept.size() / size_t(M) + kept.size() / size_t(2 * M)];
+        f.as = rho * area / float(M);
+        f.ac = std::max(0.0f, area / float(M) - f.as);
+        out.push_back(f);
+    }
+    return out;
+}
+static bool isCut(const Piece& p) { return !p.cuts.empty(); }
+
 void glueTouching(PhysWorld& w, std::vector<Piece>& P, int mat, const FrameSpec& spec, bool groundBond) {
     const double eps = 1e-6, minSide = 0.05;
     for (size_t i = 0; i < P.size(); ++i) {
@@ -66,13 +108,16 @@ void glueTouching(PhysWorld& w, std::vector<Piece>& P, int mat, const FrameSpec&
             d.len = float(P[i].hi.y - P[i].lo.y) * 0.5f + 0.3f;   // the footing below grade
             d.mat = P[i].kind == PK_WALL && spec.matBrick >= 0 ? spec.matBrick : mat;
             const float As = steelRatio(P[i].kind, P[i].kind, spec) * float(4.0 * ax * az);
-            d.fibers = fibreGrid(make_float3(float((P[i].lo.x + P[i].hi.x) * 0.5), 0.0f, float((P[i].lo.z + P[i].hi.z) * 0.5)),
-                                 make_float3(1, 0, 0), make_float3(0, 0, 1), float(ax), float(az), As);
-            w.addInterface(d);
+            const float3 c0 = make_float3(float((P[i].lo.x + P[i].hi.x) * 0.5), 0.0f, float((P[i].lo.z + P[i].hi.z) * 0.5));
+            d.fibers = isCut(P[i]) ? sharedFibres(c0, make_float3(1, 0, 0), make_float3(0, 0, 1), float(ax), float(az), P[i], nullptr,
+                                                  steelRatio(P[i].kind, P[i].kind, spec))
+                                   : fibreGrid(c0, make_float3(1, 0, 0), make_float3(0, 0, 1), float(ax), float(az), As);
+            if (!d.fibers.empty()) w.addInterface(d);
         }
         for (size_t j = i + 1; j < P.size(); ++j) {
             const Piece &A = P[i], &B = P[j];
             for (int k = 0; k < 3; ++k) {
+                if (A.unglued & B.unglued & (1u << k)) continue;
                 const double aLo = (&A.lo.x)[k], aHi = (&A.hi.x)[k], bLo = (&B.lo.x)[k], bHi = (&B.hi.x)[k];
                 int dir = 0;
                 if (std::fabs(aHi - bLo) < eps) dir = 1;          // B on A's + side
@@ -102,11 +147,49 @@ void glueTouching(PhysWorld& w, std::vector<Piece>& P, int mat, const FrameSpec&
                 // (it did: the balcony parapets got bars of zero strength that still stiffened their base 1.8 times,
                 // and with it the tension that cracks it)
                 const float rho = brick ? 0.0f : A.rho >= 0 || B.rho >= 0 ? std::max(A.rho, B.rho) : steelRatio(A.kind, B.kind, spec);
-                d.fibers = fibreGrid(f3(c), u, v, float(hi1 - lo1) * 0.5f, float(hi2 - lo2) * 0.5f, rho * area);
-                w.addInterface(d);
+                d.fibers = isCut(A) || isCut(B) ? sharedFibres(f3(c), u, v, float(hi1 - lo1) * 0.5f, float(hi2 - lo2) * 0.5f, A, &B, rho)
+                                                : fibreGrid(f3(c), u, v, float(hi1 - lo1) * 0.5f, float(hi2 - lo2) * 0.5f, rho * area);
+                if (!d.fibers.empty()) w.addInterface(d);
             }
         }
     }
+    // cut against cut: two pieces cut by the same plane from opposite sides share it (a roof slab on the sloping top of a
+    // gable wall or an eave block). The shared region is found by sampling the plane over the boxes' overlap.
+    std::vector<size_t> cut;
+    for (size_t i = 0; i < P.size(); ++i)
+        if (!P[i].cuts.empty()) cut.push_back(i);
+    for (size_t ii = 0; ii < cut.size(); ++ii)
+        for (size_t jj = ii + 1; jj < cut.size(); ++jj) {
+            const Piece &A = P[cut[ii]], &B = P[cut[jj]];
+            for (const PieceCut& ca : A.cuts)
+                for (const PieceCut& cb : B.cuts) {
+                    if (dlength(ca.n + cb.n) > 1e-6 || std::fabs(ca.d + cb.d) > 1e-6) continue;
+                    const double3 lo = d3(std::max(A.lo.x, B.lo.x), std::max(A.lo.y, B.lo.y), std::max(A.lo.z, B.lo.z));
+                    const double3 hi = d3(std::min(A.hi.x, B.hi.x), std::min(A.hi.y, B.hi.y), std::min(A.hi.z, B.hi.z));
+                    if (hi.x < lo.x - 1e-6 || hi.y < lo.y - 1e-6 || hi.z < lo.z - 1e-6) continue;
+                    const double3 n = ca.n;
+                    const double3 e = std::fabs(n.y) < 0.9 ? d3(0, 1, 0) : d3(1, 0, 0);
+                    const double3 u = dnormalize(dcross(n, e)), v = dcross(n, u), o = n * ca.d;
+                    double s0 = 1e30, s1 = -1e30, t0 = 1e30, t1 = -1e30;
+                    for (int k = 0; k < 8; ++k) {
+                        const double3 c = d3(k & 1 ? hi.x : lo.x, k & 2 ? hi.y : lo.y, k & 4 ? hi.z : lo.z);
+                        s0 = std::min(s0, ddot(c - o, u)); s1 = std::max(s1, ddot(c - o, u));
+                        t0 = std::min(t0, ddot(c - o, v)); t1 = std::max(t1, ddot(c - o, v));
+                    }
+                    if (s1 - s0 < minSide || t1 - t0 < minSide) continue;
+                    InterfaceDesc d;
+                    d.a = A.body;
+                    d.b = B.body;
+                    d.n = f3(n);
+                    d.len = float(std::max(0.05, ddot(w.pos[B.body] - w.pos[A.body], n)));
+                    const bool brick = (A.kind == PK_WALL || B.kind == PK_WALL) && spec.matBrick >= 0;
+                    d.mat = brick ? spec.matBrick : mat;
+                    const float rho = brick ? 0.0f : A.rho >= 0 || B.rho >= 0 ? std::max(A.rho, B.rho) : steelRatio(A.kind, B.kind, spec);
+                    const double3 c = o + u * (0.5 * (s0 + s1)) + v * (0.5 * (t0 + t1));
+                    d.fibers = sharedFibres(f3(c), f3(u), f3(v), float(s1 - s0) * 0.5f, float(t1 - t0) * 0.5f, A, &B, rho);
+                    if (!d.fibers.empty()) w.addInterface(d);
+                }
+        }
 }
 
 // ---------------------------------------------------------------------------------------------------------
@@ -227,7 +310,7 @@ void addFramePieces(const FrameSpec& s, std::vector<Piece>& P) {
 void addPieceBodies(PhysWorld& w, std::vector<Piece>& P, const FrameSpec& s) {
     for (Piece& p : P) {
         const float rho = p.density > 0 ? p.density : p.kind == PK_SLAB ? s.densitySlab : s.densityConcrete;
-        p.body = w.addBody(polyAabb(p.lo, p.hi), rho, false, p.kind, p.color ? p.color : kindColor(p.kind));
+        p.body = w.addBody(p.cuts.empty() ? polyAabb(p.lo, p.hi) : piecePoly(p), rho, false, p.kind, p.color ? p.color : kindColor(p.kind));
     }
 }
 

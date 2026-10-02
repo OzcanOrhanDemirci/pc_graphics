@@ -52,6 +52,7 @@ struct PhysParams {
     // (a parapet's crushed bond lets it sink 2 cm into the beam, the overlap is pushed out when the last fibre goes;
     // measured, Pazarcik x1: 116 blocks kicked by more than 2 m/s in a frame; 0.5: 15, mostly struck by falling debris)
     float maxDepenetration = 0.5f;
+    float deepOverlap = 0.10f;     // m: a contact point deeper than this inside an unglued body pushes no more (0: always)
     float relax = 1.0f;            // relaxation of a body's pairs (Jacobi between pairs)
     int interfaceIters = 2;        // colour passes over the interfaces per substep
     int contactIters = 4;          // per pair: averaged normal pass + patch static friction, repeated

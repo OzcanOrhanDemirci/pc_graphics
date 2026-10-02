@@ -68,6 +68,12 @@ struct YikimApp {
         world.params.restitution = cfg.f("phys.restitution", world.params.restitution);
         world.params.dampAlpha = cfg.f("phys.damp_alpha", world.params.dampAlpha);
         world.params.maxDepenetration = cfg.f("phys.max_depenetration", world.params.maxDepenetration);
+        world.params.deepOverlap = cfg.f("phys.deep_overlap", world.params.deepOverlap);
+    }
+    // which building stands: "apartman" (the apartment block), "gokdelen" (the tower) or "ev" (the house); setting yapi
+    std::string building() const {
+        const auto it = cfg.values.find("yapi");
+        return it == cfg.values.end() || (it->second != "gokdelen" && it->second != "ev") ? std::string("apartman") : it->second;
     }
     void build() {
         if (cfg.values.count("scene") && cfg.values.at("scene") == "cerceve") {
@@ -75,14 +81,26 @@ struct YikimApp {
             pieces = buildFrame(world, spec, concreteFromConfig(cfg));
             loose.clear();
         } else {
-            const ApartmentSpec as = apartmentSpecFromConfig(cfg);
             PhysMaterial mc = concreteFromConfig(cfg), mb = brickFromConfig(cfg);
             if (cfg.i("test.elastic", 0))   // diagnosis: nothing can break; what still falls is not glued
                 for (PhysMaterial* m : {&mc, &mb}) m->ft = m->fc = m->cohesion = m->fy = 1e12f;
-            Apartment ap = buildApartment(world, as, mc, mb);
-            spec = as.frame;
-            pieces = std::move(ap.pieces);
-            loose = std::move(ap.loose);
+            Building b;
+            const std::string y = building();
+            if (y == "gokdelen") {
+                const TowerSpec ts = towerSpecFromConfig(cfg);
+                b = buildTowerBlock(world, ts, mc, mb);
+                spec = ts.frame;
+            } else if (y == "ev") {
+                const HouseSpec hs = houseSpecFromConfig(cfg);
+                b = buildHouse(world, hs, mc, mb);
+                spec = hs.frame;
+            } else {
+                const ApartmentSpec as = apartmentSpecFromConfig(cfg);
+                b = buildApartment(world, as, mc, mb);
+                spec = as.frame;
+            }
+            pieces = std::move(b.pieces);
+            loose = std::move(b.loose);
         }
         {   // the wrecking balls a click throws: cast steel in a few sizes (the power picks one), frozen far below the
             // ground until then
@@ -116,9 +134,24 @@ struct YikimApp {
         world.upload();
         {   // the building settles under its own weight before anything happens (hidden)
             const double t0 = ynow();
+            const std::vector<double3> built = world.pos;
             world.settle(cfg.f("phys.settle_seconds", 2.0f), cfg.f("phys.settle_ramp", 0.5f), 1.0f / 60.0f);
             const PhysStats st = world.stats();
             std::printf("oturma: %.1f s, kirik lif %d, catlak %d (%.1f s surdu)\n", cfg.f("phys.settle_seconds", 2.0f), st.broken, st.cracked, ynow() - t0);
+            if (cfg.i("test.verbose", 0)) {   // diagnosis: the pieces that moved most while settling
+                world.download();
+                std::vector<int> order;
+                for (const Piece& p : pieces) order.push_back(p.body);
+                auto moved = [&](int b) { return dlength(world.pos[b] - built[b]); };
+                std::sort(order.begin(), order.end(), [&](int a, int b) { return moved(a) > moved(b); });
+                const char* kn[] = {"kolon", "kiris", "doseme", "duvar", "diger"};
+                for (size_t k = 0; k < std::min<size_t>(10, order.size()); ++k) {
+                    const int b = order[k];
+                    const double3 d = world.pos[b] - built[b];
+                    std::printf("      oturmada en cok kayan %4d %-6s (%.2f %.2f %.2f): %.1f mm (%.1f %.1f %.1f)\n", b, kn[world.info[b].tag], built[b].x,
+                                built[b].y, built[b].z, 1000 * moved(b), 1000 * d.x, 1000 * d.y, 1000 * d.z);
+                }
+            }
         }
         removed = false;
         quakeOn = false;
@@ -140,9 +173,10 @@ struct YikimApp {
         renderer.barGap = cfg.f("bar.gap", 0.005f);
         renderer.barStub = cfg.f("bar.stub", 0.25f);
     }
-    void setCamera() {
-        const float3 pos = cfg.v3("camera.pos", make_float3(-9.0f, 4.5f, -11.0f));
-        const float3 tgt = cfg.v3("camera.target", make_float3(4.0f, 2.6f, 4.0f));
+    void setCamera() {   // the building's own view: camera.* for the apartment, <yapi>.camera_* for the others
+        const std::string b = building(), pre = b == "apartman" ? std::string("camera.") : b + ".camera_";
+        const float3 pos = cfg.v3(pre + "pos", cfg.v3("camera.pos", make_float3(-9.0f, 4.5f, -11.0f)));
+        const float3 tgt = cfg.v3(pre + "target", cfg.v3("camera.target", make_float3(4.0f, 2.6f, 4.0f)));
         const float fov = cfg.f("camera.fov", 50.0f) * 3.14159265f / 180.0f;
         YCamera& c = renderer.params().cam;
         c.pos = pos;

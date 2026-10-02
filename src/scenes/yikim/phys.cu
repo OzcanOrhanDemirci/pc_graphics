@@ -69,6 +69,7 @@ struct DevWorld {
     // run repeats exactly (float atomics made the same earthquake bring a building down in one run and not the next)
     long long* acc = nullptr;
     int* cnt = nullptr;
+    int* cntPrev = nullptr;   // each body's contact pairs in the last substep (the shares, see finishPair)
     // shapes
     int *sampleStart = nullptr, *sampleCount = nullptr, *planeStart = nullptr, *planeCount = nullptr;
     float3* samples = nullptr;
@@ -449,6 +450,10 @@ __device__ void pointsVsHull(const DevWorld& W, PairState& S, int p, int q, bool
         }
         if (bi < 0) continue;
         const float4 P = W.planes[p0 + bi];
+        // a point deeper than deepOverlap inside an unglued body is past anything a solid does: pushing it out was a force
+        // that never ended, and the pair, averaged unevenly over its bodies' other contacts, flew off together (measured:
+        // a column piece wedged into the tower's debris rose to 190 m at up to 105 m/s, 1.2 MN between them for 9 s)
+        if (prm.deepOverlap > 0.0f && tolerance == 0.0f && -best > prm.deepOverlap) continue;
         pointCorrection(S, pIsA, rp, qrot(qq, make_float3(P.x, P.y, P.z)), -best, h, prm, acc, tolerance);
     }
 }
@@ -572,21 +577,31 @@ __device__ PairState loadPair(const DevWorld& W, int a, int b) {
     return S;
 }
 
-// the pair's net motion into the bodies' accumulators (averaged over each body's pairs), and the patch record
+// the pair's net motion into the bodies' accumulators, and the patch record. Jacobi: a body in several pairs takes a share
+// of each. The share is the pair's, the same for both bodies: one over the larger of their pair counts (last substep's).
+// Each body taking one over its own count instead broke the pair's momentum: two bodies wedged together, one touching
+// many others, pushed each other unevenly for seconds and flew off as one (measured in the tower's collapse: a column
+// piece rose to 190 m at 105 m/s, another slid along the ground at 53 m/s, 0.8-1.2 MN between them).
 #define BOND_OVERLAP 0.02f   // m: how far bonded bodies may overlap before contact steps in
+
+__device__ __forceinline__ float pairShare(const DevWorld& W, int a, int b, bool movesA, bool movesB) {
+    const int ca = movesA ? W.cntPrev[a] : 1, cb = movesB ? W.cntPrev[b] : 1;
+    return 1.0f / float(max(1, max(ca, cb)));
+}
 
 __device__ void finishPair(DevWorld& W, int a, int b, const PairState& S, const PatchAcc& last, float J, bool bonded = false) {
     if (J <= 0.0f) return;
+    const float share = pairShare(W, a, b, S.ima > 0.0f, S.imb > 0.0f);
     if (S.ima > 0.0f) {
         const float4 dq = qmul(S.qa, qconj(W.q[a]));
         const float3 dth = make_float3(dq.x, dq.y, dq.z) * (dq.w < 0.0f ? -2.0f : 2.0f);
-        accum(W, a, diff3(S.xa, W.x[a]), dth);
+        accum(W, a, diff3(S.xa, W.x[a]) * share, dth * share);
         atomicAdd(&W.cnt[a], 1);
     }
     if (S.imb > 0.0f) {
         const float4 dq = qmul(S.qb, qconj(W.q[b]));
         const float3 dth = make_float3(dq.x, dq.y, dq.z) * (dq.w < 0.0f ? -2.0f : 2.0f);
-        accum(W, b, diff3(S.xb, W.x[b]), dth);
+        accum(W, b, diff3(S.xb, W.x[b]) * share, dth * share);
         atomicAdd(&W.cnt[b], 1);
     }
     if (last.lam <= 0.0f) return;
@@ -720,11 +735,12 @@ __global__ void kApply(DevWorld W, float relax) {
     const int c = W.cnt[i];
     float3 dx, dth;
     takeAccum(W, i, dx, dth);
-    if (c > 0 && !W.kin[i]) {
-        const float s = (c > 1 ? relax : 1.0f) / float(c);
+    if (c > 0 && !W.kin[i]) {   // the pairs' shares are in already (finishPair)
+        const float s = c > 1 ? relax : 1.0f;
         W.x[i] = W.x[i] + d3(dx * s);
         W.q[i] = qaddRot(W.q[i], dth * s);
     }
+    W.cntPrev[i] = max(c, 1);
     W.cnt[i] = 0;
 }
 
@@ -783,6 +799,9 @@ __global__ void kPatchVelocities(DevWorld W, float h, PhysParams prm, float g) {
             const float wtor = dot(c.n, invInertiaMul(qa, iIa, c.n)) + dot(c.n, invInertiaMul(qb, iIb, c.n));
             if (wtor > 0.0f) L = c.n * (-copysignf(fminf(prm.muDynamic * fnh * c.radius, fabsf(wn) / wtor), wn));
         }
+        const float share = pairShare(W, a, b, ima > 0.0f, imb > 0.0f);   // as in finishPair: the same for both bodies
+        P = P * share;
+        L = L * share;
         if (ima > 0.0f) {
             accum(W, a, P * ima, invInertiaMul(qa, iIa, cross(c.ra, P) + L));
             atomicAdd(&W.cnt[a], 1);
@@ -800,10 +819,9 @@ __global__ void kApplyVel(DevWorld W) {
     const int c = W.cnt[i];
     float3 dv, dw;
     takeAccum(W, i, dv, dw);
-    if (c > 0 && !W.kin[i]) {
-        const float s = 1.0f / float(c);
-        W.v[i] = W.v[i] + dv * s;
-        W.w[i] = W.w[i] + dw * s;
+    if (c > 0 && !W.kin[i]) {   // shares already taken (kPatchVelocities)
+        W.v[i] = W.v[i] + dv;
+        W.w[i] = W.w[i] + dw;
     }
     W.cnt[i] = 0;
 }
@@ -946,7 +964,7 @@ PhysWorld::~PhysWorld() { freeDevice(); }
 void PhysWorld::freeDevice() {
     if (!d_) return;
     void* ptrs[] = {d_->x, d_->xPrev, d_->q, d_->qPrev, d_->v, d_->w, d_->vOld, d_->wOld, d_->invMass, d_->invI, d_->kin, d_->shape,
-                    d_->localC, d_->localH, d_->lo, d_->hi, d_->acc, d_->cnt, d_->sampleStart, d_->sampleCount, d_->planeStart,
+                    d_->localC, d_->localH, d_->lo, d_->hi, d_->acc, d_->cnt, d_->cntPrev, d_->sampleStart, d_->sampleCount, d_->planeStart,
                     d_->planeCount, d_->samples, d_->planes, d_->ifc, d_->fib, d_->colourList, d_->adjStart, d_->adjList, d_->mats,
                     d_->keys, d_->keysSorted, d_->ids, d_->idsSorted, d_->sortTemp, d_->pairs, d_->nPairs, d_->patches, d_->nPatches, d_->anchorKey, d_->anchorFrame, d_->anchorSlide, d_->anchorA, d_->anchorB, d_->bars, d_->ifcNB};
     for (void* p : ptrs)
@@ -1132,6 +1150,10 @@ void PhysWorld::upload() {
     W.hi = dmalloc<float3>(n);
     W.acc = dmalloc<long long>(size_t(n) * 6);
     W.cnt = dmalloc<int>(n);
+    {
+        const std::vector<int> ones(n, 1);
+        W.cntPrev = dupload(ones);
+    }
     // interfaces and fibres
     std::vector<DInterface> ifc;
     std::vector<DFiber> fib;

@@ -45,6 +45,13 @@ void App::onMouseButton(int button, int action) {
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) leftClick_ = true;
 }
 
+void App::setLanguage(Lang l) {
+    setLang(l);
+    if (!opt_.autotest) saveLang(opt_.root, l);   // a test run leaves the choice alone
+    infos_.clear();
+    for (const Entry& e : registry()) infos_.push_back(e.info());   // the descriptions, in the new language
+}
+
 void App::setHandCursor(bool on) {
     if (on == handShown_ || !win_) return;
     handShown_ = on;
@@ -150,7 +157,7 @@ void App::openScene(int index) {
     {
         std::lock_guard<std::mutex> lock(loadMx_);
         loadShared_ = LoadState();
-        loadShared_.label = "Hazırlanıyor";
+        loadShared_.label = L("Hazırlanıyor", "Preparing");
     }
     mode_ = Mode::Loading;
     modeT0_ = nowSec();
@@ -223,9 +230,13 @@ void App::frameGallery(double now, double dt) {
         if (hovered_ >= 0) select(hovered_);
         else if (openButton_.contains(mx, my)) keyQueue_.push_back(GLFW_KEY_ENTER);
         else if (detailsButton_.contains(mx, my)) toggleDetails();
+        else if (langRects_[0].contains(mx, my)) setLanguage(Lang::TR);
+        else if (langRects_[1].contains(mx, my)) setLanguage(Lang::EN);
     }
     if (consume(GLFW_KEY_A)) toggleDetails();
-    setHandCursor(hovered_ >= 0 || openButton_.contains(mx, my) || detailsButton_.contains(mx, my));
+    if (consume(GLFW_KEY_L)) setLanguage(lang() == Lang::EN ? Lang::TR : Lang::EN);
+    setHandCursor(hovered_ >= 0 || openButton_.contains(mx, my) || detailsButton_.contains(mx, my) || langRects_[0].contains(mx, my) ||
+                  langRects_[1].contains(mx, my));
     selAnim_ += (float(selected_) - selAnim_) * float(1.0 - std::exp(-dt * 14.0));
     if (consume(GLFW_KEY_ENTER) || consume(GLFW_KEY_KP_ENTER)) { setHandCursor(false); openScene(selected_); return; }
     if (consume(GLFW_KEY_ESCAPE)) {
@@ -388,6 +399,7 @@ void App::autotestStep(double now) {
 int App::run(const Options& opt) {
     opt_ = opt;
     g_app = this;
+    setLang(opt.lang == "en" ? Lang::EN : opt.lang == "tr" ? Lang::TR : loadLang(opt.root));
     for (const Entry& e : registry()) infos_.push_back(e.info());
     if (!glfwInit()) { std::printf("glfwInit failed\n"); return 1; }
     GLFWmonitor* mon = glfwGetPrimaryMonitor();
@@ -445,6 +457,8 @@ int App::run(const Options& opt) {
         key(GLFW_KEY_1); wait(0.6); shot("galeri_ayrintilar_1");
         key(GLFW_KEY_2); wait(0.6); shot("galeri_ayrintilar_2");
         control("@ayrintilar", 0); wait(0.6); shot("galeri_ayrintilar_kapandi");
+        // the other language and back (L)
+        key(GLFW_KEY_L); wait(0.6); shot("galeri_dil"); key(GLFW_KEY_L); wait(0.4);
         // the mouse: over the first entry, a click selects it
         mouse(0.18f, 0.43f); wait(0.5); click(); wait(0.6); shot("galeri_fare");
         for (int s = 0; s < int(infos_.size()); ++s) {
@@ -483,6 +497,12 @@ int App::run(const Options& opt) {
                 slide("sure", 0.5f); wait(0.1); left(false); wait(0.3); shot("yikim_sure_kendi");
                 key(GLFW_KEY_R); wait(4.0);
                 key(GLFW_KEY_SPACE); wait(9.0); log("yikim deprem 7"); shot("yikim_deprem"); key(GLFW_KEY_G); wait(1.0);
+                key(GLFW_KEY_G); wait(0.1); key(GLFW_KEY_G); wait(0.1);   // AI -> raw -> back to the filter
+                // the other buildings: the tower, the house (a ball at it), back to the apartment block
+                control("yapi", 1); wait(10.0); log("yikim gokdelen"); shot("yikim_gokdelen");
+                control("yapi", 2); wait(6.0); log("yikim ev"); shot("yikim_ev");
+                mouse(0.50f, 0.50f); wait(0.1); click(); wait(2.0); shot("yikim_ev_top");
+                control("yapi", 0); wait(6.0);
             }
             key(GLFW_KEY_H); wait(0.3); shot(infos_[s].id + "_arayuzsuz"); key(GLFW_KEY_H);
             key(GLFW_KEY_ESCAPE); gallery(); wait(0.8);

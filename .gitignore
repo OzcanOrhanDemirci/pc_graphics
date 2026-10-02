@@ -8,3 +8,5 @@ tools/smoke/out/
 *.exr
 __pycache__/
 captures/
+# This computer's choices (the language: src/app/lang.h)
+user.cfg

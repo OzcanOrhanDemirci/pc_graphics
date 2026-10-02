@@ -9,14 +9,23 @@
 
 enum PieceKind : int { PK_COLUMN = 0, PK_BEAM, PK_SLAB, PK_WALL, PK_OTHER, PK_COUNT };
 
-struct Piece {           // an axis-aligned box that becomes one body
+struct PieceCut {       // keep dot(n, p) <= d
+    double3 n;
+    double d;
+};
+
+struct Piece {           // an axis-aligned box that becomes one body (cut by planes, if any: a sloping roof, a gable)
     double3 lo, hi;
     int kind;
     int body = -1;
     unsigned color = 0;  // 0: by kind
     float density = 0;   // 0: by kind
     float rho = -1;      // steel ratio at its interfaces (< 0: by kind)
+    std::vector<PieceCut> cuts;
+    unsigned unglued = 0;   // axes (1 x, 2 y, 4 z) across which it is not glued to a piece that has the same bit
 };
+Poly piecePoly(const Piece& p);                        // the box, cut
+bool pieceContains(const Piece& p, double3 x, double eps);
 
 struct FrameSpec {
     int baysX = 2, baysZ = 2, storeys = 2;
@@ -37,7 +46,8 @@ struct FrameSpec {
 };
 
 // glue every pair of touching pieces (shared face area > minArea) with an interface; the ground (y = 0) too.
-// Interfaces touching a wall use spec.matBrick (when set), the rest mat.
+// Interfaces touching a wall use spec.matBrick (when set), the rest mat. Cut pieces: fibres only where both pieces
+// are; two pieces cut by the same plane from opposite sides are glued across it.
 void glueTouching(PhysWorld& w, std::vector<Piece>& pieces, int mat, const FrameSpec& spec, bool groundBond);
 // the bodies of the pieces (density and colour by kind unless the piece sets them)
 void addPieceBodies(PhysWorld& w, std::vector<Piece>& pieces, const FrameSpec& spec);

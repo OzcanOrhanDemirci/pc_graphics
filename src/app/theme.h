@@ -2,6 +2,7 @@
 // each scene brings one accent colour (its light: warm gold, cold blue, safety orange). IBM Plex throughout:
 // Serif for names, Sans for words, Mono for numbers and keys. Sizes are for a 2560x1440 screen, times scale().
 #pragma once
+#include "app/lang.h"
 #include "ui/ui.h"
 
 #include <cstdio>
@@ -36,14 +37,25 @@ inline ui::TextStyle mono(const Scale& S, float size, ui::Color c = text()) { re
 inline ui::TextStyle serif(const Scale& S, float size, ui::Color c = text()) { return {ui::Font::SerifMedium, S(size), c, 0.0f, false}; }
 inline ui::TextStyle display(const Scale& S, float size, ui::Color c = text()) { return {ui::Font::Serif, S(size), c, -S(size) * 0.01f, false}; }
 
-// ---- numbers the Turkish way: a decimal comma
+// ---- numbers in the language in use: a decimal comma in Turkish, a point in English
 inline std::string num(double v, int decimals) {
     char b[64];
     std::snprintf(b, sizeof(b), "%.*f", decimals, v);
     std::string s(b);
-    for (char& c : s)
-        if (c == '.') c = ',';
+    if (app::lang() == app::Lang::TR)
+        for (char& c : s)
+            if (c == '.') c = ',';
     return s;
+}
+// whole numbers with thousands grouped: 12.345 in Turkish, 12,345 in English
+inline std::string thousands(unsigned long long v) {
+    const std::string d = std::to_string(v);
+    std::string out;
+    for (size_t i = 0; i < d.size(); ++i) {
+        if (i && (d.size() - i) % 3 == 0) out += app::lang() == app::Lang::TR ? '.' : ',';
+        out += d[i];
+    }
+    return out;
 }
 
 }   // namespace theme

@@ -88,11 +88,12 @@ void App::drawGallery(double now) {
     const float x0 = S_(150);
     const float lift = (1.0f - easeOut(appear)) * S_(24);
     float y = S_(196) + lift;
-    ui::text(x0, y, "PC_GRAPHICS  ·  SAHNELER", theme::caption(S_, theme::faint()));
+    ui::text(x0, y, L("PC_GRAPHICS  ·  SAHNELER", "PC_GRAPHICS  ·  SCENES"), theme::caption(S_, theme::faint()));
     y += S_(46);
-    ui::text(x0, y, "Işık, atmosfer, fizik.", theme::display(S_, 66.0f, ui::withAlpha(theme::text(), appear)));
+    ui::text(x0, y, L("Işık, atmosfer, fizik.", "Light, atmosphere, physics."), theme::display(S_, 66.0f, ui::withAlpha(theme::text(), appear)));
     y += S_(96);
-    ui::textWrapped(x0, y, S_(700), "Ekran kartında, oyun motoru kullanmadan, baştan sona kendi kodumuzla kurulmuş üç sahne. Her biri tek bir soruya odaklanır.",
+    ui::textWrapped(x0, y, S_(700), L("Ekran kartında, oyun motoru kullanmadan, baştan sona kendi kodumuzla kurulmuş üç sahne. Her biri tek bir soruya odaklanır.",
+                                       "Three scenes on the graphics card, built from scratch in our own code, without a game engine. Each one is about a single question."),
                     theme::body(S_, ui::withAlpha(theme::muted(), appear)), 1.5f);
 
     const float listY = S_(566) + lift, itemH = S_(164), itemW = S_(770);
@@ -158,7 +159,7 @@ void App::drawGallery(double now) {
         const float mx = float(mouseX_), my = float(mouseY_);
         auto capW = [&](const std::string& k) { return std::max(S_(30), ui::measure(k, theme::mono(S_, 14.5f)) + S_(18)); };
         {   // open: in the scene's colour
-            const std::string label = "Sahneyi aç";
+            const std::string label = L("Sahneyi aç", "Open scene");
             const float bw = ui::measure(label, bt) + capW("Enter") + S_(86);
             openButton_ = ui::Rect{card.x + card.w - bw, y2, bw, bh};
             const bool hot = openButton_.contains(mx, my);
@@ -168,7 +169,7 @@ void App::drawGallery(double now) {
             keyCaps(openButton_.x + bw - capW("Enter") - S_(22), openButton_.y + 0.5f * (bh - S_(30)), "Enter", S_(30), appear, true);
         }
         {   // how it is made: glass, before it
-            const std::string label = details_ ? "Ayrıntıları kapat" : "Ayrıntılar";
+            const std::string label = details_ ? L("Ayrıntıları kapat", "Hide details") : L("Ayrıntılar", "Details");
             ui::TextStyle dt = bt;
             dt.font = ui::Font::SansMedium;
             dt.color = ui::withAlpha(theme::text(), appear);
@@ -185,14 +186,36 @@ void App::drawGallery(double now) {
     ui::textWrapped(card.x, y2 - S_(4), detailsButton_.x - S_(48) - card.x, cur.description,
                     theme::body(S_, ui::withAlpha(theme::muted(), appear * swap)), 1.5f, 3);
 
+    // the language, top right: two segments, the one in use filled
+    {
+        const ui::TextStyle lt = theme::mono(S_, 15.0f);
+        const float h = S_(38), segW = S_(58), gap = S_(4);
+        const float x = W - S_(150) - (2 * segW + gap + 2 * S_(4)), y = S_(110) + lift;
+        const ui::Rect pill{x, y, 2 * segW + gap + 2 * S_(4), h + 2 * S_(4)};
+        ui::panel(pill, ui::hex(0xFFFFFF, 0.05f * appear), ui::hex(0xFFFFFF, 0.14f * appear), pill.h * 0.5f, std::max(1.0f, S_(1)));
+        const char* names[2] = {"TR", "EN"};
+        for (int k = 0; k < 2; ++k) {
+            const ui::Rect r{x + S_(4) + k * (segW + gap), y + S_(4), segW, h};
+            langRects_[k] = r;
+            const bool on = (k == 1) == (lang() == Lang::EN);
+            const bool hot = !on && r.contains(float(mouseX_), float(mouseY_));
+            if (on) ui::rect(r, ui::hex(0xF2EFE9, 0.92f * appear), h * 0.5f);
+            else if (hot) ui::rect(r, ui::hex(0xFFFFFF, 0.10f * appear), h * 0.5f);
+            ui::TextStyle t = lt;
+            t.color = on ? ui::hex(0x0B0B0C, appear) : ui::withAlpha(theme::text(), 0.75f * appear);
+            ui::text(r.x + 0.5f * (r.w - ui::measure(names[k], t)), r.y + 0.5f * (h - ui::lineHeight(t)), names[k], t);
+        }
+    }
+
     // the bottom line: keys on the left, the machine on the right
     const float by = H - S_(84);
     ui::rect(ui::Rect{x0 - S_(26), by - S_(26), W - 2 * (x0 - S_(26)), std::max(1.0f, S_(1))}, ui::hex(0xFFFFFF, 0.07f * appear));
     float bx = x0;
-    bx += keyHint(bx, by, "↑|↓", "Seç") + S_(34);
-    bx += keyHint(bx, by, "Enter", "Aç") + S_(34);
-    bx += keyHint(bx, by, "A", "Ayrıntılar") + S_(34);
-    bx += keyHint(bx, by, "Esc", details_ ? "Ayrıntıları kapat" : "Çık");
+    bx += keyHint(bx, by, "↑|↓", L("Seç", "Select")) + S_(34);
+    bx += keyHint(bx, by, "Enter", L("Aç", "Open")) + S_(34);
+    bx += keyHint(bx, by, "A", L("Ayrıntılar", "Details")) + S_(34);
+    bx += keyHint(bx, by, "L", L("English", "Türkçe")) + S_(34);
+    bx += keyHint(bx, by, "Esc", details_ ? L("Ayrıntıları kapat", "Hide details") : L("Çık", "Quit"));
     const std::string sys = gpuName_ + "  ·  OptiX 9.1  ·  CUDA 13.4  ·  " + std::to_string(fbw_) + "×" + std::to_string(fbh_);
     const ui::TextStyle st = theme::mono(S_, 14.0f, theme::faint());
     ui::text(W - S_(150) - ui::measure(sys, st), by + 0.5f * (S_(30) - ui::lineHeight(st)), sys, st);
@@ -208,7 +231,7 @@ void App::drawDetails(const ui::Rect& area, float a) {
     ui::panel(P, ui::hex(0x0B0C0F, 0.975f * a), ui::hex(0xFFFFFF, 0.10f * a), S_(20), std::max(1.0f, S_(1)));
     const float pad = S_(54);
     float y = P.y + S_(46);
-    ui::text(P.x + pad, y, si.number + "  ·  " + si.title + "  ·  nasıl yapıldı", theme::caption(S_, ui::withAlpha(accentText(si), a)));
+    ui::text(P.x + pad, y, si.number + "  ·  " + si.title + L("  ·  nasıl yapıldı", "  ·  how it was made"), theme::caption(S_, ui::withAlpha(accentText(si), a)));
     y += S_(34);
     ui::rect(ui::Rect{P.x + pad, y, P.w - 2 * pad, std::max(1.0f, S_(1))}, ui::hex(0xFFFFFF, 0.08f * a));
     y += S_(30);
@@ -268,7 +291,7 @@ void App::drawLoading(double now) {
     ui::rectHGradient(ui::Rect{W * 0.5f, 0, W * 0.5f, H}, ui::hex(0x060708, 0.55f), ui::hex(0x060708, 0.30f));
     const float x0 = S_(150);
     float y = H * 0.5f - S_(150) + (1.0f - easeOut(in)) * S_(20);
-    ui::text(x0, y, "Sahne " + si.number, theme::caption(S_, ui::withAlpha(accentText(si), in)));
+    ui::text(x0, y, L("Sahne ", "Scene ") + si.number, theme::caption(S_, ui::withAlpha(accentText(si), in)));
     y += S_(44);
     ui::text(x0 - S_(4), y, si.title, theme::display(S_, 104.0f, ui::withAlpha(theme::text(), in)));
     y += S_(142);
@@ -291,7 +314,7 @@ void App::drawLoading(double now) {
     const int dots = int(now * 2.5) % 4;
     for (int k = 0; k < dots; ++k) label += ".";
     ui::text(x0, y, label, theme::small(S_, ui::withAlpha(theme::muted(), in)));
-    keyHint(W - S_(150) - S_(140), H - S_(84), "Esc", "Vazgeç");
+    keyHint(W - S_(150) - S_(140), H - S_(84), "Esc", L("Vazgeç", "Cancel"));
     drawToasts(now);
     ui::end();
 }
@@ -302,12 +325,12 @@ void App::drawFailed(double now) {
     ui::clear(ui::Color{0.04f, 0.04f, 0.05f, 1.0f});
     const float x0 = S_(150);
     float y = H * 0.5f - S_(120);
-    ui::text(x0, y, "Sahne açılamadı", theme::caption(S_, ui::hex(0xE8806A)));
+    ui::text(x0, y, L("Sahne açılamadı", "The scene could not open"), theme::caption(S_, ui::hex(0xE8806A)));
     y += S_(44);
     ui::text(x0, y, sceneIndex_ >= 0 ? infos_[sceneIndex_].title : std::string(), theme::display(S_, 72.0f));
     y += S_(112);
     ui::textWrapped(x0, y, W - 2 * x0, failure_, theme::body(S_), 1.5f, 6);
-    keyHint(x0, H - S_(84), "Esc", "Galeriye dön");
+    keyHint(x0, H - S_(84), "Esc", L("Galeriye dön", "Back to the gallery"));
     ui::end();
 }
 
@@ -338,16 +361,30 @@ void App::drawHud(double now, const Status& st) {
     float titleW = 0.0f, contentW = 0.0f;
     for (const Control& c : st.controls)
         if (!c.title.empty()) titleW = std::max(titleW, ui::measure(c.title, titleT) + S_(22));
+    // a choice's buttons: square for a digit or two (the magnitudes), as wide as the word otherwise (the buildings)
+    auto itemStyle = [&](const Control& c, ui::Color col) {
+        bool words = false;
+        for (const std::string& it : c.items) words = words || it.size() > 2;
+        return words ? ui::TextStyle{ui::Font::SansMedium, S_(17.0f), col, 0.0f, false} : theme::mono(S_, 20.0f, col);
+    };
+    auto itemWidth = [&](const Control& c, const std::string& item) {
+        return std::max(seg, ui::measure(item, itemStyle(c, theme::text())) + S_(32));
+    };
+    auto choiceWidth = [&](const Control& c) {
+        float w = 0.0f;
+        for (const std::string& it : c.items) w += itemWidth(c, it) + gap;
+        return c.items.empty() ? 0.0f : w - gap;
+    };
     float trackW = S_(300);
     for (const Control& c : st.controls)
-        if (c.kind == Control::Kind::Choice) trackW = std::max(trackW, float(c.items.size()) * (seg + gap) - gap - S_(90));
+        if (c.kind == Control::Kind::Choice && c.items.size() > 3) trackW = std::max(trackW, choiceWidth(c) - S_(90));
     auto capsWidth = [&](const std::string& keys, float hh) {
         float w = 0.0f;
         for (const std::string& k : splitCaps(keys)) w += std::max(hh, ui::measure(k, theme::mono(S_, 14.5f)) + S_(18)) + S_(6);
         return keys.empty() ? 0.0f : w - S_(6);
     };
     for (const Control& c : st.controls) {
-        if (c.kind == Control::Kind::Choice) contentW = std::max(contentW, float(c.items.size()) * (seg + gap) - gap);
+        if (c.kind == Control::Kind::Choice) contentW = std::max(contentW, choiceWidth(c));
         if (c.kind == Control::Kind::Slider) contentW = std::max(contentW, trackW + S_(22) + std::max(S_(70), ui::measure(c.text, valueT)));
         if (c.kind == Control::Kind::Button)
             contentW = std::max(contentW, S_(26) + ui::measure(c.text, buttonT) + S_(30) + capsWidth(c.keys, S_(28)) + S_(14));
@@ -404,7 +441,8 @@ void App::drawHud(double now, const Status& st) {
         if (c.kind == Control::Kind::Choice) {
             float sx = cx0;
             for (int i = 0; i < int(c.items.size()); ++i) {
-                const ui::Rect r{sx, y, seg, seg};
+                const float iw = itemWidth(c, c.items[i]);
+                const ui::Rect r{sx, y, iw, seg};
                 const bool on = i == c.active, over = !mouseCaptured_ && r.contains(mx, my);
                 if (on) {
                     ui::shadow(r, S_(12), S_(14), accentOf(si, 0.45f * in));
@@ -413,10 +451,10 @@ void App::drawHud(double now, const Status& st) {
                     ui::panel(r, ui::hex(0xFFFFFF, (over ? 0.13f : 0.05f) * in), ui::hex(0xFFFFFF, (over ? 0.30f : 0.14f) * in), S_(12),
                               std::max(1.0f, S_(1)));
                 }
-                const ui::TextStyle it = theme::mono(S_, 20.0f, on ? ui::hex(0x0B0B0C, in) : ui::withAlpha(theme::text(), (over ? 1.0f : 0.85f) * in));
-                ui::text(r.x + 0.5f * (seg - ui::measure(c.items[i], it)), r.y + 0.5f * (seg - ui::lineHeight(it)), c.items[i], it);
+                const ui::TextStyle it = itemStyle(c, on ? ui::hex(0x0B0B0C, in) : ui::withAlpha(theme::text(), (over ? 1.0f : 0.85f) * in));
+                ui::text(r.x + 0.5f * (iw - ui::measure(c.items[i], it)), r.y + 0.5f * (seg - ui::lineHeight(it)), c.items[i], it);
                 panelHits_.push_back({r, r, ci, i});
-                sx += seg + gap;
+                sx += iw + gap;
             }
         } else if (c.kind == Control::Kind::Slider) {
             const float ty = y + 0.5f * sliderH, th = S_(4);
@@ -487,14 +525,15 @@ void App::drawHud(double now, const Status& st) {
             for (const std::string& k : splitCaps(keys)) w += std::max(hh, ui::measure(k, theme::mono(S_, 14.5f)) + S_(18)) + S_(6);
             return w - S_(6) + S_(10) + ui::measure(what, ht);
         };
-        tw = hintW("F1", "Tuşlar") + hintW("H", "Gizle") + hintW("Esc", "Galeri") + 2 * S_(26);
+        const std::string kKeys = L("Tuşlar", "Keys"), kHide = L("Gizle", "Hide"), kGallery = L("Galeri", "Gallery");
+        tw = hintW("F1", kKeys) + hintW("H", kHide) + hintW("Esc", kGallery) + 2 * S_(26);
         const ui::Rect R{W - m - tw - 2 * S_(18), H - m - hh - 2 * S_(16) + slide, tw + 2 * S_(18), hh + 2 * S_(16)};
         panels_.push_back(R);
         ui::panel(R, ui::withAlpha(theme::glass(), in), ui::withAlpha(theme::glassBorder(), in), S_(16), std::max(1.0f, S_(1)));
         float hx = R.x + S_(18);
-        hx += keyHint(hx, R.y + S_(16), "F1", "Tuşlar") + S_(26);
-        hx += keyHint(hx, R.y + S_(16), "H", "Gizle") + S_(26);
-        keyHint(hx, R.y + S_(16), "Esc", "Galeri");
+        hx += keyHint(hx, R.y + S_(16), "F1", kKeys) + S_(26);
+        hx += keyHint(hx, R.y + S_(16), "H", kHide) + S_(26);
+        keyHint(hx, R.y + S_(16), "Esc", kGallery);
     }
 
     // ---- top right: how fast
@@ -505,7 +544,7 @@ void App::drawHud(double now, const Status& st) {
         const std::string fpsS = std::to_string(int(std::lround(fps_)));
         float lw = 0.0f, vw = 0.0f;
         std::vector<Metric> rows = st.metrics;
-        if (gpuW_ > 0.0f) rows.push_back({"Ekran kartı", std::to_string(int(std::lround(gpuW_))) + " W · " + std::to_string(int(gpuC_)) + " °C"});
+        if (gpuW_ > 0.0f) rows.push_back({L("Ekran kartı", "GPU"), std::to_string(int(std::lround(gpuW_))) + " W · " + std::to_string(int(gpuC_)) + " °C"});
         for (const Metric& r : rows) { lw = std::max(lw, ui::measure(r.label, lab)); vw = std::max(vw, ui::measure(r.value, val)); }
         const float rowH = S_(28);
         const float w = std::max(lw + S_(24) + vw, ui::measure(fpsS, big) + S_(70)) + 2 * S_(20);
@@ -533,9 +572,12 @@ void App::drawHelp(double now) {
     const SceneInfo& si = infos_[sceneIndex_];
     ui::rect(ui::Rect{0, 0, W, H}, ui::hex(0x000000, 0.58f));
     std::vector<KeyGroup> groups = si.keys, left, right;
-    KeyGroup general{"Genel", {{"Esc", "Galeriye dön (yardım açıkken: kapat)"}, {"F1", "Bu tuş listesi"}, {"H", "Arayüzü gizle / göster"},
-                               {"F12", "Ekran görüntüsü (captures/)"}}};
-    if (si.reloadable) general.items.push_back({"F5", "Ayarları ve programları yeniden yükle"});
+    KeyGroup general{L("Genel", "General"),
+                     {{"Esc", L("Galeriye dön (yardım açıkken: kapat)", "Back to the gallery (with this open: close it)")},
+                      {"F1", L("Bu tuş listesi", "This list of keys")},
+                      {"H", L("Arayüzü gizle / göster", "Hide / show the interface")},
+                      {"F12", L("Ekran görüntüsü (captures/)", "Screenshot (captures/)")}}};
+    if (si.reloadable) general.items.push_back({"F5", L("Ayarları ve programları yeniden yükle", "Reload the settings and programs")});
     groups.push_back(general);
     {
         float hl = 0.0f, hr = 0.0f;
@@ -559,7 +601,7 @@ void App::drawHelp(double now) {
     ui::shadow(P, S_(24), S_(60), ui::hex(0x000000, 0.7f));
     ui::panel(P, ui::hex(0x0E1013, 0.96f), theme::glassBorder(), S_(24), std::max(1.0f, S_(1)));
     float x = P.x + S_(56), y = P.y + S_(52);
-    ui::text(x, y, si.number + "  ·  tuşlar", theme::caption(S_, accentText(si)));
+    ui::text(x, y, si.number + L("  ·  tuşlar", "  ·  keys"), theme::caption(S_, accentText(si)));
     y += S_(40);
     ui::text(x - S_(2), y, si.title, theme::display(S_, 52.0f));
     y += S_(100);
@@ -583,7 +625,7 @@ void App::drawHelp(double now) {
     column(x, y, left);
     column(x + colW + gapCol, y, right);
     const ui::TextStyle ft = theme::small(S_, theme::faint());
-    const std::string foot = "F1 ya da Esc ile kapanır";
+    const std::string foot = L("F1 ya da Esc ile kapanır", "F1 or Esc closes it");
     ui::text(P.x + P.w - S_(56) - ui::measure(foot, ft), P.y + P.h - S_(52), foot, ft);
 }
 

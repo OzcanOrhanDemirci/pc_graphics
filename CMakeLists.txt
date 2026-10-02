@@ -14,6 +14,7 @@ set(TP ${CMAKE_SOURCE_DIR}/third_party)
 #   src/scenes   one folder per scene: host code, and device/ with its OptiX programs (compiled at run time by NVRTC)
 add_library(pc_core OBJECT
     src/app/app.cpp
+    src/app/lang.cpp
     src/app/overlay.cpp
     src/app/registry.cpp
     src/ui/ui.cpp

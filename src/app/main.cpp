@@ -5,6 +5,7 @@
 //   pc_graphics.exe --windowed              in a 1280x720 window
 //   pc_graphics.exe --autotest              the whole application once through by script, screens to captures/arayuz/
 //   pc_graphics.exe --set key=value         a setting for the scenes (scenes/<id>.cfg), repeatable
+//   pc_graphics.exe --lang tr|en            the language on screen (else the one chosen last, in user.cfg)
 //
 // Every other option belongs to a scene's command-line tools (renders without a window, tests):
 //   pc_graphics.exe --scene altinsaat --headless --spp 2048 --out captures/x     (also without --scene, as it always was)
@@ -39,6 +40,7 @@ int main(int argc, char** argv) {
         else if (a == "--autotest") opt.autotest = true;
         else if (a == "--set") opt.overrides.push_back(next());
         else if (a == "--root") opt.root = next();
+        else if (a == "--lang") opt.lang = next();
         else windowOnly = false;
     }
     if (!windowOnly) {

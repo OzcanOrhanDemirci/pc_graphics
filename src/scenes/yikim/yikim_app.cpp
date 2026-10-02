@@ -9,6 +9,7 @@
 #include "core/image_io.h"
 
 #include <filesystem>
+#include <map>
 #include <set>
 
 
@@ -176,6 +177,19 @@ static int runClip(YikimApp& app, double seconds, double still, unsigned spp, co
                 fastestY = app.world.pos[i].y;
             }
         }
+        // diagnosis (test.track): every second, the fastest piece now, where it is and what touches it
+        if (app.cfg.i("test.track", 0) && k % 60 == 0) {
+            int b = -1;
+            float sp = 0;
+            for (size_t i = 1; i < app.world.vel.size(); ++i)
+                if (!app.world.kinematic[i] && app.world.info[i].sphere == 0.0f && length(app.world.vel[i]) > sp) { sp = length(app.world.vel[i]); b = int(i); }
+            if (b > 0) {
+                std::printf("      iz t=%5.1f en hizli govde %d (tur %d, %.0f kg): %.1f m/s, v (%.1f %.1f %.1f), y %.1f m, temas:", t, b, app.world.info[b].tag,
+                            app.world.info[b].mass, sp, app.world.vel[b].x, app.world.vel[b].y, app.world.vel[b].z, app.world.pos[b].y);
+                for (const PhysWorld::PatchInfo& pi : app.world.patchesOf(b)) std::printf(" [%d %.0f kN]", pi.other, pi.force / 1000.0f);
+                std::printf("\n");
+            }
+        }
         // diagnosis (test.trace = interface index): one interface frame by frame
         if (app.cfg.i("test.trace", -1) >= 0 && k <= 12) {
             const int ti = app.cfg.i("test.trace", -1);
@@ -193,6 +207,25 @@ static int runClip(YikimApp& app, double seconds, double still, unsigned spp, co
             std::printf("         lifler:");
             for (size_t q = 0; q < d.fibers.size(); ++q) std::printf(" [%u %.0f %.0f %.0f]", fl[fi + q], fo[fi + q].x, fo[fi + q].y, fo[fi + q].z);
             std::printf("\n");
+        }
+        // diagnosis (test.verbose): the cracked and broken fibres as the run starts, by the kinds of piece they join
+        if (app.cfg.i("test.verbose", 0) && k == 0) {
+            std::vector<unsigned> fl;
+            std::vector<float3> fo;
+            app.world.fibres(fl, fo);
+            const char* kn[] = {"kolon", "kiris", "doseme", "duvar", "diger"};
+            std::map<std::string, std::pair<int, int>> tally;   // cracked, broken
+            size_t fi = 0;
+            for (const InterfaceDesc& d : app.world.interfaceDescs) {
+                const int ka = d.a > 0 ? app.world.info[d.a].tag : -1, kb = d.b > 0 ? app.world.info[d.b].tag : -1;
+                const std::string key = std::string(ka >= 0 ? kn[ka] : "zemin") + "-" + (kb >= 0 ? kn[kb] : "zemin");
+                for (size_t q = 0; q < d.fibers.size(); ++q, ++fi) {
+                    if (fl[fi] & 1u) ++tally[key].first;
+                    if (fl[fi] & 4u) ++tally[key].second;
+                }
+            }
+            for (const auto& e : tally)
+                if (e.second.first || e.second.second) std::printf("      oturmada %-16s catlak %5d  kirik %5d\n", e.first.c_str(), e.second.first, e.second.second);
         }
         // diagnosis (test.verbose): the first interfaces to break, by the kinds they join and where
         static bool reportedBreak = false;

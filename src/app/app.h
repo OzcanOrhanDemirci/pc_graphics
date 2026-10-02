@@ -23,6 +23,7 @@ struct Options {
     bool windowed = false;
     bool autotest = false;
     std::string startScene;               // --scene id: straight into it
+    std::string lang;                     // --lang tr|en (empty: the one remembered in user.cfg)
     std::vector<std::string> overrides;   // --set key=value, handed to the scenes
 };
 
@@ -90,6 +91,8 @@ private:
     int prevSelected_ = 0;
     ui::Rect openButton_, detailsButton_;
     std::vector<ui::Rect> entryRects_;
+    ui::Rect langRects_[2];               // the gallery's language switch: TR, EN
+    void setLanguage(Lang l);             // the texts, the scenes' descriptions, user.cfg
     bool details_ = false;                // the gallery's "Ayrıntılar" over the picture
     double detailsAt_ = -10.0;            // when it was last opened or closed
 

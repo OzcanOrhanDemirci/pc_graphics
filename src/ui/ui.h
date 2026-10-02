@@ -83,5 +83,6 @@ float ascent(const TextStyle& s);
 float textWrapped(float x, float y, float width, const std::string& utf8, const TextStyle& s, float lineSpacing = 1.45f, int maxLines = 0);
 float measureWrapped(float width, const std::string& utf8, const TextStyle& s, float lineSpacing = 1.45f);   // the height, drawing nothing
 std::string upperTR(const std::string& utf8);
+void setTurkishCase(bool on);   // capitals the Turkish way (i -> İ), or the English (i -> I)
 
 }   // namespace ui
