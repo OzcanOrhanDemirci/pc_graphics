@@ -44,6 +44,9 @@ void applyPhysics(ParticleWorld& w, const Config& c) {
     p.density = c.i("fizik.yogunluk", 1) != 0;
     p.bonds = c.i("fizik.baglar", 1) != 0;
     p.bondDamping = c.f("fizik.bag_sonum", p.bondDamping);
+    p.bleedFade = c.f("yara.pihtilasma", p.bleedFade);
+    p.adhesion = c.f("fizik.islatma", p.adhesion);
+    p.wetDrag = c.f("fizik.islak_surtunme", p.wetDrag);
 }
 
 namespace {

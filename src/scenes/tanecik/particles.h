@@ -46,11 +46,14 @@ struct PParams {
     float xsph = 0.01f;          // XSPH viscosity per 1/60 s (scaled to the substep)
     float cohesion = 0.0f;       // Akinci et al. 2013 cohesion, m/s^2 at its peak (0: off)
     float tension = 0.0f;        // and its curvature term (surface tension proper), m/s^2 per unit of normal difference
+    float adhesion = 0.0f;       // fluid to solid particles (wetting: blood runs down the skin), m/s^2 at its peak (0: off)
+    float wetDrag = 0.0f;        // fluid dragged towards the solid it touches (per 1/60 s, like XSPH; 0: off)
     float muStatic = 0.6f, muDynamic = 0.5f;     // particle-particle (solid contacts)
     float planeMuStatic = 0.6f, planeMuDynamic = 0.5f;   // solids on the ground and the box
     float fluidPlaneMu = 0.3f;   // fluid on the ground and the box (a one-particle film stops; see the puddle test)
     float fluidSolidMu = 0.0f;   // fluid along solid particles (water slips along rubber, skin, a cube)
     float maxSpeed = 60.0f;      // m/s guard
+    float bleedFade = 4.0f;      // s: a wound's bleeding fades over this (clotting)
     float bondDamping = 0.0f;    // s: XPBD damping of the bonds (beta; 0 off): what the bonds leave unsolved does not shake
     bool density = true;         // the fluid's density constraint (off: a test shows the volume is not kept)
     bool wallDensity = true;     // walls count in a fluid particle's density as resting particles would
@@ -99,6 +102,11 @@ public:
     void driveKinematic(const uint32_t* dIdx, const float3* dTarget, int n, float dt, cudaStream_t s = 0);
     void addVelocity(const std::vector<uint32_t>& idx, const std::vector<float3>& dv);   // host lists; kinematic ones ignore it
     int breakBondsOf(const std::vector<uint32_t>& particles);   // every bond of these: broken; returns how many
+    // a wound that keeps bleeding: each listed particle's bonds break at its rate (per second, each), fading over
+    // params.bleedFade; a particle whose bonds are all gone turns liquid and runs out
+    void addBleed(const std::vector<uint32_t>& particles, const std::vector<float>& rates);
+    // the blood's pressure at a wound: liquid within r of c pushed out along n at least at speed (m/s), until the next step
+    void woundPressure(float3 c, float r, float3 n, float speed);
     const float* deviceInverseMass() const { return w_; }
     // ---- reading
     int count() const { return n_; }
@@ -142,6 +150,9 @@ private:
     // device state, particle order
     float4 *x_ = nullptr, *x0_ = nullptr, *v_ = nullptr, *dx_ = nullptr, *q_ = nullptr;   // q: offset in its rigid body
     float4* kv_ = nullptr;         // a kinematic particle's velocity (driveKinematic)
+    float* bleed_ = nullptr;       // per particle: its bonds' breaking rate (1/s): a wound that bleeds
+    bool bleeding_ = false;
+    unsigned bleedStep_ = 0;
     float* w_ = nullptr;           // inverse mass
     uint32_t* phase_ = nullptr;    // group (low 24 bits) | PF_FLUID
     float* rho_ = nullptr;         // rho / rho0 (stats, tests)

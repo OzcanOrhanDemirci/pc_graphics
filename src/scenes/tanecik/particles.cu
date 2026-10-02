@@ -661,7 +661,7 @@ __global__ void kNormals(int n, int stride, const float4* xs, const uint32_t* ph
 // ns: the normals (kNormals), or null when there is no surface tension
 __global__ void kFluidForces(int n, int stride, const float4* xs, const uint32_t* phs, const int* nbr, const int* nbrCount, const float4* vs,
                              const float* rhos, const float4* ns, float4* out, Kern K, float S0, float xsph, float cohesion, float cohPeak, float tension,
-                             float dt) {
+                             float dt, float adhesion, float wet) {
     const int k = blockIdx.x * blockDim.x + threadIdx.x;
     if (k >= n) return;
     if (!(phs[k] & PF_FLUID) || xs[k].w <= 0.0f) { out[k] = vs[k]; return; }
@@ -670,9 +670,22 @@ __global__ void kFluidForces(int n, int stride, const float4* xs, const uint32_t
     float3 visc = make_float3(0, 0, 0), coh = make_float3(0, 0, 0);
     const float ri = fmaxf(rhos[k], 0.5f);
     const int m = nbrCount[k];
+    float3 stick = make_float3(0, 0, 0);
+    float3 drag = make_float3(0, 0, 0);
     for (int q = 0; q < m; ++q) {
         const int j = nbr[size_t(q) * stride + k];
-        if (!(phs[j] & PF_FLUID)) continue;
+        if (!(phs[j] & PF_FLUID)) {
+            // a solid neighbour: wetting (Akinci et al. 2013's adhesion, here with the cohesion's spline: the liquid clings
+            // to the skin and runs down it instead of dropping off) and a viscous drag towards the solid's velocity
+            if (adhesion > 0.0f || wet > 0.0f) {
+                const float3 r = p - xyz(xs[j]);
+                const float r2 = dot(r, r);
+                const float d = sqrtf(r2);
+                if (adhesion > 0.0f && d > 1e-9f) stick += r * (-adhesion * cohesionSpline(d, K.h) / (cohPeak * d));
+                drag += (xyz(vs[j]) - vi) * (W(K, r2) / S0);
+            }
+            continue;
+        }
         const float3 r = p - xyz(xs[j]);
         const float r2 = dot(r, r);
         visc += (xyz(vs[j]) - vi) * (W(K, r2) / S0);
@@ -683,7 +696,7 @@ __global__ void kFluidForces(int n, int stride, const float4* xs, const uint32_t
             if (ns) coh += (xyz(ns[k]) - xyz(ns[j])) * (-tension * kij);   // curvature: the surface pulls itself flat
         }
     }
-    const float3 d = visc * xsph + coh * dt;
+    const float3 d = visc * xsph + coh * dt + stick * dt + drag * wet;
     out[k] = make_float4(vi.x + d.x, vi.y + d.y, vi.z + d.z, 0.0f);
 }
 
@@ -745,6 +758,35 @@ __global__ void kBreakMarked(int nb, const int2* ends, const uint8_t* mark, uint
         broken[b] = 1;
         atomicAdd(counter, 1);
     }
+}
+
+__global__ void kBleed(int nb, const int2* ends, const float* bleed, uint8_t* broken, float dt, unsigned step) {
+    const int b = blockIdx.x * blockDim.x + threadIdx.x;
+    if (b >= nb || broken[b]) return;
+    const int2 e = ends[b];
+    const float r = fmaxf(bleed[e.x], bleed[e.y]);
+    if (r <= 0.0f) return;
+    unsigned hsh = unsigned(b) * 0x9E3779B1u ^ step * 0x85EBCA77u;
+    hsh ^= hsh >> 16; hsh *= 0x7feb352dU; hsh ^= hsh >> 15; hsh *= 0x846ca68bU; hsh ^= hsh >> 16;
+    if ((hsh & 0xffffff) * (1.0f / 16777216.0f) < 1.0f - expf(-r * dt)) broken[b] = 1;
+}
+// the blood's pressure at a wound: liquid within r of the hole is pushed out along its normal (at least at this speed)
+__global__ void kWoundPush(int n, const float4* x, float4* v, const uint32_t* phase, float3 c, float r2, float3 nrm, float speed) {
+    const int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= n || !(phase[i] & PF_FLUID)) return;
+    const float3 d = xyz(x[i]) - c;
+    if (dot(d, d) > r2) return;
+    float4 vi = v[i];
+    const float vn = vi.x * nrm.x + vi.y * nrm.y + vi.z * nrm.z;
+    if (vn >= speed) return;
+    vi.x += nrm.x * (speed - vn);
+    vi.y += nrm.y * (speed - vn);
+    vi.z += nrm.z * (speed - vn);
+    v[i] = vi;
+}
+__global__ void kBleedFade(int n, float* bleed, float keep) {
+    const int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) bleed[i] *= keep;
 }
 
 __global__ void kBreakSphere(int nb, const int2* ends, const float4* x, uint8_t* broken, float3 c, float r2, int* counter) {
@@ -911,6 +953,7 @@ void ParticleWorld::allocate(int cap, int bondCap) {
     x0_ = dalloc<float4>(cap);
     v_ = dalloc<float4>(cap);
     kv_ = dalloc<float4>(cap);
+    bleed_ = dalloc<float>(cap);
     dx_ = dalloc<float4>(cap);
     q_ = dalloc<float4>(cap);
     w_ = dalloc<float>(cap);
@@ -965,7 +1008,7 @@ void ParticleWorld::allocate(int cap, int bondCap) {
 void ParticleWorld::freeAll() {
     if (!x_) return;
     cudaDeviceSynchronize();
-    dfree(x_), dfree(x0_), dfree(v_), dfree(kv_), dfree(dx_), dfree(q_), dfree(w_), dfree(phase_), dfree(rho_), dfree(contacts_), dfree(contactsNext_);
+    dfree(x_), dfree(x0_), dfree(v_), dfree(kv_), dfree(bleed_), dfree(dx_), dfree(q_), dfree(w_), dfree(phase_), dfree(rho_), dfree(contacts_), dfree(contactsNext_);
     dfree(key_), dfree(keySorted_), dfree(id_), dfree(idSorted_), dfree(xs_), dfree(vs_), dfree(ns_), dfree(phs_), dfree(psi_), dfree(psis_), dfree(code_), dfree(lam_), dfree(rhos_), dfree(nbrFlag_), dfree(nbr_), dfree(nbrCount_);
     dfree(cellStart_), dfree(cellEnd_);
     if (sortTemp_) cudaFree(sortTemp_);
@@ -1223,6 +1266,10 @@ void ParticleWorld::step(float dt, cudaStream_t st) {
     } else {
         record(dt, st);
     }
+    if (bleeding_ && nb_) {
+        kBleed<<<blocks(nb_), kBlock, 0, st>>>(nb_, bEnds_, bleed_, bBroken_, dt, bleedStep_++);
+        kBleedFade<<<blocks(n_), kBlock, 0, st>>>(n_, bleed_, std::exp(-dt / std::max(0.05f, params.bleedFade)));
+    }
     time_ += dt;
     PCUDA(cudaEventRecord(e1_, st));
     PCUDA(cudaEventSynchronize(e1_));
@@ -1293,7 +1340,7 @@ void ParticleWorld::record(float dt, cudaStream_t st) {
         }
         kVelocity<<<nB, kBlock, 0, st>>>(n_, x_, x0_, v_, w_, kv_, 1.0f / sdt, P.maxSpeed);
         g_prof.mark("hiz");
-        const bool div = P.density && P.divergenceIters > 0, visc = P.xsph > 0.0f || P.cohesion > 0.0f || P.tension > 0.0f;
+        const bool div = P.density && P.divergenceIters > 0, visc = P.xsph > 0.0f || P.cohesion > 0.0f || P.tension > 0.0f || P.adhesion > 0.0f || P.wetDrag > 0.0f;
         if (div || visc) {
             kReorder<<<nB, kBlock, 0, st>>>(n_, idSorted_, x_, w_, phase_, psi_, xs_, nullptr, nullptr, nullptr, invH);
             kGatherVel<<<nB, kBlock, 0, st>>>(n_, idSorted_, v_, vs_);
@@ -1307,7 +1354,8 @@ void ParticleWorld::record(float dt, cudaStream_t st) {
                 const float xs = 1.0f - std::pow(1.0f - std::min(P.xsph, 0.99f), sdt * 60.0f);
                 if (P.tension > 0.0f) kNormals<<<nB, kBlock, 0, st>>>(n_, cap_, xs_, phs_, nbr_, nbrCount_, ns_, K, S0_);
                 kFluidForces<<<nB, kBlock, 0, st>>>(n_, cap_, xs_, phs_, nbr_, nbrCount_, vs_, rhos_, P.tension > 0.0f ? ns_ : nullptr, dx_, K, S0_, xs,
-                                                    P.cohesion, cohPeak, P.tension, sdt);
+                                                    P.cohesion, cohPeak, P.tension, sdt, P.adhesion,
+                                                    1.0f - std::pow(1.0f - std::min(P.wetDrag, 0.99f), sdt * 60.0f));
                 kScatterVel<<<nB, kBlock, 0, st>>>(n_, idSorted_, dx_, v_);
             } else {
                 kScatterVel<<<nB, kBlock, 0, st>>>(n_, idSorted_, vs_, v_);
@@ -1412,6 +1460,21 @@ void ParticleWorld::addVelocity(const std::vector<uint32_t>& idx, const std::vec
     PCUDA(cudaStreamSynchronize(stream_));
     cudaFree(di);
     cudaFree(dd);
+}
+
+void ParticleWorld::woundPressure(float3 c, float r, float3 n, float speed) {
+    if (speed <= 0.0f || n_ <= 0) return;
+    kWoundPush<<<blocks(n_), kBlock, 0, stream_>>>(n_, x_, v_, phase_, c, r * r, n, speed);
+}
+
+void ParticleWorld::addBleed(const std::vector<uint32_t>& particles, const std::vector<float>& rates) {
+    if (particles.empty()) return;
+    std::vector<float> h(size_t(n_), 0.0f);
+    PCUDA(cudaMemcpy(h.data(), bleed_, size_t(n_) * sizeof(float), cudaMemcpyDeviceToHost));
+    for (size_t k = 0; k < particles.size(); ++k)
+        if (int(particles[k]) < n_) h[particles[k]] = std::max(h[particles[k]], rates[k]);
+    PCUDA(cudaMemcpy(bleed_, h.data(), size_t(n_) * sizeof(float), cudaMemcpyHostToDevice));
+    bleeding_ = true;
 }
 
 int ParticleWorld::breakBondsOf(const std::vector<uint32_t>& particles) {

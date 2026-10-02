@@ -21,9 +21,12 @@ struct HitReport {
     bool exited = false;
     float exitSpeed = 0;
     float3 entry{};               // the first point it touched the body
+    float3 exit{};                // the last particle on its path (where it left, if it did)
+    std::vector<uint32_t> channel;   // the particles it crushed (in order along the path)
 };
 
 // one projectile from origin along dir (unit); skel may be null (no skeleton to push). cavityShare: the share of each
 // step's energy the radial flow carries (weapons::radialSpeed)
+// bleedRate (per second, each bond) and bleedRadius (m): the wound's bleeding around the holes (half along the channel)
 HitReport shootBody(BodySim& body, const BodyGraph& g, const weapons::Projectile& p, float3 origin, float3 dir, SkeletonSim* skel,
-                    float cavityShare = 0.8f);
+                    float cavityShare = 0.8f, float bleedRate = 0.8f, float bleedRadius = 0.025f);

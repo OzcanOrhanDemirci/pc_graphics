@@ -2,9 +2,12 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <unordered_map>
 
-HitReport shootBody(BodySim& body, const BodyGraph& g, const weapons::Projectile& proj, float3 o, float3 d, SkeletonSim* skel, float cavityShare) {
+HitReport shootBody(BodySim& body, const BodyGraph& g, const weapons::Projectile& proj, float3 o, float3 d, SkeletonSim* skel, float cavityShare,
+                    float bleedRate, float bleedRadius) {
     HitReport rep;
     ParticleWorld& w = body.world;
     const float s = w.spacing();
@@ -28,7 +31,21 @@ HitReport shootBody(BodySim& body, const BodyGraph& g, const weapons::Projectile
         const float r2 = dot(q, q);
         if (r2 < reach * reach) near.push_back({t, std::sqrt(r2), uint32_t(i)});
     }
+    if (std::getenv("TANECIK_ATIS_TANI")) {   // a diagnosis: what the ray found
+        int liq = 0;
+        for (uint8_t f : liquid) liq += f;
+        std::printf("  tani: %zu tanecik (%d sivi), isina yakin %zu; ilk tanecik (%.3f %.3f %.3f)\n", x.size(), liq, near.size(), x.empty() ? 0.f : x[0].x,
+                    x.empty() ? 0.f : x[0].y, x.empty() ? 0.f : x[0].z);
+    }
     if (near.empty()) return rep;
+    {   // march from just before the body, however far the muzzle is (the media's bins cover 3 m from there; a camera 4 m
+        // away put the whole body past them: every shot from the live window missed)
+        float tmin = 1e30f;
+        for (const Near& n : near) tmin = std::fmin(tmin, n.t);
+        const float shift = std::fmax(0.0f, tmin - 0.05f);
+        o = o + d * shift;
+        for (Near& n : near) n.t -= shift;
+    }
     // the media along the ray, in 2 mm bins: a particle on the path (within 0.6 spacings) covers its own spacing
     const float bin = 0.002f, maxLen = 3.0f;
     std::vector<uint8_t> med(size_t(maxLen / bin) + 1, uint8_t(weapons::Medium::Air));
@@ -72,6 +89,7 @@ HitReport shootBody(BodySim& body, const BodyGraph& g, const weapons::Projectile
         }
         if (!inPath.empty()) {
             if (first) { rep.entry = o + d * inPath.front()->t; first = false; }
+            rep.exit = o + d * inPath.back()->t;
             const float share = float((seg.dp + pending) / double(inPath.size()));   // N s each, along the ray
             pending = 0.0;
             for (const Near* n : inPath) {
@@ -99,6 +117,7 @@ HitReport shootBody(BodySim& body, const BodyGraph& g, const weapons::Projectile
             ++rep.thrown;
         }
     }
+    rep.channel = crush;
     std::sort(crush.begin(), crush.end());
     crush.erase(std::unique(crush.begin(), crush.end()), crush.end());
     rep.crushed = int(crush.size());
@@ -116,6 +135,23 @@ HitReport shootBody(BodySim& body, const BodyGraph& g, const weapons::Projectile
     std::vector<float3> vel2(vel.size());
     for (size_t k = 0; k < ord.size(); ++k) { idx2[k] = idx[ord[k]]; vel2[k] = vel[ord[k]]; }
     w.addVelocity(idx2, vel2);
+    if (!first && bleedRate > 0.0f) {
+        std::vector<uint32_t> bi;
+        std::vector<float> br;
+        const float rh = bleedRadius, rc = 0.6f * bleedRadius;
+        for (size_t i = 0; i < x.size(); ++i) {
+            if (g.kind[i] == PK_BONE) continue;
+            const float3 a = x[i] - rep.entry, b = x[i] - rep.exit;
+            const float da = dot(a, a), db = dot(b, b);
+            if (da < rh * rh || (rep.exited && db < rh * rh)) { bi.push_back(uint32_t(i)); br.push_back(bleedRate); continue; }
+            const float3 v = x[i] - o;   // near the channel between them
+            const float t = dot(v, d);
+            const float3 q = v - d * t;
+            const float t0 = dot(rep.entry - o, d), t1 = dot(rep.exit - o, d);
+            if (t > t0 && t < t1 && dot(q, q) < rc * rc) { bi.push_back(uint32_t(i)); br.push_back(0.5f * bleedRate); }
+        }
+        w.addBleed(bi, br);
+    }
     if (skel)
         for (int b = 0; b < B_COUNT; ++b)
             if (boneN[b] > 0.0f) skel->push(b, bonePush[b], boneAt[b] / boneN[b]);

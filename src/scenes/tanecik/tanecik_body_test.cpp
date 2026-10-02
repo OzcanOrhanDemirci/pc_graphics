@@ -7,6 +7,7 @@
 #include "scenes/tanecik/balance.h"
 #include "scenes/tanecik/body_hits.h"
 #include "scenes/tanecik/body_sim.h"
+#include "scenes/tanecik/body_world.h"
 #include "scenes/tanecik/tanecik_app.h"
 #include "core/image_io.h"
 
@@ -146,63 +147,45 @@ int runBodyClip(TanecikApp& app, const std::string& name, const std::string& out
     app.renderer.init(app.width, app.height, app.root);
     std::string log;
     if (!app.renderer.compileDevice(log)) { std::printf("DERLEME HATASI\n%s\n", log.c_str()); return 1; }
-    BodyRun r(app);
-    if (!r.build()) return 1;
+    BodyWorld world(app);
+    if (!world.build()) return 1;
     app.upload();
     app.applyLook(app.cfg.i("gorunum.cam", 1) != 0);
     app.cfg.set("kamera.yaw_deg", app.cfg.values.count("klip.yaw") ? app.cfg.values["klip.yaw"] : "35");
     app.cfg.set("kamera.uzaklik", app.cfg.values.count("klip.uzaklik") ? app.cfg.values["klip.uzaklik"] : "2.4");
-    app.cfg.set("kamera.hedef", "0 1.1 0");
+    app.cfg.set("kamera.hedef", app.cfg.values.count("klip.hedef") ? app.cfg.values["klip.hedef"] : "0 1.1 0");
     app.setCamera();
     std::filesystem::create_directories(outPrefix);
-    Feed feed;
     const unsigned spp = unsigned(app.cfg.i("test.klip.spp", 24));
     const float power = app.cfg.f("klip.guc", 0.5f);
-    // the timeline: settle 0.5 s, the shot, 0.6 s of slow motion (x0.1: 6 s of clip), 1.5 s real time
-    const float shotAt = 0.5f, slowFor = 0.6f, slow = 0.1f, after = 1.5f;
+    // the timeline: settle 0.5 s, the shot, slow motion (x0.1) for klip.agir s of its time, then klip.sonra s real time
+    const float shotAt = 0.5f, slowFor = app.cfg.f("klip.agir", 0.6f), slow = 0.1f, after = app.cfg.f("klip.sonra", 1.5f);
     double t = 0.0;
     bool shot = name == "dur";
     int frame = 0;
     const double total = shotAt + slowFor + after;
+    const weapons::Gun gun = name == "tufek" ? weapons::Gun::Rifle : name == "pompali" ? weapons::Gun::Shotgun : weapons::Gun::Pistol;
     while (t < total) {
         const bool inSlow = shot && t >= shotAt && t < shotAt + slowFor && name != "dur";
         const float dt = (1.0f / 30.0f) * (inSlow ? slow : 1.0f);
         if (!shot && t >= shotAt) {
-            const float3 origin = make_float3(1.2f, 1.25f, 2.6f), aim = make_float3(0.0f, 1.25f, 0.06f);
-            const float3 dir = normalize(aim - origin);
-            const weapons::Projectile p = projectileOf(name, power);
-            int pellets = 1;
-            HitReport sum;
-            if (name == "pompali") {
-                const weapons::Load l = weapons::gunLoad(weapons::Gun::Shotgun, power);
-                const std::vector<float3> dirs = weapons::pelletDirections(l, dir, 7u);
-                pellets = int(dirs.size());
-                for (const float3& dd : dirs) {
-                    const HitReport h = shootBody(r.body, app.graph, l.shot, origin, dd, &r.skel);
-                    sum.crushed += h.crushed;
-                    sum.thrown += h.thrown;
-                    sum.bondsBroken += h.bondsBroken;
-                    sum.pDeposited += h.pDeposited;
-                    sum.pApplied += h.pApplied;
-                }
-            } else {
-                sum = shootBody(r.body, app.graph, p, origin, dir, &r.skel);
-            }
-            std::printf("atis %s (guc %.2f, %d mermi): yol uzerinde %d tanecik, boslukla itilen %d, kopan bag %d, momentum %.3f / %.3f N s, "
-                        "doku %.1f cm, %s\n",
-                        name.c_str(), power, pellets, sum.crushed, sum.thrown, sum.bondsBroken, sum.pApplied, sum.pDeposited, sum.tissue * 100.0f,
-                        sum.exited ? "cikti" : "icinde kaldi");
+            const float3 origin = app.cfg.v3("klip.namlu", make_float3(1.2f, 1.25f, 2.6f)), aim = app.cfg.v3("klip.hedef_nokta", make_float3(0.0f, 1.25f, 0.06f));
+            const HitReport h = world.shoot(gun, power, origin, aim);
+            std::printf("atis %s (guc %.2f): yol uzerinde %d tanecik, boslukla itilen %d, kopan bag %d, momentum %.3f / %.3f N s, doku %.1f cm, %s\n",
+                        name.c_str(), power, h.crushed, h.thrown, h.bondsBroken, h.pApplied, h.pDeposited, h.tissue * 100.0f,
+                        h.exited ? "cikti" : "icinde kaldi");
             shot = true;
         }
-        r.step(dt);
+        world.step(dt);
         t += dt;
-        feed(app, r);
+        world.feed();
         for (unsigned k = 0; k < spp; k += 8) app.renderer.render(8, k > 0);
         std::vector<uchar4> px;
         app.renderer.download(px);
         char path[512];
         std::snprintf(path, sizeof(path), "%s/f_%05d.png", outPrefix.c_str(), frame++);
         writePNG(path, int(app.width), int(app.height), reinterpret_cast<const unsigned char*>(px.data()));
+        if (frame % 30 == 0) std::printf("  %.2f s: kan %d tanecik\n", t, world.liquidCount());
     }
     const std::string mp4 = outPrefix + ".mp4";
     const std::string cmd = "ffmpeg -loglevel error -y -framerate 30 -i \"" + outPrefix + "/f_%05d.png\" -c:v libx264 -pix_fmt yuv420p -crf 18 \"" + mp4 + "\"";
