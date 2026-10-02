@@ -35,13 +35,14 @@ Building buildApartment(PhysWorld& w, const ApartmentSpec& s, const PhysMaterial
 ApartmentSpec apartmentSpecFromConfig(const Config& cfg);
 PhysMaterial brickFromConfig(const Config& cfg);
 
-// The tower: a reinforced-concrete frame around a shear-wall core (the lift shaft in the middle bay, no floor inside
+// The tower: a reinforced-concrete frame around a plain-concrete core (the lift shaft in the middle bay, no floor inside
 // it), brick infill with large windows on every side, a glass lobby at the front of the ground storey, a parapet. The
 // columns are larger than the apartment's (a frame of 30x50 cm columns would crush under twenty storeys); the
 // materials are the same.
 struct TowerSpec {
     FrameSpec frame;
     double coreT = 0.30, coreSeg = 2.2;          // core walls: thickness, segment length
+    float coreRho = 0.0f;                        // their steel ratio: 0 plain concrete (< 0: a column's, as it was)
     double wallExt = 0.20, blockW = 1.5, blockH = 1.0;
     float densityWall = 1100.0f;
     double winW = 2.4, winH = 1.6, sill = 0.8;

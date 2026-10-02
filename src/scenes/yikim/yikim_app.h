@@ -46,6 +46,8 @@ struct YikimApp {
     std::vector<std::vector<int>> ballPools;   // bodies, per size
     std::vector<int> ballNext;
     int struck = 0;              // the last ball thrown (body), 0: none
+    int ringThrown = 0;          // darbe.cevre: balls thrown so far
+    bool stripped = false;       // darbe.soy: done
     struct BallThrow {
         int size = -1;           // index into ballSizes
         float radius = 0, speed = 0, mass = 0;
@@ -108,6 +110,8 @@ struct YikimApp {
             ballPools.clear();
             ballNext.clear();
             struck = 0;
+            ringThrown = 0;
+            stripped = false;
             const auto it = cfg.values.find("darbe.boylar");
             const std::string list = it == cfg.values.end() ? std::string("0.25 0.3 0.35 0.42 0.5 0.6 0.7") : it->second;
             for (const char* c = list.c_str(); *c;) {
@@ -226,7 +230,22 @@ struct YikimApp {
             startQuake(cfg.i("deprem.magnitude", 7), cfg.f("deprem.seconds", 0.0f), t);
         // darbe: at darbe.time a wrecking ball of power darbe.guc comes along darbe.from (a direction, m) at the
         // ground-storey column at grid point darbe.kolon, half a metre under its middle
-        if (scenario == "darbe" && !struck && t >= cfg.f("darbe.time", 1.0f)) {
+        // darbe.soy (diagnosis): at darbe.soy_t everything but the middle bay's frame (its columns, the beams on its
+        // lines, the tower's core walls: what lies within its footprint, 0.6 m wider) is taken away; the ball
+        // (darbe.time) then strikes the core standing alone
+        if (scenario == "darbe" && cfg.i("darbe.soy", 0) && !stripped && t >= cfg.f("darbe.soy_t", 0.5f)) {
+            const int ci = spec.baysX / 2, cj = spec.baysZ / 2;
+            const double x0 = ci * spec.spanX - 0.6, x1 = (ci + 1) * spec.spanX + 0.6, z0 = cj * spec.spanZ - 0.6, z1 = (cj + 1) * spec.spanZ + 0.6;
+            int kept = 0;
+            for (const Piece& p : pieces) {
+                const bool core = p.kind != PK_WALL && p.kind != PK_SLAB && p.lo.x >= x0 && p.hi.x <= x1 && p.lo.z >= z0 && p.hi.z <= z1;
+                if (core) ++kept;
+                else world.removeBody(p.body);
+            }
+            std::printf("t=%.2f s: cekirdek disi kaldirildi (%d parca kaldi)\n", t, kept);
+            stripped = true;
+        }
+        if (scenario == "darbe" && !cfg.i("darbe.cevre", 0) && !struck && t >= cfg.f("darbe.time", 1.0f)) {
             const float3 ij = cfg.v3("darbe.kolon", make_float3(0, 0, 0));
             float3 p = make_float3(float(ij.x * spec.spanX), float(0.5 * spec.level(1) - 0.5), float(ij.y * spec.spanZ));
             if (cfg.values.count("darbe.hedef")) p = cfg.v3("darbe.hedef", p);   // a point instead of a column
@@ -235,6 +254,29 @@ struct YikimApp {
             const int b = strike(from, p, cfg.f("darbe.guc", 0.5f));
             std::printf("t=%.2f s: yikim topu %d (r %.2f m, %.0f kg, %.0f m/s), hedef (%.2f %.2f %.2f)\n", t, b, bt.radius, bt.mass, bt.speed, p.x, p.y,
                         p.z);
+        }
+        // darbe.cevre (diagnosis): instead, a ball every darbe.aralik seconds at each column round the edge in turn, each
+        // from outside; darbe.katlar rounds, from storey darbe.kat_bas every darbe.kat_adim storeys: the frame knocked
+        // down around its middle, as by hand
+        if (scenario == "darbe" && cfg.i("darbe.cevre", 0) && t >= cfg.f("darbe.time", 1.0f) + ringThrown * cfg.f("darbe.aralik", 0.7f)) {
+            std::vector<int2> ring;
+            for (int i = 0; i <= spec.baysX; ++i) ring.push_back(make_int2(i, 0));
+            for (int j = 1; j <= spec.baysZ; ++j) ring.push_back(make_int2(spec.baysX, j));
+            for (int i = spec.baysX - 1; i >= 0; --i) ring.push_back(make_int2(i, spec.baysZ));
+            for (int j = spec.baysZ - 1; j >= 1; --j) ring.push_back(make_int2(0, j));
+            const int round = ringThrown / int(ring.size());
+            const int storey = cfg.i("darbe.kat_bas", 0) + round * cfg.i("darbe.kat_adim", 1);
+            if (round < cfg.i("darbe.katlar", 1) && storey < spec.storeys) {
+                const int2 g = ring[ringThrown % ring.size()];
+                const float3 p = make_float3(float(g.x * spec.spanX), float(0.5 * (spec.level(storey) + spec.level(storey + 1)) - 0.3),
+                                             float(g.y * spec.spanZ));
+                float3 out = make_float3(p.x - 0.5f * float(spec.baysX * spec.spanX), 0.0f, p.z - 0.5f * float(spec.baysZ * spec.spanZ));
+                out = out * (1.0f / std::max(1e-3f, length(out)));
+                const float guc = cfg.f("darbe.guc", 0.5f);
+                const int b = strike(p + out * 8.0f + make_float3(0, 1, 0), p, guc);
+                std::printf("t=%.2f s: cevre topu %d, kat %d, kolon (%d, %d)\n", t, b, storey, g.x, g.y);
+                ++ringThrown;
+            }
         }
         driveQuake(t);
     }

@@ -447,7 +447,7 @@ private:
     static const char* buildingKey(int b) { return b == 1 ? "gokdelen" : b == 2 ? "ev" : "apartman"; }
     static const char* buildingName(int b) { return b == 1 ? L("Gökdelen", "Tower") : b == 2 ? L("Ev", "House") : L("Apartman", "Apartments"); }
     static const char* buildingNote(int b) {
-        return b == 1   ? L("30 kat, 97 m · perdeli çekirdek", "30 storeys, 97 m · shear-wall core")
+        return b == 1   ? L("30 kat, 97 m · camlı lobi", "30 storeys, 97 m · glass lobby")
                : b == 2 ? L("Tek kat, beşik çatı", "One storey, gable roof")
                         : L("5 kat · zemin katta dükkânlar", "5 storeys · shops on the ground floor");
     }

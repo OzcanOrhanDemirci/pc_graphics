@@ -324,6 +324,13 @@ Building buildTowerBlock(PhysWorld& w, const TowerSpec& sIn, const PhysMaterial&
                 if (axis == 0) { q.lo = d3(cuts[k], y0, c - s.coreT * 0.5); q.hi = d3(cuts[k + 1], top, c + s.coreT * 0.5); }
                 else { q.lo = d3(c - s.coreT * 0.5, y0, cuts[k]); q.hi = d3(c + s.coreT * 0.5, top, cuts[k + 1]); }
                 q.color = s.frameColor;
+                // plain concrete: a reinforced core (a column's bars, storey to storey) stood alone, 90 m and bending,
+                // once wrecking balls had knocked the frame down around it, then toppled whole (Özcan, 10-02). Without
+                // bars it carries its share in compression and through an earthquake as before (magnitudes 5-7 the
+                // same) and holds nothing where it is pulled. (Measured, `darbe.soy`: the middle bay alone still stands
+                // after a ball, on its four reinforced columns. A brick shaft instead pancaked the tower at magnitude 7
+                // into a pile of 57 thousand contacts, 53-64 ms a step.)
+                q.rho = s.coreRho;
                 P.push_back(q);
             }
         };
@@ -363,6 +370,7 @@ TowerSpec towerSpecFromConfig(const Config& c) {
     heightsFromConfig(c, "gokdelen.", s.frame);
     s.coreT = c.f("gokdelen.core_t", float(s.coreT));
     s.coreSeg = c.f("gokdelen.core_seg", float(s.coreSeg));
+    s.coreRho = c.f("gokdelen.core_rho", s.coreRho);
     s.wallExt = c.f("gokdelen.wall_ext", float(s.wallExt));
     s.blockW = c.f("gokdelen.block_w", float(s.blockW));
     s.blockH = c.f("gokdelen.block_h", float(s.blockH));

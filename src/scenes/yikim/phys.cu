@@ -572,13 +572,13 @@ __device__ void pointsVsHull(const DevWorld& W, PairState& S, int p, int q, bool
                     sl = W.samples[r];
                     pl = M.mul(sl) + t;   // in Q's frame
                     if (fabsf(pl.x - cq.x) <= hq.x && fabsf(pl.y - cq.y) <= hq.y && fabsf(pl.z - cq.z) <= hq.z) {
-                        // the nearest face: the plane least deep under; outside any plane, not inside (all planes read,
-                        // no break, so that their loads go out together)
+                        // the nearest face: the plane least deep under; outside any plane, not inside (the first one
+                        // decides: a wrecking ball has 256 planes)
                         bool outside = pn == 0;
                         for (int k = 0; k < pn; ++k) {
                             const float4 P = W.planes[p0 + k];
                             const float sd = P.x * pl.x + P.y * pl.y + P.z * pl.z - P.w;
-                            outside |= sd > 0.0f;
+                            if (sd > 0.0f) { outside = true; break; }
                             if (sd > best) { best = sd; bi = k; }
                         }
                         inside = !outside;
