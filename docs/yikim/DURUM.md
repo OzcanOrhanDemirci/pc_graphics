@@ -3,6 +3,21 @@
 > Tek kaynak durum panosu. Plan ve Özcan'ın sözleri `docs/yikim/PLAN.md`'de.
 
 ## Şu an
+- **2026-10-02 (gece, en son) · Topun en güçlüsü artık bir göktaşı.** Özcan: *"topun max gücünü çok arttırabilelim.
+  Eğlence amaçlı. Son hali cidden abartı olsun. Gökdelen sağlam olduğu için şuanki en güçlü zarar veriyor ama
+  yıkamıyor."*
+  - Çubuğun sağ ucu 0,7 m · 11,4 t · 70 m/s (mermi) yerine **2,5 m · 520 t · 110 m/s** (saatte 396 km; çubukta adı
+    "Göktaşı"). Hız fizikteki 120 m/s korumasının altında kalsın diye abartı boydan ve kütleden. Sol yarı ve çentik
+    aynı. Hazır toplara yedi boy eklendi (0,85-2,5 m; her boydan 4).
+  - **Ölçüldü** (`--clip darbe --set darbe.guc=G`):
+
+    | Güç | Top | Gökdelen, lobi katı kolonu (1,0) | Apartman, köşe kolon (0,0) | Apartman, cephe (x=0, y 4,7, z 6) |
+    | --- | --- | --- | --- | --- |
+    | 0,75 · Ağır | 1,0 m · 33 t · 39 m/s | | ayağı 99 m savruldu, bina ayakta | içinden geçti, bina ayakta |
+    | 1 · Göktaşı | 2,5 m · 520 t · 110 m/s | lobiyi delip geçer, kule çöküp devrilir (çatı 95,8 m iner) | bina göçer (çatı 13,4 m) | bina göçer (çatı 12,2 m) |
+
+    Göktaşının savurduğu parçalar 107-119 m/s'ye çıkıyor (koruma 120). Gökdelende fizik çarpmadan sonra 24-26 ms,
+    enkazda (35 bin temas yaması) 31-37 ms.
 - **2026-10-02 (gece, son) · Gökdelenin ortası artık donatısız beton.** Özcan: *"gökdelenin ortasında dikdörtgen bir
   alan var. [...] top ata ata yıkarken mesela gökdelenin çevresi yıkılıyor ortasında dikdörtgen kat kat alan kalıyor,
   sonra o da devriliyor ama bütün olarak devriliyor"*, *"fiziği değil, gökdelenin ortasını düzelt sadece"*, *"Merkez çok

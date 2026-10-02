@@ -56,7 +56,7 @@ saniye görünmeden kendi ağırlığıyla oturur. Odak fizik.
 | **← / →** | süre: kısalt / uzat. Panelde kaydırma çubuğu; çentik büyüklüğün kendi süresi (varsayılan), en sağ **∞**: durdurana kadar |
 | **Boşluk** | depremi başlat / durdur (paneldeki düğme de); durdurunca zemin 1,5 sn'de diner |
 | **sol tık** | tıkladığın yere bir **yıkım topu** gelir (döküm çelik), saniyede en çok bir. Kırılıp devrilmeye fizik karar verir |
-| **↑ / ↓** | topun gücü (paneldeki **Top** çubuğu): sol uç hafif ve yavaş (0,5 t, kolonu kıpırdatmaz), çentik dengeli (4,2 t), sağ uç **mermi** (11,4 t, saatte 252 km, binanın içinden geçer) |
+| **↑ / ↓** | topun gücü (paneldeki **Top** çubuğu): sol uç hafif ve yavaş (0,5 t, kolonu kıpırdatmaz), çentik dengeli (4,2 t), sağ uç **göktaşı** (5 m çap, 520 t, saatte 396 km: tek atışta gökdeleni yıkar) |
 | **sağ tık + fare** | bak · **WASD** uç · **E / Q** yukarı / aşağı · **Shift** hızlı · **tekerlek** yakınlaş |
 | **T** | ağır çekim (×1, ×0,25, ×0,1) · **P** zamanı durdur · **R** binayı baştan kur |
 | **B** | donatı demirlerini göster / gizle · **G** gürültü giderici (hızlı süzgeç → yapay zekâ → ham) |
@@ -72,5 +72,5 @@ saniye görünmeden kendi ağırlığıyla oturur. Odak fizik.
 **Dene:** gökdeleni 6 ile 7'de karşılaştır (6'da sallanır, 7'de devrilir; devrilişi **T** ile ağır çekimde izle); evin
 çatısına top at; 6 ile 8'i apartmanda art arda (**R** ile baştan kurup) karşılaştır; 7'yi **∞** ile başlatıp uzun sarsıntıda hasarın nasıl
 biriktiğini izle; zemin kat kolonlarına top at, gücü değiştirerek (ölçüldü: dengeli top köşe ve kenar kolonu kırar, en hafifi
-kıpırdatmaz, mermi kolon parçasını 98 m savurur); çöküşü **T** ile ağır çekimde izle, kırık kolon uçlarına uçup demirlere yakından bak.
+kıpırdatmaz, göktaşı apartmanı da gökdeleni de tek atışta yıkar); çöküşü **T** ile ağır çekimde izle, kırık kolon uçlarına uçup demirlere yakından bak.
 Ayarlar `scenes/yikim.cfg` (bina, malzemeler, çözücü, kamera, güneş).

@@ -62,7 +62,7 @@ to it. On opening, the building settles under its own weight for two seconds, un
 | **← / →** | length: shorter / longer. A slider on the panel; its notch is the magnitude's own length (the default), the far right **∞**: until you stop it |
 | **Space** | start / stop the earthquake (the panel's button too); stopped, the ground calms down over 1.5 s |
 | **left click** | a **wrecking ball** (cast steel) comes at what you clicked, at most one a second. The physics decides what breaks and topples |
-| **↑ / ↓** | the ball's power (the **Ball** slider on the panel): the left end light and slow (0.5 t, it does not move a column), the notch balanced (4.2 t), the right end a **bullet** (11.4 t, 252 km/h, straight through the building) |
+| **↑ / ↓** | the ball's power (the **Ball** slider on the panel): the left end light and slow (0.5 t, it does not move a column), the notch balanced (4.2 t), the right end a **meteor** (5 m across, 520 t, 396 km/h: one brings the tower down) |
 | **right click + mouse** | look · **WASD** fly · **E / Q** up / down · **Shift** faster · **wheel** zoom |
 | **T** | slow motion (×1, ×0.25, ×0.1) · **P** pause time · **R** rebuild the building |
 | **B** | show / hide the reinforcing bars · **G** denoising (fast filter → AI → raw) |
@@ -78,6 +78,6 @@ to it. On opening, the building settles under its own weight for two seconds, un
 **Try:** the tower at 6 and at 7 (at 6 it sways, at 7 it topples; watch it fall in slow motion with **T**); a ball at
 the house's roof; 6 and 8 one after the other on the apartments (rebuilding with **R**); 7 with **∞** to watch the damage
 build up over a long shaking; balls at the ground-storey columns at different powers (measured: the balanced ball breaks
-a corner or an edge column, the lightest does not move it, the bullet throws a piece of column 98 m); a collapse in slow
+a corner or an edge column, the lightest does not move it, the meteor brings down the apartments or the tower in one throw); a collapse in slow
 motion with **T**, then fly up to the broken column ends and look at the bars. Settings in `scenes/yikim.cfg` (buildings,
 materials, solver, camera, sun).

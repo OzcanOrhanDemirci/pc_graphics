@@ -4,6 +4,8 @@
 > `docs/altinsaat/`, `docs/fener/`, `docs/yikim/` (PLAN.md ve DURUM.md).
 
 ## Şu an
+- **2026-10-02 (gece, en son) · Yıkım topunun sağ ucu bir göktaşı** (Özcan: *"Son hali cidden abartı olsun"*): 5 m,
+  520 t, 110 m/s; tek atışta gökdeleni de apartmanı da yıkar. Ölçümler `docs/yikim/DURUM.md`.
 - **2026-10-02 (gece, son) · Gökdelenin ortası donatısız beton.** Özcan: *"Merkez çok bağımsız kalıyordu"* (toplarla
   çevresi yıkılınca ortadaki çekirdek tek başına ayakta kalıyordu). Depremde davranış ve hız aynı; merkez zayıfladı ama
   orta açıklığın donatılı kolonları onu yine taşıyabiliyor (kısmi, Özcan: *"Biraz bile iyileşse yeterli"*).
