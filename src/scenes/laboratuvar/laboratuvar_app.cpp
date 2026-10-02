@@ -189,7 +189,9 @@ void LaboratuvarApp::setupScene(Deney d, int maxParticles, const std::vector<uin
         FluidSurfaceSettings k = S;
         k.smoothing = cfg.f("karpuz.yuzey_yumusatma", 0.6f);
         surface(DC_RIND, mRind, k);
-        surface(DC_PITH, mPith, k);
+        // the white rind its own surface, or drawn with the green (karpuz.ic_kabuk_ayri 0): two shells of different
+        // particles interleave where the rind breaks into a camouflage of small blobs
+        if (cfg.i("karpuz.ic_kabuk_ayri", 0)) surface(DC_PITH, mPith, k);
         surface(DC_FLESH, mFlesh, k);
         surface(DC_JUICE, mJuice, S);
     }
@@ -223,6 +225,7 @@ void LaboratuvarApp::draw(const DrawInput& in) {
     for (int c = 0; c < kDrawCodes; ++c) {
         if (surf[c] < 0) continue;
         launchWeights(in.code, n, uint8_t(c), dWeight, st);
+        if (c == DC_RIND && surf[DC_PITH] < 0) launchWeightsAdd(in.code, n, uint8_t(DC_PITH), dWeight, st);   // the white rind with it
         R.buildSurface(surf[c], in.pos, dWeight, n, 0.5f * in.spacing);
     }
     if (in.poses)

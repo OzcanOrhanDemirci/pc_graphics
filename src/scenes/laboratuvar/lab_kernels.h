@@ -12,6 +12,7 @@ void launchTransform(const float3* rest, int n, const float xf[12], float3* out,
 void launchCodes(const uint8_t* base, const float* fluid, int n, uint8_t* out, cudaStream_t s);
 // a surface's weights: 1 where the code is `code`, else 0 (FluidSurface leaves out weights <= 0)
 void launchWeights(const uint8_t* codes, int n, uint8_t code, float* out, cudaStream_t s);
+void launchWeightsAdd(const uint8_t* codes, int n, uint8_t code, float* out, cudaStream_t s);   // and 1 where it is code too
 // sand: `per` grains around each sand particle (fixed offsets by a hash of its index, so a grain rides with it),
 // radius from rMin to rMax, a brightness each; returns nothing, writes n * per spheres (non-sand: radius 0)
 void launchGrains(const float3* pos, const uint8_t* codes, int n, int per, float spread, float rMin, float rMax, float4* spheres, float* tint, cudaStream_t s);

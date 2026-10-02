@@ -43,6 +43,11 @@ __global__ void kWeights(const uint8_t* codes, int n, uint8_t code, float* out) 
     out[i] = codes[i] == code ? 1.0f : 0.0f;
 }
 
+__global__ void kWeightsAdd(const uint8_t* codes, int n, uint8_t code, float* out) {
+    const int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n && codes[i] == code) out[i] = 1.0f;
+}
+
 __global__ void kGrains(const float3* pos, const uint8_t* codes, int n, int per, float spread, float rMin, float rMax, float4* sp, float* tint) {
     const int g = blockIdx.x * blockDim.x + threadIdx.x;
     if (g >= n * per) return;
@@ -171,6 +176,9 @@ void launchCodes(const uint8_t* base, const float* fluid, int n, uint8_t* out, c
 }
 void launchWeights(const uint8_t* codes, int n, uint8_t code, float* out, cudaStream_t s) {
     if (n > 0) kWeights<<<nb(n), kB, 0, s>>>(codes, n, code, out);
+}
+void launchWeightsAdd(const uint8_t* codes, int n, uint8_t code, float* out, cudaStream_t s) {
+    if (n > 0) kWeightsAdd<<<nb(n), kB, 0, s>>>(codes, n, code, out);
 }
 void launchGrains(const float3* pos, const uint8_t* codes, int n, int per, float spread, float rMin, float rMax, float4* spheres, float* tint, cudaStream_t s) {
     if (n > 0 && per > 0) kGrains<<<nb(n * per), kB, 0, s>>>(pos, codes, n, per, spread, rMin, rMax, spheres, tint);
