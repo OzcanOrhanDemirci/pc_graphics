@@ -39,4 +39,5 @@ private:
     float fallTime_ = 0.0f;
     float3 fallDir_{};
     bool haveCom_ = false;
+    float3 restOffset_{};                      // the centre of mass relative to the feet's middle at rest (he stands so)
 };

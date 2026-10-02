@@ -131,12 +131,19 @@ __device__ void solveMuscle(SkelBody& A, SkelBody& B, const SkelJoint& j, float 
     qturn(B.q, invI(B, -p));
 }
 
-// the ground under one body: its contact points that sink below the ground pushed up, their mean shared (Jacobi: a flat
-// foot rises by the depth, not by the depth times its points); friction at the patch's centre, against how far that
-// point slid this substep: static within muS times the normal correction so far, else slowed by muD
+// the ground under one body: the smallest rigid motion that lifts all of its sunken contact points out together (a
+// lift dy and two tilts ax, az: what moves a point vertically), by least squares over the points. A flat foot sunk evenly
+// rises without turning; a heel alone turns the body as its mass and inertia say (the motion's size is weighed by the
+// radius of gyration, Gauss's principle for one point). Averaging per-point corrections instead turned a flat foot
+// whenever its points were not spread evenly about its centre (the man rocked back off his heels: measured).
+// Friction then at the contact's centre, against how far that point slid this substep: static within muS times the
+// normal correction so far, else slowed by muD.
 __device__ void solveGround(SkelBody& b, const float3* pts, int2 range, float radius, float muS, float muD, float& normalSum) {
     if (b.invMass <= 0.0f || range.y <= 0) return;
-    float3 lin = make_float3(0, 0, 0), ang = make_float3(0, 0, 0), centre = make_float3(0, 0, 0);
+    // a_k = (1, -r.z, r.x): the point's rise for (dy, ax, az); normal equations A^T A u = A^T pen
+    float S[6] = {0, 0, 0, 0, 0, 0};   // symmetric: 00 01 02 11 12 22
+    float B[3] = {0, 0, 0};
+    float3 centre = make_float3(0, 0, 0);
     int count = 0;
     float depth = 0.0f;
     for (int k = 0; k < range.y; ++k) {
@@ -144,23 +151,37 @@ __device__ void solveGround(SkelBody& b, const float3* pts, int2 range, float ra
         const float3 p = b.x + r;
         const float pen = radius - p.y;
         if (pen <= 0.0f) continue;
-        const float3 n = make_float3(0, 1, 0);
-        const float3 rn = cross(r, n);
-        const float w = b.invMass + dot(rn, invI(b, rn));
-        const float lam = pen / w;
-        lin = lin + n * lam;
-        ang = ang + cross(r, n * lam);
+        const float a0 = 1.0f, a1 = -r.z, a2 = r.x;
+        S[0] += a0 * a0; S[1] += a0 * a1; S[2] += a0 * a2; S[3] += a1 * a1; S[4] += a1 * a2; S[5] += a2 * a2;
+        B[0] += a0 * pen; B[1] += a1 * pen; B[2] += a2 * pen;
         centre = centre + p;
         depth = fmaxf(depth, pen);
         ++count;
     }
     if (count == 0) return;
-    const float inv = 1.0f / count;
-    b.x = b.x + lin * (b.invMass * inv);
-    qturn(b.q, invI(b, ang * inv));
-    normalSum += sqrtf(dot(lin, lin)) * inv;
+    // the radius of gyration about the horizontal axes weighs a tilt against a lift (fewer than three points, or a line
+    // of them, leave the motion free in some direction: it is then shared as for a single point)
+    const float3 ex = qrot(qconj(b.q), make_float3(1, 0, 0)), ez = qrot(qconj(b.q), make_float3(0, 0, 1));
+    const float Ixx = dot(ex, mat3(b.I, ex)), Izz = dot(ez, mat3(b.I, ez));
+    const float m = 1.0f / b.invMass;
+    const float eps = 1e-3f * count;
+    S[0] += eps;
+    S[3] += eps * Ixx / m;
+    S[5] += eps * Izz / m;
+    // solve the 3x3 (symmetric, positive definite)
+    const float d = S[0] * (S[3] * S[5] - S[4] * S[4]) - S[1] * (S[1] * S[5] - S[4] * S[2]) + S[2] * (S[1] * S[4] - S[3] * S[2]);
+    if (fabsf(d) < 1e-20f) return;
+    const float id = 1.0f / d;
+    const float i00 = (S[3] * S[5] - S[4] * S[4]) * id, i01 = (S[2] * S[4] - S[1] * S[5]) * id, i02 = (S[1] * S[4] - S[2] * S[3]) * id;
+    const float i11 = (S[0] * S[5] - S[2] * S[2]) * id, i12 = (S[1] * S[2] - S[0] * S[4]) * id, i22 = (S[0] * S[3] - S[1] * S[1]) * id;
+    const float dy = i00 * B[0] + i01 * B[1] + i02 * B[2];
+    const float ax = i01 * B[0] + i11 * B[1] + i12 * B[2];
+    const float az = i02 * B[0] + i12 * B[1] + i22 * B[2];
+    b.x.y += dy;
+    qturn(b.q, make_float3(ax, 0.0f, az));
+    normalSum += fabsf(dy) * m;   // the push's size (kg m): the friction's budget
     // friction at the centre of the contact
-    centre = centre * inv;
+    centre = centre * (1.0f / count);
     const float3 r = centre - b.x;
     const float3 rl = qrot(qconj(b.q), r);
     const float3 prev = b.xPrev + qrot(b.qPrev, rl);
@@ -171,7 +192,7 @@ __device__ void solveGround(SkelBody& b, const float3* pts, int2 range, float ra
     const float3 t = slide / s;
     const float3 rt = cross(r, t);
     const float w = b.invMass + dot(rt, invI(b, rt));
-    float lam = s / w;   // what stops it
+    float lam = s / w;   // what stops it (kg m)
     const float limS = muS * normalSum, limD = muD * normalSum;
     if (lam > limS) lam = fminf(lam, limD);
     const float3 p = t * (-lam);

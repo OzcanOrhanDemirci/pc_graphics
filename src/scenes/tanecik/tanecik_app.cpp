@@ -8,6 +8,7 @@
 //   --scene tanecik --skeleton-test [ad] / --skeleton-clip ad   the skeleton's physics alone (tanecik_skeleton_test.cpp)
 //   --still ... --kan-deneme      a still pool and a trickle of blood placed by hand (no physics): the liquid's look
 //   --scene tanecik --weapons-test [ad]   weapons and blast (tanecik_weapons_test.cpp)
+//   --scene tanecik --balance-test [ad] / --balance-clip <N s>   standing and pushed (tanecik_balance_test.cpp)
 #include "scenes/tanecik/tanecik_app.h"
 #include "scenes/tanecik/body_graph.h"
 #include "core/image_io.h"
@@ -71,6 +72,8 @@ int runSurfaceTests(TanecikApp& app, const std::string& only);   // tanecik_surf
 int runSkeletonTests(TanecikApp& app, const std::string& only);  // tanecik_skeleton_test.cpp
 int runSkeletonClip(TanecikApp& app, const std::string& name, const std::string& outPrefix);
 int runWeaponsTests(const std::string& only);                      // tanecik_weapons_test.cpp
+int runBalanceTests(TanecikApp& app, const std::string& only);   // tanecik_balance_test.cpp
+int runBalanceClip(TanecikApp& app, float J, const std::string& outPrefix);
 
 int runTanecikCli(int argc, char** argv) {
     TanecikApp app;
@@ -78,7 +81,8 @@ int runTanecikCli(int argc, char** argv) {
     bool surface = false;
     std::string out, look = "cam", parts = "hepsi", poseName;
     bool still = false, doStats = false, bloodTest = false, skelTest = false;
-    std::string skelOnly, skelClip;
+    std::string skelOnly, skelClip, balOnly, balClip;
+    bool balTest = false;
     unsigned spp = 512;
     std::vector<std::pair<std::string, std::string>> camSet;
     for (int i = 1; i < argc; ++i) {
@@ -95,6 +99,8 @@ int runTanecikCli(int argc, char** argv) {
         else if (a == "--kan-deneme") bloodTest = true;
         else if (a == "--skeleton-test") { skelTest = true; if (i + 1 < argc && argv[i + 1][0] != '-') skelOnly = next(); }
         else if (a == "--skeleton-clip") skelClip = next();
+        else if (a == "--balance-test") { balTest = true; if (i + 1 < argc && argv[i + 1][0] != '-') balOnly = next(); }
+        else if (a == "--balance-clip") balClip = next();
         else if (a == "--spp") spp = unsigned(std::stoi(next()));
         else if (a == "--width") app.width = unsigned(std::stoi(next()));
         else if (a == "--height") app.height = unsigned(std::stoi(next()));
@@ -112,6 +118,8 @@ int runTanecikCli(int argc, char** argv) {
     for (const auto& kv : camSet) app.cfg.set(kv.first, kv.second);
     if (doStats) return stats(app);
     if (skelTest) return runSkeletonTests(app, skelOnly);
+    if (balTest) return runBalanceTests(app, balOnly);
+    if (!balClip.empty()) return runBalanceClip(app, std::stof(balClip), out.empty() ? app.root + "/captures/tanecik/denge_" + balClip : out);
     if (!skelClip.empty()) return runSkeletonClip(app, skelClip, out.empty() ? app.root + "/captures/tanecik/iskelet_" + skelClip : out);
     if (surface) return runSurfaceTests(app, surfaceTest);
     if (!still) {

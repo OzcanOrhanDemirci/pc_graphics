@@ -65,6 +65,14 @@ void BalanceController::init(const SkeletonSim& sim) {
     tone = 1.0f;
     fallTime_ = 0.0f;
     haveCom_ = false;
+    // standing at rest is the balance to keep: the centre of mass where it is then, relative to the feet's middle (it is
+    // not over the feet's own centre of mass: the feet reach forward of the ankles, the body's weight is near the heels)
+    const std::vector<SkelBody>& r = sim.restBodies();
+    float3 c = make_float3(0, 0, 0);
+    for (int b = 0; b < B_COUNT; ++b) c = c + r[b].x0 * mass_[b];
+    c = c / totalMass_;
+    const float3 s = (r[B_FOOT_L].x0 + r[B_FOOT_R].x0) * 0.5f;
+    restOffset_ = make_float3(c.x - s.x, 0.0f, c.z - s.z);
 }
 
 void BalanceController::update(const std::vector<SkelBody>& b, float dt) {
@@ -103,7 +111,7 @@ void BalanceController::update(const std::vector<SkelBody>& b, float dt) {
     }
     if (phase_ == Phase::Stand && ankleStrategy) {
         // lean the body back over the feet: the feet turn relative to the shins (toes down when he leans forward)
-        float3 e = make_float3(c.x - support.x, 0.0f, c.z - support.z);
+        float3 e = make_float3(c.x - support.x - restOffset_.x, 0.0f, c.z - support.z - restOffset_.z);
         float3 a = e * ankleKp + make_float3(v.x, 0.0f, v.z) * ankleKd;
         float mag = std::sqrt(dot(a, a));
         if (mag > 1e-6f) {
