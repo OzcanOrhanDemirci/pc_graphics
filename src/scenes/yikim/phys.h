@@ -56,6 +56,7 @@ struct PhysParams {
     float relax = 1.0f;            // relaxation of a body's pairs (Jacobi between pairs)
     int interfaceIters = 2;        // colour passes over the interfaces per substep
     int contactIters = 4;          // per pair: averaged normal pass + patch static friction, repeated
+    float contactTol = 1e-6f;      // m: a pair whose iteration moved no point by more stops iterating (0: always all)
     float margin = 0.05f;          // m: broad-phase box growth
     float maxSpeed = 120.0f;       // m/s guard
     float dampAlpha = 1.2f;        // 1/s: mass-proportional damping relative to the ground (zeta = alpha / 2 omega)
@@ -157,6 +158,7 @@ private:
     std::vector<int> colourOffset_;
     int maxDegree_ = 0;
     void solveInterfaces(float h, void* stream);
+    void contacts(float h, void* stream);
     void freeDevice();
     void writeBody(int b);         // the host state of one body to the GPU (pose, previous pose, velocities, mass, kinematic)
 };

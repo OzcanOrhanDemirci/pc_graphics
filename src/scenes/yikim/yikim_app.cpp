@@ -38,6 +38,8 @@ static int runClip(YikimApp& app, double seconds, double still, unsigned spp, co
     double maxDrift = 0, maxDrop = 0, tMaxDrift = 0;
     bool caught = false;
     std::vector<float3> prevVel;
+    double secMs = 0;
+    float secMax = 0;
     float fastest = 0, ballFastest = 0;
     int fastestBody = -1;
     double fastestT = 0, fastestY = 0;
@@ -51,6 +53,16 @@ static int runClip(YikimApp& app, double seconds, double still, unsigned spp, co
         if (k > 0) {
             app.world.step(float(dt));
             physMs += app.world.lastMs;
+            secMs += app.world.lastMs;
+            secMax = std::max(secMax, app.world.lastMs);
+        }
+        // diagnosis (test.perf): every second, the physics step's mean and worst time over that second
+        if (app.cfg.i("test.perf", 0) && k > 0 && k % 60 == 0) {
+            const PhysStats st = app.world.stats();
+            std::printf("      hiz t=%5.1f s: fizik ort. %5.2f ms, en kotu %5.2f ms, %6d cift, %5d temas yamasi\n", t, secMs / 60.0, secMax, st.pairs,
+                        st.contacts);
+            secMs = 0;
+            secMax = 0;
         }
         app.world.download();
         if (start.empty()) start = app.world.pos;
@@ -175,6 +187,22 @@ static int runClip(YikimApp& app, double seconds, double still, unsigned spp, co
                 fastestBody = int(i);
                 fastestT = t;
                 fastestY = app.world.pos[i].y;
+            }
+        }
+        // diagnosis (test.profile_at = s, repeatable as a list "s s s"): one frame kernel by kernel at those times
+        {
+            const auto it = app.cfg.values.find("test.profile_at");
+            if (it != app.cfg.values.end()) {
+                const char* c = it->second.c_str();
+                char* end = nullptr;
+                for (double v = std::strtod(c, &end); end != c; v = std::strtod(c, &end)) {
+                    if (std::fabs(t - v) < 0.5 * dt) {
+                        const PhysStats st = app.world.stats();
+                        std::printf("      t=%.2f s: %d temas yamasi, %d cift\n", t, st.contacts, st.pairs);
+                        app.world.profile(float(dt));
+                    }
+                    c = end;
+                }
             }
         }
         // diagnosis (test.track): every second, the fastest piece now, where it is and what touches it

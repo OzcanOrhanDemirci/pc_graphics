@@ -500,6 +500,12 @@ int App::run(const Options& opt) {
                 key(GLFW_KEY_G); wait(0.1); key(GLFW_KEY_G); wait(0.1);   // AI -> raw -> back to the filter
                 // the other buildings: the tower, the house (a ball at it), back to the apartment block
                 control("yapi", 1); wait(10.0); log("yikim gokdelen"); shot("yikim_gokdelen");
+                // the tower through magnitude 7: the world's clock (Time) against the wall's while it collapses; the
+                // window takes one physics step a frame, so a slow step is a slow world (Özcan: "ağır çekimde gibi")
+                control("buyukluk", 4); wait(0.3); key(GLFW_KEY_SPACE);
+                wait(15.0); log("yikim gokdelen deprem 7, 15 sn");
+                wait(10.0); log("yikim gokdelen deprem 7, 25 sn"); shot("yikim_gokdelen_gocme");
+                wait(10.0); log("yikim gokdelen deprem 7, 35 sn");
                 control("yapi", 2); wait(6.0); log("yikim ev"); shot("yikim_ev");
                 mouse(0.50f, 0.50f); wait(0.1); click(); wait(2.0); shot("yikim_ev_top");
                 control("yapi", 0); wait(6.0);
