@@ -311,6 +311,7 @@ void addPieceBodies(PhysWorld& w, std::vector<Piece>& P, const FrameSpec& s) {
     for (Piece& p : P) {
         const float rho = p.density > 0 ? p.density : p.kind == PK_SLAB ? s.densitySlab : s.densityConcrete;
         p.body = w.addBody(p.cuts.empty() ? polyAabb(p.lo, p.hi) : piecePoly(p), rho, false, p.kind, p.color ? p.color : kindColor(p.kind));
+        w.info[p.body].glass = p.glass;
     }
 }
 

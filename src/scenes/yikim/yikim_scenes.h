@@ -23,6 +23,7 @@ struct Piece {           // an axis-aligned box that becomes one body (cut by pl
     float rho = -1;      // steel ratio at its interfaces (< 0: by kind)
     std::vector<PieceCut> cuts;
     unsigned unglued = 0;   // axes (1 x, 2 y, 4 z) across which it is not glued to a piece that has the same bit
+    bool glass = false;     // drawn as glass
 };
 Poly piecePoly(const Piece& p);                        // the box, cut
 bool pieceContains(const Piece& p, double3 x, double eps);

@@ -108,6 +108,31 @@ static __forceinline__ __device__ float3 shade(float3 p, float3 n, float3 albedo
     return albedo * L;
 }
 
+// glass: a dark tint under a mirror reflection, its share by Schlick's Fresnel with a coated pane's F0 (a curtain wall
+// reflects: that is its look). The reflection is traced once: another piece or the ground, lit as usual, or the sky
+// and the sun's disc.
+#define GLASS_F0 0.25f
+static __forceinline__ __device__ float3 glassShade(float3 p, float3 n, float3 d, float3 tint, Rng& r) {
+    const float c = fminf(1.0f, fmaxf(0.0f, -dot(d, n))), m = 1.0f - c, m2 = m * m;
+    const float F = GLASS_F0 + (1.0f - GLASS_F0) * m2 * m2 * m;
+    const float3 rd = d - n * (2.0f * dot(d, n));
+    const float3 o = p + n * 1e-3f;
+    float3 R;
+    const Hit h = trace(o, rd, 1e30f);
+    const float tg = rd.y < 0.0f ? (params.groundY - o.y) / rd.y : 1e30f;
+    if (h.hit && h.t < tg) {
+        const YBody b = params.bodies[h.body];
+        R = shade(o + rd * h.t, h.n, b.albedo * (1.0f - params.damageTint * b.damage), r);
+    } else if (tg < 1e29f) {
+        const float3 q = o + rd * tg;
+        R = shade(q, make_float3(0, 1, 0), groundAlbedo(q), r);
+    } else {
+        R = sky(rd);
+        if (dot(rd, params.sunDir) > params.sunCosMax) R = R + params.sunE * (1.0f / (2.0f * M_PIf * (1.0f - params.sunCosMax)));
+    }
+    return shade(p, n, tint, r) * (1.0f - F) + R * F;
+}
+
 // the body under a pixel (the window's mouse): one thread
 extern "C" __global__ void __raygen__pick() {
     const YCamera& C = params.cam;
@@ -166,7 +191,7 @@ extern "C" __global__ void __raygen__render() {
             const YBody b = params.bodies[h.body];
             alb = b.albedo * (1.0f - params.damageTint * b.damage);
             const float3 p = C.pos + d * h.t;
-            L = shade(p, h.n, alb, r);
+            L = b.glass > 0.0f ? glassShade(p, h.n, d, alb, r) : shade(p, h.n, alb, r);
             n = h.n;
             if (s == 0) { pp = h.body < params.barInstance ? prevPoint(h.body, p) : p; dist = h.t; seen = float(h.body) + 1.0f; }
         } else if (tg < 1e29f) {

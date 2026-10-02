@@ -508,6 +508,10 @@ int App::run(const Options& opt) {
                 wait(10.0); log("yikim gokdelen deprem 7, 35 sn");
                 control("yapi", 2); wait(6.0); log("yikim ev"); shot("yikim_ev");
                 mouse(0.50f, 0.50f); wait(0.1); click(); wait(2.0); shot("yikim_ev_top");
+                // the seismic tower on its isolators through magnitude 8 (the base glides, the tower stands)
+                control("yapi", 3); wait(8.0); log("yikim sismik"); shot("yikim_sismik");
+                control("buyukluk", 5); wait(0.3); key(GLFW_KEY_SPACE); wait(14.0); log("yikim sismik deprem 8"); shot("yikim_sismik_deprem");
+                key(GLFW_KEY_SPACE); wait(2.0);
                 control("yapi", 0); wait(6.0);
             }
             key(GLFW_KEY_H); wait(0.3); shot(infos_[s].id + "_arayuzsuz"); key(GLFW_KEY_H);

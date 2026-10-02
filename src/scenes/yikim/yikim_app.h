@@ -75,7 +75,8 @@ struct YikimApp {
     // which building stands: "apartman" (the apartment block), "gokdelen" (the tower) or "ev" (the house); setting yapi
     std::string building() const {
         const auto it = cfg.values.find("yapi");
-        return it == cfg.values.end() || (it->second != "gokdelen" && it->second != "ev") ? std::string("apartman") : it->second;
+        return it == cfg.values.end() || (it->second != "gokdelen" && it->second != "ev" && it->second != "sismik") ? std::string("apartman")
+                                                                                                                   : it->second;
     }
     void build() {
         if (cfg.values.count("scene") && cfg.values.at("scene") == "cerceve") {
@@ -92,6 +93,10 @@ struct YikimApp {
                 const TowerSpec ts = towerSpecFromConfig(cfg);
                 b = buildTowerBlock(world, ts, mc, mb);
                 spec = ts.frame;
+            } else if (y == "sismik") {
+                const SpireSpec ss = spireSpecFromConfig(cfg);
+                b = buildSpireTower(world, ss, mc, mb);
+                spec = ss.frame;
             } else if (y == "ev") {
                 const HouseSpec hs = houseSpecFromConfig(cfg);
                 b = buildHouse(world, hs, mc, mb);
@@ -159,7 +164,9 @@ struct YikimApp {
         }
         removed = false;
         quakeOn = false;
-        std::printf("dunya: %zu govde, %zu arayuz\n", world.info.size(), world.interfaceDescs.size());
+        const PhysStats ws = world.stats();   // the colours: the interface passes' cost goes with them
+        std::printf("dunya: %zu govde, %zu arayuz, %d renk (bir govdede en cok %d arayuz)\n", world.info.size(), world.interfaceDescs.size(),
+                    ws.colours, ws.maxDegree);
     }
     void applyRender() {
         YikimParams& p = renderer.params();

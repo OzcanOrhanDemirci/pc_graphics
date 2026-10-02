@@ -547,3 +547,209 @@ HouseSpec houseSpecFromConfig(const Config& c) {
     s.ridge = c.i("ev.ridge", 1) != 0;
     return s;
 }
+
+// ---------------------------------------------------------------------------------------------------------------------
+// the seismic tower
+// a piece's foot bonded to the ground (body 0) over its whole base: material mat, spring length len
+static void bondToGround(PhysWorld& w, const Piece& p, int mat, float len, float steelArea) {
+    InterfaceDesc d;
+    d.a = p.body;
+    d.b = 0;
+    d.n = make_float3(0, -1, 0);
+    d.len = len;
+    d.mat = mat;
+    const double ax = (p.hi.x - p.lo.x) * 0.5, az = (p.hi.z - p.lo.z) * 0.5;
+    const float3 c0 = make_float3(float((p.lo.x + p.hi.x) * 0.5), 0.0f, float((p.lo.z + p.hi.z) * 0.5));
+    d.fibers = fibreGrid(c0, make_float3(1, 0, 0), make_float3(0, 0, 1), float(ax), float(az), steelArea);
+    if (!d.fibers.empty()) w.addInterface(d);
+}
+
+Building buildSpireTower(PhysWorld& w, const SpireSpec& sIn, const PhysMaterial& concrete, const PhysMaterial& brick) {
+    SpireSpec s = sIn;
+    w.clear();
+    PhysMaterial hc = concrete;
+    hc.fc = s.fc;
+    hc.ft = s.ft;
+    hc.fy = s.fy;
+    hc.E = s.E;
+    const int matC = w.addMaterial(hc);
+    s.frame.matBrick = w.addMaterial(brick);
+    const FrameSpec& f = s.frame;
+    Building A;
+    std::vector<Piece>& P = A.pieces;
+    const double span = f.spanX;
+    const int base = s.tierBays.empty() ? 1 : s.tierBays[0];
+    const double W = base * span;
+    A.width = A.depth = W;
+    // the mat, in panels, under the base tier and matEdge beyond it
+    std::vector<double> mc;
+    splitRange(-s.matEdge, W + s.matEdge, s.matPanel, mc);
+    for (size_t a = 0; a + 1 < mc.size(); ++a)
+        for (size_t b = 0; b + 1 < mc.size(); ++b) {
+            Piece p;
+            p.kind = PK_SLAB;
+            p.lo = d3(mc[a], 0.0, mc[b]);
+            p.hi = d3(mc[a + 1], s.matT, mc[b + 1]);
+            p.density = f.densityConcrete;
+            p.color = s.matColor;
+            p.rho = f.rhoColumn;   // the columns' bars are anchored in it
+            P.push_back(p);
+        }
+    const size_t matEnd = P.size();
+    // the tiers: a frame each, set on the one below, its edge clad in glass from floor to beam
+    const WallStyle gs{s.glassW, 100.0, s.glassColor, s.densityGlass};   // one panel a storey high
+    double y = s.matT;
+    int st0 = 0;
+    for (size_t k = 0; k < s.tierBays.size() && k < s.tierStoreys.size(); ++k) {
+        FrameSpec t = f;
+        t.baysX = t.baysZ = s.tierBays[k];
+        t.storeys = s.tierStoreys[k];
+        t.heights.clear();
+        for (int q = 0; q < t.storeys; ++q) t.heights.push_back(f.level(st0 + q + 1) - f.level(st0 + q));
+        const double off = 0.5 * (base - s.tierBays[k]) * span, Wt = t.baysX * span;
+        const size_t from = P.size();
+        addFramePieces(t, P);
+        for (size_t q = from; q < P.size(); ++q) {
+            P[q].lo = P[q].lo + d3(off, y, off);
+            P[q].hi = P[q].hi + d3(off, y, off);
+            P[q].color = s.frameColor;
+        }
+        const size_t glassFrom = P.size();
+        for (int q = 0; q < t.storeys; ++q) {
+            const double y0 = y + t.level(q), top = y + t.level(q + 1) - t.beamD;
+            for (int i = 0; i < t.baysX; ++i) {
+                const double u0 = off + i * span + t.colX * 0.5, u1 = off + (i + 1) * span - t.colX * 0.5;
+                addWall(P, 0, off, u0, u1, y0, top, s.glassT, {}, gs);
+                addWall(P, 0, off + Wt, u0, u1, y0, top, s.glassT, {}, gs);
+            }
+            for (int j = 0; j < t.baysZ; ++j) {
+                const double u0 = off + j * span + t.colZ * 0.5, u1 = off + (j + 1) * span - t.colZ * 0.5;
+                addWall(P, 1, off, u0, u1, y0, top, s.glassT, {}, gs);
+                addWall(P, 1, off + Wt, u0, u1, y0, top, s.glassT, {}, gs);
+            }
+        }
+        for (size_t q = glassFrom; q < P.size(); ++q) P[q].glass = true;
+        y += t.level(t.storeys);
+        st0 += t.storeys;
+    }
+    A.height = y;
+    // the spire, on the top tier's middle: steel, tapering to a needle
+    {
+        const double c = 0.5 * W;
+        double yy = y;
+        for (size_t k = 0; k + 1 < s.spire.size(); k += 2) {
+            const double hw = 0.5 * s.spire[k], h = s.spire[k + 1];
+            Piece p;
+            p.kind = PK_COLUMN;
+            p.lo = d3(c - hw, yy, c - hw);
+            p.hi = d3(c + hw, yy + h, c + hw);
+            p.rho = s.spireRho;
+            p.density = s.spireDensity;
+            p.color = s.spireColor;
+            P.push_back(p);
+            yy += h;
+        }
+    }
+    // the curb round the moat, in pieces about the mat's panel long
+    const size_t curbFrom = P.size();
+    {
+        const double i0 = -s.matEdge - s.moat, i1 = W + s.matEdge + s.moat, o0 = i0 - s.curbT, o1 = i1 + s.curbT;
+        std::vector<double> cs;
+        splitRange(o0, o1, s.matPanel, cs);
+        for (size_t k = 0; k + 1 < cs.size(); ++k)
+            for (int side = 0; side < 2; ++side) {
+                Piece p;
+                p.kind = PK_OTHER;
+                p.color = s.matColor;
+                p.lo = d3(cs[k], 0.0, side ? i1 : o0);
+                p.hi = d3(cs[k + 1], s.curbH, side ? o1 : i0);
+                P.push_back(p);
+            }
+        splitRange(i0, i1, s.matPanel, cs);
+        for (size_t k = 0; k + 1 < cs.size(); ++k)
+            for (int side = 0; side < 2; ++side) {
+                Piece p;
+                p.kind = PK_OTHER;
+                p.color = s.matColor;
+                p.lo = d3(side ? i1 : o0, 0.0, cs[k]);
+                p.hi = d3(side ? o1 : i0, s.curbH, cs[k + 1]);
+                P.push_back(p);
+            }
+    }
+    const size_t curbEnd = P.size();
+    addPieceBodies(w, P, f);
+    glueTouching(w, P, matC, f, false);   // the frame, the mat and the curb among themselves; nothing to the ground yet
+    // the isolators: rubber under every mat panel. Soft across: the stiffness that gives the tower and the mat, on
+    // them, the period isoPeriod (k = m (2 pi / T)^2 over the mat's area, a spring isoLen long)
+    {
+        double mass = 0, area = 0;
+        for (size_t q = 0; q < P.size(); ++q)
+            if (q < curbFrom || q >= curbEnd) mass += w.info[P[q].body].mass;
+        for (size_t q = 0; q < matEnd; ++q) area += (P[q].hi.x - P[q].lo.x) * (P[q].hi.z - P[q].lo.z);
+        const double om = 2.0 * 3.14159265358979 / std::max(0.5, s.isoPeriod);
+        PhysMaterial iso;
+        iso.E = s.isoE;
+        iso.G = float(mass * om * om * s.isoLen / std::max(area, 1.0));
+        iso.ft = 1e12f;            // anchored: it lifts no more than it shortens (a tall tower rocks on it)
+        iso.fc = 1e12f;
+        iso.cohesion = 1e12f;      // it never slips: it shears and comes back
+        iso.Es = 0.0f;
+        iso.crushStart = 1e6f;
+        iso.crushBreak = 1e6f;
+        iso.slipBreak = 1e6f;
+        iso.openBreak = 1e6f;
+        iso.steelBreak = 1e6f;
+        const int matIso = w.addMaterial(iso);
+        for (size_t q = 0; q < matEnd; ++q) bondToGround(w, P[q], matIso, float(s.isoLen), 0.0f);
+    }
+    for (size_t q = curbFrom; q < curbEnd; ++q) bondToGround(w, P[q], matC, float(s.curbH * 0.5 + 0.3), 0.01f * float((P[q].hi.x - P[q].lo.x) * (P[q].hi.z - P[q].lo.z)));
+    return A;
+}
+
+// a list of numbers "a b c ..." under key, or fallback
+static std::vector<double> numbers(const Config& c, const std::string& key, const std::vector<double>& fallback) {
+    const auto it = c.values.find(key);
+    if (it == c.values.end()) return fallback;
+    std::vector<double> v;
+    const char* q = it->second.c_str();
+    char* end = nullptr;
+    for (double x = std::strtod(q, &end); end != q; x = std::strtod(q, &end)) {
+        v.push_back(x);
+        q = end;
+        while (*q == ',' || *q == ' ') ++q;
+    }
+    return v.empty() ? fallback : v;
+}
+
+SpireSpec spireSpecFromConfig(const Config& c) {
+    SpireSpec s;
+    s.frame = frameSpecFromConfig(c, "sismik.");
+    auto ints = [](const std::vector<double>& v) {
+        std::vector<int> r;
+        for (double x : v) r.push_back(int(x + 0.5));
+        return r;
+    };
+    s.tierBays = ints(numbers(c, "sismik.tiers", {5, 3, 1}));
+    s.tierStoreys = ints(numbers(c, "sismik.tier_storeys", {10, 10, 6}));
+    int total = 0;
+    for (int n : s.tierStoreys) total += n;
+    s.frame.storeys = total;
+    heightsFromConfig(c, "sismik.", s.frame);
+    s.spire = numbers(c, "sismik.spire", s.spire);
+    s.spireRho = c.f("sismik.spire_rho", s.spireRho);
+    s.spireDensity = c.f("sismik.spire_density", s.spireDensity);
+    s.matT = c.f("sismik.mat_t", float(s.matT));
+    s.matEdge = c.f("sismik.mat_edge", float(s.matEdge));
+    s.isoPeriod = c.f("sismik.iso_period", float(s.isoPeriod));
+    s.isoLen = c.f("sismik.iso_len", float(s.isoLen));
+    s.isoE = c.f("sismik.iso_e", s.isoE);
+    s.moat = c.f("sismik.moat", float(s.moat));
+    s.glassW = c.f("sismik.glass_w", float(s.glassW));
+    s.glassT = c.f("sismik.glass_t", float(s.glassT));
+    s.densityGlass = c.f("sismik.density_glass", s.densityGlass);
+    s.fc = c.f("sismik.fc", s.fc);
+    s.ft = c.f("sismik.ft", s.ft);
+    s.fy = c.f("sismik.fy", s.fy);
+    s.E = c.f("sismik.e", s.E);
+    return s;
+}

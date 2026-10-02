@@ -70,3 +70,27 @@ struct HouseSpec {
 };
 Building buildHouse(PhysWorld& w, const HouseSpec& s, const PhysMaterial& concrete, const PhysMaterial& brick);
 HouseSpec houseSpecFromConfig(const Config& cfg);
+
+// The seismic tower: base isolation, after Japanese practice. Glass in tiers, each centred on the one below (tierBays
+// square, tierStoreys high), a steel spire on top; the frame stands on a concrete mat that rests on isolators instead of
+// being bonded to the ground: rubber, soft across (the tower on them swings with a period of isoPeriod seconds, longer
+// than an earthquake's strong shaking, so that little of it reaches the tower), stiff and strong in compression, never
+// breaking. A curb round the mat, a moat's width away, is bonded to the ground: it rides the earthquake and shows how far
+// the tower glides.
+struct SpireSpec {
+    FrameSpec frame;                             // the storeys (all tiers), the sections; bays set per tier
+    std::vector<int> tierBays = {5, 3, 1}, tierStoreys = {10, 10, 6};
+    std::vector<double> spire = {1.6, 6, 1.1, 6, 0.7, 6, 0.4, 5, 0.2, 4};   // (width, height) from the bottom up
+    float spireRho = 0.06f, spireDensity = 1200.0f;   // hollow steel, its foot well anchored (heavier, it broke off at 8)
+    // its concrete and bars: high-strength, as a new tower's (the others' 16 MPa crushed at the foot of 26 storeys)
+    float fc = 40e6f, ft = 3.0e6f, fy = 420e6f, E = 33e9f;
+    double matT = 1.0, matEdge = 1.0, matPanel = 5.0;   // the mat: thickness, beyond the base tier, panel size
+    double isoPeriod = 3.5, isoLen = 0.5;               // the isolated period (s), the rubber's height (m)
+    float isoE = 100e6f;                                // its stiffness in compression (Pa)
+    double moat = 0.9, curbT = 0.5, curbH = 0.8;        // the curb: the moat's width, the curb's thickness and height
+    double glassW = 5.0, glassT = 0.15;                 // the curtain wall: panel width (a pane a bay), thickness
+    float densityGlass = 900.0f;                        // glass and mullions
+    unsigned frameColor = 0x4b5057, glassColor = 0x1e2a33, spireColor = 0xc9ced3, matColor = 0x8f8f8b;
+};
+Building buildSpireTower(PhysWorld& w, const SpireSpec& s, const PhysMaterial& concrete, const PhysMaterial& brick);
+SpireSpec spireSpecFromConfig(const Config& cfg);

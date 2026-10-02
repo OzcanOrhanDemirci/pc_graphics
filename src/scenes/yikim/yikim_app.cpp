@@ -56,6 +56,22 @@ static int runClip(YikimApp& app, double seconds, double still, unsigned spp, co
             secMs += app.world.lastMs;
             secMax = std::max(secMax, app.world.lastMs);
         }
+        // diagnosis (test.iso): every second, how far the base (the pieces whose foot was on the ground: the seismic
+        // tower's mat) has moved across relative to the ground, now
+        if (app.cfg.i("test.iso", 0) && k > 0 && k % 60 == 0) {
+            double sx = 0, sz = 0;
+            int nb = 0;
+            for (const Piece& p : app.pieces)
+                if (p.kind == PK_SLAB && p.lo.y < 1e-6) {
+                    sx += app.world.pos[p.body].x - start[p.body].x;
+                    sz += app.world.pos[p.body].z - start[p.body].z;
+                    ++nb;
+                }
+            if (nb > 0) {
+                const double gx = app.world.pos[0].x - start[0].x, gz = app.world.pos[0].z - start[0].z;
+                std::printf("      taban t=%5.1f s: zemine gore %.3f m\n", t, std::sqrt((sx / nb - gx) * (sx / nb - gx) + (sz / nb - gz) * (sz / nb - gz)));
+            }
+        }
         // diagnosis (test.perf): every second, the physics step's mean and worst time over that second
         if (app.cfg.i("test.perf", 0) && k > 0 && k % 60 == 0) {
             const PhysStats st = app.world.stats();

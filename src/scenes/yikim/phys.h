@@ -27,6 +27,7 @@ struct PhysMaterial {
     float crushStart = 0.0035f;       // shortening / length at which the concrete is crushed
     float crushBreak = 0.25f;         // shortening / length at which the crushed fibre is gone
     float residual = 0.3f;            // compressive capacity left after crushing
+    float G = 0.0f;                   // shear modulus (Pa); 0: from E and nu. An isolator's rubber: soft across, stiff down
 };
 
 struct FiberDesc {
@@ -70,6 +71,7 @@ struct BodyInfo {     // host copy of what the renderer and the tests need
     float mass = 0;
     float3 localLo, localHi;
     float sphere = 0;  // a ball's radius (the renderer shades it round); 0: flat faces
+    bool glass = false;   // the renderer shades it as glass (a reflection over a dark tint)
 };
 
 struct PhysStats {

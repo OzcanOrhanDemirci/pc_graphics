@@ -384,6 +384,7 @@ void YikimRenderer::uploadWorld(const PhysWorld& w) {
         b.albedo = make_float3(lin((c >> 16) & 255), lin((c >> 8) & 255), lin(c & 255));
         b.damage = 0.0f;
         b.sphere = w.info[i].sphere;
+        b.glass = w.info[i].glass ? 1.0f : 0.0f;
         bodies_.push_back(b);
     }
     bodyInstances_ = int(inst.size());
@@ -423,6 +424,7 @@ void YikimRenderer::uploadWorld(const PhysWorld& w) {
         b.albedo = make_float3(0.11f, 0.075f, 0.055f);
         b.damage = 0.0f;
         b.sphere = 0.0f;
+        b.glass = 0.0f;
         bodies_.push_back(b);
     }
     instanceCount_ = int(inst.size());

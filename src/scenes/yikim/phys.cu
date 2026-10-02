@@ -1560,7 +1560,7 @@ void PhysWorld::upload() {
             F.plastic = make_float3(0, 0, 0);
             F.force = make_float3(0, 0, 0);
             const float L = std::max(d.len, 0.02f);
-            const float G = M.E / (2.0f * (1.0f + M.nu));
+            const float G = M.G > 0.0f ? M.G : M.E / (2.0f * (1.0f + M.nu));
             F.kn = (M.E * fd.ac + M.Es * fd.as) / L;
             F.kSteel = M.Es * fd.as / L;
             F.ks = (G * fd.ac + 0.4f * M.Es * fd.as) / L;

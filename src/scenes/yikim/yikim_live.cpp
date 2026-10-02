@@ -445,12 +445,15 @@ private:
         }
     }
     // the buildings, in the panel's order, by their settings' names (YikimApp::building)
-    static constexpr int kBuildings = 3;
-    static const char* buildingKey(int b) { return b == 1 ? "gokdelen" : b == 2 ? "ev" : "apartman"; }
-    static const char* buildingName(int b) { return b == 1 ? L("Gökdelen", "Tower") : b == 2 ? L("Ev", "House") : L("Apartman", "Apartments"); }
+    static constexpr int kBuildings = 4;
+    static const char* buildingKey(int b) { return b == 1 ? "gokdelen" : b == 2 ? "ev" : b == 3 ? "sismik" : "apartman"; }
+    static const char* buildingName(int b) {
+        return b == 1 ? L("Gökdelen", "Tower") : b == 2 ? L("Ev", "House") : b == 3 ? L("Sismik", "Seismic") : L("Apartman", "Apartments");
+    }
     static const char* buildingNote(int b) {
         return b == 1   ? L("30 kat, 97 m · camlı lobi", "30 storeys, 97 m · glass lobby")
                : b == 2 ? L("Tek kat, beşik çatı", "One storey, gable roof")
+               : b == 3 ? L("26 kat ve iğne · sismik izolasyon", "26 storeys and a spire · base isolation")
                         : L("5 kat · zemin katta dükkânlar", "5 storeys · shops on the ground floor");
     }
     int building_ = 0;
