@@ -47,6 +47,8 @@ add_library(pc_core OBJECT
     src/scenes/tanecik/tanecik_app.cpp
     src/scenes/tanecik/tanecik_live.cpp
     src/scenes/tanecik/tanecik_renderer.cpp
+    src/scenes/tanecik/particles.cu
+    src/scenes/tanecik/tanecik_tests.cpp
     ${TP}/tinyexr/miniz.c)
 add_executable(pc_graphics src/app/main.cpp $<TARGET_OBJECTS:pc_core>)
 

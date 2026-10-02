@@ -3,12 +3,16 @@
 //                   [--dist m] [--target x,y,z] [--fov deg] [--width W --height H] [--out path] [--set key=value]
 //       one picture of the figure in the studio, accumulated (no window)
 //   --scene tanecik --stats      the body's numbers: particles, volume, mass, per bone, skin layer, the meshes
+//   --scene tanecik --test [ad]  the particle solver's tests; --clip <ad> [--seconds S]: its clips (tanecik_tests.cpp)
 #include "scenes/tanecik/tanecik_app.h"
 #include "core/image_io.h"
 
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+
+int runTanecikTests(TanecikApp& app, const std::string& only);
+int runTanecikClip(TanecikApp& app, const std::string& name, const std::string& out, double seconds);
 
 namespace {
 
@@ -45,7 +49,9 @@ int stats(TanecikApp& app) {
 int runTanecikCli(int argc, char** argv) {
     TanecikApp app;
     std::string out, look = "cam", parts = "hepsi";
-    bool still = false, doStats = false;
+    bool still = false, doStats = false, test = false;
+    std::string only, clip;
+    double seconds = -1.0;
     unsigned spp = 512;
     std::vector<std::pair<std::string, std::string>> camSet;
     for (int i = 1; i < argc; ++i) {
@@ -54,6 +60,9 @@ int runTanecikCli(int argc, char** argv) {
         if (a == "--scene") next();
         else if (a == "--still") still = true;
         else if (a == "--stats") doStats = true;
+        else if (a == "--test") { test = true; if (i + 1 < argc && argv[i + 1][0] != '-') only = next(); }
+        else if (a == "--clip") clip = next();
+        else if (a == "--seconds") seconds = std::stod(next());
         else if (a == "--look") look = next();
         else if (a == "--particles") parts = next();
         else if (a == "--spp") spp = unsigned(std::stoi(next()));
@@ -72,6 +81,8 @@ int runTanecikCli(int argc, char** argv) {
     app.loadConfig();
     for (const auto& kv : camSet) app.cfg.set(kv.first, kv.second);
     if (doStats) return stats(app);
+    if (test) return runTanecikTests(app, only);
+    if (!clip.empty()) return runTanecikClip(app, clip, out, seconds);
     if (!still) {
         std::printf("tanecik: --still or --stats (the live scene opens from the application)\n");
         return 2;
