@@ -216,7 +216,7 @@ void App::frameRunning(double now, double dt) {
     in.mouseDY = float(mouseY_ - prevMouseY_);
     in.leftClicked = leftClick_ && !help_;
     in.leftDown = glfwGetMouseButton(win_, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
-    in.rightDown = glfwGetMouseButton(win_, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
+    in.rightDown = virtualRight_ || glfwGetMouseButton(win_, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
     in.scroll = float(scroll_);
     in.view = view_;
     scene_->frame(*this, in);
@@ -274,6 +274,9 @@ void App::autotestStep(double now) {
             std::fflush(stdout);
             break;
         case 6: quit_ = true; return;
+        case 7: virtualMouse_ = true; virtualX_ = s.fx * fbw_; virtualY_ = s.fy * fbh_; break;
+        case 8: leftClick_ = true; return;   // seen by this frame
+        case 9: virtualRight_ = s.key != 0; break;
         default: break;
         }
     }
@@ -324,11 +327,19 @@ int App::run(const Options& opt) {
         auto running = [&] { script_.push_back({3, 0, 0, ""}); };
         auto gallery = [&] { script_.push_back({4, 0, 0, ""}); };
         auto log = [&](const std::string& n) { script_.push_back({5, 0, 0, n}); };
+        auto mouse = [&](float fx, float fy) { Step st{7, 0, 0, ""}; st.fx = fx; st.fy = fy; script_.push_back(st); };
+        auto click = [&] { script_.push_back({8, 0, 0, ""}); };
+        auto right = [&](bool down) { script_.push_back({9, 0, down ? 1 : 0, ""}); };
         wait(1.5); shot("galeri_1");
         key(GLFW_KEY_DOWN); wait(0.8); shot("galeri_2");
         key(GLFW_KEY_DOWN); wait(0.8); shot("galeri_3");
+        // the mouse: over the first entry, a click selects it
+        mouse(0.18f, 0.43f); wait(0.5); click(); wait(0.6); shot("galeri_fare");
         for (int s = 0; s < int(infos_.size()); ++s) {
-            key(GLFW_KEY_1 + s); wait(0.4); key(GLFW_KEY_ENTER); wait(0.25); shot(infos_[s].id + "_yukleniyor");
+            key(GLFW_KEY_1 + s); wait(0.4);
+            if (infos_[s].id == "yikim") { mouse(0.88f, 0.735f); wait(0.3); shot("galeri_dugme"); click(); }   // the "open" button
+            else key(GLFW_KEY_ENTER);
+            wait(0.25); shot(infos_[s].id + "_yukleniyor");
             running(); wait(5.0); log(infos_[s].id); shot(infos_[s].id + "_arayuz");
             key(GLFW_KEY_F1); wait(0.5); shot(infos_[s].id + "_yardim"); key(GLFW_KEY_F1);
             if (infos_[s].id == "altinsaat") { key(GLFW_KEY_SPACE); wait(6.0); log("altinsaat canli"); shot("altinsaat_canli"); }
@@ -336,7 +347,18 @@ int App::run(const Options& opt) {
                 key(GLFW_KEY_SPACE); wait(6.0); log("fener yolculuk"); shot("fener_yolculuk");
                 key(GLFW_KEY_TAB); wait(2.0); shot("fener_oyuncu"); key(GLFW_KEY_TAB); key(GLFW_KEY_TAB);
             }
-            if (infos_[s].id == "yikim") { key(GLFW_KEY_7); key(GLFW_KEY_SPACE); wait(9.0); log("yikim deprem 7"); shot("yikim_deprem"); key(GLFW_KEY_G); wait(1.0); }
+            if (infos_[s].id == "yikim") {
+                // look right with the right button, then blow up a piece of the ground storey
+                mouse(0.50f, 0.50f); right(true); wait(0.1);
+                for (int k = 1; k <= 10; ++k) { mouse(0.50f + 0.006f * k, 0.50f); wait(0.03); }
+                right(false); wait(0.3); shot("yikim_bakis_saga");
+                for (int k = 9; k >= 0; --k) { mouse(0.50f + 0.006f * k, 0.50f); wait(0.03); }
+                right(true); wait(0.1);
+                for (int k = 1; k <= 10; ++k) { mouse(0.50f - 0.006f * k, 0.50f); wait(0.03); }
+                right(false); wait(0.3);
+                mouse(0.47f, 0.68f); wait(0.2); click(); wait(1.5); shot("yikim_patlatma");
+                key(GLFW_KEY_7); key(GLFW_KEY_SPACE); wait(9.0); log("yikim deprem 7"); shot("yikim_deprem"); key(GLFW_KEY_G); wait(1.0);
+            }
             key(GLFW_KEY_H); wait(0.3); shot(infos_[s].id + "_arayuzsuz"); key(GLFW_KEY_H);
             key(GLFW_KEY_ESCAPE); gallery(); wait(0.8);
         }
@@ -357,8 +379,9 @@ int App::run(const Options& opt) {
         if (opt.autotest) autotestStep(now);
         if (glfwGetWindowAttrib(win_, GLFW_ICONIFIED)) { glfwWaitEventsTimeout(0.05); last = nowSec(); continue; }
         glfwGetCursorPos(win_, &mouseX_, &mouseY_);
+        if (virtualMouse_) { mouseX_ = virtualX_; mouseY_ = virtualY_; }
         glfwGetFramebufferSize(win_, &fbw_, &fbh_);
-        S_.s = float(fbh_) / 1440.0f;
+        S_.s = std::max(0.7f, float(fbh_) / 1440.0f);   // drawn for 1440 lines; a small window keeps readable text
         if (now - lastStats_ > 0.5) {
             const GpuStats g = gpuStatsRead();
             gpuW_ = g.watts;

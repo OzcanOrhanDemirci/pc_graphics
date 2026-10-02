@@ -111,6 +111,8 @@ private:
     bool leftClick_ = false;
     double mouseX_ = 0, mouseY_ = 0, prevMouseX_ = 0, prevMouseY_ = 0;
     bool mouseCaptured_ = false;
+    bool virtualMouse_ = false, virtualRight_ = false;   // --autotest drives the mouse
+    double virtualX_ = 0.0, virtualY_ = 0.0;
 
     // timing
     double fpsT0_ = 0.0;
@@ -121,10 +123,13 @@ private:
 
     // --autotest: a script of keys, waits and framebuffer captures
     struct Step {
-        int kind;   // 0 wait s, 1 key, 2 capture name, 3 wait until running, 4 wait until gallery, 5 log, 6 quit
+        // 0 wait s, 1 key, 2 capture name, 3 wait until running, 4 wait until gallery, 5 log, 6 quit,
+        // 7 mouse to (fx, fy) of the screen, 8 left click, 9 right button (key: 1 down, 0 up)
+        int kind;
         double seconds;
         int key;
         std::string name;
+        float fx = 0.0f, fy = 0.0f;
     };
     std::vector<Step> script_;
     size_t scriptAt_ = 0;
