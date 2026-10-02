@@ -3,6 +3,47 @@
 > Tek kaynak durum panosu. Plan ve Özcan'ın sözleri `docs/yikim/PLAN.md`'de.
 
 ## Şu an
+- **2026-10-02 (akşam) · Üç yapı: apartman, gökdelen, ev; çözücüde temas payı düzeltildi.** Özcan: *"yıkım moduna 3 çeşit
+  bina ekleyelim. Biri zaten bu apartman. Diğeri gökdelen olsun. Çok upuzun bir bina. Gerçekçi upuzun. Zaten beton ve
+  duvar temelimiz hazır. Sadece şekli değiştireceğiz. Bir de yer evi olsun. Yine aynı malzemelerle daha basit villamsız
+  ev. Üçgen çatılı falan."*
+  - Panelin en üstünde **Yapı** (Apartman / Gökdelen / Ev): seçince yapı yeniden kurulur, kamera ona göre
+    (`yapi = apartman|gokdelen|ev`; komut satırında `--set yapi=...`). Malzemeler üçünde de aynı.
+  - **Gökdelen** (`buildTowerBlock`): 30 kat, 97 m; 3×3 açıklık (5 m); ortada perdeli çekirdek (asansör boşluğu,
+    döşemesiz); kolonlar 40×90 cm (30×50'likler yirmi katın altında ezilirdi: ~15 MPa, beton 16); büyük pencereli tuğla
+    dolgu; önde zemin katta camlı lobi. 8.404 parça. Oturmada kırık lif 0, tepe 16 mm kısalır. Fizik ~17 ms/kare,
+    apartmanla neredeyse aynı (süre parça sayısından değil, renk geçişlerinden gelir; bkz. arayüz rengi notu).
+  - **Ev** (`buildHouse`): tek kat ve tavan döşemesi, tuğla duvarlar, kapı, pencereler, iç bölmeler; **beşik çatı**
+    (30°, saçakta 0,5 m, beşikte 0,3 m taşma), mahya kirişi ve dikmeleri, baca. 456 parça. Eğik parçalar için
+    `Piece::cuts`: kutu + kesme düzlemleri; aynı düzlemle karşı yönden kesilmiş iki parça o düzlemden yapıştırılır
+    (çatı şeridi ile saçak takozu, beşik duvarı, mahya kirişi, baca).
+  - **Ev oturtulurken ölçülerek bulunanlar** (her biri oturmadaki kırık ve çatlak lif sayısıyla):
+    1. 4×4 lif ızgarası kesik bir yüzün ince eğik şeridini kaçırdı; mahyada hiç lif yoktu, beşik tepeleri çatıyı tek
+       başına taşıyıp yırtıldı: 163 kırık. Kesik yüzlerde ortak bölge 24×24 örneklenip en çok 16 lif oradan seçiliyor
+       (`sharedFibres`): 0 kırık.
+    2. Çatının iki yarısı birbirine yaslanan bir A-çerçeve olunca saçakları itti: 2.174 çatlak (çatısız ev: 0;
+       ağırlıksız çatı: 0). Mahya kirişi ve iki dikme eklendi.
+    3. Mahya kirişi beşik duvarlarının iç yüzüne yapıştırılınca ~30 kN'u onları düzlem dışına 6-9 mm itti. Kiriş artık
+       beşiklerin üstüne oturuyor (beşiğin orta sütunu kirişin altında biter). Sonuç: **kırık 0, çatlak 0, en çok kayan
+       parça 0,4 mm**.
+    4. Beşikte bir sırayla eğim arasında kalan ince kama 32 mm dışarı sıkıştı; şimdi her sütunun üst bloğu son tam
+       sıradan eğime kadar.
+    5. Kiremitli çatı bir levha değil: şeritler mahya boyunca birbirine yapışık değil (`Piece::unglued`).
+  - **Çözücü: Jacobi payı artık çiftin.** Gökdelenin göçüşünde bir kolon parçası 105 m/s ile 190 m'ye çıktı
+    (`--set test.track=1`: her saniye en hızlı parça ve temasları). Birbirine saplanmış iki parça arasında saniyelerce
+    1,2 MN vardı. Her parça kendi temas sayısına bölünüyordu; biri çok temas ederken çiftin düzeltmeleri birbirini
+    götürmüyor, çift kendini itiyordu. Şimdi bir çiftin iki parçası da aynı payı alıyor: 1 / (ikisinin önceki alt adımdaki
+    temas sayısından büyüğü), konum ve hız geçişinde (`pairShare`). Gökdelen 9'da en hızlı parça 43,5 m/s (tepeden
+    serbest düşüş 43,8); göçüşten sonra her şey 5 sn'de durulur. Ayrıca yapışık olmayan bir cismin 10 cm'den derinine
+    saplanmış bir nokta artık itmiyor (`phys.deep_overlap`).
+  - Testler 32/34 (aynı iki konsol). Apartmanın bütün tablosu yeniden ölçüldü: nitelik aynı, sayılar biraz değişti
+    (aşağıda "Büyüklükler"). Köşe kolona dengeli top: ayak 2,4 m fırladı, gövde devrilip 1,6 m indi (önce 0,18 m kaymıştı).
+  - **Gökdelen 7'de yumuşak kat**: zemin kat ~11. sn'de gider, kule eğilir, ~25. sn'de bütün olarak devrilir (en hızlı
+    parça 43,7 m/s: devrilen 97 m'lik bir çubuğun ucu ~53 m/s). Denenenler, hepsi 7'de göçtü: lobiyi kapatmak (kısmi göçme,
+    çatı 28 m iner), kolonları 50×100 yapmak, ikisi birden. 6'da kırık 0, öteleme %0,07. Model sünek olmayan 1990'lar
+    çerçevesi gibi davranıyor; lobili hâli (Türkiye'de yaygın yumuşak kat) bilerek bırakıldı.
+  - Performans: gökdelenin göçüşünde fizik 40-80 ms (36 bine kadar temas yaması), pencerede ~15-25 fps.
+  - **İngilizce:** sahnenin bütün yazıları iki dilde (uygulamanın dili; `docs/MIMARI.md`).
 - **2026-10-02 (öğleden sonra) · Topun gücü çubukla, saniyede en çok bir top.** Özcan: *"Top atma güzel olmuş. Bir top
   atınca 1 saniyeliğine tekrar top atılamasın. spam olmaması için. Bir de deprem şiddeti ayarlamak gibi topun ağırlığını
   yani gücünü ayarlayabilelim. Kaydırma çubuyla. Mesela şuanki hali dengeli, hafif zarar veriyor güzel. Daha hafif böyle
@@ -316,7 +357,23 @@ yumuşaklığı Y1'de doğal periyotla ölçülecek; gerekirse alt adım artar.
   tavan yalnız sekme hızı / 2 m/s.
 - **Yakalayıcı "bir karede 3 kat" kuralı iki karede biriken fırlamayı kaçırdı:** izleme (`test.watch`) buldu.
 
-## Büyüklükler (10-02, `--scene yikim --clip sarsinti --still T --set deprem.magnitude=M`)
+## Büyüklükler, üç yapı (10-02 akşam, temas payı düzeltmesinden sonra; `--set yapi=... --set deprem.magnitude=M`)
+Ölçüm sarsıntı bittikten ~8 sn sonra. En hızlı parça her koşuda yapının tepesinden serbest düşüşün altında (apartman
+17,5 / 17,8, gökdelen 43,7 / 43,8, ev 7,6 / 11,6 m/s).
+
+| Büyüklük | Apartman | Gökdelen | Ev |
+|---|---|---|---|
+| 3 · Zayıf | kırık 0 (25 çatlak) | ölçülmedi | ölçülmedi |
+| 4 · Hafif | kırık 0 (974 çatlak) | ölçülmedi | ölçülmedi |
+| 5 · Orta | 116 kırık lif, öteleme %0,06 | kırık 0, öteleme %0,04 | kırık 0 |
+| 6 · Kuvvetli | 730, korkuluklar dökülür | kırık 0, öteleme %0,07 (kılcal çatlaklar) | 2 çatlak |
+| 7 · Şiddetli | 2.791, öteleme %0,59, ayakta | zemin kat gider, kule bütün olarak devrilir | 6 çatlak |
+| 8 · Yıkıcı | göçer, çatı 13,5 m iner | ölçülmedi | göçer, çatı 2,4 m iner |
+| 9 · Felaket | göçer, çatı 11,5 m iner | göçer (çatı 96 m) | göçer, çatı 2,3 m iner (*) |
+
+(*) Evin 5, 7 ve 9'u temas payı düzeltmesinden önce ölçüldü.
+
+## Büyüklükler (10-02, temas payı düzeltmesinden önce; `--scene yikim --clip sarsinti --still T --set deprem.magnitude=M`)
 Dalga kaynakları: 3-4 Bayraklı, 5-6 İzmit, 7 Yarımca, 8-9 Antakya. Bina ölçümü sarsıntı bittikten ~8 sn sonra.
 
 | Büyüklük | Tepe ivme | Süre (hız) | Bina | Kırık lif |

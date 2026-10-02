@@ -17,7 +17,8 @@ src/
     registry.cpp  sahnelerin listesi (galeri sırası)
     app.cpp       pencere, döngü, kipler (galeri / yükleme / sahne / hata), girdi, --autotest
     overlay.cpp   ekranların çizimi
-    theme.h       renkler, yazı biçimleri, ölçek
+    theme.h       renkler, yazı biçimleri, ölçek, sayılar
+    lang.h        dil: L("Türkçe", "English"), seçim user.cfg'de
     main.cpp      giriş: uygulama ya da bir sahnenin komut satırı araçları
   ui/         arayüz kiti: yuvarlak köşeli paneller, gölgeler, resimler, IBM Plex metin (OpenGL 2 + bir GLSL programı)
   core/       sahnelerin ortak parçaları: ayar dosyası (Config), resim okuma/yazma, GPU ölçümleri (NVML), ışıltı piramidi
@@ -73,11 +74,23 @@ gelinince el imleci ve vurgu. Panellere (sağ üst ve sağ alt dahil) basılan f
 tıklamak top atmaz. Durumun sahibi sahnedir: çubuğu bırakılan yere oturtmak (yuvarlamak, çentiğe yapıştırmak) onun işi,
 panel bir sonraki karede sahnenin söylediğini çizer. Tıklama yerleri bir önceki karede çizilenden gelir.
 
+## Dil: Türkçe ve İngilizce (`src/app/lang.h`)
+
+Ekrandaki her yazı kullanıldığı yerde iki dilde yazılır: `L("Türkçe", "English")` o an seçili dildekini verir. Ayrı
+bir çeviri dosyası yok: bir yazı tek dilde var olamasın diye ikisi yan yana. Seçim galeride (sağ üstte TR | EN, ya da
+**L**), proje kökündeki `user.cfg`'de hatırlanır (git'e girmez), `--lang tr|en` ile de verilir. Dile bağlı olan başka iki
+şey: büyük harf (`ui::setTurkishCase`: Türkçede i → İ, İngilizcede I) ve sayılar (`theme::num`, `theme::thousands`:
+Türkçede ondalık virgül ve binlik nokta, İngilizcede tersi). Sahnenin `info()`'su o anki dille kurulur; dil
+değişince uygulama bütün sahnelerin `info()`'sunu yeniden ister. Komut satırı araçlarının konsol çıktısı Türkçe
+(ASCII) kalır; belgeler (`docs/`) Türkçe çalışma günlüğüdür, README ve gösteri rehberi iki dilde (`README.md`,
+`README.tr.md`, `DEMO.md`, `GOSTERI.md`).
+
 ## Yeni bir sahne eklemek
 
 1. `src/scenes/<id>/` klasörü: renderer'ı, `device/` altında OptiX programları, durum (`<id>_app.h`), canlı sahne
    (`<id>_live.cpp`), gerekiyorsa komut satırı araçları (`<id>_app.cpp`).
-2. `<id>_live.cpp` içinde `app::Scene`'i uygula ve sahnenin isim alanında üç işlev ver:
+2. `<id>_live.cpp` içinde `app::Scene`'i uygula (ekrandaki her yazı `L("…", "…")` ile, iki dilde) ve sahnenin isim
+   alanında üç işlev ver:
    ```cpp
    namespace <id> {
    app::SceneInfo info();

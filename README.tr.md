@@ -39,7 +39,8 @@ kendi yazdığımız bir katı cisim ve kırılma çözücüsü; sade bir günd�
 için aynı olan bir arayüzün altında çalışır: kim ve ne sol altta, süreler sağ üstte, çıkış yolu sağ altta, tuşlar F1'de.
 Sol alttaki panel fareyle kullanılır: sahne oraya seçenek sıraları, kaydırma çubukları ve düğmeler koyabilir (Yıkım'da
 büyüklük, süre, başlat/durdur). Galeride her sahnenin kısa bir açıklaması ve **Ayrıntılar**'da nasıl yapıldığı var.
-Esc her zaman geri götürür; kapanan sahne ekran kartını bütünüyle geri verir.
+Esc her zaman geri götürür; kapanan sahne ekran kartını bütünüyle geri verir. Uygulama Türkçe ya da İngilizce
+(galeride sağ üstte TR | EN, ya da L); seçim hatırlanır.
 
 | Galeri | Ayrıntılar: nasıl yapıldı |
 | --- | --- |
@@ -92,10 +93,12 @@ saçılımın ~100 katından 5 katına indirildi; kamera içindeyken bütün sis
 
 ### 3 · Yıkım · Ekim 2026
 
-Türkiye'nin kasabalarını dolduran türden beş katlı betonarme bir apartman: yüksek zemin katta camlı dükkânlar, tuğla
-dolgu duvarlar, balkonlar, su depoları ve güneş kollektörleriyle düz çatı. Altındaki zemini büyüklüğü 3'ten 9'a kadar
-depremler sallıyor (her biri gerçek bir kuvvetli yer hareketi kaydından türetildi), ya da izleyen kişi binaya fareyle
-yıkım topu fırlatıyor. Işık bilerek sade bir güneşli gün; emek fiziğe gitti.
+Aynı beton, çelik ve tuğladan üç yapı. Türkiye'nin kasabalarını dolduran türden beş katlı bir apartman: yüksek zemin
+katta camlı dükkânlar, tuğla dolgu duvarlar, balkonlar, su depoları ve güneş kollektörleriyle düz çatı. Otuz katlı, 97
+metrelik bir gökdelen: perdeli çekirdeğin çevresinde bir çerçeve, önde camlı bir lobi. Ve beşik çatılı, tek katlı bir
+ev: mahya kirişi, beşik duvarları, baca. Zemini büyüklüğü 3'ten 9'a kadar depremler sallıyor (her biri gerçek bir
+kuvvetli yer hareketi kaydından türetildi), ya da izleyen kişi yapıya fareyle yıkım topu fırlatıyor. Işık bilerek sade
+bir güneşli gün; emek fiziğe gitti.
 
 ![Sahne 3: büyüklük 8 depremde yıkılan apartman](docs/images/yikim.jpg)
 
@@ -107,7 +110,11 @@ yıkım topu fırlatıyor. Işık bilerek sade bir güneşli gün; emek fiziğe 
 | --- | --- |
 | ![Yakın plan: eksik köşe kolonunun üstündeki kirişlerden ve kolondan çıkan eğri demirler](docs/images/yikim-bars.jpg) | ![Büyüklük 9: zemin kat göçüyor, blok yan yatıyor](docs/images/yikim-m9.jpg) |
 
-| Yıkım topu köşe kolona çarpar (4,1 t, 14 m/s) | Kolonun ayağı fırlamış, kolon eğik asılı, demirler açıkta |
+| Gökdelen: 30 kat, 97 m, 8.404 parça | Ev: beşik çatı, 456 parça |
+| --- | --- |
+| ![Otuz katlı betonarme gökdelen, önde camlı lobi](docs/images/yikim-gokdelen.jpg) | ![Beşik çatılı tek katlı ev, kiremit rengi çatı ve baca](docs/images/yikim-ev.jpg) |
+
+| Yıkım topu köşe kolona çarpar (4,2 t, 14 m/s) | Kolonun ayağı fırlamış, kolon eğik asılı, demirler açıkta |
 | --- | --- |
 | ![Döküm çelik top zemin kattaki köşe kolona çarpıyor, kolon kırılıp eğiliyor](docs/images/yikim-top-1.jpg) | ![İki saniye sonra: kolonun alt parçası yerde, kalan kısmı kirişten eğik sarkıyor](docs/images/yikim-top-2.jpg) |
 
@@ -193,30 +200,31 @@ kayıtları altında dağılmayan bir çözücü.
 
 | | |
 | --- | --- |
-| **Cisimler** | 3.007 katı dışbükey parça (kolon ve kiriş parçaları, döşeme panelleri, tuğla bloklar, balkonlar, çatı ögeleri); her birinin kendi kabuğu, kütlesi ve eylemsizliği. Konumlar çift duyarlıkta. |
+| **Cisimler** | Katı dışbükey parçalar: apartman 3.006, gökdelen 8.404, ev 456 (kolon ve kiriş parçaları, döşeme panelleri, perde duvarlar, tuğla bloklar, balkonlar, çatı); her birinin kendi kabuğu, kütlesi ve eylemsizliği. Konumlar çift duyarlıkta. Eğik parçalar (çatı, beşik) kesme düzlemli kutular; aynı düzlemle karşı yönden kesilmiş iki parça o düzlemden yapıştırılır, kesik yüzlerde lifler ortak bölgenin ince örneklemesinden. |
 | **Bağlar** | 44.378 lif taşıyan 6.857 arayüz, uygulamalı eleman yönteminden (AEM) esinli: beton çekmede çatlar, basınçta ezilir (%30 kalan dayanım), donatı akar ve 6 cm plastik uzamada kopar, kayma önce kohezyon sonra sürtünme + dübel. Kapasiteyi aşan kısım kalıcı ofset olur: mafsallaşan kolon eğik kalır. |
-| **Çözücü** | Ekran kartında XPBD, karede 40 alt adım. Arayüzler 13 graf renginde Gauss-Seidel ile çözülür (alt sınır: bir cisme değen en çok arayüz); çarpan geçişler boyunca biriktirilir, kapasite toplam kuvveti sınırlar. Alt adım döngüsü bir CUDA Graph. |
+| **Çözücü** | Ekran kartında XPBD, karede 40 alt adım. Arayüzler 13 graf renginde Gauss-Seidel ile çözülür (alt sınır: bir cisme değen en çok arayüz); çarpan geçişler boyunca biriktirilir, kapasite toplam kuvveti sınırlar. Temaslar Jacobi: bir çiftin iki cismi de aynı payı alır (1 / ikisinin temas sayısından büyüğü), çiftin momentumu korunur. Alt adım döngüsü bir CUDA Graph; süre parça sayısından çok renk geçişlerinden gelir (apartman ve 2,8 kat parçalı gökdelen ~15-17 ms). |
 | **Temas** | Cisim çifti başına bir warp: örnek noktalar ötekinin kabuk düzlemlerine karşı, normal düzeltmeler çift içinde ortalanır, sonra yama merkezinde statik ve dinamik bütçeli, çapalı (PhysX gibi) tek sürtünme; burulma sürtünmesi ve sekme. |
 | **Determinizm** | Temas ve arayüz toplamları kayan noktalı atomikler yerine 2⁻⁴⁰ sabit noktada: aynı deprem aynı binayı her koşuda aynı biçimde yıkar. |
 | **Sönüm** | Serbest titreşimden ölçülen kritik sönümün %5,3'ü: kütleye orantılı, zemine göre, yalnız bağlı cisimlere, ivmesi sınırlı (düşen enkaz serbest kalır). |
 | **Depremler** | Büyüklüğe göre, 3'ten 9'a: binanın ~15 km ötedeki o büyüklükte bir depremden hissettiği. Her biri gerçek bir kuvvetli yer hareketi kaydının dalgasından (ESM ve AFAD TADAS: 2023 Antakya, 1999 Yarımca ve İzmit, 2020 Bayraklı): o büyüklüğün getirdiği güçlü sarsıntı süresi kadar kesilir, küçükler daha hızlı oynatılır, o büyüklüğün tepe yer ivmesine ölçeklenir, taban çizgisi düzeltilir (zemin başladığı yerde durur); sonra iki kez integre edilip yer değiştirmeye çevrilir. Bir oyunun ölçeği, sismolojinin değil: sarsıntıyı büyüklük tek başına belirlemez. Daha uzun ya da durdurana kadar süren sarsıntıda güçlü kısım dikişsiz bir döngü olur: sonu başına karışır, ivmenin ve hızın ortalaması döngü boyunca çıkarılarak integre edilir (zemin kaymaz), kaydın kendi yükseliş ve sönüşüyle bir zarfın altında oynar. Durdurmak zemini 1,5 sn'de dindirir. |
-| **Yıkım topu** | Tıklanan noktaya kameranın yanından gelen döküm çelik bir top, saniyede en çok bir. Gücü bir çubuk: boy ve hız birlikte, 0,52 t ve 8 m/s'den (kolonu kıpırdatmaz) dengeli 4,1 t ve 14 m/s'ye (köşe kolonun ayağını koparır), oradan 11,4 t ve 70 m/s'ye (binanın içinden geçer); yerçekimine göre nişanlı. Öteki parçalar gibi bir cisim, 256 teğet düzlemli dışbükey bir kabuk; görüntüde kürenin normaliyle gölgelenir. Kırılmaya ve devrilmeye çözücü karar verir. |
+| **Yıkım topu** | Tıklanan noktaya kameranın yanından gelen döküm çelik bir top, saniyede en çok bir. Gücü bir çubuk: boy ve hız birlikte, 0,52 t ve 8 m/s'den (kolonu kıpırdatmaz) dengeli 4,2 t ve 14 m/s'ye (köşe kolonun ayağını koparır), oradan 11,4 t ve 70 m/s'ye (binanın içinden geçer); yerçekimine göre nişanlı. Öteki parçalar gibi bir cisim, 256 teğet düzlemli dışbükey bir kabuk; görüntüde kürenin normaliyle gölgelenir. Kırılmaya ve devrilmeye çözücü karar verir. |
 | **Görüntü** | OptiX: her parça kendi kabuğunun bir örneği, dönüşümleri fizik doğrudan örnek tamponuna yazar, üst yapı her kare yeniden kurulur. Yumuşak gölgeli güneş, gök, zeminden bir sekme, depremle birlikte kayan metre ızgarası. Donatı liflerin durumundan çizilir: tuttukça çatlağın üstünden geçer, koptuğunda eğri filizler olarak çıkar. |
 | **Gürültü giderme** | Karede altı örnek, bir şey hareket ederken grenli. Kendi yazdığımız hafif bir SVGF: ışık (görüntü bölü albedo) her parçanın kendi hareketiyle kareden kareye taşınır, cisim, normal ve uzaklıkla denetlenir, üstünden gölge geçerken yeni karenin komşuluğuna kırpılır; sonra başka cisimde, normalde, derinlik basamağında ve ışık kenarında duran à-trous geçişleri. 1080p'de 2,4 ms. OptiX yapay zekâ gidericisi bir tuş ötede (G): daha da temiz, ama 9,7 ms tutuyor ve ekran kartını paylaşan fiziği yavaşlatıyor. |
 
-Her büyüklüğün binaya yaptığı (deterministik; sarsıntı bittikten birkaç saniye sonra ölçüldü):
+Her büyüklüğün üç yapıya yaptığı (deterministik; sarsıntı bittikten ~8 sn sonra ölçüldü; en hızlı parça her koşuda
+yapının tepesinden serbest düşüşün altında):
 
-| Büyüklük | Tepe yer ivmesi | Güçlü sarsıntı | Sonuç |
-| --- | --- | --- | --- |
-| 3 · zayıf | 0,012 g | 3 sn | hiçbir şey kırılmaz |
-| 4 · hafif | 0,035 g | 5 sn | kılcal çatlaklar |
-| 5 · orta | 0,13 g | 8 sn | bağlarda çatlaklar, bir şey düşmez |
-| 6 · kuvvetli | 0,20 g | 14 sn | balkon korkulukları ve zemin kat dolgusunun bir kısmı dökülür |
-| 7 · şiddetli | 0,33 g | 26 sn | ağır hasar: korkuluklar ve zemin kat dolgusu dökülür, öteleme %0,66, çerçeve ayakta |
-| 8 · yıkıcı | 0,70 g | 32 sn | yumuşak kat göçmesi: zemin kat 11. sn'de gider, bina 17. sn'de yerdedir |
-| 9 · felaket | 1,1 g | 45 sn | daha uzun ve sert sarsıntıdan sonra göçme (en güçlü kısım daha geç gelir: zemin kat 14. sn'de) |
+| Büyüklük | Tepe yer ivmesi | Güçlü sarsıntı | Apartman | Gökdelen | Ev |
+| --- | --- | --- | --- | --- | --- |
+| 3 · zayıf | 0,012 g | 3 sn | hiçbir şey kırılmaz | ölçülmedi | ölçülmedi |
+| 4 · hafif | 0,035 g | 5 sn | kılcal çatlaklar | ölçülmedi | ölçülmedi |
+| 5 · orta | 0,13 g | 8 sn | bağlarda çatlaklar, bir şey düşmez | kırılan yok | kırılan yok |
+| 6 · kuvvetli | 0,20 g | 14 sn | balkon korkulukları ve zemin kat dolgusunun bir kısmı dökülür | kılcal çatlaklar, öteleme %0,07 | iki çatlak |
+| 7 · şiddetli | 0,33 g | 26 sn | ağır hasar, öteleme %0,59, çerçeve ayakta | yumuşak kat: lobi katı gider, kule bütün olarak devrilir | altı çatlak |
+| 8 · yıkıcı | 0,70 g | 32 sn | yumuşak kat göçmesi, çatı 13,5 m iner | ölçülmedi | göçer |
+| 9 · felaket | 1,1 g | 45 sn | göçme, çatı 11,5 m iner | göçer | göçer |
 
-Gerçek kayıtlar tam ölçekte: bina 2020 Bayraklı, 1999 İzmit ve 1999 Yarımca'da ayakta kaldı, 2023 Antakya'da ve
+Gerçek kayıtlar tam ölçekte (apartman, temas payı düzeltmesinden önce): bina 2020 Bayraklı, 1999 İzmit ve 1999 Yarımca'da ayakta kaldı, 2023 Antakya'da ve
 Yarımca ×1,5'te göçtü. Pazarcık kaydı (3,0 g yatay vektör tepe) tam eşikteydi: en sonda düzeltilen bir modelleme hatasına
 kadar binayı yıkıyordu (aşağıda), düzeltmeden sonra bina ayakta. Sınırındaki yapı kaotiktir; bu sonuçların bir şey ifade
 etmesi için çözücünün önce deterministik olması gerekti. Bu kayıt büyüklükler arasında yok: enerjisi kısa periyotlarda,
@@ -254,10 +262,20 @@ Okunmaya değer kararlar:
   daha ucuz bir süzgeci işletiyor: hareketleri tam bilindiği için her yüzey noktası kendi geçmişini taşıyor. İlk
   sürümü, yıkılan binanın gölgesi zeminde kayarken aydınlık lekeler bıraktı; geçmişi yeni karenin komşuluğuna kırpmak
   bunları sildi.
+- **Kesik bir yüzün ortak bölgesi ince bir şerit olabilir.** Evin eğik çatısı ve beşikleri kesme düzlemli kutular;
+  bağları önce kutunun yüzüne yayılan 4×4 ızgaradan alındı, ortak bölge ince ve eğik olunca mahyaya hiç lif düşmedi ve
+  ev kendi ağırlığıyla otururken 163 lif koptu. Ortak bölge ince örneklenip lifler oradan seçilince: 0.
+- **Bir çatı ya ittirir ya oturur.** Birbirine yaslanan iki çatı yarısı saçakları itti (2.174 çatlak; çatısız ev: 0).
+  Mahya kirişi eklendi, ama beşik duvarlarının yüzüne yapışınca onları 6-9 mm dışarı itti; beşiklerin üstüne oturunca
+  ev 0 çatlakla oturdu. Hepsi oturma sırasındaki kırık ve çatlak sayısıyla bulundu, gözle değil.
+- **Momentumu korumayan ortalama, en büyük yıkımda patladı.** Temas düzeltmeleri her cismin kendi temas sayısına
+  bölünüyordu. Gökdelenin göçüşünde birbirine saplanmış iki parça, biri çok temas ederken birbirini eşitsiz itti ve 105
+  m/s ile 190 m'ye çıktı. Çiftin iki cismine aynı pay verilince en hızlı parça 43,5 m/s (tepeden serbest düşüş 43,8);
+  testler ve apartmanın davranışı aynı kaldı.
 - **Darbe bir cisimdir, sihir değil.** Tıklama önceleri parçayı dünyadan kaldırıyordu (Özcan: *"kolon pıt diye yok
   oluyor"*). Şimdi top atılıyor. 1,4 t'luk top köşe kolonu yalnız 7 cm kaydırdı: katı parçalı modelde darbe yerel ezme
   yapamaz, 2,2 m'lik parçanın tamamına dağılır ve iki bağın kayma kapasitesi momentumu kopma eşiğinden önce yer.
-  4,1 t'luk top kolonun ayağını koparıp gövdesini devirdi; çözücüye hiç dokunulmadı.
+  4,2 t'luk top kolonun ayağını koparıp gövdesini devirdi; çözücüye hiç dokunulmadı.
 - **Taşıyıcıyı ölç, üstünde duranı değil.** "Çatı ötelemesi" en üstteki parçaların ortalamasıydı, onlar da tuğla
   korkuluktu; savrulan korkuluk, ayakta duran binada çatının 9,7 m düştüğü diye okundu.
 
@@ -294,6 +312,7 @@ build\pc_graphics.exe                       :: galeri, birincil monitörde kenar
 build\pc_graphics.exe --scene yikim         :: doğrudan bir sahneye (altinsaat, fener, yikim); Esc galeriye götürür
 build\pc_graphics.exe --windowed            :: 1280x720 pencerede
 build\pc_graphics.exe --set anahtar=deger   :: sahnelerin bir ayarı (scenes/<sahne>.cfg), tekrarlanabilir
+build\pc_graphics.exe --lang en             :: İngilizce (ya da tr); yoksa galeride son seçilen
 build\pc_graphics.exe --autotest            :: bütün uygulama bir kez, betikle; ekranlar captures\arayuz altına
 ```
 
@@ -306,10 +325,11 @@ build\pc_graphics.exe --autotest            :: bütün uygulama bir kez, betikle
 | F5 | sahnenin ayarlarını yeniden oku, OptiX programlarını yeniden derle (sahne 1 ve 2) |
 | ↑ ↓, 1-3, Enter, fare | galeride seç ve aç |
 | A | galeride sahnenin ayrıntıları (nasıl yapıldı) |
+| L | galeride dil: Türkçe ↔ İngilizce (sağ üstte TR \| EN) |
 
 | Sahne 1 · Altın Saat | Sahne 2 · Fener | Sahne 3 · Yıkım |
 | --- | --- | --- |
-| Boşluk durağan ↔ canlı · C sonraki kamera · ↑ ↓ pozlama · ← → odak · R sıfırla · P, V, N, D, G fotonlar, pus, doğrudan ışık örneklemesi, gürültü giderici, güneş lekeleri · 1-5 güzel, albedo, normal, kostikler, maliyet | Boşluk A ↔ B yürü · B öbür bakışa atla · P zamanı durdur · ← → zaman ∓1 sn · ↑ ↓ pozlama · 1-5 görünümler · Tab birinci şahıs (WASD, fare, Shift koş, Boşluk zıpla) | 3-9 büyüklük · ← → süre (en sonda: durdurana kadar) · Boşluk başlat ya da durdur (panelde fareyle de) · T ağır çekim · P durdur · sol tık yıkım topu (saniyede en çok bir) · ↑ ↓ topun gücü · R baştan kur · sağ tık bak · WASD, E/Q uç · Shift hızlı · tekerlek yakınlaş · B donatı · G gürültü giderici |
+| Boşluk durağan ↔ canlı · C sonraki kamera · ↑ ↓ pozlama · ← → odak · R sıfırla · P, V, N, D, G fotonlar, pus, doğrudan ışık örneklemesi, gürültü giderici, güneş lekeleri · 1-5 güzel, albedo, normal, kostikler, maliyet | Boşluk A ↔ B yürü · B öbür bakışa atla · P zamanı durdur · ← → zaman ∓1 sn · ↑ ↓ pozlama · 1-5 görünümler · Tab birinci şahıs (WASD, fare, Shift koş, Boşluk zıpla) | panelde Yapı: apartman, gökdelen, ev · 3-9 büyüklük · ← → süre (en sonda: durdurana kadar) · Boşluk başlat ya da durdur (panelde fareyle de) · T ağır çekim · P durdur · sol tık yıkım topu (saniyede en çok bir) · ↑ ↓ topun gücü · R baştan kur · sağ tık bak · WASD, E/Q uç · Shift hızlı · tekerlek yakınlaş · B donatı · G gürültü giderici |
 
 Sahnelerin araçları pencere olmadan, aynı programdan çalışır:
 
@@ -323,7 +343,7 @@ build\pc_graphics.exe --scene yikim --test                                      
 build\pc_graphics.exe --scene yikim --clip sarsinti --seconds 40 --set deprem.magnitude=7 --out captures\yikim\ad
 ```
 
-Her sahnenin listesi `src/scenes/<sahne>/<sahne>_app.cpp` başında. Gösteri için kısa rehber: [GOSTERI.md](GOSTERI.md).
+Her sahnenin listesi `src/scenes/<sahne>/<sahne>_app.cpp` başında. Gösteri için kısa rehber: [GOSTERI.md](GOSTERI.md) (İngilizcesi [DEMO.md](DEMO.md)).
 
 ## Depo düzeni
 

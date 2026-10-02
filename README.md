@@ -39,7 +39,8 @@ compile and its world is built on a worker thread, so the window stays alive) an
 the same for all of them: who and what at the bottom left, timings at the top right, the way out at the bottom right,
 the keys on F1. The panel at the bottom left takes the mouse: a scene can put rows of choices, sliders and buttons there
 (in Yıkım the magnitude, the length, start and stop). The gallery gives each scene a short description, and how it was
-made under **Ayrıntılar** (details). Esc always leads back, and a scene that closes gives the GPU back entirely.
+made under **Details**. Esc always leads back, and a scene that closes gives the GPU back entirely. The application
+speaks Turkish or English (TR | EN at the top right of the gallery, or L); the choice is remembered.
 
 | The gallery | Details: how it was made |
 | --- | --- |
@@ -93,10 +94,11 @@ fog when the camera is inside it is correct and flat.
 
 ### 3 · Collapse *(Yıkım)* · October 2026
 
-A five-storey reinforced concrete apartment block of the kind that fills Turkish towns: shops behind glass on a tall
-ground storey, brick infill, balconies, a flat roof with water tanks and solar collectors. Earthquakes from magnitude 3
-to 9 shake the ground under it, each made from a real strong-motion record, or the viewer throws a wrecking ball at it
-with the mouse. The light is a plain sunny day on purpose; the effort went into the physics.
+Three buildings of the same concrete, steel and brick. A five-storey apartment block of the kind that fills Turkish
+towns: shops behind glass on a tall ground storey, brick infill, balconies, a flat roof with water tanks and solar
+collectors. A thirty-storey tower, 97 m: a frame around a shear-wall core, a glass lobby at the front. And a one-storey
+house with a gable roof: ridge beam, gable walls, a chimney. Earthquakes from magnitude 3 to 9 shake the ground under
+them, each made from a real strong-motion record, or the viewer throws a wrecking ball with the mouse. The light is a plain sunny day on purpose; the effort went into the physics.
 
 ![Scene 3: the apartment block coming down in a magnitude 8 earthquake](docs/images/yikim.jpg)
 
@@ -112,7 +114,11 @@ It runs live at 1080p, about 50 frames per second on the RTX 4080 with the denoi
 by side on the GPU. Pick the magnitude (3 to 9) and the length (the magnitude's own up to until stopped) on the panel
 with the mouse or with keys, start it; click to throw a wrecking ball, slow time down to a tenth.
 
-| A wrecking ball hits a corner column (4.1 t, 14 m/s) | The column's foot thrown out, the column hanging askew, its bars bare |
+| The tower: 30 storeys, 97 m, 8,404 pieces | The house: gable roof, 456 pieces |
+| --- | --- |
+| ![A thirty-storey reinforced-concrete tower with a glass lobby at the front](docs/images/yikim-gokdelen.jpg) | ![A one-storey house with a tiled gable roof and a chimney](docs/images/yikim-ev.jpg) |
+
+| A wrecking ball hits a corner column (4.2 t, 14 m/s) | The column's foot thrown out, the column hanging askew, its bars bare |
 | --- | --- |
 | ![A cast steel ball striking a ground-storey corner column, which breaks and leans](docs/images/yikim-top-1.jpg) | ![Two seconds later: the column's lower piece on the ground, the rest hanging askew from the beam](docs/images/yikim-top-2.jpg) |
 
@@ -196,30 +202,31 @@ holds together under real earthquake records.
 
 | | |
 | --- | --- |
-| **Bodies** | 3,007 rigid convex pieces (column and beam segments, slab panels, brick blocks, balconies, roof items), each with its own hull, mass and inertia. Positions in double precision. |
+| **Bodies** | Rigid convex pieces: 3,006 in the apartment block, 8,404 in the tower, 456 in the house (column and beam segments, slab panels, shear walls, brick blocks, balconies, roofs), each with its own hull, mass and inertia. Positions in double precision. Slanting pieces (the roof, the gables) are boxes cut by planes; two pieces cut by the same plane from opposite sides are glued across it, with fibres drawn from a fine sampling of where both are. |
 | **Bonds** | 6,857 interfaces carrying 44,378 fibres, after the applied element method: concrete cracks in tension and crushes in compression (30 % residual), bars yield and snap at 6 cm of plastic elongation, shear is cohesion and then friction plus dowel action. What exceeds a capacity becomes a permanent offset, so a column that has hinged stays bent. |
-| **Solver** | XPBD on the GPU, 40 substeps a frame. Interfaces are solved Gauss-Seidel in 13 graph colours (the lower bound: the most interfaces on one body), with the multiplier accumulated across passes so capacities bound the total force. The substep loop is a CUDA graph. |
+| **Solver** | XPBD on the GPU, 40 substeps a frame. Interfaces are solved Gauss-Seidel in 13 graph colours (the lower bound: the most interfaces on one body), with the multiplier accumulated across passes so capacities bound the total force. Contacts are Jacobi, and both bodies of a pair take the same share (one over the larger of their contact counts), so a pair keeps its momentum. The substep loop is a CUDA graph; its time comes from the colour passes more than from the piece count (~15-17 ms for both the apartment block and the tower with 2.8 times as many pieces). |
 | **Contact** | One warp per pair of bodies: sample points against the other hull's planes, normal corrections averaged within the pair, then one friction impulse at the patch centre with static and dynamic budgets and anchors (as in PhysX), torsional friction and restitution. |
 | **Determinism** | Contact and interface sums in 2⁻⁴⁰ fixed point instead of floating-point atomics: the same earthquake brings the same building down the same way, every run. |
 | **Damping** | 5.3 % of critical, measured from free vibration: mass-proportional, relative to the ground, bonded bodies only, with capped accelerations so falling debris stays free. |
 | **Earthquakes** | By magnitude, 3 to 9: what the building feels from a quake of that size some 15 km away. Each is made from the waveform of a real strong-motion record (ESM and AFAD TADAS: 2023 Antakya, 1999 Yarımca and İzmit, 2020 Bayraklı), cut to the strong-motion length that size brings, played faster for the small ones, scaled to that size's peak ground acceleration and baseline-corrected so the ground ends where it started; then integrated twice to the ground's displacement. A game's scale, not a seismological one: magnitude alone does not fix the shaking. Longer, or until stopped, the strong part becomes a seamless loop: its end blended into its start, integrated around the loop with the mean of acceleration and velocity taken out (the ground does not drift), played under an envelope with the record's own rise and fall. Stopping fades the ground out over 1.5 s. |
-| **Wrecking ball** | A cast steel ball from the camera's side to the clicked point, at most one a second. Its power is a slider: size and speed together, from 0.52 t at 8 m/s (it barely moves a column) through the balanced 4.1 t at 14 m/s (breaks a corner column's foot out) to 11.4 t at 70 m/s (straight through the building), aimed for gravity. A body like the others, a convex hull of 256 tangent planes, shaded with the sphere's normal. The solver decides what breaks and what topples. |
+| **Wrecking ball** | A cast steel ball from the camera's side to the clicked point, at most one a second. Its power is a slider: size and speed together, from 0.52 t at 8 m/s (it barely moves a column) through the balanced 4.2 t at 14 m/s (breaks a corner column's foot out) to 11.4 t at 70 m/s (straight through the building), aimed for gravity. A body like the others, a convex hull of 256 tangent planes, shaded with the sphere's normal. The solver decides what breaks and what topples. |
 | **Picture** | OptiX: every piece an instance of its own hull, transforms written by the physics straight into the instance buffer, top level rebuilt every frame. Sun with soft shadows, sky, one bounce off the ground, a metre grid that rides the earthquake. Reinforcing bars are drawn from the fibres' state: across a crack while they hold, as bent stubs once they are gone. |
 | **Denoising** | Six samples a frame are grainy while things move. A light SVGF of our own: the lighting (beauty over albedo) is carried along each piece's own motion from frame to frame, checked by body, normal and distance, clamped to the new frame's neighbourhood when a shadow sweeps over it, then a-trous passes that stop at other bodies, normals, depth steps and lighting edges. 2.4 ms at 1080p. The OptiX AI denoiser is one key away (G): cleaner still, but it costs 9.7 ms and slows the physics that shares the GPU. |
 
-What each magnitude does to the building (deterministic; measured a few seconds after the shaking ends):
+What each magnitude does to the three buildings (deterministic; measured ~8 s after the shaking ends; the fastest piece
+in every run stays below a free fall from the building's top):
 
-| Magnitude | Peak ground acceleration | Strong shaking | Result |
-| --- | --- | --- | --- |
-| 3 · weak | 0.012 g | 3 s | nothing breaks |
-| 4 · light | 0.035 g | 5 s | hairline cracks |
-| 5 · moderate | 0.13 g | 8 s | cracks inside the bonds, nothing falls |
-| 6 · strong | 0.20 g | 14 s | balcony parapets and some ground-storey infill fall |
-| 7 · severe | 0.33 g | 26 s | heavy damage: parapets and the ground storey's infill fall, drift 0.66 %, the frame stands |
-| 8 · destructive | 0.70 g | 32 s | soft-storey collapse: the ground storey goes at 11 s, the block is on the ground by 17 s |
-| 9 · catastrophic | 1.1 g | 45 s | collapse after a longer, harder shaking (the strongest part comes later: ground storey at 14 s) |
+| Magnitude | Peak ground acceleration | Strong shaking | Apartment block | Tower | House |
+| --- | --- | --- | --- | --- | --- |
+| 3 · weak | 0.012 g | 3 s | nothing breaks | not measured | not measured |
+| 4 · light | 0.035 g | 5 s | hairline cracks | not measured | not measured |
+| 5 · moderate | 0.13 g | 8 s | cracks inside the bonds, nothing falls | nothing breaks | nothing breaks |
+| 6 · strong | 0.20 g | 14 s | balcony parapets and some ground-storey infill fall | hairline cracks, drift 0.07 % | two cracks |
+| 7 · severe | 0.33 g | 26 s | heavy damage, drift 0.59 %, the frame stands | soft storey: the lobby storey fails, the tower topples whole | six cracks |
+| 8 · destructive | 0.70 g | 32 s | soft-storey collapse, the roof drops 13.5 m | not measured | collapses |
+| 9 · catastrophic | 1.1 g | 45 s | collapse, the roof drops 11.5 m | collapses | collapses |
 
-Under the real records at full scale it stood through 2020 Bayraklı, 1999 İzmit and 1999 Yarımca, and fell under 2023
+Under the real records at full scale (the apartment block, before the contact-share fix) it stood through 2020 Bayraklı, 1999 İzmit and 1999 Yarımca, and fell under 2023
 Antakya and Yarımca ×1.5. Pazarcık's record (3.0 g vector peak) sat right at the threshold: it brought the building down
 until a modelling bug was fixed at the very end (below), and it stands after it. A building at its limit is chaotic;
 that is why the solver had to become deterministic before any of these results meant anything. That record is not
@@ -262,10 +269,22 @@ Decisions worth reading:
   Rigid bodies make a cheaper filter work well: their motion is known exactly, so each surface point keeps its own
   history. Its first version left lit blotches where a falling building's shadow swept the ground; clamping the history
   to the new frame's neighbourhood removed them.
+- **A cut face may share only a thin band.** The house's slanting roof and gables are boxes cut by planes; their bonds
+  first came from a 4 x 4 grid spread over the box's face, and where the shared part was a thin slanting band the ridge
+  got no fibre at all: 163 fibres broke while the house settled under its own weight. Sampling the shared part finely
+  and taking the fibres from there: none.
+- **A roof either pushes or rests.** Two roof halves leaning on each other pushed the eaves out (2,174 cracked fibres; the
+  house without its roof: none). A ridge beam was added, but glued to the gables' faces it pushed them out by 6-9 mm;
+  resting on top of them, the house settles with no crack. Each step was found by counting broken and cracked fibres at
+  rest, not by eye.
+- **An average that does not keep momentum blew up in the biggest collapse.** Contact corrections were divided by each
+  body's own contact count. In the tower's collapse two pieces wedged together, one touching many others, pushed each
+  other unevenly and rose to 190 m at 105 m/s. With the same share for both bodies of a pair the fastest piece is 43.5
+  m/s (a free fall from the top: 43.8); the tests and the apartment block's behaviour stayed the same.
 - **A blow is a body, not magic.** A click used to take the piece out of the world (Özcan: the column "just vanishes").
   Now it throws a ball. A 1.4 t ball moved a corner column by only 7 cm: in a model of rigid pieces a blow cannot crush
   locally, it spreads over the whole 2.2 m piece, and the shear capacity of its two bonds eats the momentum before the
-  slip reaches breaking. A 4.1 t ball broke the column's foot out and toppled the rest; the solver was not touched.
+  slip reaches breaking. A 4.2 t ball broke the column's foot out and toppled the rest; the solver was not touched.
 - **Measure the structure, not what stands on it.** "Roof drift" was averaged over the highest pieces, which were the
   brick parapet; a parapet thrown off read as the roof falling 9.7 m from a building still standing.
 
@@ -302,6 +321,7 @@ build\pc_graphics.exe                       :: the gallery, borderless full scre
 build\pc_graphics.exe --scene yikim         :: straight into a scene (altinsaat, fener, yikim); Esc leads to the gallery
 build\pc_graphics.exe --windowed            :: in a 1280x720 window
 build\pc_graphics.exe --set key=value       :: a setting of the scenes (scenes/<id>.cfg), repeatable
+build\pc_graphics.exe --lang en             :: English (or tr); otherwise the one chosen last in the gallery
 build\pc_graphics.exe --autotest            :: the whole application once through by script; screens to captures\arayuz
 ```
 
@@ -314,10 +334,11 @@ build\pc_graphics.exe --autotest            :: the whole application once throug
 | F5 | reload the scene's settings and recompile its OptiX programs (scenes 1 and 2) |
 | ↑ ↓, 1 to 3, Enter, mouse | choose and open in the gallery |
 | A | the scene's details in the gallery (how it was made) |
+| L | the language in the gallery: Turkish ↔ English (TR \| EN at the top right) |
 
-| Scene 1 · Altın Saat | Scene 2 · Fener | Scene 3 · Yıkım |
+| Scene 1 · Golden Hour | Scene 2 · Lighthouse | Scene 3 · Collapse |
 | --- | --- | --- |
-| Space still ↔ live · C next camera · ↑ ↓ exposure · ← → focus · R reset · P, V, N, D, G photons, haze, next-event estimation, denoiser, sun patches · 1 to 5 beauty, albedo, normal, caustics, cost | Space walk A ↔ B · B jump to the other view · P pause time · ← → time ∓1 s · ↑ ↓ exposure · 1 to 5 views · Tab first-person walk (WASD, mouse, Shift run, Space jump) | 3 to 9 magnitude · ← → length (at the end: until stopped) · Space start or stop (with the mouse on the panel too) · T slow motion · P pause · left click wrecking ball (at most one a second) · ↑ ↓ its power · R rebuild · right mouse look · WASD, E/Q fly · Shift faster · wheel zoom · B bars · G denoising |
+| Space still ↔ live · C next camera · ↑ ↓ exposure · ← → focus · R reset · P, V, N, D, G photons, haze, next-event estimation, denoiser, sun patches · 1 to 5 beauty, albedo, normal, caustics, cost | Space walk A ↔ B · B jump to the other view · P pause time · ← → time ∓1 s · ↑ ↓ exposure · 1 to 5 views · Tab first-person walk (WASD, mouse, Shift run, Space jump) | the panel's Building: apartment block, tower, house · 3 to 9 magnitude · ← → length (at the end: until stopped) · Space start or stop (with the mouse on the panel too) · T slow motion · P pause · left click wrecking ball (at most one a second) · ↑ ↓ its power · R rebuild · right mouse look · WASD, E/Q fly · Shift faster · wheel zoom · B bars · G denoising |
 
 The scenes' tools run without a window, from the same program:
 
@@ -332,7 +353,7 @@ build\pc_graphics.exe --scene yikim --clip sarsinti --seconds 40 --set deprem.ma
 ```
 
 Each scene's list is at the top of its `src/scenes/<scene>/<scene>_app.cpp`. A short Turkish guide for a demonstration
-is in [GOSTERI.md](GOSTERI.md).
+is in [DEMO.md](DEMO.md) (Turkish: [GOSTERI.md](GOSTERI.md)).
 
 ## Repository layout
 

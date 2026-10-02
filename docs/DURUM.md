@@ -4,6 +4,17 @@
 > `docs/altinsaat/`, `docs/fener/`, `docs/yikim/` (PLAN.md ve DURUM.md).
 
 ## Şu an
+- **2026-10-02 (akşam) · İngilizce, üç yapı.** Özcan: *"Şimdi projeme ingilizce dil desteği ekle. Tüm proje ingilizce de
+  olabilsin. Ayrıca yıkım moduna 3 çeşit bina ekleyelim. [...] Diğeri gökdelen olsun. Çok upuzun bir bina. Gerçekçi
+  upuzun. [...] Bir de yer evi olsun. [...] Üçgen çatılı falan."*
+  - **Dil:** uygulamadaki her yazı iki dilde (`L("Türkçe", "English")`, `src/app/lang.h`); galeride sağ üstte TR | EN
+    ya da **L**; seçim `user.cfg`'de (git dışı), `--lang tr|en`. Sahnelerin adları İngilizcede Golden Hour, Lighthouse,
+    Collapse. Büyük harf ve sayılar dile göre (İngilizcede "I" ve ondalık nokta). İngilizce gösteri rehberi `DEMO.md`.
+    Belgeler (`docs/`) Türkçe çalışma günlüğü olarak kaldı.
+  - **Yıkım'da üç yapı:** apartman, 30 katlı gökdelen, beşik çatılı ev; panelin en üstünden seçilir. Ölçümler ve
+    çözücüde bulunan hata (temas payı) `docs/yikim/DURUM.md`.
+  - Sahne panelinde seçenek düğmeleri artık yazılarına göre genişliyor (rakam: kare; sözcük: sözcük kadar).
+  - `--autotest` iki dilde koşuldu (`--lang tr`, `--lang en`); test, seçilen dili kaydetmiyor.
 - **2026-10-02 (gündüz) · Revizeler.** Özcan: *"Gayet güzel olmuş. Küçük revizeler yapalım. Bu sahnelerin açıklama
   metinlerini şu tarzı bu tarzı demek yerine kısaca özetle. Bir de ayrıntılar diye tıklayınca açılan bir alan yap. Orada
   teknik detaylardan bahset. [...] Yıkımda depremlerin süresi varsayılan şuanki gibi olsun ama biz değiştirebilelim.
