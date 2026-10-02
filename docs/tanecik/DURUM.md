@@ -9,6 +9,29 @@
   `tanecik-yuzey`); bitince `main`'e birleştirilecek.
 - **2026-10-02 · Plan onaylandı, T0 başladı.** Özcan: *"Onaylıyorum. Başlayabilirsin."*
 
+## T1 · tanecik çözücüsü (2026-10-02 gece, ajan dalı `tanecik-cekirdek`, main'de)
+`src/scenes/tanecik/particles.*`, testleri `tanecik_tests.cpp` (`--test [ad]`, `--clip baraj|balon`). FleX yolu: PBF sıvı
+(tek yönlü, çekirdek 1,8 aralık, alt adım başına bir diverjans geçişi: duran tank "kaynıyordu", 40 bin tanecik > 0,1 m/s
+→ 0), duvarlar yoğunlukta dolu sayılır, katılar sıvının yoğunluğuna Akinci ψ ile girer (ince deri suyu tutar), Akinci
+yapışması 5 m/s² (kapalıyken birikintinin %47'si yalnız tanecik), XPBD bağları renkli Gauss-Seidel (bağ yinelemesi 2;
+1'de zar kendiliğinden patlıyordu), şekil eşlemeli katı gruplar (küp; T2'de kemik), sıvılaşma, toplama ile birebir
+tekrar, CUDA grafiği. Sıvı-zemin sürtünmesi 0,3 (0'da tek tanecik kalınlığında film sonsuza kaydı).
+
+| Test | Sonuç |
+|---|---|
+| Serbest düşüş | 0,4503 / 0,4515 s (%0,27) |
+| Hacim (tank) | ortalama yoğunluk sapması %0,79, yükseklik +%0,44 |
+| Baraj (Martin ve Moyce 1952) | cephe RMS 0,069 (0,09 zaman kaymasıyla; kaymasız 0,118), ölçüt < 0,15 |
+| Balon | dururken %0,05 su kaybı, 0 kopuk bağ; yandan vurulunca 1 sn'de %28, 3 sn'de %62 boşalır; hafif küp (0,17 kg) patlatmaz, ağır küp (13 kg) %95 boşaltır |
+| Birikinti, dökme, sıvılaşma, tekrar | geçti (tekrar: 17.669 tanecikte 0 fark) |
+| Bütçe | beden 173 bin tanecik, 2,05 milyon bağ: 20 alt adımda 18-19 ms (bağlar 8,4, komşu arama 4,1); 195 bin su 24 ms |
+
+Kırmızı denetim: yoğunluk kapalı → hacim kalır (−%96,6), bağlar kapalı → balon kalır, yapışma kapalı → birikinti kalır.
+Açık: ince saçılmada tek tanecik kalınlığında "erişte" iplikleri; ağır küp patlaması kaotik (aynı derlemede birebir,
+ayarla %11-95 arası); zar sertliği bağ yinelemesine bağlı (yakınsama sınırlı).
+Klipler (sıvı artık yüzeyiyle ve berrak su malzemesiyle): `captures/tanecik_t1_balon.mp4`, `captures/tanecik_t1_baraj.mp4`;
+masaüstünde `Tanecik T1`.
+
 ## T2 hazırlığı · ajanlar çalışırken (2026-10-02 gece)
 Fiziğe dokunmadan, çözücü gelince bağlanacak parçalar (Özcan: *"Sen agentler çalışırken başka bir işe devam et"*):
 
@@ -47,7 +70,16 @@ Fiziğe dokunmadan, çözücü gelince bağlanacak parçalar (Özcan: *"Sen agen
     kalkabilir). Ders: **başlangıç durumunu kısıtlara karşı ölç** (açıklık ve aşım "başlangıç" satırında). (2) Yalnız kemik
     taneciklerinin kütlesi (el 84 g) kamçı etkisini abartıyor; et kendi fiziğine kavuşunca kemik + bağlı et birlikte
     taşıyacak. (3) Jiroskopik terim olmadan açısal momentum %6,7 kayıyordu.
-- **Paralel ajanlar:** çözücü çekirdeği (sürüyor), silah ve patlama fiziği modülü (sürüyor, dal `tanecik-silah`).
+- **Silah ve patlama modülü** (ajan dalı `tanecik-silah`, main'de; `weapons.*`, `--weapons-test`, 6/6): kaynaklı yükler
+  (.22 LR → 9 mm → .50 AE; 5,56 → 7,62×51 → .50 BMG; .410 → 12 kalibre 00 → 3½" magnum; en güçlülerin 70 kg'a verebileceği
+  en çok hız 0,125 / 0,54 / 0,30 m/s), dokuda mermi yolu (sürüklenme + dayanım, %10 jele kalibre: 9 mm E15 238 J / 233,
+  tepe 2131 N / 2100), geçici boşluk, kemik, Kingery-Bulmash (el bombası 0,20 kg TNT; insana 1 m'de 1,8 m/s), kılıç
+  (22 m/s üst sınır), küp 10 kg → 5 t. Tablo farkları: .410 18,2 g 259 m/s; .22 LR 376 m/s; magnum 335 m/s.
+- **Paralel ajan:** canlı pencerenin gürültü süzgeci (sürüyor, dal `tanecik-suzgec`).
+- **Denge (T3, sürüyor):** iskelete zemin teması (en küçük kareler: düz ayak dönmeden kalkar; nokta düzeltmelerini
+  ortalamak ayağı her adımda döndürüp adamı topuktan geri yuvarlıyordu), kas motorları (XPBD esnekliği + güç sınırı),
+  `BalanceController` (ayak bileği stratejisi). **Henüz ayakta durmuyor**: denetleyici kapalıyken (heykel) de düşüyor;
+  sıradaki iş bunun sebebi. Testler `--balance-test ayakta|merdiven`.
 
 ## T0 · görünüm (2026-10-02)
 Açmak: galeride 04, ya da `build\pc_graphics.exe --scene tanecik`. Kareler komut satırından:
