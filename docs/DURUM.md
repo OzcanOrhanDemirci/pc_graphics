@@ -1,9 +1,13 @@
 # DURUM · pc_graphics uygulaması
 
 > Uygulamanın tek kaynak durum panosu. Mimari ve yeni sahne ekleme: `docs/MIMARI.md`. Sahnelerin kendi panoları:
-> `docs/altinsaat/`, `docs/fener/`, `docs/yikim/` (PLAN.md ve DURUM.md).
+> `docs/altinsaat/`, `docs/fener/`, `docs/yikim/`, `docs/tanecik/` (PLAN.md ve DURUM.md).
 
 ## Şu an
+- **2026-10-02 (gece) · Sahne 4 "Tanecik" başladı** (tanecik fiziği ve insan fiziği). Plan Özcan'la konuşuldu ve
+  onaylandı: `docs/tanecik/PLAN.md`. T0 (görünüm) bitti, galeride 04 (vurgu rengi deniz yeşili `#6FC2B4`). Galeri
+  başlığındaki sahne sayısı artık kayıttan ("dört sahne"), liste satırları sahne sayısına göre kısalır (beşinci sahnede
+  taşmasın). Otomatik test tek sahneye daraltılabilir: `--autotest-only <id>`. Ayrıntı `docs/tanecik/DURUM.md`.
 - **🏁 2026-10-02 (gece) · Yıkım tamamlandı; sıradaki yeni bir sahne tasarımı (yeni oturumda).** Açık kalanlar
   `docs/yikim/DURUM.md`'nin başında.
 - **2026-10-02 (gece, kapanış) · Yıkım'da kamera W ile baktığı yöne uçar** (yukarı bakınca yükselir). `docs/yikim/DURUM.md`.

@@ -92,11 +92,22 @@ void App::drawGallery(double now) {
     y += S_(46);
     ui::text(x0, y, L("Işık, atmosfer, fizik.", "Light, atmosphere, physics."), theme::display(S_, 66.0f, ui::withAlpha(theme::text(), appear)));
     y += S_(96);
-    ui::textWrapped(x0, y, S_(700), L("Ekran kartında, oyun motoru kullanmadan, baştan sona kendi kodumuzla kurulmuş üç sahne. Her biri tek bir soruya odaklanır.",
-                                       "Three scenes on the graphics card, built from scratch in our own code, without a game engine. Each one is about a single question."),
-                    theme::body(S_, ui::withAlpha(theme::muted(), appear)), 1.5f);
+    {   // how many scenes there are, in words (the registry decides)
+        static const char* tr[] = {"", "bir", "iki", "üç", "dört", "beş", "altı", "yedi", "sekiz", "dokuz"};
+        static const char* en[] = {"", "One scene", "Two scenes", "Three scenes", "Four scenes", "Five scenes", "Six scenes", "Seven scenes",
+                                   "Eight scenes", "Nine scenes"};
+        const size_t n = infos_.size();
+        const std::string countTr = n < 10 ? std::string(tr[n]) : std::to_string(n);
+        const std::string countEn = n < 10 ? std::string(en[n]) : std::to_string(n) + " scenes";
+        ui::textWrapped(x0, y, S_(700),
+                        L("Ekran kartında, oyun motoru kullanmadan, baştan sona kendi kodumuzla kurulmuş " + countTr + " sahne. Her biri tek bir soruya odaklanır.",
+                          countEn + " on the graphics card, built from scratch in our own code, without a game engine. Each one is about a single question."),
+                        theme::body(S_, ui::withAlpha(theme::muted(), appear)), 1.5f);
+    }
 
-    const float listY = S_(566) + lift, itemH = S_(164), itemW = S_(770);
+    // the scenes' list fills the room above the key hints; each entry as tall as the design's until there are too many
+    const float listY = S_(566) + lift, itemW = S_(770);
+    const float itemH = std::min(S_(164), (H - S_(154) - S_(566)) / float(std::max<size_t>(1, infos_.size())));
     entryRects_.clear();
     // the highlight glides to the selected entry
     {

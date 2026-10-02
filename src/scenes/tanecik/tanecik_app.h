@@ -59,7 +59,7 @@ struct TanecikApp {
     }
     // the mannequin, its particles and meshes (on the CPU; a second or two)
     void build() {
-        body = fillBody(man, cfg.f("beden.aralik", 0.007f));
+        body = fillBody(man, cfg.f("beden.aralik", 0.007f), cfg.f("beden.titresim", 0.12f));
         skin = skinMesh(man, cfg.f("beden.deri_hucre", 0.004f));
         bones = skeletonMesh();
         studio = studioMesh(cfg.f("studyo.duvar_z", -4.0f), cfg.f("studyo.kavis", 1.6f), cfg.f("studyo.yukseklik", 7.0f), cfg.f("studyo.genislik", 14.0f),
@@ -98,7 +98,7 @@ struct TanecikApp {
         p.tissueAlbedo = cfg.v3("tanecik.renk", make_float3(0.55f, 0.17f, 0.15f));
         p.liquidAlbedo = cfg.v3("sivi.renk", make_float3(0.35f, 0.02f, 0.02f));
         p.studioAlbedo = cfg.v3("studyo.renk", make_float3(0.78f, 0.77f, 0.75f));
-        p.ambient = cfg.v3("isik.ortam", make_float3(0.32f, 0.32f, 0.33f));
+        p.ambient = cfg.v3("isik.ortam", make_float3(0.24f, 0.24f, 0.25f));
         p.maxDiffuse = cfg.i("isik.sekme", 2);
         p.exposure = std::pow(2.0f, cfg.f("goruntu.ev", 0.0f));
         // the soft boxes: a key to the front left, a top light, two strips behind him for the outline
@@ -115,10 +115,10 @@ struct TanecikApp {
             l.Le = cfg.v3(k + ".parlaklik", Le);
             return l;
         };
-        p.lights[0] = box("isik.ana", make_float3(-1.8f, 2.6f, 2.4f), make_float3(0, 1.1f, 0), 1.4f, 1.4f, make_float3(9.0f, 8.6f, 8.0f));
+        p.lights[0] = box("isik.ana", make_float3(-2.5f, 2.4f, 1.3f), make_float3(0, 1.1f, 0), 1.4f, 1.6f, make_float3(11.0f, 10.5f, 9.8f));
         p.lights[1] = box("isik.tepe", make_float3(0.3f, 3.6f, 0.6f), make_float3(0, 0.0f, 0.2f), 2.0f, 1.2f, make_float3(3.0f, 3.0f, 3.1f));
-        p.lights[2] = box("isik.arka_sol", make_float3(-1.3f, 1.2f, -1.6f), make_float3(0, 1.0f, 0.2f), 0.3f, 2.0f, make_float3(10.0f, 10.0f, 10.5f));
-        p.lights[3] = box("isik.arka_sag", make_float3(1.3f, 1.2f, -1.6f), make_float3(0, 1.0f, 0.2f), 0.3f, 2.0f, make_float3(10.0f, 10.0f, 10.5f));
+        p.lights[2] = box("isik.arka_sol", make_float3(-2.4f, 1.3f, -0.9f), make_float3(0, 1.0f, 0.0f), 0.35f, 2.2f, make_float3(12.0f, 12.0f, 12.5f));
+        p.lights[3] = box("isik.arka_sag", make_float3(2.4f, 1.3f, -0.9f), make_float3(0, 1.0f, 0.0f), 0.35f, 2.2f, make_float3(12.0f, 12.0f, 12.5f));
         p.lightCount = std::min(T_MAX_LIGHTS, cfg.i("isik.sayi", 4));
     }
     void setCamera() {

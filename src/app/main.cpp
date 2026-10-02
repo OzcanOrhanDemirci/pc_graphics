@@ -4,6 +4,7 @@
 //   pc_graphics.exe --scene <id>            straight into a scene (altinsaat, fener, yikim); Esc leads to the gallery
 //   pc_graphics.exe --windowed              in a 1280x720 window
 //   pc_graphics.exe --autotest              the whole application once through by script, screens to captures/arayuz/
+//   pc_graphics.exe --autotest-only <id>    the same, but of the scenes only that one
 //   pc_graphics.exe --set key=value         a setting for the scenes (scenes/<id>.cfg), repeatable
 //   pc_graphics.exe --lang tr|en            the language on screen (else the one chosen last, in user.cfg)
 //
@@ -38,6 +39,7 @@ int main(int argc, char** argv) {
         if (a == "--scene") scene = next();
         else if (a == "--windowed") opt.windowed = true;
         else if (a == "--autotest") opt.autotest = true;
+        else if (a == "--autotest-only") { opt.autotest = true; opt.autotestOnly = next(); }
         else if (a == "--set") opt.overrides.push_back(next());
         else if (a == "--root") opt.root = next();
         else if (a == "--lang") opt.lang = next();

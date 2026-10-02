@@ -462,6 +462,7 @@ int App::run(const Options& opt) {
         // the mouse: over the first entry, a click selects it
         mouse(0.18f, 0.43f); wait(0.5); click(); wait(0.6); shot("galeri_fare");
         for (int s = 0; s < int(infos_.size()); ++s) {
+            if (!opt.autotestOnly.empty() && infos_[s].id != opt.autotestOnly) continue;
             key(GLFW_KEY_1 + s); wait(0.4);
             if (infos_[s].id == "yikim") { mouse(0.88f, 0.735f); wait(0.3); shot("galeri_dugme"); click(); }   // the "open" button
             else key(GLFW_KEY_ENTER);
@@ -513,6 +514,15 @@ int App::run(const Options& opt) {
                 control("buyukluk", 5); wait(0.3); key(GLFW_KEY_SPACE); wait(14.0); log("yikim sismik deprem 8"); shot("yikim_sismik_deprem");
                 key(GLFW_KEY_SPACE); wait(2.0);
                 control("yapi", 0); wait(6.0);
+            }
+            if (infos_[s].id == "tanecik") {
+                // the look by the panel (skin, then glass with sparse particles), the camera round him, the bones off
+                control("gorunum", 1); wait(3.0); shot("tanecik_deri");
+                control("gorunum", 0); control("tanecik", 1); wait(3.0); shot("tanecik_seyrek");
+                mouse(0.50f, 0.50f); right(true); wait(0.1);
+                for (int k = 1; k <= 12; ++k) { mouse(0.50f + 0.01f * k, 0.50f); wait(0.03); }
+                right(false); wait(3.0); shot("tanecik_donus");
+                key(GLFW_KEY_K); wait(2.0); shot("tanecik_kemiksiz"); key(GLFW_KEY_K); control("tanecik", 0); wait(0.5);
             }
             key(GLFW_KEY_H); wait(0.3); shot(infos_[s].id + "_arayuzsuz"); key(GLFW_KEY_H);
             key(GLFW_KEY_ESCAPE); gallery(); wait(0.8);

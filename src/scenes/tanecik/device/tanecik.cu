@@ -134,12 +134,14 @@ static __forceinline__ __device__ float3 glossy(float3 d, float3 n, float e, Rng
 
 static __forceinline__ __device__ float3 radiance(float3 o, float3 d, Rng& r) {
     float3 T = make_float3(1, 1, 1), L = make_float3(0, 0, 0);
-    bool specular = true;   // the soft boxes count when seen along a specular chain (else they were sampled directly)
+    // the soft boxes count when seen along a specular chain (else they were sampled directly), but not straight from
+    // the camera: a photographer keeps them out of the frame, their reflections are what shows
+    bool specular = true;
     int diffuse = 0;
     for (int depth = 0; depth < 40; ++depth) {
         const Hit h = trace(o, d, 0.0f, 1e30f);
         float3 Le;
-        if (lightHit(o, d, h.hit ? h.t : 1e30f, Le)) {
+        if (depth > 0 && lightHit(o, d, h.hit ? h.t : 1e30f, Le)) {
             if (specular) L = L + T * Le;
             break;
         }

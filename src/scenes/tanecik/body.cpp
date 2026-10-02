@@ -42,17 +42,17 @@ struct Part {
     float3 a, b;
     float r1, r2;
     int bone;
-    int blend;                 // how it joins: 0 the trunk (wide), 1 neck, 2 head, 3 limbs
+    int blend;                 // how it joins: 0 the trunk (wide), 1 neck, 2 head, 3 limbs, 4 shoulder caps (wide)
 };
 
 std::vector<Part> makeParts() {
     std::vector<Part> v;
     auto E = [&](float3 c, float3 r, int bone, int blend) { v.push_back({false, c, r, 0, 0, bone, blend}); };
     auto C = [&](float3 a, float3 b, float r1, float r2, int bone, int blend) { v.push_back({true, a, b, r1, r2, bone, blend}); };
-    auto m = [](float3 p) { return make_float3(-p.x, p.y, p.z); };
+    auto m = mirrorX;
     // the trunk
     E(make_float3(0, 1.285f, -0.005f), make_float3(0.165f, 0.19f, 0.112f), B_CHEST, 0);
-    E(make_float3(0, 1.40f, -0.012f), make_float3(0.19f, 0.075f, 0.10f), B_CHEST, 0);      // the shoulder line
+    E(make_float3(0, 1.385f, -0.012f), make_float3(0.20f, 0.07f, 0.095f), B_CHEST, 0);     // the shoulder line
     E(make_float3(0, 1.07f, 0.0f), make_float3(0.142f, 0.15f, 0.10f), B_ABDOMEN, 0);
     E(make_float3(0, 0.94f, -0.005f), make_float3(0.165f, 0.105f, 0.108f), B_PELVIS, 0);
     for (int s = 0; s < 2; ++s) {
@@ -63,20 +63,21 @@ std::vector<Part> makeParts() {
     C(make_float3(0, 1.45f, -0.012f), make_float3(0, 1.585f, 0.0f), 0.06f, 0.05f, B_NECK, 1);
     E(make_float3(0, 1.655f, 0.005f), make_float3(0.078f, 0.112f, 0.098f), B_HEAD, 2);
     E(make_float3(0, 1.592f, 0.022f), make_float3(0.058f, 0.05f, 0.07f), B_HEAD, 2);
-    // the limbs, left then mirrored
+    // the limbs, left then mirrored, laid out from the joints
+    const RestJoints& J = restJoints();
     for (int s = 0; s < 2; ++s) {
-        auto P = [&](float x, float y, float z) { return s ? m(make_float3(x, y, z)) : make_float3(x, y, z); };
+        auto P = [&](float3 p) { return s ? mirrorX(p) : p; };
         const int ua = s ? B_UARM_R : B_UARM_L, fa = s ? B_FARM_R : B_FARM_L, ha = s ? B_HAND_R : B_HAND_L;
         const int th = s ? B_THIGH_R : B_THIGH_L, sh = s ? B_SHIN_R : B_SHIN_L, ft = s ? B_FOOT_R : B_FOOT_L;
-        E(P(0.185f, 1.40f, -0.012f), make_float3(0.062f, 0.06f, 0.062f), ua, 3);              // shoulder cap
-        C(P(0.19f, 1.40f, -0.012f), P(0.255f, 1.125f, -0.02f), 0.05f, 0.039f, ua, 3);
-        C(P(0.255f, 1.125f, -0.02f), P(0.305f, 0.88f, 0.012f), 0.04f, 0.026f, fa, 3);
-        E(P(0.27f, 1.05f, -0.012f), make_float3(0.045f, 0.085f, 0.045f), fa, 3);              // forearm muscle
-        E(P(0.32f, 0.797f, 0.02f), make_float3(0.022f, 0.085f, 0.046f), ha, 3);               // a mitten hand
-        C(P(0.088f, 0.905f, 0.0f), P(0.10f, 0.49f, 0.012f), 0.088f, 0.052f, th, 3);
-        C(P(0.10f, 0.49f, 0.012f), P(0.106f, 0.085f, -0.012f), 0.05f, 0.032f, sh, 3);
-        E(P(0.104f, 0.36f, -0.022f), make_float3(0.05f, 0.11f, 0.054f), sh, 3);               // calf
-        C(P(0.106f, 0.045f, -0.04f), P(0.118f, 0.026f, 0.16f), 0.042f, 0.026f, ft, 3);
+        E(P(J.shoulder + make_float3(-0.02f, -0.008f, 0)), make_float3(0.06f, 0.055f, 0.058f), ua, 4);   // shoulder cap
+        C(P(J.shoulder), P(J.elbow), 0.052f, 0.04f, ua, 3);
+        C(P(J.elbow), P(J.wrist), 0.04f, 0.026f, fa, 3);
+        E(P(lerp3(J.elbow, J.wrist, 0.3f)), make_float3(0.045f, 0.085f, 0.045f), fa, 3);              // forearm muscle
+        E(P(lerp3(J.wrist, J.handTip, 0.5f)), make_float3(0.022f, 0.085f, 0.046f), ha, 3);            // a mitten hand
+        C(P(J.hip), P(J.knee), 0.088f, 0.052f, th, 3);
+        C(P(J.knee), P(J.ankle), 0.05f, 0.032f, sh, 3);
+        E(P(lerp3(J.knee, J.ankle, 0.32f) + make_float3(0, 0, -0.026f)), make_float3(0.05f, 0.11f, 0.054f), sh, 3);   // calf
+        C(P(J.heel), P(J.toe), 0.042f, 0.026f, ft, 3);
     }
     return v;
 }
@@ -196,9 +197,26 @@ const BoneInfo& boneInfo(int b) {
     return info[b];
 }
 
+const RestJoints& restJoints() {
+    static const RestJoints j = [] {
+        RestJoints r;
+        r.shoulder = make_float3(0.19f, 1.40f, -0.012f);
+        r.elbow = make_float3(0.255f, 1.125f, -0.02f);
+        r.wrist = make_float3(0.305f, 0.88f, 0.012f);
+        r.handTip = make_float3(0.33f, 0.715f, 0.028f);
+        r.hip = make_float3(0.088f, 0.90f, 0.0f);
+        r.knee = make_float3(0.112f, 0.49f, 0.012f);
+        r.ankle = make_float3(0.124f, 0.085f, -0.012f);
+        r.heel = make_float3(0.124f, 0.045f, -0.04f);
+        r.toe = make_float3(0.14f, 0.026f, 0.16f);
+        return r;
+    }();
+    return j;
+}
+
 float Mannequin::sdf(float3 p, int& bone) const {
     const auto& ps = parts();
-    float trunk = 1e9f, neck = 1e9f, head = 1e9f, limbs = 1e9f, nearest = 1e9f;
+    float trunk = 1e9f, neck = 1e9f, head = 1e9f, limbs = 1e9f, caps = 1e9f, nearest = 1e9f;
     bone = B_CHEST;
     for (const Part& q : ps) {
         const float d = partDist(q, p);
@@ -207,10 +225,12 @@ float Mannequin::sdf(float3 p, int& bone) const {
         case 0: trunk = smin(trunk, d, 0.07f); break;
         case 1: neck = std::min(neck, d); break;
         case 2: head = smin(head, d, 0.03f); break;
+        case 4: caps = std::min(caps, d); break;
         default: limbs = smin(limbs, d, 0.02f); break;
         }
     }
-    float d = smin(trunk, neck, 0.05f);
+    float d = smin(trunk, caps, 0.06f);   // shoulders round into the trunk, not perched on it
+    d = smin(d, neck, 0.05f);
     d = smin(d, head, 0.035f);
     return smin(d, limbs, 0.025f);
 }
@@ -226,7 +246,7 @@ float3 Mannequin::normal(float3 p) const {
     return l > 0.0f ? g / l : make_float3(0, 1, 0);
 }
 
-BodyParticles fillBody(const Mannequin& m, float s) {
+BodyParticles fillBody(const Mannequin& m, float s, float jitter) {
     BodyParticles out;
     out.spacing = s;
     const float3 lo = m.lo(), hi = m.hi();
@@ -236,7 +256,16 @@ BodyParticles fillBody(const Mannequin& m, float s) {
     parallelFor(ny, [&](int j) {
         for (int k = 0; k < nz; ++k)
             for (int i = 0; i < nx; ++i) {
-                const float3 p = lo + make_float3((i + 0.5f) * s, (j + 0.5f) * s, (k + 0.5f) * s);
+                float3 p = lo + make_float3((i + 0.5f) * s, (j + 0.5f) * s, (k + 0.5f) * s);
+                if (jitter > 0.0f) {   // a hash of the lattice cell: the same body every time
+                    unsigned h = unsigned(i) * 73856093u ^ unsigned(j) * 19349663u ^ unsigned(k) * 83492791u;
+                    float u[3];
+                    for (float& x : u) {
+                        h ^= h >> 16; h *= 0x7feb352dU; h ^= h >> 15; h *= 0x846ca68bU; h ^= h >> 16;
+                        x = (h & 0xffffff) / 16777216.0f * 2.0f - 1.0f;
+                    }
+                    p = p + make_float3(u[0], u[1], u[2]) * (jitter * s);
+                }
                 int bone;
                 const float d = m.sdf(p, bone);
                 if (d > -0.5f * s) continue;
@@ -351,26 +380,29 @@ TriMesh skeletonMesh() {
         addCapsule(m, P(0.12f, 0.985f, -0.015f), P(0.085f, 0.89f, 0.005f), 0.024f, 0.02f);
         addCapsule(m, P(0.085f, 0.89f, 0.005f), P(0.02f, 0.885f, 0.045f), 0.015f, 0.012f);   // pubic bone
         // arm: humerus with its head, radius and ulna, a hand of a palm and fingers
-        addEllipsoid(m, P(0.188f, 1.402f, -0.012f), make_float3(0.023f, 0.023f, 0.023f), 16, 10);
-        addCapsule(m, P(0.19f, 1.39f, -0.012f), P(0.252f, 1.13f, -0.02f), 0.013f, 0.016f);
-        addCapsule(m, P(0.255f, 1.12f, -0.03f), P(0.302f, 0.885f, 0.0f), 0.009f, 0.008f);
-        addCapsule(m, P(0.255f, 1.12f, -0.008f), P(0.31f, 0.885f, 0.022f), 0.008f, 0.009f);
-        addCapsule(m, P(0.308f, 0.875f, 0.012f), P(0.318f, 0.80f, 0.018f), 0.012f, 0.009f);
+        const RestJoints& J = restJoints();
+        auto Q = [&](float3 p) { return s ? mirrorX(p) : p; };
+        const float3 dz = make_float3(0, 0, 0.011f), palm = lerp3(J.wrist, J.handTip, 0.5f);
+        addEllipsoid(m, Q(J.shoulder + make_float3(-0.002f, 0.002f, 0)), make_float3(0.023f, 0.023f, 0.023f), 16, 10);
+        addCapsule(m, Q(J.shoulder + make_float3(0, -0.01f, 0)), Q(J.elbow + make_float3(-0.003f, 0.005f, 0)), 0.013f, 0.016f);
+        addCapsule(m, Q(J.elbow - dz), Q(J.wrist - dz), 0.009f, 0.008f);
+        addCapsule(m, Q(J.elbow + dz), Q(J.wrist + dz), 0.008f, 0.009f);
+        addCapsule(m, Q(J.wrist), Q(palm), 0.012f, 0.009f);
         for (int f = 0; f < 4; ++f) {
-            const float z = -0.005f + 0.017f * f;
-            addCapsule(m, P(0.318f, 0.80f, z), P(0.326f, 0.725f + 0.006f * std::abs(f - 1.5f), z + 0.003f), 0.0055f, 0.004f, 10, 4);
+            const float3 o = make_float3(0, 0, -0.026f + 0.017f * f);
+            addCapsule(m, Q(palm + o * 0.8f), Q(lerp3(palm, J.handTip, 0.7f) + o * 0.7f + make_float3(0, 0.006f * std::fabs(f - 1.5f), 0)), 0.005f, 0.004f, 10, 4);
         }
         // leg: femur with its head and knee, kneecap, tibia and fibula, a foot
-        addEllipsoid(m, P(0.088f, 0.892f, 0.0f), make_float3(0.025f, 0.025f, 0.025f), 16, 10);
-        addCapsule(m, P(0.09f, 0.89f, 0.0f), P(0.10f, 0.505f, 0.008f), 0.017f, 0.02f);
-        addEllipsoid(m, P(0.10f, 0.49f, 0.005f), make_float3(0.03f, 0.022f, 0.026f), 16, 10);
-        addEllipsoid(m, P(0.10f, 0.49f, 0.048f), make_float3(0.018f, 0.022f, 0.008f), 14, 8);
-        addCapsule(m, P(0.10f, 0.47f, 0.008f), P(0.106f, 0.09f, -0.008f), 0.017f, 0.013f);
-        addCapsule(m, P(0.128f, 0.46f, -0.01f), P(0.124f, 0.09f, -0.016f), 0.007f, 0.007f);
-        addCapsule(m, P(0.106f, 0.05f, -0.045f), P(0.106f, 0.07f, 0.0f), 0.018f, 0.016f);   // heel, ankle
+        addEllipsoid(m, Q(J.hip + make_float3(0, -0.008f, 0)), make_float3(0.025f, 0.025f, 0.025f), 16, 10);
+        addCapsule(m, Q(J.hip + make_float3(0.002f, -0.01f, 0)), Q(J.knee + make_float3(0, 0.015f, -0.004f)), 0.017f, 0.02f);
+        addEllipsoid(m, Q(J.knee + make_float3(0, 0, -0.007f)), make_float3(0.03f, 0.022f, 0.026f), 16, 10);
+        addEllipsoid(m, Q(J.knee + make_float3(0, 0, 0.036f)), make_float3(0.018f, 0.022f, 0.008f), 14, 8);
+        addCapsule(m, Q(J.knee + make_float3(0, -0.02f, -0.004f)), Q(J.ankle + make_float3(0, 0.005f, 0.004f)), 0.017f, 0.013f);
+        addCapsule(m, Q(J.knee + make_float3(0.026f, -0.03f, -0.022f)), Q(J.ankle + make_float3(0.018f, 0.005f, -0.004f)), 0.007f, 0.007f);
+        addCapsule(m, Q(J.heel + make_float3(0, 0.005f, -0.005f)), Q(J.ankle + make_float3(0, -0.015f, 0.012f)), 0.018f, 0.016f);   // heel, ankle
         for (int t = 0; t < 3; ++t) {
-            const float x = 0.09f + 0.016f * t;
-            addCapsule(m, P(0.106f, 0.06f, 0.0f), P(x, 0.022f, 0.15f - 0.012f * t), 0.009f, 0.006f, 10, 4);
+            const float3 tip = J.toe + make_float3(-0.012f + 0.012f * t, -0.002f, -0.02f - 0.012f * t);
+            addCapsule(m, Q(J.ankle + make_float3(0, -0.025f, 0.012f)), Q(tip), 0.009f, 0.006f, 10, 4);
         }
     }
     return m;

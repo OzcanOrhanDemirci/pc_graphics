@@ -26,6 +26,15 @@ struct BoneInfo {
 };
 const BoneInfo& boneInfo(int b);
 
+// the rest pose's joints, left side (+x; the right side is their mirror in x). The skin's parts and the skeleton are
+// both laid out from these, and so will the physics' bones be.
+struct RestJoints {
+    float3 shoulder, elbow, wrist, handTip;
+    float3 hip, knee, ankle, heel, toe;
+};
+const RestJoints& restJoints();
+inline float3 mirrorX(float3 p) { return make_float3(-p.x, p.y, p.z); }
+
 // the body's shape; x to the man's left, y up, z forward (he faces +z), feet on y = 0
 struct Mannequin {
     float sdf(float3 p) const;                  // < 0 inside
@@ -42,8 +51,9 @@ struct BodyParticles {
     std::vector<uint8_t> skin;        // 1: in the outermost layer
     float volume() const { return float(pos.size()) * spacing * spacing * spacing; }
 };
-// a cubic lattice inside the skin: a particle wherever its sphere fits (distance <= -spacing/2)
-BodyParticles fillBody(const Mannequin& m, float spacing);
+// a cubic lattice inside the skin: a particle wherever its sphere fits (distance <= -spacing/2); jitter moves each
+// by up to that share of the spacing (a regular lattice reads as graph paper through the glass)
+BodyParticles fillBody(const Mannequin& m, float spacing, float jitter = 0.0f);
 
 TriMesh skinMesh(const Mannequin& m, float cell);   // the surface sdf = 0, surface nets on a grid of this cell (m)
 TriMesh skeletonMesh();                             // the bones as drawn (ivory): skull, spine, ribs, limbs

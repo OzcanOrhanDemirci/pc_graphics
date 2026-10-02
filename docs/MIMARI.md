@@ -27,6 +27,7 @@ src/
     altinsaat/  sahne 1 · Altın Saat (spektral yol izleyici)
     fener/      sahne 2 · Fener (gerçek zamanlı hacimsel ışık)
     yikim/      sahne 3 · Yıkım (ekran kartında fizik çözücü)
+    tanecik/    sahne 4 · Tanecik (tanecik fiziği ve insan; yapım aşamasında)
       <sahne>_app.h     bir çalıştırmanın durumu (renderer, ayarlar, dünya)
       <sahne>_app.cpp   komut satırı araçları (pencere olmadan kareler, testler)
       <sahne>_live.cpp  uygulamadaki canlı sahne: app::Scene
@@ -100,14 +101,14 @@ değişince uygulama bütün sahnelerin `info()`'sunu yeniden ister. Komut satı
    ```
 3. `src/app/registry.cpp`'ye bir satır (galeri sırası buradan), `CMakeLists.txt`'ye dosyalar.
 4. `scenes/<id>.cfg` (ayarlar), `assets/gallery/<id>.jpg` (16:9, en az 1920 piksel genişlik).
-5. Sına: `build\pc_graphics.exe --autotest` galeriyi ve her sahneyi kendiliğinden dolaşır, ekranları
+5. Sına: `build\pc_graphics.exe --autotest` (ya da yalnız bir sahne: `--autotest-only <id>`) galeriyi ve her sahneyi kendiliğinden dolaşır, ekranları
    `captures/arayuz/` altına yazar, kapanışta boş ekran kartı belleğini yazdırır (her turda aynı kalmalı). Betik
    panel denetimlerine kimlikleriyle tıklayabilir (`app.cpp`, adım 11-12), konumu bilmeden.
 
 ## Tasarım dili
 
 - **Koyu, sessiz bir çerçeve, parlak resimler.** Arayüz nötr gri tonlarda; her sahne tek bir vurgu rengi getirir:
-  01 altın (`#E6B566`), 02 soğuk mavi (`#86B3DA`), 03 güvenlik turuncusu (`#E5764A`). Galeri düğmesi, seçili öğe,
+  01 altın (`#E6B566`), 02 soğuk mavi (`#86B3DA`), 03 güvenlik turuncusu (`#E5764A`), 04 deniz yeşili (`#6FC2B4`). Galeri düğmesi, seçili öğe,
   seçici ve ilerleme çubukları o rengi alır.
 - **Tek yazı ailesi, üç ses:** IBM Plex Serif adlar ve başlıklar, Plex Sans metin, Plex Mono sayılar ve tuş kapakları.
   Küçük başlıklar büyük harf ve harf aralıklı (Türkçe büyük harf: i → İ).

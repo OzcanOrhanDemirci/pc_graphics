@@ -22,6 +22,7 @@ struct Options {
     std::string root;
     bool windowed = false;
     bool autotest = false;
+    std::string autotestOnly;             // --autotest-only id: the gallery steps, then only that scene
     std::string startScene;               // --scene id: straight into it
     std::string lang;                     // --lang tr|en (empty: the one remembered in user.cfg)
     std::vector<std::string> overrides;   // --set key=value, handed to the scenes
