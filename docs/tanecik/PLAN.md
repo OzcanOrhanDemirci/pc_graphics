@@ -39,6 +39,9 @@ devamı: **yumuşak cisim ve sıvı**, her şey tanecik. Özcan (2026-10-02), bi
   seviyede."*
 - Malzemeler: *"Su/kan (kandan kastım insan içindeki sıvı anlamında). Kum, bal gibi koyu sıvı. Yeterli olur."*
 - El aracı: *"Olur el de ekleyelim."*
+- Gore'un anlamı (T0'dan sonra): *"Gore derken ben onu çok gerçekçi beden yaparsak diye dedim. Kanla dolu olması güzel
+  olur. [...] Gerçekte de kanla dolar çünkü. Benim gore dememin nedeni hypergerçekçi bir yüze ve vücuda sahip bir şeye
+  bunları yapmak doğru olmaz dedim. Burada adam manken zaten."* → beden kanla dolu çizilir.
 - Onay ve çerçeve: *"Aynen zor kısımları optimize etmekte özgürsün illa şöyle böyle olacak değil, yeterince iyi
   seviyedeyse okey deriz. Onaylıyorum. Başlayabilirsin."*
 

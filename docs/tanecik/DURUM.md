@@ -33,10 +33,11 @@ bedenin sayıları `--scene tanecik --stats`.
   - **Cam:** ince, ten renkli bir kabuk. Her geçişte Fresnel yansıması (F0 0,04), %10'u deri gibi saçılır (biçimi
     verir), kalanı geçer ve kabuğun optik derinliği / |cos| kadar renk alır: kontur derinleşir. Optik derinlik
     (0,10 0,22 0,30); ilk denemedeki (0,22 0,48 0,65) içini kahverengi bir plastiğe çeviriyordu.
-  - **Renk kararı (tek renk + tek vurgu):** duran bedenin tanecikleri soluk pembe (0,80 0,55 0,50), kemik fildişi;
-    sahnedeki tek doygun renk hasarın serbest bıraktığı koyu kırmızı sıvı olacak (0,35 0,02 0,02). Kırmızı
-    taneciklerle dolu cam adam ilk denemede "kanla dolu" okunuyordu; Özcan gore istemiyor.
-  - **Tanecik görünümü:** hepsi (çizim yarıçapı aralığın 0,2'si: ince bir gren), seyrek (%10, 0,42) ya da gizli. Yalnız
+  - **Renk: kanla dolu.** Duran bedenin tanecikleri koyu kan kırmızısı (0,50 0,06 0,05), kemik fildişi. Önce soluk
+    pembeye çevirmiştim (gore kaygısıyla); Özcan düzeltti: *"Gore derken ben onu çok gerçekçi beden yaparsak diye dedim.
+    Kanla dolu olması güzel olur. [...] Gerçekte de kanla dolar çünkü. [...] Burada adam manken zaten."* Çizim yarıçapı
+    aralığın 0,3'ü: kanla dolu okunur, kaburgalar seçilir (0,2 uzaktan solgun, 0,38 içini tümüyle kapatıyor).
+  - **Tanecik görünümü:** hepsi (çizim yarıçapı aralığın 0,3'ü), seyrek (%10, 0,42) ya da gizli. Yalnız
     görüntü, fizik hepsini hesaplar.
   - **Deri:** opak, mat ten rengi (0,55 0,36 0,27) ve hafif parlaklık.
 - **Canlı pencere:** kamera mankenin etrafında döner (sağ tık + fare, tekerlek, E/Q); V cam/deri, N tanecikler, K
