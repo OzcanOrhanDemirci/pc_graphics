@@ -138,6 +138,8 @@ bool LabWorld::build(Deney d, const Config& sceneCfg, bool fine_, const LabInput
     emitCarry_ = 0.0;
     emitSeed_ = 1;
     heldLayers_.clear();
+    lastLayerPos_.clear();
+    lastLayerFirst_ = -1;
     triggered_ = false;
     ev_ = LabEvent{};
     switch (d) {
@@ -149,6 +151,7 @@ bool LabWorld::build(Deney d, const Config& sceneCfg, bool fine_, const LabInput
     case Deney::Jel: buildJel(); break;
     }
     pw.reserve(int(code.size()) + cfg.i(pre + "ek_kapasite", 0));
+    if (d == Deney::Bal && cfg.i("bal.yaylar", 1)) pw.reserveSprings(cfg.i("bal.yay_kapasite", 1200000));
     pw.commit();
     t0_ = pw.time();
     placeProps();
@@ -714,6 +717,30 @@ void LabWorld::emit(float dt) {
     const int first = pw.count();
     const int added = pw.appendHeld(pos, vel, density, honey ? 0 : sandGroup_);
     if (added > 0) heldLayers_.push_back({first, added, now});
+    if (honey && added > 0 && pw.springCount() >= 0 && cfg.i("bal.yaylar", 1)) {
+        // springs: every new particle to its neighbours within 1.6 spacings, among the new ones and the layer before
+        // (the thread's lattice: it stretches and flows, it does not fall apart into drops)
+        std::vector<float3> cand = lastLayerPos_;
+        const int candFirst = lastLayerFirst_;
+        std::vector<int2> pairs;
+        const float reach = cfg.f("bal.yay_uzaklik", 1.6f) * s;
+        for (int i = 0; i < added; ++i) {
+            for (int j = i + 1; j < added; ++j)
+                if (length(pos[size_t(i)] - pos[size_t(j)]) < reach) pairs.push_back(make_int2(first + i, first + j));
+            if (candFirst >= 0)
+                for (size_t j = 0; j < cand.size(); ++j)
+                    if (length(pos[size_t(i)] - (cand[j] + make_float3(0, -v0 * float(1.0 / rate), 0))) < reach * 1.2f) pairs.push_back(make_int2(first + i, candFirst + int(j)));
+        }
+        pw.addSprings(pairs);
+        lastLayerPos_.assign(pos.end() - added, pos.end());
+        lastLayerFirst_ = first + added - int(lastLayerPos_.size());
+        // only the newest layer's particles: they are the last of pos
+        const int perLayer = int(std::max<size_t>(1, d0.size()));
+        if (int(lastLayerPos_.size()) > perLayer) {
+            lastLayerPos_.erase(lastLayerPos_.begin(), lastLayerPos_.end() - perLayer);
+            lastLayerFirst_ = first + added - perLayer;
+        }
+    }
     code.insert(code.end(), size_t(added), honey ? DC_HONEY : DC_SAND);
 }
 

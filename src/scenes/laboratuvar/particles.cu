@@ -785,6 +785,52 @@ __global__ void kAddVel(int n, const uint32_t* idx, const float3* dv, float4* v,
     vi.z += dv[k].z;
     v[i] = vi;
 }
+// viscoelastic springs: each pulls its two ends towards its rest length (Jacobi: corrections summed per particle,
+// float atomics: not bit-repeatable, the springs are for honey only), its rest creeping after the length (plasticity)
+__global__ void kSprings(const int* count, int cap, const int2* ends, float* rest, uint8_t* alive, float* age, const float4* x, const float* w, float4* acc,
+                         float stiff, float relax, float breakStrain, float life, float dt) {
+    const int k = blockIdx.x * blockDim.x + threadIdx.x;
+    if (k >= cap || k >= *count || !alive[k]) return;
+    if (life > 0.0f) {
+        const float a = age[k] + dt;
+        age[k] = a;
+        if (a > life) { alive[k] = 0; return; }
+    }
+    const int2 e = ends[k];
+    const float wa = w[e.x], wb = w[e.y];
+    const float ws = wa + wb;
+    const float3 r = make_float3(x[e.x].x - x[e.y].x, x[e.x].y - x[e.y].y, x[e.x].z - x[e.y].z);
+    const float d = sqrtf(dot(r, r));
+    float r0 = rest[k];
+    if (d < 1e-9f || r0 <= 0.0f) return;
+    if (d > r0 * (1.0f + breakStrain)) { alive[k] = 0; return; }
+    r0 += (d - r0) * relax;   // it flows: the rest length follows
+    rest[k] = r0;
+    if (ws <= 0.0f) return;
+    const float3 c = r * ((r0 - d) / d * stiff / ws);
+    if (wa > 0.0f) { atomicAdd(&acc[e.x].x, c.x * wa); atomicAdd(&acc[e.x].y, c.y * wa); atomicAdd(&acc[e.x].z, c.z * wa); atomicAdd(&acc[e.x].w, 1.0f); }
+    if (wb > 0.0f) { atomicAdd(&acc[e.y].x, -c.x * wb); atomicAdd(&acc[e.y].y, -c.y * wb); atomicAdd(&acc[e.y].z, -c.z * wb); atomicAdd(&acc[e.y].w, 1.0f); }
+}
+__global__ void kSpringApply(int n, float4* x, float4* acc) {
+    const int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= n) return;
+    const float4 a = acc[i];
+    if (a.w > 0.0f) {
+        const float k = 1.0f / sqrtf(a.w);   // shared among its springs, less than a plain average (they pull together)
+        x[i].x += a.x * k;
+        x[i].y += a.y * k;
+        x[i].z += a.z * k;
+    }
+    acc[i] = make_float4(0, 0, 0, 0);
+}
+__global__ void kSpringRest(int first, int count, const int2* ends, float* rest, const float4* x) {
+    const int k = blockIdx.x * blockDim.x + threadIdx.x;
+    if (k >= count) return;
+    const int2 e = ends[first + k];
+    const float3 r = make_float3(x[e.x].x - x[e.y].x, x[e.x].y - x[e.y].y, x[e.x].z - x[e.y].z);
+    rest[first + k] = sqrtf(dot(r, r));
+}
+
 __global__ void kScaleRest(int nb, float4* prop, float f) {
     const int b = blockIdx.x * blockDim.x + threadIdx.x;
     if (b < nb) prop[b].x *= f;
@@ -989,6 +1035,16 @@ void ParticleWorld::addBond(int a, int b, float compliance, float breakStrain, f
 
 void ParticleWorld::allocate(int cap, int bondCap) {
     cap_ = cap;
+    if (dsReserve_ > 0) {
+        dsCap_ = dsReserve_;
+        dsEnds_ = dalloc<int2>(size_t(dsCap_));
+        dsRest_ = dalloc<float>(size_t(dsCap_));
+        dsAge_ = dalloc<float>(size_t(dsCap_));
+        dsAlive_ = dalloc<uint8_t>(size_t(dsCap_));
+        dsCountDev_ = dalloc<int>(1);
+        dsAcc_ = dalloc<float4>(size_t(cap));
+        dsCount_ = 0;
+    }
     x_ = dalloc<float4>(cap);
     x0_ = dalloc<float4>(cap);
     v_ = dalloc<float4>(cap);
@@ -1051,6 +1107,8 @@ void ParticleWorld::freeAll() {
     dfree(x_), dfree(x0_), dfree(v_), dfree(kv_), dfree(bleed_), dfree(dx_), dfree(q_), dfree(w_), dfree(phase_), dfree(rho_), dfree(contacts_), dfree(contactsNext_);
     dfree(key_), dfree(keySorted_), dfree(id_), dfree(idSorted_), dfree(xs_), dfree(vs_), dfree(ns_), dfree(phs_), dfree(psi_), dfree(psis_), dfree(code_), dfree(lam_), dfree(rhos_), dfree(nbrFlag_), dfree(nbr_), dfree(nbrCount_);
     dfree(cellStart_), dfree(cellEnd_);
+    dfree(dsEnds_), dfree(dsRest_), dfree(dsAge_), dfree(dsAlive_), dfree(dsCountDev_), dfree(dsAcc_);
+    dsCount_ = dsCap_ = 0;
     if (sortTemp_) cudaFree(sortTemp_);
     sortTemp_ = nullptr;
     dfree(bEnds_), dfree(bProp_), dfree(bLam_), dfree(bCorr_), dfree(bBroken_), dfree(csrStart_), dfree(csrBond_), dfree(degree_), dfree(initDeg_), dfree(sleepOk_), dfree(markPrev_), dfree(markNext_);
@@ -1376,6 +1434,12 @@ void ParticleWorld::record(float dt, cudaStream_t st) {
                 kRigidReduce<<<nRigid_, kBlock, 0, st>>>(groups_, rigidList_, x_, q_, groupFrame_);
                 kRigidProject<<<nB, kBlock, 0, st>>>(n_, phase_, groups_, q_, groupFrame_, x_);
             }
+            if (dsCap_ > 0) {   // viscoelastic springs (honey's thread)
+                const float relax = 1.0f - std::exp(-sdt / std::max(1e-4f, P.springRelax * float(std::max(iters, bondIters))));
+                kSprings<<<blocks(dsCap_), kBlock, 0, st>>>(dsCountDev_, dsCap_, dsEnds_, dsRest_, dsAlive_, dsAge_, x_, w_, dsAcc_, P.springStiff, relax, P.springBreak,
+                                                            P.springLife, sdt / float(std::max(iters, bondIters)));
+                kSpringApply<<<nB, kBlock, 0, st>>>(n_, x_, dsAcc_);
+            }
             g_prof.mark("duzlem_kati");
         }
         kVelocity<<<nB, kBlock, 0, st>>>(n_, x_, x0_, v_, w_, kv_, 1.0f / sdt, P.maxSpeed, phase_, P.grainRest);
@@ -1511,6 +1575,21 @@ void ParticleWorld::placeGroup(int group, float3 offset, float3 velocity) {
     const float4 fr[2] = {make_float4(c0.x + offset.x, c0.y + offset.y, c0.z + offset.z, 0.0f), make_float4(0, 0, 0, 1)};
     PCUDA(cudaMemcpyAsync(groupFrame_ + 2 * group, fr, sizeof(fr), cudaMemcpyHostToDevice, stream_));
     PCUDA(cudaStreamSynchronize(stream_));
+}
+
+int ParticleWorld::addSprings(const std::vector<int2>& pairs) {
+    if (!dsEnds_ || pairs.empty()) return 0;
+    const int k = std::min(int(pairs.size()), dsCap_ - dsCount_);
+    if (k <= 0) return 0;
+    PCUDA(cudaStreamSynchronize(stream_));
+    PCUDA(cudaMemcpy(dsEnds_ + dsCount_, pairs.data(), size_t(k) * sizeof(int2), cudaMemcpyHostToDevice));
+    PCUDA(cudaMemset(dsAlive_ + dsCount_, 1, size_t(k)));
+    PCUDA(cudaMemset(dsAge_ + dsCount_, 0, size_t(k) * sizeof(float)));
+    kSpringRest<<<blocks(k), kBlock, 0, stream_>>>(dsCount_, k, dsEnds_, dsRest_, x_);
+    dsCount_ += k;
+    PCUDA(cudaMemcpyAsync(dsCountDev_, &dsCount_, sizeof(int), cudaMemcpyHostToDevice, stream_));
+    PCUDA(cudaStreamSynchronize(stream_));
+    return k;
 }
 
 void ParticleWorld::scaleAllBondRest(float f) {

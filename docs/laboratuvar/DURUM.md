@@ -12,7 +12,7 @@
 | Deney | Kip | Ne oluyor | Durum |
 |---|---|---|---|
 | Su | kayıt | beher eğilip bardağa döküyor; yükseklik 12-45 cm; sıçrar, taşar, masada birikir | ince kayıt 1,5 mm, 98.670 su taneciği, saniyenin 1/600'ü; akış düzgün cam bir şerit |
-| Bal | canlı | kaşıktan cam tabağa; fareyle gezdir, akış ve yükseklik çubuğu | tabakta kehribar, pürüzsüz, yavaş yayılan gölet; **ip yerine iri damlalar** (aşağıda) |
+| Bal | canlı | kaşıktan cam tabağa; fareyle gezdir, akış ve yükseklik çubuğu | kesintisiz kehribar ip, tabakta kıvrılarak yığılır, yığın birkaç saniyede göle döner |
 | Kum | canlı | huniden masaya ve behere; fareyle gezdir; çelik bilye | yığılma açısı **32,5°** (ölçüt 30-35°); tane dokusu |
 | Su balonu | kayıt | masadaki balona iğne (tıkla ya da Boşluk) | 10 ms'de delik, 20-30 ms'de lastik soyulurken su balon biçiminde, sonra çöker |
 | Karpuz | kayıt | tüfekle (5,56 → 7,62×51 → .50 BMG, gerçek yükler) | ~600 J birikir; birkaç ms şişer, kabuk taç gibi açılır; parça görüntüsü yumuşak |
@@ -57,9 +57,12 @@ Oynatma yalnız çizimdir (fizik yok), anlar arası doğrusal ara doldurma. Vide
   kendiliğinden patlatıyordu.
 - **Su dökmede biraz viskozite + yapışma + yüzey gerilimi** (XSPH 0,05, Akinci 20, gerilim 3): olmadan akış behere
   yakın yerde bile erişte gibi kopuyordu; dört varyant kareyle kıyaslandı (`02 su dokme ayar denemeleri`).
-- **Bal: Shepard XSPH + 12 geçiş, tutulan meme:** düz XSPH ince ipte (az komşu) neredeyse etkisiz, bal yağ gibi
-  yayıldı; memeden boşluğa bırakılan katmanlar ilk anda ayrılıyordu → yeni katmanlar memede sabit hızla itilir,
-  çıkınca serbest kalır.
+- **Bal: Shepard XSPH + 12 geçiş, tutulan meme, viskoelastik yaylar:** düz XSPH ince ipte (az komşu) neredeyse
+  etkisiz, bal yağ gibi yayıldı; memeden boşluğa bırakılan katmanlar ilk anda ayrılıyordu → yeni katmanlar memede
+  sabit hızla itilir, çıkınca serbest kalır. Yine de ip ya katmanlara ayrıldı (yapışmasız) ya Rayleigh-Plateau
+  damlalarına bölündü (yapışmalı): PBF'te gerilmeye direnen viskoz gerilim yok. Çözüm Clavet 2005'in viskoelastik
+  yayları: her yeni katman öncekine 1,6 aralıkta yaylarla bağlanır, yayın dinlenme boyu 1 sn'de uzunluğunu izler
+  (akar, incelir, kopmaz), 2,5 sn sonra yay kalkar (kıvrımlar birleşip göle döner).
 - **Kum: hız düzeyinde durgun sürtünme** (granüler PBD'de bilinen "uyku" eşiği). Konumsal sürtünme her alt adımda
   küçük kaymaları tamamen durduramıyor, yığın sürünüyordu.
 - **Karpuz kabuğu iki katman** (yeşil dış deri ≥ 2 tanecik, açık yeşil iç kabuk), bağ dayanımına log-normal kusur
@@ -77,9 +80,8 @@ Oynatma yalnız çizimdir (fizik yok), anlar arası doğrusal ara doldurma. Vide
   sıçrayıp döndü (aşağı giden akış masaya çarpıp geri dönüyor), 0,3'e indirildi. Esnek enerjiyi depolayan bir boşluk
   modeli (basınçla açılıp kapanan) gerek. Yoldan kopan jel tanecikleri küre damla gibi görünüyor.
 
-- **Bal ipi:** kaşıktan sürekli ince ip yerine iri damlalar düşüyor (alçak kaşıkta yığına değen sütun). Damlalar ve
-  tabaktaki bal gerçekçi; ip kıvrılması (liquid rope coiling) yok. Sebep: PBF'te gerilmeye karşı koyan viskoz gerilim
-  yok (XSPH hız ortalaması). B planı uygulandı; asıl çözüm örtük viskozite (Weiler 2018) ya da bal için MPM.
+- **Bal ipi** yaylarla sürekli ve yığında kıvrılıyor, ama ipin yüzeyi boğumlu (1-3 tanecik kalınlığında kafes);
+  düzenli kıvrılma sıklığı (Ribe ölçeklemesi) ölçülmedi. Yaylar Jacobi ve kayan noktalı atomik: bal birebir tekrar etmez.
 - **Karpuz parçaları** yüzey yeniden kurulumuyla çiziliyor: kırık yüzey keskin değil, yumuşak "jöle" kenarlı; parçaların
   üstündeki şeritler dünya konumundan (parça dönünce kayar). Patlama 7,62'de fiziksel ama çok hızlı: ×1/100'de izlenmeli.
 - **Su balonu** yalnız masada; asılı balon (gerçek klasik kare) için zarın yük taşıması gerek (daha çok yineleme ya da

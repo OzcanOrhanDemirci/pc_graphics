@@ -47,6 +47,10 @@ void applyPhysics(ParticleWorld& w, const Config& c) {
     p.tearTip = c.f("fizik.yirtilma_ucu", p.tearTip);
     p.grainShare = c.f("fizik.tane_pay", p.grainShare);
     p.grainRest = c.f("fizik.tane_durgun", p.grainRest);
+    p.springStiff = c.f("fizik.yay_sertlik", p.springStiff);
+    p.springRelax = c.f("fizik.yay_gevseme", p.springRelax);
+    p.springBreak = c.f("fizik.yay_kopma", p.springBreak);
+    p.springLife = c.f("fizik.yay_omur", p.springLife);
     p.xsphShepard = c.i("fizik.xsph_shepard", p.xsphShepard ? 1 : 0) != 0;
     p.viscPasses = c.i("fizik.viskozite_gecis", p.viscPasses);
     p.bleedFade = c.f("yara.pihtilasma", p.bleedFade);

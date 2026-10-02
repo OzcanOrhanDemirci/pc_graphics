@@ -118,6 +118,8 @@ private:
         double born;
     };
     std::vector<HeldLayer> heldLayers_;   // the stream's newest layers, still in the nozzle
+    std::vector<float3> lastLayerPos_;    // honey: the last layer emitted, where it was born (springs to the next)
+    int lastLayerFirst_ = -1;
     unsigned emitSeed_ = 1;
     int sandGroup_ = 0;
     void emit(float dt);

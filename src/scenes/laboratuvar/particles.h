@@ -51,6 +51,12 @@ struct PParams {
     // and repeated: each pass carries the velocity a kernel further (a Jacobi solve towards implicit viscosity)
     bool xsphShepard = false;
     int viscPasses = 1;
+    // viscoelastic springs (Clavet et al. 2005, the Maxwell kind): added while running between particles (a honey
+    // thread's layers), pulled to their rest length with this stiffness a pass (0..1, Jacobi), the rest length
+    // creeping towards the current one over springRelax seconds (it flows instead of bouncing), gone past
+    // springBreak strain
+    float springStiff = 0.5f, springRelax = 0.2f, springBreak = 2.0f;
+    float springLife = 0.0f;     // s: a spring lets go this long after it was made (the pile merges and flows; 0: never)
     float cohesion = 0.0f;       // Akinci et al. 2013 cohesion, m/s^2 at its peak (0: off)
     float tension = 0.0f;        // and its curvature term (surface tension proper), m/s^2 per unit of normal difference
     float adhesion = 0.0f;       // fluid to solid particles (wetting: blood runs down the skin), m/s^2 at its peak (0: off)
@@ -131,6 +137,10 @@ public:
     // below hangs on to them, as honey hangs on a dipper (free from the start, a thin stream falls apart into drops)
     int appendHeld(const std::vector<float3>& pos, const std::vector<float3>& vel, float density, int grainGroup);   // 0: fluid
     void release(int first, int count, float density);   // held ones let go: their mass back
+    // viscoelastic springs between particle pairs (rest length: their distance now); returns how many fitted
+    int addSprings(const std::vector<int2>& pairs);
+    int springCount() const { return dsCount_; }
+    void reserveSprings(int n) { dsReserve_ = n; }   // before commit
     void placeGroup(int group, float3 offset, float3 velocity);   // a rigid group: its rest shape moved by offset, moving
     int breakBondsInSphere(float3 c, float r);  // every bond with an end inside: broken (a shot, for the tests); returns how many
     // ---- driven from outside (the body: bone particles follow the skeleton; shots and blasts push)
@@ -244,5 +254,13 @@ private:
     int graphN_ = -1;
     PParams graphP_{};
     float* gSub_ = nullptr;        // gravity per substep (device; the graph reads it)
+    // viscoelastic springs: their ends, rest lengths, alive; the count on the device too (the graph reads it there)
+    int2* dsEnds_ = nullptr;
+    float* dsRest_ = nullptr;
+    float* dsAge_ = nullptr;
+    uint8_t* dsAlive_ = nullptr;
+    int* dsCountDev_ = nullptr;
+    float4* dsAcc_ = nullptr;      // per particle: summed corrections (xyz) and their count (w)
+    int dsCount_ = 0, dsCap_ = 0, dsReserve_ = 0;
     void freeAll();
 };

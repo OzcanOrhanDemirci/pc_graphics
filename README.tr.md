@@ -137,7 +137,8 @@ klasik ışığı (cam ve sıvı kırılan kenarlarıyla okunur). Altı deney, h
 ne derse o:
 
 - **Su** eğilen bir beherden bardağa dökülür, 12 ile 45 cm arasından: sıçrar, taşar, masada birikir.
-- **Bal** kaşıktan cam tabağa (canlı, kaşığı fareyle gezdir): yığılır, yavaşça yayılır, kehribar.
+- **Bal** kaşıktan cam tabağa (canlı, kaşığı fareyle gezdir): tek kehribar ip, tabakta katlanıp kıvrılır, sonra göle
+  yayılır.
 - **Kum** huniden masaya ve behere (canlı): 32,5° ile yığılır (kuru kum 30-35°); çelik bilye bırakılabilir.
 - **Su balonu** masada, iğneyle delinir: lastik 20-30 ms'de geri soyulurken su bir an balon biçiminde kalır, sonra çöker.
 - **Karpuz** tüfekle vurulur (5,56, 7,62×51, .50 BMG; gerçek yükler): birkaç milisaniye şişer, sonra kabuğu taç gibi
@@ -177,7 +178,9 @@ Nasıl yapıldığı ve yolda neyin ölçüldüğü (çalışma günlüğünde h
   balonu tutan ayar ince balonu tutmadı: XPBD'nin sertliği çözünürlüğe bağlı); gerilimi oturma sırasında yavaşça
   verilir; yırtığın ucuna, kaba kafesin orada toplayamadığı gerilim verilir.
 - **Balın** viskozitesi her taneciğin kendi komşularına göre alınır (ince ip de gövde kadar koyu olur), alt adımda
-  tekrarlanır; bal en yeni katmanlarını tutan bir memeden çıkar. Tek ince ip yerine iri damlalarla akıyor (açık, aşağıda).
+  tekrarlanır; bal en yeni katmanlarını tutan bir memeden çıkar. Yine de ipi damlalara bölünüyordu (PBF'te gerilmeye
+  direnen gerilim yok); katmanları arasındaki viskoelastik yaylar (Clavet vd. 2005'ten, dinlenme boyu uzunluğu izler)
+  onu incelen, katlanan ve tabakta kıvrılan tek bir ip tutar, sonra bırakır: kıvrımlar birleşip göl olur.
 - **Karpuzun** kabuğu iki katman (yeşil deri, açık kabuk), yuvalı bir kaidede; bağlarında doğal kusurlar var (özdeş
   bağlar hep birden kırılıp kırıntı oluyordu); merminin yolu eski Tanecik sahnesinin jele kalibre balistiğinden.
 - **Görüntü:** OptiX ile yol izleme; kalınlıklı cam ve kırılan sıvılar tam Fresnel ile, bardaktaki su camla tek arayüzden
@@ -185,8 +188,7 @@ Nasıl yapıldığı ve yolda neyin ölçüldüğü (çalışma günlüğünde h
   çekirdekler); kum, tane ölçeğinde dokulu bir yüzey ve ince taneler; karede 4 örnek ve OptiX yapay zekâ gürültü
   gidericisi.
 
-Açık: bal kıvrılan ince bir ip yerine damlıyor (gerilmeye karşı koyan viskoz gerilim PBF'te yok; örtük viskozite ya da
-MPM sonraki adım); karpuz parçaları keskin kırık değil yumuşak yüzeyler olarak çiziliyor; balon asılı değil masada
+Açık: bal ipinin yüzeyi boğumlu (bir-üç tanecik kalınlığında); karpuz parçaları keskin kırık değil yumuşak yüzeyler olarak çiziliyor; balon asılı değil masada
 (asılıyken hafif lastik suyun ağırlığını düğüme zamanında taşıyamadı).
 
 ## Sahne 1: neyi hesaplıyor

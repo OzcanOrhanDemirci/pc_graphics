@@ -137,7 +137,8 @@ photography (glass and liquids read by their refracted edges). Six experiments, 
 our own, whatever the physics says:
 
 - **Water** poured from a tilting beaker into a tumbler, from 12 to 45 cm: it splashes, overflows, pools on the table.
-- **Honey** off a dipper onto a glass dish (live, drag the dipper with the mouse): it piles, spreads slowly, amber.
+- **Honey** off a dipper onto a glass dish (live, drag the dipper with the mouse): one amber thread that folds and
+  coils on the dish, then spreads into a pool.
 - **Sand** from a funnel onto the table and into a beaker (live): it heaps at 32.5° (dry sand: 30-35°); drop a steel ball.
 - **A water balloon** on the table, pricked with a needle: the rubber peels back in 20-30 ms while the water keeps the
   balloon's shape for a moment, then slumps.
@@ -180,8 +181,10 @@ How each is made, and what was measured on the way (the Turkish working journal 
   same settings that held a coarse balloon failed a fine one: XPBD's stiffness depends on resolution); its stretch is
   brought in slowly while it settles; a tear's tip is given the stress a coarse lattice cannot concentrate there.
 - **Honey's** viscosity is taken over each particle's own neighbours (a thin thread is then as thick as the bulk),
-  repeated a substep, and it leaves a nozzle that holds its newest layers. It drips in globs rather than one thin rope
-  (an open problem, see below).
+  repeated a substep, and it leaves a nozzle that holds its newest layers. Even so its thread fell apart into drops
+  (PBF has no stress that resists stretching); viscoelastic springs between its layers (after Clavet et al. 2005,
+  their rest length creeping after the length) keep it one thread that thins, folds and coils on the dish, then let
+  go so the coils merge into a pool.
 - **The melon's** rind is two layers (green skin, pale rind) on a cup-shaped stand; its bonds carry natural flaws
   (identical bonds all broke at once, into crumbs); the bullet's path comes from the gelatin-calibrated ballistics of
   the earlier Tanecik scene.
@@ -190,8 +193,7 @@ How each is made, and what was measured on the way (the Turkish working journal 
   the particles every frame (anisotropic kernels); sand drawn as a surface with grain-sized texture plus fine grains;
   4 samples a frame and the OptiX AI denoiser.
 
-Open: honey drips instead of a coiling thread (viscous stress that resists stretching is what PBF lacks; implicit
-viscosity or MPM would be the next step); melon fragments are drawn as soft rebuilt surfaces, not sharp fractures; the
+Open: the honey thread's surface is lumpy (it is one to three particles thick); melon fragments are drawn as soft rebuilt surfaces, not sharp fractures; the
 balloon rests on the table rather than hanging (hanging, the light rubber could not carry the water's weight to the
 knot in time).
 
