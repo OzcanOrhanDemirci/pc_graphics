@@ -32,6 +32,7 @@ std::string deneyName(Deney d) {
     case Deney::Kum: return L("Kum", "Sand");
     case Deney::Balon: return L("Su balonu", "Water balloon");
     case Deney::Karpuz: return L("Karpuz", "Watermelon");
+    case Deney::Jel: return L("Jel", "Gel");
     }
     return "";
 }
@@ -42,6 +43,7 @@ std::string deneyNote(Deney d) {
     case Deney::Kum: return L("Huniden masaya ve behere · canlı · fareyle gezdir", "From a funnel onto the table and a beaker · live · drag to move");
     case Deney::Balon: return L("Balona tıkla: iğne · kayıt", "Click the balloon: a needle · recorded");
     case Deney::Karpuz: return L("Karpuza tıkla: tüfek · kayıt", "Click the melon: a rifle · recorded");
+    case Deney::Jel: return L("Balistik jel bloğu, bloğa tıkla: tabanca · kayıt", "A ballistic gel block, click it: a pistol · recorded");
     }
     return "";
 }
@@ -57,9 +59,9 @@ public:
         i.title = L("Laboratuvar", "Laboratory");
         i.subtitle = L("Sıvı ve tanecik fiziği, ağır çekim", "Liquids and grains in slow motion");
         i.description = L("Bir ağır çekim fotoğraf masası: bardağa dökülen su, kaşıktan akan bal, huniden dökülen kum, patlayan su balonu, "
-                          "vurulan karpuz. Fizik ne derse o; hızlı anlar ince hesaplanır, istediğin hızda ve açıdan izlenir.",
+                          "vurulan karpuz, balistik jel. Fizik ne derse o; hızlı anlar ince hesaplanır, istediğin hızda ve açıdan izlenir.",
                           "A high-speed photography table: water poured into a glass, honey off a dipper, sand from a funnel, a water "
-                          "balloon popping, a watermelon shot. Whatever the physics says; fast moments are computed finely and watched "
+                          "balloon popping, a watermelon shot, ballistic gel. Whatever the physics says; fast moments are computed finely and watched "
                           "at any speed, from any side.");
         i.details = {
             {L("Tek çözücü", "One solver"),
@@ -89,7 +91,7 @@ public:
         i.accent = 0x6FC2B4;
         i.reloadable = true;
         i.keys = {{L("Deney", "Experiment"),
-                   {{"1-5", L("Su, bal, kum, balon, karpuz", "Water, honey, sand, balloon, melon")},
+                   {{"1-6", L("Su, bal, kum, balon, karpuz, jel", "Water, honey, sand, balloon, melon, gel")},
                     {L("Boşluk", "Space"), L("Dök / akıt / durdur", "Pour / run / stop")},
                     {L("Sol tık", "Left click"), L("İğne, ateş; balda ve kumda sürükle: gezdir", "Needle, fire; honey and sand: drag to move")},
                     {"B", L("Kuma çelik bilye bırak", "Drop a steel ball on the sand")},
@@ -244,9 +246,8 @@ public:
                         startRecorded(host, e);
                         lastClick_ = in.now;
                     }
-                } else if (deney_ == Deney::Karpuz && p.object >= 0) {
-                    const float3 c = make_float3(0.0f, 0.13f, 0.0f);
-                    if (length(p.pos - c) < 0.14f) {
+                } else if ((deney_ == Deney::Karpuz || deney_ == Deney::Jel) && p.object >= 0) {
+                    if (length(p.pos - w_.aim) < w_.aimRadius) {
                         LabEvent e;
                         e.kind = LabEvent::Shot;
                         e.a = a_.renderer.params().cam.pos;
@@ -365,8 +366,8 @@ public:
             h.text = num(y * 100.0, 0) + " cm";
             s.controls.push_back(h);
         }
-        if (deney_ == Deney::Karpuz) {
-            const weapons::Load L0 = weapons::gunLoad(weapons::Gun::Rifle, li.power);
+        if (deney_ == Deney::Karpuz || deney_ == Deney::Jel) {
+            const weapons::Load L0 = weapons::gunLoad(deney_ == Deney::Jel ? weapons::Gun::Pistol : weapons::Gun::Rifle, li.power);
             app::Control c;
             c.kind = app::Control::Kind::Slider;
             c.id = "guc";
@@ -580,9 +581,9 @@ private:
             e.kind = LabEvent::Prick;
             e.a = m + make_float3(0.0f, -0.25f * R, 0.97f * R);   // the front, a little low
         } else {
-            e.kind = LabEvent::Shot;
-            e.a = make_float3(-1.5f, 0.135f, 0.0f);
-            e.b = make_float3(0.0f, 0.135f, 0.0f);
+            e.kind = LabEvent::Shot;   // from the left, through its middle
+            e.a = make_float3(-1.5f, w_.aim.y, w_.aim.z);
+            e.b = w_.aim;
             e.power = li.power;
         }
         startRecorded(host, e);

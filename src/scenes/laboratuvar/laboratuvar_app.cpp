@@ -96,8 +96,8 @@ void LaboratuvarApp::applyLook() {
 
 void LaboratuvarApp::setCamera(Deney d) {
     const std::string k = std::string("kamera.") + deneyKey(d);
-    const float3 defPos[kDeneyCount] = {{0.12f, 0.24f, 0.95f}, {0.0f, 0.16f, 0.50f}, {0.02f, 0.17f, 0.58f}, {0.0f, 0.17f, 0.62f}, {0.10f, 0.26f, 1.25f}};
-    const float3 defAim[kDeneyCount] = {{-0.03f, 0.20f, 0.0f}, {0.0f, 0.06f, 0.0f}, {0.03f, 0.07f, 0.0f}, {0.0f, 0.06f, 0.0f}, {0.0f, 0.17f, 0.0f}};
+    const float3 defPos[kDeneyCount] = {{0.12f, 0.24f, 0.95f}, {0.0f, 0.16f, 0.50f}, {0.02f, 0.17f, 0.58f}, {0.0f, 0.17f, 0.62f}, {0.10f, 0.26f, 1.25f}, {0.06f, 0.13f, 0.55f}};
+    const float3 defAim[kDeneyCount] = {{-0.03f, 0.20f, 0.0f}, {0.0f, 0.06f, 0.0f}, {0.03f, 0.07f, 0.0f}, {0.0f, 0.06f, 0.0f}, {0.0f, 0.17f, 0.0f}, {0.0f, 0.05f, 0.0f}};
     cam.lookAt(cfg.v3(k + ".konum", defPos[int(d)]), cfg.v3(k + ".hedef", defAim[int(d)]));
     cam.fovDeg = cfg.f(k + ".fov", cfg.f("kamera.fov", 30.0f));
     cam.apply(renderer.params().cam, width, height);
@@ -150,6 +150,10 @@ void LaboratuvarApp::setupScene(Deney d, int maxParticles, const std::vector<uin
     juice.ior = 1.34f;
     juice.sigma = cfg.v3("karpuz.su_sogurma", make_float3(6.0f, 110.0f, 80.0f));
     const int mJuice = add(juice);
+    LMaterial gel = mat(LM_LIQUID, make_float3(1, 1, 1));
+    gel.ior = cfg.f("jel.kirilma", 1.345f);
+    gel.sigma = cfg.v3("jel.sogurma", make_float3(2.5f, 3.5f, 10.0f));
+    const int mGel = add(gel);
     R.uploadMaterials();
     // the set
     R.addMesh(tableMesh(0.75f, 0.32f, -0.40f, 0.03f), mSlate);
@@ -194,6 +198,11 @@ void LaboratuvarApp::setupScene(Deney d, int maxParticles, const std::vector<uin
         if (cfg.i("karpuz.ic_kabuk_ayri", 0)) surface(DC_PITH, mPith, k);
         surface(DC_FLESH, mFlesh, k);
         surface(DC_JUICE, mJuice, S);
+    }
+    if (d == Deney::Jel) {
+        FluidSurfaceSettings k = S;
+        k.smoothing = cfg.f("jel.yuzey_yumusatma", 0.5f);
+        surface(DC_GEL, mGel, k);
     }
     objMembrane = -1;
     release();
@@ -287,6 +296,13 @@ LabEvent defaultEvent(Deney d, const Config& c) {
         e.a = c.v3("test.namlu", make_float3(-1.5f, 0.135f, 0.0f));
         e.b = c.v3("test.hedef", make_float3(0.0f, 0.135f, 0.0f));
         e.power = c.f("test.guc", 0.5f);
+        break;
+    }
+    case Deney::Jel: {
+        e.kind = LabEvent::Shot;
+        e.a = c.v3("test.jel_namlu", make_float3(-1.5f, 0.05f, 0.0f));
+        e.b = c.v3("test.jel_hedef", make_float3(0.0f, 0.05f, 0.0f));
+        e.power = c.f("test.jel_guc", 0.5f);
         break;
     }
     case Deney::Kum: e.kind = LabEvent::Ball; e.a = c.v3("test.bilye", make_float3(0.0f, 0.25f, 0.0f)); break;

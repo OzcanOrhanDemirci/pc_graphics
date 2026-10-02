@@ -133,7 +133,7 @@ tıklayıp yıkım topu at, zamanı onda birine kadar yavaşlat.
 ### 4 · Laboratuvar · Ekim 2026
 
 Bir ağır çekim fotoğraf masası: koyu bir set, deneyin arkasında büyük yumuşak bir ışık paneli, sıvı fotoğrafçılığının
-klasik ışığı (cam ve sıvı kırılan kenarlarıyla okunur). Beş deney, hepsi kendi yazdığımız tek çözücüde tanecik, fizik
+klasik ışığı (cam ve sıvı kırılan kenarlarıyla okunur). Altı deney, hepsi kendi yazdığımız tek çözücüde tanecik, fizik
 ne derse o:
 
 - **Su** eğilen bir beherden bardağa dökülür, 12 ile 45 cm arasından: sıçrar, taşar, masada birikir.
@@ -142,6 +142,7 @@ ne derse o:
 - **Su balonu** masada, iğneyle delinir: lastik 20-30 ms'de geri soyulurken su bir an balon biçiminde kalır, sonra çöker.
 - **Karpuz** tüfekle vurulur (5,56, 7,62×51, .50 BMG; gerçek yükler): birkaç milisaniye şişer, sonra kabuğu taç gibi
   açılır.
+- **Balistik jel bloğu** tabancayla (.22, 9 mm, .50 AE): saydam bloğun içinde mermi yolu ve geçici boşluk, blok sarsılır.
 
 ![Sahne 4: iğneden 24 ms sonra su balonu, lastik geri soyuluyor, su hâlâ balon biçiminde](docs/images/lab-balon.jpg)
 

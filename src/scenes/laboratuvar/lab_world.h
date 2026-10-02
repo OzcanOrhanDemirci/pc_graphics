@@ -7,6 +7,8 @@
 //   Kum     a funnel pours sand (grains with friction) on the table and into a beaker; a steel ball can be dropped
 //   Balon   a water balloon (a stretched rubber membrane round water) hangs; a needle pricks it where clicked
 //   Karpuz  a small watermelon (a brittle rind, a soft flesh that turns to juice) on a stand; a rifle shot
+//   Jel     a block of ballistic gelatin (clear, elastic) on the table; a pistol shot: the temporary cavity opens and
+//           closes inside it, the block shudders
 #pragma once
 #include "core/config.h"
 #include "scenes/laboratuvar/lab_geom.h"
@@ -17,14 +19,14 @@
 #include <string>
 #include <vector>
 
-enum class Deney : int { Su = 0, Bal = 1, Kum = 2, Balon = 3, Karpuz = 4 };
-constexpr int kDeneyCount = 5;
+enum class Deney : int { Su = 0, Bal = 1, Kum = 2, Balon = 3, Karpuz = 4, Jel = 5 };
+constexpr int kDeneyCount = 6;
 const char* deneyKey(Deney d);            // the settings' prefix: "su", "bal", "kum", "balon", "karpuz"
-inline bool deneyRecorded(Deney d) { return d == Deney::Su || d == Deney::Balon || d == Deney::Karpuz; }
+inline bool deneyRecorded(Deney d) { return d == Deney::Su || d == Deney::Balon || d == Deney::Karpuz || d == Deney::Jel; }
 
 // what a particle is drawn as (the renderer: a surface each; DC_NONE not drawn: glass walls, a stand)
-enum DrawCode : uint8_t { DC_NONE = 0, DC_WATER = 1, DC_HONEY = 2, DC_SAND = 3, DC_RUBBER = 4, DC_RIND = 5, DC_FLESH = 6, DC_JUICE = 7, DC_STEEL = 8, DC_PITH = 9 };
-constexpr int kDrawCodes = 10;   // DC_RIND the green skin, DC_PITH the white rind under it
+enum DrawCode : uint8_t { DC_NONE = 0, DC_WATER = 1, DC_HONEY = 2, DC_SAND = 3, DC_RUBBER = 4, DC_RIND = 5, DC_FLESH = 6, DC_JUICE = 7, DC_STEEL = 8, DC_PITH = 9, DC_GEL = 10 };
+constexpr int kDrawCodes = 11;   // DC_RIND the green skin, DC_PITH the white rind under it
 
 // what the panel sets: the inputs a recording keeps with its trigger (0..1 each, read per experiment)
 struct LabInputs {
@@ -87,6 +89,9 @@ public:
     float ballRadius = 0.0f;
     // how far the recording's box must reach (the particles that matter stay inside)
     float3 boxLo = make_float3(-0.6f, -0.02f, -0.45f), boxHi = make_float3(0.6f, 0.9f, 0.45f);
+    // what a shot is aimed at (Karpuz, Jel): its centre and a radius a click must land within
+    float3 aim = make_float3(0, 0.1f, 0);
+    float aimRadius = 0.15f;
     std::string summary() const;   // a line for the console: counts
     void destroy();
     ~LabWorld() { destroy(); }
@@ -122,6 +127,7 @@ private:
     void buildKum();
     void buildBalon();
     void buildKarpuz();
+    void buildJel();
     float3 suPivot_ = make_float3(0, 0, 0), suBeakerBase_ = make_float3(0, 0, 0);
     float suAngle(double t) const;   // the beaker's tilt (rad, clockwise negative) t seconds after the pour began
     void placeProps();

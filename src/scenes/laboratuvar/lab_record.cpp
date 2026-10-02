@@ -65,7 +65,7 @@ void LabRecording::run(Config cfg, Deney d, LabInputs in, LabEvent e) {
     summary = w.summary();
     setState("settle");
     const std::string pre = std::string(deneyKey(d)) + ".";
-    w.settle(cfg.f(pre + "oturma", 1.0f), dt_);   // in the recording's own steps (its substeps are set for them)
+    w.settle(cfg.f(pre + "oturma", 1.0f), std::max(dt_, 1.0 / cfg.f(pre + "oturma_hiz", float(1.0 / dt_))));   // a solid may settle in larger steps   // in the recording's own steps (its substeps are set for them)
     if (stop_) { done_ = true; return; }
     // the drawn particles, and where the membrane and the ball are among them
     std::vector<uint32_t> idx;

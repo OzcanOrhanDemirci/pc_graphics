@@ -68,6 +68,7 @@ const char* deneyKey(Deney d) {
     case Deney::Kum: return "kum";
     case Deney::Balon: return "balon";
     case Deney::Karpuz: return "karpuz";
+    case Deney::Jel: return "jel";
     }
     return "su";
 }
@@ -145,6 +146,7 @@ bool LabWorld::build(Deney d, const Config& sceneCfg, bool fine_, const LabInput
     case Deney::Kum: buildKum(); break;
     case Deney::Balon: buildBalon(); break;
     case Deney::Karpuz: buildKarpuz(); break;
+    case Deney::Jel: buildJel(); break;
     }
     pw.reserve(int(code.size()) + cfg.i(pre + "ek_kapasite", 0));
     pw.commit();
@@ -453,10 +455,41 @@ void LabWorld::buildKarpuz() {
                     }
         }
     }
+    aim = c;
+    aimRadius = std::max(R.x, std::max(R.y, R.z)) * 1.6f;
     // flaws: the same draw at any spacing per bond number is not the same material, but its spread is
     pw.varyBreakStrain(b0, pw.bondCount(), cfg.f("karpuz.kusur", 0.6f), 11u);
     boxLo = make_float3(-1.2f, -0.01f, -1.2f);
     boxHi = make_float3(1.2f, 1.2f, 1.2f);
+}
+
+// ---------------------------------------------------------------------------------------------------- Jel
+// a block of 10% ordnance gelatin on the table, its long side across the view: an elastic solid of bonded particles
+// (compliance 1 / (E s), so as stiff at any spacing); the bullet's temporary cavity stretches it, its bonds pull it back
+
+void LabWorld::buildJel() {
+    const float3 B = cfg.v3("jel.boyut", make_float3(0.24f, 0.10f, 0.10f));
+    std::vector<float3> pos;
+    const int nx = int(std::floor(B.x / s)), ny = int(std::floor(B.y / s)), nz = int(std::floor(B.z / s));
+    int k = 0;
+    for (int z = 0; z < nz; ++z)
+        for (int y = 0; y < ny; ++y)
+            for (int x = 0; x < nx; ++x, ++k) {
+                const unsigned h = 5u * 7919u + unsigned(k) * 2654435761u;
+                const float j = 0.3f;   // a third of a spacing: no lattice layers through the clear block
+                pos.push_back(make_float3(-0.5f * B.x + (x + 0.5f) * s + (hashF(h) - 0.5f) * j * s, (y + 0.5f) * s + (hashF(h + 1) - 0.5f) * j * s,
+                                          -0.5f * B.z + (z + 0.5f) * s + (hashF(h + 2) - 0.5f) * j * s));
+            }
+    const int g = pw.addGroup(0);
+    const int first = pw.addParticles(pos, cfg.f("jel.yogunluk", 1030.0f), g);
+    code.insert(code.end(), pos.size(), DC_GEL);
+    const int b0 = pw.bondCount();
+    pw.bondWithin(first, int(pos.size()), cfg.f("jel.bag_uzaklik", 1.5f) * s, 1.0f / (cfg.f("jel.E", 3e5f) * s), cfg.f("jel.kopma", 1.5f), 0.9f);
+    pw.varyBreakStrain(b0, pw.bondCount(), cfg.f("jel.kusur", 0.2f), 5u);
+    aim = make_float3(0.0f, 0.5f * B.y, 0.0f);
+    aimRadius = 0.5f * B.x + 0.02f;
+    boxLo = make_float3(-1.0f, -0.01f, -1.0f);
+    boxHi = make_float3(1.0f, 1.0f, 1.0f);
 }
 
 // ---------------------------------------------------------------------------------------------------- props
@@ -562,7 +595,7 @@ void LabWorld::trigger(const LabEvent& e) {
         // a rifle bullet along the ray a -> b through the melon: its path (weapons.h, calibrated in gelatin) gives
         // each step's momentum, energy and cavity; the particles near the path take them
         using namespace weapons;
-        const Load L = gunLoad(Gun::Rifle, e.power);
+        const Load L = gunLoad(deney == Deney::Jel ? Gun::Pistol : Gun::Rifle, e.power);
         std::vector<float3> x;
         pw.readPositions(x);
         const float3 d = normalize(e.b - e.a);
@@ -572,7 +605,7 @@ void LabWorld::trigger(const LabEvent& e) {
         auto key = [&](int xx, int yy, int zz) { return (long long)(xx + 100000) * 40000000000LL + (long long)(yy + 100000) * 200000LL + (long long)(zz + 100000); };
         // every cell within a spacing of a melon particle (a lattice point's own cell alone leaves holes)
         for (size_t i = 0; i < x.size(); ++i)
-            if (code[i] == DC_RIND || code[i] == DC_PITH || code[i] == DC_FLESH) {
+            if (code[i] == DC_RIND || code[i] == DC_PITH || code[i] == DC_FLESH || code[i] == DC_GEL) {
                 const int cx = int(std::floor(x[i].x / cell)), cy = int(std::floor(x[i].y / cell)), cz = int(std::floor(x[i].z / cell));
                 for (int dz = -1; dz <= 1; ++dz)
                     for (int dy = -1; dy <= 1; ++dy)
@@ -587,7 +620,7 @@ void LabWorld::trigger(const LabEvent& e) {
         std::vector<uint32_t> idx, cut;
         std::vector<float3> dv;
         std::vector<float> mass(x.size(), 0.0f);
-        const float share = cfg.f("karpuz.bosluk_payi", 0.8f);
+        const float share = cfg.f(std::string(deneyKey(deney)) + ".bosluk_payi", 0.8f);
         for (const Segment& sg : path.segments) {
             if (sg.medium == Medium::Air || sg.s1 <= sg.s0) continue;
             const float3 a = e.a + d * sg.s0, b = e.a + d * sg.s1;
@@ -597,7 +630,7 @@ void LabWorld::trigger(const LabEvent& e) {
             // to those on the path
             std::vector<int> onPath;
             for (size_t i = 0; i < x.size(); ++i) {
-                if (code[i] != DC_RIND && code[i] != DC_PITH && code[i] != DC_FLESH) continue;
+                if (code[i] != DC_RIND && code[i] != DC_PITH && code[i] != DC_FLESH && code[i] != DC_GEL) continue;
                 const float3 w = x[i] - a;
                 const float t = dot(w, d);
                 if (t < 0.0f || t > sg.s1 - sg.s0) continue;
@@ -622,7 +655,7 @@ void LabWorld::trigger(const LabEvent& e) {
         }
         pw.addVelocity(idx, dv);
         const int broken = pw.breakBondsOf(cut);
-        std::printf("karpuz: %s, %.0f m/s; yol %d adim, dokuda %.1f cm, momentum %.2f N s birakti, %.0f J; %zu taneciğe hiz, %d bag koptu; %s\n", L.name.c_str(),
+        std::printf("%s: %s, %.0f m/s; yol %d adim, dokuda %.1f cm, momentum %.2f N s birakti, %.0f J; %zu taneciğe hiz, %d bag koptu; %s\n", deneyKey(deney), L.name.c_str(),
                     L.shot.velocity, int(path.segments.size()), path.tissueLength * 100.0f, path.pDeposited, path.eDeposited, idx.size(), broken,
                     path.stopped ? "durdu" : "cikti");
     }

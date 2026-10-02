@@ -5,7 +5,7 @@
 
 ## Şu an · 2026-10-03 gecesi (Özcan uyurken, otonom)
 
-**Beş deney çalışıyor, uygulamada galeride 04.** Açmak: `build\pc_graphics.exe` → 04 Laboratuvar, ya da
+**Altı deney çalışıyor, uygulamada galeride 04.** Açmak: `build\pc_graphics.exe` → 04 Laboratuvar, ya da
 `build\pc_graphics.exe --scene laboratuvar`. Tuşlar `GOSTERI.md` / `DEMO.md`, ekranda F1. Kareler masaüstünde
 `Laboratuvar` klasöründe.
 
@@ -15,7 +15,8 @@
 | Bal | canlı | kaşıktan cam tabağa; fareyle gezdir, akış ve yükseklik çubuğu | tabakta kehribar, pürüzsüz, yavaş yayılan gölet; **ip yerine iri damlalar** (aşağıda) |
 | Kum | canlı | huniden masaya ve behere; fareyle gezdir; çelik bilye | yığılma açısı **32,5°** (ölçüt 30-35°); tane dokusu |
 | Su balonu | kayıt | masadaki balona iğne (tıkla ya da Boşluk) | 10 ms'de delik, 20-30 ms'de lastik soyulurken su balon biçiminde, sonra çöker |
-| Karpuz | kayıt | tüfekle (5,56 → 7,62×51 → .50 BMG, gerçek yükler) | ~600 J birikir, karpuz ~16 m/s parçalarla dağılır (fiziksel); parça görüntüsü yumuşak |
+| Karpuz | kayıt | tüfekle (5,56 → 7,62×51 → .50 BMG, gerçek yükler) | ~600 J birikir; birkaç ms şişer, kabuk taç gibi açılır; parça görüntüsü yumuşak |
+| Jel | kayıt | 24×10×10 cm balistik jel bloğu, tabancayla (.22 → 9 mm → .50 AE) | 9 mm: 24,5 cm'de 329 J; yol boyunca boşluk tüpü, blok sarsılır ve biraz zıplar |
 
 **Kayıt düzeni (karar 4, uygulandı):** tetik kaba dünyada hemen oynar ("Kaba önizleme" yazar); aynı girdilerle ince
 dünya arka planda (işçi iş parçacığı, kendi CUDA akışı) hesaplanır, her an ekran kartında saklanır (16 bit konum +
@@ -71,6 +72,10 @@ Oynatma yalnız çizimdir (fizik yok), anlar arası doğrusal ara doldurma. Vide
   arayüz sayılır (yoksa tam iç yansıma gümüş kenar yapardı).
 
 ## Açık / bilinen sınırlar
+
+- **Jel bloğu:** geçici boşluk görülüyor ama dar (~1 cm; gerçek 9 mm boşluğu 5-6 cm): boşluk payı 0,8'de blok masadan
+  sıçrayıp döndü (aşağı giden akış masaya çarpıp geri dönüyor), 0,3'e indirildi. Esnek enerjiyi depolayan bir boşluk
+  modeli (basınçla açılıp kapanan) gerek. Yoldan kopan jel tanecikleri küre damla gibi görünüyor.
 
 - **Bal ipi:** kaşıktan sürekli ince ip yerine iri damlalar düşüyor (alçak kaşıkta yığına değen sütun). Damlalar ve
   tabaktaki bal gerçekçi; ip kıvrılması (liquid rope coiling) yok. Sebep: PBF'te gerilmeye karşı koyan viskoz gerilim
