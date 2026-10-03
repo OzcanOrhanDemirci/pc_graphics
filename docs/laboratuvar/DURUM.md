@@ -3,106 +3,111 @@
 > Tek kaynak durum panosu. Plan ve Özcan'ın sözleri `docs/laboratuvar/PLAN.md`'de. Eski "Tanecik" (insan) yolu
 > `docs/tanecik/` ve git etiketi `tanecik-insan-arsiv`'de (arşiv).
 
-## Şu an · 2026-10-03 gecesi (Özcan uyurken, otonom)
+## ☀️ Sabah raporu · 2026-10-03 (gece 01:10'dan, Özcan uyurken otonom)
 
-**Yedi deney çalışıyor, uygulamada galeride 04.** Açmak: `build\pc_graphics.exe` → 04 Laboratuvar, ya da
-`build\pc_graphics.exe --scene laboratuvar`. Tuşlar `GOSTERI.md` / `DEMO.md`, ekranda F1. Kareler masaüstünde
-`Laboratuvar` klasöründe.
+**Ne yapıldı:** sahne 4 "Laboratuvar" baştan kuruldu ve uygulamada galeride 04. Bir ağır çekim fotoğraf masası,
+**yedi deney**: su dökme, bal, kum, su balonu, karpuz, balistik jel, süt damlası. Hızlı olanlar **kayıt** (tetik
+kaba dünyada hemen oynar, ince dünya arka planda hesaplanır, hemen izlenir, bitince gerçek hızda oynar, sonra zaman
+çubuğu, ×1/10, ×1/100, dondur, WASD), bal ve kum **canlı**. Video yok: saklanan fizik, her açıdan canlı çiziliyor.
+Gürültü giderici, alan derinliği (otomatik odak), README EN + TR, gösteri rehberleri, galeri resmi ve testler.
+
+**Nasıl açılır:** `C:\dev\pc_graphics\build\pc_graphics.exe` (çift tık) → galeride 04 Laboratuvar → Enter. Ya da
+`build\pc_graphics.exe --scene laboratuvar`. Tuşlar ekranda F1, ayrıntı `GOSTERI.md`. Deney paneldeki **Deney**
+satırından (ya da 1-7). Kareler masaüstünde `Laboratuvar` klasöründe (00 galeri karesi, 01-09 deneyler).
+
+**İlk bakılacaklar:** Su balonu (Boşluk ya da balona tıkla; kayıt bitince Zaman'ı başa çek, ×1/100, P) · Su (yükseklik
+çubuğunu en yükseğe al, dök) · Bal (fareyle kaşığı gezdir) · Kum (huniyi behere götür) · Karpuz (Tüfek / Tabanca).
+
+## Deneyler
 
 | Deney | Kip | Ne oluyor | Durum |
 |---|---|---|---|
-| Su | kayıt | beher eğilip bardağa döküyor; yükseklik 12-45 cm; sıçrar, taşar, masada birikir | ince kayıt 1,5 mm, 98.670 su taneciği, saniyenin 1/600'ü; akış düzgün cam bir şerit |
-| Bal | canlı | kaşıktan cam tabağa; fareyle gezdir, akış ve yükseklik çubuğu | kesintisiz kehribar ip, tabakta kıvrılarak yığılır, yığın birkaç saniyede göle döner |
-| Kum | canlı | huniden masaya ve behere; fareyle gezdir; çelik bilye | yığılma açısı **32,5°** (ölçüt 30-35°); tane dokusu |
+| Su | kayıt | beher eğilip bardağa döküyor; yükseklik 12-45 cm | ince 1,5 mm (113 bin su), saniyenin 1/600'ü; düzgün cam şerit, sıçrar, taşar, masada birikir |
+| Bal | canlı | kaşıktan cam tabağa; fareyle gezdir, akış ve yükseklik | kesintisiz kehribar ip, tabakta katlanıp kıvrılır, göle döner |
+| Kum | canlı | huniden masaya ve behere; fareyle gezdir; çelik bilye | yığılma açısı **32,5°** (kuru kum 30-35°); behere koni hâlinde dolar |
 | Su balonu | kayıt | masadaki balona iğne (tıkla ya da Boşluk) | 10 ms'de delik, 20-30 ms'de lastik soyulurken su balon biçiminde, sonra çöker |
-| Karpuz | kayıt | tabanca ya da tüfekle (5,56 → 7,62×51 → .50 BMG, gerçek yükler) | ~600 J birikir; birkaç ms şişer, kabuk taç gibi açılır; parça görüntüsü yumuşak |
-| Süt damlası | kayıt | cam petri kabında 3 mm süt, 5 mm'lik damla 5-50 cm'den | 0,4 mm tanecik (134 bin), saniyenin 1/5000'i; taç açılır, uçlarından damlacıklar kopar |
-| Jel | kayıt | 24×10×10 cm balistik jel bloğu, tabancayla (.22 → 9 mm → .50 AE) | 9 mm: 24,5 cm'de 329 J; yol boyunca boşluk tüpü, blok sarsılır ve biraz zıplar |
+| Karpuz | kayıt | tabanca ya da tüfekle (5,56 → 7,62×51 → .50 BMG, gerçek yükler) | tüfek: ~600 J, birkaç ms şişer, kabuk taç gibi açılır, dağılır; tabanca: açar, kaideden düşürür |
+| Jel | kayıt | 24×10×10 cm balistik jel, tabancayla (.22 → 9 mm → .50 AE) | 9 mm: 24,5 cm'de 329 J; yol boyunca boşluk tüpü, blok sarsılır ve biraz zıplar |
+| Süt damlası | kayıt | petri kabında 3 mm süt, 5 mm damla 5-50 cm'den | 0,4 mm tanecik (134 bin), saniyenin 1/5000'i; taç açılır, damlacık saçar |
 
-**Kayıt düzeni (karar 4, uygulandı):** tetik kaba dünyada hemen oynar ("Kaba önizleme" yazar); aynı girdilerle ince
-dünya arka planda (işçi iş parçacığı, kendi CUDA akışı) hesaplanır, her an ekran kartında saklanır (16 bit konum +
-çizim kodu, tanecik başına 8 bayt). Zaman çubuğu hesaplanan kısmı gösterir, tıklanınca hemen izlenir. Bitince bir kez
-gerçek hızda oynar, sonra serbest: zaman çubuğu, ×1 / ×1/10 / ×1/100, P dondur, ← → adım, WASD + sağ fare kamera.
-Oynatma yalnız çizimdir (fizik yok), anlar arası doğrusal ara doldurma. Video yok.
+**Kayıt düzeni:** ince dünya bir işçi iş parçacığında kendi CUDA akışıyla; her an ekran kartında (16 bit konum + çizim
+kodu, tanecik başına 8 bayt); zaman çubuğu hesaplanan kısmı gösterir. Oynatma yalnız çizim, anlar arası doğrusal ara
+doldurma.
 
 ## Ölçümler
 
-- **Su (ince):** 3 sn dünya zamanı 5,5-7 sn'de hesaplanıyor (kare başına 3,3 ms; uygulamada görüntüyle paylaşınca
-  7,8 ms). Kaba canlı 40.829 tanecik (cam duvarlar 19.857 + su 20.972), fizik 7-16 ms.
-- **Kum:** `--lab-test kum`: 6 sn dökülen 10.439 tane (2,5 mm), yığın 25,3 mm, taban yarıçapı 39,7 mm → **32,5°**. Sırayla:
-  özdeş Jacobi payıyla sürtünme ~0° (sıvı gibi yayıldı) → sürtünme kök payla 14,5° → 4 yinelemeyle 19° → hız
-  düzeyinde durgunluk (1,2 cm/sn altındaki tane durur) 32,5°. Eşik 2 cm/sn'de 38,9°, 5 cm/sn'de 59,7° (ayar ölçümle).
-- **Balon:** `--lab-test balon`: masada 2 sn, 31.256 bağdan 2'si koptu, zar dışında su 0 (PASS); iğneden 5 ms sonra
-  bağların %45'i koptu (PASS, ölçüt 0,15 sn'de > %25). İnce kayıt 2 mm: 119.991 tanecik, 1 sn dünya zamanı ~6 sn.
-- **Karpuz (ince 2,5 mm):** 146.953 tanecik (kabuk 45.999, et 98.367); 7,62×51 M80 838 m/s: dokuda 17,7 cm, 595 J,
-  0,75 N s bıraktı, mermi çıktı. 5,56 M855: 665 J (sapıp parçalandığı için daha çok).
-- **Uygulama (otomatik test, 2560×1440 tam ekran, 1080p iç çizim, 4 örnek + yapay zekâ gürültü giderici):** su canlı
-  40 fps, önizleme + ince hesap birlikte 25 fps, bal 33, kum 31, balon kaydı oynarken 11-22, karpuz 20-53 fps.
-  Kapanışta boş ekran kartı belleği 14.857 / 16.376 MB (her turda aynı).
+- **Testler (bu gecenin son koşusu):** T1 çözücü testleri 9/9 (baraj Martin-Moyce RMS 0,069, hacim, balon, tekrar bit
+  bit aynı), yüzey 8/8, silah 6/6, laboratuvar 2/2 (`--lab-test`: balon masada sağlam + iğnede patlar; kum 32,5-32,7°).
+- **Kum:** 6 sn dökülen 10.439 tane, yığın 25,3 mm, taban yarıçapı (%95) 39,7 mm → 32,5°. Yol: özdeş Jacobi payıyla
+  sürtünme ~0° (sıvı gibi yayıldı) → kök payla 14,5° → 4 geçişle 19° → hız düzeyinde durgunluk (1,2 cm/sn altı) 32,5°.
+  Eşik 2 cm/sn'de 38,9°, 5 cm/sn'de 59,7°.
+- **Balon:** masada 2 sn, 31.256 bağdan 2'si koptu, zar dışında su 0; iğneden 5 ms sonra bağların %45'i koptu.
+- **İnce hesap süreleri (komut satırı / uygulamada görüntüyle birlikte):** su 4,5 sn dünya zamanı ~7 / ~16 sn; balon
+  1,2 sn ~6 / ~14 sn (oturma 4,8 sn); karpuz 1,2 sn ~6 / ~11 sn; jel 0,3 sn ~3 sn; süt damlası 0,06 sn ~1 sn (oturma 6 sn).
+- **Uygulama (otomatik test, 2560×1440, 1080p iç çizim, 4 örnek + OptiX yapay zekâ gürültü giderici):** su canlı 39 fps,
+  önizleme + ince hesap 21-23, bal 31, kum 29, balon kaydı 14-23, karpuz 20-30, jel 28-38, süt 15-24 fps. Bütün uygulama
+  testi (dört sahne) geçti; her sahne kapanınca ekran kartı belleği geri geliyor (14.857 / 16.376 MB).
 
-## Kararlar ve gerekçeler (bu gece)
+## Kararlar ve gerekçeler
 
-- **Çözücü kıyası (karar 6) yapılmadı:** MPM yazılmadı; bütün deneyler T1'in testli PBF/XPBD çözücüsüyle kuruldu.
-  Gerekçe: 8 saatte iki çözücü + beş deney sığmazdı; her malzeme önce eldekiyle kareye bakılarak denendi, kum ve
-  balon gibi zorlar ölçümle çözüldü. Bal ipi PBF'te tutmadı: MPM'in en çok fark yaratacağı yer orası (aşağıda).
-- **Balon asılı değil, masada:** asılıyken hafif lastik suyun ağırlığını düğüme birkaç alt adımda iletemedi, ilk anda
-  düğümden koptu (karelerde görüldü). Masada T1 kurulumu gibi masa taşıyor.
-- **Zarın bağ yinelemesi 12 (ince 20):** 2 yinelemede 3 mm zar yakınsamadı (etkin sertlik düştü, uzayıp yırtıldı); T1
-  balonu 7 mm'de geçiyordu, 3 mm'de aynı ayarla geçmiyordu (ölçüldü: %62,7 su dışarı). XPBD'nin sertliği çözünürlüğe
-  ve yinelemeye bağlı.
-- **Lastik ön gerilimi oturmada yavaş verilir:** bir anda verilince hafif lastik içe fırladı, su %72 sıkıştı, 4.133 bağ
-  koptu. Dinlenme boyu 1 → 0,85 oturmanın ilk yarısında (§15 "yük yavaş verilir").
-- **Çatlak ucu kuralı (yalnız iğneden sonra):** bağı kopmuş taneciğin komşu bağları kopma şekil değiştirmesinin 0,4'ünde
-  kopar. Kaba kafes çatlak ucunda yoğunlaşan gerilimi çözemez; kuralsız delik %4'te durdu (sızdırdı), 0,6'da %15.
-  Dinlenmede kapalı: çözücü gürültüsünün kopardığı 2 bağ gerçek balonda olmayan kusur, kural açıkken balonu
-  kendiliğinden patlatıyordu.
-- **Su dökmede biraz viskozite + yapışma + yüzey gerilimi** (XSPH 0,05, Akinci 20, gerilim 3): olmadan akış behere
-  yakın yerde bile erişte gibi kopuyordu; dört varyant kareyle kıyaslandı (`02 su dokme ayar denemeleri`).
-- **Bal: Shepard XSPH + 12 geçiş, tutulan meme, viskoelastik yaylar:** düz XSPH ince ipte (az komşu) neredeyse
-  etkisiz, bal yağ gibi yayıldı; memeden boşluğa bırakılan katmanlar ilk anda ayrılıyordu → yeni katmanlar memede
-  sabit hızla itilir, çıkınca serbest kalır. Yine de ip ya katmanlara ayrıldı (yapışmasız) ya Rayleigh-Plateau
-  damlalarına bölündü (yapışmalı): PBF'te gerilmeye direnen viskoz gerilim yok. Çözüm Clavet 2005'in viskoelastik
-  yayları: her yeni katman öncekine 1,6 aralıkta yaylarla bağlanır, yayın dinlenme boyu 1 sn'de uzunluğunu izler
-  (akar, incelir, kopmaz), 2,5 sn sonra yay kalkar (kıvrımlar birleşip göle döner).
-- **Kum: hız düzeyinde durgun sürtünme** (granüler PBD'de bilinen "uyku" eşiği). Konumsal sürtünme her alt adımda
-  küçük kaymaları tamamen durduramıyor, yığın sürünüyordu.
-- **Karpuz kabuğu iki katman** (yeşil dış deri ≥ 2 tanecik, açık yeşil iç kabuk), bağ dayanımına log-normal kusur
-  (σ 0,6: özdeş bağlar her yerde aynı anda kırılıp kırıntı oluyordu), kaide üstü karpuzun alt yüzeyini izleyen yuva
-  (düz kaidede yuvarlanıp düştü). Gerilme modülleri: kabuk 15 MPa, et 1 MPa (uyum 1/(E·aralık), her çözünürlükte aynı).
-- **Kaplar kinematik tanecik:** camın yüzeyinde tek katman, beher eğilirken her adım dönüşümüyle sürülür. Hedefler
-  çözücünün kendi akışında hesaplanır (varsayılan akışta yarışıyordu: canlı önizlemede su ilk karede fırlıyordu).
-- **Işık:** fonun önünde, kadrajdan büyük, kenarları yumuşak düşen bir panel (sıvı fotoğrafçılığının arka ışığı), solda
-  ana ışık, sağda şerit. Cam ve sıvı tam Fresnel ve kırılmayla; bardaktaki su ile cam arasındaki ince boşluk tek
-  arayüz sayılır (yoksa tam iç yansıma gümüş kenar yapardı).
+- **MPM yazılmadı (karar 6 esnetildi):** bütün deneyler T1'in testli PBF/XPBD çözücüsüyle kuruldu, zorlar ölçümle
+  çözüldü. PBF'in en zayıf olduğu yer (bal ipi: gerilmeye direnen gerilim yok) viskoelastik yaylarla kapandı.
+- **Balon masada, asılı değil:** asılıyken hafif lastik suyun ağırlığını düğüme zamanında taşıyamadı (24 geçişte de).
+- **Zarın bağ geçişi 12 (ince 20):** T1 balonu 7 mm'de geçiyordu, aynı ayarla 3 mm'de %62,7 su dışarı (XPBD sertliği
+  çözünürlüğe ve geçişe bağlı). Ön gerilim (dinlenme 0,85) oturmada yavaşça verilir (bir anda: 4.133 bağ koptu).
+- **Çatlak ucu (yalnız iğneden sonra):** bağı kopmuş taneciğin komşu bağı kopma şekil değiştirmesinin 0,4'ünde kopar
+  (kaba kafes uçta yoğunlaşan gerilimi çözemez; kuralsız delik %4'te durdu). Dinlenmede kapalı.
+- **Su:** XSPH 0,05 + Akinci yapışma 20 + yüzey gerilimi 3 (olmadan akış erişteye bölünüyordu, dört varyant kıyaslandı).
+  Dudak yüksekliğe göre geride (45 cm'den bardağı ıskalıyordu).
+- **Bal:** Shepard XSPH + alt adımda 12 geçiş + tutulan meme + viskoelastik yaylar (Clavet 2005: her yeni katman öncekine
+  bağlanır, dinlenme boyu 1 sn'de uzunluğu izler, 2,5 sn sonra yay kalkar). Önceki denemeler: yağ gibi yayılma, katmanlara
+  ayrılma, Rayleigh-Plateau damlaları.
+- **Kum:** tane fazı (kendi grubuyla çarpışan), sürtünme kök payla, 4 geçiş, hız düzeyinde durgunluk; görüntüde yüzey +
+  0,35 mm'lik tane dokusu + havada yalnız ince görüntü taneleri.
+- **Karpuz:** kabuk iki katman (yeşil deri ≥ 2 tanecik, açık iç kabuk; tek yüzeyde çizilir), gerilme modülü kabuk 15 MPa,
+  et 1 MPa (uyum 1/(E·aralık)), bağlarda log-normal kusur σ 0,6, yuvalı kaide, geçici boşluk payı 0,15 (0,5'te 6 ms'de
+  konfetiye dönüyordu; gözle ayar, ölçüm değil), sıkı yüzey çekirdeği (keskin kenar).
+- **Jel:** E 0,3 MPa, kopma %150, boşluk payı 0,3 (0,8'de blok masadan sıçradı).
+- **Süt:** yapışma 40, gerilim 5; cam kapların iç yuvarlatması ayarlanabilir, sıvı dolumu duvara 0,9 aralıktan yakın
+  noktaları eler (petrinin 4 mm yuvarlatması 3 mm sütü kesiyordu: süt camın içinde doğup fırlıyordu).
+- **Işık ve kamera:** fonun önünde kadrajdan büyük, kenarı yumuşak düşen panel (sıvı fotoğrafçılığının arka ışığı);
+  cam ve sıvı tam Fresnel ve kırılmayla, bardaktaki su ile cam arası tek arayüz; 2 mm diyafram, odak ekran ortasında.
+
+## Bu gece bulunan hatalar (düzeltildi)
+
+- **Kinematik hedef yarışı:** beherin hedefleri varsayılan akışta hesaplanıyordu, sürüş engellemeyen akışta; ilk kare
+  başlatılmamış hedef okudu, canlı önizlemede su fırladı. Artık çözücünün akışında.
+- **Kayıtta tetik sırası:** damla gibi tanecik ekleyen tetik çizilen listeden sonra yapılıyordu (damla kayda girmiyor,
+  tampon taşıyordu). Artık önce tetik.
+- **Deneyler arası ayar mirası:** iğne çözücünün çatlak ucu ayarını açıyor, sonraki deneyin dünyası devralıyordu; kaba
+  karpuz kaidede kendiliğinden parçalanıp çöktü (komut satırında her koşu yeni süreç olduğu için görünmedi). Her
+  kurulumda ayarlar sıfırlanıyor.
+- **Eski varsayılan akış yükleme yarışı:** çalışma anı yüklemeleri (`cudaMemcpy`, `cudaMemset`) çözücünün engellemeyen
+  akışındaki çekirdekten önce bitmeyebiliyordu; GPU meşgulken (uygulama çizerken) atışın işaretleri sıfır okundu, ince
+  karpuzda hiç bağ kopmadı. Yüklemelerden sonra eski akış bekleniyor.
+- **Akıtıcı eleme tohumu:** bir red bütün katmanı reddettiriyordu, akış beklenenin 1/8'iydi.
+- **Komut satırında odak:** `--cam/--look` verilince odak eski uzaklıkta kalıyordu (bulanık kareler).
 
 ## Açık / bilinen sınırlar
 
-- **Süt tacı** ince duvarlı değil, damlacık perdesi gibi: gerçek taç duvarı ~0,2 mm, tanecik 0,4 mm. Bulunan hata: cam
-  kapların iç tabanındaki 4 mm yuvarlatma 3 mm'lik katmanı kesiyordu, süt camın içinde doğup fırlıyordu (durgun
-  katmanda 5,5 m/s); artık her sıvı dolumu duvar taneciklerine 0,9 aralıktan yakın noktaları eler, petri yuvarlatması 0,8 mm.
-
-- **Jel bloğu:** geçici boşluk görülüyor ama dar (~1 cm; gerçek 9 mm boşluğu 5-6 cm): boşluk payı 0,8'de blok masadan
-  sıçrayıp döndü (aşağı giden akış masaya çarpıp geri dönüyor), 0,3'e indirildi. Esnek enerjiyi depolayan bir boşluk
-  modeli (basınçla açılıp kapanan) gerek. Yoldan kopan jel tanecikleri küre damla gibi görünüyor.
-
-- **Bal ipi** yaylarla sürekli ve yığında kıvrılıyor, ama ipin yüzeyi boğumlu (1-3 tanecik kalınlığında kafes);
-  düzenli kıvrılma sıklığı (Ribe ölçeklemesi) ölçülmedi. Yaylar Jacobi ve kayan noktalı atomik: bal birebir tekrar etmez.
-- **Karpuz parçaları** yüzey yeniden kurulumuyla çiziliyor: kırık yüzey keskin değil, yumuşak "jöle" kenarlı; parçaların
-  üstündeki şeritler dünya konumundan (parça dönünce kayar). Patlama 7,62'de fiziksel ama çok hızlı: ×1/100'de izlenmeli.
-- **Su balonu** yalnız masada; asılı balon (gerçek klasik kare) için zarın yük taşıması gerek (daha çok yineleme ya da
-  daha ağır zar, ölçülmedi).
-- **Kum akışı** fizik tanesi 2,5 mm olduğu için düşen akış kümecikler hâlinde (her fizik tanesine 12 ince görüntü tanesi).
-- Uygulamada ince hesap görüntüyle aynı kartı paylaşıyor: su kaydı canlıdayken 2,4 kat yavaş (15,8 sn).
+- **Süt tacı** ince duvarlı değil, damlacık perdesi gibi (gerçek taç duvarı ~0,2 mm, tanecik 0,4 mm).
+- **Jel:** geçici boşluk dar (~1 cm; gerçek 9 mm boşluğu 5-6 cm). Basınçla açılıp kapanan bir boşluk modeli gerek.
+- **Bal ipinin** yüzeyi biraz boğumlu (1-3 tanecik kalınlığında); kıvrılma sıklığı (Ribe ölçeklemesi) ölçülmedi. Yaylar
+  kayan noktalı atomikle: bal birebir tekrar etmez.
+- **Karpuz parçaları** yeniden kurulan yüzeyle çiziliyor, keskin kırık yüzey değil; tüfekte parçalar kadrajdan çıkar.
+- **Su balonu** yalnız masada; ince balonda iğne, kaba balondaki noktanın en yakın zar taneciğine batar (biçimler biraz
+  farklı: ince balon daha az sarkar, 17 mm kayma ölçüldü).
+- **Kum akışı** düşerken kümecikli (fizik tanesi 2,5 mm).
 
 ## NE DOĞRULANMADI
 
-- Uygulamayı ben insan gibi kullanmadım; yalnız otomatik test (sanal fare ve tuşlar) ve komut satırı kareleri.
-  Fareyle balona / karpuza tıklama yolunun isabeti ekranda görülmedi (testte düğmeler kullanıldı).
-- Bal ve kum uzun süre (dakikalarca) açık kalınca tanecik sayısı kapasiteye (150 bin ek) varınca akış durur ve son
-  resim kalır; bu davranış denenmedi.
-- Baraj (Martin-Moyce) ve diğer T1 çözücü testleri bu geceki değişikliklerden (tane fazı, Shepard, çatlak ucu)
-  sonra yeniden koşulmadı; değişiklikler varsayılan kapalı (yalnız o deneylerin ayarlarında açık).
-- İnce kaydın uzun süreli bellek davranışı (art arda çok kayıt) ölçülmedi; her yeni tetik eskisini bırakıyor.
+- Uygulamayı insan gibi elle kullanmadım; doğrulama otomatik testle (sanal fare ve tuşlar: deney seçimi, düğmeler,
+  balona ve karpuza **fareyle tıklama**, zaman çubuğu, hız, kaşığı sürükleme) ve komut satırı kareleriyle.
+- Bal ve kum dakikalarca açık kalınca tanecik kapasitesine (150 bin ek) varılır; o noktada akış durur ve son resim
+  kalır: denenmedi.
+- Art arda çok sayıda kayıt (bellek) ve F5 ile ayarları yeniden yükleme denenmedi. İngilizce arayüz otomatik testte
+  görüldü (`--lang en`: Laboratory, Fine recording, Back to live…).
+- Süt tacının ve jel boşluğunun gerçek ağır çekim kayıtlarıyla sayısal kıyası yapılmadı (yalnız göz).
 
 ## Komut satırı
 
@@ -114,4 +119,4 @@ build\pc_graphics.exe --scene laboratuvar --test [baraj|balon|...]     (T1 çöz
 build\pc_graphics.exe --autotest-only laboratuvar
 ```
 Ortak: `--width --height --cam "x y z" --look "x y z" --set anahtar=değer --yukseklik --akis --guc`.
-`LAB_TANI=1` oturma ve akıtıcı tanısı yazar.
+`LAB_TANI=1` oturma ve akıtıcı tanısı yazar. Deney adları: su, bal, kum, balon, karpuz, jel, damla.
