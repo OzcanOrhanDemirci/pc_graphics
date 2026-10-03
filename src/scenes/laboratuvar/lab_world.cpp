@@ -94,7 +94,7 @@ float kupFineness(int perEdge) {   // the panel's value nearest to perEdge (at t
 }
 
 float kupCharge(float strength) {
-    const float lo = std::log10(1e-6f), hi = std::log10(2.0f);
+    const float lo = std::log10(3e-6f), hi = std::log10(2.0f);
     return std::pow(10.0f, lo + std::min(1.0f, std::max(0.0f, strength)) * (hi - lo));
 }
 
@@ -632,7 +632,7 @@ void LabWorld::buildKup() {
     P.muFloorStatic = cfg.f("kup.masa_mu_statik", 0.40f);
     P.muFloorDynamic = cfg.f("kup.masa_mu_dinamik", 0.30f);
     P.drag = cfg.f("kup.hava_direnci", 1.05f);
-    P.substeps = cfg.i(fine ? "kup.ince_alt_adim" : "kup.alt_adim", fine ? 48 : 16);
+    P.substeps = cfg.i(fine ? "kup.ince_alt_adim" : "kup.alt_adim", fine ? 48 : 20);
     P.passes = cfg.i(fine ? "kup.ince_gecis" : "kup.gecis", fine ? 3 : 2);
     cubes.build(n, cfg.f("kup.boyut", 0.10f), cfg.v3("kup.yer", make_float3(0.0f, 0.0f, -0.02f)), unsigned(cfg.i("kup.tohum", 7)));
     boxLo = make_float3(-1.6f, -0.62f, -1.0f);

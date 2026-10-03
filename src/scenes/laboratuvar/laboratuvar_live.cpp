@@ -36,6 +36,7 @@ std::string deneyName(Deney d) {
     case Deney::Karpuz: return L("Karpuz", "Watermelon");
     case Deney::Jel: return L("Jel", "Gel");
     case Deney::Damla: return L("Süt damlası", "Milk drop");
+    case Deney::Kup: return L("Küp", "Cube");
     }
     return "";
 }
@@ -49,6 +50,8 @@ std::string deneyNote(Deney d) {
     case Deney::Jel: return L("Balistik jel bloğu, bloğa tıkla: tabanca, saniyede bir atış · kaba hesap, istersen ince",
                               "A ballistic gel block, click it: a pistol, a shot a second · coarse, fine if asked");
     case Deney::Damla: return L("İnce süt katmanına bir damla: taç · kaba hesap, istersen ince", "A drop into a thin layer of milk: the crown · coarse, fine if asked");
+    case Deney::Kup: return L("Renkli plastik küplerden küp, ortasında patlayıcı · Patlat ya da küpe tıkla · kaba hesap, istersen ince",
+                              "A cube of coloured plastic cubes, a charge at its middle · Blow it up, or click it · coarse, fine if asked");
     }
     return "";
 }
@@ -65,10 +68,11 @@ public:
         i.title = L("Laboratuvar", "Laboratory");
         i.subtitle = L("Sıvı ve tanecik fiziği, ağır çekim", "Liquids and grains in slow motion");
         i.description = L("Bir ağır çekim fotoğraf masası: bardağa dökülen su, kaşıktan akan bal, huniden dökülen kum, patlayan su balonu, "
-                          "vurulan karpuz, balistik jel. Fizik ne derse o; hızlı anlar ince hesaplanır, istediğin hızda ve açıdan izlenir.",
+                          "vurulan karpuz, balistik jel, renkli küçük küplerden patlayan bir küp. Fizik ne derse o; hızlı anlar istenince ince "
+                          "hesaplanır, istediğin hızda ve açıdan izlenir.",
                           "A high-speed photography table: water poured into a glass, honey off a dipper, sand from a funnel, a water "
-                          "balloon popping, a watermelon shot, ballistic gel. Whatever the physics says; fast moments are computed finely and watched "
-                          "at any speed, from any side.");
+                          "balloon popping, a watermelon shot, ballistic gel, a cube of small coloured cubes blown apart. Whatever the physics "
+                          "says; fast moments are computed finely when asked, and watched at any speed, from any side.");
         i.details = {
             {L("Tek çözücü", "One solver"),
              L("Her şey tanecik: su ve bal yoğunluk kısıtıyla (PBF), kum sürtünmeli tanelerle, lastik ve karpuz kopabilen bağlarla (XPBD). "
@@ -97,8 +101,8 @@ public:
         i.accent = 0x6FC2B4;
         i.reloadable = true;
         i.keys = {{L("Deney", "Experiment"),
-                   {{"1-7", L("Su, bal, kum, balon, karpuz, jel, süt damlası", "Water, honey, sand, balloon, melon, gel, milk drop")},
-                    {L("Boşluk", "Space"), L("Dök / akıt / durdur", "Pour / run / stop")},
+                   {{"1-8", L("Su, bal, kum, balon, karpuz, jel, süt damlası, küp", "Water, honey, sand, balloon, melon, gel, milk drop, cube")},
+                    {L("Boşluk", "Space"), L("Dök / akıt / durdur / patlat", "Pour / run / stop / blow up")},
                     {L("Sol tık", "Left click"), L("İğne, ateş (jelde saniyede bir); balda ve kumda sürükle: gezdir", "Needle, fire (the gel: once a second); honey and sand: drag to move")},
                     {"I", L("İnce hesap yap / durdur", "Fine pass: start / stop")},
                     {"R", L("Yeniden kur; ince kayıtta: kaba hesaba dön", "Set up again; in a fine recording: back to the coarse world")}}},
@@ -140,6 +144,8 @@ public:
             in_[int(Deney::Bal)].flow = 0.6f;
             in_[int(Deney::Kum)].height = 0.4f;
             in_[int(Deney::Kum)].flow = 0.5f;
+            in_[int(Deney::Kup)].fineness = kupFineness(a_.cfg.i("kup.baslangic_kenar", 16));
+            in_[int(Deney::Kup)].power = a_.cfg.f("kup.baslangic_siddet", 0.42f);
             st.label = L("Deney kuruluyor: su, beher, bardak", "Setting up the experiment: water, a beaker, a glass");
             st.fraction = 0.35f;
             ++st.step;
@@ -190,6 +196,13 @@ public:
             else if (e.id == "yukseklik") { in_[int(deney_)].height = e.value; if (e.released || deney_ != Deney::Su) inputsChanged(); }
             else if (e.id == "akis") { in_[int(deney_)].flow = e.value; inputsChanged(); }
             else if (e.id == "guc") in_[int(deney_)].power = e.value;
+            else if (e.id == "detay") {   // the cube's fineness: set up again when let go
+                in_[int(deney_)].fineness = e.value;
+                if (e.released && mode_ == Mode::Live) {
+                    pending_ = deney_;
+                    rebuildIn_ = 2;
+                }
+            }
             else if (e.id == "silah") in_[int(deney_)].gun = e.item;
             else if (e.id == "zaman" && rec_.active() && rec_.framesDone() > 0) {
                 mode_ = Mode::Playback;
@@ -251,7 +264,13 @@ public:
             if (inside && in.leftClicked && in.now - lastClick_ > 0.3 && mode_ == Mode::Live) {
                 const LPick p = a_.renderer.pick(rx, ry);
                 std::printf("tik: nesne %d, hedef %d, (%.3f %.3f %.3f)\n", p.object, a_.isTarget(p.object) ? 1 : 0, p.pos.x, p.pos.y, p.pos.z);
-                if (deney_ == Deney::Balon && a_.isTarget(p.object)) {
+                if (deney_ == Deney::Kup && a_.isTarget(p.object)) {
+                    LabEvent e;
+                    e.kind = LabEvent::Blast;
+                    e.power = in_[int(deney_)].power;
+                    fire(host, e);
+                    lastClick_ = in.now;
+                } else if (deney_ == Deney::Balon && a_.isTarget(p.object)) {
                     const float3 c = a_.cfg.v3("balon.merkez", make_float3(0.0f, 0.20f, 0.0f));
                     if (length(p.pos - c) < a_.cfg.f("balon.yaricap", 0.06f) * 1.6f) {
                         LabEvent e;
@@ -288,6 +307,7 @@ public:
             }
             w_.advance(dt);
             lerpA_ = between && prevValid_ ? float(w_.owed()) : 1.0f;
+            cubeAlpha_ = between ? float(w_.owed()) : 1.0f;   // the cubes keep their own state before the last step
             changed_ = true;
         }
         if (rec_.active()) {
@@ -348,10 +368,13 @@ public:
         if (rec_.computing()) s.chips.push_back({L("İnce hesap %", "Fine pass ") + num(100.0 * rec_.progress(), 0) + L("", "%")});
         if (paused_) s.chips.push_back({L("Zaman durdu", "Time paused"), true});
         if (speedIdx_) s.chips.push_back({speedIdx_ == 1 ? L("×1/10", "×1/10") : L("×1/100", "×1/100"), true});
-        s.metrics.push_back({L("Fizik", "Physics"), num(w_.pw.lastStepMs(), 1) + " ms"});
+        s.metrics.push_back({L("Fizik", "Physics"), num(deney_ == Deney::Kup ? w_.cubes.lastStepMs() : w_.pw.lastStepMs(), 1) + " ms"});
         s.metrics.push_back({L("Görüntü", "Picture"), num(a_.renderer.lastMs, 1) + " ms"});
         if (mode_ == Mode::Playback) s.metrics.push_back({L("Tanecik", "Particles"), theme::thousands(unsigned(rec_.drawnCount()))});
-        else s.metrics.push_back({L("Tanecik", "Particles"), theme::thousands(unsigned(w_.count()))});
+        else if (deney_ == Deney::Kup) {
+            s.metrics.push_back({L("Küp", "Cubes"), theme::thousands(unsigned(w_.cubes.count()))});
+            s.metrics.push_back({L("Hareketli", "Moving"), theme::thousands(unsigned(w_.cubes.lastStats().awake))});
+        } else s.metrics.push_back({L("Tanecik", "Particles"), theme::thousands(unsigned(w_.count()))});
         if (rec_.active() && rec_.computing() && rec_.slowdown() > 0.0) s.metrics.push_back({L("İnce hesap", "Fine pass"), num(rec_.slowdown(), 1) + L(" kat yavaş", "x slower")});
         {
             app::Control c;
@@ -419,6 +442,35 @@ public:
             g.active = li.gun;
             s.controls.push_back(g);
         }
+        if (deney_ == Deney::Kup) {
+            const int maxN = a_.cfg.i("kup.en_cok_kenar", 100);
+            const int n = kupPerEdge(li.fineness, maxN);
+            app::Control c;
+            c.kind = app::Control::Kind::Slider;
+            c.id = "detay";
+            c.title = L("Küp sayısı", "Cubes");
+            c.section = true;
+            c.value = li.fineness;
+            c.text = theme::thousands(unsigned(n * n * n)) + " (" + std::to_string(n) + "³)";
+            const float side = a_.cfg.f("kup.boyut", 0.10f);
+            c.detail = L("Her biri ", "Each ") + num(side / n * 1000.0, n >= 32 ? 1 : 0) + L(" mm · bırakınca yeniden kurulur", " mm · set up again when let go") +
+                       (n >= 64 ? L(" · canlıda yavaş: ince hesapla izle", " · slow live: watch it computed finely") : std::string());
+            s.controls.push_back(c);
+            app::Control g;
+            g.kind = app::Control::Kind::Slider;
+            g.id = "guc";
+            g.title = L("Şiddet", "Strength");
+            g.value = li.power;
+            const float ch = kupCharge(li.power);
+            g.text = ch < 1e-3f ? num(ch * 1e6, ch < 1e-5f ? 1 : 0) + L(" µg TNT", " µg TNT") : ch < 1.0f ? num(ch * 1000.0, ch < 1e-2f ? 1 : 0) + L(" mg TNT", " mg TNT")
+                                                                                          : num(ch, 1) + L(" g TNT", " g TNT");
+            // the speed of a face's middle (Gurney: the cone's mass over the charge's)
+            const float M = a_.cfg.f("kup.yogunluk", 1050.0f) * std::pow(0.5f * side, 3.0f) / 3.0f, Cs = ch * 1e-3f / (4.0f * 3.14159265f);
+            const float vf = 2440.0f / std::sqrt(M / Cs + 0.6f);
+            g.detail = L("Yüzün ortası ~", "A face's middle ~") + num(vf, vf < 10.0f ? 1 : 0) + L(" m/sn çıkar · ", " m/s · ") +
+                       (vf < 0.6f ? L("dökülür", "crumbles") : vf < 6.0f ? L("dağılır", "scatters") : L("patlar", "bursts"));
+            s.controls.push_back(g);
+        }
         if (deney_ == Deney::Karpuz || deney_ == Deney::Jel) {
             const bool pistol = deney_ == Deney::Jel || li.gun == 0;
             const weapons::Load L0 = weapons::gunLoad(pistol ? weapons::Gun::Pistol : weapons::Gun::Rifle, li.power);
@@ -444,8 +496,9 @@ public:
             else if (deney_ == Deney::Bal || deney_ == Deney::Kum) c.text = li.flowing ? L("Durdur", "Stop") : (deney_ == Deney::Bal ? L("Akıt", "Run") : L("Dök", "Pour"));
             else if (deney_ == Deney::Balon) { c.text = L("İğne batır", "Prick it"); c.enabled = mode_ == Mode::Live; }
             else if (deney_ == Deney::Damla) { c.text = L("Damla bırak", "Let a drop fall"); c.enabled = mode_ == Mode::Live; }
+            else if (deney_ == Deney::Kup) { c.text = L("Patlat", "Blow it up"); c.enabled = mode_ == Mode::Live && events_.empty(); }
             else { c.text = L("Ateş et (ortadan)", "Fire (through the middle)"); c.enabled = mode_ == Mode::Live && (deney_ == Deney::Jel || events_.empty()); }
-            if (deney_ == Deney::Balon || deney_ == Deney::Damla) c.enabled = c.enabled && events_.empty();
+            if (deney_ == Deney::Balon || deney_ == Deney::Damla || deney_ == Deney::Kup) c.enabled = c.enabled && events_.empty();
             if (deney_ == Deney::Jel && !events_.empty()) c.detail = num(double(events_.size()), 0) + L(" atış", events_.size() == 1 ? " shot" : " shots");
             s.controls.push_back(c);
         }
@@ -458,8 +511,13 @@ public:
             else if (rec_.active()) { c.text = L("İnce kayıt hazır", "The fine recording is ready"); c.enabled = false; }
             else {
                 c.text = L("İnce hesap yap", "Compute it finely");
-                c.detail = L("Aynı girdilerle ", "The same inputs with ") + num(a_.cfg.f(std::string(deneyKey(deney_)) + ".aralik_ince", 0.0015f) * 1000.0, 1) +
-                           L(" mm tanecik, arka planda", " mm particles, in the background");
+                if (deney_ == Deney::Kup) {   // the same cubes, finer steps
+                    const float k = float(a_.cfg.i("kup.ince_alt_adim", 48)) / float(std::max(1, a_.cfg.i("kup.alt_adim", 20)));
+                    c.detail = L("Aynı küpler, ", "The same cubes, ") + num(k, 1) + L(" kat ince adımla, arka planda", "x finer steps, in the background");
+                } else {
+                    c.detail = L("Aynı girdilerle ", "The same inputs with ") + num(a_.cfg.f(std::string(deneyKey(deney_)) + ".aralik_ince", 0.0015f) * 1000.0, 1) +
+                               L(" mm tanecik, arka planda", " mm particles, in the background");
+                }
             }
             s.controls.push_back(c);
         }
@@ -555,6 +613,9 @@ private:
     int prevCount_ = 0;
     bool prevValid_ = false;
     float lerpA_ = 1.0f;
+    float cubeAlpha_ = 1.0f;
+    float4* dCubes_ = nullptr;   // Kup: the cubes' poses for the drawing
+    int nCubes_ = 0;
     float3* dPos_ = nullptr;
     uint8_t* dCode_ = nullptr;
     int cap_ = 0;
@@ -564,6 +625,9 @@ private:
         if (dPos_) cudaFree(dPos_);
         if (dCode_) cudaFree(dCode_);
         if (dPrev_) cudaFree(dPrev_);
+        if (dCubes_) cudaFree(dCubes_);
+        dCubes_ = nullptr;
+        nCubes_ = 0;
         dPos_ = dPrev_ = nullptr;
         dCode_ = nullptr;
         cap_ = 0;
@@ -589,7 +653,13 @@ private:
         cudaMalloc(reinterpret_cast<void**>(&dPos_), size_t(cap_) * sizeof(float3));
         cudaMalloc(reinterpret_cast<void**>(&dCode_), size_t(cap_));
         cudaMalloc(reinterpret_cast<void**>(&dPrev_), size_t(cap_) * sizeof(float3));
-        a_.setupScene(d, cap_, &w_.membraneTris);
+        cubeAlpha_ = 1.0f;
+        if (d == Deney::Kup) {
+            nCubes_ = w_.cubes.count();
+            cudaMalloc(reinterpret_cast<void**>(&dCubes_), size_t(nCubes_) * 2 * sizeof(float4));
+        }
+        a_.setupScene(d, std::max(cap_, nCubes_), &w_.membraneTris);
+        if (d == Deney::Kup) a_.setCubeColours(w_.cubes.deviceColours(), nCubes_);
         a_.renderer.resetHistory();
         changed_ = moved_ = true;
         std::printf("%s\n", w_.summary().c_str());
@@ -669,7 +739,8 @@ private:
         if (rec_.active()) return;   // done: it is on the time bar
         const std::string pre = std::string(deneyKey(deney_)) + ".";
         rec_.start(a_.cfg, deney_, firedWith_, events_, a_.cfg.f(pre + "kayit_sure", 1.5f), 1.0 / a_.cfg.f(pre + "kayit_hiz", 600.0f),
-                   1.0 / a_.cfg.f("kayit.seyrek_hiz", 120.0f), a_.cfg.f(pre + "kayit_ara_en_cok", 0.8f), size_t(a_.cfg.f("kayit.butce_mb", 4096.0f)) << 20);
+                   1.0 / a_.cfg.f(pre + "kayit_seyrek_hiz", a_.cfg.f("kayit.seyrek_hiz", 120.0f)), a_.cfg.f(pre + "kayit_ara_en_cok", 0.8f),
+                   size_t(a_.cfg.f("kayit.butce_mb", 4096.0f)) << 20, a_.cfg.f(pre + "kayit_yogun", -1.0f));
         autoPlay_ = true;
         host.toast(L("İnce hesap başladı: bitince gerçek hızda oynar", "The fine pass started: it plays at real speed when done"));
     }
@@ -689,6 +760,9 @@ private:
             e.kind = LabEvent::Pour;
         } else if (deney_ == Deney::Damla) {
             e.kind = LabEvent::Drop;
+        } else if (deney_ == Deney::Kup) {
+            e.kind = LabEvent::Blast;
+            e.power = li.power;
         } else if (deney_ == Deney::Balon) {
             const float R = a_.cfg.f("balon.yaricap", 0.06f);
             const float3 m = a_.cfg.v3("balon.merkez", make_float3(0.0f, 0.20f, 0.0f));
@@ -730,6 +804,18 @@ private:
     void drawNow() {
         DrawInput d;
         PropPose poses[LabWorld::P_COUNT];
+        if (nCubes_ > 0) {   // Kup: the cubes, live or recorded
+            if (mode_ == Mode::Playback && rec_.framesDone() > 0 && rec_.hasCubes() && rec_.cubeCount() == nCubes_) rec_.cubesAt(playT_, dCubes_, a_.renderer.stream());
+            else w_.exportCubes(dCubes_, cubeAlpha_, a_.renderer.stream());
+            d.cubePose = dCubes_;
+            d.cubeCount = nCubes_;
+            d.pos = dPos_;
+            d.code = dCode_;
+            d.poses = poses;
+            for (int p = 0; p < LabWorld::P_COUNT; ++p) poses[p] = w_.prop[p];
+            a_.draw(d);
+            return;
+        }
         if (mode_ == Mode::Playback && rec_.framesDone() > 0 && rec_.drawnCount() <= cap_) {
             if (a_.memSource != &rec_.membraneTris && !rec_.membraneTris.empty()) a_.setMembraneTris(rec_.membraneTris);
             rec_.frameAt(playT_, dPos_, dCode_, poses, a_.renderer.stream());

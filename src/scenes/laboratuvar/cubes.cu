@@ -1127,6 +1127,17 @@ void CubeWorld::read(std::vector<float4>& x, std::vector<float4>& q, std::vector
     CCUDA(cudaMemcpy(state.data(), state_, state.size() * sizeof(uint32_t), cudaMemcpyDeviceToHost));
 }
 
+void CubeWorld::pairStats(int& cubesTouching, int& pairs) const {
+    std::vector<int> pn(static_cast<size_t>(n_));
+    CCUDA(cudaStreamSynchronize(stream_));
+    if (n_) CCUDA(cudaMemcpy(pn.data(), pairN_, pn.size() * sizeof(int), cudaMemcpyDeviceToHost));
+    cubesTouching = pairs = 0;
+    for (int v : pn) {
+        cubesTouching += v > 0;
+        pairs += v;
+    }
+}
+
 std::string CubeWorld::summary() const {
     char b[200];
     std::snprintf(b, sizeof(b), "kup: %d x %d x %d = %d kup, kenar %.2f mm, buyuk kup %.0f mm", per_, per_, per_, n_, a_ * 1000.0f, side_ * 1000.0f);

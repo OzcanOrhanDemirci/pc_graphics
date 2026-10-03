@@ -546,6 +546,15 @@ int App::run(const Options& opt) {
                 mouse(0.47f, 0.55f); wait(0.1); click(); wait(1.2);
                 mouse(0.53f, 0.58f); wait(0.1); click(); wait(0.6); log("lab jel uc atis"); shot("lab_jel_kaba");
                 control("ince", 0); wait(45.0); log("lab jel kayit"); shot("lab_jel_kayit");
+                // the cube: set up, a medium blast, slow motion, the fine pass; then a finer cube
+                control("deney", 7); wait(3.0); log("lab kup"); shot("lab_kup");
+                slide("guc", 0.38f); wait(0.1); left(false); wait(0.2);
+                control("eylem", 0); wait(0.25); shot("lab_kup_patlama"); wait(1.2); log("lab kup dagildi"); shot("lab_kup_dagildi");
+                control("hiz", 2); wait(2.0); log("lab kup x1/100"); control("hiz", 0);
+                control("ince", 0); wait(30.0); log("lab kup kayit"); shot("lab_kup_kayit");
+                key(GLFW_KEY_R); wait(0.5); key(GLFW_KEY_R); wait(3.0);
+                slide("detay", 0.80f); wait(0.1); left(false); wait(5.0); log("lab kup ince kup"); shot("lab_kup_ince");
+                control("eylem", 0); wait(1.5); log("lab kup ince patladi"); shot("lab_kup_ince_dagildi");
             }
             key(GLFW_KEY_H); wait(0.3); shot(infos_[s].id + "_arayuzsuz"); key(GLFW_KEY_H);
             key(GLFW_KEY_ESCAPE); gallery(); wait(0.8);

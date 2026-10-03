@@ -306,6 +306,27 @@ void testHizDebug() {
     }
 }
 
+void testProfil() {
+    CubeWorld w;
+    w.params.substeps = 20;
+    w.params.passes = 2;
+    w.build(16, 0.10f, make_float3(0, 0, -0.02f), 7);
+    CubeBlast b;
+    b.centre = w.centre();
+    b.charge = 0.000248f;
+    w.blast(b);
+    for (int k = 0; k < 150; ++k) {
+        w.step(1.0f / 60.0f);
+        if (k % 10 == 0) {
+            int t = 0, p = 0;
+            w.pairStats(t, p);
+            const CubeStats s = w.stats();
+            std::printf("  kare %3d: %.1f ms, uyanik %d, uyuyan %d, giden %d, degen %d kup, %d cift, en hizli %.2f\n", k, w.lastStepMs(), s.awake, s.asleep, s.dead, t, p,
+                        s.maxSpeed);
+        }
+    }
+}
+
 void testHiz() {
     for (int n : {32, 64, 100}) {
         for (int gentle = 0; gentle < 2; ++gentle) {
@@ -350,6 +371,10 @@ int runCubeTests(const std::string& only) {
     if (only == "durusd") return testDurusDebug();
     if (only == "ikili") return testIkili();
     if (only == "ikilid") return testIkiliDebug();
+    if (only == "profil") {
+        testProfil();
+        return 0;
+    }
     if (only == "hizd") {
         testHizDebug();
         return 0;

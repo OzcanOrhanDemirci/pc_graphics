@@ -28,7 +28,7 @@ constexpr int kDeneyCount = 8;
 const char* deneyKey(Deney d);            // the settings' prefix: "su", "bal", "kum", "balon", "karpuz"
 inline bool deneyRecorded(Deney d) { return d == Deney::Su || d == Deney::Balon || d == Deney::Karpuz || d == Deney::Jel || d == Deney::Damla || d == Deney::Kup; }
 // Kup: the cubes along an edge for the panel's fineness (0..1: 4, 5, 6, 8, 10, 13, 16, 20, 25, 32, 40, 50, 64, 80, 100;
-// about twice the count a step), at most maxPerEdge; the charge for its strength (0..1, log: 1 ug to 2 g of TNT)
+// about twice the count a step), at most maxPerEdge; the charge for its strength (0..1, log: 3 ug to 2 g of TNT)
 int kupPerEdge(float fineness, int maxPerEdge);
 float kupFineness(int perEdge);
 float kupCharge(float strength);

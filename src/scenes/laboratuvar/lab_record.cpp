@@ -236,10 +236,16 @@ void LabRecording::runCubes(LabWorld& w, double t0) {
     const double tc = nowS();
     const int total = total_.load();
     size_t next = 1;
-    int stored = 0;
-    for (int k = 0; stored < total; ++k) {
+    int stored = 0, k = 0;
+    while (stored < total) {
         if (stop_) break;
-        if (k > 0) w.step(float(dt_));
+        // to the next stored frame in one go (one call, its own substeps; a trigger on the way breaks it up)
+        int target = steps_[size_t(stored)];
+        if (next < events_.size()) target = std::min(target, std::max(k + 1, int(std::ceil(events_[next].at / dt_ - 1e-9))));
+        if (target > k) {
+            w.step(float((target - k) * dt_));
+            k = target;
+        }
         while (next < events_.size() && events_[next].at <= k * dt_ + 1e-9) w.trigger(events_[next++]);
         stepsDone_ = k;
         if (steps_[size_t(stored)] != k) continue;

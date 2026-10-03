@@ -38,7 +38,7 @@ struct CubeParams {
     float sor = 1.0f;                   // Jacobi over several touching bodies: their mean, over-relaxed by this
     float gap = 0.004f;                 // between neighbours side by side in the built cube (of the edge): real stacked
                                         // cubes are never flush, and flush faces make the solver's noise a push
-    int substeps = 16;                  // per 1/60 s: the substep's length
+    int substeps = 20;                  // per 1/60 s: the substep's length
     int passes = 2;                     // Gauss-Seidel passes a substep (the last one-way upwards: shock)
     bool shock = true;                  // the last pass one-way upwards (a stack stands)
     int debug = 0;                      // print the contacts of cube 1 (a test)
@@ -110,6 +110,8 @@ public:
     void wakeAll(float3 v, float3 w);
     void setPose(int i, float3 x, float4 q);
     void read(std::vector<float4>& x, std::vector<float4>& q, std::vector<float4>& v, std::vector<uint32_t>& state) const;
+    // the last substep's narrow phase: how many cubes touched something, how many pairs in all
+    void pairStats(int& cubesTouching, int& pairs) const;
     std::string summary() const;
 
 private:
