@@ -3,6 +3,61 @@
 > Tek kaynak durum panosu. Plan ve Özcan'ın sözleri `docs/laboratuvar/PLAN.md`'de. Eski "Tanecik" (insan) yolu
 > `docs/tanecik/` ve git etiketi `tanecik-insan-arsiv`'de (arşiv).
 
+## 🔧 Revize 1 · 2026-10-03 öğlen: görüntü kararlılığı
+
+**Özcan'ın sınaması:** *"Fizik olmuş, gayet güzel. Ancak önemli bir sorun görüntü kalitesinde [...] sanki suyun
+içindeymiş gibi hem bulanıklık var hem böyle çok kıpraşıyor [...] bi o yana bi bu yana dalgalanıyor gibi."*
+
+**Neden:** canlı görüntü her karede sıfırdan 4 örnekle çiziliyor, yapay zekâ gürültü gidericisi her kareyi ayrı
+temizliyordu. 4 örnekli gürültüyü her karede başka biçimde düzleştirdiği için cam ve sıvı kenarları, masa ile fon arası
+çizgi kareden kareye kayıyordu (dalgalanma); düzleştirme ayrıntıyı da siliyordu (bulanıklık). Dünyayı dondurmak suda
+ölçüyü değiştirmedi: kaynak fizik değil, çizimdi. Üstüne 2 mm diyafram odak dışını bulanıklaştırıyordu.
+
+**Ne yapıldı:**
+- **Zamansal birikim** (`lab_kernels.cu` `kTemporal`): her kare öncekilerle harmanlanır; geçmiş, kameranın önceki
+  konumundan geri izlenerek bulunur (her pikselin ilk değdiği nokta), bu karenin komşuluğuna (YCoCg, ort ± 2,5 sapma)
+  sıkıştırılır. Yeni karenin payı en az 0,1; hiçbir şey değişmiyorsa (dondur) düz ortalama, görüntü yakınsar.
+- **Geçmiş ancak aynı yüzeyi gösteriyorsa kullanılır:** her piksel için sabit bir ışın (piksel ortasından, camda ve
+  sıvıda hep kırılarak) ilk değdiği noktayı ve ilerlediği yolu yazar; önceki karede orada başka nokta ya da başka
+  uzunluk varsa o piksel baştan başlar. Bu olmadan dökülen su akışı fonla karışıp silikleşiyordu (masaüstündeki
+  karşılaştırmada "ara deneme"). Kamera kayarken camın ardındaki görüntü de kayar: uzunluk payı kameranın aldığı yolla
+  genişler.
+- **Gürültü gidericinin kılavuzları** (albedo, normal) aynı sabit ışından: eskiden örneğin rastgele seçtiği yoldan
+  (camda bir yansıyan bir geçen) geliyordu, giderici camı her karede başka çiziyordu.
+- **Aynadaki ışık kutusu tam sayılır:** kameradan gelen ışın havadan cama ya da sıvıya değdiğinde, yansıma yönündeki
+  ışık kutusu F ağırlığıyla her örnekte eklenir (yansıyan örnek onu bir daha saymaz; yansızdır: 1024 örnekli
+  referansta ortalama 117,93 → 117,94). Eskiden 20 örnekte bir yansıyan ışın bulduğu için tabak kenarındaki parlaklık
+  karıncalanıyordu.
+- Titreşim (8 bit bantlanmaya karşı ±1/255) artık sabit desen: her kare değişen titreşim tüm resimde ince kıpırtıydı.
+- **Diyafram varsayılan 0** (her şey keskin); `kamera.diyafram = 0.002` eski sığ alan derinliğini geri getirir.
+
+**Ölçüm** (`--kararlilik`: sabit kamera, canlı pencere gibi 40 kare, ısınma sonrası 32; "dalgalanma" 8×8 blokların
+parlaklığının kareler boyunca sapması, ince gren blokta ortalanır, kayan leke ortalanmaz; değerler 0-1 ekran aralığında):
+
+| | önce (dalgalanma %99) | sonra | önce (kareden kareye) | sonra |
+|---|---|---|---|---|
+| Su, durgun | 0,0109 | **0,0031** | 0,0014 | **0,0003** |
+| Bal, akıyor | 0,0194 | **0,0059** | 0,0029 | **0,0009** |
+| Bal, dünya donuk | | 0,0040 | | 0,0004 |
+
+"Önce" sütunu sabit titreşimle ölçüldü; gecenin sürümünde (titreşim her kare değişiyordu) kareden kareye fark su
+0,0030, bal 0,0042 idi: **su 10 kat, bal 4,7 kat sakin**. Bardağın içi referansa göre (1024 örnek) ~%3 koyu
+(sıkıştırmanın payı; gama 1,5'te %4). Kare süresi değişmedi (otomatik test: bal 31,7 → 34,9 fps, kum 29,1 → 33,6, jel
+kaydı 33,3 → 45,3). Karşılaştırma resmi: masaüstü `Laboratuvar\10 goruntu kararliligi (once - sonra).png`.
+
+**Denenip bırakılan:** yeni karenin payı 0,05 (ölçü az değişti, iz riski arttı) · sıkıştırmasız (kamera kayarken masa
+ile fon arası çizgi sürükleniyordu) · gama 1,5 (cam %4 koyu, daha çok oynuyor).
+
+**Revize 1, NE DOĞRULANMADI:**
+- Kıpraşmayı gözle izleyemem: kareler ve kendi ölçüm aracım. Asıl hakem Özcan'ın exe'de bakması.
+- Kamera hareketi yalnız yana kayma ile (karede 2 mm) denendi; fareyle dönme ve hızlı WASD ölçülmedi. Kamera
+  hareket ederken camın içi biraz grenli (geçmiş kısmen bırakılıyor), durunca toplanır.
+- Kamera hareket ederken camın ardında sıvı da hareket ediyorsa yalnız komşuluk sıkıştırması korur: hafif iz olabilir,
+  denenmedi.
+- Kum ve kayıtların oynatması için ayrı kararlılık ölçümü yok; yalnız otomatik test ekranlarına baktım (iz görmedim).
+- Görüntü 1920×1080 çizilip 2560×1440 pencereye büyütülüyor (Yıkım'da da öyle). Daha keskin isteyen
+  `display.width = 2560`, `display.height = 1440` yapabilir; maliyeti ölçülmedi (kabaca 1,8 kat çizim).
+
 ## ☀️ Sabah raporu · 2026-10-03 (gece 01:10'dan, Özcan uyurken otonom)
 
 **Ne yapıldı:** sahne 4 "Laboratuvar" baştan kuruldu ve uygulamada galeride 04. Bir ağır çekim fotoğraf masası,
@@ -71,7 +126,8 @@ doldurma.
 - **Süt:** yapışma 40, gerilim 5; cam kapların iç yuvarlatması ayarlanabilir, sıvı dolumu duvara 0,9 aralıktan yakın
   noktaları eler (petrinin 4 mm yuvarlatması 3 mm sütü kesiyordu: süt camın içinde doğup fırlıyordu).
 - **Işık ve kamera:** fonun önünde kadrajdan büyük, kenarı yumuşak düşen panel (sıvı fotoğrafçılığının arka ışığı);
-  cam ve sıvı tam Fresnel ve kırılmayla, bardaktaki su ile cam arası tek arayüz; 2 mm diyafram, odak ekran ortasında.
+  cam ve sıvı tam Fresnel ve kırılmayla, bardaktaki su ile cam arası tek arayüz; 2 mm diyafram, odak ekran ortasında
+  (revize 1'de diyafram varsayılanı 0: her şey keskin).
 
 ## Bu gece bulunan hatalar (düzeltildi)
 
@@ -117,6 +173,11 @@ build\pc_graphics.exe --scene laboratuvar --seq --deney balon --tetik --kayit --
 build\pc_graphics.exe --scene laboratuvar --lab-test [balon|kum]
 build\pc_graphics.exe --scene laboratuvar --test [baraj|balon|...]     (T1 çözücü testleri)
 build\pc_graphics.exe --autotest-only laboratuvar
+build\pc_graphics.exe --scene laboratuvar --kararlilik --deney su --kare 40 [--dondur] [--tetik] [--kaydir 0.002] --out captures\k
 ```
+`--kararlilik` canlı pencere gibi kare kare çizer, piksel ve 8×8 blok sapmasını, kareden kareye farkı ve kare süresini
+yazar; `<out>_isi.png` sapma haritası, `<out>_kare.png` son kare. `--dondur` dünyayı durdurur, `--kaydir` kamerayı her
+karede o kadar metre yana kaydırır. Görüntü anahtarları: `goruntu.zamansal`, `goruntu.zamansal_alfa`,
+`goruntu.zamansal_gama`, `goruntu.gurultu_giderici`, `kamera.diyafram`.
 Ortak: `--width --height --cam "x y z" --look "x y z" --set anahtar=değer --yukseklik --akis --guc`.
 `LAB_TANI=1` oturma ve akıtıcı tanısı yazar. Deney adları: su, bal, kum, balon, karpuz, jel, damla.

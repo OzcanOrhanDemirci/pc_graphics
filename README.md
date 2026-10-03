@@ -196,7 +196,10 @@ How each is made, and what was measured on the way (the Turkish working journal 
 - **The picture:** path tracing with OptiX; thick glass and refracting liquids with exact Fresnel, a liquid in its
   glass crossing one interface (the hair of air between their surfaces would otherwise mirror); surfaces rebuilt from
   the particles every frame (anisotropic kernels); sand drawn as a surface with grain-sized texture plus fine grains;
-  4 samples a frame and the OptiX AI denoiser.
+  4 samples a frame blended over time (reprojected through the camera; a pixel keeps its history only while a steady
+  ray through it still meets the same point and travels as far, so a moving stream leaves no trail), soft boxes seen
+  in glass and liquid counted exactly at the mirror direction, then the OptiX AI denoiser. Denoising each frame on
+  its own made glass edges swim; blended, water's swim fell tenfold.
 
 Open: the honey thread's surface is lumpy (it is one to three particles thick); melon fragments are drawn as soft rebuilt surfaces, not sharp fractures; the
 balloon rests on the table rather than hanging (hanging, the light rubber could not carry the water's weight to the

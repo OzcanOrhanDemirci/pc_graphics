@@ -71,8 +71,10 @@ struct LabParams {
     unsigned int width, height;
     float4* accum;               // linear RGB summed over the samples of this image
     uchar4* output;
-    float4* albedoOut;           // the first diffuse-like hit's albedo and normal (the denoiser's guides; may be null)
-    float4* normalOut;
+    float4* albedoOut;           // the denoiser's guides (may be null): albedo and normal of the first diffuse-like surface
+    float4* normalOut;           // along a path that refracts and reflects the same way every frame (steady, see guidePath)
+    float4* posOut;              // where the steady ray first meets something (xyz) and how far it goes before it stops
+                                 // (w): the reprojection, and whether the history still shows the same thing
     unsigned int samples, spp, seed;
     OptixTraversableHandle handle;
     const LObject* objects;

@@ -14,7 +14,9 @@
 #include "scenes/laboratuvar/lab_record.h"
 #include "core/image_io.h"
 
+#include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -70,6 +72,10 @@ void LaboratuvarApp::applyLook() {
     p.maxDiffuse = cfg.i("isik.sekme", 2);
     p.exposure = std::pow(2.0f, cfg.f("goruntu.ev", 0.0f));
     p.gapMax = cfg.f("goruntu.bosluk", 0.004f);
+    renderer.temporal = cfg.i("goruntu.zamansal", 1) != 0;
+    renderer.temporalAlpha = cfg.f("goruntu.zamansal_alfa", 0.1f);
+    renderer.temporalGamma = cfg.f("goruntu.zamansal_gama", 2.5f);
+    renderer.denoise = cfg.i("goruntu.gurultu_giderici", 1) != 0;
     auto box = [&](const std::string& k, float3 c, float3 aim, float w, float h, float3 Le, int visible) {
         LRectLight l;
         l.c = cfg.v3(k + ".konum", c);
@@ -101,7 +107,7 @@ void LaboratuvarApp::setCamera(Deney d) {
     cam.lookAt(cfg.v3(k + ".konum", defPos[int(d)]), cfg.v3(k + ".hedef", defAim[int(d)]));
     cam.fovDeg = cfg.f(k + ".fov", cfg.f("kamera.fov", 30.0f));
     // a lens: a little depth of field, in focus at the experiment (the live window refocuses on the picture's middle)
-    cam.aperture = cfg.f("kamera.diyafram", 0.002f);
+    cam.aperture = cfg.f("kamera.diyafram", 0.0f);
     cam.focus = length(cfg.v3(k + ".hedef", defAim[int(d)]) - cam.pos);
     cam.apply(renderer.params().cam, width, height);
 }
@@ -337,7 +343,8 @@ void save(LaboratuvarApp& app, const std::string& path) {
 int runLaboratuvarCli(int argc, char** argv) {
     LaboratuvarApp app;
     std::string deneyS = "su", out, testName, mode;
-    bool trig = false, recorded = false;
+    bool trig = false, recorded = false, frozen = false;
+    float pan = 0.0f;
     double t = 0.0, t0 = 0.0, t1 = 1.0, live = 0.0;
     int frames = 10;
     unsigned spp = 64;
@@ -357,6 +364,9 @@ int runLaboratuvarCli(int argc, char** argv) {
         if (a == "--scene") next();
         else if (a == "--still") mode = "still";
         else if (a == "--seq") mode = "seq";
+        else if (a == "--kararlilik") mode = "stab";
+        else if (a == "--dondur") frozen = true;
+        else if (a == "--kaydir") pan = std::stof(next());   // --kararlilik: the camera slides sideways, metres a frame
         else if (a == "--test") { mode = "test"; testName = opt(); }
         else if (a == "--surface-test") { mode = "surface"; testName = opt(); }
         else if (a == "--weapons-test") { mode = "weapons"; testName = opt(); }
@@ -388,7 +398,7 @@ int runLaboratuvarCli(int argc, char** argv) {
     if (mode == "surface") return runSurfaceTests(app.cfg, testName);
     if (mode == "weapons") return runWeaponsTests(testName);
     if (mode == "lab") return runLabTests(app, testName);
-    if (mode != "still" && mode != "seq") {
+    if (mode != "still" && mode != "seq" && mode != "stab") {
         std::printf("laboratuvar: --still, --seq, --test, --surface-test, --weapons-test, --lab-test\n");
         return 2;
     }
@@ -466,7 +476,100 @@ int runLaboratuvarCli(int argc, char** argv) {
         for (unsigned s = 0; s < spp; s += 4) app.renderer.render(std::min(4u, spp - s), s > 0);
         std::printf("  t %.3f s: %d tanecik, cizim %.0f ms (%u ornek)\n", tt, in.n, (nowS() - r0) * 1000.0, spp);
     };
-    if (mode == "still") {
+    if (mode == "stab") {
+        // how steady the live picture is: the camera still, frames drawn as the live window draws them (a fresh
+        // render each frame, the world stepping unless --dondur); every pixel's brightness over the frames after a
+        // warm-up, its standard deviation (0..1 of the display's range) averaged and at the 95th percentile, and the
+        // mean change from one frame to the next. A heat map of the deviation is written too.
+        const int warm = 8, N = std::max(frames, warm + 4);
+        const size_t np = size_t(app.width) * app.height;
+        std::vector<double> sum(np, 0.0), sum2(np, 0.0);
+        // swimming: 8x8 blocks' mean brightness (fine grain averages out in a block, a drifting blotch does not)
+        const int bw = int(app.width) / 8, bh = int(app.height) / 8;
+        std::vector<double> bsum(size_t(bw) * bh, 0.0), bsum2(size_t(bw) * bh, 0.0);
+        std::vector<float> blk(size_t(bw) * bh);
+        std::vector<float> prev(np, 0.0f);
+        double diff = 0.0, msSum = 0.0;
+        int used = 0;
+        std::vector<uchar4> px;
+        for (int k = 0; k < N; ++k) {
+            if (!frozen) w.step(1.0f / 60.0f);
+            if (pan != 0.0f) {
+                app.cam.move(0.0f, 1.0f, 0.0f, pan);
+                app.cam.apply(app.renderer.params().cam, app.width, app.height);
+            }
+            w.exportDraw(dPos, dCode, app.renderer.stream());
+            for (int q = 0; q < LabWorld::P_COUNT; ++q) poses[q] = w.prop[q];
+            DrawInput in;
+            in.pos = dPos;
+            in.code = dCode;
+            in.n = w.count();
+            in.spacing = w.s;
+            in.poses = poses;
+            in.membraneFirst = w.membraneFirst;
+            in.membraneCount = w.membraneCount;
+            in.ballFirst = w.ballFirst;
+            in.ballCount = w.ballCount;
+            in.ballRadius = w.ballRadius;
+            app.draw(in);
+            app.renderer.render(spp, false);
+            app.renderer.download(px);
+            if (k < warm) continue;
+            msSum += app.renderer.lastMs;
+            std::fill(blk.begin(), blk.end(), 0.0f);
+            for (size_t i = 0; i < np; ++i) {
+                const float l = (0.2126f * px[i].x + 0.7152f * px[i].y + 0.0722f * px[i].z) / 255.0f;
+                const int bx = int(i % app.width) / 8, by = int(i / app.width) / 8;
+                if (bx < bw && by < bh) blk[size_t(by) * bw + bx] += l * (1.0f / 64.0f);
+                sum[i] += l;
+                sum2[i] += double(l) * l;
+                if (used > 0) diff += std::fabs(l - prev[i]);
+                prev[i] = l;
+            }
+            for (size_t b = 0; b < blk.size(); ++b) {
+                bsum[b] += blk[b];
+                bsum2[b] += double(blk[b]) * blk[b];
+            }
+            ++used;
+        }
+        std::vector<float> bsd(blk.size());
+        double bmean = 0.0;
+        for (size_t b = 0; b < blk.size(); ++b) {
+            const double m = bsum[b] / used;
+            bsd[b] = float(std::sqrt(std::max(0.0, bsum2[b] / used - m * m)));
+            bmean += bsd[b];
+        }
+        bmean /= double(std::max<size_t>(1, bsd.size()));
+        std::sort(bsd.begin(), bsd.end());
+        std::printf("kararlilik %s: cizim %.2f ms/kare\n", deneyS.c_str(), msSum / std::max(1, used));
+        std::printf("kararlilik %s: dalgalanma (8x8 blok) ort %.5f, %%95 %.5f, %%99 %.5f\n", deneyS.c_str(), bmean, bsd[size_t(0.95 * (bsd.size() - 1))],
+                    bsd[size_t(0.99 * (bsd.size() - 1))]);
+        std::vector<float> sd(np);
+        for (size_t i = 0; i < np; ++i) {
+            const double m = sum[i] / used;
+            sd[i] = float(std::sqrt(std::max(0.0, sum2[i] / used - m * m)));
+        }
+        std::vector<float> sorted = sd;
+        std::sort(sorted.begin(), sorted.end());
+        double mean = 0.0;
+        for (float v : sd) mean += v;
+        mean /= double(np);
+        std::printf("kararlilik %s (%s, %u ornek, %d kare): sapma ort %.4f, %%95 %.4f, %%99 %.4f; kareden kareye ort fark %.4f\n", deneyS.c_str(),
+                    frozen ? "dunya donuk" : "dunya akiyor", spp, used, mean, sorted[size_t(0.95 * (np - 1))], sorted[size_t(0.99 * (np - 1))],
+                    diff / (double(np) * std::max(1, used - 1)));
+        std::vector<unsigned char> heat(np * 4);
+        for (size_t i = 0; i < np; ++i) {
+            const float v = std::min(1.0f, sd[i] * 10.0f);
+            heat[4 * i] = (unsigned char)(255.0f * std::min(1.0f, 2.0f * v));
+            heat[4 * i + 1] = (unsigned char)(255.0f * std::max(0.0f, 2.0f * v - 1.0f));
+            heat[4 * i + 2] = (unsigned char)(80.0f * (1.0f - v));
+            heat[4 * i + 3] = 255;
+        }
+        const std::string base = out.empty() ? app.root + "/captures/laboratuvar/kararlilik_" + deneyS : out;
+        std::filesystem::create_directories(std::filesystem::path(base).parent_path());
+        writePNG(base + "_isi.png", int(app.width), int(app.height), heat.data());
+        writePNG(base + "_kare.png", int(app.width), int(app.height), reinterpret_cast<const unsigned char*>(px.data()));
+    } else if (mode == "still") {
         drawAt(t);
         const std::string path = out.empty() ? app.root + "/captures/laboratuvar/" + deneyS + ".png" : out;
         save(app, path);

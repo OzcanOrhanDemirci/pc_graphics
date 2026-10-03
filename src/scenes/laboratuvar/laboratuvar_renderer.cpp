@@ -513,6 +513,9 @@ void LabRenderer::createDenoiser() {
     dnAvg_ = lalloc<float>(3);
     if (!p_.albedoOut) p_.albedoOut = lalloc<float4>(size_t(w_) * h_);
     if (!p_.normalOut) p_.normalOut = lalloc<float4>(size_t(w_) * h_);
+    for (float4*& pb : pos_) if (!pb) pb = lalloc<float4>(size_t(w_) * h_);
+    p_.posOut = pos_[posCur_];
+    for (float4*& hb : hist_) if (!hb) hb = lalloc<float4>(size_t(w_) * h_);
     LOPTIX(optixDenoiserSetup(dn_, stream_, w_, h_, CUdeviceptr(dnState_), dnStateSize_, CUdeviceptr(dnScratch_), dnScratchSize_));
     LCUDA(cudaStreamSynchronize(stream_));
 }
@@ -520,16 +523,44 @@ void LabRenderer::createDenoiser() {
 void LabRenderer::freeDenoiser() {
     if (dn_) optixDenoiserDestroy(dn_);
     dn_ = nullptr;
-    for (void* p : {dnState_, dnScratch_, static_cast<void*>(dnIn_), static_cast<void*>(dnOut_), static_cast<void*>(dnIntensity_), static_cast<void*>(dnAvg_)})
+    for (void* p : {dnState_, dnScratch_, static_cast<void*>(dnIn_), static_cast<void*>(dnOut_), static_cast<void*>(dnIntensity_), static_cast<void*>(dnAvg_),
+                    static_cast<void*>(hist_[0]), static_cast<void*>(hist_[1]), static_cast<void*>(pos_[0]), static_cast<void*>(pos_[1])})
         if (p) cudaFree(p);
+    hist_[0] = hist_[1] = pos_[0] = pos_[1] = nullptr;
+    p_.posOut = nullptr;
+    histValid_ = false;
     dnState_ = dnScratch_ = nullptr;
     dnIn_ = dnOut_ = nullptr;
     dnIntensity_ = dnAvg_ = nullptr;
 }
 
+void LabRenderer::runTemporal() {
+    // this frame's samples (accum holds only them) into the history, the result to the denoiser's input
+    TCam pc;
+    pc.pos = prevCam_.pos;
+    pc.right = prevCam_.right;
+    pc.up = prevCam_.up;
+    pc.fwd = prevCam_.fwd;
+    pc.tanHalfX = prevCam_.tanHalfX;
+    pc.tanHalfY = prevCam_.tanHalfY;
+    pc.moved = length(p_.cam.pos - prevCam_.pos);
+    float4* in = hist_[histCur_];
+    float4* out = hist_[histCur_ ^ 1];
+    // still: a plain mean, unclamped (a converged history clamped to a noisy 4-sample neighbourhood would flicker where
+    // glass shows a bright path only now and then)
+    launchTemporal(p_.accum, 1.0f / float(std::max(1u, p_.samples)), pos_[posCur_], pos_[posCur_ ^ 1], pc, in, out, int(w_), int(h_),
+                   still ? 0.0f : temporalAlpha, still ? 1e30f : temporalGamma, still ? 4096.0f : 1.0f / temporalAlpha, !histValid_, stream_);
+    histCur_ ^= 1;
+    histValid_ = true;
+    prevCam_ = p_.cam;
+    posCur_ ^= 1;   // the next frame writes the other one (this one is its history's)
+    p_.posOut = pos_[posCur_];
+}
+
 void LabRenderer::runDenoiser() {
     const int n = int(w_ * h_);
-    launchDenoisePrep(p_.accum, p_.samples, p_.exposure, n, dnIn_, stream_);
+    if (useTemporal_) launchDenoisePrep(hist_[histCur_], 1u, p_.exposure, n, dnIn_, stream_);
+    else launchDenoisePrep(p_.accum, p_.samples, p_.exposure, n, dnIn_, stream_);
     OptixDenoiserLayer layer{};
     layer.input = limage(dnIn_, w_, h_);
     layer.output = limage(dnOut_, w_, h_);
@@ -544,20 +575,27 @@ void LabRenderer::runDenoiser() {
     dp.hdrAverageColor = CUdeviceptr(dnAvg_);
     dp.blendFactor = 0.0f;
     LOPTIX(optixDenoiserInvoke(dn_, stream_, &dp, CUdeviceptr(dnState_), dnStateSize_, &g, &layer, 1, 0, 0, CUdeviceptr(dnScratch_), dnScratchSize_));
-    launchTonemap(dnOut_, int(w_), int(h_), p_.seed, p_.output, stream_);
+    launchTonemap(dnOut_, int(w_), int(h_), 0u, p_.output, stream_);   // a fixed dither: breaks bands, does not shimmer
 }
 
 void LabRenderer::render(unsigned int spp, bool accumulate) {
     if (objsDirty_) uploadObjects();
     if (iasDirty_) buildIAS();
-    if (denoise && !dn_) createDenoiser();
+    if ((denoise || temporal) && !dn_) createDenoiser();
+    useTemporal_ = temporal && !accumulate;   // stills accumulate as they always did
+    if (accumulate) histValid_ = false;
     if (!accumulate) p_.samples = 0;
     p_.spp = spp;
     LCUDA(cudaMemcpyAsync(reinterpret_cast<void*>(dParams_), &p_, sizeof(LabParams), cudaMemcpyHostToDevice, stream_));
     LCUDA(cudaEventRecord(e0_, stream_));
     if (p_.handle) LOPTIX(optixLaunch(pipeline_, stream_, dParams_, sizeof(LabParams), &sbt_, w_, h_, 1));
     p_.samples += spp;
+    if (useTemporal_ && p_.handle) runTemporal();
     if (denoise && p_.handle) runDenoiser();
+    else if (useTemporal_ && p_.handle) {   // no denoiser: the accumulation itself, tone mapped
+        launchDenoisePrep(hist_[histCur_], 1u, p_.exposure, int(w_ * h_), dnIn_, stream_);
+        launchTonemap(dnIn_, int(w_), int(h_), 0u, p_.output, stream_);
+    }
     p_.samples -= spp;
     LCUDA(cudaEventRecord(e1_, stream_));
     LCUDA(cudaEventSynchronize(e1_));

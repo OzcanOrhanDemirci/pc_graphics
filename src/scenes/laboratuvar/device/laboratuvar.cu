@@ -243,13 +243,16 @@ static __device__ float3 radiance(float3 o, float3 d, Rng& r, float3* aovAlb, fl
     Media md;
     md.n = 0;
     bool specular = true, aovDone = false;
+    bool lightCounted = false;   // this segment's soft box was already counted where it was reflected
     int diffuse = 0;
     for (int depth = 0; depth < 48; ++depth) {
         const Hit h = trace(o, d, 0.0f, 1e30f);
         if (md.n > 0) T = T * exp3(md.sigma() * (-(h.hit ? h.t : 0.0f)));
         float3 Le;
+        const bool counted = lightCounted;
+        lightCounted = false;
         if (specular && lightHit(o, d, h.hit ? h.t : 1e30f, depth == 0, Le)) {
-            L = L + T * Le;
+            if (!counted) L = L + T * Le;
             if (!aovDone) { *aovAlb = make_float3(1, 1, 1); *aovNrm = -d; aovDone = true; }
             break;
         }
@@ -302,9 +305,21 @@ static __device__ float3 radiance(float3 o, float3 d, Rng& r, float3* aovAlb, fl
             }
             float cosT;
             const float F = fresnelDielectric(c, n1 / n2, cosT);
+            // a soft box in this surface's mirror, met from the air on the way from the camera: counted here, weighted by F,
+            // in every sample (left to the few samples that happen to reflect, a highlight on glass or liquid speckles and
+            // never settles); the sample that does reflect then does not count it again
+            bool mirrored = false;
+            if (specular && entering && md.n == 0 && F < 1.0f) {
+                const float3 rr = reflect3(d, nn), ro = p + nn * 1e-5f;
+                const Hit hr = trace(ro, rr, 0.0f, 1e30f);
+                float3 Lr;
+                if (lightHit(ro, rr, hr.hit ? hr.t : 1e30f, false, Lr)) L = L + T * Lr * F;
+                mirrored = true;
+            }
             if (r.next() < F) {
                 d = reflect3(d, nn);
                 o = p + nn * 1e-5f;
+                lightCounted = mirrored;
             } else {
                 const float eta = n1 / n2;
                 d = normalize(d * eta + nn * (eta * c - cosT));
@@ -361,6 +376,82 @@ static __device__ float3 radiance(float3 o, float3 d, Rng& r, float3* aovAlb, fl
     return L;
 }
 
+// the denoiser's guides and the reprojection's position, from one ray through the pixel's centre that takes the same
+// way every frame: through glass and liquids it refracts (reflects only at total internal reflection), off metal it
+// reflects, and it stops at the first surface that scatters. (The guides from a light-transport sample flip between
+// what a glass reflects and what it shows through, at random, frame to frame: the denoiser then redraws glass and
+// water differently every frame, and the picture swims.)
+static __device__ void guidePath(float3 o, float3 d, float3& alb, float3& nrm, float4& firstPos) {
+    firstPos = make_float4(o.x + d.x * 50.0f, o.y + d.y * 50.0f, o.z + d.z * 50.0f, 50.0f);
+    Media md;
+    md.n = 0;
+    float len = 0.0f;
+    for (int depth = 0; depth < 24; ++depth) {
+        const Hit h = trace(o, d, 0.0f, 1e30f);
+        float3 Le;
+        if (lightHit(o, d, h.hit ? h.t : 1e30f, depth == 0, Le)) {
+            alb = make_float3(1, 1, 1);
+            nrm = -d;
+            if (depth > 0) firstPos.w = fminf(len + (h.hit ? h.t : 50.0f), 50.0f);
+            return;
+        }
+        if (!h.hit) {
+            alb = make_float3(0, 0, 0);
+            nrm = -d;
+            if (depth > 0) firstPos.w = 50.0f;
+            return;
+        }
+        const float3 p = o + d * h.t;
+        len += h.t;
+        if (depth == 0) firstPos = make_float4(p.x, p.y, p.z, len);
+        firstPos.w = fminf(len, 50.0f);
+        const int mi = params.objects[h.object].material;
+        const LMaterial& m = params.materials[mi];
+        const float3 nn = dot(h.n, d) < 0.0f ? h.n : -h.n;
+        const float c = fminf(1.0f, -dot(nn, d));
+        if (m.type == LM_GLASS || m.type == LM_LIQUID) {   // as radiance() does, refracting unless it cannot
+            const bool entering = dot(h.n, d) < 0.0f;
+            float n1, n2;
+            int into = -1;
+            float3 across = p;
+            if (entering) {
+                n1 = md.ior();
+                n2 = m.ior;
+                into = mi;
+            } else {
+                n1 = m.ior;
+                n2 = md.iorBelow(mi);
+                if (params.gapMax > 0.0f) {
+                    const Hit g = trace(p, d, 1e-5f, params.gapMax);
+                    if (g.hit && dot(g.n, d) < 0.0f && dielectric(params.objects[g.object].material) && params.objects[g.object].material != mi) {
+                        into = params.objects[g.object].material;
+                        n2 = params.materials[into].ior;
+                        across = p + d * g.t;
+                    }
+                }
+            }
+            float cosT;
+            const float F = fresnelDielectric(c, n1 / n2, cosT);
+            if (F >= 1.0f) {
+                d = reflect3(d, nn);
+                o = p + nn * 1e-5f;
+            } else {
+                const float eta = n1 / n2;
+                d = normalize(d * eta + nn * (eta * c - cosT));
+                o = across - nn * 1e-5f;
+                if (!entering) md.remove(mi);
+                if (into >= 0) md.push(into);
+            }
+            continue;
+        }
+        alb = m.type == LM_METAL ? m.albedo : albedoAt(m, h, p);   // where radiance() takes its guides
+        nrm = nn;
+        return;
+    }
+    alb = make_float3(0, 0, 0);
+    nrm = -d;
+}
+
 extern "C" __global__ void __raygen__pick() {
     const LCamera& C = params.cam;
     const float u = (params.pickPixel.x / params.width) * 2.0f - 1.0f, v = 1.0f - (params.pickPixel.y / params.height) * 2.0f;
@@ -391,38 +482,41 @@ extern "C" __global__ void __raygen__render() {
     Rng r;
     r.s = hashU32(pix * 9781u + params.seed * 6271u + params.samples * 26699u);
     const LCamera& C = params.cam;
-    float3 sum = make_float3(0, 0, 0), alb = make_float3(0, 0, 0), nrm = make_float3(0, 0, 0);
+    float3 sum = make_float3(0, 0, 0);
+    if (params.albedoOut || params.posOut) {   // the guides and the reprojection's position: one steady ray
+        const float u = ((px + 0.5f) / params.width) * 2.0f - 1.0f, v = 1.0f - ((py + 0.5f) / params.height) * 2.0f;
+        const float3 d = normalize(C.fwd + C.right * (u * C.tanHalfX) + C.up * (v * C.tanHalfY));
+        float3 ga, gn;
+        float4 gp;
+        guidePath(C.pos, d, ga, gn, gp);
+        if (params.albedoOut) {
+            params.albedoOut[pix] = make_float4(ga.x, ga.y, ga.z, 1.0f);
+            params.normalOut[pix] = make_float4(gn.x, gn.y, gn.z, 0.0f);
+        }
+        if (params.posOut) params.posOut[pix] = gp;
+    }
     for (unsigned int s = 0; s < params.spp; ++s) {
-        // the first sample through the pixel's centre: the denoiser's guides stay put while the noise moves
-        const float jx = (s == 0 && params.albedoOut) ? 0.5f : r.next(), jy = (s == 0 && params.albedoOut) ? 0.5f : r.next();
+        const float jx = r.next(), jy = r.next();
         const float u = ((px + jx) / params.width) * 2.0f - 1.0f, v = 1.0f - ((py + jy) / params.height) * 2.0f;
         float3 d = normalize(C.fwd + C.right * (u * C.tanHalfX) + C.up * (v * C.tanHalfY));
         float3 o = C.pos;
-        if (C.aperture > 0.0f && !(s == 0 && params.albedoOut)) {   // a thin lens (the guide sample stays a pinhole)
+        if (C.aperture > 0.0f) {   // a thin lens
             const float3 fp = C.pos + d * (C.focus / fmaxf(dot(d, C.fwd), 1e-3f));
             const float lr = C.aperture * sqrtf(r.next()), la = 2.0f * M_PIf * r.next();
             o = C.pos + C.right * (lr * cosf(la)) + C.up * (lr * sinf(la));
             d = normalize(fp - o);
         }
-        float3 a, n;
+        float3 a, n;   // (the per-sample guides; the steady guide path writes them)
         float3 L = radiance(o, d, r, &a, &n);
         const float mx = maxc(L);
         if (!(mx == mx)) L = make_float3(0, 0, 0);
         else if (mx > 40.0f) L = L * (40.0f / mx);   // fireflies: a rare path through glass to a soft box
         sum = sum + L;
-        alb = alb + a;
-        nrm = nrm + n;
     }
     float4 acc = params.samples > 0 ? params.accum[pix] : make_float4(0, 0, 0, 0);
     acc = acc + make_float4(sum.x, sum.y, sum.z, 0.0f);
     params.accum[pix] = acc;
     const float inv = 1.0f / float(params.samples + params.spp);
-    if (params.albedoOut) {
-        const float k = 1.0f / float(params.spp);
-        params.albedoOut[pix] = make_float4(alb.x * k, alb.y * k, alb.z * k, 1.0f);
-        const float3 nn = normalize(nrm + make_float3(0, 0, 1e-6f));
-        params.normalOut[pix] = make_float4(nn.x, nn.y, nn.z, 0.0f);
-    }
     float3 col = make_float3(acc.x, acc.y, acc.z) * (inv * params.exposure);
     col = agx(col);
     const float dn = (r.next() + r.next() - 1.0f) / 255.0f;

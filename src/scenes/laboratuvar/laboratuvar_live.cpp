@@ -306,8 +306,10 @@ public:
         drawNow();
         const bool still = !changed_ && !moved_;
         const unsigned spp = unsigned(std::max(1, a_.cfg.i("display.spp", 4)));
-        a_.renderer.render(spp, still && accumulated_ < a_.cfg.i("display.birikim", 256));
-        accumulated_ = still ? accumulated_ + int(spp) : int(spp);
+        // every frame is blended into the last ones (reprojected through the camera); while nothing changes the blend
+        // becomes a plain mean, and the picture converges
+        a_.renderer.still = still;
+        a_.renderer.render(spp, false);
         a_.renderer.downloadTo(pinned_);
         changed_ = moved_ = false;
     }
@@ -513,7 +515,7 @@ private:
     Mode mode_ = Mode::Live;
     bool paused_ = false, playing_ = false, firstPlayDone_ = false, changed_ = true, moved_ = true;
     double playT_ = 0.0, lastClick_ = -1.0;
-    int speedIdx_ = 0, rebuildIn_ = 0, accumulated_ = 0;
+    int speedIdx_ = 0, rebuildIn_ = 0;
     float3* dPos_ = nullptr;
     uint8_t* dCode_ = nullptr;
     int cap_ = 0;
@@ -542,6 +544,7 @@ private:
         cudaMalloc(reinterpret_cast<void**>(&dPos_), size_t(cap_) * sizeof(float3));
         cudaMalloc(reinterpret_cast<void**>(&dCode_), size_t(cap_));
         a_.setupScene(d, cap_, &w_.membraneTris);
+        a_.renderer.resetHistory();
         changed_ = moved_ = true;
         std::printf("%s\n", w_.summary().c_str());
     }

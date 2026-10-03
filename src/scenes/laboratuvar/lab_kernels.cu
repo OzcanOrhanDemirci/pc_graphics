@@ -145,6 +145,74 @@ __global__ void kDenoisePrep(const float4* acc, float k, int n, float4* out) {
     const float4 a = acc[i];
     out[i] = make_float4(a.x * k, a.y * k, a.z * k, 1.0f);
 }
+__device__ inline float3 toYCoCg(float3 c) { return make_float3(0.25f * c.x + 0.5f * c.y + 0.25f * c.z, 0.5f * c.x - 0.5f * c.z, -0.25f * c.x + 0.5f * c.y - 0.25f * c.z); }
+__device__ inline float3 fromYCoCg(float3 y) { return make_float3(y.x + y.y - y.z, y.x + y.z, y.x - y.y - y.z); }
+
+__global__ void kTemporal(const float4* accum, float invSpp, const float4* pos, const float4* ppos, TCam pc, const float4* hin, float4* hout, int w, int h,
+                          float alphaMin, float gamma, float maxFrames, bool reset) {
+    const int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= w * h) return;
+    const int x = i % w, y = i / w;
+    const float4 a = accum[i];
+    const float3 cur = make_float3(a.x * invSpp, a.y * invSpp, a.z * invSpp);
+    if (reset) { hout[i] = make_float4(cur.x, cur.y, cur.z, 1.0f); return; }
+    // where this pixel's surface was on the previous frame's screen
+    const float4 P = pos[i];
+    const float3 v = make_float3(P.x, P.y, P.z) - pc.pos;
+    const float z = dot(v, pc.fwd);
+    if (z <= 1e-4f) { hout[i] = make_float4(cur.x, cur.y, cur.z, 1.0f); return; }
+    const float sx = dot(v, pc.right) / (z * pc.tanHalfX), sy = dot(v, pc.up) / (z * pc.tanHalfY);
+    const float fx = (sx * 0.5f + 0.5f) * w - 0.5f, fy = (0.5f - sy * 0.5f) * h - 0.5f;
+    if (fx < 0.0f || fy < 0.0f || fx > w - 1.0f || fy > h - 1.0f) { hout[i] = make_float4(cur.x, cur.y, cur.z, 1.0f); return; }
+    const int x0 = int(fx), y0 = int(fy);
+    const int x1 = min(x0 + 1, w - 1), y1 = min(y0 + 1, h - 1);
+    const float tx = fx - x0, ty = fy - y0;
+    // the four taps, each only if it saw this surface (within a hair of the same point, the ray as long)
+    // (what is seen through glass shifts as the camera moves: the length may change in proportion; with the camera still
+    // the test is strict, and catches liquid moving behind glass)
+    const float tolP = 0.0015f + 0.004f * z, tolL = 0.002f + 0.01f * P.w + 8.0f * pc.moved * P.w / fmaxf(z, 0.05f);
+    const int tap[4] = {y0 * w + x0, y0 * w + x1, y1 * w + x0, y1 * w + x1};
+    const float wt[4] = {(1 - tx) * (1 - ty), tx * (1 - ty), (1 - tx) * ty, tx * ty};
+    float4 H = make_float4(0, 0, 0, 1e30f);
+    float W = 0.0f;
+    for (int k = 0; k < 4; ++k) {
+        const float4 q = ppos[tap[k]];
+        const float3 dq = make_float3(q.x - P.x, q.y - P.y, q.z - P.z);
+        if (dot(dq, dq) > tolP * tolP || fabsf(q.w - P.w) > tolL || wt[k] <= 0.0f) continue;
+        const float4 hk = hin[tap[k]];
+        H.x += hk.x * wt[k];
+        H.y += hk.y * wt[k];
+        H.z += hk.z * wt[k];
+        H.w = fminf(H.w, hk.w);
+        W += wt[k];
+    }
+    if (W < 0.05f) { hout[i] = make_float4(cur.x, cur.y, cur.z, 1.0f); return; }
+    H.x /= W;
+    H.y /= W;
+    H.z /= W;
+    // this frame's neighbourhood: the history kept within its spread
+    float3 m1 = make_float3(0, 0, 0), m2 = make_float3(0, 0, 0);
+    for (int dy = -1; dy <= 1; ++dy)
+        for (int dx = -1; dx <= 1; ++dx) {
+            const int xx = min(max(x + dx, 0), w - 1), yy = min(max(y + dy, 0), h - 1);
+            const float4 b = accum[yy * w + xx];
+            const float3 c = toYCoCg(make_float3(b.x * invSpp, b.y * invSpp, b.z * invSpp));
+            m1 = m1 + c;
+            m2 = m2 + c * c;
+        }
+    m1 = m1 * (1.0f / 9.0f);
+    m2 = m2 * (1.0f / 9.0f);
+    const float3 sd = make_float3(sqrtf(fmaxf(0.0f, m2.x - m1.x * m1.x)), sqrtf(fmaxf(0.0f, m2.y - m1.y * m1.y)), sqrtf(fmaxf(0.0f, m2.z - m1.z * m1.z)));
+    float3 hy = toYCoCg(make_float3(H.x, H.y, H.z));
+    const float3 lo = m1 - sd * gamma, hi = m1 + sd * gamma;
+    hy = make_float3(fminf(fmaxf(hy.x, lo.x), hi.x), fminf(fmaxf(hy.y, lo.y), hi.y), fminf(fmaxf(hy.z, lo.z), hi.z));
+    const float3 hc = fromYCoCg(hy);
+    const float n = fminf(H.w + 1.0f, maxFrames);
+    const float al = fmaxf(1.0f / n, alphaMin);
+    const float3 o = hc + (cur - hc) * al;
+    hout[i] = make_float4(fmaxf(o.x, 0.0f), fmaxf(o.y, 0.0f), fmaxf(o.z, 0.0f), n);
+}
+
 __global__ void kTonemap(const float4* lin, int w, int h, unsigned seed, uchar4* out) {
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= w * h) return;
@@ -160,6 +228,10 @@ __global__ void kTonemap(const float4* lin, int w, int h, unsigned seed, uchar4*
 
 void launchDenoisePrep(const float4* accum, unsigned samples, float exposure, int n, float4* out, cudaStream_t s) {
     if (n > 0) kDenoisePrep<<<nb(n), kB, 0, s>>>(accum, exposure / float(samples > 0 ? samples : 1), n, out);
+}
+void launchTemporal(const float4* accum, float invSpp, const float4* pos, const float4* prevPos, TCam prev, const float4* histIn, float4* histOut, int w,
+                    int h, float alphaMin, float gamma, float maxFrames, bool reset, cudaStream_t s) {
+    if (w * h > 0) kTemporal<<<nb(w * h), kB, 0, s>>>(accum, invSpp, pos, prevPos, prev, histIn, histOut, w, h, alphaMin, gamma, maxFrames, reset);
 }
 void launchTonemap(const float4* lin, int w, int h, unsigned seed, uchar4* out, cudaStream_t s) {
     if (w * h > 0) kTonemap<<<nb(w * h), kB, 0, s>>>(lin, w, h, seed, out);

@@ -32,5 +32,17 @@ void launchMembrane(const float3* pos, int first, const uint3* tris, int nTris, 
 // the denoiser: the accumulation's mean (times exposure) as its input; its output tone-mapped to the display
 void launchDenoisePrep(const float4* accum, unsigned samples, float exposure, int n, float4* out, cudaStream_t s);
 void launchTonemap(const float4* lin, int w, int h, unsigned seed, uchar4* out, cudaStream_t s);
+// temporal accumulation (live): this frame's mean (accum / spp) blended with last frame's result, found where this
+// pixel's surface was in the previous camera, clamped to this frame's neighbourhood (YCoCg mean +- gamma sigma) so a
+// moved thing leaves no ghost; blend max(1 / frames, alphaMin). Out: linear RGB, w = frames accumulated.
+struct TCam {
+    float3 pos, right, up, fwd;
+    float tanHalfX, tanHalfY;
+    float moved;   // how far the camera went since (m)
+};
+// pos / prevPos: the steady ray's first hit and length, this frame and the last (history from a tap whose surface or
+// length differs is not used: what moved, and what it uncovered, start over instead of leaving a trail)
+void launchTemporal(const float4* accum, float invSpp, const float4* pos, const float4* prevPos, TCam prev, const float4* histIn, float4* histOut, int w,
+                    int h, float alphaMin, float gamma, float maxFrames, bool reset, cudaStream_t s);
 // the mean of a range of positions as a sphere of radius r (a steel ball drawn whole)
 void launchCentre(const float3* pos, int first, int count, float r, float4* out, cudaStream_t s);

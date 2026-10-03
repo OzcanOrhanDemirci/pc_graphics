@@ -67,6 +67,12 @@ public:
     unsigned int width() const { return w_; }
     unsigned int height() const { return h_; }
     bool denoise = true;       // the OptiX AI denoiser (AOV, albedo and normal guides) over the accumulation
+    // live frames (render(spp, false)) blend into the last ones, found through the previous camera, kept only where the
+    // same surface is seen (lab_kernels.h launchTemporal); then the denoiser
+    bool temporal = true;
+    bool still = false;        // the picture does not change (camera and world still): accumulate without a floor
+    float temporalAlpha = 0.1f, temporalGamma = 2.5f;
+    void resetHistory() { histValid_ = false; }
     float denoiseMs = 0.0f;
     float lastMs = 0.0f;       // the last render
     float surfaceMs = 0.0f;    // the surfaces built since the last render
@@ -130,6 +136,14 @@ private:
     void *dnState_ = nullptr, *dnScratch_ = nullptr;
     size_t dnStateSize_ = 0, dnScratchSize_ = 0;
     float4 *dnIn_ = nullptr, *dnOut_ = nullptr;
+    float4* hist_[2] = {nullptr, nullptr};
+    float4* pos_[2] = {nullptr, nullptr};   // the steady ray's hits, this frame's is p_.posOut
+    int posCur_ = 0;
+    int histCur_ = 0;
+    bool histValid_ = false;
+    LCamera prevCam_{};
+    void runTemporal();
+    bool useTemporal_ = false;
     float* dnIntensity_ = nullptr;
     float* dnAvg_ = nullptr;
     void createDenoiser();

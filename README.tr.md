@@ -190,8 +190,11 @@ Nasıl yapıldığı ve yolda neyin ölçüldüğü (çalışma günlüğünde h
   bağlar hep birden kırılıp kırıntı oluyordu); merminin yolu eski Tanecik sahnesinin jele kalibre balistiğinden.
 - **Görüntü:** OptiX ile yol izleme; kalınlıklı cam ve kırılan sıvılar tam Fresnel ile, bardaktaki su camla tek arayüzden
   geçer (yüzeyleri arasındaki kıl kadar hava yoksa ayna olurdu); yüzeyler her karede taneciklerden kurulur (anizotropik
-  çekirdekler); kum, tane ölçeğinde dokulu bir yüzey ve ince taneler; karede 4 örnek ve OptiX yapay zekâ gürültü
-  gidericisi.
+  çekirdekler); kum, tane ölçeğinde dokulu bir yüzey ve ince taneler; karede 4 örnek, zaman içinde harmanlanır (kameradan geri
+  izlenerek; bir piksel geçmişini ancak içinden geçen sabit ışın hâlâ aynı noktaya değip aynı yolu gidiyorsa tutar,
+  akan su iz bırakmaz), cam ve sıvıda görünen ışık kutuları yansıma yönünde tam sayılır, sonra OptiX yapay zekâ
+  gürültü gidericisi. Her kareyi ayrı temizlemek cam kenarlarını dalgalandırıyordu; harmanlanınca suyun dalgalanması
+  on kat azaldı.
 
 Açık: bal ipinin yüzeyi boğumlu (bir-üç tanecik kalınlığında); karpuz parçaları keskin kırık değil yumuşak yüzeyler olarak çiziliyor; balon asılı değil masada
 (asılıyken hafif lastik suyun ağırlığını düğüme zamanında taşıyamadı).
