@@ -39,9 +39,12 @@ struct KoyOceanSettings {
     float amplitude = 1.0f;      // art scale on heights (1 = the spectrum)
     float loopSeconds = 24.0f;   // frequencies quantised to multiples of 2 pi / loop: the waves repeat seamlessly
     float minWave = 0.06f;       // metres: shorter waves are left to the unresolved slope variance
+    float maxWave = 0.0f;        // metres: longer waves are left out (0: none). The ripple layer: what the main surface cuts
     float swellAmplitude = 0.05f;// metres: long waves at the patch's harmonics (8 and 5 m)
     float unresolvedVar = -1.0f; // slope variance per axis of what the grid does not hold; < 0: Cox & Munk minus resolved
+    float targetVar = -1.0f;     // > 0: the spectrum scaled so the grid holds this slope variance per axis (the ripples)
     unsigned int seed = 7;
+    const char* name = "deniz";  // for the log
 };
 
 struct KoyCausticSettings {
@@ -64,6 +67,7 @@ public:
     int causticLevels() const { return int(causTex_.size()); }
     float heightMax() const { return hmax_; }
     float slopeVarianceUnresolved() const { return varFloor_; }
+    float slopeVarianceResolved() const { return varResolved_; }
     float msSurface = 0.0f, msCaustic = 0.0f;
     // host copies for tests and maps
     void readHeights(std::vector<float4>& out, cudaStream_t s);           // level 0: h, sx, sz, (sx^2 + sz^2) / 2
@@ -87,7 +91,7 @@ private:
     std::vector<cudaArray_t> causArr_;
     std::vector<unsigned long long> causTex_;
     std::vector<float*> causLevelBuf_;
-    float hmax_ = 0.3f, varFloor_ = 0.0f;
+    float hmax_ = 0.3f, varFloor_ = 0.0f, varResolved_ = 0.0f;
     float3 sunAir_{}, sunWater_{};
     float waterN_ = 1.333f, sunRadiusAir_ = 0.00465f;
     cudaEvent_t e0_ = nullptr, e1_ = nullptr, e2_ = nullptr;

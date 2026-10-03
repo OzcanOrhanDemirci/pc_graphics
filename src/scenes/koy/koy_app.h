@@ -48,6 +48,9 @@ struct KoyApp {
     KoyRenderer renderer;
     KoyOptics optics;
     KoyOcean ocean;
+    KoyOcean ripples;                      // the short waves the main surface leaves out, for the view alone (panel "Dalgacık")
+    bool ripplesOn = false;
+    float floorVarOff = 0.0f, floorVarOn = 0.0f;   // the unresolved slope variance without and with the ripples
     KoyWorld world;
     Diver diver;
     KoyQuality quality;
@@ -60,7 +63,8 @@ struct KoyApp {
     bool compile();
     void setup();                          // optics, ocean, world, bakes (after compile)
     void applyQuality();
-    void setTextureMode(int mode);         // 0 standard, 1 high (panel "Doku")
+    void setTextureMode(int mode);         // 0 standard, 1 high, 2 ultra (panel "Doku")
+    void setRipples(bool on);              // stays off if there are none
     void setCamera();                      // the diver's eye, the mask, the field of view
     void stepDiver(float fwd, float right, float up, bool strong, float lookDX, float lookDY, float dt);
     void stepWorld(float t);               // waves, caustics, seagrass at world time t

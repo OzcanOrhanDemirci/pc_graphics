@@ -615,6 +615,8 @@ int App::run(const Options& opt) {
                 control("doku", 0); wait(0.6); log("koy doku standart"); shot("koy_doku_standart");
                 control("doku", 1); wait(0.6); log("koy doku yuksek"); shot("koy_doku_yuksek");
                 control("doku", 2); wait(0.6); log("koy doku ultra"); shot("koy_doku_ultra");
+                control("dalgacik", 0); wait(0.6); log("koy dalgacik kapali"); shot("koy_dalgacik_kapali");
+                control("dalgacik", 1); wait(0.6); log("koy dalgacik acik"); shot("koy_dalgacik_acik");
                 key(GLFW_KEY_E); wait(0.6); shot("koy_kenar_pikselleri"); key(GLFW_KEY_E);
                 key(GLFW_KEY_P); wait(2.0); log("koy durdu"); shot("koy_durdu_birikti"); key(GLFW_KEY_P); wait(0.5);
             }

@@ -3,6 +3,7 @@
 //   snell     Snell's window: looking straight up through a flat surface, the edge of the bright disc at 48.6 degrees
 //   optik     the optics' self-checks: phase functions integrate to 1, the light field's Kd per wavelength
 //   kostik    the caustic volume's mean is 1 at every depth (energy), its sharpness against the sun's disc
+//   dalga     each surface's slope variance as booked by its spectrum against the field the FFT really makes
 #include "scenes/koy/koy_app.h"
 #include "scenes/koy/koy_data.h"
 
@@ -225,6 +226,36 @@ int testTables(KoyApp& app) {
     return 0;
 }
 
+// The slope variance a surface's spectrum books (it sets the ripples' strength, and what of the statistical roughness
+// they take over) against the field the FFT makes: the mean of (sx^2 + sz^2) / 2 over level 0, at two moments
+int testWaves(KoyApp& app) {
+    const bool wasOn = app.ripplesOn;
+    app.setRipples(true);
+    for (int s = 0; s < 2; ++s) {
+        KoyOcean& o = s == 0 ? app.ocean : app.ripples;
+        if (!o.surfaceTexture()) continue;
+        for (float t : {0.0f, 7.3f}) {
+            app.stepWorld(t);
+            std::vector<float4> f;
+            o.readHeights(f, app.renderer.stream());
+            double ms = 0.0, h2 = 0.0;
+            for (const float4& v : f) {
+                ms += v.w;
+                h2 += double(v.x) * v.x;
+            }
+            ms /= double(f.size());
+            h2 /= double(f.size());
+            const double booked = o.slopeVarianceResolved(), ratio = ms / std::max(booked, 1e-12);
+            char name[32];
+            std::snprintf(name, sizeof(name), "%s t%.0f", o.oset.name, t);
+            std::printf("  %s: egim varyansi defterde %.6f, alanda %.6f; yukseklik std %.4f m\n", name, booked, ms, std::sqrt(h2));
+            report(name, std::fabs(ratio - 1.0) < 0.1, "alan / defter %.3f (1 +- 0.1)", ratio);
+        }
+    }
+    app.setRipples(wasOn);
+    return 0;
+}
+
 int runKoyTests(KoyApp& app, const std::string& which) {
     fails = 0;
     const bool all = which.empty();
@@ -232,6 +263,7 @@ int runKoyTests(KoyApp& app, const std::string& which) {
     if (which == "tablo") testTables(app);
     if (all || which == "kostik") testCaustic(app);
     if (all || which == "snell") testSnell(app);
+    if (all || which == "dalga") testWaves(app);
     std::printf("koy testleri: %d kalan\n", fails);
     return fails ? 1 : 0;
 }

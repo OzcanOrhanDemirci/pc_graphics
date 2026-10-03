@@ -3,7 +3,63 @@
 > Tek kaynak durum panosu. Plan: `docs/koy/PLAN.md` (kararlar, fazlar, duraklar). Veri ve denetimleri: `docs/koy/VERI.md`.
 > Gerçek fotoğraflardan başvuru panosu: `docs/koy/BASVURU.md`. CC0 taramalar: `assets/koy/fetch.py`, `assets/koy/LICENSES.md`.
 
-## Şu an · 2026-10-03 gece · ✅ Ara durak 2 geçti, 16K kalıyor
+## Şu an · 2026-10-04 gece · 🛑 Ara durak 3: yüzeyin dalgacıkları (Özcan'ın bakışını bekliyor)
+
+Özcan: *"kostik ve su yüzeyindeki o küçük dalgacıkları yapmak kolay mı? Zorsa amforaya dahil edelim. Kolaysa yapalım,
+bakayım."* Altyapının çoğu vardı (FFT sınıfı, LEAN eğim piramidi), yapıldı.
+
+**Dalgacık katmanı:** ana yüzeyin bilerek kestiği kısa dalgalar (35 cm altı, 2 cm üstü) ikinci bir FFT'de, kendi 4 m'lik
+karosunda (1024², 3,9 mm'de bir nokta), aynı JONSWAP biçimiyle. Yalnız bakışa girer: Snell penceresi, tam iç yansıma
+aynası, güneş pırıltısı; yüzeyle kesişmeye ve kostiğe girmez (kostik temiz 35 cm yüzeyde kalır). Gücü, eskiden
+istatistiksel olan eğim varyansının %80'i (eksen başına 0,0005); o kadarı istatistikten düşülür, 2 cm altı istatistikte
+kalır. Uzaktan ayak izi onları aynı pürüzlülüğe ortalar (LEAN): toplam aynı, yalnız yakında artık çözülüyor. Panelde
+**Dalgacık: Kapalı / Açık** (varsayılan Açık). Ölçü: `--dalgacik` (aynı an, tek pozlama), `tools/doku_kiyas.py --kipler
+kapali,acik`.
+
+🪤 **İlk sürümde dalgacıklar iki kat güçlüydü** (bağımsız gözden geçirme yakaladı, ekran kartında ölçülerek doğrulandı):
+FFT alanı Hermitsel kurulur (H(k) = h0(k)e^{iωt} + conj(h0(−k))e^{−iωt}), her h0 alanda iki kez görünür, ama `KoyOcean::init`
+varyansı bir kez sayıyordu. Dalgacıkların gücü bu deftere göre ayarlandığı için gerçek eğim varyansları 0,00097 çıktı
+(hedef 0,00048); uzaktan bakınca yüzey olması gerekenden ~1,8 kat pürüzlüydü. Düzeltildi; yeni test `--test dalga` alanı
+deftere karşı ölçer (dalgacık 1,005, ana yüzey 0,984: geçti). Ana yüzeyin kendisi değişmedi, yalnız günlükteki sayıları
+doğrulandı (çözülen eğim varyansı 0,0056 değil 0,0102; Hs 0,191 değil 0,202 m; kesişme bandı 0,235 → 0,248 m). Özcan'ın
+00.12'de açtığı pencere eski (iki kat güçlü) sürümdü; uygulamayı yeniden açınca düzeltilmiş sürüm gelir.
+
+Düzeltilmiş dalgacıklarla (karşılaştırma ve kararlılık `tex.high=0` ile, Özcan'ın penceresi açıkken bellek için; kapalı
+ve açık aynı ayarla):
+
+| Görünüm | FLIP kapalı→açık | Ekrandaki en ince ayrıntı kapalı → açık |
+|---|---|---|
+| 1,5 m derinlik, 45° yukarı | **0,071** | 0,88 → 1,11 |
+| 4,6 m, 45° yukarı (pencere kenarı) | **0,049** | 0,84 → 1,25 |
+| 4,6 m, 20° yukarı (ayna) | 0,031 | 0,55 → 0,58 |
+| Yüzme görünümü (aşağı) | 0,001 | aynı |
+
+Kırpıntılarda fark sayının söylediğinden büyük: kapalıyken pencerenin kenarı çizilmiş gibi pürüzsüz ve kenar bantlı,
+açıkken gerçek su altı çekimlerindeki gibi kırılıp parçalanıyor; ayna ince ince bükülüyor. (İki kat güçlü sürümle FLIP
+0,080 / 0,052 idi: görünen etki varyansla orantılı değil, kritik açı yakınında küçük eğimler bile kenarı kırıyor.)
+
+**Kararlılık** (`--yol yukari`, 60 kare): piksel kıpırtısı ort / %99 kapalı 0,00057 / 0,0056 → açık 0,00084 / 0,0067; blok
+0,00013 → 0,00018; bağıl 0,079 → 0,110; FLIP 0,0049 → 0,0063. Kıpırtı ~1,5 kat (iki kat güçlü sürümde 1,9); Fener'in ~6
+kat altında, K0 hedefinin içinde.
+
+**Bedeli** (iki kat güçlü sürümle ölçüldü, ekran kartı boşken; düzeltilmişte yeniden ölçülmedi, en çok bu kadar olmalı):
+yukarı bakarken kare 20,6 → 23,9 ms (41 fps'in 24,4 ms sınırına çok yakın): temel geçiş +2,7 ms (aynadan dağılan ışınlar
+daha az uyumlu), kenar pikselleri 17 bin → 86 bin. Aşağı bakarken fark yok (otomatik testte 41 fps).
+
+**Kostik, yakından:** 30 cm'de dört ayarla kıyaslandı (aynı pozlama): 1K ızgara + 1 ışın/hücre (şimdiki), 4 kat ışın, 2K
+ızgara. Izgaranın düz ara değerlemesi eksene paralel çok soluk çizgiler bırakıyor (parlaklıkta ~%1,3, FLIP 0,043); ışın
+sayısı ~%3,4'lük yumuşak lekeler (FLIP 0,086). İkisi de kırpıntılarda gözle seçilmiyor. Kaba kuvvet çözüm (2K) kostiği
+4,7 → 23,5 ms yapıyor: olmaz. Özcan canlıda düz çizgi ya da leke görürse ucuz yol: kostikte yumuşak (kübik) ara değerleme.
+
+### Ara durak 3'te neye bakılacak
+Space ile yüzeye doğru çık (tavan 1 m), Tab ile fareyle 30-60° yukarı bak: Snell penceresinin kenarı ve ötesindeki ayna.
+Panelde **Dalgacık: Kapalı ↔ Açık**. Sonra 4-5 m'de aynı bakış. Kıpırtıya ve kare hızına dikkat (yukarı bakarken 41'in
+altına düşebilir). Bir de kuma 30 cm'den bakıp kostik ağlarında düz çizgi ya da leke var mı. Karar: dalgacık kalıyor mu?
+
+**Ne doğrulanmadı:** düzeltilmiş dalgacıklara canlı bakılmadı. Hareket hâlinde (yüzerken) kıpırtı ölçülmedi, yalnız durarak
+yukarı bakış. Düzeltilmiş sürümün kare süresi ölçülmedi. Desenin 4 m'de bir tekrar edip etmediği gözle aranmadı.
+
+## Ara durak 2 kararı · 2026-10-03 gece · ✅ geçti, 16K kalıyor
 
 Özcan canlı baktı: *"Kesinlikle farketti. Geceyle gündüz değil, şafakla gün batımı gibi farkedilme olarak. Net fark var ama
 hani oha kadar değil. Ama 16K olsun o konuda şüphe yok."* Ultra varsayılan kalıyor. Ölçüm de aynını söylüyordu: 30 cm'de

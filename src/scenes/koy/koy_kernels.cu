@@ -306,6 +306,7 @@ bool KoyOcean::init(const KoyOceanSettings& o, const KoyCausticSettings& c, floa
     const float dk = 2.0f * 3.14159265f / o.patch;
     const float w0 = 2.0f * 3.14159265f / o.loopSeconds;
     const float kCut = 2.0f * 3.14159265f / o.minWave;
+    const float kLow = o.maxWave > 0.0f ? 2.0f * 3.14159265f / o.maxWave : 0.0f;
     const float wdir = o.windDirDeg * 3.14159265f / 180.0f;
     // directional spreading cos^(2s)((th - wdir)/2), normalised over the circle
     double dnorm = 0.0;
@@ -317,7 +318,7 @@ bool KoyOcean::init(const KoyOceanSettings& o, const KoyCausticSettings& c, floa
             const float kx = dk * float(m < N / 2 ? m : m - N), kz = dk * float(n < N / 2 ? n : n - N);
             const float k = std::sqrt(kx * kx + kz * kz);
             const float a = nd(rng), b = nd(rng);
-            if (k < 1e-6f || k > kCut) { h0[i] = make_float2(0, 0); om[i] = 0.0f; continue; }
+            if (k < 1e-6f || k > kCut || k < kLow) { h0[i] = make_float2(0, 0); om[i] = 0.0f; continue; }
             const float w = std::sqrt(9.81f * k);
             const float th = std::atan2(kz, kx);
             const float D = float(std::pow(std::fabs(std::cos(0.5 * (th - wdir))), 2.0 * o.spread) / dnorm);
@@ -326,9 +327,19 @@ bool KoyOcean::init(const KoyOceanSettings& o, const KoyCausticSettings& c, floa
             const float amp = std::sqrt(0.5f * Phi * dk * dk) * o.amplitude;
             h0[i] = make_float2(a * amp, b * amp);
             om[i] = w0 * std::round(w / w0);
-            heightVar += 2.0 * double(amp) * amp;
-            resolvedVar += 2.0 * double(amp) * amp * 0.5 * k * k;   // per axis
+            // the field is Hermitian, H(k) = h0(k) e^{iwt} + conj(h0(-k)) e^{-iwt}: every h0 shows up twice (at k and at
+            // -k), so the field holds twice the sum of |h0|^2 (2 amp^2 each). The ripples' strength is set from these
+            // sums; booked once, they came out at twice their slope variance (koy --test dalga measures the field)
+            heightVar += 4.0 * double(amp) * amp;
+            resolvedVar += 4.0 * double(amp) * amp * 0.5 * k * k;   // per axis
         }
+    // the ripple layer: the spectrum's shape kept, its strength set by the slope variance it is to carry
+    if (o.targetVar > 0.0f && resolvedVar > 0.0) {
+        const float s = float(std::sqrt(double(o.targetVar) / resolvedVar));
+        for (auto& v : h0) v = make_float2(v.x * s, v.y * s);
+        heightVar *= double(s) * s;
+        resolvedVar = o.targetVar;
+    }
     // the swell: long waves at the patch's own harmonics (so the patch stays periodic), deterministic
     {
         const int harm[3][2] = {{0, 2}, {1, 3}, {-1, 3}};   // (m, n): wavelengths 8, 5.1, 5.1 m along ~z
@@ -350,8 +361,9 @@ bool KoyOcean::init(const KoyOceanSettings& o, const KoyCausticSettings& c, floa
     // the slopes the grid does not hold (Cox & Munk 1954: total mean square slope 0.003 + 5.12e-3 U, both axes)
     const float coxMunk = 0.003f + 0.00512f * o.wind;
     varFloor_ = o.unresolvedVar >= 0.0f ? o.unresolvedVar : std::max(0.5f * coxMunk - float(resolvedVar), 0.0004f);
-    std::printf("deniz: %dx%d / %.0f m, Hs %.3f m, |h| < %.3f m, egim varyansi cozulen %.4f + cozulmeyen %.4f (eksen basina)\n", N, N, o.patch,
-                4.0 * std::sqrt(heightVar), hmax_, resolvedVar, varFloor_);
+    varResolved_ = float(resolvedVar);
+    std::printf("%s: %dx%d / %.0f m, Hs %.3f m, |h| < %.3f m, egim varyansi cozulen %.4f + cozulmeyen %.4f (eksen basina)\n", o.name, N, N,
+                o.patch, 4.0 * std::sqrt(heightVar), hmax_, resolvedVar, varFloor_);
     KCHECK(cudaMalloc(&h0_, h0.size() * sizeof(float2)));
     KCHECK(cudaMemcpy(h0_, h0.data(), h0.size() * sizeof(float2), cudaMemcpyHostToDevice));
     KCHECK(cudaMalloc(&omega_, om.size() * sizeof(float)));

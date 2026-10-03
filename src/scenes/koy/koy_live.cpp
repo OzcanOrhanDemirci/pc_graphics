@@ -118,6 +118,14 @@ public:
                                : got == 1 ? L("Doku: yüksek (her şey 8K: kaya, kum, ayrıntı katmanı)", "Textures: high (everything 8K: rock, sand, detail layer)")
                                           : L("Doku: standart (2K)", "Textures: standard (2K)"));
             }
+            if (e.id == "dalgacik" && e.item >= 0) {
+                k_.setRipples(e.item == 1);
+                if (e.item == 1 && !k_.ripplesOn)
+                    host.toast(L("Dalgacık katmanı yok (ayarla kapalı ya da kurulamadı)", "No ripple layer (turned off or it could not be built)"));
+                else
+                    host.toast(k_.ripplesOn ? L("Dalgacıklar açık: yüzeyin 2-35 cm'lik dalgaları (yukarı bak)", "Ripples on: the surface's 2-35 cm waves (look up)")
+                                            : L("Dalgacıklar kapalı: yalnız istatistiksel pürüzlülük", "Ripples off: statistical roughness only"));
+            }
             k_.applyQuality();
             resetAccum();
         }
@@ -220,6 +228,17 @@ public:
             c.detail = L("Standart 2K · Yüksek: her şey 8K · Ultra: kum ve ayrıntı katmanı 16K (kayanın kendi taraması 8K'da biter)",
                          "Standard 2K · High: everything 8K · Ultra: sand and detail layer 16K (the rock's own scan ends at 8K)");
             c.section = true;
+            s.controls.push_back(c);
+        }
+        {
+            app::Control c;
+            c.kind = app::Control::Kind::Choice;
+            c.id = "dalgacik";
+            c.title = L("Dalgacık", "Ripples");
+            c.items = {L("Kapalı", "Off"), L("Açık", "On")};
+            c.active = k_.ripplesOn ? 1 : 0;
+            c.detail = L("Su yüzeyinin 2-35 cm'lik dalgaları; yalnız bakışta (Snell penceresi, ayna, pırıltı), kostik değişmez",
+                         "The surface's 2-35 cm waves; in the view alone (Snell's window, the mirror, the glints), the caustics unchanged");
             s.controls.push_back(c);
         }
         {

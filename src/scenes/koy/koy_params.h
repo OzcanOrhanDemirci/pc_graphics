@@ -158,6 +158,9 @@ struct KoyParams {
     float oceanTexels;
     float oceanHeightMax;               // bound of |height|
     float slopeVarFloor;                // unresolved capillary roughness (slope variance)
+    KTex oceanFine;                     // the ripples: like ocean, the short waves on a small patch of their own (0: off)
+    float oceanFinePatch;               // metres
+    float oceanFineTexels;
     KTex caustic[4];                    // 3D: x, z (periodic over causticPatch), depth; focusing factor (mean 1), pyramid
     int causticLevels;
     float causticPatch;

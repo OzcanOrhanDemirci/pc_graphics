@@ -57,13 +57,17 @@ def main():
     ap.add_argument('--uzaklik', type=float, default=0.5, help='eye to screen, metres')
     ap.add_argument('--ekran-m', type=float, default=0.7195, help='the screen width, metres (32.5 inch 16:9)')
     ap.add_argument('--kirp', type=int, default=1024, help='the centre crop for "ince", pixels')
+    ap.add_argument('--kipler', default=','.join(MODES), help='the picture names, in order (pc_graphics --dalgacik: kapali,acik)')
     a = ap.parse_args()
     import flip_evaluator as flip
 
-    views = sorted({int(m.group(1)) for p in glob.glob(a.onek + '_*_*.png') if (m := re.search(r'_(\d\d)_(standart|yuksek|ultra)\.png$', p))})
+    modes = tuple(a.kipler.split(','))
+    pairs = [(modes[i], modes[i + 1]) for i in range(len(modes) - 1)] + ([(modes[0], modes[-1])] if len(modes) > 2 else [])
+    views = sorted({int(m.group(1)) for p in glob.glob(a.onek + '_*_*.png')
+                    if (m := re.search(r'_(\d\d)_(' + '|'.join(map(re.escape, modes)) + r')\.png$', p))})
     out = {'uzaklik_m': a.uzaklik, 'ekran_m': a.ekran_m, 'gorunumler': {}}
     for v in views:
-        imgs = {m: load(f'{a.onek}_{v:02d}_{m}.png') for m in MODES if os.path.exists(f'{a.onek}_{v:02d}_{m}.png')}
+        imgs = {m: load(f'{a.onek}_{v:02d}_{m}.png') for m in modes if os.path.exists(f'{a.onek}_{v:02d}_{m}.png')}
         if not imgs:
             continue
         width = next(iter(imgs.values())).shape[1]
@@ -72,7 +76,7 @@ def main():
         for m, im in imgs.items():
             fine, next_ = octave_rms(im, a.kirp)
             res['ince'][m] = {'en_ince_oktav': round(fine, 3), 'bir_alt_oktav': round(next_, 3)}
-        for ra, rb in (('yuksek', 'ultra'), ('standart', 'yuksek'), ('standart', 'ultra')):
+        for ra, rb in pairs:
             if ra not in imgs or rb not in imgs:
                 continue
             # the viewing condition as pixels per degree (flip_evaluator's "vc" is [distance m, width PIXELS, width m]: an
@@ -92,7 +96,7 @@ def main():
             }
         out['gorunumler'][f'{v:02d}'] = res
         # the centre crops at 2x, standart | yuksek | ultra
-        tiles = [np.kron(centre((imgs[m] * 255.0).astype(np.uint8), 512), np.ones((2, 2, 1), dtype=np.uint8)) for m in MODES if m in imgs]
+        tiles = [np.kron(centre((imgs[m] * 255.0).astype(np.uint8), 512), np.ones((2, 2, 1), dtype=np.uint8)) for m in modes if m in imgs]
         Image.fromarray(np.concatenate(tiles, axis=1)).save(f'{a.onek}_{v:02d}_kirp.png')
         line = '  '.join(f"{k}: flip {c['flip']:.4f} (orta {c['flip_orta']:.4f}), fark {c['fark_ort']:.2f}, >3 %{100 * c['fark_3ten_buyuk']:.1f}"
                          for k, c in res['ciftler'].items())

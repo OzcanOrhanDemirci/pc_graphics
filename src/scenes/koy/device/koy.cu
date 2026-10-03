@@ -216,7 +216,7 @@ static __forceinline__ __device__ bool visible(float3 o, float3 d, float tmax) {
 struct Wave {
     float h, sx, sz, var;       // height, slopes d/dx d/dz, slope variance inside the footprint
 };
-static __forceinline__ __device__ Wave waveAt(float x, float z, float footprint) {
+static __forceinline__ __device__ Wave waveAt(float x, float z, float footprint, bool ripples) {
     const float inv = 1.0f / params.oceanPatch;
     const float lod = log2f(fmaxf(footprint * inv * params.oceanTexels, 1.0f));
     const float4 w = tex2DLod<float4>((cudaTextureObject_t)params.ocean, x * inv, z * inv, lod);
@@ -225,6 +225,17 @@ static __forceinline__ __device__ Wave waveAt(float x, float z, float footprint)
     r.sx = w.y;
     r.sz = w.z;
     r.var = fmaxf(w.w - 0.5f * (w.y * w.y + w.z * w.z), 0.0f) + params.slopeVarFloor;   // w: mean of (sx^2 + sz^2)/2 ... per axis
+    // the ripples: the waves shorter than the main surface holds, on their own small patch (an odd offset against its
+    // tiles). Their slopes add to the surface's; what of them the footprint averages (LEAN) adds to the variance. Their
+    // millimetre heights stay out of the hit, and the caustics never see them
+    if (ripples && params.oceanFine) {
+        const float invF = 1.0f / params.oceanFinePatch;
+        const float lodF = log2f(fmaxf(footprint * invF * params.oceanFineTexels, 1.0f));
+        const float4 f = tex2DLod<float4>((cudaTextureObject_t)params.oceanFine, x * invF + 0.3719f, z * invF + 0.6127f, lodF);
+        r.sx += f.y;
+        r.sz += f.z;
+        r.var += fmaxf(f.w - 0.5f * (f.y * f.y + f.z * f.z), 0.0f);
+    }
     return r;
 }
 // where an upward ray meets the surface y = h(x, z): regula falsi inside the band |h| <= hmax (robust at grazing angles)
@@ -233,7 +244,7 @@ static __forceinline__ __device__ float surfaceHit(float3 o, float3 d, float con
     float ta = fmaxf((-hm - o.y) / d.y, 0.0f), tb = (hm - o.y) / d.y;
     auto g = [&](float t) {
         const float3 p = o + d * t;
-        return p.y - waveAt(p.x, p.z, coneAngle * t / fmaxf(d.y, 0.1f)).h;
+        return p.y - waveAt(p.x, p.z, coneAngle * t / fmaxf(d.y, 0.1f), false).h;
     };
     float ga = g(ta), gb = g(tb);
     if (ga >= 0.0f) return ta;
@@ -438,7 +449,7 @@ static __forceinline__ __device__ float3 shadeReflected(float3 q, float3 r, floa
 // slopes soften the window's edge and spread the glints: the sharper the footprint, the sharper both.
 static __forceinline__ __device__ float3 shadeFromBelow(float3 q, float3 d, float ts, float coneAngle, float3& nOut) {
     const float foot = coneAngle * ts / fmaxf(d.y, 0.1f);
-    const Wave w = waveAt(q.x, q.z, foot);
+    const Wave w = waveAt(q.x, q.z, foot, true);
     const float3 m = normalize(make_float3(-w.sx, 1.0f, -w.sz));
     nOut = m;
     const float n1 = params.waterN;

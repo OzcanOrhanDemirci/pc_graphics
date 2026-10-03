@@ -10,6 +10,7 @@
 //            each view in the three texture modes with one exposure (only the textures differ); then
 //            python tools/doku_kiyas.py captures/koy/doku/x
 //   pc_graphics.exe --scene koy --yokla --cam "x y z" [--cam ..]   height above the sand, the nearest surface
+//   pc_graphics.exe --scene koy --dalgacik --out captures/koy/dalgacik/x --cam .. --look ..   ripples off and on, one exposure
 //   pc_graphics.exe --scene koy --test [ad]               the physics tests (Snell's window, colour at depth, visibility, ...)
 //   pc_graphics.exe --scene koy --map captures/koy/harita.png   the trial area from above (the same floor function)
 //   options: --set key=value, --width W, --height H, --spp 1|4|8|16, --edge N, --filter 0..3
@@ -85,6 +86,35 @@ void KoyApp::setup() {
     p.oceanTexels = float(os.N);
     p.oceanHeightMax = ocean.heightMax();
     p.slopeVarFloor = ocean.slopeVarianceUnresolved() * cfg.f("ocean.unresolved_scale", 1.0f);
+    // The ripples (Ara durak 3): the waves shorter than ocean.min_wave, which the main surface leaves out so that the
+    // caustics stay clean, on a small patch of their own and seen only by the view (Snell's window, the mirror, the
+    // glints). They take over most of the slope variance that was statistical; what is shorter still (below
+    // ripple.min_wave) stays statistical. From afar the footprint averages them (LEAN) back into the same roughness.
+    floorVarOff = p.slopeVarFloor;
+    floorVarOn = p.slopeVarFloor;
+    if (cfg.i("ripple.use", 1)) {
+        KoyOceanSettings rs = os;
+        rs.name = "dalgacik";
+        rs.N = cfg.i("ripple.n", 1024);
+        rs.patch = cfg.f("ripple.patch", 4.0f);
+        rs.minWave = cfg.f("ripple.min_wave", 0.02f);
+        rs.maxWave = os.minWave;
+        rs.swellAmplitude = 0.0f;
+        rs.unresolvedVar = 0.0f;
+        rs.targetVar = p.slopeVarFloor * cfg.f("ripple.share", 0.8f);
+        rs.seed = 23;
+        KoyCausticSettings none;   // the ripples never make caustics: the smallest volume, never updated
+        none.N = 8;
+        none.rays = 8;
+        none.slices = 2;
+        none.levels = 1;
+        if (ripples.init(rs, none, optics.sunAir, optics.waterN, optics.sunRadiusAir)) {
+            floorVarOn = std::max(p.slopeVarFloor - ripples.slopeVarianceResolved(), 0.0f);
+            p.oceanFinePatch = rs.patch;
+            p.oceanFineTexels = float(rs.N);
+        }
+    }
+    setRipples(cfg.i("ripple.on", 1) != 0);
     for (int l = 0; l < 4; ++l) p.caustic[l] = ocean.causticTexture(std::min(l, ocean.causticLevels() - 1));
     p.causticLevels = ocean.causticLevels();
     p.causticPatch = os.patch;
@@ -141,6 +171,16 @@ void KoyApp::setup() {
 void KoyApp::setTextureMode(int mode) {
     world.applyTextureMode(cfg, mode);
     renderer.updateMaterials(world.materials);
+}
+
+void KoyApp::setRipples(bool on) {
+    KoyParams& p = renderer.params();
+    const bool was = ripplesOn;
+    ripplesOn = on && ripples.surfaceTexture() != 0;
+    // turned on: their field now, at this moment (paused, no stepWorld comes to fill it: the old or an unset one)
+    if (ripplesOn && !was) ripples.update(worldTime, renderer.stream(), false);
+    p.oceanFine = ripplesOn ? ripples.surfaceTexture() : 0;
+    p.slopeVarFloor = ripplesOn ? floorVarOn : floorVarOff;   // the same roughness in all, only part of it now resolved
 }
 
 void KoyApp::applyQuality() {
@@ -214,6 +254,7 @@ void KoyApp::stepWorld(float t) {
     p.time = t;
     const double t0 = know();
     ocean.update(t, renderer.stream(), caustics);
+    if (ripplesOn) ripples.update(t, renderer.stream(), false);
     if ((grassMoves && cfg.i("grass.move", 1)) || t == 0.0f) {
         world.grass.update(t, renderer.ribbonPoints(), renderer.ribbonNormals(), renderer.stream());
         renderer.updateRibbons(nullptr, nullptr);
@@ -243,6 +284,7 @@ void KoyApp::save(const std::string& prefix) {
 
 void KoyApp::release() {
     ocean.release();
+    ripples.release();
     world.release();
     optics.release();
 }
@@ -285,6 +327,7 @@ int runKoyCli(int argc, char** argv) {
         else if (a == "--test") { mode = "test"; testName = opt(); }
         else if (a == "--map") { mode = "map"; mapOut = next(); }
         else if (a == "--doku") mode = "tex";
+        else if (a == "--dalgacik") mode = "ripple";
         else if (a == "--yokla") mode = "probe";
         else if (a == "--yol") path = next();
         else if (a == "--kare") frames = std::stoi(next());
@@ -383,6 +426,33 @@ int runKoyCli(int argc, char** argv) {
             std::printf("yokla (%.2f %.2f %.2f): kumun %.2f m ustunde, en yakin yuzey %.2f m (yon %+.0f %+.0f %+.0f)\n", cams[c].x, cams[c].y,
                         cams[c].z, cams[c].y - koyFloor(app.cfg, cams[c].x, cams[c].z), d, dir.x, dir.y, dir.z);
         }
+    } else if (mode == "ripple") {
+        // the same moment with the ripples off and on, one exposure (metered off): python tools/doku_kiyas.py <out>
+        // --kipler kapali,acik
+        const std::string o = out.empty() ? app.root + "/captures/koy/dalgacik/kiyas" : out;
+        std::filesystem::create_directories(std::filesystem::path(o).parent_path());
+        for (size_t c = 0; c < std::max<size_t>(1, cams.size()); ++c) {
+            if (c < cams.size()) aim(c);
+            app.setRipples(false);
+            app.stepWorld(t0);
+            app.frame();
+            app.adaptExposure(0.0f, true);
+            const float exposure = app.renderer.params().exposure;
+            for (int on = 0; on < 2; ++on) {
+                app.setRipples(on != 0);
+                if (on && !app.ripplesOn) {
+                    std::printf("dalgacik yok: atlandi\n");
+                    continue;
+                }
+                app.stepWorld(t0);
+                app.renderer.params().exposure = exposure;
+                app.frame();
+                char nm[48];
+                std::snprintf(nm, sizeof(nm), "_%02d_%s", int(c), on ? "acik" : "kapali");
+                app.save(o + nm);
+            }
+            std::printf("dalgacik kiyas %d: derinlik %.2f m -> %s_%02d_*.png\n", int(c), -app.diver.pos.y, o.c_str(), int(c));
+        }
     } else if (mode == "tex") {
         // the same moment in the three texture modes (the panel's "Doku"), one exposure for all three (metered on
         // "Yüksek"): the pictures differ by the textures alone. python tools/doku_kiyas.py <out> measures them
@@ -417,7 +487,11 @@ int runKoyCli(int argc, char** argv) {
         app.stepWorld(t0);
         app.frame();
         app.adaptExposure(0.0f, true);
+        // display.exposure_fixed > 0: that exposure, not the metered one (two runs that differ in one setting compare
+        // pixel for pixel)
+        if (app.cfg.f("display.exposure_fixed", 0.0f) > 0.0f) app.renderer.params().exposure = app.cfg.f("display.exposure_fixed", 0.0f);
         app.frame();
+        std::printf("pozlama carpani %.6f\n", app.renderer.params().exposure);
         printTimes(app);
         if (ref) app.renderer.renderReference(refN);
         const std::string o = out.empty() ? app.root + "/captures/koy/kare_" + stamp() : out;
