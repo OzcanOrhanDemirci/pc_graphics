@@ -42,6 +42,13 @@ FILES = {
                                        '440e81881c0681f9dc7efbc5bcf97c9585801bcbdc95b7bd74d6d18657e46f20'),
     'Ground054_4K-JPG.zip': ('https://ambientcg.com/get?file=Ground054_4K-JPG.zip',
                              '13b6964cc9afb04e577f18204fd4656c2786e0197cadf34552e1ef9b177a67e6'),
+    # everything at 8K (2026-10-03 gece): Poly Haven md5 checked; the ambientCG zip's size equals its API's (no md5 there)
+    'rock_boulder_dry_diff_8k.jpg': ('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/8k/rock_boulder_dry/rock_boulder_dry_diff_8k.jpg',
+                                     '8626225ff30359db35c8b858cff3b48b986ca168b6cec3642437e524200eedae'),
+    'rock_boulder_dry_nor_gl_8k.jpg': ('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/8k/rock_boulder_dry/rock_boulder_dry_nor_gl_8k.jpg',
+                                       '9c83e90fa5215e828fa9d9368263b4365d35bba3c86a948c9af63f7f002bd473'),
+    'Ground054_8K-JPG.zip': ('https://ambientcg.com/get?file=Ground054_8K-JPG.zip',
+                             'e4a7478a126025cf7a1e92abbead028debaa47c88563a5727fb55e704f1f2ce8'),
 }
 # members of the sand zip, and their hashes
 SAND = {
@@ -134,7 +141,8 @@ def main():
     # the high-resolution set: the same boulder at 8K, a 4K rock detail layer (Poly Haven rock_boulder_dry, 1.8 m a
     # tile) laid over it in world space, the sand at 4K
     sets = (('kaya_model_8k', (('boulder_01_diff_8k.jpg', 'albedo.jpg'), ('boulder_01_nor_gl_8k.jpg', 'normal.jpg'))),
-            ('kaya_ayrinti', (('rock_boulder_dry_diff_4k.jpg', 'albedo.jpg'), ('rock_boulder_dry_nor_gl_4k.jpg', 'normal.jpg'))))
+            ('kaya_ayrinti', (('rock_boulder_dry_diff_4k.jpg', 'albedo.jpg'), ('rock_boulder_dry_nor_gl_4k.jpg', 'normal.jpg'))),
+            ('kaya_ayrinti_8k', (('rock_boulder_dry_diff_8k.jpg', 'albedo.jpg'), ('rock_boulder_dry_nor_gl_8k.jpg', 'normal.jpg'))))
     for folder, files in sets:
         d = os.path.join(OUT, folder)
         os.makedirs(d, exist_ok=True)
@@ -151,6 +159,15 @@ def main():
             member = [n for n in names if n.endswith(key)][0]
             open(os.path.join(kum4, dst), 'wb').write(z.read(member))
         print('kum: ambientCG Ground054 (4K)')
+    kum8 = os.path.join(OUT, 'kum_8k')
+    os.makedirs(kum8, exist_ok=True)
+    if not os.path.exists(os.path.join(kum8, 'normal.jpg')):
+        z = zipfile.ZipFile(io.BytesIO(fetch('Ground054_8K-JPG.zip')))
+        names = z.namelist()
+        for key, dst in (('_Color.jpg', 'albedo.jpg'), ('_NormalGL.jpg', 'normal.jpg')):   # roughness unused: not extracted
+            member = [n for n in names if n.endswith(key)][0]
+            open(os.path.join(kum8, dst), 'wb').write(z.read(member))
+        print('kum: ambientCG Ground054 (8K)')
     print('tamam:', OUT)
 
 

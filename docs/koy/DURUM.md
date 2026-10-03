@@ -37,6 +37,11 @@ alırız [...] ara küçük bir durak ekleyelim"*. Koy (K2) bu durağa kadar ba�
 genel görünümde fark küçüktü, Özcan'ın gözlemi de bu). Uygulamada yüksek dokuyla 41 fps sabit (kare 19,6 ms; standart
 dokuda 16 ms).
 
+**Her şey 8K (Özcan istedi, ara durak onaylandıktan sonra):** kum ambientCG Ground054 8K (3,5 m karo: ~0,43 mm), ayrıntı
+katmanı Poly Haven rock_boulder_dry 8K (1,8 m karo: aynı ~0,22 mm netlik, tekrar yarıya iner; kumun kendi ayrıntısı 1,75 m),
+kaya atlası zaten 8K. "Yüksek" seçeneği artık bunları okur; 4K setler yüklenmez. Kare ~21 ms (41 fps sabit), açılış ~11
+sn, bellek tahmini ~5,3 GB / 16 (sıkıştırmasız).
+
 ### Ara durakta neye bakılacak
 Galeride 05 Koy. Kayaya yaklaş (W, gerekirse Space/C; Tab ile fareyle bak), 30-50 cm'ye kadar sokul. Panelde **Doku:
 Standart ↔ Yüksek** geçişiyle aynı yere bak. Sonra kumun dibine yaklaş (C ile alçal). Karar: yüksek doku kalıyor mu, geri mi

@@ -109,7 +109,7 @@ public:
             if (e.id == "suzgec" && e.item >= 0) k_.quality.filter = e.item;
             if (e.id == "doku" && e.item >= 0) {
                 k_.setTextureMode(e.item);
-                host.toast(e.item ? L("Doku: yüksek (8K kaya, 4K kum, ayrıntı katmanı)", "Textures: high (8K rock, 4K sand, detail layer)")
+                host.toast(e.item ? L("Doku: yüksek (her şey 8K: kaya, kum, ayrıntı katmanı)", "Textures: high (everything 8K: rock, sand, detail layer)")
                                   : L("Doku: standart (2K)", "Textures: standard (2K)"));
             }
             k_.applyQuality();
@@ -211,7 +211,7 @@ public:
             c.title = L("Doku", "Textures");
             c.items = {L("Standart", "Standard"), L("Yüksek", "High")};
             c.active = k_.world.texMode;
-            c.detail = L("Yüksek: 8K kaya, 4K kum, yakın plan ayrıntı katmanı", "High: 8K rock, 4K sand, a close-up detail layer");
+            c.detail = L("Yüksek: her şey 8K (kaya, kum, yakın plan ayrıntı katmanı)", "High: everything 8K (rock, sand, close-up detail layer)");
             c.section = true;
             s.controls.push_back(c);
         }

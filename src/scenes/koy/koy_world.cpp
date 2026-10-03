@@ -298,10 +298,12 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
     };
     setSand = load("kum");
     setRock = load("kaya_model");
-    if (cfg.i("tex.high", 1)) {   // the high-resolution set (the panel can switch between them live)
-        setSand4k = load("kum_4k");
+    if (cfg.i("tex.high", 1)) {   // the high-resolution set, everything at 8K (the panel can switch between them live)
+        setSand4k = load("kum_8k");
+        if (setSand4k < 0) setSand4k = load("kum_4k");
         setRock8k = load("kaya_model_8k");
-        setRockDetail = load("kaya_ayrinti");
+        setRockDetail = load("kaya_ayrinti_8k");
+        if (setRockDetail < 0) setRockDetail = load("kaya_ayrinti");
     }
     const int sandSet = setSand, rockSet = setRock;
     KMaterial floorM{};
@@ -364,11 +366,11 @@ void KoyWorld::applyTextureMode(const Config& cfg, int mode) {
     if (r.texSet >= 0) r.texSet = high ? setRock8k : setRock;
     // the detail layers: the sand's own grain at a quarter of its tile; the rock a weathered limestone scan, finer
     f.detailSet = high && f.texSet >= 0 ? setSand4k : -1;
-    f.detailTile = cfg.f("tex.sand_detail_tile", 0.9f);
+    f.detailTile = cfg.f("tex.sand_detail_tile", 1.75f);
     f.detailNormal = cfg.f("tex.sand_detail_normal", 0.5f);
     f.detailAlbedo = cfg.f("tex.sand_detail_albedo", 0.25f);
     r.detailSet = high && r.texSet >= 0 ? setRockDetail : -1;
-    r.detailTile = cfg.f("tex.rock_detail_tile", 0.9f);
+    r.detailTile = cfg.f("tex.rock_detail_tile", 1.8f);
     r.detailNormal = cfg.f("tex.rock_detail_normal", 0.6f);
     r.detailAlbedo = cfg.f("tex.rock_detail_albedo", 0.35f);
 }
