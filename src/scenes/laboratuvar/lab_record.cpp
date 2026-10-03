@@ -50,10 +50,10 @@ bool LabRecording::start(const Config& cfg, Deney d, const LabInputs& in, const 
     return true;
 }
 
-void LabRecording::schedule(int denseStride) {
+void LabRecording::schedule(int denseStride, int sparseMul) {
     const double end = events_.back().at + after_;
     const int last = std::max(0, int(std::ceil(end / dt_ - 1e-9)));
-    const int sparse = std::max(1, int(std::lround(sparseDt_ / dt_)));
+    const int sparse = std::max(1, int(std::lround(sparseDt_ / dt_))) * std::max(1, sparseMul);
     steps_.clear();
     size_t next = 0;
     double busyUntil = -1.0;
@@ -212,8 +212,15 @@ void LabRecording::runCubes(LabWorld& w, double t0) {
     box_.scale = make_float3(ext.x / 65535.0f, ext.y / 65535.0f, ext.z / 65535.0f);
     const size_t perFrame = size_t(n) * 2 * sizeof(ushort4);
     const size_t fitFrames = budget_ / std::max<size_t>(perFrame, 1);
-    for (int stride = 1; size_t(total_.load()) > fitFrames && stride < 16; ++stride) schedule(stride + 1);
-    if (size_t(total_.load()) > fitFrames) {
+    // within the budget (a million cubes: 16 MB a frame, 256 of them): the burst thins to every 4th step (slow motion
+    // watches it), then the flight after it to a half and a quarter of its rate (at real speed, lerped), then the burst
+    // further, then the end goes. Thinning the burst first left a million cubes 10 frames in their 80 ms.
+    int dense = 1, sparseMul = 1;
+    auto over = [&] { return size_t(total_.load()) > fitFrames; };
+    while (over() && dense < 4) schedule(++dense, sparseMul);
+    while (over() && sparseMul < 4) schedule(dense, sparseMul *= 2);
+    while (over() && dense < 16) schedule(++dense, sparseMul);
+    if (over()) {
         steps_.resize(std::max<size_t>(1, fitFrames));
         total_ = int(steps_.size());
         stepsTotal_ = steps_.back();
@@ -230,8 +237,9 @@ void LabRecording::runCubes(LabWorld& w, double t0) {
     drawn_ = n;
     cudaStream_t st;
     cudaStreamCreateWithFlags(&st, cudaStreamNonBlocking);
-    std::printf("kayit: %s; %d tetik, %d kare (yogun her %d adimda) x %.2f ms adim, %.2f s dunya zamani, %.0f MB (kurma %.1f s)\n", summary.c_str(),
-                int(events_.size()), total_.load(), denseStride_.load(), dt_ * 1000.0, duration_.load(), double(perFrame) * total_.load() / 1048576.0, nowS() - t0);
+    std::printf("kayit: %s; %d tetik, %d kare (yogun her %d adimda, sonra saniyede %.0f) x %.2f ms adim, %.2f s dunya zamani, %.0f MB (kurma %.1f s)\n",
+                summary.c_str(), int(events_.size()), total_.load(), denseStride_.load(), 1.0 / (sparseDt_ * sparseMul), dt_ * 1000.0, duration_.load(),
+                double(perFrame) * total_.load() / 1048576.0, nowS() - t0);
     setState("compute");
     const double tc = nowS();
     const int total = total_.load();

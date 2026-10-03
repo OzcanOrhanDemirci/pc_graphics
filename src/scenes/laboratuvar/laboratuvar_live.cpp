@@ -300,7 +300,7 @@ public:
         }
         // ---- time
         const float speed = kSpeeds[speedIdx_];
-        if (mode_ != Mode::Playback && !paused_ && rebuildIn_ == 0) {
+        if (mode_ != Mode::Playback && !paused_ && rebuildIn_ == 0 && !liveHeld()) {
             // the world's own substeps, fewer of them in slow motion; when a frame owes less than one, the drawing
             // goes from the state before the last substep to the state after it
             const double dt = (1.0 / 60.0) * speed;
@@ -347,8 +347,12 @@ public:
             }
         }
         // ---- draw
-        drawNow();
         const bool still = !changed_ && !moved_;
+        stillFrames_ = still ? stillFrames_ + 1 : 0;
+        // the coarse cubes waiting on a fine pass, the camera at rest: once the picture has converged it is kept, and the
+        // GPU is the fine pass's
+        if (liveHeld() && stillFrames_ > a_.cfg.i("kup.bekle_kare", 48)) return;
+        drawNow();
         const unsigned spp = unsigned(std::max(1, a_.cfg.i("display.spp", 4)));
         // every frame is blended into the last ones (reprojected through the camera); while nothing changes the blend
         // becomes a plain mean, and the picture converges
@@ -373,9 +377,13 @@ public:
         if (rec_.computing()) s.chips.push_back({L("İnce hesap %", "Fine pass ") + num(100.0 * rec_.progress(), 0) + L("", "%")});
         if (paused_) s.chips.push_back({L("Zaman durdu", "Time paused"), true});
         if (speedIdx_) s.chips.push_back({speedIdx_ == 1 ? L("×1/10", "×1/10") : L("×1/100", "×1/100"), true});
-        s.metrics.push_back({L("Fizik", "Physics"), num(deney_ == Deney::Kup ? w_.cubes.lastStepMs() : w_.pw.lastStepMs(), 1) + " ms"});
+        if (liveHeld() && mode_ == Mode::Live) s.chips.push_back({L("Kaba küpler bekliyor", "Coarse cubes on hold"), true});
+        // the cubes not stepped (waiting, or the recording on screen): no physics this frame
+        if (deney_ == Deney::Kup && (liveHeld() || mode_ == Mode::Playback)) s.metrics.push_back({L("Fizik", "Physics"), "-"});
+        else s.metrics.push_back({L("Fizik", "Physics"), num(deney_ == Deney::Kup ? w_.cubes.lastStepMs() : w_.pw.lastStepMs(), 1) + " ms"});
         s.metrics.push_back({L("Görüntü", "Picture"), num(a_.renderer.lastMs, 1) + " ms"});
-        if (mode_ == Mode::Playback) s.metrics.push_back({L("Tanecik", "Particles"), theme::thousands(unsigned(rec_.drawnCount()))});
+        if (mode_ == Mode::Playback && rec_.hasCubes()) s.metrics.push_back({L("Küp", "Cubes"), theme::thousands(unsigned(rec_.cubeCount()))});
+        else if (mode_ == Mode::Playback) s.metrics.push_back({L("Tanecik", "Particles"), theme::thousands(unsigned(rec_.drawnCount()))});
         else if (deney_ == Deney::Kup) {
             s.metrics.push_back({L("Küp", "Cubes"), theme::thousands(unsigned(w_.cubes.count()))});
             s.metrics.push_back({L("Hareketli", "Moving"), theme::thousands(unsigned(w_.cubes.lastStats().awake))});
@@ -536,7 +544,8 @@ public:
             c.value = float(mode_ == Mode::Playback ? playT_ / T : rec_.computed() / T);
             c.text = num((mode_ == Mode::Playback ? playT_ : rec_.computed()) * 1000.0, 0) + " ms";
             c.detail = rec_.computing() ? L("Hesaplanan ", "Computed ") + num(rec_.computed(), 2) + " / " + num(T, 2) + L(" sn · tıkla, izle", " s · click to watch")
-                                        : L("İnce kayıt: ", "Fine recording: ") + num(rec_.spacing() * 1000.0, 1) + L(" mm tanecik, saniyede ", " mm particles, ") +
+                                        : L("İnce kayıt: ", "Fine recording: ") + num(rec_.spacing() * 1000.0, 1) +
+                                              (rec_.hasCubes() ? L(" mm küp, saniyede ", " mm cubes, ") : L(" mm tanecik, saniyede ", " mm particles, ")) +
                                               num(rec_.busyRate(), 0) + L(" an", " moments a second") +
                                               (rec_.shots() > 1 ? " · " + num(double(rec_.shots()), 0) + L(" atış", " shots") : std::string());
             s.controls.push_back(c);
@@ -606,7 +615,10 @@ private:
     Mode mode_ = Mode::Live;
     bool paused_ = false, playing_ = false, firstPlayDone_ = false, changed_ = true, moved_ = true;
     double playT_ = 0.0, lastClick_ = -1.0;
-    int speedIdx_ = 0, rebuildIn_ = 0;
+    int speedIdx_ = 0, rebuildIn_ = 0, stillFrames_ = 0;
+    // the coarse cubes wait while the fine pass computes: they have shown their burst, and a million of them took ~0.9 s
+    // a step beside it (the panel at 1 fps for ten minutes, the fine pass at half the GPU)
+    bool liveHeld() const { return deney_ == Deney::Kup && rec_.active() && rec_.computing(); }
     double now_ = 0.0;
     // what was triggered in this world (a recording replays it), with the inputs at the first
     std::vector<LabEvent> events_;
@@ -747,7 +759,10 @@ private:
                    1.0 / a_.cfg.f(pre + "kayit_seyrek_hiz", a_.cfg.f("kayit.seyrek_hiz", 120.0f)), a_.cfg.f(pre + "kayit_ara_en_cok", 0.8f),
                    size_t(a_.cfg.f("kayit.butce_mb", 4096.0f)) << 20, a_.cfg.f(pre + "kayit_yogun", -1.0f));
         autoPlay_ = true;
-        host.toast(L("İnce hesap başladı: bitince gerçek hızda oynar", "The fine pass started: it plays at real speed when done"));
+        if (deney_ == Deney::Kup)
+            host.toast(L("İnce hesap başladı: kaba küpler bekler, bitince gerçek hızda oynar", "The fine pass started: the coarse cubes wait, it plays at real speed when done"));
+        else
+            host.toast(L("İnce hesap başladı: bitince gerçek hızda oynar", "The fine pass started: it plays at real speed when done"));
     }
 
     void mainAction(app::Host& host) {

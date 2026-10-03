@@ -99,7 +99,7 @@ bar). No video: what is kept is the physics, drawn live from any view.
 | **Watermelon** | **Gun**: pistol (cracks it open, knocks it off the stand) or rifle (blows it apart) · the **Round** slider (rifle: 5.56 → 7.62×51 → .50 BMG, real loads), **left click** the melon (fired from the camera) or **Space** (from the side, through the middle) |
 | **Milk drop** | the **Height** slider (5-50 cm), **Space** or **Let a drop fall**: watch the crown at ×1/100 |
 | **Gel** | the **Round** slider (pistol: .22 → 9 mm → .50 AE), **left click** the block or **Space** (from the side, lengthwise), **once a second, as often as you like**: the track and the temporary cavity inside the clear block; the fine pass computes every shot again in turn (a wait between two longer than 0.8 s shortened to 0.8 s) |
-| **Cube** | the **Cubes** slider (64 → a million: 4³ … 100³; set up again when let go), the **Strength** slider (3 µg → 2 g of TNT; under it the speed a face's middle leaves at), **Space**, **Blow it up** or **left click** the cube. Watch it in slow motion; 64³ and more are slow live: **Compute it finely**, then watch it at real speed and at ×1/100 |
+| **Cube** | the **Cubes** slider (64 → a million: 4³ … 100³; set up again when let go), the **Strength** slider (3 µg → 2 g of TNT; under it the speed a face's middle leaves at), **Space**, **Blow it up** or **left click** the cube. Watch it in slow motion; 64³ and more are slow live: **Compute it finely** (a million: ~6 min; the coarse cubes wait meanwhile, quicker with the camera at rest), then watch it at real speed and at ×1/100 |
 
 | Key | What it does |
 |---|---|

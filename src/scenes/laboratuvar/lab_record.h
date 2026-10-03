@@ -74,7 +74,7 @@ private:
     std::vector<int> steps_;         // the world steps kept (frame k is step steps_[k]); set before the first frame
     ushort4* frames_ = nullptr;      // total_ x drawn_
     std::vector<PropPose> poses_;    // total_ x P_COUNT
-    void schedule(int denseStride);  // steps_ from events_, after_, dt_, sparseDt_
+    void schedule(int denseStride, int sparseMul = 1);   // steps_ from events_, after_, dt_, sparseDt_ (times sparseMul)
     void run(Config cfg, Deney d, LabInputs in);
     void runCubes(LabWorld& w, double t0);
     void locate(double t, int& k0, int& k1, float& a) const;   // the stored frames around t, how far between

@@ -3,7 +3,7 @@
 > Tek kaynak durum panosu. Plan ve Özcan'ın sözleri `docs/laboratuvar/PLAN.md`'de. Eski "Tanecik" (insan) yolu
 > `docs/tanecik/` ve git etiketi `tanecik-insan-arsiv`'de (arşiv).
 
-## 🧊 Ek deney: Küp · 2026-10-03 öğleden sonra (otonom, 13:28 → ~16:00)
+## 🧊 Ek deney: Küp · 2026-10-03 öğleden sonra (otonom, 13:28 → ~16:45)
 
 **Özcan'ın isteği:** *"Bir küp olacak. Bu küp patlayacak. Küp [...] taneciklerden oluşacak [...] Patlat diye tuş [...] ne
 şiddette patlayacağını ve küpün tanecik sayısını çubukla seçeceğiz [...] milyon tanecikli küplere çıkabilirsin [...] pıt
@@ -41,28 +41,47 @@ tıkla, ağır çekim, ince hesap. Masaüstü `Laboratuvar\11-15`.
 | Hava: 1 mm küp 0,6 sn düşer | 3,11 m/sn | v_t tanh(gt/v_t) = 3,12 (havasız 5,89) |
 | Patlama: 16³, 2 mg | Gurney 5,84 J, küplerde 5,32 J (yansıma dahil); yüz 4,65, köşe 2,04 m/sn; durulur | enerji %55-110, yüz > 1,5 köşe |
 
-**Hız (RTX 4080):** canlı fizik kare başına 16³ patlamada en yoğun anda ~60-90 ms (2.000-2.500 küp birbirine ve masaya
-değerken), uyudukça 0'a iner; 32³ patlama ~30 ms, 64³ ~64 ms, 100³ ~210 ms (5 kare/sn); yumuşak çöküş (yoğun yığın) 2-3
-kat yavaş. Görüntü 1 milyon örnekli küple ~15-20 ms. İnce hesap dünya saniyesi başına 16³'te ~6 sn, 80³'te (512 bin) ~60 sn.
-Büyük sayılarda canlı yavaş: panel "ince hesapla izle" der.
+**Hız (RTX 4080, uygulamada, şiddet 490 µg):** canlı fizik kare başına 16³'te en yoğun anda ~50-90 ms (2.000-2.500 küp
+birbirine ve masaya değerken), uyudukça 0'a iner; 50³ (125 bin) ~130 ms (4-5 kare/sn); 100³ ~950 ms (1 kare/sn). Güçlü
+patlamada küpler çabuk ayrılır, daha hızlı (50 mg'da 100³ ~210 ms). Görüntü 1 milyon küple ~15-20 ms. Büyük sayılarda canlı
+yavaş: panel "ince hesapla izle" der.
+**İnce hesap (2,5 sn'lik kayıt):** 16³ uygulamada 15 sn (pencere olmadan da ~15; önce 72); **1 milyon uygulamada 6,1 dk** (365 sn;
+pencere olmadan 4,5 dk). Kayıt 1 milyonla gerçek hızda ~49 kare/sn, ×1/100'de ~42 oynar (kareler
+`captures/arayuz/lab_kup_1m_*`).
+
+**Uygulamada ince hesap: üç hızlandırma ve kaydın bütçesi (akşamüstü, ölçerek):**
+- Çözücünün akışı ekran kartının en yüksek önceliğinde (`kup.oncelikli`): çözücü binlerce küçük, birbirini bekleyen
+  çekirdekten oluşuyor, her biri çizimin bloklarının arkasında sıra bekliyordu. 16³: 72 → 41 sn, çizim 59 kare/sn'de kaldı
+  (`--kup-test yarisma`: yapay çizim yükü altında 22,5 → 15,4 sn/dünya-sn).
+- İnce hesap sürerken kaba küpler bekler ("Kaba küpler bekliyor"): patlamalarını göstermişlerdi; 1 milyonda kaba adım
+  ~0,9 sn sürüyor, panel 10 dakika 1 kare/sn'de kalıyordu (ince hesap da bitmedi: 10 dk'da 2,5 sn'nin 2,2'si). Şimdi 30+.
+- Kamera dururken görüntü yakınsayınca (48 kare, `kup.bekle_kare`) kare tutulur, ekran kartı ince hesabındır: 1 milyon
+  10+ dk → 6,1 dk; 16³ üçü birlikte 72 → 15 sn.
+- Kayıt bütçesi (4 GB) 1 milyonda kare başına 16 MB, 256 kare: eski seyreltme önce patlamanın kendisini inceltiyordu (80
+  ms'de 10 kare, ×1/100'de kaba) ve sonu kesiyordu. Şimdi patlama en çok her 4 adımda bir (2 ms), sonra uçuş saniyede 60:
+  186 kare, 2,8 GB, 2,5 sn'nin hepsi.
 
 **Bulunan hatalar (düzeltildi):** sürtünme her noktada ayrı hesaplanıp toplanınca dört köşe kaymayı dört kez iptal
 ediyordu (yığın kendini sarsıp dağıttı) · hızı konum farkından türetmek metrelerce uzakta float yuvarlamasında hızı %10
 kaydırıyordu · Jacobi ortalaması yığında yakınsamıyordu (renkli Gauss-Seidel) · aynı hücredeki küpler aynı renkte
 birbirinin yarım yazılmışını okuyordu · plastik malzeme ekran kartına yüklendikten sonra eklenmişti (küpler simsiyah) ·
 `lalloc`'un sıfırlaması eski varsayılan akışta, büyüyen örnek dizisinde masayı ve fonu rastgele siliyordu (bütün
-deneyleri etkileyebilirdi) · sayı ↔ çubuk dönüşümü iki listedeydi.
+deneyleri etkileyebilirdi) · sayı ↔ çubuk dönüşümü iki listedeydi · ince hesabın 0,5 ms'lik yoğun adımı tek 0,5 ms alt
+adıma yuvarlanıyordu (ayar 0,35 ms; artık alt adım ayarı aşmaz) · oynatmada sayaç ve not küplere "tanecik" diyordu.
 
 **Küp, NE DOĞRULANMADI:**
-- Elle kullanmadım: otomatik test (deney seçimi, şiddet çubuğu, Patlat, ×1/100, ince hesap, sayı çubuğu, 125 bin küp) ve
-  komut satırı kareleri. 1 milyon küpün ince hesabını uçtan uca uygulamada çalıştırmadım (komut satırında 512 bin, 1,2 sn,
-  73 sn sürdü; 1 milyonda 2,5 sn kabaca 4-6 dk tahmini).
+- Elle kullanmadım: otomatik test (deney seçimi, şiddet çubuğu, Patlat, ×1/100, ince hesap, sayı çubuğu, 125 bin küp;
+  `laboratuvar/kup1m`: 1 milyon küp, ince hesap sonuna kadar, ×1/100) ve komut satırı kareleri. Fareyle kamera
+  gezdirirken (bekleyen kare tutulmuyor, ince hesap yavaşlar) ölçmedim.
 - Patlama modeli (Gurney yön yön, içtekiler (r/R)^-0,5, masa yansıması 0,6) gerçek bir patlayan küp kaydına karşı
   ölçülmedi; enerji ve yüz/köşe oranı yalnız modelin kendi içinde tutarlı.
 - Kenar kenara temas tek nokta: dönmüş iki küpün kenarları birbirinden geçebilir (nadir; yığında görülmedi). Hızlı
   patlamada (≫ 10 m/sn) küçük küpler birbirinin içinden geçebilir (öngörülü temasın payı a'nın 1,2 katı).
-- Canlıda büyük sayılar yavaş; canlı fiziği hızlandırmanın bir sonraki adımı bir küpün çiftlerini iş parçacıklarına bölmek
-  olurdu (yapılmadı).
+- Canlıda büyük sayılar yavaş (100³ orta şiddette 1 kare/sn); canlı fiziği hızlandırmanın bir sonraki adımı renk sayısını
+  azaltmak (temas çizgesini boyamak, 64 yerine ~10 renk) ya da bir küpün çiftlerini iş parçacıklarına bölmek olurdu
+  (yapılmadı).
+- Kaba küplerin ince hesap sürerken beklemesi yeni bir davranış: Patlat'tan hemen sonra İnce hesap'a basılırsa havadaki
+  kaba küpler donar (etiket ve bildirim söyler). Sıvılarda kaba dünya eskisi gibi akar.
 
 ## 🏁 Sahne tamamlandı · 2026-10-03
 
