@@ -119,20 +119,25 @@ float KoyArchShape::sdf(float3 world) const {
     // far from the surface the relief cannot change the sign: the base distance is enough (the surface nets need the
     // sign everywhere, the exact value only near the surface)
     if (std::fabs(d) > 2.5f * (bump + bedStep) + 0.8f) return d;
-    // limestone beds: tilted and wavy planes, each bed standing out or receding a little, but only in patches (the
-    // weathering is uneven: where a bed is soft it has gone back, elsewhere the faces are flush)
+    // blocks: limestone splits along joints (vertical) and bedding (horizontal) into blocks; the sea opened the joints
+    // into crevices and every block weathered on its own, standing out or set back a little (cells wider than tall)
+    {
+        const kn::Cell cb = kn::cellular3(x / 4.5f + o, y / 2.2f, z / 4.5f, seed);
+        const float crack = cb.f2 - cb.f1;   // small on a boundary between two blocks
+        d += 0.09f * (1.0f - kn::smoothstep(0.0f, 0.035f, crack));
+        d -= 0.32f * (float(unsigned(cb.id) & 0xFFFu) / 4095.0f - 0.5f) * kn::smoothstep(0.0f, 0.05f, crack);
+    }
+    // limestone beds: tilted and wavy planes; a few of them stand out as ledges or are cut back as grooves (most bedding
+    // planes are tight and show only where the blocks end)
     const float by = (y + 0.08f * x + 0.6f * kn::noise3(x * 0.06f + o, 2.1f, z * 0.06f)) / bed;
     const int layer = int(std::floor(by));
     const float fr = by - float(layer);
     const float patch = kn::smoothstep(-0.1f, 0.45f, kn::fbm3(x * 0.16f + o, y * 0.05f, z * 0.16f, 3));
-    const float step = bedStep * (kn::hash01(layer, int(seed), 11) - 0.5f) * 2.0f;
-    const float next = bedStep * (kn::hash01(layer + 1, int(seed), 11) - 0.5f) * 2.0f;
-    const float edge = kn::smoothstep(0.80f, 1.0f, fr);   // a soft step into the next bed
-    d -= patch * (step + (next - step) * edge);
-    d += patch * 0.05f * (1.0f - kn::smoothstep(0.0f, 0.08f, std::min(fr, 1.0f - fr)));   // a groove at the bedding plane
-    // vertical joints: fractures where a plan-view noise crosses zero, opened by the sea into grooves
-    const float jn = kn::noise3(x * 0.22f + o, 0.5f * y * 0.05f, z * 0.22f);
-    d += 0.10f * (1.0f - kn::smoothstep(0.0f, 0.06f, std::fabs(jn)));
+    const float hl = kn::hash01(layer, int(seed), 11);
+    const float step = hl > 0.62f ? bedStep * (hl - 0.62f) / 0.38f * 2.0f : 0.0f;   // a protruding ledge, some beds only
+    d -= patch * step * (1.0f - kn::smoothstep(0.75f, 1.0f, fr)) * kn::smoothstep(0.0f, 0.15f, fr);
+    if (kn::hash01(layer, int(seed), 12) > 0.55f)   // a groove at this bedding plane
+        d += patch * 0.06f * (1.0f - kn::smoothstep(0.0f, 0.07f, std::min(fr, 1.0f - fr)));
     // mid relief and eroded creases
     d += bump * kn::fbm3(x * 0.45f + o, y * 0.5f, z * 0.45f, 6);
     d -= 0.4f * bump * (kn::ridged3(x * 0.3f, y * 0.3f + o, z * 0.3f, 4) - 0.5f);

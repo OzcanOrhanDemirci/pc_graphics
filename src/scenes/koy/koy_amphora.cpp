@@ -198,13 +198,241 @@ KMeshCPU koyBuildAmphora(const KoyAmphoraType& t, int segments, unsigned int mat
     return m;
 }
 
+// ---- broken pieces ----------------------------------------------------------------------------------------------------
+namespace {
+
+// a profile walked by arc length (so the rim's steps and the shoulder's break keep their shape when resampled)
+struct Walk {
+    std::vector<float2> p;   // (r, z)
+    std::vector<float> s;    // arc length at each point
+    float length() const { return s.back(); }
+    float2 at(float t) const {   // t in metres along it
+        if (t <= 0.0f) return p.front();
+        for (size_t k = 1; k < p.size(); ++k)
+            if (t <= s[k]) {
+                const float u = (t - s[k - 1]) / std::max(s[k] - s[k - 1], 1e-7f);
+                return make_float2(p[k - 1].x + (p[k].x - p[k - 1].x) * u, p[k - 1].y + (p[k].y - p[k - 1].y) * u);
+            }
+        return p.back();
+    }
+    float arcAt(float z) const {   // where the walk first reaches height z
+        if (z <= p.front().y) return 0.0f;
+        for (size_t k = 1; k < p.size(); ++k)
+            if (z <= p[k].y) {
+                const float u = (z - p[k - 1].y) / std::max(p[k].y - p[k - 1].y, 1e-7f);
+                return s[k - 1] + (s[k] - s[k - 1]) * u;
+            }
+        return s.back();
+    }
+};
+Walk makeWalk(const std::vector<float2>& prof) {
+    Walk w;
+    w.p = prof;
+    w.s.assign(prof.size(), 0.0f);
+    for (size_t k = 1; k < prof.size(); ++k) w.s[k] = w.s[k - 1] + std::hypot(prof[k].x - prof[k - 1].x, prof[k].y - prof[k - 1].y);
+    return w;
+}
+// the break's wander: smooth noise along a closed circle (heights at an angle) or along a line (angles at a height)
+float jagAt(float a, unsigned seed, float amp) {
+    const float o = float(seed) * 3.71f;
+    return amp * (kn::noise3(std::cos(a) * 1.8f + o, std::sin(a) * 1.8f, 0.37f * o) + 0.22f * kn::noise3(std::cos(a) * 4.3f, std::sin(a) * 4.3f + o, 1.3f));
+}
+float jagLine(float z, unsigned seed, float amp) {
+    const float o = float(seed) * 5.13f;
+    return amp * (kn::noise3(z * 14.0f + o, 0.5f, 2.0f) + 0.45f * kn::noise3(z * 41.0f, o, 3.0f));
+}
+
+}   // namespace
+
+std::vector<KoyAmphoraPiece> koyAmphoraPieces() {
+    const float twoPi = 6.2831853f, pi = 3.14159265f;
+    std::vector<KoyAmphoraPiece> v;
+    // every type whole (0..3), then the broken ones: bodies whose neck snapped (the commonest find), necks with their
+    // handles, half bodies split down their length, sherds
+    for (int t = 0; t < koyAmphoraTypes(); ++t) v.push_back({t, 0, 0.0f, 9.0f, 0.0f, twoPi, 0.0f, 0u});
+    const KoyAmphoraType& B = koyAmphoraType(0);
+    const float sh = 0.79f, top = B.outer.back().y;   // Dressel 1B: the shoulder's top, the rim
+    v.push_back({0, 1, 0.0f, 0.86f, 0.0f, twoPi, 0.035f, 11u});   // body, the neck gone a little above the shoulder
+    v.push_back({0, 1, 0.0f, 0.76f, 0.0f, twoPi, 0.05f, 12u});    // body broken through the shoulder
+    v.push_back({1, 1, 0.0f, 0.66f, 0.0f, twoPi, 0.04f, 13u});    // a Dressel 1A body
+    v.push_back({2, 1, 0.0f, 0.62f, 0.0f, twoPi, 0.04f, 14u});    // a Lamboglia 2 body
+    v.push_back({0, 2, sh - 0.04f, top, 0.0f, twoPi, 0.03f, 21u});   // a Dressel 1B neck with its handles
+    v.push_back({1, 2, 0.585f, 0.978f, 0.0f, twoPi, 0.03f, 22u});    // a Dressel 1A neck
+    v.push_back({0, 3, 0.18f, 0.74f, -0.15f, pi + 0.2f, 0.05f, 31u});    // half bodies
+    v.push_back({0, 3, 0.26f, 0.70f, 0.3f, pi + 0.1f, 0.06f, 32u});
+    v.push_back({0, 4, 0.40f, 0.62f, 0.0f, 0.9f, 0.03f, 41u});   // sherds: hand-sized pieces of the wall
+    v.push_back({0, 4, 0.30f, 0.46f, 1.0f, 1.65f, 0.025f, 42u});
+    v.push_back({0, 4, 0.50f, 0.74f, 2.0f, 2.55f, 0.03f, 43u});
+    return v;
+}
+
+KMeshCPU koyBuildPiece(const KoyAmphoraPiece& pc, int segments, unsigned int material, unsigned int id) {
+    const KoyAmphoraType& t = koyAmphoraType(pc.type);
+    if (pc.kind == 0) return koyBuildAmphora(t, segments, material, id);
+    KMeshCPU m;
+    m.name = std::string(t.name) + (pc.kind == 1 ? " govde" : pc.kind == 2 ? " boyun" : pc.kind == 3 ? " yarim" : " kirik");
+    m.material = material;
+    m.id = id;
+    const float twoPi = 6.2831853f;
+    const bool round = pc.a1 - pc.a0 >= twoPi - 1e-4f;
+    const Walk wo = makeWalk(t.outer), wi = makeWalk(t.inner);
+    const float hTop = t.outer.back().y;
+    const bool cutTop = pc.z1 < hTop - 1e-3f, cutBottom = pc.z0 > 1e-3f;
+    // columns over the angle range, rows over the height range; each column's own (jagged) ends
+    const int S = round ? std::max(8, segments) : std::max(6, int(float(segments) * (pc.a1 - pc.a0) / twoPi) + 2);
+    const int R = std::max(24, int((pc.z1 - pc.z0) * 110.0f));
+    const float aSpan = pc.a1 - pc.a0;
+    auto columnAngle = [&](int s, float z) {   // the side breaks wander with height, eased over four columns (no folds)
+        float a = pc.a0 + aSpan * float(s) / float(S);
+        if (!round) {
+            a += std::max(0.0f, 1.0f - float(s) / 4.0f) * jagLine(z, pc.seed, 0.12f);
+            a += std::max(0.0f, 1.0f - float(S - s) / 4.0f) * jagLine(z, pc.seed + 7u, 0.12f);
+        }
+        return a;
+    };
+    auto zEnds = [&](float a, float& zb, float& zt) {
+        zb = cutBottom ? pc.z0 + jagAt(a, pc.seed + 3u, pc.jag) : 0.0f;
+        zt = cutTop ? pc.z1 + jagAt(a, pc.seed, pc.jag) : hTop;
+    };
+    const float innerLo = t.inner.front().y;
+    // one wall surface: rows by arc length between the column's two ends (the outside: the outer profile; the cavity's
+    // wall: the inner one, its normals towards the axis)
+    auto surface = [&](const Walk& w, bool cavity, std::vector<unsigned>& bottomRow, std::vector<unsigned>& topRow,
+                       std::vector<unsigned>& firstCol, std::vector<unsigned>& lastCol) {
+        const unsigned base = unsigned(m.pos.size());
+        for (int k = 0; k <= R; ++k)
+            for (int s = 0; s <= S; ++s) {
+                const float u = float(k) / float(R);
+                // the column's angle at its middle height decides its ends; the side breaks bend with height
+                float a = pc.a0 + aSpan * float(s) / float(S), zb, zt;
+                zEnds(a, zb, zt);
+                if (cavity) zb = std::max(zb, innerLo + 0.002f), zt = std::min(zt, t.inner.back().y);
+                const float sb = w.arcAt(zb), st = w.arcAt(zt);
+                const float2 p = w.at(sb + (st - sb) * u);
+                a = columnAngle(s, p.y);
+                const float c = std::cos(a), sn = std::sin(a);
+                m.pos.push_back(make_float3(p.x * c, p.y, p.x * sn));
+                // the normal from the profile's slope there
+                const float2 q0 = w.at(sb + (st - sb) * std::max(u - 0.01f, 0.0f)), q1 = w.at(sb + (st - sb) * std::min(u + 0.01f, 1.0f));
+                float nr = q1.y - q0.y, nh = -(q1.x - q0.x);
+                const float L = std::max(std::hypot(nr, nh), 1e-7f);
+                nr /= L;
+                nh /= L;
+                if (cavity) { nr = -nr; nh = -nh; }
+                m.nrm.push_back(make_float3(nr * c, nh, nr * sn));
+                m.uv.push_back(make_float2(0.15f * a, p.y));
+            }
+        for (int k = 0; k < R; ++k)
+            for (int s = 0; s < S; ++s) {
+                const unsigned a = base + unsigned(k * (S + 1) + s), b = a + 1, c = a + unsigned(S + 1), d = c + 1;
+                if (!cavity) {
+                    m.idx.push_back(make_uint3(a, c, b));
+                    m.idx.push_back(make_uint3(b, c, d));
+                } else {
+                    m.idx.push_back(make_uint3(a, b, c));
+                    m.idx.push_back(make_uint3(b, d, c));
+                }
+            }
+        bottomRow.clear();
+        topRow.clear();
+        firstCol.clear();
+        lastCol.clear();
+        for (int s = 0; s <= S; ++s) {
+            bottomRow.push_back(base + unsigned(s));
+            topRow.push_back(base + unsigned(R * (S + 1) + s));
+        }
+        for (int k = 0; k <= R; ++k) {
+            firstCol.push_back(base + unsigned(k * (S + 1)));
+            lastCol.push_back(base + unsigned(k * (S + 1) + S));
+        }
+    };
+    std::vector<unsigned> ob, ot, of, ol, ib, it, iff, il;
+    surface(wo, false, ob, ot, of, ol);
+    const bool hasCavity = pc.z1 > innerLo + 0.01f;
+    if (hasCavity) surface(wi, true, ib, it, iff, il);
+    // the breaks: strips across the wall between the outside's edge and the cavity's (fresh clay there; the coat finds it
+    // anyway, as on the old breaks of the real ones)
+    // ref: the side the break faces (its normal turned that way: the baked occlusion looks out of the break, not into it)
+    auto strip = [&](const std::vector<unsigned>& A, const std::vector<unsigned>& B, float3 ref) {
+        const size_t n = std::min(A.size(), B.size());
+        const unsigned base = unsigned(m.pos.size());
+        for (size_t q = 0; q < n; ++q) {   // duplicated vertices: the break's own normals (across the wall's edge)
+            const float3 pa = m.pos[A[q]], pb = m.pos[B[q]];
+            const float3 along = q + 1 < n ? m.pos[A[q + 1]] - pa : pa - m.pos[A[q - 1]];
+            float3 nn = cross(along, pb - pa);
+            const float L = length(nn);
+            nn = L > 1e-9f ? nn / L : ref;
+            if (dot(nn, ref) < 0.0f) nn = -nn;
+            m.pos.push_back(pa);
+            m.pos.push_back(pb);
+            m.nrm.push_back(nn);
+            m.nrm.push_back(nn);
+            m.uv.push_back(make_float2(0.0f, 0.0f));
+            m.uv.push_back(make_float2(0.0f, 0.02f));
+        }
+        for (size_t q = 0; q + 1 < n; ++q) {
+            const unsigned a = base + unsigned(2 * q), b = a + 1, c = a + 2, d = a + 3;
+            m.idx.push_back(make_uint3(a, b, c));
+            m.idx.push_back(make_uint3(b, d, c));
+        }
+    };
+    if (hasCavity) {
+        if (cutTop) strip(ot, it, make_float3(0.0f, 1.0f, 0.0f));
+        if (cutBottom && pc.z0 > innerLo) strip(ob, ib, make_float3(0.0f, -1.0f, 0.0f));
+        if (!round) {
+            strip(of, iff, make_float3(std::sin(pc.a0), 0.0f, -std::cos(pc.a0)));    // towards decreasing angle
+            strip(ol, il, make_float3(-std::sin(pc.a1), 0.0f, std::cos(pc.a1)));     // towards increasing angle
+        }
+    }
+    // a body: sediment fills it to a little below the break (a disc, facing up)
+    if (pc.kind == 1) {
+        float zmin = 1e9f;
+        for (int s = 0; s <= S; ++s) {
+            float zb, zt;
+            zEnds(pc.a0 + aSpan * float(s) / float(S), zb, zt);
+            zmin = std::min(zmin, zt);
+        }
+        const float hf = zmin - 0.06f;
+        const float r = radiusAt(t.inner, hf);
+        const unsigned c0 = unsigned(m.pos.size());
+        m.pos.push_back(make_float3(0.0f, hf, 0.0f));
+        m.nrm.push_back(make_float3(0.0f, 1.0f, 0.0f));
+        m.uv.push_back(make_float2(0.0f, 0.0f));
+        for (int s = 0; s <= S; ++s) {
+            const float ph = twoPi * float(s) / float(S);
+            m.pos.push_back(make_float3(r * std::cos(ph), hf, r * std::sin(ph)));
+            m.nrm.push_back(make_float3(0.0f, 1.0f, 0.0f));
+            m.uv.push_back(make_float2(r * std::cos(ph), r * std::sin(ph)));
+        }
+        for (int s = 0; s < S; ++s) m.idx.push_back(make_uint3(c0, c0 + 1 + unsigned(s) + 1, c0 + 1 + unsigned(s)));
+    }
+    // a neck keeps its handles: the whole jar's, cut to the piece's heights by taking only those inside it
+    if (pc.kind == 2) {
+        KMeshCPU whole = koyBuildAmphora(t, segments, material, id);
+        // the handles are the whole jar's last vertices: everything after its lathe, rim, cavity and fill
+        const size_t handleStart = whole.pos.size() - size_t((t.doubleRod ? 4 : 2) * 41 * 13);
+        const unsigned off = unsigned(m.pos.size());
+        for (size_t v = handleStart; v < whole.pos.size(); ++v) {
+            m.pos.push_back(whole.pos[v]);
+            m.nrm.push_back(whole.nrm[v]);
+            m.uv.push_back(whole.uv[v]);
+        }
+        for (const uint3& tri : whole.idx)
+            if (tri.x >= handleStart && tri.y >= handleStart && tri.z >= handleStart)
+                m.idx.push_back(make_uint3(off + unsigned(tri.x - handleStart), off + unsigned(tri.y - handleStart), off + unsigned(tri.z - handleStart)));
+    }
+    return m;
+}
+
 // The field. The hull lay along `ship` (degrees from +x towards +z); its cargo stood in rows across it, toes between the
 // necks below. When the wood went, the rows fell over across the hull, mostly the same way, some the other, slid and
-// rolled a little; sand drifted over the lower ones and the edges. Every jar is placed so it does not pass through
-// another (its body as a capsule), lying on the floor or sunk into it.
+// rolled a little; sand drifted over the lower ones and the edges; many broke (bodies whose necks snapped, necks with their
+// handles, halves), and sherds lie everywhere about. Every piece is placed so it does not pass through another (its body
+// as a capsule), lying on the floor or sunk into it.
 std::vector<KoyAmphoraPlacement> koyPlaceAmphorae(const Config& cfg, const std::function<float(float, float)>& floorY) {
     std::vector<KoyAmphoraPlacement> out;
-    const int n = cfg.i("amfora.count", 64);
+    const std::vector<KoyAmphoraPiece> pieces = koyAmphoraPieces();
+    const int n = cfg.i("amfora.count", 96), nSherds = cfg.i("amfora.sherds", 40);
     const float3 c = cfg.v3("amfora.centre", make_float3(0.0f, 0.0f, 0.0f));
     const float ship = cfg.f("amfora.ship_deg", -75.0f) * 3.14159265f / 180.0f;
     const float halfL = cfg.f("amfora.half_length", 4.4f), halfW = cfg.f("amfora.half_width", 1.9f);
@@ -224,71 +452,124 @@ std::vector<KoyAmphoraPlacement> koyPlaceAmphorae(const Config& cfg, const std::
         else if (t > 1.0f) { t = 1.0f; s = std::min(std::max((b - cc) / std::max(a, 1e-8f), 0.0f), 1.0f); }
         return length((p1 + d1 * s) - (p2 + d2 * t));
     };
+    // which piece: types by their share among the whole jars; broken pieces by theirs
     const float typeShare[4] = {cfg.f("amfora.share_1b", 0.62f), cfg.f("amfora.share_1a", 0.2f), cfg.f("amfora.share_l2", 0.12f), cfg.f("amfora.share_24", 0.06f)};
+    const float pBody = cfg.f("amfora.broken_body", 0.24f), pNeck = cfg.f("amfora.broken_neck", 0.08f), pHalf = cfg.f("amfora.broken_half", 0.07f);
+    auto pick = [&](int kind) {   // a random piece of that kind (whole: by type share)
+        if (kind == 0) {
+            float r = uni(rng), acc = 0.0f;
+            for (int k = 0; k < 4; ++k) {
+                acc += typeShare[k];
+                if (r <= acc) return k;
+            }
+            return 0;
+        }
+        std::vector<int> of;
+        for (int i = 0; i < int(pieces.size()); ++i)
+            if (pieces[i].kind == kind) of.push_back(i);
+        return of[std::min(int(uni(rng) * of.size()), int(of.size()) - 1)];
+    };
+    auto frame = [&](float yaw, float pitch, float roll, float3& rx, float3& ax, float3& rz) {
+        ax = make_float3(std::cos(yaw) * std::cos(pitch), std::sin(pitch), std::sin(yaw) * std::cos(pitch));
+        const float3 helper = std::fabs(ax.y) < 0.9f ? make_float3(0, 1, 0) : make_float3(1, 0, 0);
+        const float3 bx = normalize(cross(helper, ax)), bz = cross(bx, ax);
+        const float cr = std::cos(roll), sr = std::sin(roll);
+        rx = bx * cr + bz * sr;
+        rz = bz * cr - bx * sr;
+    };
+    auto emit = [&](int piece, float3 rx, float3 ax, float3 rz, float3 tip, float burial) {
+        KoyAmphoraPlacement P;
+        P.piece = piece;
+        P.burial = burial;
+        P.m[0] = rx.x; P.m[1] = ax.x; P.m[2] = rz.x; P.m[3] = tip.x;
+        P.m[4] = rx.y; P.m[5] = ax.y; P.m[6] = rz.y; P.m[7] = tip.y;
+        P.m[8] = rx.z; P.m[9] = ax.z; P.m[10] = rz.z; P.m[11] = tip.z;
+        out.push_back(P);
+    };
     int tries = 0;
     while (int(out.size()) < n && tries < n * 400) {
         ++tries;
-        // where along and across the hull (the middle fuller), which type
+        // where along and across the hull (the middle fuller)
         const float u = halfL * (2.0f * uni(rng) - 1.0f);
         const float vmax = halfW * std::sqrt(std::max(0.0f, 1.0f - (u / (halfL * 1.05f)) * (u / (halfL * 1.05f))));
         const float v = std::min(std::max(0.55f * vmax * gauss(rng), -vmax), vmax);
-        float pick = uni(rng), acc = 0.0f;
-        int type = 0;
-        for (int k = 0; k < 4; ++k) {
-            acc += typeShare[k];
-            if (pick <= acc) { type = k; break; }
-        }
-        const KoyAmphoraType& T = kTypes[type];
+        const float rk = uni(rng);
+        const int kind = rk < pHalf ? 3 : rk < pHalf + pNeck ? 2 : rk < pHalf + pNeck + pBody ? 1 : 0;
+        const int piece = pick(kind);
+        const KoyAmphoraPiece& PC = pieces[size_t(piece)];
+        const KoyAmphoraType& T = koyAmphoraType(PC.type);
         const float H = T.outer.back().y;
+        const float z0 = PC.kind == 0 ? 0.0f : PC.z0, z1 = PC.kind == 0 ? H : PC.z1;
         float rmax = 0.0f;
-        for (const float2& p : T.outer) rmax = std::max(rmax, p.x);
-        // its lie: across the hull mostly (one way or the other), a few along it; a few still half upright
+        for (const float2& p : T.outer)
+            if (p.y >= z0 - 0.02f && p.y <= z1 + 0.02f) rmax = std::max(rmax, p.x);
+        // its lie: across the hull mostly (one way or the other), a few along it; a few whole ones still upright, sunk
+        // to the shoulder
         const float r = uni(rng);
         float yaw = std::atan2(V.y, V.x) + 0.30f * gauss(rng);
         if (uni(rng) < 0.5f) yaw += 3.14159265f;
         if (r < 0.12f) yaw = std::atan2(U.y, U.x) + 0.3f * gauss(rng) + (uni(rng) < 0.5f ? 3.14159265f : 0.0f);
-        const bool upright = r > 0.95f;
-        const float pitch = upright ? (0.9f + 0.4f * uni(rng)) : 0.12f * gauss(rng);   // radians off the horizontal, toe down > 0
-        const float roll = 6.2831853f * uni(rng);
-        // the frame: the jar's axis (y) laid along (yaw, pitch); its middle at mid-height on the floor
-        const float3 ax = make_float3(std::cos(yaw) * std::cos(pitch), std::sin(pitch), std::sin(yaw) * std::cos(pitch));
-        const float3 helper = std::fabs(ax.y) < 0.9f ? make_float3(0, 1, 0) : make_float3(1, 0, 0);
-        float3 bx = normalize(cross(helper, ax));
-        float3 bz = cross(bx, ax);
-        const float cr = std::cos(roll), sr = std::sin(roll);
-        const float3 rx = bx * cr + bz * sr, rz = bz * cr - bx * sr;
+        const bool upright = PC.kind == 0 && r > 0.95f;
+        const float pitch = upright ? (1.25f + 0.25f * uni(rng)) : 0.10f * gauss(rng);
+        // half bodies lie hollow up or down (their opening along the roll), the rest any way round
+        float roll = 6.2831853f * uni(rng);
+        if (PC.kind == 3) roll = (uni(rng) < 0.5f ? 0.0f : 3.14159265f) - 0.5f * (PC.a0 + PC.a1) + 1.5708f + 0.3f * gauss(rng);
+        float3 rx, ax, rz;
+        frame(yaw, pitch, roll, rx, ax, rz);
         const float px = c.x + U.x * u + V.x * v, pz = c.z + U.y * u + V.y * v;
         // sunk: the edges and the ends more, the heart of the mound less; plus chance
         const float edge = std::sqrt((u / halfL) * (u / halfL) + (v / std::max(vmax, 0.3f)) * (v / std::max(vmax, 0.3f)) * 0.6f);
         float burial = std::min(std::max(0.15f + 0.45f * edge + 0.18f * gauss(rng), 0.0f), 0.85f);
-        if (upright) burial = 0.0f;
-        const float mid = 0.5f * H;
+        const float mid = 0.5f * (z0 + z1);
         const float fy = floorY(px, pz);
-        // lying: the axis rmax above the floor (resting), sunk by burial of its width; upright: the toe sunk deep
         float3 centre;
         if (upright) {
-            const float sink = 0.35f + 0.25f * uni(rng);
-            centre = make_float3(px, fy - sink + ax.y * mid, pz);
+            // the toe deep in the sand, the sand reaching up to about the shoulder
+            const float shoulder = 0.62f * H;
+            centre = make_float3(px, fy - shoulder * (0.75f + 0.25f * uni(rng)) + ax.y * mid, pz);
+            burial = 0.9f;
+        } else if (PC.kind == 3) {
+            centre = make_float3(px, fy + rmax * (0.25f - 0.5f * burial), pz);   // a shell: its edges in the sand
         } else {
             centre = make_float3(px, fy + rmax * (1.0f - 2.0f * burial) * 0.98f, pz);
         }
-        const float3 tip = centre - ax * mid;
-        // capsule: the body from the toe's top to the shoulder
-        const Cap me{tip + ax * (0.16f * H), tip + ax * (0.70f * H), rmax * 0.95f};
+        const float3 tip = centre - ax * mid;   // the jar's own origin (its foot) for this piece's mid height
+        const Cap me{tip + ax * (z0 + 0.14f * (z1 - z0)), tip + ax * (z0 + 0.62f * (z1 - z0)), rmax * 0.95f};
         bool clash = false;
         for (const Cap& o : caps)
             if (segDist(me.a, me.b, o.a, o.b) < me.r + o.r) { clash = true; break; }
         if (clash) continue;
         caps.push_back(me);
-        KoyAmphoraPlacement P;
-        P.type = type;
-        P.burial = burial;
-        // columns: rx (object x), ax (object y), rz (object z); translation: the tip
-        P.m[0] = rx.x; P.m[1] = ax.x; P.m[2] = rz.x; P.m[3] = tip.x;
-        P.m[4] = rx.y; P.m[5] = ax.y; P.m[6] = rz.y; P.m[7] = tip.y;
-        P.m[8] = rx.z; P.m[9] = ax.z; P.m[10] = rz.z; P.m[11] = tip.z;
-        out.push_back(P);
+        emit(piece, rx, ax, rz, tip, burial);
     }
-    std::printf("amfora tarlasi: %zu amfora (%d deneme)\n", out.size(), tries);
+    // sherds: on and about the mound, lying flat-ish, a little sunk
+    int placed = 0, stries = 0;
+    while (placed < nSherds && stries < nSherds * 200) {
+        ++stries;
+        const float u = halfL * 1.25f * (2.0f * uni(rng) - 1.0f), v = halfW * 1.5f * gauss(rng) * 0.6f;
+        const int piece = pick(4);
+        const KoyAmphoraPiece& PC = pieces[size_t(piece)];
+        const KoyAmphoraType& T = koyAmphoraType(PC.type);
+        const float mid = 0.5f * (PC.z0 + PC.z1), r = radiusAt(T.outer, mid);
+        // the sherd's own normal (outward at its middle angle) turned up or down: it lies on its curve
+        const float am = 0.5f * (PC.a0 + PC.a1);
+        float3 rx, ax, rz;
+        const bool down = uni(rng) < 0.5f;
+        frame(6.2831853f * uni(rng), 0.0f, -am + (down ? -1.5708f : 1.5708f) + 0.25f * gauss(rng), rx, ax, rz);
+        const float px = c.x + U.x * u + V.x * v, pz = c.z + U.y * u + V.y * v;
+        const float fy = floorY(px, pz);
+        // the sherd's middle point sits at the floor: its offset from the axis is r along the rolled normal
+        const float3 outward = rx * std::cos(am) + rz * std::sin(am);
+        const float3 tip = make_float3(px, fy + 0.01f - 0.03f * uni(rng), pz) - ax * mid - outward * r;
+        const Cap me{make_float3(px, fy, pz), make_float3(px, fy + 0.01f, pz), 0.10f};
+        bool clash = false;
+        for (const Cap& o : caps)
+            if (segDist(me.a, me.b, o.a, o.b) < me.r + o.r) { clash = true; break; }
+        if (clash) continue;
+        caps.push_back(me);
+        emit(piece, rx, ax, rz, tip, 0.2f);
+        ++placed;
+    }
+    std::printf("amfora tarlasi: %zu parca (%d butun ya da kirik, %d kirik parcacik; %d deneme)\n", out.size(), int(out.size()) - placed, placed, tries + stries);
     return out;
 }

@@ -26,8 +26,22 @@ int koyAmphoraTypes();
 // a whole number of texture tiles), v along the profile (metres).
 KMeshCPU koyBuildAmphora(const KoyAmphoraType& t, int segments, unsigned int material, unsigned int id);
 
+// A whole jar or what is left of it: a stretch of its wall between two heights and two angles, the boundaries jagged
+// where it broke (a whole jar: the full height, all round). The break shows the wall's thickness between the outside and
+// the cavity's wall.
+struct KoyAmphoraPiece {
+    int type;                     // which profile
+    int kind;                     // 0 whole, 1 body (the neck broken off), 2 neck with its handles, 3 half body, 4 sherd
+    float z0, z1;                 // heights (metres): a break where it is not the jar's own end
+    float a0, a1;                 // angles (radians); a1 - a0 >= 2 pi: all round
+    float jag;                    // metres the break wanders
+    unsigned seed;
+};
+std::vector<KoyAmphoraPiece> koyAmphoraPieces();   // the pieces the field draws from (one mesh each)
+KMeshCPU koyBuildPiece(const KoyAmphoraPiece& p, int segments, unsigned int material, unsigned int id);
+
 struct KoyAmphoraPlacement {
-    int type;
+    int piece;                    // index into koyAmphoraPieces()
     float m[12];                  // object to world, 3x4 rows
     float burial;                 // 0 lying on the sand .. 1 its width under it
 };

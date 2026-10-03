@@ -448,11 +448,12 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
         const KoyFloorShape fs = KoyFloorShape::from(cfg);
         std::vector<KoyAmphoraPlacement> field = koyPlaceAmphorae(cfg, [&](float x, float z) { return fs(x, z); });
         const int firstMesh = int(meshes.size());
-        for (int t = 0; t < koyAmphoraTypes(); ++t)
-            meshes.push_back(koyBuildAmphora(koyAmphoraType(t), cfg.i("amfora.segments", 96), 4, unsigned(10 + t)));
-        for (int t = 0; t < koyAmphoraTypes(); ++t)
+        const std::vector<KoyAmphoraPiece> pieces = koyAmphoraPieces();
+        for (size_t t = 0; t < pieces.size(); ++t)
+            meshes.push_back(koyBuildPiece(pieces[t], cfg.i("amfora.segments", 96), 4, unsigned(10 + t)));
+        for (int t = 0; t < int(pieces.size()); ++t)
             for (const KoyAmphoraPlacement& P : field) {
-                if (P.type != t) continue;
+                if (P.piece != t) continue;
                 KInstanceCPU in;
                 for (int q = 0; q < 12; ++q) in.m[q] = P.m[q];
                 in.mesh = firstMesh + t;

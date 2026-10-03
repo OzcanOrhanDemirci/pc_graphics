@@ -55,6 +55,32 @@ inline float ridged3(float x, float y, float z, int oct) {
     }
     return s;
 }
+// cellular (Worley) noise: distances to the nearest and the second nearest of jittered points, one per unit cell, and
+// the nearest one's cell id (blocks of rock split along joints)
+struct Cell {
+    float f1, f2;
+    int id;
+};
+inline Cell cellular3(float x, float y, float z, unsigned seed) {
+    const int X = int(std::floor(x)), Y = int(std::floor(y)), Z = int(std::floor(z));
+    Cell c{1e9f, 1e9f, 0};
+    for (int k = -1; k <= 1; ++k)
+        for (int j = -1; j <= 1; ++j)
+            for (int i = -1; i <= 1; ++i) {
+                const int cx = X + i, cy = Y + j, cz = Z + k;
+                const unsigned h = hash3(cx + int(seed) * 131, cy, cz);
+                const float px = cx + float(h & 0x3FFu) / 1023.0f, py = cy + float((h >> 10) & 0x3FFu) / 1023.0f, pz = cz + float((h >> 20) & 0x3FFu) / 1023.0f;
+                const float d = std::sqrt((x - px) * (x - px) + (y - py) * (y - py) + (z - pz) * (z - pz));
+                if (d < c.f1) {
+                    c.f2 = c.f1;
+                    c.f1 = d;
+                    c.id = int(h);
+                } else if (d < c.f2) {
+                    c.f2 = d;
+                }
+            }
+    return c;
+}
 inline float smoothstep(float a, float b, float x) {
     const float t = std::min(std::max((x - a) / (b - a), 0.0f), 1.0f);
     return t * t * (3.0f - 2.0f * t);
