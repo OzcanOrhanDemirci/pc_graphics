@@ -95,7 +95,7 @@ what is kept is the physics, drawn live from any view.
 | **Honey** | live; **left-drag**: the dipper follows the cursor · **Flow**, **Height** sliders · **Space** run / stop |
 | **Sand** | live; **left-drag**: the funnel follows the cursor (fill the beaker or heap the table) · **B** or **Drop a steel ball** |
 | **Water balloon** | **left click** the balloon (a needle where you click) or **Space** (from the front) |
-| **Watermelon** | the **Round** slider (5.56 → 7.62×51 → .50 BMG, real loads), **left click** the melon (fired from the camera) or **Space** (from the side, through the middle) |
+| **Watermelon** | **Gun**: pistol (cracks it open, knocks it off the stand) or rifle (blows it apart) · the **Round** slider (rifle: 5.56 → 7.62×51 → .50 BMG, real loads), **left click** the melon (fired from the camera) or **Space** (from the side, through the middle) |
 | **Gel** | the **Round** slider (pistol: .22 → 9 mm → .50 AE), **left click** the block or **Space** (from the side, lengthwise): the track and the temporary cavity inside the clear block |
 
 | Key | What it does |

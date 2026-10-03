@@ -304,6 +304,7 @@ LabEvent defaultEvent(Deney d, const Config& c) {
         e.a = c.v3("test.namlu", make_float3(-1.5f, 0.135f, 0.0f));
         e.b = c.v3("test.hedef", make_float3(0.0f, 0.135f, 0.0f));
         e.power = c.f("test.guc", 0.5f);
+        e.gun = c.i("test.silah", 1);
         break;
     }
     case Deney::Jel: {

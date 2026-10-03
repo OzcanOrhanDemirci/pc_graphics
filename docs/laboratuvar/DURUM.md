@@ -15,7 +15,7 @@
 | Bal | canlı | kaşıktan cam tabağa; fareyle gezdir, akış ve yükseklik çubuğu | kesintisiz kehribar ip, tabakta kıvrılarak yığılır, yığın birkaç saniyede göle döner |
 | Kum | canlı | huniden masaya ve behere; fareyle gezdir; çelik bilye | yığılma açısı **32,5°** (ölçüt 30-35°); tane dokusu |
 | Su balonu | kayıt | masadaki balona iğne (tıkla ya da Boşluk) | 10 ms'de delik, 20-30 ms'de lastik soyulurken su balon biçiminde, sonra çöker |
-| Karpuz | kayıt | tüfekle (5,56 → 7,62×51 → .50 BMG, gerçek yükler) | ~600 J birikir; birkaç ms şişer, kabuk taç gibi açılır; parça görüntüsü yumuşak |
+| Karpuz | kayıt | tabanca ya da tüfekle (5,56 → 7,62×51 → .50 BMG, gerçek yükler) | ~600 J birikir; birkaç ms şişer, kabuk taç gibi açılır; parça görüntüsü yumuşak |
 | Jel | kayıt | 24×10×10 cm balistik jel bloğu, tabancayla (.22 → 9 mm → .50 AE) | 9 mm: 24,5 cm'de 329 J; yol boyunca boşluk tüpü, blok sarsılır ve biraz zıplar |
 
 **Kayıt düzeni (karar 4, uygulandı):** tetik kaba dünyada hemen oynar ("Kaba önizleme" yazar); aynı girdilerle ince

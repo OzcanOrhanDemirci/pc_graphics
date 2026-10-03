@@ -601,7 +601,7 @@ void LabWorld::trigger(const LabEvent& e) {
         // a rifle bullet along the ray a -> b through the melon: its path (weapons.h, calibrated in gelatin) gives
         // each step's momentum, energy and cavity; the particles near the path take them
         using namespace weapons;
-        const Load L = gunLoad(deney == Deney::Jel ? Gun::Pistol : Gun::Rifle, e.power);
+        const Load L = gunLoad(deney == Deney::Jel || e.gun == 0 ? Gun::Pistol : Gun::Rifle, e.power);
         std::vector<float3> x;
         pw.readPositions(x);
         const float3 d = normalize(e.b - e.a);

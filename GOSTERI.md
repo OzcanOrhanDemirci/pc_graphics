@@ -87,7 +87,7 @@ kez gerçek hızda oynar, sonra serbest inceleme. Video yok: saklanan fiziktir, 
 | **Bal** | canlı; **sol tıkla sürükle**: kaşık imleci izler · **Akış**, **Yükseklik** çubukları · **Boşluk** akıt / durdur |
 | **Kum** | canlı; **sol tıkla sürükle**: huni imleci izler (behere doldur ya da masaya yığ) · **B** ya da **Çelik bilye bırak** |
 | **Su balonu** | balona **sol tık** (tıkladığın yere iğne) ya da **Boşluk** (önden) |
-| **Karpuz** | **Mermi** çubuğu (5,56 → 7,62×51 → .50 BMG, gerçek yükler), karpuza **sol tık** (kameradan ateş) ya da **Boşluk** (yandan, ortadan) |
+| **Karpuz** | **Silah**: tabanca (karpuzu açar, kaideden düşürür) ya da tüfek (dağıtır) · **Mermi** çubuğu (tüfekte 5,56 → 7,62×51 → .50 BMG, gerçek yükler), karpuza **sol tık** (kameradan ateş) ya da **Boşluk** (yandan, ortadan) |
 | **Jel** | **Mermi** çubuğu (tabanca: .22 → 9 mm → .50 AE), bloğa **sol tık** ya da **Boşluk** (yandan, boylamasına): yol ve geçici boşluk saydam bloğun içinde |
 
 | Tuş | Ne yapar |

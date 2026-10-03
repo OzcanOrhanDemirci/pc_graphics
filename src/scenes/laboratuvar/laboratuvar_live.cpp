@@ -183,6 +183,7 @@ public:
             else if (e.id == "yukseklik") { in_[int(deney_)].height = e.value; if (e.released || deney_ != Deney::Su) inputsChanged(); }
             else if (e.id == "akis") { in_[int(deney_)].flow = e.value; inputsChanged(); }
             else if (e.id == "guc") in_[int(deney_)].power = e.value;
+            else if (e.id == "silah") in_[int(deney_)].gun = e.item;
             else if (e.id == "zaman" && rec_.active() && rec_.framesDone() > 0) {
                 mode_ = Mode::Playback;
                 playing_ = false;
@@ -258,6 +259,7 @@ public:
                         e.a = a_.renderer.params().cam.pos;
                         e.b = p.pos;
                         e.power = in_[int(deney_)].power;
+                        e.gun = deney_ == Deney::Jel ? 0 : in_[int(deney_)].gun;
                         startRecorded(host, e);
                         lastClick_ = in.now;
                     }
@@ -371,13 +373,24 @@ public:
             h.text = num(y * 100.0, 0) + " cm";
             s.controls.push_back(h);
         }
+        if (deney_ == Deney::Karpuz) {   // which gun: a pistol cracks it open, a rifle blows it apart
+            app::Control g;
+            g.kind = app::Control::Kind::Choice;
+            g.id = "silah";
+            g.title = L("Silah", "Gun");
+            g.section = true;
+            g.items = {L("Tabanca", "Pistol"), L("Tüfek", "Rifle")};
+            g.active = li.gun;
+            s.controls.push_back(g);
+        }
         if (deney_ == Deney::Karpuz || deney_ == Deney::Jel) {
-            const weapons::Load L0 = weapons::gunLoad(deney_ == Deney::Jel ? weapons::Gun::Pistol : weapons::Gun::Rifle, li.power);
+            const bool pistol = deney_ == Deney::Jel || li.gun == 0;
+            const weapons::Load L0 = weapons::gunLoad(pistol ? weapons::Gun::Pistol : weapons::Gun::Rifle, li.power);
             app::Control c;
             c.kind = app::Control::Kind::Slider;
             c.id = "guc";
             c.title = L("Mermi", "Round");
-            c.section = true;
+            c.section = deney_ == Deney::Jel;
             c.value = li.power;
             c.mark = 0.5f;
             c.text = L0.name;
@@ -590,6 +603,7 @@ private:
             e.a = make_float3(-1.5f, w_.aim.y, w_.aim.z);
             e.b = w_.aim;
             e.power = li.power;
+            e.gun = deney_ == Deney::Jel ? 0 : li.gun;
         }
         startRecorded(host, e);
     }

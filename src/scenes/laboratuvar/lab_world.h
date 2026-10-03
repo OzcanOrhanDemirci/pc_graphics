@@ -32,7 +32,8 @@ constexpr int kDrawCodes = 11;   // DC_RIND the green skin, DC_PITH the white ri
 struct LabInputs {
     float height = 0.3f;    // Su: the beaker's lip over the tumbler; Bal: the dipper's height; Kum: the funnel's
     float flow = 0.5f;      // Bal, Kum: the flow
-    float power = 0.5f;     // Karpuz: the load (weapons.h gunLoad rifle, u)
+    float power = 0.5f;     // Karpuz, Jel: the load (weapons.h gunLoad, u)
+    int gun = 1;            // Karpuz: 0 pistol, 1 rifle (Jel: always a pistol)
     float3 nozzle = make_float3(0, 0, 0);   // Bal, Kum: where over the table (x, z) the stream falls
     bool flowing = true;    // Bal, Kum: the stream runs
 };
@@ -43,6 +44,7 @@ struct LabEvent {
     float3 a = make_float3(0, 0, 0);   // Prick: the point; Shot: the muzzle; Ball: where it is let go
     float3 b = make_float3(0, 0, 0);   // Shot: the aim point
     float power = 0.5f;
+    int gun = 1;            // Shot: 0 pistol, 1 rifle
 };
 
 // what one held object (a prop: the beaker, the dipper, the funnel) is: its mesh's object frame placed by xf
