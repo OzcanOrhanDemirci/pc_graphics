@@ -101,7 +101,7 @@ void LaboratuvarApp::setCamera(Deney d) {
     cam.lookAt(cfg.v3(k + ".konum", defPos[int(d)]), cfg.v3(k + ".hedef", defAim[int(d)]));
     cam.fovDeg = cfg.f(k + ".fov", cfg.f("kamera.fov", 30.0f));
     // a lens: a little depth of field, in focus at the experiment (the live window refocuses on the picture's middle)
-    cam.aperture = cfg.f("kamera.diyafram", 0.0035f);
+    cam.aperture = cfg.f("kamera.diyafram", 0.002f);
     cam.focus = length(cfg.v3(k + ".hedef", defAim[int(d)]) - cam.pos);
     cam.apply(renderer.params().cam, width, height);
 }
@@ -178,7 +178,11 @@ void LaboratuvarApp::setupScene(Deney d, int maxParticles, const std::vector<uin
     const int verts = cfg.i("yuzey.kose", 1500000), tris = cfg.i("yuzey.ucgen", 3000000), blocks = cfg.i("yuzey.blok", 49152);
     auto surface = [&](int code, int material, FluidSurfaceSettings s) { surf[code] = R.addSurface(material, maxParticles, verts, tris, blocks, s); };
     if (d == Deney::Su || d == Deney::Balon) surface(DC_WATER, mWater, S);
-    if (d == Deney::Bal) surface(DC_HONEY, mHoney, S);
+    if (d == Deney::Bal) {
+        FluidSurfaceSettings k = S;
+        k.smoothingPasses = cfg.i("bal.yuzey_gecis", 2);   // the thread is one to three particles thick: smooth it twice
+        surface(DC_HONEY, mHoney, k);
+    }
     if (d == Deney::Kum) {
         FluidSurfaceSettings k = S;
         k.smoothing = cfg.f("kum.yuzey_yumusatma", 0.5f);
@@ -206,6 +210,7 @@ void LaboratuvarApp::setupScene(Deney d, int maxParticles, const std::vector<uin
         FluidSurfaceSettings k = S;
         k.smoothing = cfg.f("jel.yuzey_yumusatma", 0.5f);
         surface(DC_GEL, mGel, k);
+        R.setDropletsVisible(surf[DC_GEL], cfg.i("jel.damla", 0) != 0);   // the crumbs a track spits out read as beads
     }
     objMembrane = -1;
     release();
@@ -412,6 +417,7 @@ int runLaboratuvarCli(int argc, char** argv) {
     app.setupScene(d, std::max(maxN, 1024), &memTris);
     if (camGiven) {
         app.cam.lookAt(camPos, camAim);
+        app.cam.focus = length(camAim - camPos);   // in focus where it looks
         app.cam.apply(app.renderer.params().cam, app.width, app.height);
     }
     float3* dPos = nullptr;
