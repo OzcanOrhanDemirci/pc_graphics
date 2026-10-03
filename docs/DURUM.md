@@ -1,9 +1,13 @@
 # DURUM · pc_graphics uygulaması
 
 > Uygulamanın tek kaynak durum panosu. Mimari ve yeni sahne ekleme: `docs/MIMARI.md`. Sahnelerin kendi panoları:
-> `docs/altinsaat/`, `docs/fener/`, `docs/yikim/`, `docs/laboratuvar/` (PLAN.md ve DURUM.md); `docs/tanecik/` arşiv.
+> `docs/altinsaat/`, `docs/fener/`, `docs/yikim/`, `docs/laboratuvar/`, `docs/koy/` (PLAN.md ve DURUM.md); `docs/tanecik/` arşiv.
 
 ## Şu an
+- **2026-10-03 (akşam) · Sahne 5 "Koy" planlandı** (su altı: Akdeniz kayalık koyu, 3-15 m, birinci şahıs tüplü dalgıç).
+  Özcan'la uzun konuşmayla: **netlik ve kararlılık her şeyin önünde** (kaba kuvvet süper örnekleme, zamansal tahmin yok,
+  Fener taban), ışık + temas gerçek fizik, değişmeyen ışık fırınlanır, 41 fps sabit, su üstü yok. Tek kaynak
+  `docs/koy/PLAN.md`; uygulama K0'dan başlar, ilk durak (netlik) Özcan'ın canlı bakışı.
 - **2026-10-03 (gece, Özcan uyurken otonom) · Sahne 4 artık "Laboratuvar"** (ağır çekim fotoğraf masası). İnsan / manken
   yolu kapandı (Özcan: fikir olarak kalsın), kodu `tanecik-insan-arsiv` etiketinde, belgeleri `docs/tanecik/` (arşiv).
   Beş deney: su dökme, bal, kum, su balonu, karpuz; hızlı anlar arka planda ince hesaplanan **kayıt** (video değil,
