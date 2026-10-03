@@ -139,6 +139,7 @@ private:
     double mouseX_ = 0, mouseY_ = 0, prevMouseX_ = 0, prevMouseY_ = 0;
     bool mouseCaptured_ = false;
     bool virtualMouse_ = false, virtualRight_ = false, virtualLeft_ = false;   // --autotest drives the mouse
+    std::vector<int> virtualHeld_;                                               // --autotest holds keys down
     double virtualX_ = 0.0, virtualY_ = 0.0;
 
     // timing

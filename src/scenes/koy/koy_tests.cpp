@@ -1,0 +1,195 @@
+// Scene 5 "Koy": physics tests against published numbers (docs/koy/PLAN.md §9). Each test renders or computes with the
+// scene's own code (the same tables, the same programs) and compares with the physics; PASS/FAIL per test.
+//   snell     Snell's window: looking straight up through a flat surface, the edge of the bright disc at 48.6 degrees
+//   optik     the optics' self-checks: phase functions integrate to 1, the light field's Kd per wavelength
+//   kostik    the caustic volume's mean is 1 at every depth (energy), its sharpness against the sun's disc
+#include "scenes/koy/koy_app.h"
+
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
+
+namespace {
+int fails = 0;
+void report(const char* name, bool ok, const char* fmt, double a = 0.0, double b = 0.0) {
+    char msg[256];
+    std::snprintf(msg, sizeof(msg), fmt, a, b);
+    std::printf("[%s] %-10s %s\n", ok ? "GECTI" : "KALDI", name, msg);
+    if (!ok) ++fails;
+}
+
+int testSnell(KoyApp& app) {
+    // a flat sea (no waves), the camera 5 m deep looking straight up, a pinhole in water (no mask) with a wide view
+    app.overrides.push_back("ocean.amplitude=0");
+    app.overrides.push_back("camera.port=0");
+    app.overrides.push_back("camera.hfov_air=150");
+    app.loadConfig();
+    app.release();
+    app.setup();
+    app.diver.pos = make_float3(0.0f, -5.0f, 6.0f);
+    app.diver.yaw = 0.0f;
+    app.diver.pitch = 1.5707f;
+    app.setCamera();
+    app.stepWorld(0.0f);
+    app.frame();
+    app.adaptExposure(0.0f, true);
+    app.frame();
+    std::vector<float4> hdr;
+    app.renderer.downloadHdr(hdr);
+    const int W = int(app.width), H = int(app.height), y = H / 2;
+    // the brightness along the middle row: the window's edge is where it falls fastest
+    std::vector<float> Y(W);
+    for (int x = 0; x < W; ++x) {
+        const float4 c = hdr[size_t(y) * W + x];
+        Y[x] = std::log(std::max(1e-9f, 0.2126f * c.x + 0.7152f * c.y + 0.0722f * c.z));
+    }
+    int best = W / 2;
+    float drop = 0.0f;
+    for (int x = W / 2; x + 3 < W; ++x) {
+        const float d = Y[x - 2] - Y[x + 2];
+        if (d > drop) { drop = d; best = x; }
+    }
+    const KCamera& c = app.renderer.params().cam;
+    const float u = (2.0f * (best + 0.5f) / W - 1.0f) * c.tanHalfX;
+    const float angle = std::atan(u) * 57.29578f;
+    const float expect = std::asin(1.0f / app.optics.waterN) * 57.29578f;
+    report("snell", std::fabs(angle - expect) < 0.5f, "pencere kenari %.2f derece, beklenen %.2f (+-0.5)", angle, expect);
+    app.save(app.root + "/captures/koy/test_snell");
+    return 0;
+}
+
+int testOptics(KoyApp& app) {
+    const KoyOptics& o = app.optics;
+    // phase functions
+    double sw = 0, sp = 0;
+    const int N = 200000;
+    for (int k = 0; k < N; ++k) {
+        const double u = (k + 0.5) / N;
+        const double th = 3.14159265358979 * u * u;
+        const double dth = 3.14159265358979 * 2.0 * u / N;
+        sw += KoyOptics::phaseWater(float(std::cos(th))) * std::sin(th) * 2.0 * 3.14159265358979 * dth;
+        sp += o.phaseFF(float(std::cos(th))) * std::sin(th) * 2.0 * 3.14159265358979 * dth;
+    }
+    report("faz_su", std::fabs(sw - 1.0) < 0.01, "su faz integrali %.4f (1 +- 0.01)", sw);
+    (void)sp;
+    const double ip = o.phaseIntegral();
+    report("faz_ff", std::fabs(ip - 1.0) < 0.01, "Fournier-Forand integrali %.4f (1 +- 0.01), kesilen pay %.4f", ip, o.ffTruncated);
+    // backscatter fraction of the FF used
+    double bb = 0, tot = 0;
+    for (int k = 0; k < N; ++k) {
+        const double th = 3.14159265358979 * (k + 0.5) / N;
+        const double w = o.phaseFF(float(std::cos(th))) * std::sin(th);
+        tot += w;
+        if (th > 0.5 * 3.14159265358979) bb += w;
+    }
+    report("ff_geri", std::fabs(bb / tot - o.Bp) < 0.003, "geri sacilim payi %.4f, istenen %.4f", bb / tot, o.Bp);
+    // the light field's downwelling irradiance with depth at 490 nm: direct beam and diffuse separately
+    {
+        const int li = int(std::round((490.0f - KoyOptics::L0) / KoyOptics::DL));
+        const int NZ = AP_Z, NM = AP_MU;
+        const float dz = AMB_ZMAX / float(NZ - 1);
+        for (float z : {0.0f, 0.65f, 1.3f, 2.5f, 5.0f, 7.5f, 8.2f}) {
+            const int j = std::min(NZ - 1, std::max(0, int(std::round(z / dz))));
+            const float* L = o.field.data() + size_t(li) * NZ * NM + size_t(j) * NM;
+            double ed = 0, eu = 0;
+            for (int m = 0; m < NM; ++m) {
+                const float mu = -1.0f + (m + 0.5f) * 2.0f / NM;
+                const double v = L[m] * std::fabs(mu) * 2.0 * 3.14159265358979 * (2.0 / NM);
+                if (mu < 0) ed += v; else eu += v;
+            }
+            const double dir = o.sunWaterPerp[li] * o.sunCosW * std::exp(-o.c[li] * j * dz / o.sunCosW);
+            std::printf("         z %.2f m: Ed dogrudan %.4f + daginik %.4f = %.4f, Eu %.4f\n", j * dz, dir, ed, dir + ed, eu);
+        }
+    }
+    // Kd of the light field at a few wavelengths (printed; the comparison with the Jerlov type comes with the data)
+    for (float nm : {450.0f, 490.0f, 530.0f, 570.0f, 600.0f}) {
+        const int li = int(std::round((nm - KoyOptics::L0) / KoyOptics::DL));
+        std::printf("         Kd(%.0f nm, 1-6 m) = %.4f 1/m, a %.4f, b %.4f, c %.4f\n", nm, o.kdDown(li, 1.0f, 6.0f), o.a[li], o.b[li], o.c[li]);
+    }
+    return 0;
+}
+
+int testCaustic(KoyApp& app) {
+    app.stepWorld(app.cfg.f("test.t", 3.0f));
+    const KoyOcean& oc = app.ocean;
+    std::vector<float> sl;
+    bool ok = true;
+    for (int k = 0; k < oc.cset.slices; k += 4) {
+        const_cast<KoyOcean&>(oc).readCaustic(k, sl, app.renderer.stream());
+        double m = 0, mx = 0;
+        for (float v : sl) {
+            m += v;
+            mx = std::max(mx, double(v));
+        }
+        m /= double(sl.size());
+        std::printf("         dilim %2d (%.2f m): ortalama %.4f, en buyuk %.2f\n", k, oc.sliceDepth(k), m, mx);
+        {   // the slice as an image: 1 (flat sun) at mid grey, 4x brighter at white
+            const int N = oc.cset.N;
+            std::vector<unsigned char> img(size_t(N) * N * 4);
+            for (size_t i = 0; i < sl.size(); ++i) {
+                const float v = std::min(1.0f, sl[i] / 4.0f);
+                const unsigned char g = (unsigned char)(255.0f * std::sqrt(v));
+                img[4 * i] = img[4 * i + 1] = img[4 * i + 2] = g;
+                img[4 * i + 3] = 255;
+            }
+            char nm[128];
+            std::snprintf(nm, sizeof(nm), "/captures/koy/kostik_dilim_%02d.png", k);
+            writePNG(app.root + nm, N, N, img.data());
+        }
+        ok = ok && std::fabs(m - 1.0) < 0.02;
+    }
+    report("kostik", ok, "her dilimin ortalamasi 1 +- 0.02 (enerji korunur)");
+    std::printf("         yuzey %.2f ms, kostik %.2f ms\n", oc.msSurface, oc.msCaustic);
+    return 0;
+}
+}   // namespace
+
+// the tables along their axes near the trial area's numbers (a jump marks a bad cell)
+int testTables(KoyApp& app) {
+    const KoyOptics& o = app.optics;
+    auto t3 = [](const std::vector<float4>& v, int nx, int ny, int nz, float fx, float fy, float fz) {   // trilinear, texel units
+        auto at = [&](int x, int y, int z) {
+            x = std::min(std::max(x, 0), nx - 1);
+            y = std::min(std::max(y, 0), ny - 1);
+            z = std::min(std::max(z, 0), nz - 1);
+            return v[(size_t(z) * ny + y) * nx + x].y;
+        };
+        const int x0 = int(std::floor(fx)), y0 = int(std::floor(fy)), z0 = int(std::floor(fz));
+        const float ax = fx - x0, ay = fy - y0, az = fz - z0;
+        float r = 0.0f;
+        for (int k = 0; k < 8; ++k) {
+            const float w = ((k & 1) ? ax : 1 - ax) * ((k & 2) ? ay : 1 - ay) * ((k & 4) ? az : 1 - az);
+            r += w * at(x0 + (k & 1), y0 + ((k >> 1) & 1), z0 + ((k >> 2) & 1));
+        }
+        return r;
+    };
+    auto ix = [](float x, int n) { return std::min(std::max(x, 0.0f), 1.0f) * float(n - 1); };
+    auto it = [&](float t, float tmax, int n) { return ix(std::sqrt(std::max(t, 0.0f) / tmax), n); };
+    std::printf("ambSurf[1].Y (yukari bakan, t 6 m) derinlige gore:\n  ");
+    for (float z = 5.5f; z <= 8.6f; z += 0.25f) std::printf("%.2f:%.4f ", z, t3(o.ambSurf[1], AS_T, AS_N, AS_Z, it(6.0f, AMB_TMAX, AS_T), ix(1.0f, AS_N), ix(z / AMB_ZMAX, AS_Z)));
+    std::printf("\nambSurf[1].Y (z 7 m) yol uzunluguna gore:\n  ");
+    for (float t = 3.0f; t <= 12.0f; t += 0.5f) std::printf("%.1f:%.4f ", t, t3(o.ambSurf[1], AS_T, AS_N, AS_Z, it(t, AMB_TMAX, AS_T), ix(1.0f, AS_N), ix(7.0f / AMB_ZMAX, AS_Z)));
+    std::printf("\nambPath.Y (z0 4.6, mu -0.4) yol uzunluguna gore:\n  ");
+    for (float t = 3.0f; t <= 12.0f; t += 0.5f)
+        std::printf("%.1f:%.4f ", t, t3(o.ambPath, AP_T, AP_MU, AP_Z, it(t, AMB_TMAX, AP_T), ix(-0.4f * 0.5f + 0.5f, AP_MU), ix(4.6f / AMB_ZMAX, AP_Z)));
+    std::printf("\npathTab SURF1.Y yol uzunluguna gore:\n  ");
+    for (float L = 8.0f; L <= 20.0f; L += 1.0f) {
+        const float u = std::min(std::max(L / PT_LMAX, 0.0f), 1.0f) * (PT_W - 1);
+        const int x0 = int(u);
+        const float a = u - x0;
+        std::printf("%.0f:%.4f ", L, o.pathTab[size_t(PT_SURF0 + 1) * PT_W + x0].y * (1 - a) + o.pathTab[size_t(PT_SURF0 + 1) * PT_W + x0 + 1].y * a);
+    }
+    std::printf("\n");
+    return 0;
+}
+
+int runKoyTests(KoyApp& app, const std::string& which) {
+    fails = 0;
+    const bool all = which.empty();
+    if (all || which == "optik") testOptics(app);
+    if (which == "tablo") testTables(app);
+    if (all || which == "kostik") testCaustic(app);
+    if (all || which == "snell") testSnell(app);
+    std::printf("koy testleri: %d kalan\n", fails);
+    return fails ? 1 : 0;
+}

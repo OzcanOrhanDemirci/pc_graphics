@@ -59,6 +59,13 @@ add_library(pc_core OBJECT
     src/scenes/laboratuvar/laboratuvar_renderer.cpp
     src/scenes/laboratuvar/laboratuvar_app.cpp
     src/scenes/laboratuvar/laboratuvar_live.cpp
+    src/scenes/koy/koy_app.cpp
+    src/scenes/koy/koy_live.cpp
+    src/scenes/koy/koy_renderer.cpp
+    src/scenes/koy/koy_optics.cpp
+    src/scenes/koy/koy_world.cpp
+    src/scenes/koy/koy_tests.cpp
+    src/scenes/koy/koy_kernels.cu
     ${TP}/tinyexr/miniz.c)
 add_executable(pc_graphics src/app/main.cpp $<TARGET_OBJECTS:pc_core>)
 

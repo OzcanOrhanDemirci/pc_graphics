@@ -6,6 +6,10 @@
 //   pc_graphics.exe --scene fener --headless --journey N --every k --out captures/x   the walk A -> B, N frames at 30 fps
 //   pc_graphics.exe --scene fener --headless --player-test                   the player walked by script, frames saved
 //   pc_graphics.exe --scene fener --map captures/harita.png                  top-down map (islands, forest, A, B, the walk)
+//   pc_graphics.exe --scene fener --kararlilik --yol a|yolculuk --kare N --out captures/kararlilik/fener_a
+//            steadiness and sharpness (Koy PLAN §9): N live frames of a path as the window draws them (TAA, jitter, the eye's
+//            adaptation) and, at the same moments, a converged reference (--ref frames accumulated at a frozen time); then
+//            python tools/kararlilik.py <out>. --hiz fps (time step, 41), --bas m (yolculuk: start this far from A, cruising)
 //   options: --view A|B, --time t (seconds: beam angle, waves), --at m (a still from the walk), --width W, --height H,
 //            --set key=value
 #include "scenes/fener/fener_app.h"
@@ -32,6 +36,9 @@ int runFenerCli(int argc, char** argv) {
     float atMeters = -1.0f;
     bool playerTest = false;
     int pview = 0;   // 1 surface only, 2 volume only, 3 depth, 4 normals
+    int stab = 0, stabRef = 128;
+    float stabFps = 41.0f, stabStart = 300.0f;
+    std::string stabPath = "a";
     float t0 = -1.0f;
     std::string out, viewName, mapOut;
     for (int i = 1; i < argc; ++i) {
@@ -54,6 +61,12 @@ int runFenerCli(int argc, char** argv) {
         else if (a == "--set") app.overrides.push_back(next());
         else if (a == "--root") app.root = next();
         else if (a == "--map") mapOut = next();
+        else if (a == "--kararlilik") { headless = true; stab = stab > 0 ? stab : 120; }
+        else if (a == "--kare") stab = std::stoi(next());
+        else if (a == "--ref") stabRef = std::stoi(next());
+        else if (a == "--hiz") stabFps = std::stof(next());
+        else if (a == "--bas") stabStart = std::stof(next());
+        else if (a == "--yol") stabPath = next();
         else { std::printf("unknown option %s\n", a.c_str()); return 2; }
     }
     if (!headless && mapOut.empty()) {
@@ -61,6 +74,7 @@ int runFenerCli(int argc, char** argv) {
         return 2;
     }
     app.still = headless && frames > 0;
+    if (stab > 0) { frames = 0; live = 0; journeyFrames = 0; }
     app.loadConfig();
     app.renderer.init(app.width, app.height, app.root, unsigned(app.cfg.i("volume.scale", 1)));
     std::printf("GPU: %s\n", app.renderer.deviceName().c_str());
@@ -148,6 +162,52 @@ int runFenerCli(int argc, char** argv) {
         }
         std::printf("journey: %d frames, %.0f of %.0f m, %.2f ms/frame\n", journeyFrames, app.journey.d, app.journey.length(), 1000.0 * sum / journeyFrames);
         printTimes(app.renderer.times());
+    } else if (headless && stab > 0) {
+        // Koy PLAN §9: the live frames of a path and, at the same moments, a converged reference (tools/kararlilik.py)
+        const std::string o = out.empty() ? app.root + "/captures/kararlilik/fener_" + stabPath : out;
+        std::filesystem::create_directories(o);
+        const bool walk = stabPath == "yolculuk";
+        const float dt = 1.0f / stabFps;
+        struct Moment { FCamera cam; float t, exposure; };
+        std::vector<Moment> at(stab);
+        if (walk) {   // already cruising, this far from A towards B
+            app.journey.target = 1;
+            app.journey.d = std::min(stabStart, app.journey.length());
+            app.journey.v = app.cfg.f("journey.speed", 12.0f);
+            app.applyJourney();
+        }
+        app.renderer.resetHistory();
+        double sum = 0.0;
+        for (int k = 0; k < stab; ++k) {   // pass 1: live, as the window draws it
+            const float t = t0 + k * dt;
+            app.setTime(t);
+            if (walk) {
+                app.journey.step(dt, app.cfg.f("journey.speed", 12.0f), app.cfg.f("journey.accel", 1.0f));
+                app.applyJourney();
+            }
+            at[k] = {app.renderer.params().cam, t, app.renderer.params().exposure};
+            const double s = fnow();
+            app.frame(unsigned(k));
+            sum += fnow() - s;
+            app.adaptExposure(dt, k == 0);
+            char nm[32];
+            std::snprintf(nm, sizeof(nm), "/live_%04d", k);
+            app.save(o + nm);
+        }
+        std::printf("kararlilik fener %s: %d canli kare, %.2f ms/kare\n", stabPath.c_str(), stab, 1000.0 * sum / stab);
+        app.still = true;   // pass 2: the reference, a progressive average of jittered frames at each frozen moment
+        app.applyConfig();
+        for (int k = 0; k < stab; ++k) {
+            app.renderer.params().cam = at[k].cam;
+            app.renderer.params().exposure = at[k].exposure;
+            app.setTime(at[k].t);
+            app.renderer.resetHistory();
+            for (int j = 0; j < stabRef; ++j) app.frame(unsigned(j));
+            char nm[32];
+            std::snprintf(nm, sizeof(nm), "/ref_%04d", k);
+            app.save(o + nm);
+        }
+        std::printf("kararlilik fener %s: %d referans (%d kare birikim) -> %s\n", stabPath.c_str(), stab, stabRef, o.c_str());
     } else if (headless && live > 0) {
         const std::string o = out.empty() ? app.root + "/captures/fener_live_" + stamp() : out;
         double sum = 0;

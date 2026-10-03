@@ -1,0 +1,715 @@
+// Scene 5 "Koy": OptiX device programs, compiled at run time with NVRTC (F5 recompiles them).
+//   __raygen__base     every pixel: the same fixed sub-pixel samples every frame, each fully shaded; the sun's light
+//                      scattered by the water is marched once along the pixel's centre and read at each sample's distance.
+//                      A pixel whose samples disagree (another surface, a strong contrast) joins the edge list.
+//   __raygen__edge     every edge pixel: the rest of the 32-sample pattern, filtered at once towards its 3x3 neighbours.
+//   __raygen__resolve  every pixel: the reconstruction filter over the samples of its 3x3 neighbourhood, XYZ -> sRGB.
+//   __raygen__final    exposure, AgX, sRGB, a fixed (not moving) blue-noise TPDF dither.
+//   __raygen__bakeAO   the meshes' ambient occlusion per vertex (load time).
+//   __raygen__bakeSun  the sun's visibility through the water of the test area, per voxel (load time).
+// No random numbers anywhere in a frame: the picture is a function of the camera and the world's time.
+#include <optix.h>
+#include "scenes/koy/koy_params.h"
+#include "scenes/koy/koy_sampling.h"
+#include "shared/display.h"
+
+extern "C" {
+__constant__ KoyParams params;
+}
+
+#define ID_WATER 0xFFFF0001u
+#define ID_OPEN 0xFFFF0002u
+
+// =====================================================================================================
+// small helpers
+// =====================================================================================================
+static __forceinline__ __device__ float3 f3(float4 a) { return make_float3(a.x, a.y, a.z); }
+static __forceinline__ __device__ unsigned int hashU32(unsigned int x) {
+    x ^= x >> 16; x *= 0x7feb352dU; x ^= x >> 15; x *= 0x846ca68bU; x ^= x >> 16;
+    return x;
+}
+static __forceinline__ __device__ float fracf(float x) { return x - floorf(x); }
+static __forceinline__ __device__ float3 offsetRay(float3 p, float3 n) {   // Waechter & Binder, Ray Tracing Gems ch. 6
+    const float origin = 1.0f / 32.0f, floatScale = 1.0f / 65536.0f, intScale = 256.0f;
+    const int3 of = make_int3(int(intScale * n.x), int(intScale * n.y), int(intScale * n.z));
+    const float3 pi = make_float3(__int_as_float(__float_as_int(p.x) + (p.x < 0 ? -of.x : of.x)),
+                                  __int_as_float(__float_as_int(p.y) + (p.y < 0 ? -of.y : of.y)),
+                                  __int_as_float(__float_as_int(p.z) + (p.z < 0 ? -of.z : of.z)));
+    return make_float3(fabsf(p.x) < origin ? p.x + floatScale * n.x : pi.x, fabsf(p.y) < origin ? p.y + floatScale * n.y : pi.y,
+                       fabsf(p.z) < origin ? p.z + floatScale * n.z : pi.z);
+}
+static __forceinline__ __device__ float3 xyzToRgb(float3 c) {
+    return make_float3(dot(params.xyzToRgb0, c), dot(params.xyzToRgb1, c), dot(params.xyzToRgb2, c));
+}
+
+// =====================================================================================================
+// the baked tables (koy_optics.cpp)
+// =====================================================================================================
+static __forceinline__ __device__ float4 tex2Dt(KTex t, float u, float v) { return tex2D<float4>((cudaTextureObject_t)t, u, v); }
+static __forceinline__ __device__ float4 tex3Dt(KTex t, float u, float v, float w) { return tex3D<float4>((cudaTextureObject_t)t, u, v, w); }
+// texel-centre coordinate of x in [0, 1] over n samples placed at the ends and between
+static __forceinline__ __device__ float tc(float x, int n) { return (saturate(x) * float(n - 1) + 0.5f) / float(n); }
+static __forceinline__ __device__ float tcT(float t, float tmax, int n) { return tc(sqrtf(fmaxf(t, 0.0f) / tmax), n); }   // squared spacing
+
+static __forceinline__ __device__ float3 pathRow(int row, float L) {
+    return f3(tex2Dt(params.pathTab, tc(L * (1.0f / PT_LMAX), PT_W), (row + 0.5f) / float(PT_ROWS)));
+}
+// a linear sRGB albedo -> the weights of the three basis spectra
+static __forceinline__ __device__ float3 basisWeights(float3 rgb) {
+    return make_float3(params.basisFix[0][0] * rgb.x + params.basisFix[0][1] * rgb.y + params.basisFix[0][2] * rgb.z,
+                       params.basisFix[1][0] * rgb.x + params.basisFix[1][1] * rgb.y + params.basisFix[1][2] * rgb.z,
+                       params.basisFix[2][0] * rgb.x + params.basisFix[2][1] * rgb.y + params.basisFix[2][2] * rgb.z);
+}
+// Lambert surface of albedo weights wk at depth z lit by the direct sun with cosine cs, seen after t metres (XYZ)
+static __forceinline__ __device__ float3 sunOnSurface(float3 wk, float z, float t) {
+    const float L = fmaxf(z, 0.0f) / params.sunCosW + t;
+    return pathRow(PT_SURF0 + 0, L) * wk.x + pathRow(PT_SURF0 + 1, L) * wk.y + pathRow(PT_SURF0 + 2, L) * wk.z;
+}
+// the water's diffuse light on a Lambert surface (normal's vertical component ny) at depth z, seen after t metres
+static __forceinline__ __device__ float3 ambientOnSurface(float3 wk, float z, float ny, float t) {
+    const float u = tcT(t, AMB_TMAX, AS_T), v = tc(ny * 0.5f + 0.5f, AS_N), w = tc(z / AMB_ZMAX, AS_Z);
+    return f3(tex3Dt(params.ambSurf[0], u, v, w)) * wk.x + f3(tex3Dt(params.ambSurf[1], u, v, w)) * wk.y +
+           f3(tex3Dt(params.ambSurf[2], u, v, w)) * wk.z;
+}
+// the diffuse light scattered into a view ray (direction's vertical component muUp, from depth z0) over its first t metres
+static __forceinline__ __device__ float3 ambientPath(float z0, float muUp, float t) {
+    return f3(tex3Dt(params.ambPath, tcT(t, AMB_TMAX, AP_T), tc(muUp * 0.5f + 0.5f, AP_MU), tc(z0 / AMB_ZMAX, AP_Z)));
+}
+// the same for a ray leaving the surface downwards (a total internal reflection), seen through a further ts metres
+static __forceinline__ __device__ float3 reflectedPath(float muUp, float t2, float ts) {
+    return f3(tex3Dt(params.reflPath, tcT(t2, AMB_TMAX, RP_T), tc(muUp * 0.5f + 0.5f, RP_MU), tc(ts / RP_TSMAX, RP_TS)));
+}
+
+// =====================================================================================================
+// phase functions (normalised over the sphere)
+// =====================================================================================================
+static __forceinline__ __device__ float phaseWater(float c) {   // pure water: 1 + 0.835 cos^2 (depolarisation 0.09)
+    return (1.0f + 0.835f * c * c) * (1.0f / (4.0f * M_PIf * (1.0f + 0.835f / 3.0f)));
+}
+// Fournier-Forand (Fournier & Forand 1994, as written by Mobley et al. 2002); nu and delta180 from the backscatter fraction
+static __forceinline__ __device__ float phaseFF(float c) {
+    const float th = fmaxf(acosf(clampf(c, -1.0f, 1.0f)), 0.0035f);   // not sharper than the sun's disc seen under water
+    const float s2 = sqr(sinf(0.5f * th));
+    const float nu = params.ffNu, d180 = params.ffDelta180;
+    const float d = d180 * s2;                                      // delta = 4 / (3 (n-1)^2) sin^2(theta/2)
+    const float dn = powf(d, nu), d180n = powf(d180, nu);
+    const float a = 1.0f / (4.0f * M_PIf * sqr(1.0f - d) * dn) * (nu * (1.0f - d) - (1.0f - dn) + (d * (1.0f - dn) - nu * (1.0f - d)) / s2);
+    const float b = (1.0f - d180n) / (16.0f * M_PIf * (d180 - 1.0f) * d180n) * (3.0f * c * c - 1.0f);
+    return fmaxf(a + b, 0.0f) * params.ffScale;
+}
+
+// =====================================================================================================
+// textures of the scanned materials (mipmapped, filtered by the ray cone)
+// =====================================================================================================
+static __forceinline__ __device__ float3 srgbDecode(float3 c) {
+    auto f = [](float x) { return x <= 0.04045f ? x * (1.0f / 12.92f) : powf((x + 0.055f) * (1.0f / 1.055f), 2.4f); };
+    return make_float3(f(c.x), f(c.y), f(c.z));
+}
+static __forceinline__ __device__ float4 texGrad(KTex t, float2 uv, float2 du, float2 dv) {
+    return tex2DGrad<float4>((cudaTextureObject_t)t, uv.x, uv.y, du, dv);
+}
+
+// =====================================================================================================
+// the camera: a pinhole behind a flat mask port (rays refract at the glass: everything 4/3 nearer, a narrower view)
+// =====================================================================================================
+static __forceinline__ __device__ float3 cameraRay(const KCamera& c, float px, float py) {
+    const float u = (2.0f * px / params.width - 1.0f) * c.tanHalfX;
+    const float v = (1.0f - 2.0f * py / params.height) * c.tanHalfY;
+    float3 d = normalize(c.fwd + c.right * u + c.up * v);
+    if (c.portN > 1.0f) {   // Snell at a plane facing fwd: the tangential part shrinks by 1/n
+        const float ci = dot(d, c.fwd);
+        const float3 tang = (d - c.fwd * ci) * (1.0f / c.portN);
+        d = tang + c.fwd * sqrtf(fmaxf(0.0f, 1.0f - dot(tang, tang)));
+    }
+    return d;
+}
+
+// =====================================================================================================
+// geometry
+// =====================================================================================================
+struct Hit {
+    bool hit;
+    float t;
+    float3 p, ng, ns;
+    float2 uv;
+    float3 dpdu, dpdv;          // world-space surface derivatives along uv (texture footprints, normal maps)
+    float ao;
+    unsigned int mat, id;
+    bool leaf;
+};
+static __forceinline__ __device__ float3 xformP(const KInstance& in, float3 p) {
+    return make_float3(in.r0.x * p.x + in.r0.y * p.y + in.r0.z * p.z + in.r0.w, in.r1.x * p.x + in.r1.y * p.y + in.r1.z * p.z + in.r1.w,
+                       in.r2.x * p.x + in.r2.y * p.y + in.r2.z * p.z + in.r2.w);
+}
+static __forceinline__ __device__ float3 xformV(const KInstance& in, float3 v) {
+    return make_float3(in.r0.x * v.x + in.r0.y * v.y + in.r0.z * v.z, in.r1.x * v.x + in.r1.y * v.y + in.r1.z * v.z,
+                       in.r2.x * v.x + in.r2.y * v.y + in.r2.z * v.z);
+}
+static __forceinline__ __device__ Hit trace(float3 o, float3 d, float tmax) {
+    optixTraverse(params.handle, o, d, 0.0f, tmax, 0.0f, OptixVisibilityMask(1u), OPTIX_RAY_FLAG_DISABLE_ANYHIT, 0, 1, 0);
+    Hit h;
+    h.hit = optixHitObjectIsHit();
+    h.leaf = false;
+    if (!h.hit) return h;
+    const unsigned int ii = optixHitObjectGetInstanceIndex();
+    const unsigned int prim = optixHitObjectGetPrimitiveIndex();
+    const KInstance in = params.instances[ii];
+    const KMesh& m = params.meshes[in.mesh];
+    h.t = optixHitObjectGetRayTmax();
+    h.mat = m.material;
+    if (optixGetPrimitiveType(optixHitObjectGetHitKind()) == OPTIX_PRIMITIVE_TYPE_FLAT_QUADRATIC_BSPLINE) {
+        // a seagrass ribbon: its normal from OptiX, its id per leaf (every leaf a different surface)
+        const float2 rp = optixHitObjectGetRibbonParameters();
+        h.leaf = true;
+        h.p = o + d * h.t;
+        h.ng = normalize(xformV(in, optixHitObjectGetRibbonNormal(rp)));
+        if (dot(h.ng, d) > 0.0f) h.ng = -h.ng;
+        h.ns = h.ng;
+        h.uv = make_float2(rp.x, rp.y);
+        h.dpdu = make_float3(0, 0, 0);
+        h.dpdv = make_float3(0, 0, 0);
+        h.ao = m.ao ? m.ao[prim] : 1.0f;
+        h.id = 0x10000u + prim / 4u;
+        return h;
+    }
+    const float2 b = optixHitObjectGetTriangleBarycentrics();
+    const uint3 tri = m.idx[prim];
+    const float3 v0 = m.pos[tri.x], v1 = m.pos[tri.y], v2 = m.pos[tri.z];
+    const float b0 = 1.0f - b.x - b.y;
+    h.p = xformP(in, v0 * b0 + v1 * b.x + v2 * b.y);
+    const float3 e1 = xformV(in, v1 - v0), e2 = xformV(in, v2 - v0);
+    h.ng = normalize(cross(e1, e2));
+    h.ns = m.nrm ? normalize(xformV(in, m.nrm[tri.x] * b0 + m.nrm[tri.y] * b.x + m.nrm[tri.z] * b.y)) : h.ng;
+    if (dot(h.ng, d) > 0.0f) h.ng = -h.ng;
+    if (dot(h.ns, h.ng) < 0.0f) h.ns = -h.ns;
+    h.ao = m.ao ? (m.ao[tri.x] * b0 + m.ao[tri.y] * b.x + m.ao[tri.z] * b.y) : 1.0f;
+    h.id = m.id;
+    if (m.uv) {
+        const float2 t0 = m.uv[tri.x], t1 = m.uv[tri.y], t2 = m.uv[tri.z];
+        h.uv = make_float2(t0.x * b0 + t1.x * b.x + t2.x * b.y, t0.y * b0 + t1.y * b.x + t2.y * b.y);
+        const float du1 = t1.x - t0.x, dv1 = t1.y - t0.y, du2 = t2.x - t0.x, dv2 = t2.y - t0.y;
+        const float det = du1 * dv2 - dv1 * du2;
+        if (fabsf(det) > 1e-12f) {
+            const float r = 1.0f / det;
+            h.dpdu = (e1 * dv2 - e2 * dv1) * r;
+            h.dpdv = (e2 * du1 - e1 * du2) * r;
+        } else {
+            h.dpdu = make_float3(0, 0, 0);
+            h.dpdv = make_float3(0, 0, 0);
+        }
+    } else {
+        h.uv = make_float2(h.p.x, h.p.z);
+        h.dpdu = make_float3(1, 0, 0);
+        h.dpdv = make_float3(0, 0, 1);
+    }
+    return h;
+}
+static __forceinline__ __device__ bool visible(float3 o, float3 d, float tmax) {
+    optixTraverse(params.handle, o, d, 0.0f, tmax, 0.0f, OptixVisibilityMask(1u),
+                  OPTIX_RAY_FLAG_DISABLE_ANYHIT | OPTIX_RAY_FLAG_TERMINATE_ON_FIRST_HIT, 0, 1, 0);
+    return !optixHitObjectIsHit();
+}
+
+// =====================================================================================================
+// the sea surface seen from below: a periodic height field (FFT), filtered by the pixel's footprint (LEAN slopes)
+// =====================================================================================================
+struct Wave {
+    float h, sx, sz, var;       // height, slopes d/dx d/dz, slope variance inside the footprint
+};
+static __forceinline__ __device__ Wave waveAt(float x, float z, float footprint) {
+    const float inv = 1.0f / params.oceanPatch;
+    const float lod = log2f(fmaxf(footprint * inv * params.oceanTexels, 1.0f));
+    const float4 w = tex2DLod<float4>((cudaTextureObject_t)params.ocean, x * inv, z * inv, lod);
+    Wave r;
+    r.h = w.x;
+    r.sx = w.y;
+    r.sz = w.z;
+    r.var = fmaxf(w.w - 0.5f * (w.y * w.y + w.z * w.z), 0.0f) + params.slopeVarFloor;   // w: mean of (sx^2 + sz^2)/2 ... per axis
+    return r;
+}
+// where an upward ray meets the surface y = h(x, z): regula falsi inside the band |h| <= hmax (robust at grazing angles)
+static __forceinline__ __device__ float surfaceHit(float3 o, float3 d, float coneAngle) {
+    const float hm = params.oceanHeightMax;
+    float ta = fmaxf((-hm - o.y) / d.y, 0.0f), tb = (hm - o.y) / d.y;
+    auto g = [&](float t) {
+        const float3 p = o + d * t;
+        return p.y - waveAt(p.x, p.z, coneAngle * t / fmaxf(d.y, 0.1f)).h;
+    };
+    float ga = g(ta), gb = g(tb);
+    if (ga >= 0.0f) return ta;
+    float t = tb;
+    for (int k = 0; k < 6; ++k) {
+        t = ta - ga * (tb - ta) / (gb - ga);
+        const float gt = g(t);
+        if (gt < 0.0f) { ta = t; ga = gt; } else { tb = t; gb = gt; }
+    }
+    return t;
+}
+
+// The sky above the water, as weights of the three basis spectra of pathTab's sky rows: clear blue (Rayleigh-like),
+// white (haze, the sun's aureole, near the horizon) and the sunlit rocky rim of the cove. Perez shape (Preetham clear sky).
+static __forceinline__ __device__ float3 skyWeights(float3 w) {
+    const float cz = fmaxf(w.y, 0.0f);
+    if (cz < params.coastHeight * 0.9f) {   // the cove's rim: a band of sunlit rock above the horizon
+        const float rim = 1.0f - smoothstepf(params.coastHeight * 0.8f, params.coastHeight * 0.9f, cz);
+        return make_float3(0.0f, 0.0f, rim);
+    }
+    const float cg = clampf(dot(w, params.sunAir), -1.0f, 1.0f);
+    const float g = acosf(cg);
+    const float F = (1.0f + params.perez[0] * expf(params.perez[1] / fmaxf(cz, 0.02f))) *
+                    (1.0f + params.perez[2] * expf(params.perez[3] * g) + params.perez[4] * cg * cg);
+    const float Y = params.skyY * F * params.perezNorm;
+    const float white = saturate(0.25f + 0.55f * expf(-3.0f * cz) + 0.35f * expf(-4.0f * g));
+    return make_float3(Y * (1.0f - white), Y * white, 0.0f);
+}
+
+// =====================================================================================================
+// shading
+// =====================================================================================================
+struct Lit {
+    float3 L;           // XYZ arriving at the camera, without the in-scattering of the first segment's sun light
+    float t;            // where the first segment ends (the sun's in-scattering is marched up to here)
+    unsigned int id;
+    float3 n;           // for the views
+    float caustic;
+};
+
+static __forceinline__ __device__ float causticAt(float3 p, int level) {
+    // slices spaced in log depth (a caustic's lines move laterally ~ in proportion to depth); above the first slice the
+    // focusing has not happened yet: fade to 1 towards the surface
+    const float z = -p.y;
+    if (z <= 0.0f || params.causticFlat) return 1.0f;
+    const float lz = logf(z);
+    const float w = (lz - params.causticLz0) / (params.causticLz1 - params.causticLz0);
+    const float inv = 1.0f / params.causticPatch;
+    const float F = tex3D<float>((cudaTextureObject_t)params.caustic[level], p.x * inv, p.z * inv, tc(w, params.causticSlices));
+    if (w >= 0.0f) return F;
+    return lerpf(1.0f, F, saturate(z / expf(params.causticLz0)));
+}
+static __forceinline__ __device__ float sunVisAt(float3 p) {
+    const float3 q = make_float3((p.x - params.sunVisMin.x) / params.sunVisSize.x, (p.y - params.sunVisMin.y) / params.sunVisSize.y,
+                                 (p.z - params.sunVisMin.z) / params.sunVisSize.z);
+    if (q.x < 0.0f || q.y < 0.0f || q.z < 0.0f || q.x > 1.0f || q.y > 1.0f || q.z > 1.0f || !params.sunVis) return 1.0f;
+    return tex3D<float>((cudaTextureObject_t)params.sunVis, q.x, q.y, q.z);
+}
+
+// A surface: the scanned material (ray-cone filtered), the direct sun (caustic factor, a shadow ray) and the water's
+// diffuse light (baked occlusion), all seen through tPath metres of water.
+static __forceinline__ __device__ float3 shadeSurface(const Hit& h, float3 d, float tPath, float coneAngle, float& causticOut, float3& nOut) {
+    const KMaterial m = params.materials[h.mat];
+    float3 albedo = m.albedo;
+    float3 n = h.ns;
+    const float width = coneAngle * h.t;   // the cone's width at the hit
+    if (m.texSet >= 0 && (m.kind == KM_TERRAIN || m.kind == KM_MESH)) {
+        const KTextureSet ts = params.texSets[m.texSet];
+        float2 uv = h.uv;
+        float3 dpdu = h.dpdu, dpdv = h.dpdv;
+        if (m.kind == KM_TERRAIN) {
+            uv = make_float2(h.p.x * m.uvScale, h.p.z * m.uvScale);
+            dpdu = make_float3(1.0f / m.uvScale, 0.0f, 0.0f);
+            dpdv = make_float3(0.0f, 0.0f, 1.0f / m.uvScale);
+        }
+        // the cone's footprint on the surface: an ellipse stretched along the view's projection (anisotropic filtering)
+        const float cosv = fmaxf(fabsf(dot(d, h.ng)), 0.05f);
+        float3 ax = d - h.ng * dot(d, h.ng);
+        const float axl = length(ax);
+        ax = axl > 1e-6f ? ax / axl : normalize(dpdu);
+        const float3 ay = cross(h.ng, ax);
+        const float3 A = ax * (width / cosv), B = ay * width;
+        // to uv: solve with the (non-orthogonal) tangent frame by projection
+        const float uu = dot(dpdu, dpdu), vv = dot(dpdv, dpdv), uv_ = dot(dpdu, dpdv);
+        const float det = fmaxf(uu * vv - uv_ * uv_, 1e-20f);
+        auto toUV = [&](float3 v) {
+            const float a = dot(v, dpdu), b = dot(v, dpdv);
+            return make_float2((a * vv - b * uv_) / det, (b * uu - a * uv_) / det);
+        };
+        const float2 du = toUV(A), dv = toUV(B);
+        albedo = albedo * srgbDecode(f3(texGrad(ts.albedo, uv, du, dv)));
+        if (ts.hasNormal) {
+            const float3 tn = f3(texGrad(ts.normal, uv, du, dv)) * 2.0f - make_float3(1.0f, 1.0f, 1.0f);
+            const float3 T = normalize(dpdu - n * dot(n, dpdu));
+            const float3 Bt = cross(n, T) * (dot(cross(n, T), dpdv) < 0.0f ? -1.0f : 1.0f);
+            const float3 nn = normalize(T * (tn.x * m.normalStrength) + Bt * (tn.y * m.normalStrength) + n * fmaxf(tn.z, 0.05f));
+            n = dot(nn, h.ng) > 0.02f ? nn : n;
+        }
+    }
+    // the sand ripples (world-space normal map, ray-cone filtered: sharp near, averaged out far)
+    if (m.kind == KM_TERRAIN && params.rippleTex && fabsf(h.p.x) < params.rippleHalf && fabsf(h.p.z) < params.rippleHalf) {
+        const float inv = 0.5f / params.rippleHalf;
+        const float2 uv = make_float2(h.p.x * inv + 0.5f, h.p.z * inv + 0.5f);
+        const float cosv = fmaxf(fabsf(dot(d, h.ng)), 0.05f);
+        float3 ax = d - h.ng * dot(d, h.ng);
+        const float axl = length(ax);
+        ax = axl > 1e-6f ? ax / axl : make_float3(1, 0, 0);
+        const float3 ay = cross(h.ng, ax);
+        const float2 du = make_float2(ax.x * width / cosv * inv, ax.z * width / cosv * inv);
+        const float2 dv = make_float2(ay.x * width * inv, ay.z * width * inv);
+        const float4 rn = tex2DGrad<float4>((cudaTextureObject_t)params.rippleTex, uv.x, uv.y, du, dv);
+        const float rx = rn.x * 2.0f - 1.0f, rz = rn.y * 2.0f - 1.0f;   // the ripple's tilt (world x, z), shortened when averaged
+        const float3 nn = normalize(n + make_float3(rx, 0.0f, rz) / fmaxf(rn.z * 2.0f - 1.0f, 0.2f));
+        n = dot(nn, h.ng) > 0.05f ? nn : n;
+    }
+    nOut = n;
+    const float3 wk = basisWeights(albedo);
+    const float z = -h.p.y;
+    float3 L = make_float3(0.0f, 0.0f, 0.0f);
+    // the sun
+    const float cs = dot(n, params.sunWater);
+    causticOut = 1.0f;
+    if (cs > 0.0f && dot(h.ng, params.sunWater) > -0.05f) {
+        const float F = causticAt(h.p, 0);
+        causticOut = F;
+        const float tUp = (params.oceanHeightMax - h.p.y) / fmaxf(params.sunWater.y, 0.05f);
+        const bool lit = visible(offsetRay(h.p, h.ng), params.sunWater, tUp);
+        if (lit) L += sunOnSurface(wk, z, tPath) * (cs * F);
+    }
+    // the water's diffuse light
+    const float occ = lerpf(1.0f, h.ao, m.aoStrength);
+    L += ambientOnSurface(wk, z, n.y, tPath) * occ;
+    // debug views: grey levels in display terms (5 occlusion, 6 the sun's shadow ray, 7 the normal's height)
+    if (params.view >= 5 && params.view <= 7) {
+        const float tUp = (params.oceanHeightMax - h.p.y) / fmaxf(params.sunWater.y, 0.05f);
+        const float v = params.view == 5 ? h.ao : params.view == 6 ? (visible(offsetRay(h.p, h.ng), params.sunWater, tUp) ? 1.0f : 0.0f) : n.y;
+        const float g = 0.18f * v / fmaxf(params.exposure, 1e-9f);
+        return make_float3(0.9505f * g, g, 1.089f * g);
+    }
+    return L;
+}
+
+// What a ray leaving the surface downwards sees (a total internal reflection): one more surface or the water's depth.
+// tBefore: the metres the light still travels afterwards (to the camera).
+static __forceinline__ __device__ float3 shadeReflected(float3 q, float3 r, float tBefore, float coneAngle) {
+    const Hit h = trace(q, r, params.farDistance);
+    float3 L;
+    if (h.hit) {
+        float c;
+        float3 n;
+        L = shadeSurface(h, r, h.t + tBefore, coneAngle, c, n);
+        L += reflectedPath(r.y, h.t, tBefore);
+    } else {
+        L = reflectedPath(r.y, params.farDistance, tBefore);
+    }
+    return L;
+}
+
+// The surface from below at q (reached after ts metres along d): Snell's window (the sky, the rim, the sun's glints,
+// all refracted, Fresnel and n^2), and outside it the mirror of total internal reflection. The footprint's unresolved
+// slopes soften the window's edge and spread the glints: the sharper the footprint, the sharper both.
+static __forceinline__ __device__ float3 shadeFromBelow(float3 q, float3 d, float ts, float coneAngle, float3& nOut) {
+    const float foot = coneAngle * ts / fmaxf(d.y, 0.1f);
+    const Wave w = waveAt(q.x, q.z, foot);
+    const float3 m = normalize(make_float3(-w.sx, 1.0f, -w.sz));
+    nOut = m;
+    const float n1 = params.waterN;
+    const float ci = clampf(dot(d, m), 0.0f, 1.0f);
+    const float si = sqrtf(fmaxf(0.0f, 1.0f - ci * ci));
+    const float thetaI = acosf(ci), thetaC = asinf(1.0f / n1);
+    const float sigma = sqrtf(w.var);                         // slope spread ~ normal angle spread (rad), small slopes
+    const float spread = fmaxf(sigma * 1.4142f, 1e-4f);
+    // the share of the footprint's normals that let the ray out (incidence below the critical angle)
+    const float pass = 0.5f * erfcf((thetaI - thetaC) / spread);
+    float3 L = make_float3(0.0f, 0.0f, 0.0f);
+    float fresnel = 1.0f;
+    if (pass > 1e-4f) {
+        const float st = fminf(n1 * si, 0.9999f);
+        const float ct = sqrtf(1.0f - st * st);
+        // transmitted direction (into air)
+        const float3 tdir = normalize(d * n1 + m * (ct - n1 * ci));
+        // unpolarised Fresnel water -> air
+        const float rs = (n1 * ci - ct) / (n1 * ci + ct), rp = (ci - n1 * ct) / (ci + n1 * ct);
+        fresnel = 0.5f * (rs * rs + rp * rp);
+        const float T = (1.0f - fresnel) * pass;
+        const float3 sw = skyWeights(tdir);
+        L += (pathRow(PT_SKY0 + 0, ts) * sw.x + pathRow(PT_SKY0 + 1, ts) * sw.y + pathRow(PT_SKY0 + 2, ts) * sw.z) * T;
+        // the sun's glint: microfacet transmission (Walter et al. 2007) with Beckmann slopes of the footprint's spread
+        // plus the sun's own disc mapped to slopes, evaluated for the one normal that refracts d into the sun
+        const float3 s = params.sunAir;
+        float3 hm = d * n1 - s;                                // the refraction half vector (towards the air)
+        if (hm.y > 1e-4f) {
+            hm = normalize(hm);
+            const float im = dot(s, hm), om = dot(d, hm);      // the light's and the view's cosines with that normal
+            if (im > 0.0f && om > 0.0f) {
+                const float px = -hm.x / hm.y, pz = -hm.z / hm.y;   // its slopes
+                const float discSlope = params.sunRadiusAir / fmaxf(length(d * n1 - s), 0.05f);
+                const float v = w.var + 0.25f * discSlope * discSlope;
+                const float dx = px - w.sx, dz = pz - w.sz;
+                const float cm = hm.y;
+                const float D = expf(-(dx * dx + dz * dz) / (2.0f * v)) / (2.0f * M_PIf * v * cm * cm * cm * cm);
+                const float denom = im - n1 * om;               // n_i (i.m) + n_o (o.m) with o = -d
+                const float J = n1 * n1 * om * im / fmaxf(denom * denom, 1e-6f);   // |i.m||o.m| n_o^2 / (...)^2
+                const float cosO = fmaxf(d.y, 0.05f), cosI = fmaxf(s.y, 0.05f);
+                const float fs = (1.0f - fresnel) * D * J / (cosO * cosI);   // BTDF
+                L += pathRow(PT_SUN_AIR, ts) * (fs * cosI);
+            }
+        }
+    }
+    // the mirror: total internal reflection outside the window, Fresnel inside it
+    const float R = (1.0f - pass) + pass * fresnel;
+    if (R > 1e-3f) {
+        const float3 r = normalize(reflect3(d, m));
+        if (r.y < -0.02f) L += shadeReflected(q + make_float3(0.0f, -0.01f, 0.0f), r, ts, coneAngle) * R;
+    }
+    return L;
+}
+
+// One sample: trace, shade what is hit, carry it through the water to the camera (the diffuse in-scattering included;
+// the sun's single scattering of the first segment is added by the march).
+static __forceinline__ __device__ Lit shadeSample(float3 o, float3 d, float coneAngle) {
+    Lit r;
+    r.n = make_float3(0, 0, 0);
+    r.caustic = 1.0f;
+    const float z0 = -o.y;
+    float tmax = params.farDistance;
+    if (d.y > 1e-4f) tmax = fminf(tmax, (params.oceanHeightMax - o.y) / d.y);
+    const Hit h = trace(o, d, tmax);
+    if (h.hit) {
+        r.L = shadeSurface(h, d, h.t, coneAngle, r.caustic, r.n) + (params.view >= 5 ? make_float3(0, 0, 0) : ambientPath(z0, d.y, h.t));
+        r.t = h.t;
+        r.id = h.id;
+        return r;
+    }
+    if (d.y > 1e-4f) {
+        const float ts = surfaceHit(o, d, coneAngle);
+        const float3 q = o + d * ts;
+        r.L = shadeFromBelow(q, d, ts, coneAngle, r.n) + ambientPath(z0, d.y, ts);
+        r.t = ts;
+        r.id = ID_WATER;
+        return r;
+    }
+    r.L = ambientPath(z0, d.y, params.farDistance);
+    r.t = params.farDistance;
+    r.id = ID_OPEN;
+    return r;
+}
+
+// ---- the sun's light scattered once by the water along a ray (shafts): marched per 2x2 pixel block, read per sample
+// knot k of K sits at t = shaftMax (k / (K-1))^2: fine near the eye
+static __forceinline__ __device__ float knotT(int k) {
+    const float u = float(k) / float(params.shaftKnots - 1);
+    return params.shaftMax * u * u;
+}
+static __forceinline__ __device__ float knotCoord(float t) {
+    return sqrtf(fminf(fmaxf(t, 0.0f), params.shaftMax) / params.shaftMax) * float(params.shaftKnots - 1);
+}
+// the shafts' light reaching the camera from the first t metres of a sample's ray (px, py: its position on the screen)
+static __forceinline__ __device__ float3 shaftAt(float px, float py, float t) {
+    // block i's centre sits at pixel 2i - 1 (texel centres at i + 0.5, unnormalised coordinates)
+    const float bx = (px + 1.0f) * 0.5f + 0.5f, by = (py + 1.0f) * 0.5f + 0.5f, bz = knotCoord(t) + 0.5f;
+    return f3(tex3D<float4>((cudaTextureObject_t)params.shaftTex, bx, by, bz));
+}
+
+// =====================================================================================================
+// frame passes
+// =====================================================================================================
+static __forceinline__ __device__ float displayValue(float3 xyz) {   // a rough display brightness: for edge detection only
+    const float Y = fmaxf(xyz.y, 0.0f) * params.exposure;
+    return Y / (1.0f + Y);
+}
+
+extern "C" __global__ void __raygen__base() {
+    const uint3 idx = optixGetLaunchIndex();
+    const unsigned int pix = idx.y * params.width + idx.x;
+    const KCamera& cam = params.cam;
+    const int N = params.baseSpp;
+    const float cone = cam.pixelAngle / sqrtf(float(N));
+    float lo = 1e30f, hi = -1e30f;
+    bool other = false;
+    unsigned int id0 = 0;
+    for (int s = 0; s < N; ++s) {
+        const float2 sp = params.basePattern[s] + params.patternShift;
+        const float3 d = cameraRay(cam, idx.x + sp.x, idx.y + sp.y);
+        const Lit l = shadeSample(cam.pos, d, cone);
+        const float3 c = l.L + shaftAt(idx.x + sp.x, idx.y + sp.y, l.t);
+        params.samples[size_t(pix) * N + s] = make_float4(c.x, c.y, c.z, __uint_as_float(l.id));
+        const float v = displayValue(c);
+        lo = fminf(lo, v);
+        hi = fmaxf(hi, v);
+        if (s == 0) id0 = l.id;
+        other = other || l.id != id0;
+    }
+    unsigned int e = 0;
+    // an edge: a strong contrast between the samples, or another surface with at least a little contrast (two leaves
+    // of the same green, or the far floor meeting the far water, need no more samples)
+    if (params.edgeSpp > N && (hi - lo > params.edgeContrast || (other && hi - lo > params.edgeContrast * params.edgeIdShare))) {
+        const unsigned int k = atomicAdd(params.edgeCount, 1u);
+        if (k < params.edgeCapacity) {
+            params.edgeList[k] = pix;
+            e = k + 1;
+        }
+    }
+    params.edgeIndex[pix] = e;
+}
+
+// the reconstruction filter (separable), x in pixels from the output pixel's centre: the same function as the host's
+static __forceinline__ __device__ float filter1(float x) { return koyFilter(params.filter, params.filterRadius, x); }
+
+extern "C" __global__ void __raygen__edge() {
+    const unsigned int k = optixGetLaunchIndex().x;
+    if (k >= min(*params.edgeCount, params.edgeCapacity)) return;
+    const unsigned int pix = params.edgeList[k];
+    const unsigned int x = pix % params.width, y = pix / params.width;
+    const KCamera& cam = params.cam;
+    const int N = params.baseSpp, M = params.edgeSpp - params.baseSpp;
+    const float cone = cam.pixelAngle / sqrtf(float(params.edgeSpp));
+    float3 acc[9];
+    for (int j = 0; j < 9; ++j) acc[j] = make_float3(0.0f, 0.0f, 0.0f);
+    const float invN = 1.0f / float(params.edgeSpp);
+    for (int s = 0; s < M; ++s) {
+        const float2 sp = params.edgePattern[N + s] + params.patternShift;
+        const float3 d = cameraRay(cam, x + sp.x, y + sp.y);
+        const Lit l = shadeSample(cam.pos, d, cone);
+        const float3 c = (l.L + shaftAt(x + sp.x, y + sp.y, l.t)) * invN;
+        // towards the output pixel at (x + jx, y + jy): neighbour j = (jy + 1) * 3 + (jx + 1)
+        const float wx[3] = {filter1(sp.x + 0.5f), filter1(sp.x - 0.5f), filter1(sp.x - 1.5f)};
+        const float wy[3] = {filter1(sp.y + 0.5f), filter1(sp.y - 0.5f), filter1(sp.y - 1.5f)};
+        for (int jy = 0; jy < 3; ++jy)
+            for (int jx = 0; jx < 3; ++jx) acc[jy * 3 + jx] += c * (wx[jx] * wy[jy]);
+    }
+    for (int j = 0; j < 9; ++j) params.edgeAcc[size_t(k) * 9 + j] = make_float4(acc[j].x, acc[j].y, acc[j].z, 0.0f);
+}
+
+extern "C" __global__ void __raygen__resolve() {
+    const uint3 idx = optixGetLaunchIndex();
+    const int W = int(params.width), H = int(params.height);
+    const int x = int(idx.x), y = int(idx.y);
+    const int N = params.baseSpp;
+    float3 sum = make_float3(0.0f, 0.0f, 0.0f);
+    float wsum = 0.0f;
+    for (int dy = -1; dy <= 1; ++dy)
+        for (int dx = -1; dx <= 1; ++dx) {
+            const int qx = x + dx, qy = y + dy;
+            if (qx < 0 || qy < 0 || qx >= W || qy >= H) continue;
+            const unsigned int q = unsigned(qy) * params.width + unsigned(qx);
+            const unsigned int e = params.edgeIndex[q];
+            const float inv = 1.0f / float(e ? params.edgeSpp : N);
+            for (int s = 0; s < N; ++s) {
+                const float2 sp = params.basePattern[s] + params.patternShift;
+                const float w = filter1(dx + sp.x - 0.5f) * filter1(dy + sp.y - 0.5f) * inv;
+                const float4 c = params.samples[size_t(q) * N + s];
+                sum += f3(c) * w;
+                wsum += w;
+            }
+            if (e) {
+                // the edge pixel q filtered its extra samples towards the output pixel at q + (jx, jy): here (-dx, -dy)
+                const int j = (-dy + 1) * 3 + (-dx + 1);
+                sum += f3(params.edgeAcc[size_t(e - 1) * 9 + j]);
+                wsum += params.filterWEdge[-dy + 1][-dx + 1];
+            }
+        }
+    const float3 xyz = wsum > 0.0f ? sum / wsum : make_float3(0.0f, 0.0f, 0.0f);
+    float3 rgb = xyzToRgb(xyz);
+    if (params.view == 1 && params.edgeIndex[unsigned(y) * params.width + unsigned(x)]) rgb = rgb * 0.3f + make_float3(1.0f, 0.15f, 0.05f) * 0.7f / fmaxf(params.exposure, 1e-6f);
+    params.hdr[unsigned(y) * params.width + unsigned(x)] = make_float4(rgb.x, rgb.y, rgb.z, 1.0f);
+}
+
+extern "C" __global__ void __raygen__final() {
+    const uint3 idx = optixGetLaunchIndex();
+    const unsigned int i = idx.y * params.width + idx.x;
+    float3 c = f3(params.hdr[i]) * params.exposure;
+    c = gamutCompress(c, luminance709(c));
+    c = agx(c);
+    // a fixed TPDF dither from two decorrelated blue-noise tiles: no banding, and nothing that moves between frames
+    float n = 0.0f;
+    if (params.blueNoise) {
+        const float a = params.blueNoise[((idx.y) & 127u) * 128u + ((idx.x) & 127u)];
+        const float b = params.blueNoise[((idx.y + 61u) & 127u) * 128u + ((idx.x + 37u) & 127u)];
+        n = a + b - 1.0f;
+    }
+    const float r = fminf(fmaxf(srgbOetf(c.x) * 255.0f + 0.5f + n, 0.0f), 255.0f);
+    const float g = fminf(fmaxf(srgbOetf(c.y) * 255.0f + 0.5f + n, 0.0f), 255.0f);
+    const float b = fminf(fmaxf(srgbOetf(c.z) * 255.0f + 0.5f + n, 0.0f), 255.0f);
+    params.output[i] = make_uchar4((unsigned char)r, (unsigned char)g, (unsigned char)b, 255);
+}
+
+extern "C" __global__ void __raygen__shafts() {
+    const uint3 idx = optixGetLaunchIndex();
+    const KCamera& cam = params.cam;
+    // the block's centre on the screen: pixel 2i - 1 (blocks reach a pixel beyond each border)
+    const float px = 2.0f * float(idx.x) - 1.0f, py = 2.0f * float(idx.y) - 1.0f;
+    const float3 d = cameraRay(cam, px, py);
+    // the sun's light travels along -sunWater and leaves towards the camera along -d: cos(theta) = dot(sunWater, d)
+    const float cth = dot(d, params.sunWater);
+    const float pW = phaseWater(cth), pP = phaseFF(cth);
+    const float3 o = cam.pos;
+    float3 acc = make_float3(0.0f, 0.0f, 0.0f);
+    const int K = params.shaftKnots;
+    surf3Dwrite(make_float4(0.0f, 0.0f, 0.0f, 0.0f), (cudaSurfaceObject_t)params.shaftSurf, int(idx.x * sizeof(float4)), int(idx.y), 0);
+    float t0 = 0.0f;
+    for (int k = 1; k < K; ++k) {
+        const float t1 = knotT(k);
+        const float step = params.shaftStep0 + params.shaftStepGrow * t0;
+        const int n = min(8, max(1, int(ceilf((t1 - t0) / step))));
+        const float ds = (t1 - t0) / float(n);
+        const int level = ds < 0.08f ? 0 : ds < 0.16f ? 1 : ds < 0.32f ? 2 : 3;
+        for (int j = 0; j < n; ++j) {
+            const float sm = t0 + (j + 0.5f) * ds;
+            const float3 p = o + d * sm;
+            const float z = -p.y;
+            if (z <= 0.0f) continue;   // above the surface: no water
+            const float L = z / params.sunCosW + sm;
+            const float3 src = pathRow(PT_SHAFT_W, L) * pW + pathRow(PT_SHAFT_P, L) * pP;
+            const float F = causticAt(p, min(level, params.causticLevels - 1));
+            const float V = sunVisAt(p);
+            acc += src * (F * V * ds);
+        }
+        surf3Dwrite(make_float4(acc.x, acc.y, acc.z, 0.0f), (cudaSurfaceObject_t)params.shaftSurf, int(idx.x * sizeof(float4)), int(idx.y), k);
+        t0 = t1;
+    }
+}
+
+// =====================================================================================================
+// load-time bakes
+// =====================================================================================================
+// Hammersley point k of n, cosine-weighted around n
+static __forceinline__ __device__ float3 cosineDir(unsigned int k, unsigned int n, float3 nrm, float rot) {
+    unsigned int b = k;
+    b = (b << 16u) | (b >> 16u);
+    b = ((b & 0x55555555u) << 1u) | ((b & 0xAAAAAAAAu) >> 1u);
+    b = ((b & 0x33333333u) << 2u) | ((b & 0xCCCCCCCCu) >> 2u);
+    b = ((b & 0x0F0F0F0Fu) << 4u) | ((b & 0xF0F0F0F0u) >> 4u);
+    b = ((b & 0x00FF00FFu) << 8u) | ((b & 0xFF00FF00u) >> 8u);
+    const float u1 = (k + 0.5f) / float(n), u2 = fracf(float(b) * 2.3283064365386963e-10f + rot);
+    const float r = sqrtf(u1), phi = 2.0f * M_PIf * u2;
+    const Frame f = Frame::from(nrm);
+    return f.toWorld(make_float3(r * cosf(phi), r * sinf(phi), sqrtf(fmaxf(0.0f, 1.0f - u1))));
+}
+
+extern "C" __global__ void __raygen__bakeAO() {
+    const unsigned int v = optixGetLaunchIndex().x;
+    const KMesh& m = params.meshes[params.bakeMesh];
+    const KInstance in = params.instances[params.bakeInstance];
+    const float3 p = xformP(in, m.pos[v]);
+    const float3 n = normalize(xformV(in, m.nrm[v]));
+    const unsigned int R = 128;
+    float open = 0.0f;
+    const float rot = (hashU32(v) & 0xFFFF) * (1.0f / 65536.0f);
+    for (unsigned int k = 0; k < R; ++k) {
+        const float3 d = cosineDir(k, R, n, rot);
+        if (visible(offsetRay(p, n), d, 4.0f)) open += 1.0f;
+    }
+    params.bakeOut[v] = open / float(R);
+}
+
+extern "C" __global__ void __raygen__bakeSun() {
+    // voxel (x, y, z) of the sun-visibility box: rays towards the refracted sun spread by the waves' slopes
+    const uint3 idx = optixGetLaunchIndex();
+    const uint3 dim = optixGetLaunchDimensions();
+    const float3 p = params.sunVisMin + make_float3((idx.x + 0.5f) / dim.x * params.sunVisSize.x, (idx.y + 0.5f) / dim.y * params.sunVisSize.y,
+                                                    (idx.z + 0.5f) / dim.z * params.sunVisSize.z);
+    float vis = 0.0f;
+    if (p.y < -0.02f) {
+        const Frame f = Frame::from(params.sunWater);
+        const unsigned int R = 16;
+        const float spread = 0.035f;   // ~2 degrees: the refracted sun wanders with the slopes of the waves
+        for (unsigned int k = 0; k < R; ++k) {
+            const float a = 2.0f * M_PIf * (k + 0.5f) / R * 2.618f, r = spread * sqrtf((k + 0.5f) / R);
+            const float3 d = normalize(f.toWorld(make_float3(r * cosf(a), r * sinf(a), 1.0f)));
+            const float tUp = (params.oceanHeightMax - p.y) / fmaxf(d.y, 0.05f);
+            if (visible(p, d, tUp)) vis += 1.0f;
+        }
+        vis /= float(R);
+    } else {
+        vis = 1.0f;
+    }
+    params.bakeOut[(size_t(idx.z) * dim.y + idx.y) * dim.x + idx.x] = vis;
+}

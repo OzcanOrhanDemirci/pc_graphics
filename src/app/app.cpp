@@ -291,7 +291,9 @@ void App::frameRunning(double now, double dt) {
     in.pressedKeys = keyQueue_;
     keyQueue_.clear();
     GLFWwindow* w = win_;
-    in.down = [w](int k) { return glfwGetKey(w, k) == GLFW_PRESS; };
+    in.down = [w, this](int k) {
+        return glfwGetKey(w, k) == GLFW_PRESS || std::find(virtualHeld_.begin(), virtualHeld_.end(), k) != virtualHeld_.end();
+    };
     in.shift = glfwGetKey(win_, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(win_, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
     in.ctrl = glfwGetKey(win_, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS || glfwGetKey(win_, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS;
     in.mouseX = float(mouseX_);
@@ -364,6 +366,12 @@ void App::autotestStep(double now) {
         case 7: virtualMouse_ = true; virtualX_ = s.fx * fbw_; virtualY_ = s.fy * fbh_; break;
         case 8: leftClick_ = true; return;   // seen by this frame
         case 9: virtualRight_ = s.key != 0; break;
+        case 13: {   // hold a key (fx 1) or let it go (fx 0)
+            const auto it = std::find(virtualHeld_.begin(), virtualHeld_.end(), s.key);
+            if (s.fx > 0.5f && it == virtualHeld_.end()) virtualHeld_.push_back(s.key);
+            if (s.fx <= 0.5f && it != virtualHeld_.end()) virtualHeld_.erase(it);
+            break;
+        }
         case 10:
             virtualLeft_ = s.key != 0;
             if (virtualLeft_) leftClick_ = true;
@@ -449,6 +457,7 @@ int App::run(const Options& opt) {
         auto left = [&](bool down) { script_.push_back({10, 0, down ? 1 : 0, ""}); };
         auto control = [&](const std::string& id, int item) { script_.push_back({11, 0, item, id}); };
         auto slide = [&](const std::string& id, float v) { Step st{12, 0, 0, id}; st.fx = v; script_.push_back(st); };
+        auto hold = [&](int k, bool down) { Step st{13, 0, k, ""}; st.fx = down ? 1.0f : 0.0f; script_.push_back(st); };
         wait(1.5); shot("galeri_1");
         key(GLFW_KEY_DOWN); wait(0.8); shot("galeri_2");
         key(GLFW_KEY_DOWN); wait(0.8); shot("galeri_3");
@@ -575,6 +584,19 @@ int App::run(const Options& opt) {
                     slide("zaman", 0.03f); wait(0.1); left(false); control("hiz", 2); wait(2.0); log("lab kup 1m x1/100"); shot("lab_kup_1m_yavas");
                     control("hiz", 0);
                 }
+            }
+            if (infos_[s].id == "koy") {
+                // swim forward, look right with the right button, the panel's knobs, the edge pixels, time paused (the
+                // still picture accumulates to 256 samples a pixel)
+                hold(GLFW_KEY_W, true); wait(2.5); hold(GLFW_KEY_W, false); wait(0.5); log("koy yuzdu"); shot("koy_yuzdu");
+                mouse(0.50f, 0.50f); right(true); wait(0.1);
+                for (int k = 1; k <= 10; ++k) { mouse(0.50f + 0.008f * k, 0.50f); wait(0.03); }
+                right(false); wait(0.5); shot("koy_saga_bakti");
+                control("ornek", 3); wait(1.0); log("koy 16 ornek"); shot("koy_16_ornek");
+                control("ornek", 1); control("kenar", 3); wait(1.0); log("koy kenar 32"); shot("koy_kenar_32");
+                control("kenar", 2); control("suzgec", 0); wait(0.6); shot("koy_kutu_suzgec"); control("suzgec", 1);
+                key(GLFW_KEY_E); wait(0.6); shot("koy_kenar_pikselleri"); key(GLFW_KEY_E);
+                key(GLFW_KEY_P); wait(2.0); log("koy durdu"); shot("koy_durdu_birikti"); key(GLFW_KEY_P); wait(0.5);
             }
             key(GLFW_KEY_H); wait(0.3); shot(infos_[s].id + "_arayuzsuz"); key(GLFW_KEY_H);
             key(GLFW_KEY_ESCAPE); gallery(); wait(0.8);
