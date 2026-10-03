@@ -26,6 +26,7 @@ int runSolverTests(const Config& c, const std::string& only);
 int runSurfaceTests(const Config& cfg, const std::string& only);
 int runWeaponsTests(const std::string& only);
 int runLabTests(LaboratuvarApp& app, const std::string& only);
+int runCubeTests(const std::string& only);
 
 void LaboratuvarApp::loadConfig() {
     cfg = Config();
@@ -363,6 +364,7 @@ int runLaboratuvarCli(int argc, char** argv) {
         else if (a == "--surface-test") { mode = "surface"; testName = opt(); }
         else if (a == "--weapons-test") { mode = "weapons"; testName = opt(); }
         else if (a == "--lab-test") { mode = "lab"; testName = opt(); }
+        else if (a == "--kup-test") { mode = "kup"; testName = opt(); }
         else if (a == "--deney") deneyS = next();
         else if (a == "--tetik") trig = true;
         else if (a == "--kayit") recorded = true;
@@ -392,6 +394,7 @@ int runLaboratuvarCli(int argc, char** argv) {
     if (mode == "surface") return runSurfaceTests(app.cfg, testName);
     if (mode == "weapons") return runWeaponsTests(testName);
     if (mode == "lab") return runLabTests(app, testName);
+    if (mode == "kup") return runCubeTests(testName);
     if (mode != "still" && mode != "seq" && mode != "stab") {
         std::printf("laboratuvar: --still, --seq, --test, --surface-test, --weapons-test, --lab-test\n");
         return 2;

@@ -44,6 +44,7 @@ add_library(pc_core OBJECT
     src/scenes/yikim/phys.cu
     src/scenes/yikim/quake.cpp
     src/scenes/laboratuvar/particles.cu
+    src/scenes/laboratuvar/cubes.cu
     src/scenes/laboratuvar/surface.cu
     src/scenes/laboratuvar/weapons.cpp
     src/scenes/laboratuvar/solver_tests.cpp
@@ -53,6 +54,7 @@ add_library(pc_core OBJECT
     src/scenes/laboratuvar/lab_kernels.cu
     src/scenes/laboratuvar/lab_world.cpp
     src/scenes/laboratuvar/lab_record.cpp
+    src/scenes/laboratuvar/cube_tests.cpp
     src/scenes/laboratuvar/lab_tests.cpp
     src/scenes/laboratuvar/laboratuvar_renderer.cpp
     src/scenes/laboratuvar/laboratuvar_app.cpp
