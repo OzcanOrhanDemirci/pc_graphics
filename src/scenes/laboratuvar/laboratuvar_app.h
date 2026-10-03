@@ -90,6 +90,12 @@ struct LaboratuvarApp {
     void draw(const DrawInput& in);
     // the balloon's membrane triangles (the coarse world's, or a recording's fine ones)
     void setMembraneTris(const std::vector<uint3>& tris);
+    // is this picked object the experiment's target (the balloon, the melon, the gel), not the table or a stand
+    bool isTarget(int obj) const {
+        for (int c : {int(DC_RUBBER), int(DC_WATER), int(DC_RIND), int(DC_PITH), int(DC_FLESH), int(DC_GEL)})
+            if (renderer.isSurfaceObject(surf[c], obj)) return true;
+        return obj >= 0 && obj == objMembrane;
+    }
     void applyLook();
     void setCamera(Deney d);
     void release();

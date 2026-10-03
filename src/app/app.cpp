@@ -530,8 +530,11 @@ int App::run(const Options& opt) {
                 control("deney", 2); wait(10.0); log("lab kum"); shot("lab_kum");
                 key(GLFW_KEY_B); wait(2.0); shot("lab_kum_bilye");
                 control("deney", 3); wait(4.0); shot("lab_balon");
+                mouse(0.50f, 0.50f); wait(0.2); click(); wait(0.3); log("lab balon tik");   // the needle by the mouse (the log says where)
                 control("eylem", 0); wait(0.6); shot("lab_balon_onizleme"); wait(12.0); log("lab balon kayit"); shot("lab_balon_kayit");
                 control("deney", 4); wait(4.0); shot("lab_karpuz");
+                mouse(0.50f, 0.56f); wait(0.2); click(); wait(0.6); shot("lab_karpuz_tik"); log("lab karpuz tik");
+                key(GLFW_KEY_R); wait(4.0);
                 control("eylem", 0); wait(0.6); shot("lab_karpuz_onizleme"); wait(14.0); log("lab karpuz kayit"); shot("lab_karpuz_kayit");
                 control("deney", 6); wait(4.0); shot("lab_damla");
                 control("eylem", 0); wait(0.6); shot("lab_damla_onizleme"); wait(8.0); log("lab damla kayit"); shot("lab_damla_kayit");

@@ -52,6 +52,7 @@ public:
     int addSurface(int material, int maxParticles, int maxVertices, int maxTriangles, int maxBlocks, const FluidSurfaceSettings& s);
     void buildSurface(int surf, const float3* dPos, const float* dWeight, int n, float radius);
     FluidSurface& surface(int surf) { return *surfaces_[size_t(surf)].fs; }
+    bool isSurfaceObject(int surf, int obj) const { return surf >= 0 && (surfaces_[size_t(surf)].meshObj == obj || surfaces_[size_t(surf)].dropObj == obj); }
     void setSurfaceVisible(int surf, bool on);
     void setDropletsVisible(int surf, bool on);   // its lone particles as spheres (sand: drawn as grains instead)
     void setTransform(int obj, const float xf[12]);           // row-major 3x4, object to world

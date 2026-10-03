@@ -121,6 +121,10 @@ bool LabWorld::build(Deney d, const Config& sceneCfg, bool fine_, const LabInput
         if (kv.first.rfind(pre + "fizik.", 0) == 0) cfg.values["fizik." + kv.first.substr(pre.size() + 6)] = kv.second;
     s = cfg.f(pre + (fine ? "aralik_ince" : "aralik_kaba"), fine ? 0.0015f : 0.0025f);
     pw.begin(s);
+    // every setting afresh: a trigger may have changed one (the needle turns the tear's tip on), and the world of the
+    // next experiment must not inherit it (a melon after the balloon crumbled on its stand: measured)
+    pw.params = PParams{};
+    restScale_ = restTarget_ = 1.0f;
     applyPhysics(pw, cfg);
     if (fine) {   // smaller particles move as far in fewer of their own sizes: the same substeps per second suffice
         pw.params.substeps = cfg.i(pre + "ince_alt_adim", pw.params.substeps);
@@ -649,6 +653,7 @@ void LabWorld::trigger(const LabEvent& e) {
         }
         pw.breakBondsInSphere(x[size_t(near)], cfg.f("balon.igne", 0.004f));
         pw.params.tearTip = cfg.f("balon.yirtilma_ucu", 0.5f);
+        std::printf("balon: igne (%.3f %.3f %.3f), en yakin zar taneciginden %.1f mm\n", e.a.x, e.a.y, e.a.z, best * 1000.0f);
     } else if (e.kind == LabEvent::Shot) {
         // a rifle bullet along the ray a -> b through the melon: its path (weapons.h, calibrated in gelatin) gives
         // each step's momentum, energy and cavity; the particles near the path take them

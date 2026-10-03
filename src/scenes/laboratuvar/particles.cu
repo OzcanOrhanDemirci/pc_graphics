@@ -1559,6 +1559,7 @@ int ParticleWorld::appendPhase(const std::vector<float3>& pos, const std::vector
     PCUDA(cudaMemcpy(&last, csrStart_ + n_, sizeof(int), cudaMemcpyDeviceToHost));
     std::fill(cs.begin(), cs.end(), last);
     PCUDA(cudaMemcpy(csrStart_ + n_ + 1, cs.data(), k * sizeof(int), cudaMemcpyHostToDevice));
+    PCUDA(cudaStreamSynchronize(cudaStreamLegacy));   // the next step reads them on the solver's own stream
     n_ += k;
     if (n_ > nPad_ || n_ == nPad_) pad(n_);   // past the padding: a new block (the graph is captured again)
     return k;
@@ -1585,6 +1586,7 @@ int ParticleWorld::addSprings(const std::vector<int2>& pairs) {
     PCUDA(cudaMemcpy(dsEnds_ + dsCount_, pairs.data(), size_t(k) * sizeof(int2), cudaMemcpyHostToDevice));
     PCUDA(cudaMemset(dsAlive_ + dsCount_, 1, size_t(k)));
     PCUDA(cudaMemset(dsAge_ + dsCount_, 0, size_t(k) * sizeof(float)));
+    PCUDA(cudaStreamSynchronize(cudaStreamLegacy));
     kSpringRest<<<blocks(k), kBlock, 0, stream_>>>(dsCount_, k, dsEnds_, dsRest_, x_);
     dsCount_ += k;
     PCUDA(cudaMemcpyAsync(dsCountDev_, &dsCount_, sizeof(int), cudaMemcpyHostToDevice, stream_));
@@ -1614,6 +1616,7 @@ void ParticleWorld::addVelocity(const std::vector<uint32_t>& idx, const std::vec
     float3* dd = dalloc<float3>(n);
     PCUDA(cudaMemcpy(di, idx.data(), size_t(n) * sizeof(uint32_t), cudaMemcpyHostToDevice));
     PCUDA(cudaMemcpy(dd, dv.data(), size_t(n) * sizeof(float3), cudaMemcpyHostToDevice));
+    PCUDA(cudaStreamSynchronize(cudaStreamLegacy));   // the uploads above are done (legacy-stream uploads, see appendPhase)
     kAddVel<<<blocks(n), kBlock, 0, stream_>>>(n, di, dd, v_, w_);
     PCUDA(cudaStreamSynchronize(stream_));
     cudaFree(di);
@@ -1632,6 +1635,7 @@ void ParticleWorld::addBleed(const std::vector<uint32_t>& particles, const std::
     for (size_t k = 0; k < particles.size(); ++k)
         if (int(particles[k]) < n_) h[particles[k]] = std::max(h[particles[k]], rates[k]);
     PCUDA(cudaMemcpy(bleed_, h.data(), size_t(n_) * sizeof(float), cudaMemcpyHostToDevice));
+    PCUDA(cudaStreamSynchronize(cudaStreamLegacy));
     bleeding_ = true;
 }
 
@@ -1643,6 +1647,7 @@ int ParticleWorld::breakBondsOf(const std::vector<uint32_t>& particles) {
     uint8_t* dm = dalloc<uint8_t>(n_);
     int* cnt = dalloc<int>(1);
     PCUDA(cudaMemcpy(dm, mark.data(), size_t(n_), cudaMemcpyHostToDevice));
+    PCUDA(cudaStreamSynchronize(cudaStreamLegacy));
     kBreakMarked<<<blocks(nb_), kBlock, 0, stream_>>>(nb_, bEnds_, dm, bBroken_, cnt);
     PCUDA(cudaStreamSynchronize(stream_));
     int hcount = 0;
@@ -1655,6 +1660,7 @@ int ParticleWorld::breakBondsOf(const std::vector<uint32_t>& particles) {
 int ParticleWorld::breakBondsInSphere(float3 c, float r) {
     if (!nb_) return 0;
     int* cnt = dalloc<int>(1);
+    PCUDA(cudaStreamSynchronize(cudaStreamLegacy));
     kBreakSphere<<<blocks(nb_), kBlock, 0, stream_>>>(nb_, bEnds_, x_, bBroken_, c, r * r, cnt);
     PCUDA(cudaStreamSynchronize(stream_));
     int h = 0;

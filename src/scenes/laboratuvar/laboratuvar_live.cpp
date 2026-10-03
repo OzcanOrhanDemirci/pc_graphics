@@ -245,7 +245,8 @@ public:
             }
             if (inside && in.leftClicked && in.now - lastClick_ > 0.3 && mode_ == Mode::Live) {
                 const LPick p = a_.renderer.pick(rx, ry);
-                if (deney_ == Deney::Balon && p.object >= 0) {
+                std::printf("tik: nesne %d, hedef %d, (%.3f %.3f %.3f)\n", p.object, a_.isTarget(p.object) ? 1 : 0, p.pos.x, p.pos.y, p.pos.z);
+                if (deney_ == Deney::Balon && a_.isTarget(p.object)) {
                     const float3 c = a_.cfg.v3("balon.merkez", make_float3(0.0f, 0.20f, 0.0f));
                     if (length(p.pos - c) < a_.cfg.f("balon.yaricap", 0.06f) * 1.6f) {
                         LabEvent e;
@@ -254,7 +255,7 @@ public:
                         startRecorded(host, e);
                         lastClick_ = in.now;
                     }
-                } else if ((deney_ == Deney::Karpuz || deney_ == Deney::Jel) && p.object >= 0) {
+                } else if ((deney_ == Deney::Karpuz || deney_ == Deney::Jel) && a_.isTarget(p.object)) {
                     if (length(p.pos - w_.aim) < w_.aimRadius) {
                         LabEvent e;
                         e.kind = LabEvent::Shot;
