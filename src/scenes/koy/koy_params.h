@@ -62,6 +62,10 @@ struct KMaterial {
     float uvScale;       // terrain: texture tiles per metre
     float normalStrength;
     float aoStrength;
+    int detailSet;       // a tiling detail layer laid over in world space (close-up grain), -1 none
+    float detailTile;    // metres a tile of it covers
+    float detailNormal;  // how strongly its normal map bends the surface
+    float detailAlbedo;  // how strongly its colour variation (around its own mean) modulates the albedo
 };
 
 struct KMesh {
@@ -84,6 +88,7 @@ struct KTextureSet {     // a scanned material: albedo (sRGB, decoded on fetch),
     KTex albedo, normal, rough;
     float texels;        // texels across the texture (LOD from the ray cone)
     int hasNormal;
+    float3 meanAlbedo;   // linear, the whole texture's average (a detail layer modulates around it)
 };
 
 struct KCamera {
@@ -176,7 +181,8 @@ struct KoyParams {
     float3 xyzToRgb0, xyzToRgb1, xyzToRgb2;   // rows: CIE XYZ -> linear sRGB, white balanced to daylight above the water
     const float* blueNoise;             // 128 x 128, fixed: the dither does not move from frame to frame
 
-    // ---- load-time bakes
+    // ---- load-time bakes, and the diver's collision probe
     int bakeMesh, bakeInstance;
     float* bakeOut;
+    float3 probeOrigin;                 // __raygen__probe: distances to static geometry in 26 directions from here
 };

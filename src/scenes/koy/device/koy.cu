@@ -146,7 +146,7 @@ static __forceinline__ __device__ float3 xformV(const KInstance& in, float3 v) {
                        in.r2.x * v.x + in.r2.y * v.y + in.r2.z * v.z);
 }
 static __forceinline__ __device__ Hit trace(float3 o, float3 d, float tmax) {
-    optixTraverse(params.handle, o, d, 0.0f, tmax, 0.0f, OptixVisibilityMask(1u), OPTIX_RAY_FLAG_DISABLE_ANYHIT, 0, 1, 0);
+    optixTraverse(params.handle, o, d, 0.0f, tmax, 0.0f, OptixVisibilityMask(3u), OPTIX_RAY_FLAG_DISABLE_ANYHIT, 0, 1, 0);
     Hit h;
     h.hit = optixHitObjectIsHit();
     h.leaf = false;
@@ -205,7 +205,7 @@ static __forceinline__ __device__ Hit trace(float3 o, float3 d, float tmax) {
     return h;
 }
 static __forceinline__ __device__ bool visible(float3 o, float3 d, float tmax) {
-    optixTraverse(params.handle, o, d, 0.0f, tmax, 0.0f, OptixVisibilityMask(1u),
+    optixTraverse(params.handle, o, d, 0.0f, tmax, 0.0f, OptixVisibilityMask(3u),
                   OPTIX_RAY_FLAG_DISABLE_ANYHIT | OPTIX_RAY_FLAG_TERMINATE_ON_FIRST_HIT, 0, 1, 0);
     return !optixHitObjectIsHit();
 }
@@ -331,6 +331,47 @@ static __forceinline__ __device__ float3 shadeSurface(const Hit& h, float3 d, fl
             const float3 Bt = cross(n, T) * (dot(cross(n, T), dpdv) < 0.0f ? -1.0f : 1.0f);
             const float3 nn = normalize(T * (tn.x * m.normalStrength) + Bt * (tn.y * m.normalStrength) + n * fmaxf(tn.z, 0.05f));
             n = dot(nn, h.ng) > 0.02f ? nn : n;
+        }
+    }
+    // the detail layer: a tiling scan laid over in world space (planar on the floor, triplanar on rocks), its colour
+    // modulating around its own mean, its normal map bending the surface: grain that holds up at 30 cm
+    if (m.detailSet >= 0) {
+        const KTextureSet ds = params.texSets[m.detailSet];
+        const float inv = 1.0f / m.detailTile;
+        const float lodBase = log2f(fmaxf(width * inv * ds.texels, 1e-6f));
+        float3 dAlb = make_float3(0.0f, 0.0f, 0.0f), dPert = make_float3(0.0f, 0.0f, 0.0f);
+        float wsum = 0.0f;
+        const float3 an = make_float3(fabsf(h.ng.x), fabsf(h.ng.y), fabsf(h.ng.z));
+        float3 w3 = m.kind == KM_TERRAIN ? make_float3(0.0f, 1.0f, 0.0f) : make_float3(an.x * an.x * an.x * an.x, an.y * an.y * an.y * an.y, an.z * an.z * an.z * an.z);
+        const float ws = w3.x + w3.y + w3.z;
+        w3 = w3 / fmaxf(ws, 1e-6f);
+        for (int ax = 0; ax < 3; ++ax) {
+            const float wa = ax == 0 ? w3.x : ax == 1 ? w3.y : w3.z;
+            if (wa < 0.02f) continue;
+            // the plane's uv (rotated by a fixed angle per axis so the tiles never line up with the scan's own)
+            float2 uv = ax == 0 ? make_float2(h.p.z, h.p.y) : ax == 1 ? make_float2(h.p.x, h.p.z) : make_float2(h.p.x, h.p.y);
+            const float ca = 0.8253f, sa = 0.5646f;
+            uv = make_float2((ca * uv.x - sa * uv.y) * inv, (sa * uv.x + ca * uv.y) * inv);
+            const float axisCos = ax == 0 ? an.x : ax == 1 ? an.y : an.z;
+            const float lod = lodBase - log2f(fmaxf(axisCos, 0.25f));
+            const float3 a = f3(tex2DLod<float4>((cudaTextureObject_t)ds.albedo, uv.x, uv.y, lod));
+            dAlb += a * wa;
+            if (ds.hasNormal) {
+                const float3 t = f3(tex2DLod<float4>((cudaTextureObject_t)ds.normal, uv.x, uv.y, lod)) * 2.0f - make_float3(1.0f, 1.0f, 1.0f);
+                // the tangent-space tilt back into the plane's world axes (undo the fixed rotation)
+                const float tx = ca * t.x + sa * t.y, ty = -sa * t.x + ca * t.y;
+                const float s = (ax == 0 ? h.ng.x : ax == 1 ? h.ng.y : h.ng.z) < 0.0f ? -1.0f : 1.0f;
+                const float3 pert = ax == 0 ? make_float3(0.0f, ty, tx * s) : ax == 1 ? make_float3(tx * s, 0.0f, ty) : make_float3(tx * s, ty, 0.0f);
+                dPert += pert * wa;
+            }
+            wsum += wa;
+        }
+        if (wsum > 0.0f) {
+            dAlb = dAlb / wsum;
+            const float3 rel = make_float3(dAlb.x / fmaxf(ds.meanAlbedo.x, 1e-3f), dAlb.y / fmaxf(ds.meanAlbedo.y, 1e-3f), dAlb.z / fmaxf(ds.meanAlbedo.z, 1e-3f));
+            albedo = albedo * (make_float3(1.0f, 1.0f, 1.0f) + (rel - make_float3(1.0f, 1.0f, 1.0f)) * m.detailAlbedo);
+            const float3 nn = normalize(n + (dPert / wsum) * m.detailNormal);
+            n = dot(nn, h.ng) > 0.05f ? nn : n;
         }
     }
     // the sand ripples (world-space normal map, ray-cone filtered: sharp near, averaged out far)
@@ -512,24 +553,47 @@ extern "C" __global__ void __raygen__base() {
     const KCamera& cam = params.cam;
     const int N = params.baseSpp;
     const float cone = cam.pixelAngle / sqrtf(float(N));
-    float lo = 1e30f, hi = -1e30f;
-    bool other = false;
-    unsigned int id0 = 0;
     for (int s = 0; s < N; ++s) {
         const float2 sp = params.basePattern[s] + params.patternShift;
         const float3 d = cameraRay(cam, idx.x + sp.x, idx.y + sp.y);
         const Lit l = shadeSample(cam.pos, d, cone);
         const float3 c = l.L + shaftAt(idx.x + sp.x, idx.y + sp.y, l.t);
         params.samples[size_t(pix) * N + s] = make_float4(c.x, c.y, c.z, __uint_as_float(l.id));
-        const float v = displayValue(c);
+    }
+}
+
+// Which pixels sit on an edge: a strong contrast between their samples, or another surface with at least a little
+// contrast (two leaves of the same green, the far floor meeting the far water, need no more). With one sample a pixel
+// has nothing to compare inside it: it is compared with its four neighbours instead (both sides of an edge get flagged).
+extern "C" __global__ void __raygen__edgeFind() {
+    const uint3 idx = optixGetLaunchIndex();
+    const unsigned int pix = idx.y * params.width + idx.x;
+    const int N = params.baseSpp;
+    float lo = 1e30f, hi = -1e30f;
+    bool other = false;
+    unsigned int id0 = 0;
+    for (int s = 0; s < N; ++s) {
+        const float4 c = params.samples[size_t(pix) * N + s];
+        const float v = displayValue(f3(c));
         lo = fminf(lo, v);
         hi = fmaxf(hi, v);
-        if (s == 0) id0 = l.id;
-        other = other || l.id != id0;
+        const unsigned int id = __float_as_uint(c.w);
+        if (s == 0) id0 = id;
+        other = other || id != id0;
+    }
+    if (N == 1) {
+        const int dx[4] = {-1, 1, 0, 0}, dy[4] = {0, 0, -1, 1};
+        for (int k = 0; k < 4; ++k) {
+            const int qx = int(idx.x) + dx[k], qy = int(idx.y) + dy[k];
+            if (qx < 0 || qy < 0 || qx >= int(params.width) || qy >= int(params.height)) continue;
+            const float4 c = params.samples[size_t(qy) * params.width + qx];
+            const float v = displayValue(f3(c));
+            lo = fminf(lo, v);
+            hi = fmaxf(hi, v);
+            other = other || __float_as_uint(c.w) != id0;
+        }
     }
     unsigned int e = 0;
-    // an edge: a strong contrast between the samples, or another surface with at least a little contrast (two leaves
-    // of the same green, or the far floor meeting the far water, need no more samples)
     if (params.edgeSpp > N && (hi - lo > params.edgeContrast || (other && hi - lo > params.edgeContrast * params.edgeIdShare))) {
         const unsigned int k = atomicAdd(params.edgeCount, 1u);
         if (k < params.edgeCapacity) {
@@ -538,6 +602,19 @@ extern "C" __global__ void __raygen__base() {
         }
     }
     params.edgeIndex[pix] = e;
+}
+
+// The diver's collision probe: distance to the static geometry (rocks, floor; not the seagrass, which bends) in 26
+// directions from probeOrigin, up to 2 m.
+extern "C" __global__ void __raygen__probe() {
+    const unsigned int k = optixGetLaunchIndex().x;
+    const int ix = int(k % 3) - 1, iy = int((k / 3) % 3) - 1, iz = int(k / 9) - 1;
+    const int kk = k >= 13 ? int(k) + 1 : int(k);   // skip (0, 0, 0)
+    const int jx = kk % 3 - 1, jy = (kk / 3) % 3 - 1, jz = kk / 9 - 1;
+    (void)ix; (void)iy; (void)iz;
+    const float3 d = normalize(make_float3(float(jx), float(jy), float(jz)));
+    optixTraverse(params.handle, params.probeOrigin, d, 0.0f, 2.0f, 0.0f, OptixVisibilityMask(1u), OPTIX_RAY_FLAG_DISABLE_ANYHIT, 0, 1, 0);
+    params.bakeOut[k] = optixHitObjectIsHit() ? optixHitObjectGetRayTmax() : 2.0f;
 }
 
 // the reconstruction filter (separable), x in pixels from the output pixel's centre: the same function as the host's

@@ -290,13 +290,20 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
     materials.clear();
     // textures (CC0 scans fetched by assets/koy/fetch.sh; without them plain albedos)
     const std::string tdir = root + "/assets/koy/cc0";
-    int sandSet = -1, rockSet = -1;
-    {
+    auto load = [&](const char* name) {
         KoyTextureSet t;
-        if (koyLoadTextureSet(tdir, cfg.f("tex.use", 1.0f) > 0.5f ? "kum" : "-", t)) { sandSet = int(textures.size()); textures.push_back(t); }
-        KoyTextureSet r;
-        if (koyLoadTextureSet(tdir, cfg.f("tex.use", 1.0f) > 0.5f ? "kaya_model" : "-", r)) { rockSet = int(textures.size()); textures.push_back(r); }
+        if (cfg.f("tex.use", 1.0f) < 0.5f || !koyLoadTextureSet(tdir, name, t)) return -1;
+        textures.push_back(t);
+        return int(textures.size()) - 1;
+    };
+    setSand = load("kum");
+    setRock = load("kaya_model");
+    if (cfg.i("tex.high", 1)) {   // the high-resolution set (the panel can switch between them live)
+        setSand4k = load("kum_4k");
+        setRock8k = load("kaya_model_8k");
+        setRockDetail = load("kaya_ayrinti");
     }
+    const int sandSet = setSand, rockSet = setRock;
     KMaterial floorM{};
     floorM.kind = KM_TERRAIN;
     floorM.texSet = sandSet;
@@ -316,6 +323,7 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
     leafM.texSet = -1;
     leafM.albedo = cfg.v3("grass.albedo", make_float3(0.09f, 0.20f, 0.06f));
     leafM.aoStrength = 0.0f;
+    floorM.detailSet = rockM.detailSet = leafM.detailSet = -1;
     materials = {floorM, rockM, leafM};
 
     meshes.push_back(buildFloor(cfg));
@@ -344,6 +352,25 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
     }
     grass.build(cfg);
     grass.toRibbons(ribbons, 2);
+    applyTextureMode(cfg, cfg.i("tex.mode", 1));
+}
+
+void KoyWorld::applyTextureMode(const Config& cfg, int mode) {
+    texMode = mode;
+    KMaterial& f = materials[0];
+    KMaterial& r = materials[1];
+    const bool high = mode == 1 && setSand4k >= 0 && setRock8k >= 0;
+    if (f.texSet >= 0) f.texSet = high ? setSand4k : setSand;
+    if (r.texSet >= 0) r.texSet = high ? setRock8k : setRock;
+    // the detail layers: the sand's own grain at a quarter of its tile; the rock a weathered limestone scan, finer
+    f.detailSet = high && f.texSet >= 0 ? setSand4k : -1;
+    f.detailTile = cfg.f("tex.sand_detail_tile", 0.9f);
+    f.detailNormal = cfg.f("tex.sand_detail_normal", 0.5f);
+    f.detailAlbedo = cfg.f("tex.sand_detail_albedo", 0.25f);
+    r.detailSet = high && r.texSet >= 0 ? setRockDetail : -1;
+    r.detailTile = cfg.f("tex.rock_detail_tile", 0.9f);
+    r.detailNormal = cfg.f("tex.rock_detail_normal", 0.6f);
+    r.detailAlbedo = cfg.f("tex.rock_detail_albedo", 0.35f);
 }
 
 namespace {
@@ -427,6 +454,11 @@ bool makeMipTexture(std::vector<unsigned char> px, int w, int h, bool srgb, KoyT
     if (cudaMallocMipmappedArray(&arr, &fd, make_cudaExtent(w, h, 0), levels) != cudaSuccess) return false;
     std::vector<float> lut(256);
     for (int i = 0; i < 256; ++i) lut[i] = srgb ? srgbToLin(i / 255.0f) : i / 255.0f;
+    std::vector<unsigned char> inv(4096);   // linear 0..1 in 4096 steps -> 8-bit encoded
+    for (int i = 0; i < 4096; ++i) {
+        const float v = i / 4095.0f;
+        inv[i] = (unsigned char)std::min(255.0f, std::max(0.0f, (srgb ? linToSrgb(v) : v) * 255.0f + 0.5f));
+    }
     int cw = w, ch = h;
     for (int l = 0; l < levels; ++l) {
         cudaArray_t a = nullptr;
@@ -446,13 +478,15 @@ bool makeMipTexture(std::vector<unsigned char> px, int w, int h, bool srgb, KoyT
                             s += (c < 3) ? lut[v] : v / 255.0f;
                         }
                     s *= 0.25f;
-                    const float e = (c < 3 && srgb) ? linToSrgb(s) : s;
-                    nx[(size_t(y) * nw + x) * 4 + c] = (unsigned char)std::min(255.0f, std::max(0.0f, e * 255.0f + 0.5f));
+                    nx[(size_t(y) * nw + x) * 4 + c] = c < 3 ? inv[std::min(4095, std::max(0, int(s * 4095.0f + 0.5f)))]
+                                                             : (unsigned char)std::min(255.0f, std::max(0.0f, s * 255.0f + 0.5f));
                 }
         px.swap(nx);
         cw = nw;
         ch = nh;
     }
+    // the last level is one texel: the average (in linear light for sRGB)
+    if (srgb) out.set.meanAlbedo = make_float3(lut[px[0]], lut[px[1]], lut[px[2]]);
     cudaResourceDesc rd{};
     rd.resType = cudaResourceTypeMipmappedArray;
     rd.res.mipmap.mipmap = arr;

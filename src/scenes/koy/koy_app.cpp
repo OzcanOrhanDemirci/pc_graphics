@@ -128,6 +128,11 @@ void KoyApp::setup() {
     setCamera();
 }
 
+void KoyApp::setTextureMode(int mode) {
+    world.applyTextureMode(cfg, mode);
+    renderer.updateMaterials(world.materials);
+}
+
 void KoyApp::applyQuality() {
     renderer.params().edgeIdShare = cfg.f("sample.edge_id_share", 0.25f);
     renderer.setSampling(quality.base, quality.edge, quality.filter, quality.radius, quality.contrast);
@@ -173,12 +178,18 @@ void KoyApp::stepDiver(float fwd, float right, float up, bool strong, float look
         // collisions: the floor (the eye at least 0.6 m above it), the boulder, the surface's ceiling (1 m under it)
         const float fy = koyFloor(cfg, diver.pos.x, diver.pos.z) + 0.6f;
         if (diver.pos.y < fy) { diver.pos.y = fy; diver.vel.y = std::max(diver.vel.y, 0.0f); }
-        const float3 d = diver.pos - world.rockCentre;
-        const float rr = world.rockRadius * 1.3f + 0.5f, dl = length(d);
-        if (dl < rr && dl > 1e-4f) {
-            diver.pos = world.rockCentre + d * (rr / dl);
-            const float3 nn = d / dl;
-            diver.vel = diver.vel - nn * std::min(0.0f, dot(diver.vel, nn));
+        if (k == sub - 1) {   // the rocks: the probe's distances in 26 directions push the head out (0.3 m)
+            float dist[26];
+            renderer.probe(diver.pos, dist);
+            const float rmin = cfg.f("diver.head", 0.3f);
+            for (int q = 0; q < 26; ++q) {
+                if (dist[q] >= rmin) continue;
+                const int kk = q >= 13 ? q + 1 : q;
+                const float3 dir = normalize(make_float3(float(kk % 3 - 1), float((kk / 3) % 3 - 1), float(kk / 9 - 1)));
+                diver.pos = diver.pos - dir * (rmin - dist[q]);
+                const float into = dot(diver.vel, dir);
+                if (into > 0.0f) diver.vel = diver.vel - dir * into;
+            }
         }
         const float ceil = -cfg.f("diver.ceiling", 1.0f);
         if (diver.pos.y > ceil) { diver.pos.y = ceil; diver.vel.y = std::min(diver.vel.y, 0.0f); }
@@ -368,15 +379,24 @@ int runKoyCli(int argc, char** argv) {
         const float dt = 1.0f / fps;
         struct Moment { Diver d; float t, exposure; };
         std::vector<Moment> at(frames);
+        if (path == "yakin") {   // close to the boulder (about a metre), looking at it, gliding sideways along it
+            app.diver.pos = app.cfg.v3("path.near_pos", make_float3(-2.2f, -6.1f, -4.1f));
+            const float3 f = normalize(app.cfg.v3("path.near_look", make_float3(-2.4f, -6.6f, -6.0f)) - app.diver.pos);
+            app.diver.yaw = std::atan2(f.x, f.z);
+            app.diver.pitch = std::asin(f.y);
+            app.diver.vel = make_float3(0, 0, 0);
+            app.setCamera();
+        }
         app.stepWorld(t0);
         app.frame();
         app.adaptExposure(0.0f, true);
         double sum = 0.0;
         for (int k = 0; k < frames; ++k) {   // pass 1: live
             const float t = t0 + k * dt;
-            // the path: still (the world moves), swimming forward, turning, looking up at the surface
+            // the path: still (the world moves), swimming forward, turning, looking up at the surface, along the boulder
             float fwd = 0, right = 0, up = 0, lookX = 0, lookY = 0;
             if (path == "yuz") fwd = 1.0f;
+            else if (path == "yakin") right = 1.0f;
             else if (path == "don") lookX = -dt * 12.0f / (app.cfg.f("diver.mouse", 0.0022f) * 57.2958f);   // 12 deg/s
             else if (path == "yukari" && k == 0) lookY = -(55.0f / 57.2958f) / app.cfg.f("diver.mouse", 0.0022f);
             app.stepDiver(fwd, right, up, false, lookX, lookY, dt);

@@ -43,6 +43,10 @@ struct KoyWorld {
     float3 rockCentre{};
     float rockRadius = 0.0f;
     KoyTextureSet ripples;          // the sand ripples: a world-space normal map (x, z over +-rippleHalf), mipmapped
+    // the texture choice (the panel's "Doku"): 0 standard (2K scans), 1 high (8K boulder, 4K sand, detail layers)
+    int texMode = 1;
+    int setSand = -1, setSand4k = -1, setRock = -1, setRock8k = -1, setRockDetail = -1;
+    void applyTextureMode(const Config& cfg, int mode);
     float rippleHalf = 16.0f;
     void build(const Config& cfg, const std::string& root);
     void buildRipples(const Config& cfg);

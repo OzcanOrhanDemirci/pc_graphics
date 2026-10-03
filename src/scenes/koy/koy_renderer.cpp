@@ -206,9 +206,9 @@ bool KoyRenderer::compileDevice(std::string& log) {
     r = optixBuiltinISModuleGet(context_, &mco, &pco, &bio, &curveModule);
     if (r != OPTIX_SUCCESS) { log = std::string("optixBuiltinISModuleGet: ") + optixGetErrorString(r); return false; }
 
-    const char* rgNames[7] = {"__raygen__base", "__raygen__edge", "__raygen__resolve", "__raygen__final", "__raygen__bakeAO", "__raygen__bakeSun",
-                              "__raygen__shafts"};
-    const int RG = 7;
+    const char* rgNames[9] = {"__raygen__base", "__raygen__edge", "__raygen__resolve", "__raygen__final", "__raygen__bakeAO", "__raygen__bakeSun",
+                              "__raygen__shafts", "__raygen__edgeFind", "__raygen__probe"};
+    const int RG = 9;
     std::vector<OptixProgramGroupDesc> d(RG + 3);
     for (auto& x : d) std::memset(&x, 0, sizeof(x));
     for (int i = 0; i < RG; ++i) {
@@ -257,6 +257,8 @@ bool KoyRenderer::compileDevice(std::string& log) {
     record(groups_[4], rgBakeAO_);
     record(groups_[5], rgBakeSun_);
     record(groups_[6], rgShafts_);
+    record(groups_[7], rgEdgeFind_);
+    record(groups_[8], rgProbe_);
     record(groups_[RG + 0], missRecord_);
     {   // two hit records: [0] triangles, [1] ribbons (instances pick theirs with sbtOffset)
         KRecord recs[2];
@@ -404,7 +406,7 @@ void KoyRenderer::uploadWorld(const std::vector<KMeshCPU>& meshes, const std::ve
         std::memcpy(oi.transform, id, sizeof(id));
         oi.instanceId = unsigned(inst.size());
         oi.sbtOffset = 1;
-        oi.visibilityMask = 1;
+        oi.visibilityMask = 2;
         oi.flags = OPTIX_INSTANCE_FLAG_NONE;
         oi.traversableHandle = ribbonGas_;
         inst.push_back(oi);
@@ -549,6 +551,11 @@ void KoyRenderer::renderFrame() {
     CUDA_CHECK(cudaMemsetAsync(params_.edgeCount, 0, sizeof(unsigned int), stream_));
     launch(rgShafts_, unsigned(params_.shaftBlocksX), unsigned(params_.shaftBlocksY), 1, &times_.shafts);
     launch(rgBase_, width_, height_, 1, &times_.base);
+    {
+        float ms = 0.0f;
+        launch(rgEdgeFind_, width_, height_, 1, &ms);
+        times_.base += ms;
+    }
     unsigned int count = 0;
     CUDA_CHECK(cudaMemcpy(&count, params_.edgeCount, sizeof(unsigned int), cudaMemcpyDeviceToHost));
     times_.edgePixels = std::min(count, params_.edgeCapacity);
@@ -587,6 +594,7 @@ void KoyRenderer::renderReference(int n) {
         for (int i = 0; i < n; ++i, ++k) {
             params_.patternShift = make_float2(((i + 0.5f) / n - 0.5f) * spacing, ((j + 0.5f) / n - 0.5f) * spacing);
             launch(rgBase_, width_, height_, 1, nullptr);
+            launch(rgEdgeFind_, width_, height_, 1, nullptr);
             launch(rgResolve_, width_, height_, 1, nullptr);
             koyBlend(refAcc_, params_.hdr, np, k == 0 ? 0.0f : 1.0f, 1.0f / float(n * n), stream_);
         }
@@ -596,6 +604,21 @@ void KoyRenderer::renderReference(int n) {
     params_.samples = live;
     allocatedBase_ = base0;
     setSampling(base0, edge0, filter0, radius0, contrast0);
+}
+
+void KoyRenderer::updateMaterials(const std::vector<KMaterial>& materials) {
+    if (!params_.materials || materials.empty()) return;
+    CUDA_CHECK(cudaMemcpy(const_cast<KMaterial*>(params_.materials), materials.data(), materials.size() * sizeof(KMaterial), cudaMemcpyHostToDevice));
+}
+
+void KoyRenderer::probe(float3 p, float out[26]) {
+    if (!probeBuf_) probeBuf_ = devAlloc<float>(26);
+    float* keep = params_.bakeOut;
+    params_.bakeOut = probeBuf_;
+    params_.probeOrigin = p;
+    launch(rgProbe_, 26, 1, 1, nullptr);
+    params_.bakeOut = keep;
+    CUDA_CHECK(cudaMemcpy(out, probeBuf_, 26 * sizeof(float), cudaMemcpyDeviceToHost));
 }
 
 void KoyRenderer::download(std::vector<uchar4>& out) {

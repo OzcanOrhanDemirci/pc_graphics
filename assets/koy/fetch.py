@@ -30,6 +30,18 @@ FILES = {
                                '90bbaa17c1fe0254d2b0b6e5148264fa834953a72724d566f14af029eebe3ca3'),
     'boulder_01_nor_gl_2k.jpg': ('https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/boulder_01/boulder_01_nor_gl_2k.jpg',
                                  '5174b318712ac7725cbcb55d422607f9c66d7f8d035c5412ab897b5939e2db6b'),
+    # the high-resolution set (2026-10-03 ara durak): Poly Haven's md5 checked when pinned; ambientCG gives none (pinned on
+    # first download)
+    'boulder_01_diff_8k.jpg': ('https://dl.polyhaven.org/file/ph-assets/Models/jpg/8k/boulder_01/boulder_01_diff_8k.jpg',
+                               '36e3f8b181ccd3630b4a821c8e29af000d6cfa8f0ab80c23e7fc78bc790e24da'),
+    'boulder_01_nor_gl_8k.jpg': ('https://dl.polyhaven.org/file/ph-assets/Models/jpg/8k/boulder_01/boulder_01_nor_gl_8k.jpg',
+                                 'b1f693b926d9af8f280591a0ced1bfb90be8b5e02b65a09be6bf4f00d2f49b97'),
+    'rock_boulder_dry_diff_4k.jpg': ('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_boulder_dry/rock_boulder_dry_diff_4k.jpg',
+                                     '2787cfdf899ea12442e67e337e32712d6e25f4a0763ab3df63fd9306a02e156f'),
+    'rock_boulder_dry_nor_gl_4k.jpg': ('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rock_boulder_dry/rock_boulder_dry_nor_gl_4k.jpg',
+                                       '440e81881c0681f9dc7efbc5bcf97c9585801bcbdc95b7bd74d6d18657e46f20'),
+    'Ground054_4K-JPG.zip': ('https://ambientcg.com/get?file=Ground054_4K-JPG.zip',
+                             '13b6964cc9afb04e577f18204fd4656c2786e0197cadf34552e1ef9b177a67e6'),
 }
 # members of the sand zip, and their hashes
 SAND = {
@@ -119,6 +131,26 @@ def main():
         p = os.path.join(kaya, dst)
         if not os.path.exists(p):
             open(p, 'wb').write(fetch(src))
+    # the high-resolution set: the same boulder at 8K, a 4K rock detail layer (Poly Haven rock_boulder_dry, 1.8 m a
+    # tile) laid over it in world space, the sand at 4K
+    sets = (('kaya_model_8k', (('boulder_01_diff_8k.jpg', 'albedo.jpg'), ('boulder_01_nor_gl_8k.jpg', 'normal.jpg'))),
+            ('kaya_ayrinti', (('rock_boulder_dry_diff_4k.jpg', 'albedo.jpg'), ('rock_boulder_dry_nor_gl_4k.jpg', 'normal.jpg'))))
+    for folder, files in sets:
+        d = os.path.join(OUT, folder)
+        os.makedirs(d, exist_ok=True)
+        for src, dst in files:
+            p = os.path.join(d, dst)
+            if not os.path.exists(p):
+                open(p, 'wb').write(fetch(src))
+    kum4 = os.path.join(OUT, 'kum_4k')
+    os.makedirs(kum4, exist_ok=True)
+    if not os.path.exists(os.path.join(kum4, 'normal.jpg')):
+        z = zipfile.ZipFile(io.BytesIO(fetch('Ground054_4K-JPG.zip')))
+        names = z.namelist()
+        for key, dst in (('_Color.jpg', 'albedo.jpg'), ('_NormalGL.jpg', 'normal.jpg'), ('_Roughness.jpg', 'rough.jpg')):
+            member = [n for n in names if n.endswith(key)][0]
+            open(os.path.join(kum4, dst), 'wb').write(z.read(member))
+        print('kum: ambientCG Ground054 (4K)')
     print('tamam:', OUT)
 
 

@@ -50,6 +50,9 @@ public:
     void bakeAO();                                                // every mesh's per-vertex occlusion (once, after upload)
     void bakeSunVisibility(float3 boxMin, float3 boxSize, int3 dims);   // 3D sun visibility of a box (once)
     void setSampling(int baseSpp, int edgeSpp, int filter, float radius, float edgeContrast);
+    void updateMaterials(const std::vector<KMaterial>& materials);   // the same count as uploaded (texture choice)
+    // distances to the static geometry from p in 26 directions (index = 9 (z+1) + 3 (y+1) + (x+1), the centre skipped)
+    void probe(float3 p, float out[26]);
     void renderFrame();                                           // base -> edge -> resolve -> meter -> final
     // the converged reference of the same moment: the base pattern (16) shifted over an n x n grid inside its spacing,
     // edges off, the resolved frames averaged (n = 4: 256 samples a pixel), then the same final pass
@@ -75,7 +78,9 @@ private:
     OptixPipeline pipeline_ = nullptr;
     std::vector<OptixProgramGroup> groups_;
     OptixShaderBindingTable sbt_{};
-    CUdeviceptr rgBase_ = 0, rgEdge_ = 0, rgResolve_ = 0, rgFinal_ = 0, rgBakeAO_ = 0, rgBakeSun_ = 0, rgShafts_ = 0, missRecord_ = 0, hitRecords_ = 0;
+    CUdeviceptr rgBase_ = 0, rgEdge_ = 0, rgResolve_ = 0, rgFinal_ = 0, rgBakeAO_ = 0, rgBakeSun_ = 0, rgShafts_ = 0, rgEdgeFind_ = 0, rgProbe_ = 0,
+                missRecord_ = 0, hitRecords_ = 0;
+    float* probeBuf_ = nullptr;
     cudaArray_t shaftArr_ = nullptr;
     CUdeviceptr dParams_ = 0;
     cudaStream_t stream_ = nullptr;

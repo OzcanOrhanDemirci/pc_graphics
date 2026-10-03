@@ -60,6 +60,7 @@ struct KoyApp {
     bool compile();
     void setup();                          // optics, ocean, world, bakes (after compile)
     void applyQuality();
+    void setTextureMode(int mode);         // 0 standard, 1 high (panel "Doku")
     void setCamera();                      // the diver's eye, the mask, the field of view
     void stepDiver(float fwd, float right, float up, bool strong, float lookDX, float lookDY, float dt);
     void stepWorld(float t);               // waves, caustics, seagrass at world time t

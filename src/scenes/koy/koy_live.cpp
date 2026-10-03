@@ -107,6 +107,11 @@ public:
             if (e.id == "ornek" && e.item >= 0) k_.quality.base = kBaseChoices[e.item];
             if (e.id == "kenar" && e.item >= 0) k_.quality.edge = kEdgeChoices[e.item];
             if (e.id == "suzgec" && e.item >= 0) k_.quality.filter = e.item;
+            if (e.id == "doku" && e.item >= 0) {
+                k_.setTextureMode(e.item);
+                host.toast(e.item ? L("Doku: yüksek (8K kaya, 4K kum, ayrıntı katmanı)", "Textures: high (8K rock, 4K sand, detail layer)")
+                                  : L("Doku: standart (2K)", "Textures: standard (2K)"));
+            }
             k_.applyQuality();
             resetAccum();
         }
@@ -197,6 +202,17 @@ public:
             for (int k = 0; k < 4; ++k)
                 if (kEdgeChoices[k] == k_.quality.edge) c.active = k;
             c.detail = L("Kenardaki piksele toplam örnek", "Samples in all for a pixel on an edge");
+            s.controls.push_back(c);
+        }
+        {
+            app::Control c;
+            c.kind = app::Control::Kind::Choice;
+            c.id = "doku";
+            c.title = L("Doku", "Textures");
+            c.items = {L("Standart", "Standard"), L("Yüksek", "High")};
+            c.active = k_.world.texMode;
+            c.detail = L("Yüksek: 8K kaya, 4K kum, yakın plan ayrıntı katmanı", "High: 8K rock, 4K sand, a close-up detail layer");
+            c.section = true;
             s.controls.push_back(c);
         }
         {

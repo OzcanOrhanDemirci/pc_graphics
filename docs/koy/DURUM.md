@@ -3,7 +3,46 @@
 > Tek kaynak durum panosu. Plan: `docs/koy/PLAN.md` (kararlar, fazlar, duraklar). Veri ve denetimleri: `docs/koy/VERI.md`.
 > Gerçek fotoğraflardan başvuru panosu: `docs/koy/BASVURU.md`. CC0 taramalar: `assets/koy/fetch.py`, `assets/koy/LICENSES.md`.
 
-## Şu an · 2026-10-03 gece · 🛑 Durak 1 (netlik ve kararlılık) Özcan'ı bekliyor
+## Şu an · 2026-10-03 gece · 🛑 Ara durak: yüksek çözünürlüklü doku (Özcan'ın bakışını bekliyor)
+
+**Durak 1 geçti** (Özcan canlı baktı): *"En düşük seçeneklerde 1 e 4 [...] gayet iyi [...] her şekilde net. Ayar
+bağımsız"*, en düşük ayarda 90 fps; *"Suyun maviliği çok güzel. Beğendim okey"*. Tek eleştiri: kaya yakından düşük
+çözünürlüklü (*"uzaktan wow dersin yakından kötü"*). Önerisi: örnekleri düşük tut, dokuya yüklen; *"Beğenmezsek geri
+alırız [...] ara küçük bir durak ekleyelim"*. Koy (K2) bu durağa kadar başlamaz.
+
+**Bu durakta yapılan:**
+- **Teşhis:** kaya 2K taramaydı ve 2,8 m'ye büyütüldüğü için doku pikseli ~3-4 mm; 1 m'den bakınca ekrandaki bir piksel
+  ~0,6 mm (maske camı 4/3 yaklaştırır): her doku pikseli ~6 ekran pikseli. Kum 2K / 3,5 m: ~1,7 mm.
+- **Yüksek doku seti** (`assets/koy/fetch.py`, Poly Haven md5'leri doğrulandı): kaya aynı taramanın **8K**'sı (~0,8 mm),
+  üstüne dünya uzayında **ayrıntı katmanı** (Poly Haven rock_boulder_dry 4K, 0,9 m karo: ~0,2 mm; kayada üç düzlemli
+  izdüşüm, rengi kendi ortalaması çevresinde dalgalandırır, yüzey haritası normali büker), kum **4K** (~0,85 mm) ve kendi
+  tanesinden 0,9 m'lik ayrıntı katmanı. Dokular ışın konisiyle süzüldüğü için fazla çözünürlük uzakta kıpırtı yapmaz.
+- **Panelde "Doku: Standart / Yüksek"** (canlı karşılaştırma; ikisi de bellekte, geçiş anında).
+- **Kayaya yaklaşma:** dalgıcın kaya çarpışması artık 26 yöne ışın yoklamasıyla (baş yarıçapı 0,3 m); eskiden kaba bir
+  küre dalgıcı kayadan ~0,5-1,5 m uzak tutuyordu. Çayır yoklamaya girmez (eğilir).
+- **1 örnekte kenar algılama:** tek örnekte piksel içinde karşılaştıracak fark yoktu, kenar iyileştirmesi hiç devreye
+  girmiyordu; artık 1 örnekte piksel dört komşusuyla karşılaştırılır (kenarın iki yanı da işaretlenir).
+- **Bedeli:** bellek +~1,1 GB (sıkıştırmasız; toplam ~4,3 GB / 16), yükleme ~5 → ~8 sn, kare ~18 → ~21 ms (4 örnek; ayrıntı
+  katmanının örnekler arası karşıtlığı daha çok pikseli kenar sayıyor), 1 örnek + kenar 4: ~11 ms.
+
+**Yakın plan ölçüsü** (yeni yol `--yol yakin`: kayanın ~1 m önünde, ona bakarak yan yan kayma, yüksek doku, 100 kare):
+
+| | Piksel kıpırtısı ort / %99 | 8×8 blok ort / %99 | Bağıl | FLIP |
+|---|---|---|---|---|
+| 1 örnek (+ kenar 16) | 0,0016 / 0,012 | 0,00029 / 0,0019 | 0,084 | 0,0093 |
+| 4 örnek (+ kenar 16) | 0,0006 / 0,0059 | 0,00013 / 0,0008 | 0,031 | 0,0051 |
+| *Fener tabanı* | *0,0053-0,0061* | *0,0011-0,0026* | *0,45-1,24* | *0,026-0,038* |
+
+İkisi de Fener'in çok önünde; ayrıntılı dokuda yakın planda 4 örnek 1'e göre ~2,7 kat sakin, ~1,8 kat net (uzaktaki
+genel görünümde fark küçüktü, Özcan'ın gözlemi de bu). Uygulamada yüksek dokuyla 41 fps sabit (kare 19,6 ms; standart
+dokuda 16 ms).
+
+### Ara durakta neye bakılacak
+Galeride 05 Koy. Kayaya yaklaş (W, gerekirse Space/C; Tab ile fareyle bak), 30-50 cm'ye kadar sokul. Panelde **Doku:
+Standart ↔ Yüksek** geçişiyle aynı yere bak. Sonra kumun dibine yaklaş (C ile alçal). Karar: yüksek doku kalıyor mu, geri mi
+alınıyor? Örnek sayısı: 1 + kenar 4 ile de bak (yakın planda kıpırtı ölçüsü aşağıda).
+
+## Durak 1 · 2026-10-03 gece · netlik ve kararlılık (geçti)
 
 K0 bitti, K1 (deneme alanı) bitti. Koy kurulmadı: plan gereği Durak 1 geçilmeden koy kurulmaz.
 
