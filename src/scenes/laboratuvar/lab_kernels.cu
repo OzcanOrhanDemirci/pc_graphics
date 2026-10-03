@@ -123,6 +123,12 @@ __global__ void kGather(const float3* pos, const uint8_t* codes, const uint32_t*
     oc[i] = codes[j];
 }
 
+__global__ void kLerp(const float3* a, float3* b, int n, float t) {
+    const int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= n) return;
+    b[i] = a[i] + (b[i] - a[i]) * t;
+}
+
 __global__ void kCentre(const float3* pos, int first, int count, float r, float4* out) {
     __shared__ float3 acc[kB];
     float3 s = make_float3(0, 0, 0);
@@ -273,4 +279,7 @@ void launchGather(const float3* pos, const uint8_t* codes, const uint32_t* idx, 
 }
 void launchCentre(const float3* pos, int first, int count, float r, float4* out, cudaStream_t s) {
     kCentre<<<1, kB, 0, s>>>(pos, first, count, r, out);
+}
+void launchLerp(const float3* a, float3* b, int n, float t, cudaStream_t s) {
+    if (n > 0) kLerp<<<nb(n), kB, 0, s>>>(a, b, n, t);
 }

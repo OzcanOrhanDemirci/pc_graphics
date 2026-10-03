@@ -139,7 +139,7 @@ our own, whatever the physics says:
 - **Water** poured from a tilting beaker into a tumbler, from 12 to 45 cm: it splashes, overflows, pools on the table.
 - **Honey** off a dipper onto a glass dish (live, drag the dipper with the mouse): one amber thread that folds and
   coils on the dish, then spreads into a pool.
-- **Sand** from a funnel onto the table and into a beaker (live): it heaps at 32.5° (dry sand: 30-35°); drop a steel ball.
+- **Sand** from a funnel onto the table and into a beaker (live): it heaps at 32.5° (dry sand: 30-35°); drop steel balls where you click.
 - **A water balloon** on the table, pricked with a needle: the rubber peels back in 20-30 ms while the water keeps the
   balloon's shape for a moment, then slumps.
 - **A watermelon** shot with a rifle (5.56, 7.62×51, .50 BMG; real loads): it swells for a few milliseconds, then the
@@ -150,9 +150,11 @@ our own, whatever the physics says:
 
 ![Scene 4: a water balloon 24 ms after the needle, the rubber peeling back, the water still balloon-shaped](docs/images/lab-balon.jpg)
 
-The fast ones are **recorded**: the trigger plays at once on a coarse world (marked as a preview), while a fine world
-(1.5-2.5 mm particles, up to 150,000 of them) computes the same inputs on a worker thread and keeps every 1/600 to
-1/1000 of a second on the GPU. What is computed can be watched at once, like a video loading; when it is done it plays
+The fast ones can be **recorded**: the trigger plays at once on a coarse world (marked so); asked for, a fine world
+(0.4-2.5 mm particles, up to 250,000 of them) computes the same inputs on a worker thread and keeps every 1/600 to
+1/5000 of a second on the GPU (the gel takes a shot a second; the fine pass replays them all, every step kept round each
+shot, 120 a second between). Slow motion on the live world is the same physics, slower: the solver's substeps keep their
+length and come less often, the picture moves between them (shrunk substeps once blew a resting dish of milk apart). What is computed can be watched at once, like a video loading; when it is done it plays
 once at real speed, then it is free: scrub the time bar, slow down to 1/10 or 1/100, freeze, fly round it with WASD.
 Nothing is a video: what is kept is the physics, drawn live from any view. Honey and sand are only live, since their
 flowing is the scene.

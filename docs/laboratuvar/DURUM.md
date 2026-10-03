@@ -3,6 +3,59 @@
 > Tek kaynak durum panosu. Plan ve Özcan'ın sözleri `docs/laboratuvar/PLAN.md`'de. Eski "Tanecik" (insan) yolu
 > `docs/tanecik/` ve git etiketi `tanecik-insan-arsiv`'de (arşiv).
 
+## 🔧 Revize 2 · 2026-10-03 öğleden sonra: tıklanan yere bilye, jele çoklu atış, ağır çekim, ince hesap düğmesi
+
+**Özcan'ın sınaması:** *"Tamam olmuş. Mükemmel değil ama yeterince iyi"*; iki revize: (1) kuma bilye hep aynı yere (solda)
+düşüyor, yeri tıklayarak seçelim; ateşte de aynı mantık, 1 sn arayla birden çok atış (jele 6-7 kez); karpuz ve balonda
+tek atış mantıklı. (2) 1/100 ağır çekime basınca hiçbir şey yapmadan süt saçılıyor, su dağılıyor: *"Sadece ağır çekim
+olmalı."* Ayrıca ince hesap otomatik başlamasın, düğmeyle: *"İnce hesap yaptırmak opsiyonel olsun, daha tutarlı olur."*
+
+**Ne yapıldı:**
+- **Ağır çekim artık yalnız ağır çekim** (`LabWorld::advance`): canlı dünya her karede `1/60 × hız` saniyelik bir adımı
+  her zamanki 20 alt adımla atıyordu; 1/100'de alt adım 8 µs'ye iniyordu. PBF'nin konum düzeltmesi o kısa süreye
+  bölününce hız 100 kat büyüyor: duran dünya kendiliğinden patlıyordu. Şimdi alt adımın boyu hep aynı (1/1200 sn),
+  ağır çekimde yalnız daha seyrek atılıyor; bir kare bir alt adımdan azını gerektiriyorsa görüntü önceki ve sonraki
+  alt adımın arasında süzülüyor (`launchLerp`). Ölçüm (`--lab-test yavas`, duran dünya, 1/100'de 0,05 sn):
+
+  | | en hızlı tanecik | yukarı fırlayan | gerçek hızda aynı süre |
+  |---|---|---|---|
+  | Süt, eski yol | 3,10 m/sn | 7.367 | 0,195 m/sn, 0 |
+  | Süt, yeni | **0,195 m/sn** | **0** | |
+  | Su, eski yol | 22,1 m/sn | 21.868 | 0,131 m/sn, 0 |
+  | Su, yeni | **0,147 m/sn** | **0** | |
+
+- **İnce hesap isteğe bağlı:** tetik yalnız kaba dünyada oynar (sol üstte **Kaba hesap**); panelde **İnce hesap yap**
+  (**I**) aynı girdilerle ince dünyayı başlatır, bir daha basınca durdurur. Bitince bir kez gerçek hızda oynar (o sırada
+  kayıt izlenmiyorsa). İnce kayıttan **R** / **Kaba hesaba dön** kaba dünyaya olduğu yerden döner (kayıt zaman çubuğunda
+  kalır); kaba dünyada **R** yeniden kurar.
+- **Kum: tıklanan yere bilye.** Panelde **Sol tık: Huniyi gezdir / Bilye bırak** (**B** değiştirir). Bilye kipinde sol
+  tık, tıklanan noktanın (kum, masa; havaya ya da huniye tıklanırsa masadaki iz) üstünden 28 cm'den bir bilye bırakır,
+  saniyede en çok bir. Altı bilye var, hepsi bitince en eskisi yeniden kullanılır. Eskiden B, bilyeyi huninin altına
+  bırakıyordu ("hep solda" bu).
+- **Jel: saniyede bir, istediğin kadar atış** (tıkla ya da Boşluk). Karpuz, balon, dökme, damla tek tetik. İnce hesap
+  bütün atışları sırayla yeniden oynatır: kayıt her atışın ardından 0,3 sn boyunca her adımı (saniyede 2000), arada
+  saniyede 120 anı saklar; bellek yetmezse yoğun kısım seyrekleşir (her 2., 3. adım), sonra son kırpılır. Atışlar
+  arasındaki 0,8 sn'den uzun bekleme 0,8 sn'ye kısalır (`jel.kayit_ara_en_cok`): blok o arada yalnız durur; böylece 7
+  atış ~5 sn dünya zamanı, ince hesabı 1-2 dk (uygulamada dünya saniyesi 10-21 sn sürüyor; kısalmasa dakikalar). Ölçüm: 3 atış, 1,21 sn dünya zamanı, 2421 an, 2,8 GB, 11,9 sn
+  hesap (`--seq --deney jel --tetik --kayit --atis 3 --atis_ara 0.4`).
+- Otomatik test yeni akışla: her tetikten sonra İnce hesap yap düğmesine gerçek tıklama; kumda iki bilye (üçüncü tık
+  erken: alınmadı), jele üç atış ve ince hesabı, sütte ve balda dokunmadan ×1/100, ince kayıttan kaba hesaba dönüş.
+  Testler: laboratuvar 3/3 (balon, kum 32,7°, yavaş), otomatik test geçti.
+
+**Revize 2'de görülen, dokunulmayan:** ince dünyada jel bloğu ilk 9 mm atışında ~10 cm havalanıp dönüyor (tek atışta da,
+gecenin kaydında da öyle; yeni değil), kaba dünyada yalnız sarsılıyor. Bloğumuz küçük (24×10×10 cm, ~2,5 kg; standart
+blok ~9 kg): aynı itiş ona dört kat hız, ~16 kat yükseklik verir, yani akla yakın olabilir; gerçek kayda karşı
+ölçülmedi. Çoklu atışta sonraki atışlar kaba dünyadaki bloğun yerine nişanlandığı için ince dünyada havadaki bloğun
+başka yerine değebilir ya da ıskalayabilir (aynı ışın, ayrışan dünya).
+
+**Revize 2, NE DOĞRULANMADI:**
+- Elle kullanmadım: otomatik test sanal fare ve tuşlarla, ekranlar ve günlük. Bilye bırakma noktasının tıklanan yere
+  denk düştüğüne günlükteki tıklama noktası ve ekranla baktım (iki bilye, ikisi de tıklanan yerde).
+- 6-7 atışlık ince hesabı uçtan uca çalıştırmadım (3 atış denendi); süresi ve belleği 3 atıştan kestirildi.
+- Ağır çekimde süzülme yalnız taneciklerde: taşınan cam kapların (beher) duruşu alt adım aralarında atlar (0,8 ms'lik
+  dönüş, gözle seçilmez sandım; bakılmadı).
+- ×1/10'da (karede 2 alt adım) süzülme yok, gerekmiyor sandım; 20'den az alt adımlı bir deneyde gerekebilir.
+
 ## 🔧 Revize 1 · 2026-10-03 öğlen: görüntü kararlılığı
 
 **Özcan'ın sınaması:** *"Fizik olmuş, gayet güzel. Ancak önemli bir sorun görüntü kalitesinde [...] sanki suyun
@@ -170,7 +223,7 @@ doldurma.
 ```
 build\pc_graphics.exe --scene laboratuvar --still --deney su --tetik --kayit --t 1.4 --spp 64 --out captures\x.png
 build\pc_graphics.exe --scene laboratuvar --seq --deney balon --tetik --kayit --t0 0 --t1 0.07 --kare 8 --out captures\x
-build\pc_graphics.exe --scene laboratuvar --lab-test [balon|kum]
+build\pc_graphics.exe --scene laboratuvar --lab-test [balon|kum|yavas]
 build\pc_graphics.exe --scene laboratuvar --test [baraj|balon|...]     (T1 çözücü testleri)
 build\pc_graphics.exe --autotest-only laboratuvar
 build\pc_graphics.exe --scene laboratuvar --kararlilik --deney su --kare 40 [--dondur] [--tetik] [--kaydir 0.002] --out captures\k
@@ -179,5 +232,6 @@ build\pc_graphics.exe --scene laboratuvar --kararlilik --deney su --kare 40 [--d
 yazar; `<out>_isi.png` sapma haritası, `<out>_kare.png` son kare. `--dondur` dünyayı durdurur, `--kaydir` kamerayı her
 karede o kadar metre yana kaydırır. Görüntü anahtarları: `goruntu.zamansal`, `goruntu.zamansal_alfa`,
 `goruntu.zamansal_gama`, `goruntu.gurultu_giderici`, `kamera.diyafram`.
-Ortak: `--width --height --cam "x y z" --look "x y z" --set anahtar=değer --yukseklik --akis --guc`.
+Ortak: `--width --height --cam "x y z" --look "x y z" --set anahtar=değer --yukseklik --akis --guc`; jelde
+`--atis N --atis_ara S` N atış (her biri biraz yukarı ve geride), S saniye arayla.
 `LAB_TANI=1` oturma ve akıtıcı tanısı yazar. Deney adları: su, bal, kum, balon, karpuz, jel, damla.

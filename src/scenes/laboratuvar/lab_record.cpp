@@ -22,18 +22,55 @@ std::string LabRecording::state() const {
     return state_;
 }
 
-bool LabRecording::start(const Config& cfg, Deney d, const LabInputs& in, const LabEvent& e, double duration, double frameDt, size_t budgetBytes) {
+bool LabRecording::start(const Config& cfg, Deney d, const LabInputs& in, const std::vector<LabEvent>& events, double after, double frameDt, double sparseDt,
+                         double gapMax, size_t budgetBytes) {
     release();
+    if (events.empty()) return false;
     dt_ = frameDt;
+    after_ = std::max(frameDt, after);
+    sparseDt_ = std::max(frameDt, sparseDt);
+    // the triggers' times from the first; a long pause shortened (nothing fast happens in it: the world only rests)
+    events_ = events;
+    events_[0].at = 0.0;
+    for (size_t i = 1; i < events_.size(); ++i) {
+        double gap = std::max(0.0, events[i].at - events[i - 1].at);
+        if (gapMax > 0.0) gap = std::min(gap, gapMax);
+        events_[i].at = events_[i - 1].at + gap;
+    }
     stop_ = false;
     done_ = false;
     failed_ = false;
     framesDone_ = 0;
-    total_ = std::max(1, int(std::ceil(duration / frameDt)));
+    stepsDone_ = 0;
     budget_ = budgetBytes;
+    schedule(1);
     started_ = true;
-    worker_ = std::thread([this, cfg, d, in, e] { run(cfg, d, in, e); });
+    worker_ = std::thread([this, cfg, d, in] { run(cfg, d, in); });
     return true;
+}
+
+void LabRecording::schedule(int denseStride) {
+    const double end = events_.back().at + after_;
+    const int last = std::max(0, int(std::ceil(end / dt_ - 1e-9)));
+    const int sparse = std::max(1, int(std::lround(sparseDt_ / dt_)));
+    steps_.clear();
+    size_t next = 0;
+    double busyUntil = -1.0;
+    for (int k = 0; k <= last; ++k) {
+        const double t = k * dt_;
+        while (next < events_.size() && events_[next].at <= t + 1e-9) busyUntil = events_[next++].at + after_;
+        const bool busy = t <= busyUntil + 1e-9;
+        if ((busy && k % denseStride == 0) || k % sparse == 0 || k == last) steps_.push_back(k);
+    }
+    denseStride_ = denseStride;
+    total_ = int(steps_.size());
+    stepsTotal_ = last;
+    duration_ = steps_.empty() ? 0.0 : steps_.back() * dt_;
+}
+
+double LabRecording::computed() const {
+    const int done = framesDone();
+    return done > 0 ? steps_[size_t(done - 1)] * dt_ : 0.0;
 }
 
 void LabRecording::cancel() {
@@ -46,18 +83,22 @@ void LabRecording::release() {
     if (frames_) cudaFree(frames_);
     frames_ = nullptr;
     poses_.clear();
+    steps_.clear();
+    events_.clear();
     started_ = false;
     framesDone_ = 0;
+    stepsDone_ = 0;
     total_ = 0;
     drawn_ = 0;
+    duration_ = 0.0;
     membraneFirst = -1;
     membraneCount = 0;
     membraneTris.clear();
     ballFirst = -1;
-    ballCount = 0;
+    ballCount = ballN = 0;
 }
 
-void LabRecording::run(Config cfg, Deney d, LabInputs in, LabEvent e) {
+void LabRecording::run(Config cfg, Deney d, LabInputs in) {
     const double t0 = nowS();
     setState("build");
     LabWorld w;
@@ -67,9 +108,10 @@ void LabRecording::run(Config cfg, Deney d, LabInputs in, LabEvent e) {
     const std::string pre = std::string(deneyKey(d)) + ".";
     w.settle(cfg.f(pre + "oturma", 1.0f), std::max(dt_, 1.0 / cfg.f(pre + "oturma_hiz", float(1.0 / dt_))));   // a solid may settle in larger steps   // in the recording's own steps (its substeps are set for them)
     if (stop_) { done_ = true; return; }
-    // the trigger first: it may add particles (a drop), and they must be among the drawn ones and fit the buffers
-    w.trigger(e);
-    // the drawn particles, and where the membrane and the ball are among them
+    // the first trigger first: it may add particles (a drop), and they must be among the drawn ones and fit the
+    // buffers (the later ones only shoot: they add none)
+    w.trigger(events_[0]);
+    // the drawn particles, and where the membrane and the balls are among them
     std::vector<uint32_t> idx;
     std::vector<int> drawnOf(w.code.size(), -1);
     for (size_t i = 0; i < w.code.size(); ++i)
@@ -87,15 +129,23 @@ void LabRecording::run(Config cfg, Deney d, LabInputs in, LabEvent e) {
         ballFirst = drawnOf[size_t(w.ballFirst)];
         ballCount = w.ballCount;
         ballRadius = w.ballRadius;
+        ballN = w.ballsDropped;
     }
     spacing_ = w.s;
     // the box: 16 bits an axis
     box_.lo = w.boxLo;
     const float3 ext = w.boxHi - w.boxLo;
     box_.scale = make_float3(ext.x / 65535.0f, ext.y / 65535.0f, ext.z / 65535.0f);
+    // the frames within the budget: the busy parts thin out first (every 2nd step, 3rd...), then the end goes
     const size_t perFrame = size_t(n) * sizeof(ushort4);
-    const int fit = int(std::min<size_t>(size_t(total_.load()), budget_ / std::max<size_t>(perFrame, 1)));
-    total_ = std::max(1, fit);
+    const size_t fitFrames = budget_ / std::max<size_t>(perFrame, 1);
+    for (int stride = 1; size_t(total_.load()) > fitFrames && stride < 8; ++stride) schedule(stride + 1);
+    if (size_t(total_.load()) > fitFrames) {
+        steps_.resize(std::max<size_t>(1, fitFrames));
+        total_ = int(steps_.size());
+        stepsTotal_ = steps_.back();
+        duration_ = steps_.back() * dt_;
+    }
     if (cudaMalloc(reinterpret_cast<void**>(&frames_), perFrame * size_t(total_.load())) != cudaSuccess) {
         failed_ = true;
         done_ = true;
@@ -114,22 +164,31 @@ void LabRecording::run(Config cfg, Deney d, LabInputs in, LabEvent e) {
     cudaMalloc(reinterpret_cast<void**>(&dIdx), size_t(n) * sizeof(uint32_t));
     cudaMemcpy(dIdx, idx.data(), size_t(n) * sizeof(uint32_t), cudaMemcpyHostToDevice);
     drawn_ = n;
-    std::printf("kayit: %s; %d kare x %.2f ms dunya zamani, %d cizilen tanecik, %.0f MB (kurma + oturma %.1f s)\n", summary.c_str(), total_.load(), dt_ * 1000.0, n,
+    std::printf("kayit: %s; %d tetik, %d kare (yogun her %d adimda) x %.2f ms adim, %.2f s dunya zamani, %d cizilen tanecik, %.0f MB (kurma + oturma %.1f s)\n",
+                summary.c_str(), int(events_.size()), total_.load(), denseStride_.load(), dt_ * 1000.0, duration_.load(), n,
                 double(perFrame) * total_.load() / 1048576.0, nowS() - t0);
     setState("compute");
     const double tc = nowS();
-    for (int k = 0; k < total_.load(); ++k) {
+    const int total = total_.load();
+    size_t next = 1;   // the first trigger is in
+    int stored = 0;
+    for (int k = 0; stored < total; ++k) {
         if (stop_) break;
         if (k > 0) w.step(float(dt_));
+        while (next < events_.size() && events_[next].at <= k * dt_ + 1e-9) w.trigger(events_[next++]);
+        stepsDone_ = k;
+        if (steps_[size_t(stored)] != k) continue;
         w.exportDraw(dAll, dCodeAll, st);
         launchGather(dAll, dCodeAll, dIdx, n, dDrawn, dCodeDrawn, st);
-        launchQuantise(dDrawn, dCodeDrawn, n, box_, frames_ + size_t(k) * n, st);
-        for (int p = 0; p < LabWorld::P_COUNT; ++p) poses_[size_t(k) * LabWorld::P_COUNT + p] = w.prop[p];
+        launchQuantise(dDrawn, dCodeDrawn, n, box_, frames_ + size_t(stored) * n, st);
+        for (int p = 0; p < LabWorld::P_COUNT; ++p) poses_[size_t(stored) * LabWorld::P_COUNT + p] = w.prop[p];
         cudaStreamSynchronize(st);
-        framesDone_.store(k + 1, std::memory_order_release);
-        msPerFrame_ = float((nowS() - tc) * 1000.0 / (k + 1));
+        ++stored;
+        framesDone_.store(stored, std::memory_order_release);
+        msPerFrame_ = float((nowS() - tc) * 1000.0 / stored);
+        slowdown_ = float((nowS() - tc) / std::max(dt_, k * dt_));
     }
-    std::printf("kayit bitti: %d kare, %.1f s (kare basina %.1f ms)\n", framesDone_.load(), nowS() - tc, msPerFrame_.load());
+    std::printf("kayit bitti: %d kare, %.1f s (dunya saniyesi basina %.1f s)\n", framesDone_.load(), nowS() - tc, slowdown_.load());
     for (void* p : {static_cast<void*>(dAll), static_cast<void*>(dDrawn), static_cast<void*>(dCodeAll), static_cast<void*>(dCodeDrawn), static_cast<void*>(dIdx)})
         cudaFree(p);
     cudaStreamDestroy(st);
@@ -142,10 +201,13 @@ void LabRecording::frameAt(double t, float3* dPos, uint8_t* dCode, PropPose* pos
     const int done = framesDone();
     const int n = drawnCount();
     if (done <= 0 || n <= 0) return;
-    const double f = std::max(0.0, std::min(double(done - 1), t / dt_));
-    const int k0 = int(std::floor(f));
+    // the stored frame at or before t, the next one, how far between them
+    const double s = std::max(0.0, t / dt_);
+    int k0 = int(std::upper_bound(steps_.begin(), steps_.begin() + done, int(std::floor(s + 1e-9))) - steps_.begin()) - 1;
+    k0 = std::max(0, std::min(done - 1, k0));
     const int k1 = std::min(done - 1, k0 + 1);
-    const float a = float(f - k0);
+    const double span = double(steps_[size_t(k1)] - steps_[size_t(k0)]);
+    const float a = k1 != k0 && span > 0.0 ? float(std::min(1.0, std::max(0.0, (s - steps_[size_t(k0)]) / span))) : 0.0f;
     launchDequantise(frames_ + size_t(k0) * n, k1 != k0 ? frames_ + size_t(k1) * n : nullptr, a, n, box_, dPos, dCode, st);
     if (poses)
         for (int p = 0; p < LabWorld::P_COUNT; ++p) {

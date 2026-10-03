@@ -45,4 +45,6 @@ struct TCam {
 void launchTemporal(const float4* accum, float invSpp, const float4* pos, const float4* prevPos, TCam prev, const float4* histIn, float4* histOut, int w,
                     int h, float alphaMin, float gamma, float maxFrames, bool reset, cudaStream_t s);
 // the mean of a range of positions as a sphere of radius r (a steel ball drawn whole)
+// slow motion's drawing between two substeps: b = a + (b - a) t for the first n (newer particles stay as they are)
+void launchLerp(const float3* a, float3* b, int n, float t, cudaStream_t s);
 void launchCentre(const float3* pos, int first, int count, float r, float4* out, cudaStream_t s);

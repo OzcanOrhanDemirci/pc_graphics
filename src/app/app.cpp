@@ -516,30 +516,41 @@ int App::run(const Options& opt) {
                 control("yapi", 0); wait(6.0);
             }
             if (infos_[s].id == "laboratuvar") {
-                // every experiment: live, its trigger, the fine recording as it computes and when it plays; the panel
-                // by mouse (the time bar, the speed)
+                // every experiment: live, its trigger on the coarse world, the fine pass asked for, the recording as it
+                // computes and when it plays; the panel by mouse (the time bar, the speed); slow motion on a resting
+                // world; balls where clicked; the gel shot three times
                 wait(1.0); shot("lab_su_canli");
-                control("eylem", 0); wait(1.2); log("lab su onizleme"); shot("lab_su_onizleme");
-                wait(9.0); log("lab su kayit"); shot("lab_su_kayit");
+                control("eylem", 0); wait(1.2); log("lab su kaba"); shot("lab_su_kaba");
+                control("ince", 0); wait(9.0); log("lab su kayit"); shot("lab_su_kayit");
                 wait(6.0); shot("lab_su_bitti");
                 slide("zaman", 0.35f); wait(0.1); left(false); control("hiz", 1); control("durdur", 0); wait(2.0); shot("lab_su_yavas");
+                key(GLFW_KEY_R); wait(1.0); shot("lab_su_kabaya_don"); control("hiz", 0);
                 control("deney", 1); wait(6.0); log("lab bal"); shot("lab_bal");
                 mouse(0.45f, 0.70f); left(true); wait(0.1);
                 for (int k = 1; k <= 20; ++k) { mouse(0.45f + 0.004f * k, 0.70f); wait(0.05); }
                 left(false); wait(3.0); shot("lab_bal_gezdi");
+                control("hiz", 2); wait(3.0); log("lab bal x1/100"); shot("lab_bal_yavas"); control("hiz", 0);
                 control("deney", 2); wait(10.0); log("lab kum"); shot("lab_kum");
-                key(GLFW_KEY_B); wait(2.0); shot("lab_kum_bilye");
+                key(GLFW_KEY_B); wait(0.2);
+                mouse(0.42f, 0.66f); wait(0.1); click(); wait(1.2);
+                mouse(0.58f, 0.66f); wait(0.1); click(); wait(0.3); mouse(0.50f, 0.70f); click();   // too soon: not taken
+                wait(2.5); log("lab kum bilye"); shot("lab_kum_bilye");
+                key(GLFW_KEY_B);
                 control("deney", 3); wait(4.0); shot("lab_balon");
-                mouse(0.50f, 0.50f); wait(0.2); click(); wait(0.3); log("lab balon tik");   // the needle by the mouse (the log says where)
-                control("eylem", 0); wait(0.6); shot("lab_balon_onizleme"); wait(12.0); log("lab balon kayit"); shot("lab_balon_kayit");
+                mouse(0.50f, 0.50f); wait(0.2); click(); wait(0.6); log("lab balon tik"); shot("lab_balon_kaba");   // the needle by the mouse (the log says where)
+                control("ince", 0); wait(12.0); log("lab balon kayit"); shot("lab_balon_kayit");
                 control("deney", 4); wait(4.0); shot("lab_karpuz");
                 mouse(0.50f, 0.56f); wait(0.2); click(); wait(0.6); shot("lab_karpuz_tik"); log("lab karpuz tik");
                 key(GLFW_KEY_R); wait(4.0);
-                control("eylem", 0); wait(0.6); shot("lab_karpuz_onizleme"); wait(14.0); log("lab karpuz kayit"); shot("lab_karpuz_kayit");
+                control("eylem", 0); wait(0.6); shot("lab_karpuz_kaba"); control("ince", 0); wait(14.0); log("lab karpuz kayit"); shot("lab_karpuz_kayit");
                 control("deney", 6); wait(4.0); shot("lab_damla");
-                control("eylem", 0); wait(0.6); shot("lab_damla_onizleme"); wait(8.0); log("lab damla kayit"); shot("lab_damla_kayit");
+                control("hiz", 2); wait(3.0); log("lab damla x1/100 dokunmadan"); shot("lab_damla_yavas"); control("hiz", 0);
+                control("eylem", 0); wait(0.6); shot("lab_damla_kaba"); control("ince", 0); wait(8.0); log("lab damla kayit"); shot("lab_damla_kayit");
                 control("deney", 5); wait(4.0); shot("lab_jel");
-                control("eylem", 0); wait(0.6); shot("lab_jel_onizleme"); wait(10.0); log("lab jel kayit"); shot("lab_jel_kayit");
+                control("eylem", 0); wait(1.2);
+                mouse(0.47f, 0.55f); wait(0.1); click(); wait(1.2);
+                mouse(0.53f, 0.58f); wait(0.1); click(); wait(0.6); log("lab jel uc atis"); shot("lab_jel_kaba");
+                control("ince", 0); wait(45.0); log("lab jel kayit"); shot("lab_jel_kayit");
             }
             key(GLFW_KEY_H); wait(0.3); shot(infos_[s].id + "_arayuzsuz"); key(GLFW_KEY_H);
             key(GLFW_KEY_ESCAPE); gallery(); wait(0.8);

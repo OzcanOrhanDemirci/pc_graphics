@@ -58,7 +58,7 @@ struct DrawInput {
     float spacing = 0.0025f;
     const PropPose* poses = nullptr;
     int membraneFirst = -1, membraneCount = 0;
-    int ballFirst = -1, ballCount = 0;
+    int ballFirst = -1, ballCount = 0, ballN = 0;   // the balls: the first one's range, as many each after it, how many drawn
     float ballRadius = 0.0f;
 };
 

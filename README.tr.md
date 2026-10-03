@@ -139,7 +139,7 @@ ne derse o:
 - **Su** eğilen bir beherden bardağa dökülür, 12 ile 45 cm arasından: sıçrar, taşar, masada birikir.
 - **Bal** kaşıktan cam tabağa (canlı, kaşığı fareyle gezdir): tek kehribar ip, tabakta katlanıp kıvrılır, sonra göle
   yayılır.
-- **Kum** huniden masaya ve behere (canlı): 32,5° ile yığılır (kuru kum 30-35°); çelik bilye bırakılabilir.
+- **Kum** huniden masaya ve behere (canlı): 32,5° ile yığılır (kuru kum 30-35°); tıklanan yere çelik bilyeler bırakılır.
 - **Su balonu** masada, iğneyle delinir: lastik 20-30 ms'de geri soyulurken su bir an balon biçiminde kalır, sonra çöker.
 - **Karpuz** tüfekle vurulur (5,56, 7,62×51, .50 BMG; gerçek yükler): birkaç milisaniye şişer, sonra kabuğu taç gibi
   açılır.
@@ -148,9 +148,11 @@ ne derse o:
 
 ![Sahne 4: iğneden 24 ms sonra su balonu, lastik geri soyuluyor, su hâlâ balon biçiminde](docs/images/lab-balon.jpg)
 
-Hızlı olanlar **kaydedilir**: tetik kaba dünyada hemen oynar (önizleme olduğu yazar), ince dünya (1,5-2,5 mm tanecik,
-150 bine kadar) aynı girdileri bir işçi iş parçacığında hesaplar, saniyenin 1/600'ü ile 1/1000'i aralıklarla ekran
-kartında saklar. Hesaplanan kısım hemen izlenir, video yüklenir gibi; bitince bir kez gerçek hızda oynar, sonra
+Hızlı olanlar **kaydedilebilir**: tetik kaba dünyada hemen oynar (kaba olduğu yazar); istenince ince dünya (0,4-2,5 mm
+tanecik, 250 bine kadar) aynı girdileri bir işçi iş parçacığında hesaplar, saniyenin 1/600'ü ile 1/5000'i aralıklarla
+ekran kartında saklar (jele saniyede bir atış; ince hesap hepsini yeniden oynatır, her atışın çevresinde her adımı,
+arada saniyede 120 an). Canlı dünyada ağır çekim aynı fiziktir, yalnız yavaş: çözücünün alt adımları boyunu korur, daha
+seyrek gelir, görüntü aralarında süzülür (kısaltılan alt adım duran bir süt kabını bir kez patlatmıştı). Hesaplanan kısım hemen izlenir, video yüklenir gibi; bitince bir kez gerçek hızda oynar, sonra
 serbest: zaman çubuğunda gez, 1/10 ya da 1/100'e yavaşlat, dondur, WASD ile etrafında dolaş. Hiçbiri video değil:
 saklanan fiziktir, her açıdan canlı çizilir. Bal ve kum yalnız canlı, çünkü akışları sahnenin kendisi.
 

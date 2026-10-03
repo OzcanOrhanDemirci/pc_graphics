@@ -84,30 +84,32 @@ materials, solver, camera, sun).
 
 ## 04 · Laboratory — a high-speed photography table: water, honey, sand, a water balloon, a watermelon, gel, a milk drop
 A dark set, a soft light panel behind. At the top of the panel **Experiment** (or **1-7**). Everything is particles,
-whatever the physics says. **Fast moments are recorded:** the trigger plays at once on a coarse world (**Coarse
-preview** at the bottom left), a fine world computes behind (**Fine pass …%**, the bar at the bottom); click the **Time**
-bar to watch what is computed so far. When it is done it plays once at real speed, then it is yours to look at. No video:
-what is kept is the physics, drawn live from any view.
+whatever the physics says. **Fast moments:** the trigger plays at once on a coarse world (**Coarse** at the top left);
+if you want, **Compute it finely** (**I**) has a fine world compute the same inputs behind (**Fine pass …%**, the bar at
+the bottom); click the **Time** bar to watch what is computed so far. When it is done it plays once at real speed, then
+it is yours to look at. **R** goes from the fine recording back to the coarse world (the recording stays on the time
+bar). No video: what is kept is the physics, drawn live from any view.
 
 | Experiment | What to do |
 |---|---|
 | **Water** | the **Height** slider (12-45 cm; let go and the beaker is set up again), **Space** or **Pour**: the beaker pours into the glass; from high up it splashes and overflows |
 | **Honey** | live; **left-drag**: the dipper follows the cursor · **Flow**, **Height** sliders · **Space** run / stop |
-| **Sand** | live; **left-drag**: the funnel follows the cursor (fill the beaker or heap the table) · **B** or **Drop a steel ball** |
+| **Sand** | live; the **Left click** choice (or **B**): **Move the funnel** (drag: the funnel follows the cursor, fill the beaker or heap the table) · **Drop a ball** (where you click, from 28 cm, one a second, six balls) |
 | **Water balloon** | **left click** the balloon (a needle where you click) or **Space** (from the front) |
 | **Watermelon** | **Gun**: pistol (cracks it open, knocks it off the stand) or rifle (blows it apart) · the **Round** slider (rifle: 5.56 → 7.62×51 → .50 BMG, real loads), **left click** the melon (fired from the camera) or **Space** (from the side, through the middle) |
 | **Milk drop** | the **Height** slider (5-50 cm), **Space** or **Let a drop fall**: watch the crown at ×1/100 |
-| **Gel** | the **Round** slider (pistol: .22 → 9 mm → .50 AE), **left click** the block or **Space** (from the side, lengthwise): the track and the temporary cavity inside the clear block |
+| **Gel** | the **Round** slider (pistol: .22 → 9 mm → .50 AE), **left click** the block or **Space** (from the side, lengthwise), **once a second, as often as you like**: the track and the temporary cavity inside the clear block; the fine pass computes every shot again in turn (a wait between two longer than 0.8 s shortened to 0.8 s) |
 
 | Key | What it does |
 |---|---|
-| **T** | speed: ×1, ×1/10, ×1/100 (live and in a recording; **Speed** on the panel) |
+| **T** | speed: ×1, ×1/10, ×1/100 (live and in a recording; **Speed** on the panel). Live slow motion is the same physics, only slower |
+| **I** | the fine pass: start / stop |
 | **P** | pause / play (a finished recording plays from the start) · **← / →** 10 ms back / on in a recording (100 ms with **Shift**) |
 | **right drag** | look · **WASD** move where you look · **E / Q** up / down · **Shift** fast · **wheel** forward / back · **C** camera back to the experiment |
-| **R** | set up again (from a recording: back to live) |
+| **R** | set up again (from a fine recording: back to the coarse world) |
 
-**Try:** pop the balloon, when the recording is done pull **Time** back to the start, pick **×1/100** and **P**: the
+**Try:** pop the balloon, **Compute it finely**, when the recording is done pull **Time** back to the start, pick **×1/100** and **P**: the
 rubber peels back in 20-30 ms while the water keeps the balloon's shape for a moment. Pour the water from the highest
 (45 cm), freeze the splash at ×1/10 and fly round it. Heap the sand in one place (a cone of ~32°), then take the funnel
-to the beaker; drop a ball on the heap. Watch the melon at ×1/100: first it swells, then the rind opens.
+to the beaker; with **B**, drop balls on the heap and beside it. Shoot the gel six or seven times in different places. Watch the melon at ×1/100: first it swells, then the rind opens.
 Settings `scenes/laboratuvar.cfg` (F5).

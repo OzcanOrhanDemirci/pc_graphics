@@ -4,6 +4,9 @@
 //             pops it: the membrane must be gone from most of the water within 0.1 s while the water keeps its shape
 //   kum       sand poured on the table piles at its angle of repose (30-35 deg for dry sand)
 //   bal       honey off the dipper: the rope stays whole and coils on the dish
+//   yavas     slow motion leaves a resting world at rest: milk in its dish and water in its beaker at 1/100 speed
+//             (the live window's way, whole substeps taken less often) against the old way (each frame's substeps
+//             shrunk 100 times), which blew them apart untouched (Özcan, 10-03)
 #include "scenes/laboratuvar/laboratuvar_app.h"
 
 #include <algorithm>
@@ -117,6 +120,48 @@ int testKum(LaboratuvarApp& app) {
     return ok ? 0 : 1;
 }
 
+// a resting world run 0.05 s of world time at 1/100 speed (300 frames): the fastest particle and how many liquid
+// particles rose above where any was at the start (a splash); `old`: each frame one step of 1/6000 s in the world's
+// usual substeps (each 100 times shorter)
+int testYavas(LaboratuvarApp& app) {
+    int fails = 0;
+    for (Deney d : {Deney::Damla, Deney::Su}) {
+        // 0: slow motion (the window's way), 1: the old way, 2: real speed over the same 0.05 s (the resting world's own stir)
+        float speeds[3] = {0, 0, 0};
+        int risen[3] = {0, 0, 0};
+        for (int old = 0; old < 3; ++old) {
+            LabWorld w;
+            LabInputs in;
+            in.height = d == Deney::Su ? app.cfg.f("su.yukseklik_baslangic", 0.25f) : 0.3f;
+            w.build(d, app.cfg, false, in);
+            w.settle(app.cfg.f(std::string(deneyKey(d)) + ".oturma", 1.0f));
+            for (int k = 0; k < 30; ++k) w.advance(1.0 / 60.0);   // half a second at real speed, as the window starts
+            std::vector<float3> x;
+            w.pw.readPositions(x);
+            float top = -1e9f;
+            for (size_t i = 0; i < x.size(); ++i)
+                if (w.code[i] == DC_MILK || w.code[i] == DC_WATER) top = std::max(top, x[i].y);
+            float vmax = 0.0f;
+            for (int k = 0; k < (old == 2 ? 3 : 300); ++k) {
+                if (old == 1) w.step(float(1.0 / 6000.0));
+                else w.advance(old == 2 ? 1.0 / 60.0 : 1.0 / 6000.0);
+                if (old == 2 || k % 20 == 19) vmax = std::max(vmax, w.pw.stats().maxSpeed);
+            }
+            w.pw.readPositions(x);
+            int up = 0;
+            for (size_t i = 0; i < x.size(); ++i)
+                if ((w.code[i] == DC_MILK || w.code[i] == DC_WATER) && x[i].y > top + 0.005f) ++up;
+            speeds[old] = vmax;
+            risen[old] = up;
+        }
+        const bool ok = speeds[0] <= std::max(0.05f, 1.5f * speeds[2]) && risen[0] == 0;
+        std::printf("yavas %s x1/100: en hizli %.3f m/s, yukari firlayan %d  (gercek hizda ayni 0,05 sn: %.3f m/s, %d; eski yol: %.2f m/s, %d)  "
+                    "[olcut: gercek hizin en cok 1,5 kati, 0] %s\n", deneyKey(d), speeds[0], risen[0], speeds[2], risen[2], speeds[1], risen[1], verdict(ok));
+        fails += ok ? 0 : 1;
+    }
+    return fails;
+}
+
 }   // namespace
 
 int runLabTests(LaboratuvarApp& app, const std::string& only) {
@@ -124,7 +169,8 @@ int runLabTests(LaboratuvarApp& app, const std::string& only) {
     if (only.empty() || only == "balon") { ++ran; fails += testBalon(app, false); }
     if (only == "balon_ince") { ++ran; fails += testBalon(app, true); }
     if (only.empty() || only == "kum") { ++ran; fails += testKum(app); }
-    if (!ran) { std::printf("bilinmeyen test: %s (balon, balon_ince)\n", only.c_str()); return 2; }
+    if (only.empty() || only == "yavas") { ++ran; fails += testYavas(app); }
+    if (!ran) { std::printf("bilinmeyen test: %s (balon, balon_ince, kum, yavas)\n", only.c_str()); return 2; }
     std::printf("laboratuvar deney testleri: %d test, %d basarisiz\n", ran, fails);
     return fails ? 1 : 0;
 }

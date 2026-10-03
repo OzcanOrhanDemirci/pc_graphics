@@ -77,28 +77,30 @@ Ayarlar `scenes/yikim.cfg` (bina, malzemeler, çözücü, kamera, güneş).
 
 ## 04 · Laboratuvar — ağır çekim fotoğraf masası: su, bal, kum, su balonu, karpuz, jel, süt damlası
 Koyu set, arkada yumuşak ışık paneli. Panelin en üstünde **Deney** (ya da **1-7**). Her şey tanecik, fizik ne derse o.
-**Hızlı anlar kayıt:** tetik kaba dünyada hemen oynar (sol altta **Kaba önizleme**), ince dünya arka planda
-hesaplanır (**İnce hesap %…**, alttaki çubuk); **Zaman** çubuğuna tıklayınca hesaplanan kısım hemen izlenir. Bitince bir
-kez gerçek hızda oynar, sonra serbest inceleme. Video yok: saklanan fiziktir, her açıdan canlı çizilir.
+**Hızlı anlar:** tetik kaba dünyada hemen oynar (sol üstte **Kaba hesap**); istersen **İnce hesap yap** (**I**) ile ince
+dünya aynı girdileri arka planda hesaplar (**İnce hesap %…**, alttaki çubuk). **Zaman** çubuğuna tıklayınca hesaplanan
+kısım hemen izlenir; bitince bir kez gerçek hızda oynar, sonra serbest inceleme. **R** ince kayıttan kaba hesaba döner
+(kayıt zaman çubuğunda kalır). Video yok: saklanan fiziktir, her açıdan canlı çizilir.
 
 | Deney | Ne yap |
 |---|---|
 | **Su** | **Yükseklik** çubuğu (12-45 cm; bırakınca beher yeniden kurulur), **Boşluk** ya da **Dök**: beher bardağa dökülür, yüksekten sıçrar ve taşar |
 | **Bal** | canlı; **sol tıkla sürükle**: kaşık imleci izler · **Akış**, **Yükseklik** çubukları · **Boşluk** akıt / durdur |
-| **Kum** | canlı; **sol tıkla sürükle**: huni imleci izler (behere doldur ya da masaya yığ) · **B** ya da **Çelik bilye bırak** |
+| **Kum** | canlı; **Sol tık** seçimi (ya da **B**): **Huniyi gezdir** (sürükle: huni imleci izler, behere doldur ya da masaya yığ) · **Bilye bırak** (tıkladığın yere 28 cm'den, saniyede bir, altı bilye) |
 | **Su balonu** | balona **sol tık** (tıkladığın yere iğne) ya da **Boşluk** (önden) |
 | **Karpuz** | **Silah**: tabanca (karpuzu açar, kaideden düşürür) ya da tüfek (dağıtır) · **Mermi** çubuğu (tüfekte 5,56 → 7,62×51 → .50 BMG, gerçek yükler), karpuza **sol tık** (kameradan ateş) ya da **Boşluk** (yandan, ortadan) |
 | **Süt damlası** | **Yükseklik** çubuğu (5-50 cm), **Boşluk** ya da **Damla bırak**: taçı ×1/100'de izle |
-| **Jel** | **Mermi** çubuğu (tabanca: .22 → 9 mm → .50 AE), bloğa **sol tık** ya da **Boşluk** (yandan, boylamasına): yol ve geçici boşluk saydam bloğun içinde |
+| **Jel** | **Mermi** çubuğu (tabanca: .22 → 9 mm → .50 AE), bloğa **sol tık** ya da **Boşluk** (yandan, boylamasına), **saniyede bir, istediğin kadar**: yol ve geçici boşluk saydam bloğun içinde; ince hesap bütün atışları sırayla yeniden hesaplar (aralarındaki 0,8 sn'den uzun bekleme 0,8 sn'ye kısalır) |
 
 | Tuş | Ne yapar |
 |---|---|
-| **T** | hız: ×1, ×1/10, ×1/100 (canlıda da, kayıtta da; panelde **Hız**) |
+| **T** | hız: ×1, ×1/10, ×1/100 (canlıda da, kayıtta da; panelde **Hız**). Canlıda ağır çekim aynı fiziktir, yalnız yavaş |
+| **I** | ince hesap yap / durdur |
 | **P** | durdur / oynat (kayıt bitmişse baştan oynatır) · **← / →** kayıtta 10 ms geri / ileri (**Shift** ile 100 ms) |
 | **sağ tık + fare** | bak · **WASD** baktığın yöne git · **E / Q** yukarı / aşağı · **Shift** hızlı · **tekerlek** ileri / geri · **C** kamerayı deneye döndür |
-| **R** | yeniden kur (kayıttayken canlıya dön) |
+| **R** | yeniden kur (ince kayıttayken kaba hesaba dön) |
 
-**Dene:** balonu patlat, kayıt bitince **Zaman**'ı başa çek, **×1/100** seç ve **P**: lastik 20-30 ms'de soyulurken su bir
+**Dene:** balonu patlat, **İnce hesap yap**, kayıt bitince **Zaman**'ı başa çek, **×1/100** seç ve **P**: lastik 20-30 ms'de soyulurken su bir
 an balon biçiminde durur. Suyu en yüksekten (45 cm) dök, sıçramayı ×1/10'da dondurup etrafında dolaş. Kumu bir yere
-yığ (koni ~32°), sonra huniyi behere götür; yığına bilye bırak. Karpuzu ×1/100'de izle: önce şişer, sonra kabuk açılır.
+yığ (koni ~32°), sonra huniyi behere götür; **B** ile yığına ve kenarına bilyeler bırak. Jele altı yedi kez farklı yerlerden ateş et. Karpuzu ×1/100'de izle: önce şişer, sonra kabuk açılır.
 Ayarlar `scenes/laboratuvar.cfg` (F5 ile).

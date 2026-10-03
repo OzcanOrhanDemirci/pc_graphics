@@ -1,9 +1,11 @@
-// Scene 4 "Laboratuvar" inside the application: five experiments on a high-speed photography table.
-//   live       the coarse world runs; honey and sand are only this (their flowing is the scene)
-//   recorded   water poured, the balloon pricked, the melon shot: the trigger plays at once on the coarse world (a
-//              preview, marked so), while a fine world computes the same trigger on a worker thread; what is computed
-//              can be watched at once (the time bar fills like a video loading); when it is done it plays once at
-//              real speed, then it is free to look at: scrub, slow down to 1/10 or 1/100, pause, fly round it.
+// Scene 4 "Laboratuvar" inside the application: seven experiments on a high-speed photography table.
+//   live       the coarse world runs, at any speed (slow motion takes the world's own substeps less often, and the
+//              drawing goes between them); honey and sand are only this (their flowing is the scene)
+//   recorded   water poured, the balloon pricked, the melon or the gel shot (the gel up to once a second), a drop of
+//              milk: the triggers play at once on the coarse world, marked so. Asked for (the fine pass button), a
+//              fine world computes the same triggers on a worker thread; what is computed can be watched at once (the
+//              time bar fills like a video loading); when it is done it plays once at real speed, then it is free to
+//              look at: scrub, slow down to 1/10 or 1/100, pause, fly round it; back to the coarse world as it was.
 // No video is made: what is kept is the physics, drawn live from any view.
 #include "app/lang.h"
 #include "app/scene.h"
@@ -39,18 +41,20 @@ std::string deneyName(Deney d) {
 }
 std::string deneyNote(Deney d) {
     switch (d) {
-    case Deney::Su: return L("Beher bardağa dökülür · kayıt", "A beaker poured into a glass · recorded");
+    case Deney::Su: return L("Beher bardağa dökülür · kaba hesap, istersen ince", "A beaker poured into a glass · coarse, fine if asked");
     case Deney::Bal: return L("Kaşıktan cam tabağa · canlı · fareyle gezdir", "From a dipper onto a glass dish · live · drag to move");
-    case Deney::Kum: return L("Huniden masaya ve behere · canlı · fareyle gezdir", "From a funnel onto the table and a beaker · live · drag to move");
-    case Deney::Balon: return L("Balona tıkla: iğne · kayıt", "Click the balloon: a needle · recorded");
-    case Deney::Karpuz: return L("Karpuza tıkla: tüfek · kayıt", "Click the melon: a rifle · recorded");
-    case Deney::Jel: return L("Balistik jel bloğu, bloğa tıkla: tabanca · kayıt", "A ballistic gel block, click it: a pistol · recorded");
-    case Deney::Damla: return L("İnce süt katmanına bir damla: taç · kayıt", "A drop into a thin layer of milk: the crown · recorded");
+    case Deney::Kum: return L("Huniden masaya ve behere · canlı · fareyle gezdir ya da bilye bırak", "From a funnel onto the table and a beaker · live · drag it, or drop balls");
+    case Deney::Balon: return L("Balona tıkla: iğne · kaba hesap, istersen ince", "Click the balloon: a needle · coarse, fine if asked");
+    case Deney::Karpuz: return L("Karpuza tıkla: silah · kaba hesap, istersen ince", "Click the melon: a gun · coarse, fine if asked");
+    case Deney::Jel: return L("Balistik jel bloğu, bloğa tıkla: tabanca, saniyede bir atış · kaba hesap, istersen ince",
+                              "A ballistic gel block, click it: a pistol, a shot a second · coarse, fine if asked");
+    case Deney::Damla: return L("İnce süt katmanına bir damla: taç · kaba hesap, istersen ince", "A drop into a thin layer of milk: the crown · coarse, fine if asked");
     }
     return "";
 }
 
 const float kSpeeds[3] = {1.0f, 0.1f, 0.01f};
+const double kCooldown = 1.0;   // seconds between two shots into the gel, two balls on the sand
 
 class LabLive : public app::Scene {
 public:
@@ -72,10 +76,10 @@ public:
                "Everything is particles: water and honey by a density constraint (PBF), sand by grains with friction, rubber and "
                "watermelon by breakable bonds (XPBD). Melon flesh that loses its bonds turns to juice.")},
             {L("Kayıt", "Recording"),
-             L("Tetik kaba dünyada hemen oynar; aynı girdilerle ince dünya (1,5-2,5 mm tanecik) arka planda saniyenin 1/600'ü ile "
-               "1/1000'i aralıklarla hesaplanır. Video yok: saklanan fiziktir, her açıdan canlı çizilir.",
-               "The trigger plays at once on a coarse world; a fine world (1.5-2.5 mm particles) computes the same inputs in the "
-               "background, kept every 1/600 to 1/1000 of a second. No video: what is kept is the physics, drawn live from any view.")},
+             L("Tetik kaba dünyada hemen oynar; istenirse aynı girdilerle ince dünya (1,5-2,5 mm tanecik) arka planda saniyenin "
+               "1/600'ü ile 1/5000'i aralıklarla hesaplanır. Video yok: saklanan fiziktir, her açıdan canlı çizilir.",
+               "The trigger plays at once on a coarse world; asked for, a fine world (1.5-2.5 mm particles) computes the same inputs "
+               "in the background, kept every 1/600 to 1/5000 of a second. No video: what is kept is the physics, drawn live from any view.")},
             {L("Yüzeyler", "Surfaces"),
              L("Sıvıların yüzeyi her karede taneciklerinden kurulur (anizotropik çekirdekler); tane görünmez.",
                "Every frame each liquid's surface is built from its particles (anisotropic kernels); no grain shows.")},
@@ -95,9 +99,10 @@ public:
         i.keys = {{L("Deney", "Experiment"),
                    {{"1-7", L("Su, bal, kum, balon, karpuz, jel, süt damlası", "Water, honey, sand, balloon, melon, gel, milk drop")},
                     {L("Boşluk", "Space"), L("Dök / akıt / durdur", "Pour / run / stop")},
-                    {L("Sol tık", "Left click"), L("İğne, ateş; balda ve kumda sürükle: gezdir", "Needle, fire; honey and sand: drag to move")},
-                    {"B", L("Kuma çelik bilye bırak", "Drop a steel ball on the sand")},
-                    {"R", L("Yeniden kur (canlıya dön)", "Set up again (back to live)")}}},
+                    {L("Sol tık", "Left click"), L("İğne, ateş (jelde saniyede bir); balda ve kumda sürükle: gezdir", "Needle, fire (the gel: once a second); honey and sand: drag to move")},
+                    {"B", L("Kumda sol tık: huniyi gezdir ↔ bilye bırak", "Sand's left click: move the funnel ↔ drop a ball")},
+                    {"I", L("İnce hesap yap / durdur", "Fine pass: start / stop")},
+                    {"R", L("Yeniden kur; ince kayıtta: kaba hesaba dön", "Set up again; in a fine recording: back to the coarse world")}}},
                   {L("Zaman", "Time"),
                    {{"T", L("Hız: ×1, ×1/10, ×1/100", "Speed: ×1, ×1/10, ×1/100")},
                     {"P", L("Durdur / oynat", "Pause / play")},
@@ -157,6 +162,7 @@ public:
 
     void frame(app::Host& host, const app::Input& in) override {
         const float realDt = float(std::min(0.1, in.dt));
+        now_ = in.now;
         if (rebuildIn_ > 0 && --rebuildIn_ == 0) {
             buildWorld(pending_);
             host.toast(deneyName(deney_));
@@ -164,9 +170,10 @@ public:
         // ---- keys and the panel
         for (int k = 0; k < kDeneyCount; ++k)
             if (in.pressed(GLFW_KEY_1 + k) || in.pressed(GLFW_KEY_KP_1 + k)) choose(host, Deney(k));
-        if (in.pressed(GLFW_KEY_R)) choose(host, deney_, true);
+        if (in.pressed(GLFW_KEY_R)) resetAction(host);
         if (in.pressed(GLFW_KEY_SPACE)) mainAction(host);
-        if (in.pressed(GLFW_KEY_B) && deney_ == Deney::Kum) dropBall(host);
+        if (in.pressed(GLFW_KEY_B) && deney_ == Deney::Kum) setTool(host, tool_ ^ 1);
+        if (in.pressed(GLFW_KEY_I)) fineAction(host);
         if (in.pressed(GLFW_KEY_T)) setSpeed(host, (speedIdx_ + 1) % 3);
         if (in.pressed(GLFW_KEY_P)) togglePause(host);
         if (in.pressed(GLFW_KEY_C)) { a_.setCamera(deney_); moved_ = true; }
@@ -178,8 +185,9 @@ public:
         for (const app::ControlEvent& e : in.events) {
             if (e.id == "deney") choose(host, Deney(e.item));
             else if (e.id == "eylem") mainAction(host);
-            else if (e.id == "bilye") dropBall(host);
-            else if (e.id == "yeniden") choose(host, deney_, true);
+            else if (e.id == "arac") setTool(host, e.item);
+            else if (e.id == "ince") fineAction(host);
+            else if (e.id == "yeniden") resetAction(host);
             else if (e.id == "hiz") setSpeed(host, e.item);
             else if (e.id == "durdur") togglePause(host);
             else if (e.id == "yukseklik") { in_[int(deney_)].height = e.value; if (e.released || deney_ != Deney::Su) inputsChanged(); }
@@ -224,7 +232,7 @@ public:
         if (rebuildIn_ == 0 && in.view.w > 0.0f) {
             const float rx = (in.mouseX - in.view.x) / in.view.w * a_.width, ry = (in.mouseY - in.view.y) / in.view.h * a_.height;
             const bool inside = rx >= 0 && ry >= 0 && rx < a_.width && ry < a_.height;
-            if (inside && in.leftDown && (deney_ == Deney::Bal || deney_ == Deney::Kum) && mode_ == Mode::Live) {
+            if (inside && in.leftDown && (deney_ == Deney::Bal || (deney_ == Deney::Kum && tool_ == 0)) && mode_ == Mode::Live) {
                 // the stream follows the cursor over the table (where the camera's ray meets the table, limited)
                 const LCamera& C = a_.renderer.params().cam;
                 const float u = (rx / a_.width) * 2.0f - 1.0f, v = 1.0f - (ry / a_.height) * 2.0f;
@@ -246,13 +254,16 @@ public:
             if (inside && in.leftClicked && in.now - lastClick_ > 0.3 && mode_ == Mode::Live) {
                 const LPick p = a_.renderer.pick(rx, ry);
                 std::printf("tik: nesne %d, hedef %d, (%.3f %.3f %.3f)\n", p.object, a_.isTarget(p.object) ? 1 : 0, p.pos.x, p.pos.y, p.pos.z);
-                if (deney_ == Deney::Balon && a_.isTarget(p.object)) {
+                if (deney_ == Deney::Kum && tool_ == 1) {
+                    dropBallAt(host, p, rx, ry);
+                    lastClick_ = in.now;
+                } else if (deney_ == Deney::Balon && a_.isTarget(p.object)) {
                     const float3 c = a_.cfg.v3("balon.merkez", make_float3(0.0f, 0.20f, 0.0f));
                     if (length(p.pos - c) < a_.cfg.f("balon.yaricap", 0.06f) * 1.6f) {
                         LabEvent e;
                         e.kind = LabEvent::Prick;
                         e.a = p.pos;
-                        startRecorded(host, e);
+                        fire(host, e);
                         lastClick_ = in.now;
                     }
                 } else if ((deney_ == Deney::Karpuz || deney_ == Deney::Jel) && a_.isTarget(p.object)) {
@@ -263,7 +274,7 @@ public:
                         e.b = p.pos;
                         e.power = in_[int(deney_)].power;
                         e.gun = deney_ == Deney::Jel ? 0 : in_[int(deney_)].gun;
-                        startRecorded(host, e);
+                        fire(host, e);
                         lastClick_ = in.now;
                     }
                 }
@@ -272,21 +283,35 @@ public:
         // ---- time
         const float speed = kSpeeds[speedIdx_];
         if (mode_ != Mode::Playback && !paused_ && rebuildIn_ == 0) {
-            w_.step((1.0f / 60.0f) * speed);
+            // the world's own substeps, fewer of them in slow motion; when a frame owes less than one, the drawing
+            // goes from the state before the last substep to the state after it
+            const double dt = (1.0 / 60.0) * speed;
+            const bool between = w_.substepsIn(dt) < 0.999;
+            if (between && w_.due(dt) > 0 && w_.count() <= cap_) {
+                w_.pw.exportPositions(dPrev_, w_.pw.stream());   // on the solver's stream: before the substep
+                prevCount_ = w_.count();
+                prevValid_ = true;
+            }
+            w_.advance(dt);
+            lerpA_ = between && prevValid_ ? float(w_.owed()) : 1.0f;
             changed_ = true;
         }
         if (rec_.active()) {
             if (rec_.failed()) {
                 host.toast(L("İnce hesap başarısız oldu", "The fine pass failed"));
                 rec_.release();
-            } else if (mode_ == Mode::Preview && !rec_.computing() && rec_.framesDone() > 0) {
-                // the fine pass is done: play it once at real speed, in full
-                mode_ = Mode::Playback;
-                playT_ = 0.0;
-                playing_ = true;
-                firstPlayDone_ = false;
-                speedIdx_ = 0;
-                host.toast(L("İnce kayıt hazır: gerçek hızda oynuyor", "The fine recording is ready: playing at real speed"));
+                autoPlay_ = false;
+            } else if (autoPlay_ && !rec_.computing() && rec_.framesDone() > 0) {
+                // the fine pass asked for is done: play it once at real speed, in full (unless it is being watched)
+                autoPlay_ = false;
+                if (mode_ != Mode::Playback) {
+                    mode_ = Mode::Playback;
+                    playT_ = 0.0;
+                    playing_ = true;
+                    firstPlayDone_ = false;
+                    speedIdx_ = 0;
+                    host.toast(L("İnce kayıt hazır: gerçek hızda oynuyor", "The fine recording is ready: playing at real speed"));
+                }
             }
             if (mode_ == Mode::Playback && playing_ && !paused_) {
                 playT_ += realDt * (firstPlayDone_ ? kSpeeds[speedIdx_] : 1.0f);
@@ -323,17 +348,17 @@ public:
     void status(app::Status& s) override {
         using theme::num;
         // what is on screen
-        if (mode_ == Mode::Preview) s.chips.push_back({L("Kaba önizleme", "Coarse preview"), true});
-        else if (mode_ == Mode::Playback) s.chips.push_back({firstPlayDone_ ? L("İnce kayıt", "Fine recording") : L("İnce kayıt · gerçek hız", "Fine recording · real speed"), true});
+        if (mode_ == Mode::Playback) s.chips.push_back({firstPlayDone_ ? L("İnce kayıt", "Fine recording") : L("İnce kayıt · gerçek hız", "Fine recording · real speed"), true});
+        else if (!events_.empty() && deneyRecorded(deney_)) s.chips.push_back({L("Kaba hesap", "Coarse"), true});
         else s.chips.push_back({L("Canlı", "Live"), false});
-        if (rec_.computing()) s.chips.push_back({L("İnce hesap %", "Fine pass ") + num(100.0 * rec_.framesDone() / std::max(1, rec_.framesTotal()), 0) + L("", "%")});
+        if (rec_.computing()) s.chips.push_back({L("İnce hesap %", "Fine pass ") + num(100.0 * rec_.progress(), 0) + L("", "%")});
         if (paused_) s.chips.push_back({L("Zaman durdu", "Time paused"), true});
         if (speedIdx_) s.chips.push_back({speedIdx_ == 1 ? L("×1/10", "×1/10") : L("×1/100", "×1/100"), true});
         s.metrics.push_back({L("Fizik", "Physics"), num(w_.pw.lastStepMs(), 1) + " ms"});
         s.metrics.push_back({L("Görüntü", "Picture"), num(a_.renderer.lastMs, 1) + " ms"});
         if (mode_ == Mode::Playback) s.metrics.push_back({L("Tanecik", "Particles"), theme::thousands(unsigned(rec_.drawnCount()))});
         else s.metrics.push_back({L("Tanecik", "Particles"), theme::thousands(unsigned(w_.count()))});
-        if (rec_.active() && rec_.computing()) s.metrics.push_back({L("İnce hesap", "Fine pass"), num(rec_.msPerFrame() / (rec_.frameDt() * 1000.0), 1) + L(" kat yavaş", "x slower")});
+        if (rec_.active() && rec_.computing() && rec_.slowdown() > 0.0) s.metrics.push_back({L("İnce hesap", "Fine pass"), num(rec_.slowdown(), 1) + L(" kat yavaş", "x slower")});
         {
             app::Control c;
             c.kind = app::Control::Kind::Choice;
@@ -425,15 +450,35 @@ public:
             else if (deney_ == Deney::Bal || deney_ == Deney::Kum) c.text = li.flowing ? L("Durdur", "Stop") : (deney_ == Deney::Bal ? L("Akıt", "Run") : L("Dök", "Pour"));
             else if (deney_ == Deney::Balon) { c.text = L("İğne batır", "Prick it"); c.enabled = mode_ == Mode::Live; }
             else if (deney_ == Deney::Damla) { c.text = L("Damla bırak", "Let a drop fall"); c.enabled = mode_ == Mode::Live; }
-            else { c.text = L("Ateş et (ortadan)", "Fire (through the middle)"); c.enabled = mode_ == Mode::Live; }
+            else { c.text = L("Ateş et (ortadan)", "Fire (through the middle)"); c.enabled = mode_ == Mode::Live && (deney_ == Deney::Jel || events_.empty()); }
+            if (deney_ == Deney::Balon || deney_ == Deney::Damla) c.enabled = c.enabled && events_.empty();
+            if (deney_ == Deney::Jel && !events_.empty()) c.detail = num(double(events_.size()), 0) + L(" atış", events_.size() == 1 ? " shot" : " shots");
             s.controls.push_back(c);
         }
-        if (deney_ == Deney::Kum) {
+        if (deney_ == Deney::Kum) {   // what the left button does on the sand
+            app::Control c;
+            c.kind = app::Control::Kind::Choice;
+            c.id = "arac";
+            c.title = L("Sol tık", "Left click");
+            c.items = {L("Huniyi gezdir", "Move the funnel"), L("Bilye bırak", "Drop a ball")};
+            c.active = tool_;
+            c.detail = tool_ == 1 ? L("Tıkladığın yere, ", "Where you click, from ") + num(a_.cfg.f("kum.bilye_yukseklik", 0.28f) * 100.0, 0) +
+                                        L(" cm'den; saniyede bir · B", " cm; one a second · B")
+                                  : L("Sürükle: huni izler · B: bilyeye geç", "Drag: the funnel follows · B: to the balls");
+            s.controls.push_back(c);
+        }
+        if (deneyRecorded(deney_) && !events_.empty()) {   // the fine pass, only when asked for
             app::Control c;
             c.kind = app::Control::Kind::Button;
-            c.id = "bilye";
-            c.keys = "B";
-            c.text = L("Çelik bilye bırak", "Drop a steel ball");
+            c.id = "ince";
+            c.keys = "I";
+            if (rec_.computing()) c.text = L("İnce hesabı durdur", "Stop the fine pass");
+            else if (rec_.active()) { c.text = L("İnce kayıt hazır", "The fine recording is ready"); c.enabled = false; }
+            else {
+                c.text = L("İnce hesap yap", "Compute it finely");
+                c.detail = L("Aynı girdilerle ", "The same inputs with ") + num(a_.cfg.f(std::string(deneyKey(deney_)) + ".aralik_ince", 0.0015f) * 1000.0, 1) +
+                           L(" mm tanecik, arka planda", " mm particles, in the background");
+            }
             s.controls.push_back(c);
         }
         if (rec_.active() && rec_.framesDone() > 0) {   // the recording's time
@@ -447,7 +492,8 @@ public:
             c.text = num((mode_ == Mode::Playback ? playT_ : rec_.computed()) * 1000.0, 0) + " ms";
             c.detail = rec_.computing() ? L("Hesaplanan ", "Computed ") + num(rec_.computed(), 2) + " / " + num(T, 2) + L(" sn · tıkla, izle", " s · click to watch")
                                         : L("İnce kayıt: ", "Fine recording: ") + num(rec_.spacing() * 1000.0, 1) + L(" mm tanecik, saniyede ", " mm particles, ") +
-                                              num(1.0 / rec_.frameDt(), 0) + L(" an", " moments a second");
+                                              num(rec_.busyRate(), 0) + L(" an", " moments a second") +
+                                              (rec_.shots() > 1 ? " · " + num(double(rec_.shots()), 0) + L(" atış", " shots") : std::string());
             s.controls.push_back(c);
         }
         {
@@ -471,12 +517,12 @@ public:
             r.kind = app::Control::Kind::Button;
             r.id = "yeniden";
             r.keys = "R";
-            r.text = mode_ == Mode::Live ? L("Yeniden kur", "Set up again") : L("Canlıya dön", "Back to live");
+            r.text = mode_ == Mode::Live ? L("Yeniden kur", "Set up again") : L("Kaba hesaba dön", "Back to the coarse world");
             s.controls.push_back(r);
         }
-        if (mode_ == Mode::Preview) {
+        if (rec_.computing()) {
             s.progressLabel = L("İnce hesap", "Fine pass");
-            s.progress = float(rec_.framesDone()) / float(std::max(1, rec_.framesTotal()));
+            s.progress = rec_.progress();
         }
     }
 
@@ -505,7 +551,7 @@ public:
     ~LabLive() override { unload(); }
 
 private:
-    enum class Mode { Live, Preview, Playback };
+    enum class Mode { Live, Playback };
     app::SceneInfo info_;
     LaboratuvarApp a_;
     LabWorld w_;
@@ -516,6 +562,19 @@ private:
     bool paused_ = false, playing_ = false, firstPlayDone_ = false, changed_ = true, moved_ = true;
     double playT_ = 0.0, lastClick_ = -1.0;
     int speedIdx_ = 0, rebuildIn_ = 0;
+    double now_ = 0.0;
+    // what was triggered in this world (a recording replays it), with the inputs at the first
+    std::vector<LabEvent> events_;
+    LabInputs firedWith_;
+    double firstAt_ = 0.0, lastFire_ = -1e9, lastBall_ = -1e9;
+    bool autoPlay_ = false;   // a fine pass was asked for: play it once when it is done
+    int tool_ = 0;            // Kum: the left button moves the funnel (0) or drops a ball (1)
+    int ballNext_ = 0;
+    // slow motion's drawing between substeps: where the particles were before the last one
+    float3* dPrev_ = nullptr;
+    int prevCount_ = 0;
+    bool prevValid_ = false;
+    float lerpA_ = 1.0f;
     float3* dPos_ = nullptr;
     uint8_t* dCode_ = nullptr;
     int cap_ = 0;
@@ -524,7 +583,8 @@ private:
     void freeBuffers() {
         if (dPos_) cudaFree(dPos_);
         if (dCode_) cudaFree(dCode_);
-        dPos_ = nullptr;
+        if (dPrev_) cudaFree(dPrev_);
+        dPos_ = dPrev_ = nullptr;
         dCode_ = nullptr;
         cap_ = 0;
     }
@@ -536,6 +596,12 @@ private:
         paused_ = playing_ = false;
         playT_ = 0.0;
         speedIdx_ = 0;
+        events_.clear();
+        autoPlay_ = false;
+        lastFire_ = lastBall_ = -1e9;
+        ballNext_ = 0;
+        prevValid_ = false;
+        lerpA_ = 1.0f;
         w_.build(d, a_.cfg, false, in_[int(d)]);
         w_.settle(a_.cfg.f(std::string(deneyKey(d)) + ".oturma", 1.0f));
         const int cap = std::max(w_.count() + a_.cfg.i(std::string(deneyKey(d)) + ".ek_kapasite", 0), a_.cfg.i(std::string(deneyKey(d)) + ".cizim_kapasite", 0));
@@ -543,6 +609,7 @@ private:
         cap_ = std::max(cap, 1024);
         cudaMalloc(reinterpret_cast<void**>(&dPos_), size_t(cap_) * sizeof(float3));
         cudaMalloc(reinterpret_cast<void**>(&dCode_), size_t(cap_));
+        cudaMalloc(reinterpret_cast<void**>(&dPrev_), size_t(cap_) * sizeof(float3));
         a_.setupScene(d, cap_, &w_.membraneTris);
         a_.renderer.resetHistory();
         changed_ = moved_ = true;
@@ -553,6 +620,7 @@ private:
         if (d == deney_ && !again) return;
         if (rebuildIn_ > 0) return;
         rec_.cancel();
+        autoPlay_ = false;   // a pass cut short is not to be played as if done
         pending_ = d;
         rebuildIn_ = 2;
         host.toast(L("Kuruluyor: ", "Setting up: ") + deneyName(d) + "…");
@@ -572,6 +640,8 @@ private:
 
     void setSpeed(app::Host& host, int k) {
         speedIdx_ = std::max(0, std::min(2, k));
+        prevValid_ = false;   // the state before the last substep is the next one's to keep
+        lerpA_ = 1.0f;
         if (mode_ == Mode::Playback) firstPlayDone_ = true;
         host.toast(speedIdx_ == 0 ? L("Gerçek hız", "Real speed") : speedIdx_ == 1 ? L("Ağır çekim ×1/10", "Slow motion ×1/10") : L("Ağır çekim ×1/100", "Slow motion ×1/100"));
     }
@@ -589,14 +659,68 @@ private:
         changed_ = true;
     }
 
-    void dropBall(app::Host& host) {
+    void setTool(app::Host& host, int t) {
+        tool_ = std::max(0, std::min(1, t));
+        host.toast(tool_ == 1 ? L("Sol tık: tıkladığın yere bilye", "Left click: a ball where you click") : L("Sol tık: huniyi gezdir", "Left click: move the funnel"));
+    }
+
+    // a ball over the clicked point (where the camera's ray meets the sand or the table; kept over the table)
+    void dropBallAt(app::Host& host, const LPick& p, float rx, float ry) {
         if (deney_ != Deney::Kum || mode_ != Mode::Live) return;
+        if (now_ - lastBall_ < kCooldown) return;
+        float3 q = p.pos;
+        if (p.object < 0 || p.pos.y > 0.2f) {   // the sky, the funnel: the table under the cursor
+            const LCamera& C = a_.renderer.params().cam;
+            const float u = (rx / a_.width) * 2.0f - 1.0f, v = 1.0f - (ry / a_.height) * 2.0f;
+            const float3 d = normalize(C.fwd + C.right * (u * C.tanHalfX) + C.up * (v * C.tanHalfY));
+            if (d.y > -1e-3f) return;
+            q = C.pos + d * (-C.pos.y / d.y);
+        }
         LabEvent e;
         e.kind = LabEvent::Ball;
-        const float3 nz = in_[int(deney_)].nozzle;
-        e.a = make_float3(nz.x + 0.0f, a_.cfg.f("kum.bilye_yukseklik", 0.28f), nz.z);
+        e.index = ballNext_++;
+        e.a = make_float3(std::max(-0.25f, std::min(0.25f, q.x)), a_.cfg.f("kum.bilye_yukseklik", 0.28f), std::max(-0.15f, std::min(0.15f, q.z)));
         w_.trigger(e);
-        host.toast(L("Bilye bırakıldı", "A ball let go"));
+        lastBall_ = now_;
+        paused_ = false;
+        const int n = std::max(1, w_.ballN);
+        host.toast(e.index < n ? L("Bilye ", "Ball ") + std::to_string(e.index + 1) : L("Bilye ", "Ball ") + std::to_string(e.index % n + 1) + L(" yeniden", " again"));
+    }
+
+    // R: in a fine recording back to the coarse world as it was; else the experiment set up again
+    void resetAction(app::Host& host) {
+        if (mode_ == Mode::Playback) {
+            mode_ = Mode::Live;
+            playing_ = false;
+            prevValid_ = false;
+            lerpA_ = 1.0f;
+            changed_ = true;
+            host.toast(L("Kaba hesap (ince kayıt zaman çubuğunda)", "The coarse world (the fine recording is on the time bar)"));
+            return;
+        }
+        choose(host, deney_, true);
+    }
+
+    // the fine pass: started when asked for, stopped when asked again
+    void fineAction(app::Host& host) {
+        if (rebuildIn_ || !deneyRecorded(deney_)) return;
+        if (rec_.computing()) {
+            rec_.release();
+            autoPlay_ = false;
+            if (mode_ == Mode::Playback) mode_ = Mode::Live;
+            host.toast(L("İnce hesap durduruldu", "The fine pass stopped"));
+            return;
+        }
+        if (events_.empty()) {
+            host.toast(L("Önce tetikle: ince hesap aynı girdileri yeniden hesaplar", "Trigger it first: the fine pass computes the same inputs again"));
+            return;
+        }
+        if (rec_.active()) return;   // done: it is on the time bar
+        const std::string pre = std::string(deneyKey(deney_)) + ".";
+        rec_.start(a_.cfg, deney_, firedWith_, events_, a_.cfg.f(pre + "kayit_sure", 1.5f), 1.0 / a_.cfg.f(pre + "kayit_hiz", 600.0f),
+                   1.0 / a_.cfg.f("kayit.seyrek_hiz", 120.0f), a_.cfg.f(pre + "kayit_ara_en_cok", 0.8f), size_t(a_.cfg.f("kayit.butce_mb", 4096.0f)) << 20);
+        autoPlay_ = true;
+        host.toast(L("İnce hesap başladı: bitince gerçek hızda oynar", "The fine pass started: it plays at real speed when done"));
     }
 
     void mainAction(app::Host& host) {
@@ -626,17 +750,30 @@ private:
             e.power = li.power;
             e.gun = deney_ == Deney::Jel ? 0 : li.gun;
         }
-        startRecorded(host, e);
+        fire(host, e);
     }
 
-    void startRecorded(app::Host& host, const LabEvent& e) {
-        w_.trigger(e);
-        const std::string pre = std::string(deneyKey(deney_)) + ".";
-        rec_.start(a_.cfg, deney_, in_[int(deney_)], e, a_.cfg.f(pre + "kayit_sure", 1.5f), 1.0 / a_.cfg.f(pre + "kayit_hiz", 600.0f),
-                   size_t(a_.cfg.f("kayit.butce_mb", 4096.0f)) << 20);
-        mode_ = Mode::Preview;
+    // a trigger on the coarse world, kept for a fine pass; the gel takes one a second, the others one
+    void fire(app::Host& host, const LabEvent& e) {
+        const bool many = deney_ == Deney::Jel;
+        if (!events_.empty() && !many) return;
+        if (many && now_ - lastFire_ < kCooldown) return;
+        if (events_.empty()) {
+            firstAt_ = w_.time();
+            firedWith_ = in_[int(deney_)];
+        }
+        LabEvent ev = e;
+        ev.at = w_.time() - firstAt_;
+        w_.trigger(ev);
+        events_.push_back(ev);
+        lastFire_ = now_;
         paused_ = false;
-        host.toast(L("Kaba önizleme; ince hesap arka planda", "Coarse preview; the fine pass runs behind"));
+        if (rec_.active()) {   // a new shot: the fine recording no longer is this world's
+            rec_.release();
+            autoPlay_ = false;
+        }
+        if (events_.size() == 1) host.toast(L("Kaba hesap · ince için: İnce hesap yap (I)", "Coarse · for the fine pass: Compute it finely (I)"));
+        else host.toast(L("Atış ", "Shot ") + std::to_string(events_.size()));
     }
 
     void drawNow() {
@@ -652,10 +789,12 @@ private:
             d.ballFirst = rec_.ballFirst;
             d.ballCount = rec_.ballCount;
             d.ballRadius = rec_.ballRadius;
+            d.ballN = rec_.ballN;
         } else {
             if (w_.count() > cap_) return;   // over the drawing's room (an emitter ran long): keep the last picture
             if (a_.memSource != &w_.membraneTris && !w_.membraneTris.empty()) a_.setMembraneTris(w_.membraneTris);
             w_.exportDraw(dPos_, dCode_, a_.renderer.stream());
+            if (prevValid_ && lerpA_ < 0.9999f) launchLerp(dPrev_, dPos_, std::min(prevCount_, w_.count()), lerpA_, a_.renderer.stream());
             for (int p = 0; p < LabWorld::P_COUNT; ++p) poses[p] = w_.prop[p];
             d.n = w_.count();
             d.spacing = w_.s;
@@ -664,6 +803,7 @@ private:
             d.ballFirst = w_.ballFirst;
             d.ballCount = w_.ballCount;
             d.ballRadius = w_.ballRadius;
+            d.ballN = w_.ballsDropped;
         }
         d.pos = dPos_;
         d.code = dCode_;

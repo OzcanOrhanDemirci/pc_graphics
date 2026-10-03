@@ -139,8 +139,11 @@ bool LabWorld::build(Deney d, const Config& sceneCfg, bool fine_, const LabInput
     membraneTris.clear();
     ballFirst = -1;
     ballCount = 0;
-    ballGroup = 0;
+    ballN = ballsDropped = 0;
+    ballGroups.clear();
     sandGroup_ = 0;
+    owe_ = 0.0;
+    liveSubs_ = 0;
     emitCarry_ = 0.0;
     emitSeed_ = 1;
     heldLayers_.clear();
@@ -270,21 +273,28 @@ void LabWorld::buildKum() {
     translation(prop[P_BEAKER].xf, cfg.v3("kum.beher", make_float3(0.075f, 0.0f, 0.0f)));
     const int g = pw.addGroup(0);
     addHeld(sampleProfileWalls(kSandBeaker.profile(), s, 0.75f * s), P_BEAKER, g);
-    // the steel ball: a rigid cluster, parked on the table far to the side until it is let go
+    // the steel balls: rigid clusters, parked on the table far to the side until they are let go
     ballRadius = cfg.f("kum.bilye_yaricap", 0.0125f);
-    ballGroup = pw.addGroup(PG_RIGID);
-    std::vector<float3> ball;
+    ballN = std::max(1, cfg.i("kum.bilye_sayisi", 6));
     const int k = int(std::ceil(ballRadius / s));
-    const float3 park = make_float3(2.0f, ballRadius, 0.0f);
-    for (int z = -k; z <= k; ++z)
-        for (int y = -k; y <= k; ++y)
-            for (int x = -k; x <= k; ++x) {
-                const float3 p = make_float3(x * s, y * s, z * s);
-                if (length(p) <= ballRadius - 0.5f * s) ball.push_back(park + p);
-            }
-    ballFirst = pw.addParticles(ball, cfg.f("kum.bilye_yogunluk", 7850.0f), ballGroup);
-    ballCount = int(ball.size());
-    code.insert(code.end(), ball.size(), DC_STEEL);
+    for (int b = 0; b < ballN; ++b) {
+        const int g = pw.addGroup(PG_RIGID);
+        std::vector<float3> ball;
+        const float3 park = make_float3(2.0f + 3.0f * ballRadius * b, ballRadius, 0.0f);
+        for (int z = -k; z <= k; ++z)
+            for (int y = -k; y <= k; ++y)
+                for (int x = -k; x <= k; ++x) {
+                    const float3 p = make_float3(x * s, y * s, z * s);
+                    if (length(p) <= ballRadius - 0.5f * s) ball.push_back(park + p);
+                }
+        const int first = pw.addParticles(ball, cfg.f("kum.bilye_yogunluk", 7850.0f), g);
+        if (b == 0) {
+            ballFirst = first;
+            ballCount = int(ball.size());
+        }
+        ballGroups.push_back(g);
+        code.insert(code.end(), ball.size(), DC_STEEL);
+    }
     sandGroup_ = pw.addGroup(PG_GRAIN);
     boxLo = make_float3(-0.45f, -0.01f, -0.35f);
     boxHi = make_float3(0.45f, 0.5f, 0.35f);
@@ -610,14 +620,17 @@ void LabWorld::trigger(const LabEvent& e) {
     ev_ = e;
     triggered_ = true;
     tTrigger_ = time();
-    if (e.kind == LabEvent::Ball && ballGroup > 0) {
-        // let go where asked, at rest
+    if (e.kind == LabEvent::Ball && ballN > 0) {
+        // the ball asked for (the oldest again once all are out), let go where asked, at rest
+        const int b = ((e.index % ballN) + ballN) % ballN;
         std::vector<float3> x;
         pw.readPositions(x);
         float3 c = make_float3(0, 0, 0);
-        for (int i = ballFirst; i < ballFirst + ballCount; ++i) c = c + x[size_t(i)];
+        const int first = ballFirst + b * ballCount;
+        for (int i = first; i < first + ballCount; ++i) c = c + x[size_t(i)];
         c = c * (1.0f / std::max(1, ballCount));
-        pw.placeGroup(ballGroup, e.a - c, make_float3(0, 0, 0));
+        pw.placeGroup(ballGroups[size_t(b)], e.a - c, make_float3(0, 0, 0));
+        ballsDropped = std::max(ballsDropped, b + 1);
     } else if (e.kind == LabEvent::Drop && deney == Deney::Damla) {
         // a drop of radius r, a little above the milk, moving down at sqrt(2 g h): as if it fell from h
         const float r = cfg.f("damla.yaricap", 0.0025f);
@@ -814,6 +827,25 @@ void LabWorld::step(float dt) {
     }
     emit(dt);
     pw.step(dt);
+}
+
+int LabWorld::due(double dt) const {
+    const int subs = liveSubs_ > 0 ? liveSubs_ : std::max(1, pw.params.substeps);
+    return int(std::floor(owe_ + dt * 60.0 * subs + 1e-6));
+}
+
+int LabWorld::advance(double dt) {
+    if (liveSubs_ <= 0) liveSubs_ = std::max(1, pw.params.substeps);
+    owe_ += dt * 60.0 * liveSubs_;
+    int n = int(std::floor(owe_ + 1e-6));
+    if (n <= 0) return 0;
+    n = std::min(n, 2 * liveSubs_);   // falling behind: what is owed beyond two frames is let go
+    owe_ = std::max(0.0, std::min(owe_ - n, 0.999));
+    const int keep = pw.params.substeps;
+    pw.params.substeps = n;
+    step(float(double(n) / (60.0 * liveSubs_)));
+    pw.params.substeps = keep;
+    return n;
 }
 
 void LabWorld::exportDraw(float3* dPos, uint8_t* dCode, cudaStream_t st) {

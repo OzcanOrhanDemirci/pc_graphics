@@ -199,7 +199,7 @@ void LaboratuvarApp::setupScene(Deney d, int maxParticles, const std::vector<uin
         grainsPer = cfg.i("kum.tane_sayisi", 4);
         grainsCap = maxParticles * grainsPer;
         objGrains = R.addSpheres(grainsCap, mSand, true);
-        objBall = R.addSpheres(1, matSteel, false);
+        objBall = R.addSpheres(std::max(1, cfg.i("kum.bilye_sayisi", 6)), matSteel, false);
     } else {
         objGrains = objBall = -1;
     }
@@ -265,9 +265,10 @@ void LaboratuvarApp::draw(const DrawInput& in) {
         R.setSphereCount(objGrains, m * grainsPer);
     }
     if (objBall >= 0) {
-        if (in.ballFirst >= 0) {
-            launchCentre(in.pos, in.ballFirst, in.ballCount, in.ballRadius, R.spheresBuffer(objBall), st);
-            R.setSphereCount(objBall, 1);
+        if (in.ballFirst >= 0 && in.ballN > 0) {
+            const int m = std::min(in.ballN, std::max(1, cfg.i("kum.bilye_sayisi", 6)));
+            for (int b = 0; b < m; ++b) launchCentre(in.pos, in.ballFirst + b * in.ballCount, in.ballCount, in.ballRadius, R.spheresBuffer(objBall) + b, st);
+            R.setSphereCount(objBall, m);
         } else {
             R.setSphereCount(objBall, 0);
         }
@@ -345,6 +346,8 @@ int runLaboratuvarCli(int argc, char** argv) {
     std::string deneyS = "su", out, testName, mode;
     bool trig = false, recorded = false, frozen = false;
     float pan = 0.0f;
+    int shots = 1;
+    double shotGap = 0.5;
     double t = 0.0, t0 = 0.0, t1 = 1.0, live = 0.0;
     int frames = 10;
     unsigned spp = 64;
@@ -382,6 +385,8 @@ int runLaboratuvarCli(int argc, char** argv) {
         else if (a == "--yukseklik") inputs.height = std::stof(next());
         else if (a == "--akis") inputs.flow = std::stof(next());
         else if (a == "--guc") inputs.power = std::stof(next());
+        else if (a == "--atis") shots = std::max(1, std::stoi(next()));        // the gel: so many shots (side by side)
+        else if (a == "--atis_ara") shotGap = std::stod(next());               // seconds between them
         else if (a == "--spp") spp = unsigned(std::stoi(next()));
         else if (a == "--width") app.width = unsigned(std::stoi(next()));
         else if (a == "--height") app.height = unsigned(std::stoi(next()));
@@ -412,9 +417,21 @@ int runLaboratuvarCli(int argc, char** argv) {
     std::vector<uint3> memTris;
     int maxN = 0;
     const LabEvent ev = defaultEvent(d, app.cfg);
+    // the triggers: the default one, and for the gel more shots after it, each a little higher and further back
+    std::vector<LabEvent> evs{ev};
+    for (int k = 1; k < shots && ev.kind == LabEvent::Shot; ++k) {
+        LabEvent e = ev;
+        const float3 off = make_float3(0.0f, 0.018f * float((k + 1) / 2) * (k % 2 ? 1.0f : -1.0f), 0.012f * float(k % 3) - 0.012f);
+        e.a = e.a + off;
+        e.b = e.b + off;
+        e.at = k * shotGap;
+        evs.push_back(e);
+    }
     if (recorded) {
         const std::string pre = std::string(deneyKey(d)) + ".";
-        rec.start(app.cfg, d, inputs, ev, std::max(t, t1) + 0.01, 1.0 / app.cfg.f(pre + "kayit_hiz", 600.0f), size_t(app.cfg.f("kayit.butce_mb", 4096.0f)) << 20);
+        const double cover = std::max(t, t1) + 0.01;
+        rec.start(app.cfg, d, inputs, evs, std::max(0.05, cover - evs.back().at), 1.0 / app.cfg.f(pre + "kayit_hiz", 600.0f),
+                  1.0 / app.cfg.f("kayit.seyrek_hiz", 120.0f), 0.0, size_t(app.cfg.f("kayit.butce_mb", 4096.0f)) << 20);
         while (rec.computing()) std::this_thread::sleep_for(std::chrono::milliseconds(50));
         if (rec.failed()) { std::printf("kayit basarisiz\n"); return 1; }
         maxN = rec.drawnCount();
@@ -442,6 +459,7 @@ int runLaboratuvarCli(int argc, char** argv) {
     cudaMalloc(reinterpret_cast<void**>(&dCode), size_t(maxN + 1));
     PropPose poses[LabWorld::P_COUNT];
     double simT = 0.0;
+    size_t nextEv = 1;   // the coarse world: the later shots as its time reaches them
     auto drawAt = [&](double tt) {
         DrawInput in;
         if (recorded) {
@@ -453,10 +471,12 @@ int runLaboratuvarCli(int argc, char** argv) {
             in.ballFirst = rec.ballFirst;
             in.ballCount = rec.ballCount;
             in.ballRadius = rec.ballRadius;
+            in.ballN = rec.ballN;
         } else {
             while (simT + 1e-9 < tt) {
                 w.step(1.0f / 60.0f);
                 simT += 1.0 / 60.0;
+                while (nextEv < evs.size() && trig && evs[nextEv].at <= simT + 1e-9) w.trigger(evs[nextEv++]);
             }
             w.exportDraw(dPos, dCode, app.renderer.stream());
             for (int p = 0; p < LabWorld::P_COUNT; ++p) poses[p] = w.prop[p];
@@ -467,6 +487,7 @@ int runLaboratuvarCli(int argc, char** argv) {
             in.ballFirst = w.ballFirst;
             in.ballCount = w.ballCount;
             in.ballRadius = w.ballRadius;
+            in.ballN = w.ballsDropped;
         }
         in.pos = dPos;
         in.code = dCode;
@@ -511,6 +532,7 @@ int runLaboratuvarCli(int argc, char** argv) {
             in.ballFirst = w.ballFirst;
             in.ballCount = w.ballCount;
             in.ballRadius = w.ballRadius;
+            in.ballN = w.ballsDropped;
             app.draw(in);
             app.renderer.render(spp, false);
             app.renderer.download(px);
