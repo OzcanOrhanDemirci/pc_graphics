@@ -33,13 +33,15 @@ struct LMaterial {
 };
 
 struct LObject {
-    int kind;             // 0 triangles, 1 spheres
+    int kind;             // 0 triangles, 1 spheres, 2 boxes (a unit cube's triangles, instanced once a box)
     int material;
     const float3* pos;    // triangles: object space
     const float3* nrm;
     const uint3* idx;
     const float4* spheres;   // spheres: centre (world), radius
     const float* tint;       // spheres: an optional brightness per sphere (sand grains), null: 1
+    const uchar4* colour;    // boxes: a colour each (sRGB)
+    int first;               // boxes: the first one's instance index
 };
 
 struct LCamera {

@@ -297,6 +297,43 @@ int LabRenderer::addMesh(const HostMesh& m, int material) {
     return int(objs_.size()) - 1;
 }
 
+int LabRenderer::addBoxes(int capacity, int material) {
+    // a unit cube, [-0.5, 0.5]^3, flat faces (24 corners, each face its own normal)
+    HostMesh m;
+    for (int ax = 0; ax < 3; ++ax)
+        for (int sg = -1; sg <= 1; sg += 2) {
+            float3 n = make_float3(0, 0, 0), u = make_float3(0, 0, 0), v = make_float3(0, 0, 0);
+            (ax == 0 ? n.x : ax == 1 ? n.y : n.z) = float(sg);
+            (ax == 0 ? u.y : ax == 1 ? u.z : u.x) = 0.5f;
+            (ax == 0 ? v.z : ax == 1 ? v.x : v.y) = 0.5f * float(sg);
+            const float3 c = n * 0.5f;
+            const unsigned b0 = unsigned(m.pos.size());
+            m.pos.push_back(c - u - v);
+            m.pos.push_back(c + u - v);
+            m.pos.push_back(c + u + v);
+            m.pos.push_back(c - u + v);
+            for (int k = 0; k < 4; ++k) m.nrm.push_back(n);
+            m.idx.push_back(make_uint3(b0, b0 + 1, b0 + 2));
+            m.idx.push_back(make_uint3(b0, b0 + 2, b0 + 3));
+        }
+    const int id = addMesh(m, material);
+    Obj& o = objs_[size_t(id)];
+    o.kind = 2;
+    o.capacity = capacity;
+    o.count = 0;
+    o.boxColour = lalloc<uchar4>(size_t(std::max(1, capacity)));
+    return id;
+}
+
+uchar4* LabRenderer::boxColours(int obj) { return objs_[size_t(obj)].boxColour; }
+
+void LabRenderer::setBoxes(int obj, const float4* pose, int n) {
+    Obj& o = objs_[size_t(obj)];
+    o.boxPose = pose;
+    o.count = std::min(n, o.capacity);
+    iasDirty_ = true;
+}
+
 int LabRenderer::addDynamicMesh(int maxVertices, int maxTriangles, int material) {
     Obj o;
     o.kind = 0;
@@ -437,6 +474,8 @@ void LabRenderer::uploadObjects() {
         t[i].idx = o.idx;
         t[i].spheres = o.spheres;
         t[i].tint = o.tint;
+        t[i].colour = o.boxColour;
+        t[i].first = o.firstInstance;
     }
     if (int(t.size()) > dObjsCap_) {
         if (dObjs_) cudaFree(dObjs_);
@@ -452,7 +491,7 @@ void LabRenderer::buildIAS() {
     std::vector<OptixInstance> inst;
     for (size_t i = 0; i < objs_.size(); ++i) {
         const Obj& o = objs_[i];
-        if (!o.gas.handle || !o.visible) continue;
+        if (!o.gas.handle || !o.visible || o.kind == 2) continue;
         OptixInstance oi{};
         std::memcpy(oi.transform, o.xf, 12 * sizeof(float));
         oi.instanceId = unsigned(i);
@@ -463,17 +502,30 @@ void LabRenderer::buildIAS() {
         inst.push_back(oi);
     }
     iasDirty_ = false;
-    if (inst.empty()) { p_.handle = 0; return; }
-    if (int(inst.size()) > dInstancesCap_) {
+    // the boxes after the rest: one instance a box, written on the device from their poses
+    int total = int(inst.size());
+    for (Obj& o : objs_)
+        if (o.kind == 2 && o.visible && o.count > 0 && o.boxPose) {
+            if (o.firstInstance != total) objsDirty_ = true;
+            o.firstInstance = total;
+            total += o.count;
+        }
+    if (total == 0) { p_.handle = 0; return; }
+    if (total > dInstancesCap_) {
         if (dInstances_) cudaFree(dInstances_);
-        dInstancesCap_ = int(inst.size()) + 16;
+        dInstancesCap_ = total + 16;
         dInstances_ = lalloc<OptixInstance>(size_t(dInstancesCap_));
     }
-    LCUDA(cudaMemcpyAsync(dInstances_, inst.data(), inst.size() * sizeof(OptixInstance), cudaMemcpyHostToDevice, stream_));
+    if (!inst.empty()) LCUDA(cudaMemcpyAsync(dInstances_, inst.data(), inst.size() * sizeof(OptixInstance), cudaMemcpyHostToDevice, stream_));
+    for (size_t i = 0; i < objs_.size(); ++i) {
+        const Obj& o = objs_[i];
+        if (o.kind == 2 && o.visible && o.count > 0 && o.boxPose)
+            launchBoxInstances(o.boxPose, o.count, (unsigned long long)o.gas.handle, unsigned(i), dInstances_ + o.firstInstance, stream_);
+    }
     OptixBuildInput bi{};
     bi.type = OPTIX_BUILD_INPUT_TYPE_INSTANCES;
     bi.instanceArray.instances = CUdeviceptr(dInstances_);
-    bi.instanceArray.numInstances = unsigned(inst.size());
+    bi.instanceArray.numInstances = unsigned(total);
     OptixAccelBuildOptions ao{};
     ao.buildFlags = OPTIX_BUILD_FLAG_PREFER_FAST_BUILD;
     ao.operation = OPTIX_BUILD_OPERATION_BUILD;
@@ -579,8 +631,8 @@ void LabRenderer::runDenoiser() {
 }
 
 void LabRenderer::render(unsigned int spp, bool accumulate) {
-    if (objsDirty_) uploadObjects();
     if (iasDirty_) buildIAS();
+    if (objsDirty_) uploadObjects();
     if ((denoise || temporal) && !dn_) createDenoiser();
     useTemporal_ = temporal && !accumulate;   // stills accumulate as they always did
     if (accumulate) histValid_ = false;
@@ -606,8 +658,8 @@ void LabRenderer::render(unsigned int spp, bool accumulate) {
 }
 
 LPick LabRenderer::pick(float x, float y) {
-    if (objsDirty_) uploadObjects();
     if (iasDirty_) buildIAS();
+    if (objsDirty_) uploadObjects();
     p_.pickPixel = make_float2(x, y);
     p_.pickOut = dPick_;
     LCUDA(cudaMemcpyAsync(reinterpret_cast<void*>(dParams_), &p_, sizeof(LabParams), cudaMemcpyHostToDevice, stream_));

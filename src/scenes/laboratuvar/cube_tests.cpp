@@ -288,6 +288,24 @@ int testPatlama() {
     return ok ? 0 : 1;
 }
 
+void testHizDebug() {
+    for (int n : {16, 32}) {
+        CubeWorld w;
+        w.build(n, 0.10f, make_float3(0, 0, -0.02f), 5);
+        CubeBlast b;
+        b.centre = w.centre();
+        b.charge = 0.05f;
+        CubeBlastReport rep;
+        w.blast(b, &rep);
+        std::printf("  %d^3: en hizli %.1f m/s\n", n, rep.maxSpeed);
+        for (int k = 0; k < 6; ++k) {
+            w.step(1.0f / 60.0f);
+            const CubeStats s = w.stats();
+            std::printf("  %d^3 kare %d: %.1f ms, %d alt adim, uyanik %d, giden %d, en hizli %.1f\n", n, k, w.lastStepMs(), w.lastSubsteps(), s.awake, s.dead, s.maxSpeed);
+        }
+    }
+}
+
 void testHiz() {
     for (int n : {32, 64, 100}) {
         for (int gentle = 0; gentle < 2; ++gentle) {
@@ -332,6 +350,10 @@ int runCubeTests(const std::string& only) {
     if (only == "durusd") return testDurusDebug();
     if (only == "ikili") return testIkili();
     if (only == "ikilid") return testIkiliDebug();
+    if (only == "hizd") {
+        testHizDebug();
+        return 0;
+    }
     if (only == "hiz") {
         testHiz();
         return 0;

@@ -46,3 +46,7 @@ void launchTemporal(const float4* accum, float invSpp, const float4* pos, const 
                     int h, float alphaMin, float gamma, float maxFrames, bool reset, cudaStream_t s);
 // slow motion's drawing between two substeps: b = a + (b - a) t for the first n (newer particles stay as they are)
 void launchLerp(const float3* a, float3* b, int n, float t, cudaStream_t s);
+// the boxes' instances: a unit cube's GAS, scaled by each box's edge, turned and placed (2 float4 a box: centre + edge,
+// orientation xyzw); edge 0: hidden. out: OptixInstance (80 bytes each)
+struct OptixInstance;
+void launchBoxInstances(const float4* pose, int n, unsigned long long gas, unsigned instanceId, OptixInstance* out, cudaStream_t s);

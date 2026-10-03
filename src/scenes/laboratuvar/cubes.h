@@ -38,11 +38,12 @@ struct CubeParams {
     float sor = 1.0f;                   // Jacobi over several touching bodies: their mean, over-relaxed by this
     float gap = 0.004f;                 // between neighbours side by side in the built cube (of the edge): real stacked
                                         // cubes are never flush, and flush faces make the solver's noise a push
-    int substeps = 32;                  // per 1/60 s: the substep's length
-    int passes = 3;                     // Gauss-Seidel passes a substep (a stack's weight reaches its bottom sooner)
+    int substeps = 16;                  // per 1/60 s: the substep's length
+    int passes = 2;                     // Gauss-Seidel passes a substep (the last one-way upwards: shock)
     bool shock = true;                  // the last pass one-way upwards (a stack stands)
     int debug = 0;                      // print the contacts of cube 1 (a test)
-    int maxSubdivide = 8;               // a fast step is cut finer, so a cube moves at most half its edge a substep
+    int maxSubdivide = 1;               // a fast step cut finer (a cube moving at most half its edge a substep); contacts
+                                        // are speculative (a gap closing this substep is one), so it need not be
     // the stage: the table's top (y = 0), the backdrop's floor, sweep and wall (as lab_geom draws them)
     float tableHalfWidth = 0.75f, tableFront = 0.32f, tableBack = -0.40f;
     float backHalfWidth = 1.2f, backWall = -0.62f, backSweep = 0.18f;
@@ -124,6 +125,9 @@ private:
     float4 *dvT_ = nullptr, *dwT_ = nullptr;     // and what of them is velocity (times h)
     uint32_t *colKey_ = nullptr, *colKeySorted_ = nullptr, *colId_ = nullptr, *idByColour_ = nullptr;   // Gauss-Seidel's colours
     int *colStart_ = nullptr, *colEnd_ = nullptr;
+    uint32_t* pairJ_ = nullptr;                  // the narrow phase's records: kPairs a cube
+    float4 *pairU_ = nullptr, *pairP_ = nullptr;
+    int* pairN_ = nullptr;
     uint32_t *key_ = nullptr, *keySorted_ = nullptr, *id_ = nullptr, *idSorted_ = nullptr;
     int *cellStart_ = nullptr, *cellEnd_ = nullptr;
     void* sortTemp_ = nullptr;
@@ -131,4 +135,13 @@ private:
     uchar4* dColour_ = nullptr;
     float* dRed_ = nullptr;                  // reductions: [0] max speed bits, [1] awake, [2] asleep, [3] gone, [4..5] kinetic
     void substep(float h);
+    void record(float h);
+    // a substep's launches (a few hundred: the colours) captured once a length and replayed
+    struct Graph {
+        float hs;
+        cudaGraphExec_t exec;
+    };
+    std::vector<Graph> graphs_;
+    CubeParams graphParams_{};
+    void dropGraphs();
 };

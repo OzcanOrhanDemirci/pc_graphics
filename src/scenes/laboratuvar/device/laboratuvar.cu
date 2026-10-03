@@ -86,7 +86,8 @@ static __forceinline__ __device__ Hit trace(float3 o, float3 d, float tmin, floa
         h.n = normalize(p - make_float3(s.x, s.y, s.z));
         h.local = p;
     } else {
-        const uint3 tri = ob.idx[h.prim];
+        if (ob.kind == 2) h.prim = optixHitObjectGetInstanceIndex() - unsigned(ob.first);   // which box
+        const uint3 tri = ob.idx[ob.kind == 2 ? optixHitObjectGetPrimitiveIndex() : h.prim];
         const float2 b = optixHitObjectGetTriangleBarycentrics();
         const float3 v0 = ob.pos[tri.x], v1 = ob.pos[tri.y], v2 = ob.pos[tri.z];
         h.local = v0 * (1.0f - b.x - b.y) + v1 * b.x + v2 * b.y;
@@ -95,6 +96,28 @@ static __forceinline__ __device__ Hit trace(float3 o, float3 d, float tmin, floa
                            : ng;
         h.n = dot(ns, ns) > 1e-12f ? normalize(ns) : ng;
         if (dot(h.n, ng) < 0.0f) h.n = ng;
+        if (ob.kind == 2) {
+            // a moulded plastic cube's edges are rounded: within a few hundredths of the edge of one, the normal
+            // turns towards the neighbouring face (the edge catches the light as a real cube's does)
+            const float3 l = h.local;
+            const float al[3] = {fabsf(l.x), fabsf(l.y), fabsf(l.z)};
+            const int k = (al[0] >= al[1] && al[0] >= al[2]) ? 0 : (al[1] >= al[2] ? 1 : 2);
+            float3 no = make_float3(k == 0 ? (l.x >= 0 ? 1.0f : -1.0f) : 0.0f, k == 1 ? (l.y >= 0 ? 1.0f : -1.0f) : 0.0f, k == 2 ? (l.z >= 0 ? 1.0f : -1.0f) : 0.0f);
+            const float r = 0.07f;
+            for (int ax = 0; ax < 3; ++ax) {
+                if (ax == k) continue;
+                const float e = 0.5f - al[ax];
+                if (e < r) {
+                    const float t = 1.0f - e / r;
+                    const float sgn = (ax == 0 ? l.x : ax == 1 ? l.y : l.z) >= 0.0f ? 1.0f : -1.0f;
+                    if (ax == 0) no.x += sgn * t;
+                    else if (ax == 1) no.y += sgn * t;
+                    else no.z += sgn * t;
+                }
+            }
+            const float3 nw = normalize(optixHitObjectTransformNormalFromObjectToWorldSpace(no));
+            h.n = dot(nw, ng) > 0.05f ? nw : ng;
+        }
     }
     return h;
 }
@@ -166,6 +189,10 @@ static __device__ float3 albedoAt(const LMaterial& m, const Hit& h, float3 p) {
         a = lerp3(a, make_float3(0.20f, 0.33f, 0.09f), smoothstepf(0.45f, 0.75f, st) * (0.6f + 0.4f * mot));
     }
     if (h.object >= 0 && params.objects[h.object].kind == 1 && params.objects[h.object].tint) a = a * params.objects[h.object].tint[h.prim];
+    if (h.object >= 0 && params.objects[h.object].kind == 2 && params.objects[h.object].colour) {
+        const uchar4 c = params.objects[h.object].colour[h.prim];
+        a = a * make_float3(powf(c.x / 255.0f, 2.2f), powf(c.y / 255.0f, 2.2f), powf(c.z / 255.0f, 2.2f));
+    }
     return a;
 }
 

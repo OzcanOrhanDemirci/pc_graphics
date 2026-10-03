@@ -1,4 +1,5 @@
 #include "scenes/laboratuvar/lab_kernels.h"
+#include <optix_types.h>
 #include "shared/display.h"
 
 namespace {
@@ -260,6 +261,36 @@ void launchMembrane(const float3* pos, int first, const uint3* tris, int nTris, 
 }
 void launchGather(const float3* pos, const uint8_t* codes, const uint32_t* idx, int n, float3* outPos, uint8_t* outCodes, cudaStream_t s) {
     if (n > 0) kGather<<<nb(n), kB, 0, s>>>(pos, codes, idx, n, outPos, outCodes);
+}
+__global__ void kBoxInstances(const float4* pose, int n, unsigned long long gas, unsigned instanceId, OptixInstance* out) {
+    const int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= n) return;
+    const float4 p = pose[2 * i], q = pose[2 * i + 1];
+    const float x = q.x, y = q.y, z = q.z, w = q.w, e = p.w;
+    OptixInstance o;
+    o.transform[0] = (1 - 2 * (y * y + z * z)) * e;
+    o.transform[1] = 2 * (x * y - z * w) * e;
+    o.transform[2] = 2 * (x * z + y * w) * e;
+    o.transform[3] = p.x;
+    o.transform[4] = 2 * (x * y + z * w) * e;
+    o.transform[5] = (1 - 2 * (x * x + z * z)) * e;
+    o.transform[6] = 2 * (y * z - x * w) * e;
+    o.transform[7] = p.y;
+    o.transform[8] = 2 * (x * z - y * w) * e;
+    o.transform[9] = 2 * (y * z + x * w) * e;
+    o.transform[10] = (1 - 2 * (x * x + y * y)) * e;
+    o.transform[11] = p.z;
+    o.instanceId = instanceId;
+    o.sbtOffset = 0;
+    o.visibilityMask = e > 0.0f ? 1u : 0u;
+    o.flags = OPTIX_INSTANCE_FLAG_NONE;
+    o.traversableHandle = gas;
+    o.pad[0] = o.pad[1] = 0;
+    out[i] = o;
+}
+
+void launchBoxInstances(const float4* pose, int n, unsigned long long gas, unsigned instanceId, OptixInstance* out, cudaStream_t s) {
+    if (n > 0) kBoxInstances<<<nb(n), kB, 0, s>>>(pose, n, gas, instanceId, out);
 }
 void launchLerp(const float3* a, float3* b, int n, float t, cudaStream_t s) {
     if (n > 0) kLerp<<<nb(n), kB, 0, s>>>(a, b, n, t);

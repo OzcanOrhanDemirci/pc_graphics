@@ -48,6 +48,11 @@ public:
     float4* spheresBuffer(int obj);
     float* tintBuffer(int obj);
     void setSphereCount(int obj, int n);                      // and builds them
+    // boxes: a unit cube instanced once a box, posed every frame from the device (2 float4 a box: centre + edge,
+    // orientation xyzw; edge 0: not drawn), a colour each (the caller writes boxColours)
+    int addBoxes(int capacity, int material);
+    uchar4* boxColours(int obj);
+    void setBoxes(int obj, const float4* pose, int n);
     // a liquid's surface (two objects: the mesh and its droplets); returns the surface's index
     int addSurface(int material, int maxParticles, int maxVertices, int maxTriangles, int maxBlocks, const FluidSurfaceSettings& s);
     void buildSurface(int surf, const float3* dPos, const float* dWeight, int n, float radius);
@@ -96,6 +101,9 @@ private:
         float* tint = nullptr;
         int count = 0, capacity = 0;
         bool external = false;   // buffers owned by a FluidSurface
+        const float4* boxPose = nullptr;   // boxes: the caller's
+        uchar4* boxColour = nullptr;
+        int firstInstance = 0;
     };
     struct Surf {
         std::unique_ptr<FluidSurface> fs;

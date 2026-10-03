@@ -10,8 +10,11 @@
 //   Damla   a drop of milk falling into a thin layer of milk in a glass dish: the crown and the jet
 //   Jel     a block of ballistic gelatin (clear, elastic) on the table; a pistol shot: the temporary cavity opens and
 //           closes inside it, the block shudders
+//   Kup     a cube of small, loose, coloured plastic cubes (n x n x n) with a charge at its middle (cubes.h): blown
+//           apart, from a crumble to a burst
 #pragma once
 #include "core/config.h"
+#include "scenes/laboratuvar/cubes.h"
 #include "scenes/laboratuvar/lab_geom.h"
 #include "scenes/laboratuvar/particles.h"
 
@@ -20,10 +23,15 @@
 #include <string>
 #include <vector>
 
-enum class Deney : int { Su = 0, Bal = 1, Kum = 2, Balon = 3, Karpuz = 4, Jel = 5, Damla = 6 };
-constexpr int kDeneyCount = 7;
+enum class Deney : int { Su = 0, Bal = 1, Kum = 2, Balon = 3, Karpuz = 4, Jel = 5, Damla = 6, Kup = 7 };
+constexpr int kDeneyCount = 8;
 const char* deneyKey(Deney d);            // the settings' prefix: "su", "bal", "kum", "balon", "karpuz"
-inline bool deneyRecorded(Deney d) { return d == Deney::Su || d == Deney::Balon || d == Deney::Karpuz || d == Deney::Jel || d == Deney::Damla; }
+inline bool deneyRecorded(Deney d) { return d == Deney::Su || d == Deney::Balon || d == Deney::Karpuz || d == Deney::Jel || d == Deney::Damla || d == Deney::Kup; }
+// Kup: the cubes along an edge for the panel's fineness (0..1: 4, 5, 6, 8, 10, 13, 16, 20, 25, 32, 40, 50, 64, 80, 100;
+// about twice the count a step), at most maxPerEdge; the charge for its strength (0..1, log: 1 ug to 2 g of TNT)
+int kupPerEdge(float fineness, int maxPerEdge);
+float kupFineness(int perEdge);
+float kupCharge(float strength);
 
 // what a particle is drawn as (the renderer: a surface each; DC_NONE not drawn: glass walls, a stand)
 enum DrawCode : uint8_t { DC_NONE = 0, DC_WATER = 1, DC_HONEY = 2, DC_SAND = 3, DC_RUBBER = 4, DC_RIND = 5, DC_FLESH = 6, DC_JUICE = 7, DC_PITH = 9, DC_GEL = 10, DC_MILK = 11 };
@@ -37,14 +45,15 @@ struct LabInputs {
     int gun = 1;            // Karpuz: 0 pistol, 1 rifle (Jel: always a pistol)
     float3 nozzle = make_float3(0, 0, 0);   // Bal, Kum: where over the table (x, z) the stream falls
     bool flowing = true;    // Bal, Kum: the stream runs
+    float fineness = 0.5f;  // Kup: how many cubes (kupPerEdge)
 };
 
 // a trigger (what a recording replays: the first at its time zero, the others at their `at`)
 struct LabEvent {
-    enum Kind : int { None = 0, Pour = 1, Prick = 2, Shot = 3, Drop = 5 } kind = None;
+    enum Kind : int { None = 0, Pour = 1, Prick = 2, Shot = 3, Drop = 5, Blast = 6 } kind = None;
     float3 a = make_float3(0, 0, 0);   // Prick: the point; Shot: the muzzle
     float3 b = make_float3(0, 0, 0);   // Shot: the aim point
-    float power = 0.5f;
+    float power = 0.5f;     // Shot: the load; Blast: the charge (kupCharge)
     int gun = 1;            // Shot: 0 pistol, 1 rifle
     double at = 0.0;        // seconds after the first trigger (the gel takes several shots)
 };
@@ -88,10 +97,15 @@ public:
     double substepsIn(double dt) const { return dt * 60.0 * (liveSubs_ > 0 ? liveSubs_ : std::max(1, pw.params.substeps)); }
     void trigger(const LabEvent& e);
     void setInputs(const LabInputs& i);   // live changes (the dipper moved, the flow set)
-    double time() const { return pw.time() - t0_; }   // since the world settled
+    double time() const { return (deney == Deney::Kup ? cubes.time() : pw.time()) - t0_; }   // since the world settled
     double sinceTrigger() const { return triggered_ ? time() - tTrigger_ : -1.0; }
     bool triggered() const { return triggered_; }
     int count() const { return pw.count(); }
+    // Kup: the cubes (their own rigid-body world), drawn as 2 float4 a cube (centre + edge, orientation), between the
+    // state before the last step and now (alpha)
+    CubeWorld cubes;
+    CubeBlastReport lastBlast;
+    void exportCubes(float4* pose, float alpha, cudaStream_t st) const;
     // the drawing: every particle's position and draw code, on the device (the caller's arrays, count() long)
     void exportDraw(float3* dPos, uint8_t* dCode, cudaStream_t st);
     // the balloon's membrane: its triangles (indices relative to its first particle) and range
@@ -143,6 +157,7 @@ private:
     void buildKarpuz();
     void buildJel();
     void buildDamla();
+    void buildKup();
     float milkTop_ = 0.0f;   // Damla: the milk layer's surface
     float3 suPivot_ = make_float3(0, 0, 0), suBeakerBase_ = make_float3(0, 0, 0);
     float suAngle(double t) const;   // the beaker's tilt (rad, clockwise negative) t seconds after the pour began

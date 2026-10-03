@@ -71,11 +71,35 @@ const char* deneyKey(Deney d) {
     case Deney::Karpuz: return "karpuz";
     case Deney::Jel: return "jel";
     case Deney::Damla: return "damla";
+    case Deney::Kup: return "kup";
     }
     return "su";
 }
 
+int kupPerEdge(float fineness, int maxPerEdge) {
+    static const int steps[] = {4, 5, 6, 8, 10, 13, 16, 20, 25, 32, 40, 50, 64, 80, 100, 128};
+    int m = 0;
+    while (m + 1 < int(sizeof(steps) / sizeof(steps[0])) && steps[m + 1] <= maxPerEdge) ++m;
+    const int k = int(std::lround(std::min(1.0f, std::max(0.0f, fineness)) * m));
+    return steps[k];
+}
+
+float kupFineness(int perEdge) {   // the panel's value nearest to perEdge (at the full list)
+    static const int steps[] = {4, 5, 6, 8, 10, 13, 16, 20, 25, 32, 40, 50, 64, 80, 100, 128};
+    const int m = int(sizeof(steps) / sizeof(steps[0])) - 1;
+    int best = 0;
+    for (int k = 0; k <= m; ++k)
+        if (std::abs(steps[k] - perEdge) < std::abs(steps[best] - perEdge)) best = k;
+    return float(best) / float(m);
+}
+
+float kupCharge(float strength) {
+    const float lo = std::log10(1e-6f), hi = std::log10(2.0f);
+    return std::pow(10.0f, lo + std::min(1.0f, std::max(0.0f, strength)) * (hi - lo));
+}
+
 void LabWorld::destroy() {
+    cubes.destroy();
     for (Held& h : held_)
         for (void* p : {static_cast<void*>(h.dRest), static_cast<void*>(h.dTarget), static_cast<void*>(h.dIdx)})
             if (p) cudaFree(p);
@@ -155,6 +179,7 @@ bool LabWorld::build(Deney d, const Config& sceneCfg, bool fine_, const LabInput
     case Deney::Karpuz: buildKarpuz(); break;
     case Deney::Jel: buildJel(); break;
     case Deney::Damla: buildDamla(); break;
+    case Deney::Kup: buildKup(); break;
     }
     pw.reserve(int(code.size()) + cfg.i(pre + "ek_kapasite", 0));
     if (d == Deney::Bal && cfg.i("bal.yaylar", 1)) pw.reserveSprings(cfg.i("bal.yay_kapasite", 1200000));
@@ -165,6 +190,7 @@ bool LabWorld::build(Deney d, const Config& sceneCfg, bool fine_, const LabInput
 }
 
 void LabWorld::settle(double seconds, double dt) {
+    if (deney == Deney::Kup) return;   // the built cube is asleep: a stack stands by itself
     const double ramp = pw.params.gravityRamp;
     pw.params.gravityRamp = float(std::min(0.4, seconds * 0.5));
     const int frames = int(std::ceil(seconds / dt));
@@ -590,10 +616,50 @@ void LabWorld::setInputs(const LabInputs& i) {
     placeProps();
 }
 
+// ---------------------------------------------------------------------------------------------------- Kup
+// a cube of small plastic cubes on the table, a charge at its middle (cubes.h); the coarse world and a recording's
+// fine one have the same cubes (their count is the panel's), the fine one smaller steps
+
+void LabWorld::buildKup() {
+    const int n = kupPerEdge(in.fineness, cfg.i("kup.en_cok_kenar", 100));
+    CubeParams& P = cubes.params;
+    P = CubeParams{};
+    P.density = cfg.f("kup.yogunluk", 1050.0f);
+    P.restitution = cfg.f("kup.sekme", 0.55f);
+    P.restitutionFloor = cfg.f("kup.masa_sekme", 0.45f);
+    P.muStatic = cfg.f("kup.mu_statik", 0.45f);
+    P.muDynamic = cfg.f("kup.mu_dinamik", 0.35f);
+    P.muFloorStatic = cfg.f("kup.masa_mu_statik", 0.40f);
+    P.muFloorDynamic = cfg.f("kup.masa_mu_dinamik", 0.30f);
+    P.drag = cfg.f("kup.hava_direnci", 1.05f);
+    P.substeps = cfg.i(fine ? "kup.ince_alt_adim" : "kup.alt_adim", fine ? 48 : 16);
+    P.passes = cfg.i(fine ? "kup.ince_gecis" : "kup.gecis", fine ? 3 : 2);
+    cubes.build(n, cfg.f("kup.boyut", 0.10f), cfg.v3("kup.yer", make_float3(0.0f, 0.0f, -0.02f)), unsigned(cfg.i("kup.tohum", 7)));
+    boxLo = make_float3(-1.6f, -0.62f, -1.0f);
+    boxHi = make_float3(1.6f, 2.6f, 1.6f);
+    aim = cubes.centre();
+    aimRadius = 0.6f * cubes.side() * 1.7321f;
+}
+
 void LabWorld::trigger(const LabEvent& e) {
     ev_ = e;
     triggered_ = true;
     tTrigger_ = time();
+    if (e.kind == LabEvent::Blast && deney == Deney::Kup) {
+        CubeBlast b;
+        b.centre = cubes.centre();
+        b.charge = kupCharge(e.power);
+        b.inner = cfg.f("kup.ic_hiz", 0.5f);
+        b.spread = cfg.f("kup.dagilim", 0.25f);
+        b.cone = cfg.f("kup.koni", 0.12f);
+        b.spin = cfg.f("kup.donme", 0.3f);
+        b.floorReflect = cfg.f("kup.masa_yansima", 0.6f);
+        b.seed = unsigned(cfg.i("kup.tohum", 7)) * 31u + 5u;
+        cubes.blast(b, &lastBlast);
+        std::printf("kup: %.4g g TNT esdegeri, Gurney %.3g J, kuplerde %.3g J; yuz %.2f m/s, kose %.2f m/s, ortalama %.2f, en hizli %.2f m/s\n", b.charge,
+                    lastBlast.gurneyEnergy, lastBlast.energy, lastBlast.faceSpeed, lastBlast.cornerSpeed, lastBlast.meanSpeed, lastBlast.maxSpeed);
+        return;
+    }
     if (e.kind == LabEvent::Drop && deney == Deney::Damla) {
         // a drop of radius r, a little above the milk, moving down at sqrt(2 g h): as if it fell from h
         const float r = cfg.f("damla.yaricap", 0.0025f);
@@ -781,6 +847,10 @@ void LabWorld::emit(float dt) {
 }
 
 void LabWorld::step(float dt) {
+    if (deney == Deney::Kup) {
+        cubes.step(dt);
+        return;
+    }
     if (triggered_ || deney == Deney::Bal || deney == Deney::Kum) placeProps();
     // the props at the end of this step
     if (deney == Deney::Su && triggered_) {
@@ -793,12 +863,12 @@ void LabWorld::step(float dt) {
 }
 
 int LabWorld::due(double dt) const {
-    const int subs = liveSubs_ > 0 ? liveSubs_ : std::max(1, pw.params.substeps);
+    const int subs = liveSubs_ > 0 ? liveSubs_ : (deney == Deney::Kup ? cubes.baseSubsteps() : std::max(1, pw.params.substeps));
     return int(std::floor(owe_ + dt * 60.0 * subs + 1e-6));
 }
 
 int LabWorld::advance(double dt) {
-    if (liveSubs_ <= 0) liveSubs_ = std::max(1, pw.params.substeps);
+    if (liveSubs_ <= 0) liveSubs_ = deney == Deney::Kup ? cubes.baseSubsteps() : std::max(1, pw.params.substeps);
     owe_ += dt * 60.0 * liveSubs_;
     int n = int(std::floor(owe_ + 1e-6));
     if (n <= 0) return 0;
@@ -810,6 +880,8 @@ int LabWorld::advance(double dt) {
     pw.params.substeps = keep;
     return n;
 }
+
+void LabWorld::exportCubes(float4* pose, float alpha, cudaStream_t st) const { cubes.exportPoses(pose, alpha, st); }
 
 void LabWorld::exportDraw(float3* dPos, uint8_t* dCode, cudaStream_t st) {
     const int n = pw.count();
@@ -831,6 +903,7 @@ void LabWorld::exportDraw(float3* dPos, uint8_t* dCode, cudaStream_t st) {
 }
 
 std::string LabWorld::summary() const {
+    if (deney == Deney::Kup) return cubes.summary();
     int counts[kDrawCodes] = {};
     for (uint8_t c : code) counts[c]++;
     char b[256];

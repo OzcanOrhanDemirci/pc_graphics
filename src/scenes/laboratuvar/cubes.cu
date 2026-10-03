@@ -89,6 +89,7 @@ struct Consts {
     float tol;           // a point this near a face's edge still counts on it (a lattice's corners)
     float sor;
     float restDamp;
+    float maxMargin;
     int debug;
     float sleepV, sleepT;
     float tableHW, tableFront, tableBack, backHW, backWall, backSweep;
@@ -177,8 +178,9 @@ __device__ inline void pairStep(Body& I, const Body& J, bool jMoves, int np, con
         wsum[k] = w;
         const float vn = dot(I.v + cross(I.w, ri) - vj, u[k]);                                        // > 0: apart
         const float doneV = dot((I.v + cross(I.w, ri) - vj) * C.hs + I.dv + cross(I.dw, ri) - dj, u[k]);   // apart, times h, so far
-        float nv = -doneV;
-        if (vn < -C.vRest) nv = fmaxf(nv, e * -vn * C.hs - doneV);
+        const float allowed = fmaxf(0.0f, -d[k]);   // a gap: the pair may close it this substep (speculative contact)
+        float nv = -allowed - doneV;
+        if (vn < -C.vRest && vn * C.hs < -allowed) nv = fmaxf(nv, e * -vn * C.hs - doneV);   // they meet: the bounce
         needV[k] = nv;
     }
     float3 pxi = make_float3(0, 0, 0), pxj = make_float3(0, 0, 0);
@@ -264,8 +266,9 @@ __device__ inline void applyTo(Body& I, float4& q, float3 dx, float3 dt, float3 
 
 // two cubes of half edge h: where they touch (Gottschalk's separating axes, then the incident face clipped by the
 // reference face's sides, as ODE's dBoxBox; an edge across an edge: one point between them). n: from A to B; the
-// points lie on the incident box, inside the reference one by dep. 0: apart.
-__device__ inline int boxBox(const Body& A, const Body& B, float h, float tol, float3& n, float3* pts, float* dep) {
+// points lie on the incident box, inside the reference one by dep (negative: a gap under margin, a speculative
+// contact: the pair may close it this substep, no more). 0: apart.
+__device__ inline int boxBox(const Body& A, const Body& B, float h, float tol, float margin, float3& n, float3* pts, float* dep) {
     const float3 T = B.x - A.x;
     const float3 a[3] = {A.R.c0, A.R.c1, A.R.c2}, b[3] = {B.R.c0, B.R.c1, B.R.c2};
     float Ab[3][3];
@@ -277,13 +280,13 @@ __device__ inline int boxBox(const Body& A, const Body& B, float h, float tol, f
     for (int i = 0; i < 3; ++i) {
         const float t = dot(T, a[i]);
         const float pen = h + h * (Ab[i][0] + Ab[i][1] + Ab[i][2]) - fabsf(t);
-        if (pen <= 0.0f) return 0;
+        if (pen <= -margin) return 0;
         if (pen < best) { best = pen; code = i; nb = a[i] * (t >= 0.0f ? 1.0f : -1.0f); }
     }
     for (int j = 0; j < 3; ++j) {
         const float t = dot(T, b[j]);
         const float pen = h + h * (Ab[0][j] + Ab[1][j] + Ab[2][j]) - fabsf(t);
-        if (pen <= 0.0f) return 0;
+        if (pen <= -margin) return 0;
         if (pen < best * 0.999f) { best = pen; code = 3 + j; nb = b[j] * (t >= 0.0f ? 1.0f : -1.0f); }
     }
     for (int i = 0; i < 3; ++i)
@@ -296,7 +299,7 @@ __device__ inline int boxBox(const Body& A, const Body& B, float h, float tol, f
             const float rB = h * (fabsf(dot(b[0], ax)) + fabsf(dot(b[1], ax)) + fabsf(dot(b[2], ax)));
             const float t = dot(T, ax);
             const float pen = rA + rB - fabsf(t);
-            if (pen <= 0.0f) return 0;
+            if (pen <= -margin) return 0;
             if (pen < 0.95f * best - 1e-4f * h) { best = pen; code = 6 + 3 * i + j; nb = ax * (t >= 0.0f ? 1.0f : -1.0f); }
         }
     n = nb;
@@ -358,7 +361,7 @@ __device__ inline int boxBox(const Body& A, const Body& B, float h, float tol, f
     int out = 0;
     for (int q = 0; q < np; ++q) {
         const float dd = h - dot(poly[q] - Rf.x, nr);
-        if (dd > 0.0f) {
+        if (dd > -margin) {
             pts[out] = poly[q];
             dep[out] = dd;
             ++out;
@@ -368,7 +371,7 @@ __device__ inline int boxBox(const Body& A, const Body& B, float h, float tol, f
 }
 
 // the stage: a point below the table top or the backdrop's floor, inside its sweep, behind its wall
-__device__ inline bool stageContact(float3 p, const Consts& C, float3& n, float& d) {
+__device__ inline bool stageContact(float3 p, bool wasAbove, const Consts& C, float3& n, float& d) {
     const bool onTable = fabsf(p.x) <= C.tableHW && p.z <= C.tableFront && p.z >= C.tableBack;
     const bool onBack = fabsf(p.x) <= C.backHW && p.z < C.tableBack;
     if (!onTable && !onBack) return false;
@@ -386,7 +389,7 @@ __device__ inline bool stageContact(float3 p, const Consts& C, float3& n, float&
         n = make_float3(0, 0, 1);
         return true;
     }
-    if (p.y < 0.0f && p.y > -0.05f) {   // the floor (a hand's breadth under it is falling past the edge)
+    if (p.y < 0.0f && wasAbove) {   // the floor, for a cube whose middle was over it (beside the table's edge it falls)
         d = -p.y;
         n = make_float3(0, 1, 0);
         return true;
@@ -394,10 +397,123 @@ __device__ inline bool stageContact(float3 p, const Consts& C, float3& n, float&
     return false;
 }
 
-// one colour's cubes, at once: each against the stage and every cube it touches, as they are now (Gauss-Seidel)
+constexpr int kPairs = 8;   // touching pairs kept a cube a substep (the deepest)
+constexpr int kPts = 4;     // points a pair (the manifold's extremes)
+
+// the narrow phase, every awake cube at once (the colours' passes then read only these): the cubes within reach
+// (a circumsphere, and the gap two can close this substep), their contact points (at most four: the manifold's
+// extremes across the normal) relative to the cube, how deep, the way it is pushed. A sleeping cube touched by a
+// moving one wakes.
+__global__ void kNarrow(int n, const float4* x, const float4* q, const float4* v, const float4* w, const uint32_t* st, const uint32_t* idSorted,
+                        const int* cellStart, const int* cellEnd, float inv, uint32_t mask, Consts C, uint32_t* pairJ, float4* pairU, float4* pairP,
+                        int* pairN, uint32_t* wake) {
+    const int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= n) return;
+    pairN[i] = 0;
+    if (st[i] != S_AWAKE) return;
+    Body I;
+    I.x = xyz(x[i]);
+    I.R = qrot(q[i]);
+    I.v = xyz(v[i]);
+    I.w = xyz(w[i]);
+    const bool moving = dot(I.v, I.v) > C.sleepV * C.sleepV;
+    const float speedI = sqrtf(dot(I.v, I.v)) + sqrtf(dot(I.w, I.w)) * C.h * 1.7321f;
+    const float reachMax = 1.7321f * C.a + C.maxMargin;
+    const int3 c0 = cellOf(I.x, inv);
+    uint32_t seen[27];
+    int nSeen = 0, kept = 0;
+    float keptDepth[kPairs];
+    float3 pc[kMaxPts];
+    float pd[kMaxPts];
+    for (int dz = -1; dz <= 1; ++dz)
+        for (int dy = -1; dy <= 1; ++dy)
+            for (int dxc = -1; dxc <= 1; ++dxc) {
+                const uint32_t hc = hashCell(c0.x + dxc, c0.y + dy, c0.z + dz, mask);
+                bool dup = false;
+                for (int u = 0; u < nSeen; ++u) dup |= seen[u] == hc;
+                if (dup) continue;
+                seen[nSeen++] = hc;
+                const int a0 = cellStart[hc];
+                if (a0 < 0) continue;
+                const int a1 = cellEnd[hc];
+                for (int m = a0; m < a1; ++m) {
+                    const uint32_t j = idSorted[m];
+                    if (j == uint32_t(i)) continue;
+                    const uint32_t sj = st[j];
+                    if (sj == S_GONE) continue;
+                    Body J;
+                    J.x = xyz(x[j]);
+                    const float3 dd = J.x - I.x;
+                    if (dot(dd, dd) > reachMax * reachMax) continue;
+                    const bool jMoves = sj == S_AWAKE;
+                    J.v = jMoves ? xyz(v[j]) : make_float3(0, 0, 0);
+                    J.w = jMoves ? xyz(w[j]) : make_float3(0, 0, 0);
+                    const float speedJ = sqrtf(dot(J.v, J.v)) + sqrtf(dot(J.w, J.w)) * C.h * 1.7321f;
+                    const float margin = fminf(C.maxMargin, (speedI + speedJ) * C.hs * 1.2f + 0.001f * C.a);
+                    if (dot(dd, dd) > (1.7321f * C.a + margin) * (1.7321f * C.a + margin)) continue;
+                    J.R = qrot(q[j]);
+                    // the pair in a fixed order (the lower id is A): both its cubes find the same points
+                    const bool iIsA = uint32_t(i) < j;
+                    float3 nAB;
+                    const int np = iIsA ? boxBox(I, J, C.h, C.tol, margin, nAB, pc, pd) : boxBox(J, I, C.h, C.tol, margin, nAB, pc, pd);
+                    if (!np) continue;
+                    if (!jMoves && moving) wake[j] = 1u;
+                    const float3 un = iIsA ? nAB * -1.0f : nAB;   // I moves away from the other
+                    // at most four points: the deepest and the extremes across the normal
+                    int sel[kPts];
+                    int ns = 0;
+                    if (np <= kPts) {
+                        for (int k = 0; k < np; ++k) sel[ns++] = k;
+                    } else {
+                        const float3 t1 = normalize(fabsf(un.x) < 0.9f ? cross(un, make_float3(1, 0, 0)) : cross(un, make_float3(0, 1, 0)));
+                        const float3 t2 = cross(un, t1);
+                        int ext[4] = {0, 0, 0, 0};
+                        float ev[4] = {-1e30f, 1e30f, -1e30f, 1e30f};
+                        for (int k = 0; k < np; ++k) {
+                            const float s1 = dot(pc[k], t1), s2 = dot(pc[k], t2);
+                            if (s1 > ev[0]) { ev[0] = s1; ext[0] = k; }
+                            if (s1 < ev[1]) { ev[1] = s1; ext[1] = k; }
+                            if (s2 > ev[2]) { ev[2] = s2; ext[2] = k; }
+                            if (s2 < ev[3]) { ev[3] = s2; ext[3] = k; }
+                        }
+                        for (int e = 0; e < 4; ++e) {
+                            bool have = false;
+                            for (int u = 0; u < ns; ++u) have |= sel[u] == ext[e];
+                            if (!have) sel[ns++] = ext[e];
+                        }
+                    }
+                    float deepest = -1e30f;
+                    for (int k = 0; k < ns; ++k) deepest = fmaxf(deepest, pd[sel[k]]);
+                    // the slot: a free one, else the shallowest kept if this one is deeper
+                    int slot = -1;
+                    if (kept < kPairs) slot = kept++;
+                    else {
+                        int worst = 0;
+                        for (int u = 1; u < kPairs; ++u)
+                            if (keptDepth[u] < keptDepth[worst]) worst = u;
+                        if (keptDepth[worst] < deepest) slot = worst;
+                    }
+                    if (slot < 0) continue;
+                    keptDepth[slot] = deepest;
+                    const int base = i * kPairs + slot;
+                    pairJ[base] = j;
+                    pairU[base] = make_float4(un.x, un.y, un.z, float(ns));
+                    for (int k = 0; k < kPts; ++k) {
+                        const int kk = sel[k < ns ? k : 0];
+                        const float3 r = pc[kk] - I.x;
+                        pairP[base * kPts + k] = make_float4(r.x, r.y, r.z, pd[kk]);
+                    }
+                }
+            }
+    pairN[i] = kept;
+}
+
+// one colour's cubes, at once: each against the stage and the cubes the narrow phase found it touching, as they are
+// now (Gauss-Seidel): a point's depth now is what it was less how far the two have been pushed apart along the
+// normal since (the pushes are translations: exactly)
 __global__ void kSolveColour(int colour, const int* colStart, const int* colEnd, const uint32_t* idByColour, float4* x, float4* q, const float4* v,
-                             const float4* w, float4* dxT, float4* dtT, float4* dvT, float4* dwT, const uint32_t* st, const uint32_t* idSorted, const int* cellStart, const int* cellEnd,
-                             float inv, uint32_t mask, Consts C, uint32_t* wake, bool shock) {
+                             const float4* w, const float4* xp, float4* dxT, float4* dtT, float4* dvT, float4* dwT, const uint32_t* st, const uint32_t* pairJ,
+                             const float4* pairU, const float4* pairP, const int* pairN, Consts C, bool shock) {
     const int s0 = colStart[colour];
     if (s0 < 0) return;
     const int s1 = colEnd[colour];
@@ -414,7 +530,7 @@ __global__ void kSolveColour(int colour, const int* colStart, const int* colEnd,
         I.dt = xyz(dtT[i]);
         I.dv = xyz(dvT[i]);
         I.dw = xyz(dwT[i]);
-        const bool moving = dot(I.v, I.v) > C.sleepV * C.sleepV;
+        const bool wasAbove = xp[i].y > 0.0f;
         float3 pu[kMaxPts], pc[kMaxPts];
         float pd[kMaxPts];
         // the stage, at the corners: first, and again last (it does not move: it has the last word)
@@ -426,7 +542,7 @@ __global__ void kSolveColour(int colour, const int* colStart, const int* colEnd,
                 const float3 c = I.x + rmul(I.R, lc);
                 float3 nn;
                 float d;
-                if (stageContact(c, C, nn, d)) {
+                if (stageContact(c, wasAbove, C, nn, d)) {
                     pu[np] = nn;
                     pc[np] = c;
                     pd[np] = d;
@@ -441,70 +557,48 @@ __global__ void kSolveColour(int colour, const int* colStart, const int* colEnd,
             }
         };
         stage();
-        // the cubes within a circumsphere's reach
-        const int3 c0 = cellOf(I.x, inv);
-        uint32_t seen[27];
-        int nSeen = 0;
-        const float reach2 = 3.0f * C.a * C.a * 1.0001f;
-        for (int dz = -1; dz <= 1; ++dz)
-            for (int dy = -1; dy <= 1; ++dy)
-                for (int dxc = -1; dxc <= 1; ++dxc) {
-                    const uint32_t hc = hashCell(c0.x + dxc, c0.y + dy, c0.z + dz, mask);
-                    bool dup = false;
-                    for (int u = 0; u < nSeen; ++u) dup |= seen[u] == hc;
-                    if (dup) continue;
-                    seen[nSeen++] = hc;
-                    const int a0 = cellStart[hc];
-                    if (a0 < 0) continue;
-                    const int a1 = cellEnd[hc];
-                    for (int m = a0; m < a1; ++m) {
-                        const uint32_t j = idSorted[m];
-                        if (j == i) continue;
-                        const uint32_t sj = st[j];
-                        if (sj == S_GONE) continue;
-                        Body J;
-                        J.x = xyz(x[j]);
-                        const float3 dd = J.x - I.x;
-                        if (dot(dd, dd) > reach2) continue;
-                        J.R = qrot(q[j]);
-                        const bool jMoves = sj == S_AWAKE;
-                        if (jMoves) {
-                            J.v = xyz(v[j]);
-                            J.w = xyz(w[j]);
-                            J.dx = xyz(dxT[j]);
-                            J.dt = xyz(dtT[j]);
-                            J.dv = xyz(dvT[j]);
-                            J.dw = xyz(dwT[j]);
-                        } else {
-                            J.v = J.w = J.dx = J.dt = J.dv = J.dw = make_float3(0, 0, 0);
-                        }
-                        // the pair in a fixed order (the lower id is A): both its cubes find the same points
-                        const bool iIsA = i < j;
-                        float3 nAB;
-                        const int np = iIsA ? boxBox(I, J, C.h, C.tol, nAB, pc, pd) : boxBox(J, I, C.h, C.tol, nAB, pc, pd);
-                        if (!np) continue;
-                        const float3 un = iIsA ? nAB * -1.0f : nAB;   // I moves away from the other
-                        // the last pass propagates the support up (shock propagation, Guendelman, Bridson & Fedkiw
-                        // 2003): a cube under this one is a floor to it, a cube on it is not its business
-                        bool other = jMoves;
-                        if (shock && jMoves) {
-                            if (un.y > 0.5f) other = false;
-                            else if (un.y < -0.5f) continue;
-                        }
-                        for (int k = 0; k < np; ++k) pu[k] = un;
-                        float3 dx, dt, vx, vt;
-                        pairStep(I, J, other, np, pu, pc, pd, C.e, C.muS, C.muD, C, dx, dt, vx, vt);
-                        if (C.debug && (i == 1 || i == 0)) {
-                            printf("kup %u ile %u: %d nokta, n (%.4f %.4f %.4f) d0 %.3e d1 %.3e d2 %.3e d3 %.3e | dx (%.3e %.3e %.3e) dt (%.3e %.3e %.3e) vx (%.3e %.3e %.3e) vt (%.3e %.3e %.3e)\n", i, j, np,
-                                   un.x, un.y, un.z, pd[0], np > 1 ? pd[1] : 0.f, np > 2 ? pd[2] : 0.f, np > 3 ? pd[3] : 0.f, dx.x, dx.y, dx.z, dt.x, dt.y, dt.z, vx.x, vx.y,
-                                   vx.z, vt.x, vt.y, vt.z);
-                            for (int k = 0; k < np; ++k) printf("   p%d (%.5f %.5f %.5f)\n", k, pc[k].x, pc[k].y, pc[k].z);
-                        }
-                        applyTo(I, qi, dx, dt, vx, vt, C);
-                        touched = 1;
-                        if (!jMoves && moving) wake[j] = 1u;
-                    }
-                }
+        const int np0 = pairN[i];
+        for (int sl = 0; sl < np0; ++sl) {
+            const int base = int(i) * kPairs + sl;
+            const uint32_t j = pairJ[base];
+            const uint32_t sj = st[j];
+            if (sj == S_GONE) continue;
+            const float4 u4 = pairU[base];
+            const float3 un = xyz(u4);
+            const int np = int(u4.w);
+            const bool jMoves = sj == S_AWAKE;
+            Body J;
+            J.x = xyz(x[j]);
+            J.R = qrot(q[j]);
+            if (jMoves) {
+                J.v = xyz(v[j]);
+                J.w = xyz(w[j]);
+                J.dx = xyz(dxT[j]);
+                J.dt = xyz(dtT[j]);
+                J.dv = xyz(dvT[j]);
+                J.dw = xyz(dwT[j]);
+            } else {
+                J.v = J.w = J.dx = J.dt = J.dv = J.dw = make_float3(0, 0, 0);
+            }
+            // the last pass propagates the support up (shock propagation, Guendelman, Bridson & Fedkiw 2003): a cube
+            // under this one is a floor to it, a cube on it is not its business
+            bool other = jMoves;
+            if (shock && jMoves) {
+                if (un.y > 0.5f) other = false;
+                else if (un.y < -0.5f) continue;
+            }
+            const float apart = dot(I.dx - J.dx, un);   // pushed apart since the narrow phase
+            for (int k = 0; k < np; ++k) {
+                const float4 r4 = pairP[base * kPts + k];
+                pu[k] = un;
+                pc[k] = I.x + xyz(r4);   // the point moves with I
+                pd[k] = r4.w - apart;
+            }
+            float3 dx, dt, vx, vt;
+            pairStep(I, J, other, np, pu, pc, pd, C.e, C.muS, C.muD, C, dx, dt, vx, vt);
+            applyTo(I, qi, dx, dt, vx, vt, C);
+            touched = 1;
+        }
         stage();
         x[i] = make_float4(I.x.x, I.x.y, I.x.z, 0.0f);
         q[i] = qi;
@@ -678,10 +772,15 @@ __global__ void kBlastScale(int n, float4* v, float4* w, const uint32_t* st, flo
 // ------------------------------------------------------------------------------------------------- the world
 
 void CubeWorld::destroy() {
+    dropGraphs();
     for (float4** p : {&x_, &xp_, &v_, &w_, &q_, &qp_, &x0_, &q0_, &accX_, &accW_, &dvT_, &dwT_}) dfree(*p);
     for (uint32_t** p : {&colKey_, &colKeySorted_, &colId_, &idByColour_}) dfree(*p);
     dfree(colStart_);
     dfree(colEnd_);
+    dfree(pairJ_);
+    dfree(pairU_);
+    dfree(pairP_);
+    dfree(pairN_);
     dfree(state_);
     dfree(wake_);
     dfree(sleepT_);
@@ -720,6 +819,10 @@ void CubeWorld::build(int n, float side, float3 base, unsigned seed) {
     for (uint32_t** p : {&colKey_, &colKeySorted_, &colId_, &idByColour_}) *p = dalloc<uint32_t>(size_t(cap_));
     colStart_ = dalloc<int>(64);
     colEnd_ = dalloc<int>(64);
+    pairJ_ = dalloc<uint32_t>(size_t(cap_) * kPairs);
+    pairU_ = dalloc<float4>(size_t(cap_) * kPairs);
+    pairP_ = dalloc<float4>(size_t(cap_) * kPairs * kPts);
+    pairN_ = dalloc<int>(size_t(cap_));
     state_ = dalloc<uint32_t>(size_t(cap_));
     wake_ = dalloc<uint32_t>(size_t(cap_));
     sleepT_ = dalloc<float>(size_t(cap_));
@@ -782,6 +885,7 @@ Consts makeConsts(const CubeParams& P, float a, float hs) {
     C.muFD = P.muFloorDynamic;
     C.vRest = std::max(2.0f * P.gravity * hs, P.restSpeed);
     C.sor = P.sor;
+    C.maxMargin = 1.2f * a;   // within the neighbours' cells
     C.restDamp = std::pow(1.0f - P.restDamping, hs * 1000.0f);   // per millisecond
     C.debug = P.debug;
     C.maxPush = P.maxPush * hs;
@@ -799,7 +903,38 @@ Consts makeConsts(const CubeParams& P, float a, float hs) {
 }
 }   // namespace
 
+void CubeWorld::dropGraphs() {
+    for (Graph& g : graphs_) cudaGraphExecDestroy(g.exec);
+    graphs_.clear();
+}
+
 void CubeWorld::substep(float hs) {
+    if (std::memcmp(&graphParams_, &params, sizeof(CubeParams)) != 0) {   // the settings changed: capture afresh
+        dropGraphs();
+        std::memcpy(&graphParams_, &params, sizeof(CubeParams));
+    }
+    for (const Graph& g : graphs_)
+        if (g.hs == hs) {
+            CCUDA(cudaGraphLaunch(g.exec, stream_));
+            return;
+        }
+    if (graphs_.size() >= 8) {
+        cudaGraphExecDestroy(graphs_.front().exec);
+        graphs_.erase(graphs_.begin());
+    }
+    cudaGraph_t gr;
+    CCUDA(cudaStreamBeginCapture(stream_, cudaStreamCaptureModeThreadLocal));
+    record(hs);
+    CCUDA(cudaStreamEndCapture(stream_, &gr));
+    Graph g;
+    g.hs = hs;
+    CCUDA(cudaGraphInstantiate(&g.exec, gr, 0));
+    cudaGraphDestroy(gr);
+    graphs_.push_back(g);
+    CCUDA(cudaGraphLaunch(g.exec, stream_));
+}
+
+void CubeWorld::record(float hs) {
     Consts C = makeConsts(params, a_, hs);
     const int B = nb(n_);
     kIntegrate<<<B, kB, 0, stream_>>>(n_, x_, xp_, v_, w_, q_, qp_, state_, accX_, accW_, dvT_, dwT_, C, hs);
@@ -815,12 +950,13 @@ void CubeWorld::substep(float hs) {
     cub::DeviceRadixSort::SortPairs(sortTemp_, sortTempBytes_, colKey_, colKeySorted_, colId_, idByColour_, n_, 0, 6, stream_);
     CCUDA(cudaMemsetAsync(colStart_, 0xff, 64 * sizeof(int), stream_));
     kRanges<<<B, kB, 0, stream_>>>(n_, colKeySorted_, colStart_, colEnd_);
-    // Gauss-Seidel by colour: a colour's cubes never touch each other
+    // the narrow phase at once, then Gauss-Seidel by colour over what it found (a colour's cubes never touch)
+    kNarrow<<<B, kB, 0, stream_>>>(n_, x_, q_, v_, w_, state_, idSorted_, cellStart_, cellEnd_, inv, mask, C, pairJ_, pairU_, pairP_, pairN_, wake_);
     const int G = std::max(1, nb(n_ / 48 + 1));
     for (int pass = 0; pass < std::max(1, params.passes); ++pass)
         for (int c = 0; c < 64; ++c)
-            kSolveColour<<<G, kB, 0, stream_>>>(c, colStart_, colEnd_, idByColour_, x_, q_, v_, w_, accX_, accW_, dvT_, dwT_, state_, idSorted_, cellStart_,
-                                                cellEnd_, inv, mask, C, wake_, pass == std::max(1, params.passes) - 1 && params.shock);
+            kSolveColour<<<G, kB, 0, stream_>>>(c, colStart_, colEnd_, idByColour_, x_, q_, v_, w_, xp_, accX_, accW_, dvT_, dwT_, state_, pairJ_, pairU_, pairP_,
+                                                pairN_, C, pass == std::max(1, params.passes) - 1 && params.shock);
     kFinish<<<B, kB, 0, stream_>>>(n_, x_, v_, w_, state_, wake_, sleepT_, dvT_, dwT_, C, hs);
 }
 
