@@ -139,6 +139,35 @@ void KoyApp::setup() {
                 world.textureSeconds, world.textureBytes / 1073741824.0, (double(freeBefore) - double(freeAfter)) / 1073741824.0,
                 (totalMem - freeAfter) / 1073741824.0, totalMem / 1073741824.0);
     renderer.uploadWorld(world.meshes, world.instances, world.materials, world.textureSets(), &world.ribbons);
+    {   // the floor's depth under every (x, z): which light fields a point reads (koy.cu fieldsFor)
+        const int B = cfg.i("light.bottom_map", 512);
+        const float half = cfg.f("floor.extent", 110.0f);
+        const KoyFloorShape fs = KoyFloorShape::from(cfg);
+        std::vector<float> m(size_t(B) * B);
+        for (int j = 0; j < B; ++j)
+            for (int i = 0; i < B; ++i) m[size_t(j) * B + i] = -fs((i + 0.5f) / B * 2.0f * half - half, (j + 0.5f) / B * 2.0f * half - half);
+        cudaChannelFormatDesc fd = cudaCreateChannelDesc<float>();
+        cudaArray_t arr = nullptr;
+        cudaMallocArray(&arr, &fd, B, B);
+        cudaMemcpy2DToArray(arr, 0, 0, m.data(), size_t(B) * sizeof(float), size_t(B) * sizeof(float), B, cudaMemcpyHostToDevice);
+        cudaResourceDesc rd{};
+        rd.resType = cudaResourceTypeArray;
+        rd.res.array.array = arr;
+        cudaTextureDesc td{};
+        td.addressMode[0] = td.addressMode[1] = cudaAddressModeClamp;
+        td.filterMode = cudaFilterModeLinear;
+        td.readMode = cudaReadModeElementType;
+        td.normalizedCoords = 1;
+        cudaTextureObject_t t = 0;
+        cudaCreateTextureObject(&t, &rd, &td, nullptr);
+        bottomArr = arr;
+        bottomTex = t;
+        p.bottomMap = t;
+        p.bottomMapHalf = half;
+        std::printf("koy isik alanlari: %d dip derinligi", p.fields);
+        for (int f = 0; f < p.fields; ++f) std::printf(" %.1f", p.fieldBottom[f]);
+        std::printf(" m\n");
+    }
     p.rippleTex = world.ripples.set.normal;
     p.rippleHalf = world.rippleHalf;
     std::printf("koy dunya: %s\n", world.summary().c_str());
@@ -287,6 +316,11 @@ void KoyApp::save(const std::string& prefix) {
 }
 
 void KoyApp::release() {
+    if (bottomTex) cudaDestroyTextureObject(cudaTextureObject_t(bottomTex));
+    if (bottomArr) cudaFreeArray(static_cast<cudaArray_t>(bottomArr));
+    bottomTex = 0;
+    bottomArr = nullptr;
+    renderer.params().bottomMap = 0;
     ocean.release();
     ripples.release();
     world.release();

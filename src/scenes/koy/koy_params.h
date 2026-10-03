@@ -17,6 +17,7 @@
 typedef unsigned long long KTex;   // cudaTextureObject_t (NVRTC sees it as this too)
 
 #define KOY_MAX_MESHES 32
+#define KOY_FIELDS 4             // the light field for up to this many floor depths
 #define KOY_MAX_BASE 16          // base samples per pixel (1, 4, 8 or 16)
 #define KOY_MAX_EDGE 32          // samples of a pixel that sits on an edge, base included
 
@@ -150,9 +151,16 @@ struct KoyParams {
 
     // ---- light (tables built by koy_optics.cpp)
     KTex pathTab;
-    KTex ambSurf[3];
-    KTex ambPath;
-    KTex reflPath;
+    // The water's diffuse light depends on the floor below it (bright sand sends light back up: over the wreck's sand the
+    // water column is ~30 % brighter than over the deep). One set of tables per floor depth; a point reads the two that
+    // bracket the floor under it, each only where it is lit (above its own floor).
+    KTex ambSurf[KOY_FIELDS][3];
+    KTex ambPath[KOY_FIELDS];
+    KTex reflPath[KOY_FIELDS];
+    int fields;
+    float fieldBottom[KOY_FIELDS];      // ascending
+    KTex bottomMap;                     // the floor's depth under (x, z), over +-bottomMapHalf (0: none, the deepest field)
+    float bottomMapHalf;
     float basisFix[3][3];               // linear sRGB albedo -> weights of the three basis spectra (exact round trip in daylight)
     float3 sunWater;                    // towards the sun, refracted (in water)
     float3 sunAir;                      // towards the sun, in air

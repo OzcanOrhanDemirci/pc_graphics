@@ -39,7 +39,8 @@ struct KoyOptics {
     float ffScale = 1.0f, ffTruncated = 0.0f;   // delta-M: 1 / (1 - share inside the sun-disc cone), that share
     float chl = 0.05f;
     std::string jerlov = "IA";
-    float bottomDepth = 8.0f;
+    float bottomDepth = 8.0f;                   // the floor of the light field being built
+    std::vector<float> bottoms;                 // every floor depth a field is built for (ascending; light.bottoms)
     float basisFix[3][3] = {};
     float3 xyzToRgb[3] = {};
     float skyY = 0.0f, perez[5] = {}, perezNorm = 1.0f, coastSin = 0.2f;
@@ -54,6 +55,10 @@ struct KoyOptics {
     std::vector<float4> ambSurf[3];             // AS_T x AS_N x AS_Z
     std::vector<float4> ambPath;                // AP_T x AP_MU x AP_Z
     std::vector<float4> reflPath;               // RP_T x RP_MU x RP_TS
+    struct FieldTables {                        // the three above for each of bottoms (the members: the deepest one's)
+        std::vector<float4> ambSurf[3], ambPath, reflPath;
+    };
+    std::vector<FieldTables> fieldTables;
     double msBuild = 0.0, msField = 0.0;
 
     void build(const Config& cfg);              // everything above

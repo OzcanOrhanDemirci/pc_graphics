@@ -65,19 +65,75 @@ static __forceinline__ __device__ float3 sunOnSurface(float3 wk, float z, float 
     const float L = fmaxf(z, 0.0f) / params.sunCosW + t;
     return pathRow(PT_SURF0 + 0, L) * wk.x + pathRow(PT_SURF0 + 1, L) * wk.y + pathRow(PT_SURF0 + 2, L) * wk.z;
 }
+// which light fields: the floor's depth under a point (the bottom map) picks the two that bracket it; a field is dark
+// below its own floor, so none shallower than zmax (the deepest point that must be lit) is used
+struct FW {
+    int a, b;
+    float w;   // b's weight
+};
+static __forceinline__ __device__ float bottomAt(float x, float z) {
+    if (!params.bottomMap) return params.fieldBottom[params.fields - 1];
+    const float inv = 0.5f / params.bottomMapHalf;
+    return tex2D<float>((cudaTextureObject_t)params.bottomMap, x * inv + 0.5f, z * inv + 0.5f);
+}
+// a surface: the two fields that bracket the floor under it (each read no deeper than its own floor: continuous where the
+// floor crosses a field's depth)
+static __forceinline__ __device__ FW fieldsFor(float hf) {
+    const int n = params.fields;
+    int a = 0;
+    while (a + 1 < n && params.fieldBottom[a + 1] <= hf) ++a;
+    const int b = min(a + 1, n - 1);
+    FW f;
+    f.a = a;
+    f.b = b;
+    f.w = (b > a && hf > params.fieldBottom[a]) ? saturate((hf - params.fieldBottom[a]) / (params.fieldBottom[b] - params.fieldBottom[a])) : 0.0f;
+    return f;
+}
+// a view path: the shallowest field lit down to its deepest point, eased into the next over the last 1.5 m above its
+// floor (no seam where the paths' ends cross a field's depth)
+static __forceinline__ __device__ FW fieldsForPath(float zmax) {
+    const int n = params.fields;
+    int k = 0;
+    while (k < n - 1 && params.fieldBottom[k] < zmax) ++k;
+    FW f;
+    f.a = k;
+    f.b = min(k + 1, n - 1);
+    const float b = params.fieldBottom[k];
+    f.w = f.b > f.a ? saturate((zmax - (b - 1.5f)) / 1.5f) : 0.0f;
+    f.w = f.w * f.w * (3.0f - 2.0f * f.w);
+    return f;
+}
+static __forceinline__ __device__ FW deepestField() {
+    FW f;
+    f.a = f.b = params.fields - 1;
+    f.w = 0.0f;
+    return f;
+}
 // the water's diffuse light on a Lambert surface (normal's vertical component ny) at depth z, seen after t metres
-static __forceinline__ __device__ float3 ambientOnSurface(float3 wk, float z, float ny, float t) {
-    const float u = tcT(t, AMB_TMAX, AS_T), v = tc(ny * 0.5f + 0.5f, AS_N), w = tc(z / AMB_ZMAX, AS_Z);
-    return f3(tex3Dt(params.ambSurf[0], u, v, w)) * wk.x + f3(tex3Dt(params.ambSurf[1], u, v, w)) * wk.y +
-           f3(tex3Dt(params.ambSurf[2], u, v, w)) * wk.z;
+static __forceinline__ __device__ float3 ambientOnSurface(float3 wk, float z, float ny, float t, FW f) {
+    const float u = tcT(t, AMB_TMAX, AS_T), v = tc(ny * 0.5f + 0.5f, AS_N);
+    float3 r = make_float3(0.0f, 0.0f, 0.0f);
+    for (int q = 0; q < 2; ++q) {
+        const int k = q == 0 ? f.a : f.b;
+        const float wq = q == 0 ? 1.0f - f.w : f.w;
+        if (wq <= 0.0f) continue;
+        const float w = tc(fminf(z, params.fieldBottom[k]) / AMB_ZMAX, AS_Z);
+        r += (f3(tex3Dt(params.ambSurf[k][0], u, v, w)) * wk.x + f3(tex3Dt(params.ambSurf[k][1], u, v, w)) * wk.y +
+              f3(tex3Dt(params.ambSurf[k][2], u, v, w)) * wk.z) * wq;
+    }
+    return r;
 }
 // the diffuse light scattered into a view ray (direction's vertical component muUp, from depth z0) over its first t metres
-static __forceinline__ __device__ float3 ambientPath(float z0, float muUp, float t) {
-    return f3(tex3Dt(params.ambPath, tcT(t, AMB_TMAX, AP_T), tc(muUp * 0.5f + 0.5f, AP_MU), tc(z0 / AMB_ZMAX, AP_Z)));
+static __forceinline__ __device__ float3 ambientPath(float z0, float muUp, float t, FW f) {
+    const float u = tcT(t, AMB_TMAX, AP_T), v = tc(muUp * 0.5f + 0.5f, AP_MU), w = tc(z0 / AMB_ZMAX, AP_Z);
+    const float3 A = f3(tex3Dt(params.ambPath[f.a], u, v, w));
+    return f.w > 0.0f ? A + (f3(tex3Dt(params.ambPath[f.b], u, v, w)) - A) * f.w : A;
 }
 // the same for a ray leaving the surface downwards (a total internal reflection), seen through a further ts metres
-static __forceinline__ __device__ float3 reflectedPath(float muUp, float t2, float ts) {
-    return f3(tex3Dt(params.reflPath, tcT(t2, AMB_TMAX, RP_T), tc(muUp * 0.5f + 0.5f, RP_MU), tc(ts / RP_TSMAX, RP_TS)));
+static __forceinline__ __device__ float3 reflectedPath(float muUp, float t2, float ts, FW f) {
+    const float u = tcT(t2, AMB_TMAX, RP_T), v = tc(muUp * 0.5f + 0.5f, RP_MU), w = tc(ts / RP_TSMAX, RP_TS);
+    const float3 A = f3(tex3Dt(params.reflPath[f.a], u, v, w));
+    return f.w > 0.0f ? A + (f3(tex3Dt(params.reflPath[f.b], u, v, w)) - A) * f.w : A;
 }
 
 // =====================================================================================================
@@ -504,7 +560,7 @@ static __forceinline__ __device__ float3 shadeSurface(const Hit& h, float3 d, fl
     }
     // the water's diffuse light
     const float occ = lerpf(1.0f, h.ao, m.aoStrength);
-    L += ambientOnSurface(wk, z, n.y, tPath) * occ;
+    L += ambientOnSurface(wk, z, n.y, tPath, fieldsFor(bottomAt(h.p.x, h.p.z))) * occ;
     // debug views: grey levels in display terms (5 occlusion, 6 the sun's shadow ray, 7 the normal's height)
     if (params.view >= 5 && params.view <= 7) {
         const float tUp = (params.oceanHeightMax - h.p.y) / fmaxf(params.sunWater.y, 0.05f);
@@ -524,9 +580,9 @@ static __forceinline__ __device__ float3 shadeReflected(float3 q, float3 r, floa
         float c;
         float3 n;
         L = shadeSurface(h, r, h.t + tBefore, coneAngle, c, n);
-        L += reflectedPath(r.y, h.t, tBefore);
+        L += reflectedPath(r.y, h.t, tBefore, deepestField());   // reflected rays go down: the deep field is lit all the way
     } else {
-        L = reflectedPath(r.y, params.farDistance, tBefore);
+        L = reflectedPath(r.y, params.farDistance, tBefore, deepestField());
     }
     return L;
 }
@@ -602,7 +658,9 @@ static __forceinline__ __device__ Lit shadeSample(float3 o, float3 d, float cone
     if (d.y > 1e-4f) tmax = fminf(tmax, (params.oceanHeightMax - o.y) / d.y);
     const Hit h = trace(o, d, tmax);
     if (h.hit) {
-        r.L = shadeSurface(h, d, h.t, coneAngle, r.caustic, r.n) + (params.view >= 5 ? make_float3(0, 0, 0) : ambientPath(z0, d.y, h.t));
+        // the path's light field: the floor under where it ends, and lit down to its deepest point
+        const FW fp = fieldsForPath(fmaxf(z0, -h.p.y));
+        r.L = shadeSurface(h, d, h.t, coneAngle, r.caustic, r.n) + (params.view >= 5 ? make_float3(0, 0, 0) : ambientPath(z0, d.y, h.t, fp));
         r.t = h.t;
         r.id = h.id;
         return r;
@@ -610,12 +668,13 @@ static __forceinline__ __device__ Lit shadeSample(float3 o, float3 d, float cone
     if (d.y > 1e-4f) {
         const float ts = surfaceHit(o, d, coneAngle);
         const float3 q = o + d * ts;
-        r.L = shadeFromBelow(q, d, ts, coneAngle, r.n) + ambientPath(z0, d.y, ts);
+        r.L = shadeFromBelow(q, d, ts, coneAngle, r.n) + ambientPath(z0, d.y, ts, fieldsForPath(z0));
         r.t = ts;
         r.id = ID_WATER;
         return r;
     }
-    r.L = ambientPath(z0, d.y, params.farDistance);
+    // open water: the floor under the camera while the ray stays above it, the deepest field once it goes down into the blue
+    r.L = ambientPath(z0, d.y, params.farDistance, fieldsForPath(d.y < -0.02f ? 1e9f : z0));
     r.t = params.farDistance;
     r.id = ID_OPEN;
     return r;

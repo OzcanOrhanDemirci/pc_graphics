@@ -145,6 +145,15 @@ void KoyOptics::spectra(const Config& cfg) {
     waterN = cfg.f("water.n", 1.333f);
     Bp = cfg.f("water.bp_fraction", 0.0183f);   // Petzold's average particle backscatter fraction
     bottomDepth = cfg.f("light.bottom", 8.0f);
+    {   // the floors the light field is built for: light.bottoms (up to three, metres) or light.bottom alone
+        const float3 b = cfg.v3("light.bottoms", make_float3(0.0f, 0.0f, 0.0f));
+        bottoms.clear();
+        for (float v : {b.x, b.y, b.z})
+            if (v > 0.0f) bottoms.push_back(v);
+        if (bottoms.empty()) bottoms.push_back(bottomDepth);
+        std::sort(bottoms.begin(), bottoms.end());
+        if (bottoms.size() > size_t(KOY_FIELDS)) bottoms.resize(KOY_FIELDS);
+    }
     photons = cfg.i("light.photons", 400000);
     sunElevDeg = cfg.f("sun.elevation", 70.0f);
     sunAzimDeg = cfg.f("sun.azimuth", 180.0f);
@@ -719,8 +728,17 @@ void KoyOptics::tables() {
 void KoyOptics::build(const Config& cfg) {
     const double t0 = nowMs();
     spectra(cfg);
-    lightField();
-    tables();
+    fieldTables.clear();
+    for (float b : bottoms) {   // one light field and its tables per floor depth, the deepest last (the members keep it)
+        bottomDepth = b;
+        lightField();
+        tables();
+        FieldTables ft;
+        for (int k = 0; k < 3; ++k) ft.ambSurf[k] = ambSurf[k];
+        ft.ambPath = ambPath;
+        ft.reflPath = reflPath;
+        fieldTables.push_back(std::move(ft));
+    }
     msBuild = nowMs() - t0;
 }
 
@@ -781,10 +799,15 @@ static unsigned long long makeTex3D(const std::vector<float4>& v, int w, int h, 
 void KoyOptics::upload(KoyParams& p) {
     release();
     p.pathTab = makeTex2D(pathTab, PT_W, PT_ROWS, arrays_);
-    for (int k = 0; k < 3; ++k) p.ambSurf[k] = makeTex3D(ambSurf[k], AS_T, AS_N, AS_Z, arrays_);
-    p.ambPath = makeTex3D(ambPath, AP_T, AP_MU, AP_Z, arrays_);
-    p.reflPath = makeTex3D(reflPath, RP_T, RP_MU, RP_TS, arrays_);
-    textures_ = {p.pathTab, p.ambSurf[0], p.ambSurf[1], p.ambSurf[2], p.ambPath, p.reflPath};
+    textures_ = {p.pathTab};
+    p.fields = int(fieldTables.size());
+    for (int f = 0; f < p.fields; ++f) {
+        const FieldTables& ft = fieldTables[size_t(f)];
+        for (int k = 0; k < 3; ++k) textures_.push_back(p.ambSurf[f][k] = makeTex3D(ft.ambSurf[k], AS_T, AS_N, AS_Z, arrays_));
+        textures_.push_back(p.ambPath[f] = makeTex3D(ft.ambPath, AP_T, AP_MU, AP_Z, arrays_));
+        textures_.push_back(p.reflPath[f] = makeTex3D(ft.reflPath, RP_T, RP_MU, RP_TS, arrays_));
+        p.fieldBottom[f] = bottoms[size_t(f)];
+    }
     for (int r = 0; r < 3; ++r)
         for (int k = 0; k < 3; ++k) p.basisFix[r][k] = basisFix[r][k];
     p.sunWater = sunWater;

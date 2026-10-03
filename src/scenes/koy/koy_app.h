@@ -58,6 +58,8 @@ struct KoyApp {
     bool caustics = true, grassMoves = true;
     float worldTime = 0.0f;
     std::vector<uchar4> pixels;
+    void* bottomArr = nullptr;             // the floor's depth map (the light fields' choice), cudaArray_t
+    unsigned long long bottomTex = 0;
 
     void loadConfig();
     bool compile();
