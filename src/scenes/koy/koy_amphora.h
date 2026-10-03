@@ -11,12 +11,12 @@
 
 struct KoyAmphoraType {
     const char* name;
-    std::vector<float2> outer;    // (radius, height) in metres, from the toe's tip (0) up to the top of the rim
-    float wall;                   // the neck's wall (the inside of the mouth)
+    std::vector<float2> outer;    // (radius, height) in metres, from the foot (0) up to the top of the rim
+    std::vector<float2> inner;    // the cavity's wall (radius, height), from its bottom up to the rim
+    std::vector<float2> handle;   // a handle's centre line (radius, height): from inside the neck out and down into the shoulder
+    float handleR, handleT;       // its section: radial and tangential (metres)
+    bool doubleRod;               // Dressel 2-4: two rods side by side (the bifid handle)
     float fillDepth;              // how far below the rim the sediment fills it
-    float handleTop, handleBottom;  // heights where a handle leaves the neck and lands on the shoulder
-    float handleOut;              // how far out (radius) the handle's arc reaches
-    float handleW, handleT;       // its section: width (along the circumference), thickness
 };
 
 const KoyAmphoraType& koyAmphoraType(int k);   // 0 Dressel 1B, 1 Dressel 1A, 2 Lamboglia 2, 3 Dressel 2-4

@@ -60,6 +60,7 @@ struct KoyWorld {
     int texMode = 2;
     int setSand = -1, setSand4k = -1, setRock = -1, setRock8k = -1, setRockDetail = -1;
     int setSand16k = -1, setRockDetail16k = -1;
+    int setClay = -1, setCoat = -1;   // Amfora: the jars' clay (8K, a 1.64 m tile) and the concretion (8K, 1.36 m)
     double textureSeconds = 0.0;    // decoding, mipmapping and uploading every set
     size_t textureBytes = 0;        // the sets' GPU arrays, all levels
     bool hasMode(int mode) const;

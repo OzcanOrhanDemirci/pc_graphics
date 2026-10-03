@@ -9,33 +9,63 @@
 
 namespace {
 
-// Profiles (radius, height) in metres from the toe's tip. First pass (A0, composition): proportions after the published
-// typology (Dressel 1B ~1.13 m: a tall cylindrical neck, a sharply carinated shoulder, a long tapering body, a solid
-// toe; Peacock & Williams class 4, 3), refined in A3 against the drawings gathered in docs/koy/AMFORA_KAYNAK.md.
+// The profiles: ArchAIDE consortium (2019), vector profiles of the University of Southampton's drawings (P. Copeland,
+// "Roman Amphorae: a digital resource", 2014), CC BY 4.0 (assets/koy/LICENSES.md): Dressel 1B DR105, Dressel 1A DR104,
+// Dressel 2-4 Italian DR139, Lamboglia 2 DR136. Simplified to 28 points (at most 2.2 mm off the full outline) and read
+// from the drawings in docs/koy/AMFORA_KAYNAK.md §2.4; the handles from §2.5 (centre line between their outer and inner
+// edges, the section's radial and tangential size). Centimetres here, metres in the mesh.
+struct Row { float z, ro, ri; };   // height, outer radius, inner radius (< 0: solid there)
+const Row k1B[] = {{0.0f, 0.00f, -1}, {0.0f, 3.05f, -1}, {1.0f, 3.73f, -1}, {6.8f, 2.84f, -1}, {12.7f, 3.56f, -1}, {21.6f, 6.18f, 1.52f},
+                   {26.7f, 8.21f, 6.05f}, {29.4f, 9.65f, 7.41f}, {37.4f, 12.70f, 10.33f}, {42.4f, 13.93f, 11.73f}, {46.7f, 14.44f, 12.32f},
+                   {53.0f, 14.52f, 12.07f}, {62.7f, 13.89f, 11.43f}, {74.3f, 13.67f, 9.48f}, {79.1f, 7.11f, 4.87f}, {80.7f, 6.10f, 4.40f},
+                   {82.3f, 5.63f, 4.36f}, {85.7f, 5.59f, 4.57f}, {92.2f, 6.27f, 4.61f}, {101.2f, 5.93f, 4.40f}, {104.2f, 6.82f, 4.70f},
+                   {109.6f, 6.77f, 5.21f}, {111.0f, 7.41f, 5.59f}, {112.1f, 8.89f, 6.22f}, {114.9f, 8.34f, 6.77f}, {117.2f, 8.85f, 6.69f},
+                   {117.8f, 8.47f, 7.03f}, {117.9f, 7.45f, 7.45f}};
+const Row k1A[] = {{0.0f, 0.00f, -1}, {0.1f, 2.50f, -1}, {0.5f, 3.05f, -1}, {4.5f, 3.18f, -1}, {9.7f, 4.78f, -1}, {11.0f, 5.50f, -1},
+                   {15.5f, 8.89f, 5.80f}, {19.1f, 10.71f, 8.09f}, {26.0f, 12.70f, 10.67f}, {34.4f, 13.67f, 12.11f}, {42.6f, 14.10f, 12.74f},
+                   {52.7f, 14.06f, 12.62f}, {57.6f, 13.80f, 10.33f}, {58.5f, 13.25f, 8.17f}, {61.0f, 8.55f, 5.88f}, {62.0f, 7.54f, 5.46f},
+                   {64.7f, 6.22f, 4.87f}, {67.9f, 5.59f, 4.61f}, {70.7f, 5.38f, 4.40f}, {79.0f, 5.42f, 4.11f}, {88.1f, 6.05f, 5.00f},
+                   {88.7f, 6.35f, 5.08f}, {93.2f, 7.49f, 5.84f}, {93.3f, 8.38f, 5.84f}, {93.9f, 8.81f, 6.05f}, {97.2f, 8.38f, 7.28f},
+                   {97.7f, 7.96f, 7.58f}, {97.8f, 7.62f, 7.62f}};
+const Row k24[] = {{0.0f, 0.00f, -1}, {0.3f, 1.91f, -1}, {0.7f, 2.58f, -1}, {1.6f, 3.30f, -1}, {4.1f, 3.18f, -1}, {5.9f, 2.71f, 0.97f},
+                   {9.0f, 2.96f, 1.57f}, {12.3f, 3.98f, 2.75f}, {21.1f, 8.04f, 6.60f}, {27.8f, 10.41f, 9.19f}, {35.7f, 12.19f, 11.05f},
+                   {44.0f, 13.08f, 11.81f}, {51.3f, 13.34f, 12.11f}, {60.5f, 13.29f, 12.02f}, {64.2f, 13.17f, 11.81f}, {67.7f, 12.70f, 10.03f},
+                   {69.3f, 11.09f, 7.07f}, {72.0f, 6.14f, 4.36f}, {72.8f, 5.42f, 3.94f}, {74.9f, 4.61f, 3.60f}, {80.2f, 4.83f, 3.68f},
+                   {84.4f, 5.38f, 4.32f}, {87.3f, 6.14f, 4.78f}, {92.0f, 6.65f, 5.55f}, {93.1f, 7.45f, 5.50f}, {93.7f, 7.37f, 5.55f},
+                   {94.1f, 7.03f, 5.80f}, {94.3f, 6.05f, 6.05f}};
+const Row kL2[] = {{0.0f, 0.00f, -1}, {0.5f, 2.16f, -1}, {3.7f, 3.90f, -1}, {6.0f, 5.80f, 0.76f}, {6.8f, 6.90f, 3.09f}, {9.5f, 12.28f, 8.76f},
+                   {13.1f, 15.92f, 13.42f}, {15.3f, 17.49f, 15.28f}, {17.8f, 18.63f, 16.81f}, {21.2f, 19.69f, 18.16f}, {24.5f, 20.19f, 18.84f},
+                   {31.2f, 20.41f, 19.05f}, {37.5f, 19.81f, 18.37f}, {46.0f, 18.25f, 16.77f}, {53.7f, 16.13f, 13.42f}, {54.8f, 15.41f, 10.84f},
+                   {55.7f, 12.83f, 9.40f}, {58.1f, 8.76f, 6.60f}, {59.9f, 7.11f, 5.50f}, {62.4f, 6.14f, 4.91f}, {69.3f, 5.12f, 4.02f},
+                   {75.1f, 5.00f, 3.73f}, {80.1f, 5.76f, 4.45f}, {81.2f, 6.73f, 4.95f}, {81.5f, 7.37f, 5.08f}, {82.3f, 7.66f, 5.42f},
+                   {84.9f, 7.96f, 6.69f}, {85.5f, 7.28f, 7.28f}};
+// handle centre lines (radius, height) in cm: inside the neck under the rim, out, down the free part (between the
+// handle's outer and inner edges of §2.5), into the shoulder
+const float2 h1B[] = {{5.0f, 107.8f}, {7.5f, 108.2f}, {9.6f, 107.0f}, {10.05f, 103.0f}, {10.1f, 95.0f}, {10.1f, 87.0f}, {10.2f, 81.0f}, {10.9f, 77.6f}, {11.4f, 75.4f}};
+const float2 h1A[] = {{4.8f, 91.5f}, {7.0f, 92.3f}, {8.9f, 91.2f}, {9.35f, 87.5f}, {9.3f, 78.0f}, {9.4f, 68.0f}, {9.6f, 62.5f}, {10.6f, 60.0f}, {11.4f, 59.0f}};
+const float2 h24[] = {{4.5f, 90.0f}, {7.5f, 90.6f}, {9.9f, 89.0f}, {10.2f, 86.0f}, {9.7f, 81.0f}, {9.3f, 75.5f}, {9.4f, 72.5f}, {9.9f, 70.6f}, {10.0f, 69.9f}};
+const float2 hL2[] = {{4.6f, 78.0f}, {8.0f, 79.0f}, {10.8f, 78.0f}, {11.4f, 75.0f}, {11.4f, 68.0f}, {11.4f, 61.5f}, {12.0f, 58.5f}, {12.2f, 56.6f}};
+
+template <size_t N, size_t H>
+KoyAmphoraType makeType(const char* name, const Row (&rows)[N], const float2 (&hp)[H], float hr, float ht, bool dbl, float fill) {
+    KoyAmphoraType t;
+    t.name = name;
+    for (const Row& r : rows) {
+        t.outer.push_back(make_float2(r.ro * 0.01f, r.z * 0.01f));
+        if (r.ri >= 0.0f) t.inner.push_back(make_float2(r.ri * 0.01f, r.z * 0.01f));
+    }
+    for (const float2& p : hp) t.handle.push_back(make_float2(p.x * 0.01f, p.y * 0.01f));
+    t.handleR = hr;
+    t.handleT = ht;
+    t.doubleRod = dbl;
+    t.fillDepth = fill;
+    return t;
+}
 const KoyAmphoraType kTypes[] = {
-    {"Dressel 1B",
-     {{0.000f, 0.000f}, {0.018f, 0.008f}, {0.025f, 0.035f}, {0.027f, 0.085f}, {0.033f, 0.125f}, {0.052f, 0.155f}, {0.086f, 0.195f},
-      {0.112f, 0.255f}, {0.130f, 0.335f}, {0.141f, 0.425f}, {0.148f, 0.515f}, {0.150f, 0.595f}, {0.149f, 0.655f}, {0.144f, 0.695f},
-      {0.126f, 0.716f}, {0.098f, 0.740f}, {0.074f, 0.766f}, {0.060f, 0.797f}, {0.056f, 0.848f}, {0.054f, 0.948f}, {0.055f, 1.018f},
-      {0.059f, 1.048f}, {0.069f, 1.064f}, {0.073f, 1.080f}, {0.073f, 1.118f}, {0.068f, 1.128f}},
-     0.016f, 0.10f, 1.030f, 0.735f, 0.104f, 0.036f, 0.024f},
-    {"Dressel 1A",
-     {{0.000f, 0.000f}, {0.017f, 0.008f}, {0.024f, 0.032f}, {0.026f, 0.075f}, {0.033f, 0.110f}, {0.058f, 0.140f}, {0.094f, 0.180f},
-      {0.120f, 0.240f}, {0.136f, 0.320f}, {0.145f, 0.410f}, {0.150f, 0.500f}, {0.150f, 0.570f}, {0.146f, 0.625f}, {0.132f, 0.655f},
-      {0.104f, 0.680f}, {0.078f, 0.705f}, {0.062f, 0.735f}, {0.057f, 0.790f}, {0.055f, 0.880f}, {0.056f, 0.930f}, {0.062f, 0.950f},
-      {0.072f, 0.962f}, {0.074f, 0.990f}, {0.069f, 1.000f}},
-     0.015f, 0.09f, 0.915f, 0.680f, 0.100f, 0.034f, 0.023f},
-    {"Lamboglia 2",
-     {{0.000f, 0.000f}, {0.020f, 0.008f}, {0.030f, 0.030f}, {0.034f, 0.060f}, {0.050f, 0.090f}, {0.085f, 0.130f}, {0.125f, 0.200f},
-      {0.150f, 0.290f}, {0.163f, 0.390f}, {0.166f, 0.480f}, {0.160f, 0.560f}, {0.140f, 0.620f}, {0.110f, 0.660f}, {0.080f, 0.690f},
-      {0.064f, 0.720f}, {0.060f, 0.780f}, {0.061f, 0.840f}, {0.066f, 0.860f}, {0.080f, 0.872f}, {0.082f, 0.910f}, {0.076f, 0.920f}},
-     0.017f, 0.09f, 0.835f, 0.660f, 0.108f, 0.040f, 0.026f},
-    {"Dressel 2-4",
-     {{0.000f, 0.000f}, {0.016f, 0.010f}, {0.022f, 0.050f}, {0.024f, 0.100f}, {0.030f, 0.140f}, {0.060f, 0.170f}, {0.098f, 0.215f},
-      {0.118f, 0.290f}, {0.128f, 0.380f}, {0.131f, 0.480f}, {0.130f, 0.560f}, {0.124f, 0.610f}, {0.108f, 0.650f}, {0.084f, 0.680f},
-      {0.064f, 0.705f}, {0.054f, 0.740f}, {0.050f, 0.820f}, {0.050f, 0.880f}, {0.055f, 0.905f}, {0.062f, 0.915f}, {0.062f, 0.940f},
-      {0.057f, 0.948f}},
-     0.014f, 0.08f, 0.860f, 0.665f, 0.096f, 0.040f, 0.022f},
+    makeType("Dressel 1B", k1B, h1B, 0.033f, 0.054f, false, 0.12f),
+    makeType("Dressel 1A", k1A, h1A, 0.031f, 0.054f, false, 0.10f),
+    makeType("Lamboglia 2", kL2, hL2, 0.035f, 0.033f, false, 0.08f),
+    makeType("Dressel 2-4", k24, h24, 0.033f, 0.052f, true, 0.09f),
 };
 
 float radiusAt(const std::vector<float2>& p, float h) {
@@ -46,6 +76,38 @@ float radiusAt(const std::vector<float2>& p, float h) {
             return p[k - 1].x + (p[k].x - p[k - 1].x) * t;
         }
     return p.back().x;
+}
+
+// a polyline (radius, height) turned about the axis: rings of S + 1 vertices, normals from the profile's own
+// perpendicular (flipped for the cavity's wall, which faces the axis)
+void lathe(KMeshCPU& m, const std::vector<float2>& prof, int S, bool facingAxis, float vOffset) {
+    const float twoPi = 6.2831853f, uLen = twoPi * 0.15f;
+    const int R = int(prof.size());
+    const unsigned base = unsigned(m.pos.size());
+    float arc = vOffset;
+    for (int k = 0; k < R; ++k) {
+        if (k > 0) arc += std::hypot(prof[k].x - prof[k - 1].x, prof[k].y - prof[k - 1].y);
+        const float2 a = prof[std::max(k - 1, 0)], b = prof[std::min(k + 1, R - 1)];
+        float nr = (b.y - a.y), nh = -(b.x - a.x);   // outward for a profile going up the outside
+        if (facingAxis) { nr = -nr; nh = -nh; }
+        const float L = std::max(std::hypot(nr, nh), 1e-6f);
+        nr /= L;
+        nh /= L;
+        for (int s = 0; s <= S; ++s) {
+            const float ph = twoPi * float(s) / float(S);
+            const float c = std::cos(ph), sn = std::sin(ph);
+            m.pos.push_back(make_float3(prof[k].x * c, prof[k].y, prof[k].x * sn));
+            m.nrm.push_back(make_float3(nr * c, nh, nr * sn));
+            m.uv.push_back(make_float2(uLen * float(s) / float(S), arc));
+        }
+    }
+    for (int k = 0; k + 1 < R; ++k)
+        for (int s = 0; s < S; ++s) {
+            const unsigned a = base + unsigned(k * (S + 1) + s), b = a + 1, c = a + unsigned(S + 1), d = c + 1;
+            if (prof[k].x < 1e-5f && prof[k + 1].x < 1e-5f) continue;   // a degenerate band on the axis
+            m.idx.push_back(make_uint3(a, c, b));
+            m.idx.push_back(make_uint3(b, c, d));
+        }
 }
 
 }   // namespace
@@ -60,86 +122,78 @@ KMeshCPU koyBuildAmphora(const KoyAmphoraType& t, int segments, unsigned int mat
     m.id = id;
     const int S = std::max(8, segments);
     const float twoPi = 6.2831853f;
-    // the profile walked from the toe up the outside, over the rim and down the inside of the neck to the fill
-    std::vector<float2> prof = t.outer;   // (r, h)
-    std::vector<int> inward;               // 1 where the surface faces the axis (the inside)
-    inward.assign(prof.size(), 0);
+    // the outside, from the foot up over the rim's top (the profile closes onto the inner radius at the top)
+    lathe(m, t.outer, S, false, 0.0f);
+    // the inside of the mouth and neck, from the rim down to the sediment that fills the jar
     const float hTop = t.outer.back().y, hFill = hTop - t.fillDepth;
-    const float rimIn = std::max(t.outer.back().x - t.wall * 1.1f, 0.01f);
-    for (int k = 0; k <= 8; ++k) {   // the inside of the mouth and neck, the wall following the outside
-        const float h = hTop - 0.004f - (hTop - 0.004f - hFill) * float(k) / 8.0f;
-        const float r = std::max(std::min(radiusAt(t.outer, h) - t.wall, rimIn), 0.01f);
-        prof.push_back(make_float2(r, h));
-        inward.push_back(1);
+    std::vector<float2> in;
+    for (size_t k = t.inner.size(); k-- > 0;) {
+        if (t.inner[k].y < hFill) break;
+        in.push_back(make_float2(t.inner[k].x, t.inner[k].y));
     }
-    prof.push_back(make_float2(0.0f, hFill));   // the sediment's face across the neck (a disc, facing up)
-    inward.push_back(2);
-    const int R = int(prof.size());
-    // arc length along the profile (v), and the normals: the profile's own perpendicular turned about the axis
-    std::vector<float> arc(R, 0.0f);
-    for (int k = 1; k < R; ++k) arc[k] = arc[k - 1] + std::hypot(prof[k].x - prof[k - 1].x, prof[k].y - prof[k - 1].y);
-    const float uLen = twoPi * 0.15f;   // u in metres of the widest girth: the same texel size on every jar
-    for (int k = 0; k < R; ++k) {
-        const float2 a = prof[std::max(k - 1, 0)], b = prof[std::min(k + 1, R - 1)];
-        float nr = (b.y - a.y), nh = -(b.x - a.x);   // outward for a profile going up the outside
-        if (inward[k] == 1) { nr = -std::fabs(nr) - 1e-4f; nh = -nh; }
-        if (inward[k] == 2) { nr = 0.0f; nh = 1.0f; }
-        const float L = std::max(std::hypot(nr, nh), 1e-6f);
-        nr /= L;
-        nh /= L;
+    in.push_back(make_float2(radiusAt(t.inner, hFill), hFill));
+    // walking down the inside: the profile goes downwards, so its outward perpendicular already faces the axis
+    lathe(m, in, S, false, 0.0f);
+    // the sediment's face across the neck (a disc, facing up)
+    {
+        const float r = in.back().x;
+        const unsigned c0 = unsigned(m.pos.size());
+        m.pos.push_back(make_float3(0.0f, hFill, 0.0f));
+        m.nrm.push_back(make_float3(0.0f, 1.0f, 0.0f));
+        m.uv.push_back(make_float2(0.0f, 0.0f));
         for (int s = 0; s <= S; ++s) {
             const float ph = twoPi * float(s) / float(S);
-            const float c = std::cos(ph), sn = std::sin(ph);
-            m.pos.push_back(make_float3(prof[k].x * c, prof[k].y, prof[k].x * sn));
-            m.nrm.push_back(make_float3(nr * c, nh, nr * sn));
-            m.uv.push_back(make_float2(uLen * float(s) / float(S), arc[k]));
+            m.pos.push_back(make_float3(r * std::cos(ph), hFill, r * std::sin(ph)));
+            m.nrm.push_back(make_float3(0.0f, 1.0f, 0.0f));
+            m.uv.push_back(make_float2(r * std::cos(ph), r * std::sin(ph)));
         }
+        for (int s = 0; s < S; ++s) m.idx.push_back(make_uint3(c0, c0 + 1 + unsigned(s) + 1, c0 + 1 + unsigned(s)));
     }
-    for (int k = 0; k + 1 < R; ++k)
-        for (int s = 0; s < S; ++s) {
-            const unsigned a = unsigned(k * (S + 1) + s), b = a + 1, c = a + unsigned(S + 1), d = c + 1;
-            m.idx.push_back(make_uint3(a, c, b));
-            m.idx.push_back(make_uint3(b, c, d));
-        }
-    // two handles: a tube of elliptic section swept along an arc from the neck out and down to the shoulder; their ends
-    // sink into the jar (the ray tracer needs no seam)
-    const int HS = 24, HC = 12;
+    // two handles: a section swept along the centre line (Catmull-Rom between its points), elliptic (radial x
+    // tangential), or two round rods side by side for the bifid Dressel 2-4 handle; their ends sink into the jar
+    const int HC = 12;
+    auto curve = [&](float u) {   // u in 0..1 along the centre line
+        const int n = int(t.handle.size());
+        const float f = u * float(n - 1);
+        const int i = std::min(int(f), n - 2);
+        const float s = f - float(i);
+        const float2 p0 = t.handle[std::max(i - 1, 0)], p1 = t.handle[i], p2 = t.handle[i + 1], p3 = t.handle[std::min(i + 2, n - 1)];
+        const float s2 = s * s, s3 = s2 * s;
+        const float a0 = -0.5f * s3 + s2 - 0.5f * s, a1 = 1.5f * s3 - 2.5f * s2 + 1.0f, a2 = -1.5f * s3 + 2.0f * s2 + 0.5f * s, a3 = 0.5f * s3 - 0.5f * s2;
+        return make_float2(p0.x * a0 + p1.x * a1 + p2.x * a2 + p3.x * a3, p0.y * a0 + p1.y * a1 + p2.y * a2 + p3.y * a3);
+    };
+    const int HS = 40;
     for (int side = 0; side < 2; ++side) {
         const float ang = side == 0 ? 0.0f : 3.14159265f;
         const float3 out = make_float3(std::cos(ang), 0.0f, std::sin(ang)), tan = make_float3(-std::sin(ang), 0.0f, std::cos(ang));
-        const float rN = radiusAt(t.outer, t.handleTop), rS = radiusAt(t.outer, t.handleBottom);
-        auto path = [&](float u) {   // u 0 at the neck .. 1 at the shoulder: radius and height
-            const float r0 = rN - 0.01f, r3 = rS - 0.012f;
-            const float h0 = t.handleTop, h3 = t.handleBottom;
-            const float r1 = t.handleOut, h1 = t.handleTop + 0.012f, r2 = t.handleOut + 0.004f, h2 = t.handleBottom + 0.10f;
-            const float v = 1.0f - u;
-            const float r = v * v * v * r0 + 3 * v * v * u * r1 + 3 * v * u * u * r2 + u * u * u * r3;
-            const float h = v * v * v * h0 + 3 * v * v * u * h1 + 3 * v * u * u * h2 + u * u * u * h3;
-            return make_float2(r, h);
-        };
-        const unsigned base = unsigned(m.pos.size());
-        for (int i = 0; i <= HS; ++i) {
-            const float u = float(i) / HS;
-            const float2 p = path(u), q = path(std::min(u + 0.01f, 1.0f)), o = path(std::max(u - 0.01f, 0.0f));
-            const float dr = q.x - o.x, dh = q.y - o.y, L = std::max(std::hypot(dr, dh), 1e-6f);
-            // the section's frame: along the jar's circumference (tan) and across in the profile plane
-            const float3 T = make_float3(out.x * dr / L, dh / L, out.z * dr / L);
-            const float3 Nn = normalize(cross(tan, T));
-            for (int c = 0; c <= HC; ++c) {
-                const float ph = twoPi * float(c) / float(HC);
-                const float3 dir = tan * (0.5f * t.handleW * std::cos(ph)) + Nn * (0.5f * t.handleT * std::sin(ph));
-                const float3 nrm = normalize(tan * (std::cos(ph) / (0.5f * t.handleW)) + Nn * (std::sin(ph) / (0.5f * t.handleT)));
-                m.pos.push_back(make_float3(out.x * p.x, p.y, out.z * p.x) + dir);
-                m.nrm.push_back(nrm);
-                m.uv.push_back(make_float2(0.5f * (t.handleW + t.handleT) * 3.14159265f * float(c) / float(HC), 0.6f * u));
+        const int rods = t.doubleRod ? 2 : 1;
+        for (int rod = 0; rod < rods; ++rod) {
+            // a single handle: the full section; a bifid one: two rods of the radial size, side by side tangentially
+            const float halfR = 0.5f * t.handleR, halfT = t.doubleRod ? 0.5f * t.handleR : 0.5f * t.handleT;
+            const float shift = t.doubleRod ? (rod == 0 ? -1.0f : 1.0f) * (0.5f * t.handleT - halfT) : 0.0f;
+            const unsigned base = unsigned(m.pos.size());
+            for (int i = 0; i <= HS; ++i) {
+                const float u = float(i) / HS;
+                const float2 p = curve(u), q = curve(std::min(u + 0.01f, 1.0f)), o = curve(std::max(u - 0.01f, 0.0f));
+                const float dr = q.x - o.x, dh = q.y - o.y, L = std::max(std::hypot(dr, dh), 1e-6f);
+                const float3 T = make_float3(out.x * dr / L, dh / L, out.z * dr / L);   // along the handle
+                const float3 Nn = normalize(cross(tan, T));                                 // radial-ish, in the profile plane
+                for (int c = 0; c <= HC; ++c) {
+                    const float ph = twoPi * float(c) / float(HC);
+                    const float3 dir = Nn * (halfR * std::cos(ph)) + tan * (halfT * std::sin(ph) + shift);
+                    const float3 nrm = normalize(Nn * (std::cos(ph) / halfR) + tan * (std::sin(ph) / halfT));
+                    m.pos.push_back(make_float3(out.x * p.x, p.y, out.z * p.x) + dir);
+                    m.nrm.push_back(nrm);
+                    m.uv.push_back(make_float2(float(c) / HC * 0.15f, 0.6f * u));
+                }
             }
+            for (int i = 0; i < HS; ++i)
+                for (int c = 0; c < HC; ++c) {
+                    const unsigned a = base + unsigned(i * (HC + 1) + c), b = a + 1, cc = a + unsigned(HC + 1), d = cc + 1;
+                    m.idx.push_back(make_uint3(a, cc, b));
+                    m.idx.push_back(make_uint3(b, cc, d));
+                }
         }
-        for (int i = 0; i < HS; ++i)
-            for (int c = 0; c < HC; ++c) {
-                const unsigned a = base + unsigned(i * (HC + 1) + c), b = a + 1, cc = a + unsigned(HC + 1), d = cc + 1;
-                m.idx.push_back(make_uint3(a, cc, b));
-                m.idx.push_back(make_uint3(b, cc, d));
-            }
     }
     return m;
 }

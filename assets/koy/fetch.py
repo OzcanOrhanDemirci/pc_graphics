@@ -58,6 +58,16 @@ FILES = {
                                         'b3866a4a280e19070d3cd5ebe714184508fae00520582a5f7e1066a12b322051'),
     'Ground054_16K-JPG.zip': ('https://ambientcg.com/get?file=Ground054_16K-JPG.zip',
                               'accbf0efe105003082a40348745f4336d909a6c21fa2abe479ffbe328eacec7e'),
+    # Amfora (2026-10-04 gecesi, docs/koy/AMFORA_KAYNAK.md §3-4): the jars' fired clay (Poly Haven clay_plaster, 2.00 m)
+    # and the concretion over them (coral_fort_wall_01, 1.36 m); Poly Haven md5 checked when pinned
+    'clay_plaster_diff_8k.jpg': ('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/8k/clay_plaster/clay_plaster_diff_8k.jpg',
+                                 '29fc36a48909bd5d4c743ccf8deb98a7886f9427845427ddcf986424a6e8d4a5'),
+    'clay_plaster_nor_gl_8k.jpg': ('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/8k/clay_plaster/clay_plaster_nor_gl_8k.jpg',
+                                   '0a78d8d9c01591e0b71961ce48749df5891f66c88e2337e921ebd9a8e6bbcd82'),
+    'coral_fort_wall_01_diff_8k.jpg': ('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/8k/coral_fort_wall_01/coral_fort_wall_01_diff_8k.jpg',
+                                       '14204ac93866d4ebeaeb4d7c22bd5cbb8072a3c1c2052afecc50773f6b82fdec'),
+    'coral_fort_wall_01_nor_gl_8k.jpg': ('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/8k/coral_fort_wall_01/coral_fort_wall_01_nor_gl_8k.jpg',
+                                         '2ccb8e22c14248adc0d8bd16800f04358cf0bc759562fe4142d17f08e2906140'),
 }
 # members of the sand zip, and their hashes
 SAND = {
@@ -177,7 +187,9 @@ def main():
     # tile) laid over it in world space, the sand at 4K
     sets = (('kaya_model_8k', (('boulder_01_diff_8k.jpg', 'albedo.jpg'), ('boulder_01_nor_gl_8k.jpg', 'normal.jpg'))),
             ('kaya_ayrinti', (('rock_boulder_dry_diff_4k.jpg', 'albedo.jpg'), ('rock_boulder_dry_nor_gl_4k.jpg', 'normal.jpg'))),
-            ('kaya_ayrinti_8k', (('rock_boulder_dry_diff_8k.jpg', 'albedo.jpg'), ('rock_boulder_dry_nor_gl_8k.jpg', 'normal.jpg'))))
+            ('kaya_ayrinti_8k', (('rock_boulder_dry_diff_8k.jpg', 'albedo.jpg'), ('rock_boulder_dry_nor_gl_8k.jpg', 'normal.jpg'))),
+            ('amfora_kil_8k', (('clay_plaster_diff_8k.jpg', 'albedo.jpg'), ('clay_plaster_nor_gl_8k.jpg', 'normal.jpg'))),
+            ('kabuk_8k', (('coral_fort_wall_01_diff_8k.jpg', 'albedo.jpg'), ('coral_fort_wall_01_nor_gl_8k.jpg', 'normal.jpg'))))
     for folder, files in sets:
         d = os.path.join(OUT, folder)
         os.makedirs(d, exist_ok=True)

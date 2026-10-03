@@ -390,6 +390,25 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
     jarM.albedo = cfg.v3("amfora.albedo", make_float3(0.46f, 0.27f, 0.17f));
     jarM.aoStrength = 1.0f;
     floorM.detailSet = rockM.detailSet = leafM.detailSet = archM.detailSet = jarM.detailSet = -1;
+    floorM.coatSet = rockM.coatSet = leafM.coatSet = archM.coatSet = jarM.coatSet = -1;   // not 0: that is a texture set
+    // the sea's coat (KMaterial): the jars heavily, the arch's rock less, the scanned boulder lightly
+    auto coat = [&](KMaterial& M, const char* key, float cover, float scale, float3 tint, float sediment, float film, float mottle) {
+        M.coatSet = setCoat;
+        M.coatTile = cfg.f("tex.coat_tile", 1.36f);
+        M.coatCover = cfg.f((std::string(key) + ".coat_cover").c_str(), cover);
+        M.coatScale = cfg.f((std::string(key) + ".coat_scale").c_str(), scale);
+        M.coatNormal = cfg.f((std::string(key) + ".coat_normal").c_str(), 1.0f);
+        M.coatTint = cfg.v3((std::string(key) + ".coat_tint").c_str(), tint);
+        M.sediment = cfg.f((std::string(key) + ".sediment").c_str(), sediment);
+        M.sedimentColor = cfg.v3("sediment.color", make_float3(0.40f, 0.37f, 0.31f));
+        M.film = cfg.f((std::string(key) + ".film").c_str(), film);
+        M.filmColor = cfg.v3("film.color", make_float3(0.78f, 0.95f, 0.72f));
+        M.mottle = cfg.f((std::string(key) + ".mottle").c_str(), mottle);
+    };
+    if (setCoat >= 0) {
+        coat(jarM, "amfora", 0.55f, 0.22f, make_float3(0.42f, 0.40f, 0.36f), 0.75f, 0.35f, 0.22f);
+        coat(archM, "arch", 0.45f, 0.80f, make_float3(0.30f, 0.28f, 0.25f), 0.55f, 0.40f, 0.30f);
+    }
     materials = {floorM, rockM, leafM, archM, jarM};
 
     meshes.push_back(buildFloor(cfg));
@@ -472,6 +491,20 @@ void KoyWorld::applyTextureMode(const Config& cfg, int mode) {
     r.detailTile = cfg.f("tex.rock_detail_tile", 1.8f);
     r.detailNormal = cfg.f("tex.rock_detail_normal", 0.6f);
     r.detailAlbedo = cfg.f("tex.rock_detail_albedo", 0.35f);
+    // Amfora: the arch's limestone takes the rock's detail scan (the same 16K in Ultra), the jars the clay (8K in both
+    // high modes; 2.00 m pressed to a 1.64 m tile: 0.2 mm a texel, the clay's grain 18 % finer than scanned)
+    if (materials.size() > 4) {
+        KMaterial& a = materials[3];
+        KMaterial& j = materials[4];
+        a.detailSet = high ? rockDetail : -1;
+        a.detailTile = cfg.f("arch.detail_tile", 1.8f);
+        a.detailNormal = cfg.f("arch.detail_normal", 0.9f);
+        a.detailAlbedo = cfg.f("arch.detail_albedo", 0.6f);
+        j.detailSet = high ? setClay : -1;
+        j.detailTile = cfg.f("amfora.detail_tile", 1.64f);
+        j.detailNormal = cfg.f("amfora.detail_normal", 0.8f);
+        j.detailAlbedo = cfg.f("amfora.detail_albedo", 0.55f);
+    }
 }
 
 namespace {
@@ -755,7 +788,7 @@ bool koyLoadTextureSet(const std::string& dir, const std::string& name, KoyTextu
 void KoyWorld::loadTextures(const Config& cfg, const std::string& dir) {
     const auto t0 = std::chrono::steady_clock::now();
     textureBytes = 0;
-    setSand = setRock = setSand4k = setRock8k = setRockDetail = setSand16k = setRockDetail16k = -1;
+    setSand = setRock = setSand4k = setRock8k = setRockDetail = setSand16k = setRockDetail16k = setClay = setCoat = -1;
     if (cfg.f("tex.use", 1.0f) < 0.5f) return;
     struct Slot {
         std::vector<const char*> names;
@@ -766,6 +799,10 @@ void KoyWorld::loadTextures(const Config& cfg, const std::string& dir) {
         slots.push_back({{"kum_8k", "kum_4k"}, &setSand4k});
         slots.push_back({{"kaya_model_8k"}, &setRock8k});
         slots.push_back({{"kaya_ayrinti_8k", "kaya_ayrinti"}, &setRockDetail});
+        if (cfg.i("amfora.use", 0)) {   // the jars' clay and the sea's concretion (on the jars and the arch)
+            slots.push_back({{"amfora_kil_8k"}, &setClay});
+            slots.push_back({{"kabuk_8k"}, &setCoat});
+        }
         if (cfg.i("tex.ultra", 1)) {   // the sand and the rock detail at 16K (panel "Ultra")
             slots.push_back({{"kum_16k"}, &setSand16k});
             slots.push_back({{"kaya_ayrinti_16k"}, &setRockDetail16k});

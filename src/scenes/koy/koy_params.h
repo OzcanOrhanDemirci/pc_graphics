@@ -66,6 +66,20 @@ struct KMaterial {
     float detailTile;    // metres a tile of it covers
     float detailNormal;  // how strongly its normal map bends the surface
     float detailAlbedo;  // how strongly its colour variation (around its own mean) modulates the albedo
+    // Amfora: what the sea laid over it (docs/koy/AMFORA_KAYNAK.md §3.3): a concretion scan in patches (a noise mask in
+    // world space, denser in recesses), a felt of fine sediment on the faces looking up, a thin greenish film on the
+    // sides, and a slow mottling of the colour (no two jars, no two metres of rock alike)
+    int coatSet;         // -1 none
+    float coatTile;      // metres a tile of it covers
+    float coatCover;     // share of the surface it covers (0..1), before recesses and facing
+    float coatScale;     // metres: the size of its patches
+    float coatNormal;    // how strongly its normal map bends the surface
+    float3 coatTint;     // its colour (linear sRGB; the scan's variation around its mean on top)
+    float sediment;      // the felt on upward faces (0..1)
+    float3 sedimentColor;
+    float film;          // the film on the sides (0..1), towards filmColor
+    float3 filmColor;
+    float mottle;        // slow colour variation (0..1)
 };
 
 struct KMesh {

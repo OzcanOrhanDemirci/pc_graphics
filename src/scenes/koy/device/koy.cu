@@ -305,6 +305,85 @@ static __forceinline__ __device__ float sunVisAt(float3 p) {
     return tex3D<float>((cudaTextureObject_t)params.sunVis, q.x, q.y, q.z);
 }
 
+// gradient noise (the load-time builders' kn::noise3, same hash): masks for the concretion and the mottling
+static __forceinline__ __device__ unsigned int nHash(int x, int y, int z) {
+    unsigned int h = unsigned(x) * 73856093u ^ unsigned(y) * 19349663u ^ unsigned(z) * 83492791u;
+    h ^= h >> 13;
+    h *= 0x5bd1e995u;
+    h ^= h >> 15;
+    return h;
+}
+static __forceinline__ __device__ float nGrad(int x, int y, int z, float fx, float fy, float fz) {
+    const unsigned int h = nHash(x, y, z) & 15u;
+    const float u = h < 8 ? fx : fy, v = h < 4 ? fy : (h == 12 || h == 14 ? fx : fz);
+    return ((h & 1u) ? -u : u) + ((h & 2u) ? -v : v);
+}
+static __forceinline__ __device__ float nFade(float t) { return t * t * t * (t * (t * 6.0f - 15.0f) + 10.0f); }
+static __device__ float noise3(float3 p) {
+    const int X = int(floorf(p.x)), Y = int(floorf(p.y)), Z = int(floorf(p.z));
+    const float fx = p.x - X, fy = p.y - Y, fz = p.z - Z;
+    const float u = nFade(fx), v = nFade(fy), w = nFade(fz);
+    return lerpf(lerpf(lerpf(nGrad(X, Y, Z, fx, fy, fz), nGrad(X + 1, Y, Z, fx - 1, fy, fz), u),
+                       lerpf(nGrad(X, Y + 1, Z, fx, fy - 1, fz), nGrad(X + 1, Y + 1, Z, fx - 1, fy - 1, fz), u), v),
+                 lerpf(lerpf(nGrad(X, Y, Z + 1, fx, fy, fz - 1), nGrad(X + 1, Y, Z + 1, fx - 1, fy, fz - 1), u),
+                       lerpf(nGrad(X, Y + 1, Z + 1, fx, fy - 1, fz - 1), nGrad(X + 1, Y + 1, Z + 1, fx - 1, fy - 1, fz - 1), u), v),
+                 w);
+}
+static __device__ float fbm3(float3 p, int oct) {
+    float s = 0.0f, a = 0.5f;
+    for (int k = 0; k < oct; ++k) {
+        s += a * noise3(p);
+        p = p * 2.03f + make_float3(17.3f, 3.1f, 7.7f);
+        a *= 0.5f;
+    }
+    return s;
+}
+
+// A tiling scan laid over in world space by three planar projections (on the floor only the horizontal one), filtered by
+// the ray cone. Returns its colour (the scan's own, linear) and the tilt its normal map gives, in world axes.
+struct Tri {
+    float3 albedo, tilt;
+    bool ok;
+};
+static __device__ Tri triplanar(int set, float tile, float3 p, float3 ng, float width, bool floorOnly) {
+    Tri r;
+    r.albedo = make_float3(0.0f, 0.0f, 0.0f);
+    r.tilt = make_float3(0.0f, 0.0f, 0.0f);
+    r.ok = false;
+    const KTextureSet ds = params.texSets[set];
+    const float inv = 1.0f / tile;
+    const float lodBase = log2f(fmaxf(width * inv * ds.texels, 1e-6f));
+    const float3 an = make_float3(fabsf(ng.x), fabsf(ng.y), fabsf(ng.z));
+    float3 w3 = floorOnly ? make_float3(0.0f, 1.0f, 0.0f) : make_float3(an.x * an.x * an.x * an.x, an.y * an.y * an.y * an.y, an.z * an.z * an.z * an.z);
+    w3 = w3 / fmaxf(w3.x + w3.y + w3.z, 1e-6f);
+    float wsum = 0.0f;
+    for (int ax = 0; ax < 3; ++ax) {
+        const float wa = ax == 0 ? w3.x : ax == 1 ? w3.y : w3.z;
+        if (wa < 0.02f) continue;
+        // the plane's uv, rotated by a fixed angle per axis so the tiles never line up with the scan's own
+        float2 uv = ax == 0 ? make_float2(p.z, p.y) : ax == 1 ? make_float2(p.x, p.z) : make_float2(p.x, p.y);
+        const float ca = 0.8253f, sa = 0.5646f;
+        uv = make_float2((ca * uv.x - sa * uv.y) * inv, (sa * uv.x + ca * uv.y) * inv);
+        const float axisCos = ax == 0 ? an.x : ax == 1 ? an.y : an.z;
+        const float lod = lodBase - log2f(fmaxf(axisCos, 0.25f));
+        r.albedo += f3(tex2DLod<float4>((cudaTextureObject_t)ds.albedo, uv.x, uv.y, lod)) * wa;
+        if (ds.hasNormal) {
+            const float3 t = f3(tex2DLod<float4>((cudaTextureObject_t)ds.normal, uv.x, uv.y, lod)) * 2.0f - make_float3(1.0f, 1.0f, 1.0f);
+            // the tangent-space tilt back into the plane's world axes (undo the fixed rotation)
+            const float tx = ca * t.x + sa * t.y, ty = -sa * t.x + ca * t.y;
+            const float s = (ax == 0 ? ng.x : ax == 1 ? ng.y : ng.z) < 0.0f ? -1.0f : 1.0f;
+            r.tilt += (ax == 0 ? make_float3(0.0f, ty, tx * s) : ax == 1 ? make_float3(tx * s, 0.0f, ty) : make_float3(tx * s, ty, 0.0f)) * wa;
+        }
+        wsum += wa;
+    }
+    if (wsum > 0.0f) {
+        r.albedo = r.albedo / wsum;
+        r.tilt = r.tilt / wsum;
+        r.ok = true;
+    }
+    return r;
+}
+
 // A surface: the scanned material (ray-cone filtered), the direct sun (caustic factor, a shadow ray) and the water's
 // diffuse light (baked occlusion), all seen through tPath metres of water.
 static __forceinline__ __device__ float3 shadeSurface(const Hit& h, float3 d, float tPath, float coneAngle, float& causticOut, float3& nOut) {
@@ -345,46 +424,53 @@ static __forceinline__ __device__ float3 shadeSurface(const Hit& h, float3 d, fl
             n = dot(nn, h.ng) > 0.02f ? nn : n;
         }
     }
-    // the detail layer: a tiling scan laid over in world space (planar on the floor, triplanar on rocks), its colour
-    // modulating around its own mean, its normal map bending the surface: grain that holds up at 30 cm
+    // the detail layer: a tiling scan laid over in world space (planar on the floor, triplanar on rocks and jars), its
+    // colour modulating around its own mean, its normal map bending the surface: grain that holds up at 30 cm
     if (m.detailSet >= 0) {
-        const KTextureSet ds = params.texSets[m.detailSet];
-        const float inv = 1.0f / m.detailTile;
-        const float lodBase = log2f(fmaxf(width * inv * ds.texels, 1e-6f));
-        float3 dAlb = make_float3(0.0f, 0.0f, 0.0f), dPert = make_float3(0.0f, 0.0f, 0.0f);
-        float wsum = 0.0f;
-        const float3 an = make_float3(fabsf(h.ng.x), fabsf(h.ng.y), fabsf(h.ng.z));
-        float3 w3 = m.kind == KM_TERRAIN ? make_float3(0.0f, 1.0f, 0.0f) : make_float3(an.x * an.x * an.x * an.x, an.y * an.y * an.y * an.y, an.z * an.z * an.z * an.z);
-        const float ws = w3.x + w3.y + w3.z;
-        w3 = w3 / fmaxf(ws, 1e-6f);
-        for (int ax = 0; ax < 3; ++ax) {
-            const float wa = ax == 0 ? w3.x : ax == 1 ? w3.y : w3.z;
-            if (wa < 0.02f) continue;
-            // the plane's uv (rotated by a fixed angle per axis so the tiles never line up with the scan's own)
-            float2 uv = ax == 0 ? make_float2(h.p.z, h.p.y) : ax == 1 ? make_float2(h.p.x, h.p.z) : make_float2(h.p.x, h.p.y);
-            const float ca = 0.8253f, sa = 0.5646f;
-            uv = make_float2((ca * uv.x - sa * uv.y) * inv, (sa * uv.x + ca * uv.y) * inv);
-            const float axisCos = ax == 0 ? an.x : ax == 1 ? an.y : an.z;
-            const float lod = lodBase - log2f(fmaxf(axisCos, 0.25f));
-            const float3 a = f3(tex2DLod<float4>((cudaTextureObject_t)ds.albedo, uv.x, uv.y, lod));
-            dAlb += a * wa;
-            if (ds.hasNormal) {
-                const float3 t = f3(tex2DLod<float4>((cudaTextureObject_t)ds.normal, uv.x, uv.y, lod)) * 2.0f - make_float3(1.0f, 1.0f, 1.0f);
-                // the tangent-space tilt back into the plane's world axes (undo the fixed rotation)
-                const float tx = ca * t.x + sa * t.y, ty = -sa * t.x + ca * t.y;
-                const float s = (ax == 0 ? h.ng.x : ax == 1 ? h.ng.y : h.ng.z) < 0.0f ? -1.0f : 1.0f;
-                const float3 pert = ax == 0 ? make_float3(0.0f, ty, tx * s) : ax == 1 ? make_float3(tx * s, 0.0f, ty) : make_float3(tx * s, ty, 0.0f);
-                dPert += pert * wa;
-            }
-            wsum += wa;
-        }
-        if (wsum > 0.0f) {
-            dAlb = dAlb / wsum;
-            const float3 rel = make_float3(dAlb.x / fmaxf(ds.meanAlbedo.x, 1e-3f), dAlb.y / fmaxf(ds.meanAlbedo.y, 1e-3f), dAlb.z / fmaxf(ds.meanAlbedo.z, 1e-3f));
+        const Tri t = triplanar(m.detailSet, m.detailTile, h.p, h.ng, width, m.kind == KM_TERRAIN);
+        if (t.ok) {
+            const float3 mean = params.texSets[m.detailSet].meanAlbedo;
+            const float3 rel = make_float3(t.albedo.x / fmaxf(mean.x, 1e-3f), t.albedo.y / fmaxf(mean.y, 1e-3f), t.albedo.z / fmaxf(mean.z, 1e-3f));
             albedo = albedo * (make_float3(1.0f, 1.0f, 1.0f) + (rel - make_float3(1.0f, 1.0f, 1.0f)) * m.detailAlbedo);
-            const float3 nn = normalize(n + (dPert / wsum) * m.detailNormal);
+            const float3 nn = normalize(n + t.tilt * m.detailNormal);
             n = dot(nn, h.ng) > 0.05f ? nn : n;
         }
+    }
+    // Amfora: what the sea laid over it. A slow mottling first (no two jars, no two metres of rock alike), the greenish
+    // film on the sides, the concretion in patches (recesses gather more, faces down in the sand's reach less: the sand
+    // scours them), and the felt of fine sediment on everything that looks up (docs/koy/AMFORA_KAYNAK.md §3.3)
+    auto sstep = [](float a, float b, float x) {
+        const float t = fminf(fmaxf((x - a) / (b - a), 0.0f), 1.0f);
+        return t * t * (3.0f - 2.0f * t);
+    };
+    if (m.mottle > 0.0f) albedo = albedo * (1.0f + m.mottle * 2.0f * fbm3(h.p * 1.7f + make_float3(5.0f, 1.0f, 3.0f), 3));
+    if (m.film > 0.0f) {
+        const float side = 1.0f - sstep(0.2f, 0.7f, n.y);
+        albedo = albedo + (albedo * m.filmColor - albedo) * (m.film * side);
+    }
+    if (m.coatSet >= 0) {
+        const float nv = fbm3(h.p * (1.0f / m.coatScale), 4);
+        const float recess = (1.0f - h.ao) * sstep(-0.4f, 0.0f, n.y);
+        const float scour = sstep(-0.2f, -0.7f, n.y);
+        const float mask = sstep(-0.10f, 0.10f, nv + 1.2f * (m.coatCover - 0.5f) + 0.9f * recess - 0.5f * scour);
+        if (mask > 0.01f) {
+            const Tri c = triplanar(m.coatSet, m.coatTile, h.p, h.ng, width, false);
+            if (c.ok) {
+                const float3 mean = params.texSets[m.coatSet].meanAlbedo;
+                const float3 rel = make_float3(c.albedo.x / fmaxf(mean.x, 1e-3f), c.albedo.y / fmaxf(mean.y, 1e-3f), c.albedo.z / fmaxf(mean.z, 1e-3f));
+                const float3 ca = m.coatTint * rel;
+                albedo = albedo + (ca - albedo) * mask;
+                const float3 nn = normalize(n + c.tilt * (m.coatNormal * mask));
+                n = dot(nn, h.ng) > 0.05f ? nn : n;
+            }
+        }
+    }
+    if (m.sediment > 0.0f) {
+        const float up = sstep(0.30f, 0.85f, n.y);
+        const float s = m.sediment * up * (0.55f + 0.45f * sstep(-0.25f, 0.25f, fbm3(h.p * 3.1f + make_float3(2.0f, 7.0f, 1.0f), 3)));
+        albedo = albedo + (m.sedimentColor - albedo) * s;
+        const float3 nn = normalize(n + (h.ng - n) * (0.6f * s));   // the felt fills the fine relief
+        n = dot(nn, h.ng) > 0.05f ? nn : n;
     }
     // the sand ripples (world-space normal map, ray-cone filtered: sharp near, averaged out far)
     if (m.kind == KM_TERRAIN && params.rippleTex && fabsf(h.p.x) < params.rippleHalf && fabsf(h.p.z) < params.rippleHalf) {

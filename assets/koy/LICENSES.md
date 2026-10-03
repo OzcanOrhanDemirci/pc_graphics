@@ -13,3 +13,14 @@ Bu klasördeki taramalar depoya girmez; `python assets/koy/fetch.py` indirir ve 
 | `cc0/kaya_ayrinti_8k` | Poly Haven, rock_boulder_dry, 8K | CC0 1.0 |
 | `cc0/kum_16k` | ambientCG, Ground054, 16K | CC0 1.0 |
 | `cc0/kaya_ayrinti_16k` | Poly Haven, rock_boulder_dry, 16K | CC0 1.0 |
+| `cc0/amfora_kil_8k` | Poly Haven, clay_plaster, 8K (https://polyhaven.com/a/clay_plaster), 2,00 m (amforada 1,64 m'lik karo) | CC0 1.0 |
+| `cc0/kabuk_8k` | Poly Haven, coral_fort_wall_01, 8K (https://polyhaven.com/a/coral_fort_wall_01), 1,36 m | CC0 1.0 |
+
+## Atıf zorunlu (CC BY 4.0)
+
+Amforaların profilleri (dış, iç, kulplar) koda tablo olarak yazıldı (`src/scenes/koy/koy_amphora.cpp`), dosya indirilmiyor:
+
+- ArchAIDE consortium (2019), Southampton çizimlerinin vektör profilleri: Dressel_1_DR105 (Dressel 1B), DR104 (Dressel 1A),
+  Dressel_2-4_Italian_DR139, Lamboglia_2_DR136. https://doi.org/10.5284/1050896 · CC BY 4.0
+- Çizimler: Penny Copeland, University of Southampton (2014), *Roman Amphorae: a digital resource*.
+  https://doi.org/10.5284/1028192 · CC BY 4.0
