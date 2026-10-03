@@ -139,7 +139,7 @@ our own, whatever the physics says:
 - **Water** poured from a tilting beaker into a tumbler, from 12 to 45 cm: it splashes, overflows, pools on the table.
 - **Honey** off a dipper onto a glass dish (live, drag the dipper with the mouse): one amber thread that folds and
   coils on the dish, then spreads into a pool.
-- **Sand** from a funnel onto the table and into a beaker (live): it heaps at 32.5° (dry sand: 30-35°); drop steel balls where you click.
+- **Sand** from a funnel onto the table and into a beaker (live): it heaps at 32.5° (dry sand: 30-35°).
 - **A water balloon** on the table, pricked with a needle: the rubber peels back in 20-30 ms while the water keeps the
   balloon's shape for a moment, then slumps.
 - **A watermelon** shot with a rifle (5.56, 7.62×51, .50 BMG; real loads): it swells for a few milliseconds, then the
@@ -176,8 +176,8 @@ flowing is the scene.
 How each is made, and what was measured on the way (the Turkish working journal has it all,
 [docs/laboratuvar/DURUM.md](docs/laboratuvar/DURUM.md)):
 
-- **One solver** (after NVIDIA FleX): Position Based Fluids for water and honey, XPBD bonds for rubber and melon,
-  shape matching for the steel ball, grains for sand; a melon particle that has lost all its bonds turns to juice.
+- **One solver** (after NVIDIA FleX): Position Based Fluids for water and honey, XPBD bonds for rubber, melon and gel,
+  grains for sand; a melon particle that has lost all its bonds turns to juice.
   Glass ware is one layer of kinematic particles over the glass's surface, moved with the hand that tilts it.
 - **Water** leaves the lip as one rope only with a little viscosity, cohesion and surface tension (without them it
   frayed into noodles at once; four variants compared by eye).

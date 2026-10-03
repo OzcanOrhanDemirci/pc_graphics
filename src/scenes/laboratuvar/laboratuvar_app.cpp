@@ -199,9 +199,8 @@ void LaboratuvarApp::setupScene(Deney d, int maxParticles, const std::vector<uin
         grainsPer = cfg.i("kum.tane_sayisi", 4);
         grainsCap = maxParticles * grainsPer;
         objGrains = R.addSpheres(grainsCap, mSand, true);
-        objBall = R.addSpheres(std::max(1, cfg.i("kum.bilye_sayisi", 6)), matSteel, false);
     } else {
-        objGrains = objBall = -1;
+        objGrains = -1;
     }
     if (d == Deney::Karpuz) {
         FluidSurfaceSettings k = S;
@@ -264,15 +263,6 @@ void LaboratuvarApp::draw(const DrawInput& in) {
                      cfg.f("kum.tane_en_buyuk", 0.17f) * in.spacing, R.spheresBuffer(objGrains), R.tintBuffer(objGrains), st);
         R.setSphereCount(objGrains, m * grainsPer);
     }
-    if (objBall >= 0) {
-        if (in.ballFirst >= 0 && in.ballN > 0) {
-            const int m = std::min(in.ballN, std::max(1, cfg.i("kum.bilye_sayisi", 6)));
-            for (int b = 0; b < m; ++b) launchCentre(in.pos, in.ballFirst + b * in.ballCount, in.ballCount, in.ballRadius, R.spheresBuffer(objBall) + b, st);
-            R.setSphereCount(objBall, m);
-        } else {
-            R.setSphereCount(objBall, 0);
-        }
-    }
     if (objMembrane >= 0 && in.membraneFirst >= 0) {
         launchMembrane(in.pos, in.membraneFirst, dMemTris, memTris, cfg.f("balon.yirtilma", 2.6f) * in.spacing, R.meshIndices(objMembrane), dMemCount,
                        R.meshPositions(objMembrane), R.meshNormals(objMembrane), in.membraneCount, st);
@@ -326,7 +316,6 @@ LabEvent defaultEvent(Deney d, const Config& c) {
         break;
     }
     case Deney::Damla: e.kind = LabEvent::Drop; break;
-    case Deney::Kum: e.kind = LabEvent::Ball; e.a = c.v3("test.bilye", make_float3(0.0f, 0.25f, 0.0f)); break;
     default: break;
     }
     return e;
@@ -468,10 +457,6 @@ int runLaboratuvarCli(int argc, char** argv) {
             in.spacing = rec.spacing();
             in.membraneFirst = rec.membraneFirst;
             in.membraneCount = rec.membraneCount;
-            in.ballFirst = rec.ballFirst;
-            in.ballCount = rec.ballCount;
-            in.ballRadius = rec.ballRadius;
-            in.ballN = rec.ballN;
         } else {
             while (simT + 1e-9 < tt) {
                 w.step(1.0f / 60.0f);
@@ -484,10 +469,6 @@ int runLaboratuvarCli(int argc, char** argv) {
             in.spacing = w.s;
             in.membraneFirst = w.membraneFirst;
             in.membraneCount = w.membraneCount;
-            in.ballFirst = w.ballFirst;
-            in.ballCount = w.ballCount;
-            in.ballRadius = w.ballRadius;
-            in.ballN = w.ballsDropped;
         }
         in.pos = dPos;
         in.code = dCode;
@@ -529,10 +510,6 @@ int runLaboratuvarCli(int argc, char** argv) {
             in.poses = poses;
             in.membraneFirst = w.membraneFirst;
             in.membraneCount = w.membraneCount;
-            in.ballFirst = w.ballFirst;
-            in.ballCount = w.ballCount;
-            in.ballRadius = w.ballRadius;
-            in.ballN = w.ballsDropped;
             app.draw(in);
             app.renderer.render(spp, false);
             app.renderer.download(px);

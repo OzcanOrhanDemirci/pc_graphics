@@ -518,7 +518,7 @@ int App::run(const Options& opt) {
             if (infos_[s].id == "laboratuvar") {
                 // every experiment: live, its trigger on the coarse world, the fine pass asked for, the recording as it
                 // computes and when it plays; the panel by mouse (the time bar, the speed); slow motion on a resting
-                // world; balls where clicked; the gel shot three times
+                // world; the gel shot three times
                 wait(1.0); shot("lab_su_canli");
                 control("eylem", 0); wait(1.2); log("lab su kaba"); shot("lab_su_kaba");
                 control("ince", 0); wait(9.0); log("lab su kayit"); shot("lab_su_kayit");
@@ -531,11 +531,6 @@ int App::run(const Options& opt) {
                 left(false); wait(3.0); shot("lab_bal_gezdi");
                 control("hiz", 2); wait(3.0); log("lab bal x1/100"); shot("lab_bal_yavas"); control("hiz", 0);
                 control("deney", 2); wait(10.0); log("lab kum"); shot("lab_kum");
-                key(GLFW_KEY_B); wait(0.2);
-                mouse(0.42f, 0.66f); wait(0.1); click(); wait(1.2);
-                mouse(0.58f, 0.66f); wait(0.1); click(); wait(0.3); mouse(0.50f, 0.70f); click();   // too soon: not taken
-                wait(2.5); log("lab kum bilye"); shot("lab_kum_bilye");
-                key(GLFW_KEY_B);
                 control("deney", 3); wait(4.0); shot("lab_balon");
                 mouse(0.50f, 0.50f); wait(0.2); click(); wait(0.6); log("lab balon tik"); shot("lab_balon_kaba");   // the needle by the mouse (the log says where)
                 control("ince", 0); wait(12.0); log("lab balon kayit"); shot("lab_balon_kayit");

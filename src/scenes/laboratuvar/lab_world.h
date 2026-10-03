@@ -4,7 +4,7 @@
 // over the glass's surface, a liquid's density counts them (Akinci's psi), so a thin wall holds water.
 //   Su      a beaker of water tilts over a tumbler (its height is set): the water pours, splashes, overflows
 //   Bal     a dipper drips honey (very viscous, sticking to glass) on a glass dish; the dipper follows the mouse
-//   Kum     a funnel pours sand (grains with friction) on the table and into a beaker; steel balls can be dropped
+//   Kum     a funnel pours sand (grains with friction) on the table and into a beaker
 //   Balon   a water balloon (a stretched rubber membrane round water) hangs; a needle pricks it where clicked
 //   Karpuz  a small watermelon (a brittle rind, a soft flesh that turns to juice) on a stand; a rifle shot
 //   Damla   a drop of milk falling into a thin layer of milk in a glass dish: the crown and the jet
@@ -26,7 +26,7 @@ const char* deneyKey(Deney d);            // the settings' prefix: "su", "bal", 
 inline bool deneyRecorded(Deney d) { return d == Deney::Su || d == Deney::Balon || d == Deney::Karpuz || d == Deney::Jel || d == Deney::Damla; }
 
 // what a particle is drawn as (the renderer: a surface each; DC_NONE not drawn: glass walls, a stand)
-enum DrawCode : uint8_t { DC_NONE = 0, DC_WATER = 1, DC_HONEY = 2, DC_SAND = 3, DC_RUBBER = 4, DC_RIND = 5, DC_FLESH = 6, DC_JUICE = 7, DC_STEEL = 8, DC_PITH = 9, DC_GEL = 10, DC_MILK = 11 };
+enum DrawCode : uint8_t { DC_NONE = 0, DC_WATER = 1, DC_HONEY = 2, DC_SAND = 3, DC_RUBBER = 4, DC_RIND = 5, DC_FLESH = 6, DC_JUICE = 7, DC_PITH = 9, DC_GEL = 10, DC_MILK = 11 };
 constexpr int kDrawCodes = 12;   // DC_RIND the green skin, DC_PITH the white rind under it
 
 // what the panel sets: the inputs a recording keeps with its trigger (0..1 each, read per experiment)
@@ -41,12 +41,11 @@ struct LabInputs {
 
 // a trigger (what a recording replays: the first at its time zero, the others at their `at`)
 struct LabEvent {
-    enum Kind : int { None = 0, Pour = 1, Prick = 2, Shot = 3, Ball = 4, Drop = 5 } kind = None;
-    float3 a = make_float3(0, 0, 0);   // Prick: the point; Shot: the muzzle; Ball: where it is let go
+    enum Kind : int { None = 0, Pour = 1, Prick = 2, Shot = 3, Drop = 5 } kind = None;
+    float3 a = make_float3(0, 0, 0);   // Prick: the point; Shot: the muzzle
     float3 b = make_float3(0, 0, 0);   // Shot: the aim point
     float power = 0.5f;
     int gun = 1;            // Shot: 0 pistol, 1 rifle
-    int index = 0;          // Ball: which of the balls
     double at = 0.0;        // seconds after the first trigger (the gel takes several shots)
 };
 
@@ -98,11 +97,6 @@ public:
     // the balloon's membrane: its triangles (indices relative to its first particle) and range
     int membraneFirst = -1, membraneCount = 0;
     std::vector<uint3> membraneTris;
-    // the steel balls (Kum): the first one's particles' range (the others follow it, as many each), their radius;
-    // how many there are, how many have been let go (drawn: the first ballsDropped)
-    int ballFirst = -1, ballCount = 0, ballN = 0, ballsDropped = 0;
-    std::vector<int> ballGroups;
-    float ballRadius = 0.0f;
     // how far the recording's box must reach (the particles that matter stay inside)
     float3 boxLo = make_float3(-0.6f, -0.02f, -0.45f), boxHi = make_float3(0.6f, 0.9f, 0.45f);
     // what a shot is aimed at (Karpuz, Jel): its centre and a radius a click must land within

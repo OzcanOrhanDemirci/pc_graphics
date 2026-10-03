@@ -3,7 +3,20 @@
 > Tek kaynak durum panosu. Plan ve Özcan'ın sözleri `docs/laboratuvar/PLAN.md`'de. Eski "Tanecik" (insan) yolu
 > `docs/tanecik/` ve git etiketi `tanecik-insan-arsiv`'de (arşiv).
 
-## 🔧 Revize 2 · 2026-10-03 öğleden sonra: tıklanan yere bilye, jele çoklu atış, ağır çekim, ince hesap düğmesi
+## 🏁 Sahne tamamlandı · 2026-10-03
+
+Özcan: *"Kumda bilyeyi kaldıralım, içime sinmedi. Onun dışında güzel oldu. Bu sahneyi tamamladık."*
+
+**Revize 3:** kumdaki çelik bilye kaldırıldı (dünyadan, çizimden, panelden, B tuşundan, ayarlardan, testten, belgelerden).
+Kum yalnız huni: sürükle, akış, yükseklik. Çözücünün katı cisim (şekil eşleme) desteği yerinde, çözücü testleri
+kullanıyor; sahnede kullanan kalmadı.
+
+**Son hâl:** yedi deney (su dökme, bal, kum, su balonu, karpuz, balistik jel, süt damlası); canlı görüntü kararlı (revize
+1); ağır çekim yalnız ağır çekim, ince hesap isteğe bağlı, jele saniyede bir çoklu atış (revize 2). Açık kalan, bilerek
+dokunulmayan: ince dünyada jelin ilk atışta ~10 cm havalanması (revize 2'de, ayar Özcan'a soruldu, karar verilmedi),
+süt tacının damlacık perdesi, jel boşluğu dar, karpuz parçaları yumuşak yüzey, balon masada (sabah raporunda).
+
+## 🔧 Revize 2 · 2026-10-03 öğleden sonra: tıklanan yere bilye (revize 3'te kaldırıldı), jele çoklu atış, ağır çekim, ince hesap düğmesi
 
 **Özcan'ın sınaması:** *"Tamam olmuş. Mükemmel değil ama yeterince iyi"*; iki revize: (1) kuma bilye hep aynı yere (solda)
 düşüyor, yeri tıklayarak seçelim; ateşte de aynı mantık, 1 sn arayla birden çok atış (jele 6-7 kez); karpuz ve balonda
@@ -132,7 +145,7 @@ satırından (ya da 1-7). Kareler masaüstünde `Laboratuvar` klasöründe (00 g
 |---|---|---|---|
 | Su | kayıt | beher eğilip bardağa döküyor; yükseklik 12-45 cm | ince 1,5 mm (113 bin su), saniyenin 1/600'ü; düzgün cam şerit, sıçrar, taşar, masada birikir |
 | Bal | canlı | kaşıktan cam tabağa; fareyle gezdir, akış ve yükseklik | kesintisiz kehribar ip, tabakta katlanıp kıvrılır, göle döner |
-| Kum | canlı | huniden masaya ve behere; fareyle gezdir; çelik bilye | yığılma açısı **32,5°** (kuru kum 30-35°); behere koni hâlinde dolar |
+| Kum | canlı | huniden masaya ve behere; fareyle gezdir | yığılma açısı **32,5°** (kuru kum 30-35°); behere koni hâlinde dolar |
 | Su balonu | kayıt | masadaki balona iğne (tıkla ya da Boşluk) | 10 ms'de delik, 20-30 ms'de lastik soyulurken su balon biçiminde, sonra çöker |
 | Karpuz | kayıt | tabanca ya da tüfekle (5,56 → 7,62×51 → .50 BMG, gerçek yükler) | tüfek: ~600 J, birkaç ms şişer, kabuk taç gibi açılır, dağılır; tabanca: açar, kaideden düşürür |
 | Jel | kayıt | 24×10×10 cm balistik jel, tabancayla (.22 → 9 mm → .50 AE) | 9 mm: 24,5 cm'de 329 J; yol boyunca boşluk tüpü, blok sarsılır ve biraz zıplar |

@@ -43,11 +43,9 @@ public:
     int drawnCount() const { return drawn_.load(); }
     float spacing() const { return spacing_; }
     void frameAt(double t, float3* dPos, uint8_t* dCode, PropPose* poses, cudaStream_t st) const;
-    // what the drawing needs from the fine world: the membrane (indices into the drawn set) and the balls
+    // what the drawing needs from the fine world: the membrane (indices into the drawn set)
     int membraneFirst = -1, membraneCount = 0;
     std::vector<uint3> membraneTris;
-    int ballFirst = -1, ballCount = 0, ballN = 0;
-    float ballRadius = 0.0f;
     std::string summary;         // the fine world's counts
 
 private:

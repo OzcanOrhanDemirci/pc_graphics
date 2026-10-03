@@ -86,7 +86,7 @@ kısım hemen izlenir; bitince bir kez gerçek hızda oynar, sonra serbest incel
 |---|---|
 | **Su** | **Yükseklik** çubuğu (12-45 cm; bırakınca beher yeniden kurulur), **Boşluk** ya da **Dök**: beher bardağa dökülür, yüksekten sıçrar ve taşar |
 | **Bal** | canlı; **sol tıkla sürükle**: kaşık imleci izler · **Akış**, **Yükseklik** çubukları · **Boşluk** akıt / durdur |
-| **Kum** | canlı; **Sol tık** seçimi (ya da **B**): **Huniyi gezdir** (sürükle: huni imleci izler, behere doldur ya da masaya yığ) · **Bilye bırak** (tıkladığın yere 28 cm'den, saniyede bir, altı bilye) |
+| **Kum** | canlı; **sol tıkla sürükle**: huni imleci izler (behere doldur ya da masaya yığ) · **Akış**, **Yükseklik** çubukları · **Boşluk** dök / durdur |
 | **Su balonu** | balona **sol tık** (tıkladığın yere iğne) ya da **Boşluk** (önden) |
 | **Karpuz** | **Silah**: tabanca (karpuzu açar, kaideden düşürür) ya da tüfek (dağıtır) · **Mermi** çubuğu (tüfekte 5,56 → 7,62×51 → .50 BMG, gerçek yükler), karpuza **sol tık** (kameradan ateş) ya da **Boşluk** (yandan, ortadan) |
 | **Süt damlası** | **Yükseklik** çubuğu (5-50 cm), **Boşluk** ya da **Damla bırak**: taçı ×1/100'de izle |
@@ -102,5 +102,5 @@ kısım hemen izlenir; bitince bir kez gerçek hızda oynar, sonra serbest incel
 
 **Dene:** balonu patlat, **İnce hesap yap**, kayıt bitince **Zaman**'ı başa çek, **×1/100** seç ve **P**: lastik 20-30 ms'de soyulurken su bir
 an balon biçiminde durur. Suyu en yüksekten (45 cm) dök, sıçramayı ×1/10'da dondurup etrafında dolaş. Kumu bir yere
-yığ (koni ~32°), sonra huniyi behere götür; **B** ile yığına ve kenarına bilyeler bırak. Jele altı yedi kez farklı yerlerden ateş et. Karpuzu ×1/100'de izle: önce şişer, sonra kabuk açılır.
+yığ (koni ~32°), sonra huniyi behere götür. Jele altı yedi kez farklı yerlerden ateş et. Karpuzu ×1/100'de izle: önce şişer, sonra kabuk açılır.
 Ayarlar `scenes/laboratuvar.cfg` (F5 ile).

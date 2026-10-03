@@ -94,8 +94,6 @@ void LabRecording::release() {
     membraneFirst = -1;
     membraneCount = 0;
     membraneTris.clear();
-    ballFirst = -1;
-    ballCount = ballN = 0;
 }
 
 void LabRecording::run(Config cfg, Deney d, LabInputs in) {
@@ -111,7 +109,7 @@ void LabRecording::run(Config cfg, Deney d, LabInputs in) {
     // the first trigger first: it may add particles (a drop), and they must be among the drawn ones and fit the
     // buffers (the later ones only shoot: they add none)
     w.trigger(events_[0]);
-    // the drawn particles, and where the membrane and the balls are among them
+    // the drawn particles, and where the membrane is among them
     std::vector<uint32_t> idx;
     std::vector<int> drawnOf(w.code.size(), -1);
     for (size_t i = 0; i < w.code.size(); ++i)
@@ -124,12 +122,6 @@ void LabRecording::run(Config cfg, Deney d, LabInputs in) {
         membraneFirst = drawnOf[size_t(w.membraneFirst)];
         membraneCount = w.membraneCount;
         membraneTris = w.membraneTris;
-    }
-    if (w.ballFirst >= 0) {
-        ballFirst = drawnOf[size_t(w.ballFirst)];
-        ballCount = w.ballCount;
-        ballRadius = w.ballRadius;
-        ballN = w.ballsDropped;
     }
     spacing_ = w.s;
     // the box: 16 bits an axis

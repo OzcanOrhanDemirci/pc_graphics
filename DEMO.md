@@ -94,7 +94,7 @@ bar). No video: what is kept is the physics, drawn live from any view.
 |---|---|
 | **Water** | the **Height** slider (12-45 cm; let go and the beaker is set up again), **Space** or **Pour**: the beaker pours into the glass; from high up it splashes and overflows |
 | **Honey** | live; **left-drag**: the dipper follows the cursor · **Flow**, **Height** sliders · **Space** run / stop |
-| **Sand** | live; the **Left click** choice (or **B**): **Move the funnel** (drag: the funnel follows the cursor, fill the beaker or heap the table) · **Drop a ball** (where you click, from 28 cm, one a second, six balls) |
+| **Sand** | live; **left-drag**: the funnel follows the cursor (fill the beaker or heap the table) · **Flow**, **Height** sliders · **Space** pour / stop |
 | **Water balloon** | **left click** the balloon (a needle where you click) or **Space** (from the front) |
 | **Watermelon** | **Gun**: pistol (cracks it open, knocks it off the stand) or rifle (blows it apart) · the **Round** slider (rifle: 5.56 → 7.62×51 → .50 BMG, real loads), **left click** the melon (fired from the camera) or **Space** (from the side, through the middle) |
 | **Milk drop** | the **Height** slider (5-50 cm), **Space** or **Let a drop fall**: watch the crown at ×1/100 |
@@ -111,5 +111,5 @@ bar). No video: what is kept is the physics, drawn live from any view.
 **Try:** pop the balloon, **Compute it finely**, when the recording is done pull **Time** back to the start, pick **×1/100** and **P**: the
 rubber peels back in 20-30 ms while the water keeps the balloon's shape for a moment. Pour the water from the highest
 (45 cm), freeze the splash at ×1/10 and fly round it. Heap the sand in one place (a cone of ~32°), then take the funnel
-to the beaker; with **B**, drop balls on the heap and beside it. Shoot the gel six or seven times in different places. Watch the melon at ×1/100: first it swells, then the rind opens.
+to the beaker. Shoot the gel six or seven times in different places. Watch the melon at ×1/100: first it swells, then the rind opens.
 Settings `scenes/laboratuvar.cfg` (F5).

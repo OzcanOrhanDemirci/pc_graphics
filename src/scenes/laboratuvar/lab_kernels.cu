@@ -129,22 +129,6 @@ __global__ void kLerp(const float3* a, float3* b, int n, float t) {
     b[i] = a[i] + (b[i] - a[i]) * t;
 }
 
-__global__ void kCentre(const float3* pos, int first, int count, float r, float4* out) {
-    __shared__ float3 acc[kB];
-    float3 s = make_float3(0, 0, 0);
-    for (int i = threadIdx.x; i < count; i += blockDim.x) s = s + pos[first + i];
-    acc[threadIdx.x] = s;
-    __syncthreads();
-    for (int w = blockDim.x / 2; w > 0; w >>= 1) {
-        if (threadIdx.x < w) acc[threadIdx.x] = acc[threadIdx.x] + acc[threadIdx.x + w];
-        __syncthreads();
-    }
-    if (threadIdx.x == 0) {
-        const float3 c = acc[0] * (1.0f / float(max(count, 1)));
-        out[0] = make_float4(c.x, c.y, c.z, r);
-    }
-}
-
 __global__ void kDenoisePrep(const float4* acc, float k, int n, float4* out) {
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= n) return;
@@ -276,9 +260,6 @@ void launchMembrane(const float3* pos, int first, const uint3* tris, int nTris, 
 }
 void launchGather(const float3* pos, const uint8_t* codes, const uint32_t* idx, int n, float3* outPos, uint8_t* outCodes, cudaStream_t s) {
     if (n > 0) kGather<<<nb(n), kB, 0, s>>>(pos, codes, idx, n, outPos, outCodes);
-}
-void launchCentre(const float3* pos, int first, int count, float r, float4* out, cudaStream_t s) {
-    kCentre<<<1, kB, 0, s>>>(pos, first, count, r, out);
 }
 void launchLerp(const float3* a, float3* b, int n, float t, cudaStream_t s) {
     if (n > 0) kLerp<<<nb(n), kB, 0, s>>>(a, b, n, t);

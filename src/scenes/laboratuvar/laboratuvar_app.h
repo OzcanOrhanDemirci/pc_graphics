@@ -50,7 +50,7 @@ struct LabCam {
     }
 };
 
-// what one picture is drawn from: particles (device), their draw codes, the props' poses, the membrane and the ball
+// what one picture is drawn from: particles (device), their draw codes, the props' poses, the membrane
 struct DrawInput {
     const float3* pos = nullptr;
     const uint8_t* code = nullptr;
@@ -58,8 +58,6 @@ struct DrawInput {
     float spacing = 0.0025f;
     const PropPose* poses = nullptr;
     int membraneFirst = -1, membraneCount = 0;
-    int ballFirst = -1, ballCount = 0, ballN = 0;   // the balls: the first one's range, as many each after it, how many drawn
-    float ballRadius = 0.0f;
 };
 
 struct LaboratuvarApp {
@@ -74,7 +72,7 @@ struct LaboratuvarApp {
     int matGlass = -1, matWood = -1, matSteel = -1;
     int objProp[LabWorld::P_COUNT];
     int surf[kDrawCodes];
-    int objGrains = -1, objBall = -1, objMembrane = -1;
+    int objGrains = -1, objMembrane = -1;
     int grainsPer = 0, grainsCap = 0;
     uint3* dMemTris = nullptr;
     int memTris = 0, memTrisCap = 0;

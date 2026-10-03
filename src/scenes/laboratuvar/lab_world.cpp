@@ -137,10 +137,6 @@ bool LabWorld::build(Deney d, const Config& sceneCfg, bool fine_, const LabInput
     membraneFirst = -1;
     membraneCount = 0;
     membraneTris.clear();
-    ballFirst = -1;
-    ballCount = 0;
-    ballN = ballsDropped = 0;
-    ballGroups.clear();
     sandGroup_ = 0;
     owe_ = 0.0;
     liveSubs_ = 0;
@@ -262,7 +258,7 @@ void LabWorld::buildBal() {
 }
 
 // ---------------------------------------------------------------------------------------------------- Kum
-// a funnel over the table (it follows the mouse) pours sand; a beaker to fill; a steel ball parked aside
+// a funnel over the table (it follows the mouse) pours sand; a beaker to fill
 
 namespace {
 const Glass kSandBeaker{0.034f, 0.085f, 0.002f, 0.004f, 1.0f};
@@ -273,28 +269,6 @@ void LabWorld::buildKum() {
     translation(prop[P_BEAKER].xf, cfg.v3("kum.beher", make_float3(0.075f, 0.0f, 0.0f)));
     const int g = pw.addGroup(0);
     addHeld(sampleProfileWalls(kSandBeaker.profile(), s, 0.75f * s), P_BEAKER, g);
-    // the steel balls: rigid clusters, parked on the table far to the side until they are let go
-    ballRadius = cfg.f("kum.bilye_yaricap", 0.0125f);
-    ballN = std::max(1, cfg.i("kum.bilye_sayisi", 6));
-    const int k = int(std::ceil(ballRadius / s));
-    for (int b = 0; b < ballN; ++b) {
-        const int g = pw.addGroup(PG_RIGID);
-        std::vector<float3> ball;
-        const float3 park = make_float3(2.0f + 3.0f * ballRadius * b, ballRadius, 0.0f);
-        for (int z = -k; z <= k; ++z)
-            for (int y = -k; y <= k; ++y)
-                for (int x = -k; x <= k; ++x) {
-                    const float3 p = make_float3(x * s, y * s, z * s);
-                    if (length(p) <= ballRadius - 0.5f * s) ball.push_back(park + p);
-                }
-        const int first = pw.addParticles(ball, cfg.f("kum.bilye_yogunluk", 7850.0f), g);
-        if (b == 0) {
-            ballFirst = first;
-            ballCount = int(ball.size());
-        }
-        ballGroups.push_back(g);
-        code.insert(code.end(), ball.size(), DC_STEEL);
-    }
     sandGroup_ = pw.addGroup(PG_GRAIN);
     boxLo = make_float3(-0.45f, -0.01f, -0.35f);
     boxHi = make_float3(0.45f, 0.5f, 0.35f);
@@ -620,18 +594,7 @@ void LabWorld::trigger(const LabEvent& e) {
     ev_ = e;
     triggered_ = true;
     tTrigger_ = time();
-    if (e.kind == LabEvent::Ball && ballN > 0) {
-        // the ball asked for (the oldest again once all are out), let go where asked, at rest
-        const int b = ((e.index % ballN) + ballN) % ballN;
-        std::vector<float3> x;
-        pw.readPositions(x);
-        float3 c = make_float3(0, 0, 0);
-        const int first = ballFirst + b * ballCount;
-        for (int i = first; i < first + ballCount; ++i) c = c + x[size_t(i)];
-        c = c * (1.0f / std::max(1, ballCount));
-        pw.placeGroup(ballGroups[size_t(b)], e.a - c, make_float3(0, 0, 0));
-        ballsDropped = std::max(ballsDropped, b + 1);
-    } else if (e.kind == LabEvent::Drop && deney == Deney::Damla) {
+    if (e.kind == LabEvent::Drop && deney == Deney::Damla) {
         // a drop of radius r, a little above the milk, moving down at sqrt(2 g h): as if it fell from h
         const float r = cfg.f("damla.yaricap", 0.0025f);
         const float h = cfg.f("damla.yukseklik_en_az", 0.05f) + in.height * (cfg.f("damla.yukseklik_en_cok", 0.5f) - cfg.f("damla.yukseklik_en_az", 0.05f));
@@ -871,8 +834,8 @@ std::string LabWorld::summary() const {
     int counts[kDrawCodes] = {};
     for (uint8_t c : code) counts[c]++;
     char b[256];
-    std::snprintf(b, sizeof(b), "%s %s: aralik %.2f mm, %d tanecik (cam/kaide %d, su %d, bal %d, kum %d, lastik %d, kabuk %d + %d, et %d, celik %d, jel %d, sut %d)",
+    std::snprintf(b, sizeof(b), "%s %s: aralik %.2f mm, %d tanecik (cam/kaide %d, su %d, bal %d, kum %d, lastik %d, kabuk %d + %d, et %d, jel %d, sut %d)",
                   deneyKey(deney), fine ? "ince" : "kaba", s * 1000.0f, pw.count(), counts[DC_NONE], counts[DC_WATER], counts[DC_HONEY], counts[DC_SAND],
-                  counts[DC_RUBBER], counts[DC_RIND], counts[DC_PITH], counts[DC_FLESH], counts[DC_STEEL], counts[DC_GEL], counts[DC_MILK]);
+                  counts[DC_RUBBER], counts[DC_RIND], counts[DC_PITH], counts[DC_FLESH], counts[DC_GEL], counts[DC_MILK]);
     return b;
 }

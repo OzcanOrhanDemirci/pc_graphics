@@ -139,7 +139,7 @@ ne derse o:
 - **Su** eğilen bir beherden bardağa dökülür, 12 ile 45 cm arasından: sıçrar, taşar, masada birikir.
 - **Bal** kaşıktan cam tabağa (canlı, kaşığı fareyle gezdir): tek kehribar ip, tabakta katlanıp kıvrılır, sonra göle
   yayılır.
-- **Kum** huniden masaya ve behere (canlı): 32,5° ile yığılır (kuru kum 30-35°); tıklanan yere çelik bilyeler bırakılır.
+- **Kum** huniden masaya ve behere (canlı): 32,5° ile yığılır (kuru kum 30-35°).
 - **Su balonu** masada, iğneyle delinir: lastik 20-30 ms'de geri soyulurken su bir an balon biçiminde kalır, sonra çöker.
 - **Karpuz** tüfekle vurulur (5,56, 7,62×51, .50 BMG; gerçek yükler): birkaç milisaniye şişer, sonra kabuğu taç gibi
   açılır.
@@ -173,8 +173,8 @@ saklanan fiziktir, her açıdan canlı çizilir. Bal ve kum yalnız canlı, çü
 Nasıl yapıldığı ve yolda neyin ölçüldüğü (çalışma günlüğünde hepsi:
 [docs/laboratuvar/DURUM.md](docs/laboratuvar/DURUM.md)):
 
-- **Tek çözücü** (NVIDIA FleX'in yolu): su ve bal için Position Based Fluids, lastik ve karpuz için XPBD bağları, çelik
-  bilye için şekil eşleme, kum için taneler; bütün bağlarını yitiren karpuz taneciği suyuna döner. Cam kaplar camın
+- **Tek çözücü** (NVIDIA FleX'in yolu): su ve bal için Position Based Fluids, lastik, karpuz ve jel için XPBD
+  bağları, kum için taneler; bütün bağlarını yitiren karpuz taneciği suyuna döner. Cam kaplar camın
   yüzeyinde tek katman kinematik tanecik, onu eğen elle birlikte hareket eder.
 - **Su** dudaktan ancak biraz viskozite, yapışma ve yüzey gerilimiyle tek şerit olarak çıkıyor (onlarsız hemen
   erişteye bölünüyordu; dört varyant kareyle kıyaslandı).

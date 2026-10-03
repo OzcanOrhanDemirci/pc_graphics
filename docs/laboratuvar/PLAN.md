@@ -84,7 +84,7 @@ bakılır, bir malzeme PBF'te "yeterince iyi"ye varamazsa o malzeme için MPM de
    birikinti.
 2. **Bal** (canlı): kaşık/huniden ince bal ipi cam tabağa; kıvrılır, yığılır, yayılır, kenardan sarkar. Akış ve
    yükseklik çubuğu, fareyle ipi gezdirme.
-3. **Kum** (canlı): huniden cam behere ve masaya; birbirini iteleyerek dolar, koni yığılır; çelik bilye bırakma.
+3. **Kum** (canlı): huniden cam behere ve masaya; birbirini iteleyerek dolar, koni yığılır; çelik bilye bırakma (yapıldı, Özcan'ın isteğiyle kaldırıldı, 10-03).
 4. **Su balonu** (kayıt): asılı su dolu balon, iğneyle tıklanan yerden patlar; lastik çekilir, su bir an balon şeklinde
    kalır, sonra dağılır.
 5. **Karpuz** (kayıt): kaidede küçük karpuz, tüfekle (gerçek yükler, `weapons.*`) vurulur: kabuk parçalanır, et kopar,
