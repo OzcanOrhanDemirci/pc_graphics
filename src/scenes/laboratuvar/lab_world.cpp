@@ -84,13 +84,14 @@ int kupPerEdge(float fineness, int maxPerEdge) {
     return steps[k];
 }
 
-float kupFineness(int perEdge) {   // the panel's value nearest to perEdge (at the full list)
+float kupFineness(int perEdge, int maxPerEdge) {   // the panel's value nearest to perEdge (kupPerEdge's inverse)
     static const int steps[] = {4, 5, 6, 8, 10, 13, 16, 20, 25, 32, 40, 50, 64, 80, 100, 128};
-    const int m = int(sizeof(steps) / sizeof(steps[0])) - 1;
+    int m = 0;
+    while (m + 1 < int(sizeof(steps) / sizeof(steps[0])) && steps[m + 1] <= maxPerEdge) ++m;
     int best = 0;
     for (int k = 0; k <= m; ++k)
         if (std::abs(steps[k] - perEdge) < std::abs(steps[best] - perEdge)) best = k;
-    return float(best) / float(m);
+    return m > 0 ? float(best) / float(m) : 0.0f;
 }
 
 float kupCharge(float strength) {

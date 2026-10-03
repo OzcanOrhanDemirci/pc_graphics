@@ -30,7 +30,7 @@ inline bool deneyRecorded(Deney d) { return d == Deney::Su || d == Deney::Balon 
 // Kup: the cubes along an edge for the panel's fineness (0..1: 4, 5, 6, 8, 10, 13, 16, 20, 25, 32, 40, 50, 64, 80, 100;
 // about twice the count a step), at most maxPerEdge; the charge for its strength (0..1, log: 3 ug to 2 g of TNT)
 int kupPerEdge(float fineness, int maxPerEdge);
-float kupFineness(int perEdge);
+float kupFineness(int perEdge, int maxPerEdge);
 float kupCharge(float strength);
 
 // what a particle is drawn as (the renderer: a surface each; DC_NONE not drawn: glass walls, a stand)

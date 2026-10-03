@@ -47,6 +47,9 @@ template <class T> T* lalloc(size_t n) {
     void* p = nullptr;
     LCUDA(cudaMalloc(&p, std::max<size_t>(n, 1) * sizeof(T)));
     LCUDA(cudaMemset(p, 0, std::max<size_t>(n, 1) * sizeof(T)));
+    // the memset runs on the legacy default stream, unordered with the renderer's own: wait for it, or it may land
+    // after what is written next (a grown instance array lost the table and the backdrop, at random)
+    LCUDA(cudaDeviceSynchronize());
     return static_cast<T*>(p);
 }
 

@@ -133,8 +133,8 @@ tıklayıp yıkım topu at, zamanı onda birine kadar yavaşlat.
 ### 4 · Laboratuvar · Ekim 2026
 
 Bir ağır çekim fotoğraf masası: koyu bir set, deneyin arkasında büyük yumuşak bir ışık paneli, sıvı fotoğrafçılığının
-klasik ışığı (cam ve sıvı kırılan kenarlarıyla okunur). Yedi deney, hepsi kendi yazdığımız tek çözücüde tanecik, fizik
-ne derse o:
+klasik ışığı (cam ve sıvı kırılan kenarlarıyla okunur). Sekiz deney, yedisi kendi yazdığımız tek çözücüde tanecik,
+biri ayrı bir çözücüde katı küpler, fizik ne derse o:
 
 - **Su** eğilen bir beherden bardağa dökülür, 12 ile 45 cm arasından: sıçrar, taşar, masada birikir.
 - **Bal** kaşıktan cam tabağa (canlı, kaşığı fareyle gezdir): tek kehribar ip, tabakta katlanıp kıvrılır, sonra göle
@@ -145,6 +145,9 @@ ne derse o:
   açılır.
 - **Süt damlası** ince bir süt katmanına (0,4 mm tanecik, saniyenin 1/5000'i): taç açılır, damlacık saçar.
 - **Balistik jel bloğu** tabancayla (.22, 9 mm, .50 AE): saydam bloğun içinde mermi yolu ve geçici boşluk, blok sarsılır.
+- **Küçük plastik küplerden bir küp** (zeka küpünün altı rengi, 64'ten bir milyona, her biri 25 mm'den 1 mm'ye), ortasında
+  patlayıcı: 3 mikrogram TNT'den (birkaç küp dökülür) 2 grama (patlar). Her küçük küp katı bir cisim: yüzünün üstüne
+  düşer, takla atar, seker, kayar; küçükleri hava yavaşlatır.
 
 ![Sahne 4: iğneden 24 ms sonra su balonu, lastik geri soyuluyor, su hâlâ balon biçiminde](docs/images/lab-balon.jpg)
 
@@ -190,6 +193,12 @@ Nasıl yapıldığı ve yolda neyin ölçüldüğü (çalışma günlüğünde h
   onu incelen, katlanan ve tabakta kıvrılan tek bir ip tutar, sonra bırakır: kıvrımlar birleşip göl olur.
 - **Karpuzun** kabuğu iki katman (yeşil deri, açık kabuk), yuvalı bir kaidede; bağlarında doğal kusurlar var (özdeş
   bağlar hep birden kırılıp kırıntı oluyordu); merminin yolu eski Tanecik sahnesinin jele kalibre balistiğinden.
+- **Küplerin** kendi çözücüsü var: her biri katı cisim, kutu kutuya ayırıcı eksenlerle, gelen yüz kırpılarak (ODE'nin
+  yolu); ekran kartında renklere bölünmüş Gauss-Seidel (köşegenin üçte biri genişlikte hücreler, 64 renk: aynı renkten iki
+  küp asla değmez), ayrık itme (dışarı itilen iç içe geçme hız vermez), yığınlar için şok yayılımı (Guendelman, Bridson ve
+  Fedkiw 2003), nokta nokta Coulomb sürtünmesi, öngörülü temas, hava direnci, uyuma. Testler: hepsi uyanık 512 küplük 8 kat
+  yığın 0,07 mm içinde durur, sekme e² h'ye döner, kayma v²/(2 μ g)'de durur, 1 mm'lik küp direncinin son hızıyla düşer.
+  Patlama yön yön Gurney'nin (yüzün ortası köşeden iki kat hızlı uçar), masa aşağı giden yarıyı yansıtır.
 - **Görüntü:** OptiX ile yol izleme; kalınlıklı cam ve kırılan sıvılar tam Fresnel ile, bardaktaki su camla tek arayüzden
   geçer (yüzeyleri arasındaki kıl kadar hava yoksa ayna olurdu); yüzeyler her karede taneciklerden kurulur (anizotropik
   çekirdekler); kum, tane ölçeğinde dokulu bir yüzey ve ince taneler; karede 4 örnek, zaman içinde harmanlanır (kameradan geri

@@ -84,6 +84,11 @@ public:
                "1/600'ü ile 1/5000'i aralıklarla hesaplanır. Video yok: saklanan fiziktir, her açıdan canlı çizilir.",
                "The trigger plays at once on a coarse world; asked for, a fine world (1.5-2.5 mm particles) computes the same inputs "
                "in the background, kept every 1/600 to 1/5000 of a second. No video: what is kept is the physics, drawn live from any view.")},
+            {L("Katı küpler", "Rigid cubes"),
+             L("Küp deneyinde her küçük küp katı bir cisim: kutu kutuya temas, renklere bölünmüş Gauss-Seidel, yığın için şok yayılımı, "
+               "sürtünme, sekme, hava direnci. 64'ten bir milyona; patlama yön yön Gurney'nin.",
+               "In the cube experiment each small cube is a rigid body: box on box, Gauss-Seidel by colour, shock propagation for stacks, "
+               "friction, bounce, air drag. From 64 to a million; the blast Gurney's along each direction.")},
             {L("Yüzeyler", "Surfaces"),
              L("Sıvıların yüzeyi her karede taneciklerinden kurulur (anizotropik çekirdekler); tane görünmez.",
                "Every frame each liquid's surface is built from its particles (anisotropic kernels); no grain shows.")},
@@ -144,7 +149,7 @@ public:
             in_[int(Deney::Bal)].flow = 0.6f;
             in_[int(Deney::Kum)].height = 0.4f;
             in_[int(Deney::Kum)].flow = 0.5f;
-            in_[int(Deney::Kup)].fineness = kupFineness(a_.cfg.i("kup.baslangic_kenar", 16));
+            in_[int(Deney::Kup)].fineness = kupFineness(a_.cfg.i("kup.baslangic_kenar", 16), a_.cfg.i("kup.en_cok_kenar", 100));
             in_[int(Deney::Kup)].power = a_.cfg.f("kup.baslangic_siddet", 0.42f);
             st.label = L("Deney kuruluyor: su, beher, bardak", "Setting up the experiment: water, a beaker, a glass");
             st.fraction = 0.35f;

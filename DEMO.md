@@ -82,8 +82,8 @@ a corner or an edge column, the lightest does not move it, the meteor brings dow
 motion with **T**, then fly up to the broken column ends and look at the bars. Settings in `scenes/yikim.cfg` (buildings,
 materials, solver, camera, sun).
 
-## 04 · Laboratory — a high-speed photography table: water, honey, sand, a water balloon, a watermelon, gel, a milk drop
-A dark set, a soft light panel behind. At the top of the panel **Experiment** (or **1-7**). Everything is particles,
+## 04 · Laboratory — a high-speed photography table: water, honey, sand, a water balloon, a watermelon, gel, a milk drop, a cube
+A dark set, a soft light panel behind. At the top of the panel **Experiment** (or **1-8**). Everything is particles,
 whatever the physics says. **Fast moments:** the trigger plays at once on a coarse world (**Coarse** at the top left);
 if you want, **Compute it finely** (**I**) has a fine world compute the same inputs behind (**Fine pass …%**, the bar at
 the bottom); click the **Time** bar to watch what is computed so far. When it is done it plays once at real speed, then
@@ -99,6 +99,7 @@ bar). No video: what is kept is the physics, drawn live from any view.
 | **Watermelon** | **Gun**: pistol (cracks it open, knocks it off the stand) or rifle (blows it apart) · the **Round** slider (rifle: 5.56 → 7.62×51 → .50 BMG, real loads), **left click** the melon (fired from the camera) or **Space** (from the side, through the middle) |
 | **Milk drop** | the **Height** slider (5-50 cm), **Space** or **Let a drop fall**: watch the crown at ×1/100 |
 | **Gel** | the **Round** slider (pistol: .22 → 9 mm → .50 AE), **left click** the block or **Space** (from the side, lengthwise), **once a second, as often as you like**: the track and the temporary cavity inside the clear block; the fine pass computes every shot again in turn (a wait between two longer than 0.8 s shortened to 0.8 s) |
+| **Cube** | the **Cubes** slider (64 → a million: 4³ … 100³; set up again when let go), the **Strength** slider (3 µg → 2 g of TNT; under it the speed a face's middle leaves at), **Space**, **Blow it up** or **left click** the cube. Watch it in slow motion; 64³ and more are slow live: **Compute it finely**, then watch it at real speed and at ×1/100 |
 
 | Key | What it does |
 |---|---|

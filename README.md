@@ -133,8 +133,8 @@ with the mouse or with keys, start it; click to throw a wrecking ball, slow time
 ### 4 · Laboratory *(Laboratuvar)* · October 2026
 
 A high-speed photography table: a dark set with a large soft panel behind the experiment, the classic light of liquid
-photography (glass and liquids read by their refracted edges). Seven experiments, all of particles in one solver of
-our own, whatever the physics says:
+photography (glass and liquids read by their refracted edges). Eight experiments, seven of particles in one solver of
+our own, one of rigid cubes in another, whatever the physics says:
 
 - **Water** poured from a tilting beaker into a tumbler, from 12 to 45 cm: it splashes, overflows, pools on the table.
 - **Honey** off a dipper onto a glass dish (live, drag the dipper with the mouse): one amber thread that folds and
@@ -147,6 +147,9 @@ our own, whatever the physics says:
 - **A drop of milk** into a thin layer of milk (0.4 mm particles, 1/5000 s): the crown opens and throws droplets.
 - **A block of ballistic gelatin** shot with a pistol (.22, 9 mm, .50 AE): the track and its temporary cavity inside
   the clear block, the block shuddering.
+- **A cube of small plastic cubes** (a puzzle cube's six colours, 64 to a million of them, from 25 mm to 1 mm each) with
+  a charge at its middle, from 3 micrograms of TNT (a few cubes trickle off) to 2 grams (a burst): every small cube a
+  rigid body that lands on a face, tumbles, bounces and slides; the small ones slowed by the air.
 
 ![Scene 4: a water balloon 24 ms after the needle, the rubber peeling back, the water still balloon-shaped](docs/images/lab-balon.jpg)
 
@@ -195,6 +198,13 @@ How each is made, and what was measured on the way (the Turkish working journal 
 - **The melon's** rind is two layers (green skin, pale rind) on a cup-shaped stand; its bonds carry natural flaws
   (identical bonds all broke at once, into crumbs); the bullet's path comes from the gelatin-calibrated ballistics of
   the earlier Tanecik scene.
+- **The cubes** have a solver of their own: each a rigid body, box on box by separating axes with the incident face
+  clipped (ODE's way), Gauss-Seidel by colour on the GPU (cells a third of a diagonal wide, 64 colours: two cubes of one
+  colour can never touch), split impulses (an overlap pushed out gives no speed), shock propagation for stacks
+  (Guendelman, Bridson & Fedkiw 2003), Coulomb friction point by point, speculative contacts, air drag, sleep. Tests:
+  an 8-high stack of 512 awake cubes stands still to 0.07 mm, a bounce comes back to e² h, a slide stops at
+  v²/(2 μ g), a 1 mm cube falls at its drag's terminal speed. The blast is Gurney's per direction (a face's middle
+  flies twice as fast as a corner), the table reflecting the downward half.
 - **The picture:** path tracing with OptiX; thick glass and refracting liquids with exact Fresnel, a liquid in its
   glass crossing one interface (the hair of air between their surfaces would otherwise mirror); surfaces rebuilt from
   the particles every frame (anisotropic kernels); sand drawn as a surface with grain-sized texture plus fine grains;

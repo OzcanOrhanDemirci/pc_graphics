@@ -75,8 +75,8 @@ biriktiğini izle; zemin kat kolonlarına top at, gücü değiştirerek (ölçü
 kıpırdatmaz, göktaşı apartmanı da gökdeleni de tek atışta yıkar); çöküşü **T** ile ağır çekimde izle, kırık kolon uçlarına uçup demirlere yakından bak.
 Ayarlar `scenes/yikim.cfg` (bina, malzemeler, çözücü, kamera, güneş).
 
-## 04 · Laboratuvar — ağır çekim fotoğraf masası: su, bal, kum, su balonu, karpuz, jel, süt damlası
-Koyu set, arkada yumuşak ışık paneli. Panelin en üstünde **Deney** (ya da **1-7**). Her şey tanecik, fizik ne derse o.
+## 04 · Laboratuvar — ağır çekim fotoğraf masası: su, bal, kum, su balonu, karpuz, jel, süt damlası, küp
+Koyu set, arkada yumuşak ışık paneli. Panelin en üstünde **Deney** (ya da **1-8**). Her şey tanecik, fizik ne derse o.
 **Hızlı anlar:** tetik kaba dünyada hemen oynar (sol üstte **Kaba hesap**); istersen **İnce hesap yap** (**I**) ile ince
 dünya aynı girdileri arka planda hesaplar (**İnce hesap %…**, alttaki çubuk). **Zaman** çubuğuna tıklayınca hesaplanan
 kısım hemen izlenir; bitince bir kez gerçek hızda oynar, sonra serbest inceleme. **R** ince kayıttan kaba hesaba döner
@@ -91,6 +91,7 @@ kısım hemen izlenir; bitince bir kez gerçek hızda oynar, sonra serbest incel
 | **Karpuz** | **Silah**: tabanca (karpuzu açar, kaideden düşürür) ya da tüfek (dağıtır) · **Mermi** çubuğu (tüfekte 5,56 → 7,62×51 → .50 BMG, gerçek yükler), karpuza **sol tık** (kameradan ateş) ya da **Boşluk** (yandan, ortadan) |
 | **Süt damlası** | **Yükseklik** çubuğu (5-50 cm), **Boşluk** ya da **Damla bırak**: taçı ×1/100'de izle |
 | **Jel** | **Mermi** çubuğu (tabanca: .22 → 9 mm → .50 AE), bloğa **sol tık** ya da **Boşluk** (yandan, boylamasına), **saniyede bir, istediğin kadar**: yol ve geçici boşluk saydam bloğun içinde; ince hesap bütün atışları sırayla yeniden hesaplar (aralarındaki 0,8 sn'den uzun bekleme 0,8 sn'ye kısalır) |
+| **Küp** | **Küp sayısı** çubuğu (64 → 1 milyon: 4³ … 100³; bırakınca yeniden kurulur), **Şiddet** çubuğu (3 µg → 2 g TNT; altında yüzün ortasından çıkış hızı), **Boşluk**, **Patlat** ya da küpe **sol tık**. Ağır çekimde izle; 64³ ve üstü canlıda yavaş: **İnce hesap yap** ile hesapla, sonra gerçek hızda ve ×1/100'de izle |
 
 | Tuş | Ne yapar |
 |---|---|

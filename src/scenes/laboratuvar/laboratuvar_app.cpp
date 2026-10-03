@@ -430,8 +430,8 @@ int runLaboratuvarCli(int argc, char** argv) {
     std::vector<uint3> memTris;
     int maxN = 0;
     if (d == Deney::Kup && kupN > 0) {   // so many cubes an edge (the panel's nearest), allowed
-        inputs.fineness = kupFineness(kupN);
         app.cfg.set("kup.en_cok_kenar", std::to_string(std::max(kupN, app.cfg.i("kup.en_cok_kenar", 100))));
+        inputs.fineness = kupFineness(kupN, app.cfg.i("kup.en_cok_kenar", 100));
     }
     if (d == Deney::Kup && kupPower >= 0.0f) app.cfg.set("test.kup_guc", std::to_string(kupPower));
     const LabEvent ev = defaultEvent(d, app.cfg);
