@@ -15,7 +15,6 @@ using app::L;
 
 const int kBaseChoices[] = {1, 4, 8, 16};
 const int kEdgeChoices[] = {4, 8, 16, 32};
-const int kRayChoices[] = {1024, 2048, 2896, 4096};   // caustic rays a side: 1x, 4x, 8x, 16x (to see the caustics' own noise)
 
 class KoyLive : public app::Scene {
 public:
@@ -42,10 +41,12 @@ public:
                "curves. All baked beforehand into tables by the light's path length in water: colours turn blue with depth on "
                "their own.")},
             {L("Yüzey ve kostik", "Surface and caustics"),
-             L("Dalgalar Tessendorf'un FFT yöntemiyle, kusursuz döngüyle. Her karede yüzeyden bir milyon güneş ışını kırılır, "
-               "derinlik dilimlerinde kostik hacmine işlenir; güneş diski onu derinlikle bulanıklaştırır.",
-               "Waves by Tessendorf's FFT method, looping seamlessly. Every frame a million sun rays refract through the surface "
-               "into a caustic volume in depth slices; the sun's disc blurs it with depth.")},
+             L("Dalgalar Tessendorf'un FFT yöntemiyle, kusursuz döngüyle. Her karede yüzeyin bir milyon hücresi birer ışık "
+               "hüzmesi olarak kırılır; her derinlik diliminde hüzmenin ışığı kapladığı alana tam olarak yayılır (sayma yok, "
+               "gürültü yok). Güneş diski kostiği derinlikle bulanıklaştırır.",
+               "Waves by Tessendorf's FFT method, looping seamlessly. Every frame a million cells of the surface refract as beams "
+               "of light; at each depth slice a beam's light spreads exactly over the area it covers (nothing counted, no "
+               "noise). The sun's disc blurs the caustics with depth.")},
             {L("Işık alanı", "Light field"),
              L("Su sütununun dağınık ışığı (pencereden gök, çok kez saçılan güneş, kumdan yansıyan) hazırlıkta Monte Carlo ile "
                "hesaplanır; canlı karede gürültüsüz okunur.",
@@ -130,12 +131,10 @@ public:
                 refresh = true;
             }
             if (e.id == "kostik" && e.item >= 0) {
-                k_.ocean.cset.rays = kRayChoices[e.item];
+                k_.ocean.cset.method = e.item == 0 ? 1 : 0;
                 refresh = true;
-                static const char* const kTimes[] = {"1", "4", "8", "16"};
-                host.toast(L("Kostik ışını ", "Caustic rays ") + std::string(kTimes[e.item]) +
-                           L(" kat: ", "x: ") + theme::thousands(unsigned(kRayChoices[e.item]) * unsigned(kRayChoices[e.item])) +
-                           L(" ışın (kare hızı düşer)", " rays (the frame rate drops)"));
+                host.toast(e.item == 0 ? L("Kostik: hüzme (gürültüsüz)", "Caustics: beams (noise free)")
+                                       : L("Kostik: ışın sayma (eski yöntem, kaynar)", "Caustics: counted rays (the old method, it boils)"));
             }
             k_.applyQuality();
             resetAccum();
@@ -256,12 +255,13 @@ public:
             app::Control c;
             c.kind = app::Control::Kind::Choice;
             c.id = "kostik";
-            c.title = L("Kostik ışını", "Caustic rays");
-            c.items = {"1×", "4×", "8×", "16×"};
-            for (int k = 0; k < 4; ++k)
-                if (kRayChoices[k] == k_.ocean.cset.rays) c.active = k;
-            c.detail = L("Dibe inen güneş ışını: 1× 1 milyon. Çok ışın kostiğin kendi gürültüsünü (kaynamayı) siler; kare hızı düşer",
-                         "Sun rays down to the floor: 1x is a million. More rays wipe out the caustics' own noise (the boiling); the frame rate drops");
+            c.title = L("Kostik", "Caustics");
+            c.items = {L("Hüzme", "Beams"), L("Işın (eski)", "Rays (old)")};
+            c.active = k_.ocean.cset.method == 1 ? 0 : 1;
+            c.detail = L("Hüzme: yüzeyin her hücresi bir ışık hüzmesi, ışığı derinlikte kapladığı alana yayılır; sayma yok, gürültü yok. "
+                         "Işın: eski yöntem, dokuya düşen ışınları sayar (kaynar)",
+                         "Beams: every cell of the surface is a beam of light, spread over the area it covers at depth; nothing counted, no noise. "
+                         "Rays: the old method, counting the rays that land in each texel (it boils)");
             s.controls.push_back(c);
         }
         {

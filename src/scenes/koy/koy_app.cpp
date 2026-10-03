@@ -74,6 +74,10 @@ void KoyApp::setup() {
     os.unresolvedVar = cfg.f("ocean.unresolved_var", -1.0f);
     KoyCausticSettings cs;
     cs.N = cfg.i("caustic.n", 1024);
+    cs.method = cfg.i("caustic.method", 1);
+    cs.beams = cfg.i("caustic.beams", 1024);
+    cs.fineZ0 = cfg.f("caustic.fine_z0", 4.2f);
+    cs.fineZ1 = cfg.f("caustic.fine_z1", 15.5f);
     cs.rays = cfg.i("caustic.rays", 1024);
     cs.slices = cfg.i("caustic.slices", 32);
     cs.z0 = cfg.f("caustic.z0", 0.5f);
@@ -310,7 +314,7 @@ int runKoyCli(int argc, char** argv) {
     std::string mode, out, path = "sabit", testName, mapOut;
     int frames = 120, refN = 4, timing = 0;
     float t0 = 0.0f, fps = 41.0f;
-    bool camGiven = false, ref = false, worker = false;
+    bool camGiven = false, ref = false, worker = false, liveOnly = false;
     float3 camPos{}, camLook{};
     std::vector<float3> cams, looks;   // --doku and --yokla take several --cam/--look pairs
     int spp = -1, edge = -1, filter = -1;
@@ -323,6 +327,7 @@ int runKoyCli(int argc, char** argv) {
         else if (a == "--ref") ref = true;
         else if (a == "--isci") worker = true;
         else if (a == "--kararlilik") mode = "stab";
+        else if (a == "--canli") liveOnly = true;   // --kararlilik: the live pass alone (two runs that differ in one setting)
         else if (a == "--zaman") { mode = "time"; timing = std::stoi(next()); }
         else if (a == "--test") { mode = "test"; testName = opt(); }
         else if (a == "--map") { mode = "map"; mapOut = next(); }
@@ -533,9 +538,13 @@ int runKoyCli(int argc, char** argv) {
             app.diver.vel = make_float3(0, 0, 0);
             app.setCamera();
         }
+        if (!cams.empty()) aim(0);   // --cam / --look: the path starts there
         app.stepWorld(t0);
         app.frame();
         app.adaptExposure(0.0f, true);
+        // display.exposure_fixed > 0: that exposure all the way (two runs that differ in one setting compare pixel for pixel)
+        const float fixedExposure = app.cfg.f("display.exposure_fixed", 0.0f);
+        if (fixedExposure > 0.0f) app.renderer.params().exposure = fixedExposure;
         double sum = 0.0;
         for (int k = 0; k < frames; ++k) {   // pass 1: live
             const float t = t0 + k * dt;
@@ -547,6 +556,7 @@ int runKoyCli(int argc, char** argv) {
             else if (path == "yukari" && k == 0) lookY = -(55.0f / 57.2958f) / app.cfg.f("diver.mouse", 0.0022f);
             app.stepDiver(fwd, right, up, false, lookX, lookY, dt);
             app.stepWorld(t);
+            if (fixedExposure > 0.0f) app.renderer.params().exposure = fixedExposure;
             at[k] = {app.diver, t, app.renderer.params().exposure};
             const double s = know();
             app.frame();
@@ -558,7 +568,7 @@ int runKoyCli(int argc, char** argv) {
         }
         std::printf("kararlilik koy %s: %d canli kare, %.2f ms/kare\n", path.c_str(), frames, 1000.0 * sum / frames);
         printTimes(app);
-        for (int k = 0; k < frames; ++k) {   // pass 2: the reference
+        for (int k = 0; k < frames && !liveOnly; ++k) {   // pass 2: the reference
             app.diver = at[k].d;
             app.setCamera();
             app.stepWorld(at[k].t);

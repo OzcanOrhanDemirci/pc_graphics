@@ -3,12 +3,71 @@
 > Tek kaynak durum panosu. Plan: `docs/koy/PLAN.md` (kararlar, fazlar, duraklar). Veri ve denetimleri: `docs/koy/VERI.md`.
 > Gerçek fotoğraflardan başvuru panosu: `docs/koy/BASVURU.md`. CC0 taramalar: `assets/koy/fetch.py`, `assets/koy/LICENSES.md`.
 
-## Şu an · 2026-10-04 00.50 · 🚀 Amfora planı kesinleşti, otonom görev A0'dan başlayacak
+## Şu an · 2026-10-04 02.15 · A1 bitti (hüzme kostiği), A0 sürüyor
 
-**Aktif plan: `docs/koy/PLAN_AMFORA.md`** (batık bir Roma gemisinin amfora yükü ~12 m'de + ~30 m ötede doğal kireçtaşı
-kemeri; yücelik ışıkla; durak yok, sonuna kadar otonom). Özcan kostik ışın düğmesine baktı: *"Açıkçası farkı pek
-göremedim. Hüzme yöntemiyle kendi en iyi bildiğin şekilde yapmak daha sağlıklı olur."* Hüzme yöntemi planın A1'i.
-Sıradaki: **A0** (kaynak araştırması, başvuru panosu, gri kutu kompozisyon etüdü).
+**Aktif plan: `docs/koy/PLAN_AMFORA.md`** (otonom, durak yok). A0'ın kaynak araştırması bir ajanda sürüyor (amfora
+taramaları ve tipoloji, 8K pişmiş toprak ve kireçtaşı taramaları, batık ve kemer fotoğrafları; sonuç
+`docs/koy/AMFORA_KAYNAK.md` ve `BASVURU.md` §12-13). A1 bunu beklemeden yapıldı (bağımsız). Sıradaki: A0'ın gri kutu
+kompozisyon etüdü, sonra A2.
+
+## A1 · hüzme kostiği · 2026-10-04 gece · ✅ bitti
+
+**Yöntem** (`koy_kernels.cu`, "caustics by beams"): yüzeyde 1024² hücrelik düzenli ağ; her hücre bir ışık hüzmesi.
+Köşe ışınları kırılır (eğimler FFT alanından iki kübik ara değerlemeyle: hüzmelerin yoğunluğu alanın kendi hücrelerinde
+basamak yapmasın). Her derinlik diliminde hücrenin dört köşesinin vardığı yerler iki üçgen kurar; üçgenin akısı alanına
+eşit yayılır (yoğunluk = akı / alan, katlanan üçgenin alanı eksi, aynı formül). Her doku pikseli üçgenin kendi içinde
+kalan alan payını **tam** alır: Green teoremiyle, satır satır, yalnız kenarların geçtiği sütunlar gezilir. Sayma yok,
+gürültü yok; akı her dilimde yuvarlama kadar korunur (`--test kostik`: ortalama 0,9999). Odaklar küçük ve parlak
+üçgen, dağılan hüzme büyük ve loş üçgen, katlanma çizgisi kendiliğinden keskin. Çok ince üçgen (alan < 0,001 doku²)
+en uzun kenarı boyunca birkaç ikili doğrusal noktaya yayılır. Güneş diski bulanıklığı aynen kaldı.
+
+**Dilim grupları** (ayar: `caustic.fine_z0`, `caustic.fine_z1`): 4,2 m'den sığda yalnız ışık sütunları okuyor (orada
+duran bir şey yok): yarım çözünürlük, her ikinci hüzme. 4,2-15,5 m tam çözünürlük, bütün hüzmeler. 15,5 m'den derinde
+güneş diski iki dokudan geniş bulanıklaştırıyor: yarım çözünürlük, bütün hüzmeler (katlanmalar oradaki ince ayrıntıdan
+çıkıyor). Yarım dilimler bulanıklaştırmadan sonra tam çözünürlüğe çıkarılır; ışık sütunlarının piramidinde 1. düzey
+yarım dilimin kendisidir.
+
+**Gürültü** (canlı / referans: hüzme 2048², hepsi tam çözünürlük; aynı yol, sabit pozlama, kumdan 1 m, 45° aşağı, durgun
+kamera; `kararlilik.py`):
+
+| Derinlik | Hüzme (canlı) piksel ort / %99 | 8×8 blok | FLIP | Eski ışın 1× piksel ort | Kazanç |
+|---|---|---|---|---|---|
+| 7 m (deneme alanı) | **0,00084** / 0,0048 | 0,00058 | 0,009 | 0,0126 | 15 kat |
+| 12 m (amfora tarlası) | **0,00123** / 0,0059 | 0,00077 | 0,014 | 0,0155 | 13 kat |
+| 20 m (kemerin dibi, yarım grup) | **0,00285** / 0,0118 | 0,00252 | 0,027 | 0,0133 | 4,7 kat |
+
+Hedef ≤ 0,003: üçünde de tuttu. Eski ölçü yeniden üretildi (ışın 1× / ışın 16×: 0,0121; geçen ölçüm 0,0113). Yan bulgu:
+eski referans (16 kat ışın) da gürültülüymüş: hüzme referansına karşı 0,0033, yeni canlı yöntemin 4 katı. 20 m'deki
+farkın çoğu blokta da var (yumuşak): yarım çözünürlüğün hareketli desende biraz farklı bulanıklığı, gren değil.
+
+**Süre** (`--test kostik`, dünyanın bir anı): kostik **5,97 ms** (hüzmeler 4,84, bulanıklaştırma 0,80, gerisi hazırlık
+ve piramit). Eski ışın yolu artık 3,47 ms (aynı kopya tasarrufuyla; önce 4,75). Uygulamada (otomatik test) 41 fps sabit.
+Yol: ilk sürüm 61 ms'ydi; ölçerek indirildi:
+- Satranç tahtası köşegeni için iki ayrı çağrı noktası her warp'ı ikiye bölüyordu: tek çağrı, köşeler seçimle (61 → 32).
+- Çerçeve kutusu yerine satır satır yalnız kenarların sütunları (pencere 12 m'de hücre başına 24 doku, gerçek alan 5,6).
+- Dilim grupları (yukarıda) ve her blok tek dilim: dilim (4 MB) L2 önbellekteyken dolar; tek iş parçacığının bütün
+  dilimleri dolaşması %30 yavaştı.
+- `__launch_bounds__(128, 8)` (64 yazmaç): 5,1 → 4,8 ms; daha sıkısı taşırdı (8,6 ms).
+- Bulanıklaştırma ağırlıkları blok başına bir kez (her dokunuşta `expf` ve tam sayı bölmesi vardı): 1,25 → 0,80 ms.
+- Dilimler doğrudan 3B dokuya (yüzey nesnesi) yazılır, ara tampondan kopya ve piramit tamponları kalktı; bellek
+  sıfırlaması yalnız hüzmelerin doldurduğu dilimlerde.
+- 🪤 Ölçüm kendini kirletiyordu: dilim başına sayaçlar her hücrede aynı 6 adrese atomik ekliyordu, her dilime 2 ms'lik
+  taban ekledi. Sayaç ve zamanlama ayrı kiplere ayrıldı (`--set test.beam_stats=1` sayaç, `=2` dilim dilim süre).
+
+**Panel:** "Kostik ışını 1×/4×/8×/16×" kalktı; yerine **Kostik: Hüzme / Işın (eski)** (iki yöntem canlı geçişli,
+Özcan farkı görebilsin). Ayrıntılar metni hüzmeyi anlatıyor.
+
+**Bulunan eski hata:** `--test` tam takımda dalgacık testi hep kalıyordu (tek başına geçiyordu): Snell testi düz deniz
+için `ocean.amplitude=0` koyup uygulamayı yeniden kuruyor, geri almıyor; sonra gelen dalga testi düz denizi ölçüyordu.
+Snell sona alındı; tam takım 10/10.
+
+**Ölçü araçları:** `--kararlilik ... --canli` (yalnız canlı geçiş), `--cam/--look` artık kararlılık yolunun başlangıcı,
+`display.exposure_fixed` kararlılık yolunda da. İki koşunun canlı karelerini kıyaslamak: scratchpad'deki `kostik_olc.py`
+yöntemi (live_* birinci koşu, ref_* ikinci koşunun live_*'ı).
+
+**Ne doğrulanmadı:** kostik gürültüsü yalnız durgun kamerayla ölçüldü (yüzerken değil); ışık sütunlarında yarım
+çözünürlüklü sığ dilimlerin farkı kareyle kıyaslanmadı; 25 m'ye inen dilimler (plan §5.2) henüz yok, A2'de; Özcan'ın
+gözü (yöntem farkı) yok.
 
 ## Ara durak 3 kararı · 2026-10-04 gece · ✅ geçti, dalgacıklar kalıyor; kostik gürültüsü ölçüldü
 

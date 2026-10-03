@@ -49,7 +49,11 @@ struct KoyOceanSettings {
 
 struct KoyCausticSettings {
     int N = 1024;                // texels per side of a slice
-    int rays = 1024;             // rays per side from the surface
+    int method = 1;              // 1 beams (A1: no noise), 0 rays counted per texel (K1, kept as a fallback)
+    int beams = 1024;            // beams: cells per side of the grid on the surface
+    float fineZ0 = 4.2f;         // beams: full resolution between these depths (m); above, half (only the shafts read
+    float fineZ1 = 15.5f;        // it), below, half (the sun's disc blurs wider than two texels there)
+    int rays = 1024;             // rays: rays per side from the surface
     int slices = 32;
     float z0 = 0.5f, z1 = 20.0f; // depth range (metres), slices spaced logarithmically
     float minBlurTexels = 0.6f;  // the blur never narrower than this (texels)
@@ -69,6 +73,11 @@ public:
     float slopeVarianceUnresolved() const { return varFloor_; }
     float slopeVarianceResolved() const { return varResolved_; }
     float msSurface = 0.0f, msCaustic = 0.0f;
+    float msBeams = 0.0f, msBlur = 0.0f;           // inside msCaustic: the beams (or rays) alone, the blur alone
+    int beamStatsOn = 0;                           // tests: per slice cells, texels of their windows, split beams, thin triangles
+    std::vector<unsigned long long> beamStats;
+    std::vector<float> beamSliceMs;
+    int beamDebug = 0;
     // host copies for tests and maps
     void readHeights(std::vector<float4>& out, cudaStream_t s);           // level 0: h, sx, sz, (sx^2 + sz^2) / 2
     void readCaustic(int slice, std::vector<float>& out, cudaStream_t s);  // level 0
@@ -88,11 +97,14 @@ private:
     float* caus_ = nullptr;      // N x N x slices accumulation
     float* causTmp_ = nullptr;
     float* dSig_ = nullptr;      // the blur's sigma per slice
+    unsigned long long* dStats_ = nullptr;
+    float4* beamVtx_ = nullptr;
+    float* causHalf_ = nullptr;  // beams: the half-resolution slices (N / 2 per side)  // beams: per grid vertex the refracted ray's travel per metre of depth (x, z), its flux
     std::vector<cudaArray_t> causArr_;
     std::vector<unsigned long long> causTex_;
-    std::vector<float*> causLevelBuf_;
+    std::vector<unsigned long long> causSurf_;   // the same arrays, written (cudaSurfaceObject_t)
     float hmax_ = 0.3f, varFloor_ = 0.0f, varResolved_ = 0.0f;
     float3 sunAir_{}, sunWater_{};
     float waterN_ = 1.333f, sunRadiusAir_ = 0.00465f;
-    cudaEvent_t e0_ = nullptr, e1_ = nullptr, e2_ = nullptr;
+    cudaEvent_t e0_ = nullptr, e1_ = nullptr, e2_ = nullptr, eb0_ = nullptr, eb1_ = nullptr, e1b_ = nullptr;
 };

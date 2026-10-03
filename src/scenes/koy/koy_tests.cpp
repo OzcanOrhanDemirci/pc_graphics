@@ -153,8 +153,18 @@ int testOptics(KoyApp& app) {
 }
 
 int testCaustic(KoyApp& app) {
+    app.ocean.beamStatsOn = app.cfg.i("test.beam_stats", 0);
+    app.ocean.beamDebug = app.cfg.i("test.beam_debug", 0);
     app.stepWorld(app.cfg.f("test.t", 3.0f));
     const KoyOcean& oc = app.ocean;
+    if (!oc.beamStats.empty())
+        for (int k = 0; k < oc.cset.slices; ++k) {
+            const unsigned long long* st = oc.beamStats.data() + 6 * k;
+            const double nc = double(std::max(st[0], 1ull));
+            std::printf("         huzme dilim %2d (%5.2f m): pencere %.2f, alan %.2f, cevre %.2f doku/hucre, bolunen %llu, ince %llu, %.3f ms\n", k,
+                        oc.sliceDepth(k), double(st[1]) / nc, double(st[4]) / 1024.0 / nc, double(st[5]) / 1024.0 / nc, st[2], st[3],
+                        k < int(oc.beamSliceMs.size()) ? oc.beamSliceMs[k] : 0.0f);
+        }
     std::vector<float> sl;
     bool ok = true;
     for (int k = 0; k < oc.cset.slices; k += 4) {
@@ -182,7 +192,8 @@ int testCaustic(KoyApp& app) {
         ok = ok && std::fabs(m - 1.0) < 0.02;
     }
     report("kostik", ok, "her dilimin ortalamasi 1 +- 0.02 (enerji korunur)");
-    std::printf("         yuzey %.2f ms, kostik %.2f ms\n", oc.msSurface, oc.msCaustic);
+    std::printf("         yuzey %.2f ms, kostik %.2f ms (%s %.2f, bulaniklik %.2f)\n", oc.msSurface, oc.msCaustic,
+                oc.cset.method == 1 ? "huzme" : "isin", oc.msBeams, oc.msBlur);
     return 0;
 }
 }   // namespace
@@ -262,8 +273,9 @@ int runKoyTests(KoyApp& app, const std::string& which) {
     if (all || which == "optik") testOptics(app);
     if (which == "tablo") testTables(app);
     if (all || which == "kostik") testCaustic(app);
-    if (all || which == "snell") testSnell(app);
     if (all || which == "dalga") testWaves(app);
+    // last: it flattens the sea and sets the app up again with that (a wave test after it measured a flat sea)
+    if (all || which == "snell") testSnell(app);
     std::printf("koy testleri: %d kalan\n", fails);
     return fails ? 1 : 0;
 }
