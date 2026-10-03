@@ -659,7 +659,8 @@ static __forceinline__ __device__ Lit shadeSample(float3 o, float3 d, float cone
     const Hit h = trace(o, d, tmax);
     if (h.hit) {
         // the path's light field: the floor under where it ends, and lit down to its deepest point
-        const FW fp = fieldsForPath(fmaxf(z0, -h.p.y));
+        // (the depth the path reaches within ~30 m: the water's in-scattering comes almost all from there, c ~ 0.1/m)
+        const FW fp = fieldsForPath(fmaxf(z0, z0 - d.y * fminf(h.t, 30.0f)));
         r.L = shadeSurface(h, d, h.t, coneAngle, r.caustic, r.n) + (params.view >= 5 ? make_float3(0, 0, 0) : ambientPath(z0, d.y, h.t, fp));
         r.t = h.t;
         r.id = h.id;
@@ -674,7 +675,7 @@ static __forceinline__ __device__ Lit shadeSample(float3 o, float3 d, float cone
         return r;
     }
     // open water: the floor under the camera while the ray stays above it, the deepest field once it goes down into the blue
-    r.L = ambientPath(z0, d.y, params.farDistance, fieldsForPath(d.y < -0.02f ? 1e9f : z0));
+    r.L = ambientPath(z0, d.y, params.farDistance, fieldsForPath(fmaxf(z0, z0 - d.y * 30.0f)));
     r.t = params.farDistance;
     r.id = ID_OPEN;
     return r;

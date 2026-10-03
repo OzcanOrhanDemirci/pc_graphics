@@ -113,6 +113,9 @@ KoyFloorShape KoyFloorShape::from(const Config& cfg) {
     s.farDrop = cfg.f("floor.far_drop", 0.0f);
     s.farZ0 = cfg.f("floor.far_z0", -42.0f);
     s.farZ1 = cfg.f("floor.far_z1", -80.0f);
+    s.farX = cfg.f("floor.far_x", 0.0f);
+    s.farHalf = cfg.f("floor.far_half", 1e9f);
+    s.farEdge = cfg.f("floor.far_edge", 0.0f);
     s.rise = cfg.f("floor.rise", 0.0f);
     s.riseZ0 = cfg.f("floor.rise_z0", 10.0f);
     s.riseZ1 = cfg.f("floor.rise_z1", 40.0f);
@@ -129,7 +132,11 @@ float KoyFloorShape::operator()(float x, float z) const {
     float y = depth + slope * z;
     // descents towards -z (smoothstep from z0 down to z1, z1 < z0), the rise behind towards +z
     if (drop != 0.0f) y -= drop * smooth01(dropZ0, dropZ1, z);
-    if (farDrop != 0.0f) y -= farDrop * smooth01(farZ0, farZ1, z);
+    if (farDrop != 0.0f) {   // the wall: behind the arch only (a bay of deep water), its edge wandering
+        const float wz = farEdge * fbm3(x * 0.07f, 4.1f, 0.3f, 3);
+        const float across = farHalf < 1e8f ? 1.0f - smooth01(farHalf, farHalf * 2.2f, std::fabs(x - farX) + 0.6f * farEdge * fbm3(z * 0.08f, 1.7f, 2.2f, 2)) : 1.0f;
+        y -= farDrop * smooth01(farZ0 + wz, farZ1 + wz, z) * across;
+    }
     if (rise != 0.0f) y += rise * smooth01(riseZ0, riseZ1, z);
     // the wreck's mound: the hull's outline under the cargo, a long low swell of sand
     if (moundH != 0.0f) {

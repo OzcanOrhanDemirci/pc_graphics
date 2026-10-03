@@ -17,6 +17,7 @@ struct KoyFloorShape {
     // it into the blue, a gentle rise behind towards the shore, and the wreck's own mound
     float drop = 0.0f, dropZ0 = -6.0f, dropZ1 = -26.0f;
     float farDrop = 0.0f, farZ0 = -42.0f, farZ1 = -80.0f;
+    float farX = 0.0f, farHalf = 1e9f, farEdge = 0.0f;   // the drop only behind x = farX (its width), its edge wandering
     float rise = 0.0f, riseZ0 = 10.0f, riseZ1 = 40.0f;
     float moundX = 0.0f, moundZ = 0.0f, moundA = 5.0f, moundB = 3.0f, moundH = 0.0f, moundAngle = 0.0f;
     static KoyFloorShape from(const Config& cfg);
