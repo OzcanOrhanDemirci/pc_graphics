@@ -15,6 +15,7 @@ using app::L;
 
 const int kBaseChoices[] = {1, 4, 8, 16};
 const int kEdgeChoices[] = {4, 8, 16, 32};
+const int kRayChoices[] = {1024, 2048, 2896, 4096};   // caustic rays a side: 1x, 4x, 8x, 16x (to see the caustics' own noise)
 
 class KoyLive : public app::Scene {
 public:
@@ -103,6 +104,7 @@ public:
 
     void frame(app::Host& host, const app::Input& in) override {
         const float dt = float(std::min(0.1, in.dt));
+        bool refresh = false;   // the world's light changed: recompute it even with time paused
         for (const app::ControlEvent& e : in.events) {
             if (e.id == "ornek" && e.item >= 0) k_.quality.base = kBaseChoices[e.item];
             if (e.id == "kenar" && e.item >= 0) k_.quality.edge = kEdgeChoices[e.item];
@@ -125,6 +127,15 @@ public:
                 else
                     host.toast(k_.ripplesOn ? L("Dalgacıklar açık: yüzeyin 2-35 cm'lik dalgaları (yukarı bak)", "Ripples on: the surface's 2-35 cm waves (look up)")
                                             : L("Dalgacıklar kapalı: yalnız istatistiksel pürüzlülük", "Ripples off: statistical roughness only"));
+                refresh = true;
+            }
+            if (e.id == "kostik" && e.item >= 0) {
+                k_.ocean.cset.rays = kRayChoices[e.item];
+                refresh = true;
+                static const char* const kTimes[] = {"1", "4", "8", "16"};
+                host.toast(L("Kostik ışını ", "Caustic rays ") + std::string(kTimes[e.item]) +
+                           L(" kat: ", "x: ") + theme::thousands(unsigned(kRayChoices[e.item]) * unsigned(kRayChoices[e.item])) +
+                           L(" ışın (kare hızı düşer)", " rays (the frame rate drops)"));
             }
             k_.applyQuality();
             resetAccum();
@@ -163,7 +174,7 @@ public:
         k_.stepDiver(fwd, right, up, in.shift, mdx, mdy, dt);
         const bool moved = length(k_.diver.pos - before.pos) > 1e-5f || k_.diver.yaw != before.yaw || k_.diver.pitch != before.pitch;
         if (!paused_) t_ += in.dt;
-        if (!paused_ || moved) {
+        if (!paused_ || moved || refresh) {
             k_.stepWorld(float(t_));
             k_.frame();
             k_.adaptExposure(dt, false);
@@ -239,6 +250,18 @@ public:
             c.active = k_.ripplesOn ? 1 : 0;
             c.detail = L("Su yüzeyinin 2-35 cm'lik dalgaları; yalnız bakışta (Snell penceresi, ayna, pırıltı), kostik değişmez",
                          "The surface's 2-35 cm waves; in the view alone (Snell's window, the mirror, the glints), the caustics unchanged");
+            s.controls.push_back(c);
+        }
+        {
+            app::Control c;
+            c.kind = app::Control::Kind::Choice;
+            c.id = "kostik";
+            c.title = L("Kostik ışını", "Caustic rays");
+            c.items = {"1×", "4×", "8×", "16×"};
+            for (int k = 0; k < 4; ++k)
+                if (kRayChoices[k] == k_.ocean.cset.rays) c.active = k;
+            c.detail = L("Dibe inen güneş ışını: 1× 1 milyon. Çok ışın kostiğin kendi gürültüsünü (kaynamayı) siler; kare hızı düşer",
+                         "Sun rays down to the floor: 1x is a million. More rays wipe out the caustics' own noise (the boiling); the frame rate drops");
             s.controls.push_back(c);
         }
         {

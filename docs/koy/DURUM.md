@@ -21,6 +21,12 @@ sarsıntısı sabit (her kare aynı), yani sorun yeniden rastgeleleşme değil, 
 21,7 → 26,5 ms (37,7 fps). Doğru çözüm gürültüsüz bir yöntem: her yüzey hücresinin ışığını nokta yerine hüzme olarak
 dibe yaymak (alan değişimi ya da ışın türevli çekirdek). Önerim: amfora planına.
 
+**Görmek için panelde "Kostik ışını: 1× / 4× / 8× / 16×"** (Özcan istedi: *"FPS çok düşsün ama [...] Amaç sadece gürültüsüz
+nasıl oluyormuş o farkı görmek"*). Işın sayısı yalnız ışın atma çekirdeğinin başlatılmasında ve ağırlıkta, canlı değişir;
+durmuşken basılınca kostik hemen yeniden hesaplanır. Yüzme görünümünde kare: 1× 19,2 ms, 4× 24,0, 8× 32,7 (30,6 fps; kostik
+18,5 ms), 16× 51,4 ms (19,5 fps; kostik 36 ms); uygulamada 16× 21,8 fps. Yan bulgu: ışın arttıkça kenar pikseli 200 bin →
+140 bin: kostik gürültüsü kenar algılamayı da boşuna tetikliyormuş.
+
 ## Ara durak 3 · 2026-10-04 gece · yüzeyin dalgacıkları (geçti)
 
 Özcan: *"kostik ve su yüzeyindeki o küçük dalgacıkları yapmak kolay mı? Zorsa amforaya dahil edelim. Kolaysa yapalım,
