@@ -82,8 +82,8 @@ a corner or an edge column, the lightest does not move it, the meteor brings dow
 motion with **T**, then fly up to the broken column ends and look at the bars. Settings in `scenes/yikim.cfg` (buildings,
 materials, solver, camera, sun).
 
-## 04 · Laboratory — a high-speed photography table: water, honey, sand, a water balloon, a watermelon, gel
-A dark set, a soft light panel behind. At the top of the panel **Experiment** (or **1-6**). Everything is particles,
+## 04 · Laboratory — a high-speed photography table: water, honey, sand, a water balloon, a watermelon, gel, a milk drop
+A dark set, a soft light panel behind. At the top of the panel **Experiment** (or **1-7**). Everything is particles,
 whatever the physics says. **Fast moments are recorded:** the trigger plays at once on a coarse world (**Coarse
 preview** at the bottom left), a fine world computes behind (**Fine pass …%**, the bar at the bottom); click the **Time**
 bar to watch what is computed so far. When it is done it plays once at real speed, then it is yours to look at. No video:
@@ -96,6 +96,7 @@ what is kept is the physics, drawn live from any view.
 | **Sand** | live; **left-drag**: the funnel follows the cursor (fill the beaker or heap the table) · **B** or **Drop a steel ball** |
 | **Water balloon** | **left click** the balloon (a needle where you click) or **Space** (from the front) |
 | **Watermelon** | **Gun**: pistol (cracks it open, knocks it off the stand) or rifle (blows it apart) · the **Round** slider (rifle: 5.56 → 7.62×51 → .50 BMG, real loads), **left click** the melon (fired from the camera) or **Space** (from the side, through the middle) |
+| **Milk drop** | the **Height** slider (5-50 cm), **Space** or **Let a drop fall**: watch the crown at ×1/100 |
 | **Gel** | the **Round** slider (pistol: .22 → 9 mm → .50 AE), **left click** the block or **Space** (from the side, lengthwise): the track and the temporary cavity inside the clear block |
 
 | Key | What it does |

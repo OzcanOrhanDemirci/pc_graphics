@@ -37,12 +37,12 @@ float2 segNormal(const ProfilePoint& a, const ProfilePoint& b) {
 
 }   // namespace
 
-Profile glassProfile(float ri, float H, float wall, float base, float taper) {
+Profile glassProfile(float ri, float H, float wall, float base, float taper, float fillet) {
     Profile p;
     const float ro = ri + wall;
     const float rob = ro * taper, rib = std::max(0.002f, ri * taper - (1.0f - taper) * 0.0f);
     const float cb = std::min(0.0025f, 0.4f * base);   // the foot's rounded edge
-    const float ci = std::min(0.004f, 0.5f * rib);    // the inside's rounded bottom
+    const float ci = std::min(fillet, 0.5f * rib);    // the inside's rounded bottom
     p.push_back({0.0f, 0.0f, false});
     arc(p, rob - cb, cb, cb, -0.5f * kPi, 0.0f, 6, true);
     p.push_back({ro, H - 0.5f * wall, true});
@@ -176,6 +176,29 @@ std::vector<float3> sampleProfileWalls(const Profile& p, float spacing, float st
         }
     }
     return out;
+}
+
+void removeNear(std::vector<float3>& fluid, const std::vector<float3>& walls, float d) {
+    std::unordered_map<long long, std::vector<int>> grid;
+    auto key = [&](int x, int y, int z) { return (long long)(x + 100000) * 40000000000LL + (long long)(y + 100000) * 200000LL + (long long)(z + 100000); };
+    for (size_t i = 0; i < walls.size(); ++i)
+        grid[key(int(std::floor(walls[i].x / d)), int(std::floor(walls[i].y / d)), int(std::floor(walls[i].z / d)))].push_back(int(i));
+    std::vector<float3> keep;
+    keep.reserve(fluid.size());
+    for (const float3& p : fluid) {
+        const int cx = int(std::floor(p.x / d)), cy = int(std::floor(p.y / d)), cz = int(std::floor(p.z / d));
+        bool near = false;
+        for (int dz = -1; dz <= 1 && !near; ++dz)
+            for (int dy = -1; dy <= 1 && !near; ++dy)
+                for (int dx = -1; dx <= 1 && !near; ++dx) {
+                    auto it = grid.find(key(cx + dx, cy + dy, cz + dz));
+                    if (it == grid.end()) continue;
+                    for (int j : it->second)
+                        if (length(walls[size_t(j)] - p) < d) { near = true; break; }
+                }
+        if (!near) keep.push_back(p);
+    }
+    fluid.swap(keep);
 }
 
 std::vector<float3> fillCylinder(float radius, float y0, float y1, float s, unsigned seed) {

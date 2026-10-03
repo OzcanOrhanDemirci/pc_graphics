@@ -5,7 +5,7 @@
 
 ## Şu an · 2026-10-03 gecesi (Özcan uyurken, otonom)
 
-**Altı deney çalışıyor, uygulamada galeride 04.** Açmak: `build\pc_graphics.exe` → 04 Laboratuvar, ya da
+**Yedi deney çalışıyor, uygulamada galeride 04.** Açmak: `build\pc_graphics.exe` → 04 Laboratuvar, ya da
 `build\pc_graphics.exe --scene laboratuvar`. Tuşlar `GOSTERI.md` / `DEMO.md`, ekranda F1. Kareler masaüstünde
 `Laboratuvar` klasöründe.
 
@@ -16,6 +16,7 @@
 | Kum | canlı | huniden masaya ve behere; fareyle gezdir; çelik bilye | yığılma açısı **32,5°** (ölçüt 30-35°); tane dokusu |
 | Su balonu | kayıt | masadaki balona iğne (tıkla ya da Boşluk) | 10 ms'de delik, 20-30 ms'de lastik soyulurken su balon biçiminde, sonra çöker |
 | Karpuz | kayıt | tabanca ya da tüfekle (5,56 → 7,62×51 → .50 BMG, gerçek yükler) | ~600 J birikir; birkaç ms şişer, kabuk taç gibi açılır; parça görüntüsü yumuşak |
+| Süt damlası | kayıt | cam petri kabında 3 mm süt, 5 mm'lik damla 5-50 cm'den | 0,4 mm tanecik (134 bin), saniyenin 1/5000'i; taç açılır, uçlarından damlacıklar kopar |
 | Jel | kayıt | 24×10×10 cm balistik jel bloğu, tabancayla (.22 → 9 mm → .50 AE) | 9 mm: 24,5 cm'de 329 J; yol boyunca boşluk tüpü, blok sarsılır ve biraz zıplar |
 
 **Kayıt düzeni (karar 4, uygulandı):** tetik kaba dünyada hemen oynar ("Kaba önizleme" yazar); aynı girdilerle ince
@@ -75,6 +76,10 @@ Oynatma yalnız çizimdir (fizik yok), anlar arası doğrusal ara doldurma. Vide
   arayüz sayılır (yoksa tam iç yansıma gümüş kenar yapardı).
 
 ## Açık / bilinen sınırlar
+
+- **Süt tacı** ince duvarlı değil, damlacık perdesi gibi: gerçek taç duvarı ~0,2 mm, tanecik 0,4 mm. Bulunan hata: cam
+  kapların iç tabanındaki 4 mm yuvarlatma 3 mm'lik katmanı kesiyordu, süt camın içinde doğup fırlıyordu (durgun
+  katmanda 5,5 m/s); artık her sıvı dolumu duvar taneciklerine 0,9 aralıktan yakın noktaları eler, petri yuvarlatması 0,8 mm.
 
 - **Jel bloğu:** geçici boşluk görülüyor ama dar (~1 cm; gerçek 9 mm boşluğu 5-6 cm): boşluk payı 0,8'de blok masadan
   sıçrayıp döndü (aşağı giden akış masaya çarpıp geri dönüyor), 0,3'e indirildi. Esnek enerjiyi depolayan bir boşluk

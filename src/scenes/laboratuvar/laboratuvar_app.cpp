@@ -96,8 +96,8 @@ void LaboratuvarApp::applyLook() {
 
 void LaboratuvarApp::setCamera(Deney d) {
     const std::string k = std::string("kamera.") + deneyKey(d);
-    const float3 defPos[kDeneyCount] = {{0.12f, 0.24f, 0.95f}, {0.0f, 0.16f, 0.50f}, {0.02f, 0.17f, 0.58f}, {0.0f, 0.2f, 0.78f}, {0.10f, 0.26f, 1.25f}, {0.06f, 0.13f, 0.55f}};
-    const float3 defAim[kDeneyCount] = {{-0.03f, 0.20f, 0.0f}, {0.0f, 0.06f, 0.0f}, {0.03f, 0.07f, 0.0f}, {0.0f, 0.06f, 0.0f}, {0.0f, 0.17f, 0.0f}, {0.0f, 0.05f, 0.0f}};
+    const float3 defPos[kDeneyCount] = {{0.12f, 0.24f, 0.95f}, {0.0f, 0.16f, 0.50f}, {0.02f, 0.17f, 0.58f}, {0.0f, 0.2f, 0.78f}, {0.10f, 0.26f, 1.25f}, {0.06f, 0.13f, 0.55f}, {0.0f, 0.035f, 0.13f}};
+    const float3 defAim[kDeneyCount] = {{-0.03f, 0.20f, 0.0f}, {0.0f, 0.06f, 0.0f}, {0.03f, 0.07f, 0.0f}, {0.0f, 0.06f, 0.0f}, {0.0f, 0.17f, 0.0f}, {0.0f, 0.05f, 0.0f}, {0.0f, 0.012f, 0.0f}};
     cam.lookAt(cfg.v3(k + ".konum", defPos[int(d)]), cfg.v3(k + ".hedef", defAim[int(d)]));
     cam.fovDeg = cfg.f(k + ".fov", cfg.f("kamera.fov", 30.0f));
     // a lens: a little depth of field, in focus at the experiment (the live window refocuses on the picture's middle)
@@ -157,6 +157,7 @@ void LaboratuvarApp::setupScene(Deney d, int maxParticles, const std::vector<uin
     gel.ior = cfg.f("jel.kirilma", 1.345f);
     gel.sigma = cfg.v3("jel.sogurma", make_float3(2.5f, 3.5f, 10.0f));
     const int mGel = add(gel);
+    const int mMilk = add(mat(LM_WET, cfg.v3("damla.renk", make_float3(0.86f, 0.86f, 0.84f)), 0.03f, 5000.0f));
     R.uploadMaterials();
     // the set
     R.addMesh(tableMesh(0.75f, 0.32f, -0.40f, 0.03f), mSlate);
@@ -208,6 +209,7 @@ void LaboratuvarApp::setupScene(Deney d, int maxParticles, const std::vector<uin
         surface(DC_FLESH, mFlesh, k);
         surface(DC_JUICE, mJuice, S);
     }
+    if (d == Deney::Damla) surface(DC_MILK, mMilk, S);
     if (d == Deney::Jel) {
         FluidSurfaceSettings k = S;
         k.smoothing = cfg.f("jel.yuzey_yumusatma", 0.5f);
@@ -316,6 +318,7 @@ LabEvent defaultEvent(Deney d, const Config& c) {
         e.power = c.f("test.jel_guc", 0.5f);
         break;
     }
+    case Deney::Damla: e.kind = LabEvent::Drop; break;
     case Deney::Kum: e.kind = LabEvent::Ball; e.a = c.v3("test.bilye", make_float3(0.0f, 0.25f, 0.0f)); break;
     default: break;
     }

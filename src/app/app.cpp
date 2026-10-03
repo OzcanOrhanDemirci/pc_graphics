@@ -533,6 +533,8 @@ int App::run(const Options& opt) {
                 control("eylem", 0); wait(0.6); shot("lab_balon_onizleme"); wait(12.0); log("lab balon kayit"); shot("lab_balon_kayit");
                 control("deney", 4); wait(4.0); shot("lab_karpuz");
                 control("eylem", 0); wait(0.6); shot("lab_karpuz_onizleme"); wait(14.0); log("lab karpuz kayit"); shot("lab_karpuz_kayit");
+                control("deney", 6); wait(4.0); shot("lab_damla");
+                control("eylem", 0); wait(0.6); shot("lab_damla_onizleme"); wait(8.0); log("lab damla kayit"); shot("lab_damla_kayit");
                 control("deney", 5); wait(4.0); shot("lab_jel");
                 control("eylem", 0); wait(0.6); shot("lab_jel_onizleme"); wait(10.0); log("lab jel kayit"); shot("lab_jel_kayit");
             }

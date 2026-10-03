@@ -67,6 +67,8 @@ void LabRecording::run(Config cfg, Deney d, LabInputs in, LabEvent e) {
     const std::string pre = std::string(deneyKey(d)) + ".";
     w.settle(cfg.f(pre + "oturma", 1.0f), std::max(dt_, 1.0 / cfg.f(pre + "oturma_hiz", float(1.0 / dt_))));   // a solid may settle in larger steps   // in the recording's own steps (its substeps are set for them)
     if (stop_) { done_ = true; return; }
+    // the trigger first: it may add particles (a drop), and they must be among the drawn ones and fit the buffers
+    w.trigger(e);
     // the drawn particles, and where the membrane and the ball are among them
     std::vector<uint32_t> idx;
     std::vector<int> drawnOf(w.code.size(), -1);
@@ -115,7 +117,6 @@ void LabRecording::run(Config cfg, Deney d, LabInputs in, LabEvent e) {
     std::printf("kayit: %s; %d kare x %.2f ms dunya zamani, %d cizilen tanecik, %.0f MB (kurma + oturma %.1f s)\n", summary.c_str(), total_.load(), dt_ * 1000.0, n,
                 double(perFrame) * total_.load() / 1048576.0, nowS() - t0);
     setState("compute");
-    w.trigger(e);
     const double tc = nowS();
     for (int k = 0; k < total_.load(); ++k) {
         if (stop_) break;

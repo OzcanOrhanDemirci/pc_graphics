@@ -7,6 +7,7 @@
 //   Kum     a funnel pours sand (grains with friction) on the table and into a beaker; a steel ball can be dropped
 //   Balon   a water balloon (a stretched rubber membrane round water) hangs; a needle pricks it where clicked
 //   Karpuz  a small watermelon (a brittle rind, a soft flesh that turns to juice) on a stand; a rifle shot
+//   Damla   a drop of milk falling into a thin layer of milk in a glass dish: the crown and the jet
 //   Jel     a block of ballistic gelatin (clear, elastic) on the table; a pistol shot: the temporary cavity opens and
 //           closes inside it, the block shudders
 #pragma once
@@ -19,14 +20,14 @@
 #include <string>
 #include <vector>
 
-enum class Deney : int { Su = 0, Bal = 1, Kum = 2, Balon = 3, Karpuz = 4, Jel = 5 };
-constexpr int kDeneyCount = 6;
+enum class Deney : int { Su = 0, Bal = 1, Kum = 2, Balon = 3, Karpuz = 4, Jel = 5, Damla = 6 };
+constexpr int kDeneyCount = 7;
 const char* deneyKey(Deney d);            // the settings' prefix: "su", "bal", "kum", "balon", "karpuz"
-inline bool deneyRecorded(Deney d) { return d == Deney::Su || d == Deney::Balon || d == Deney::Karpuz || d == Deney::Jel; }
+inline bool deneyRecorded(Deney d) { return d == Deney::Su || d == Deney::Balon || d == Deney::Karpuz || d == Deney::Jel || d == Deney::Damla; }
 
 // what a particle is drawn as (the renderer: a surface each; DC_NONE not drawn: glass walls, a stand)
-enum DrawCode : uint8_t { DC_NONE = 0, DC_WATER = 1, DC_HONEY = 2, DC_SAND = 3, DC_RUBBER = 4, DC_RIND = 5, DC_FLESH = 6, DC_JUICE = 7, DC_STEEL = 8, DC_PITH = 9, DC_GEL = 10 };
-constexpr int kDrawCodes = 11;   // DC_RIND the green skin, DC_PITH the white rind under it
+enum DrawCode : uint8_t { DC_NONE = 0, DC_WATER = 1, DC_HONEY = 2, DC_SAND = 3, DC_RUBBER = 4, DC_RIND = 5, DC_FLESH = 6, DC_JUICE = 7, DC_STEEL = 8, DC_PITH = 9, DC_GEL = 10, DC_MILK = 11 };
+constexpr int kDrawCodes = 12;   // DC_RIND the green skin, DC_PITH the white rind under it
 
 // what the panel sets: the inputs a recording keeps with its trigger (0..1 each, read per experiment)
 struct LabInputs {
@@ -40,7 +41,7 @@ struct LabInputs {
 
 // a trigger (what a recording replays at its time zero)
 struct LabEvent {
-    enum Kind : int { None = 0, Pour = 1, Prick = 2, Shot = 3, Ball = 4 } kind = None;
+    enum Kind : int { None = 0, Pour = 1, Prick = 2, Shot = 3, Ball = 4, Drop = 5 } kind = None;
     float3 a = make_float3(0, 0, 0);   // Prick: the point; Shot: the muzzle; Ball: where it is let go
     float3 b = make_float3(0, 0, 0);   // Shot: the aim point
     float power = 0.5f;
@@ -132,6 +133,8 @@ private:
     void buildBalon();
     void buildKarpuz();
     void buildJel();
+    void buildDamla();
+    float milkTop_ = 0.0f;   // Damla: the milk layer's surface
     float3 suPivot_ = make_float3(0, 0, 0), suBeakerBase_ = make_float3(0, 0, 0);
     float suAngle(double t) const;   // the beaker's tilt (rad, clockwise negative) t seconds after the pour began
     void placeProps();

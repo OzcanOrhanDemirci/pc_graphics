@@ -75,8 +75,8 @@ biriktiğini izle; zemin kat kolonlarına top at, gücü değiştirerek (ölçü
 kıpırdatmaz, göktaşı apartmanı da gökdeleni de tek atışta yıkar); çöküşü **T** ile ağır çekimde izle, kırık kolon uçlarına uçup demirlere yakından bak.
 Ayarlar `scenes/yikim.cfg` (bina, malzemeler, çözücü, kamera, güneş).
 
-## 04 · Laboratuvar — ağır çekim fotoğraf masası: su, bal, kum, su balonu, karpuz, jel
-Koyu set, arkada yumuşak ışık paneli. Panelin en üstünde **Deney** (ya da **1-6**). Her şey tanecik, fizik ne derse o.
+## 04 · Laboratuvar — ağır çekim fotoğraf masası: su, bal, kum, su balonu, karpuz, jel, süt damlası
+Koyu set, arkada yumuşak ışık paneli. Panelin en üstünde **Deney** (ya da **1-7**). Her şey tanecik, fizik ne derse o.
 **Hızlı anlar kayıt:** tetik kaba dünyada hemen oynar (sol altta **Kaba önizleme**), ince dünya arka planda
 hesaplanır (**İnce hesap %…**, alttaki çubuk); **Zaman** çubuğuna tıklayınca hesaplanan kısım hemen izlenir. Bitince bir
 kez gerçek hızda oynar, sonra serbest inceleme. Video yok: saklanan fiziktir, her açıdan canlı çizilir.
@@ -88,6 +88,7 @@ kez gerçek hızda oynar, sonra serbest inceleme. Video yok: saklanan fiziktir, 
 | **Kum** | canlı; **sol tıkla sürükle**: huni imleci izler (behere doldur ya da masaya yığ) · **B** ya da **Çelik bilye bırak** |
 | **Su balonu** | balona **sol tık** (tıkladığın yere iğne) ya da **Boşluk** (önden) |
 | **Karpuz** | **Silah**: tabanca (karpuzu açar, kaideden düşürür) ya da tüfek (dağıtır) · **Mermi** çubuğu (tüfekte 5,56 → 7,62×51 → .50 BMG, gerçek yükler), karpuza **sol tık** (kameradan ateş) ya da **Boşluk** (yandan, ortadan) |
+| **Süt damlası** | **Yükseklik** çubuğu (5-50 cm), **Boşluk** ya da **Damla bırak**: taçı ×1/100'de izle |
 | **Jel** | **Mermi** çubuğu (tabanca: .22 → 9 mm → .50 AE), bloğa **sol tık** ya da **Boşluk** (yandan, boylamasına): yol ve geçici boşluk saydam bloğun içinde |
 
 | Tuş | Ne yapar |

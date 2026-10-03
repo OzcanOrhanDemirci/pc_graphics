@@ -133,7 +133,7 @@ with the mouse or with keys, start it; click to throw a wrecking ball, slow time
 ### 4 · Laboratory *(Laboratuvar)* · October 2026
 
 A high-speed photography table: a dark set with a large soft panel behind the experiment, the classic light of liquid
-photography (glass and liquids read by their refracted edges). Six experiments, all of particles in one solver of
+photography (glass and liquids read by their refracted edges). Seven experiments, all of particles in one solver of
 our own, whatever the physics says:
 
 - **Water** poured from a tilting beaker into a tumbler, from 12 to 45 cm: it splashes, overflows, pools on the table.
@@ -144,6 +144,7 @@ our own, whatever the physics says:
   balloon's shape for a moment, then slumps.
 - **A watermelon** shot with a rifle (5.56, 7.62×51, .50 BMG; real loads): it swells for a few milliseconds, then the
   rind opens like a crown.
+- **A drop of milk** into a thin layer of milk (0.4 mm particles, 1/5000 s): the crown opens and throws droplets.
 - **A block of ballistic gelatin** shot with a pistol (.22, 9 mm, .50 AE): the track and its temporary cavity inside
   the clear block, the block shuddering.
 

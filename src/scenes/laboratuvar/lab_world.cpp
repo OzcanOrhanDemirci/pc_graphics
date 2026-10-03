@@ -37,7 +37,8 @@ void translation(float m[12], float3 t) {
 // the glass ware of the experiments (lab_geom.h profiles), one place: the renderer draws the same profiles
 struct Glass {
     float ri, H, wall, base, taper;
-    Profile profile() const { return glassProfile(ri, H, wall, base, taper); }
+    float fillet = 0.004f;
+    Profile profile() const { return glassProfile(ri, H, wall, base, taper, fillet); }
 };
 
 // a disc of points (a hexagonal lattice of spacing s inside radius r), turned by angle
@@ -69,6 +70,7 @@ const char* deneyKey(Deney d) {
     case Deney::Balon: return "balon";
     case Deney::Karpuz: return "karpuz";
     case Deney::Jel: return "jel";
+    case Deney::Damla: return "damla";
     }
     return "su";
 }
@@ -149,6 +151,7 @@ bool LabWorld::build(Deney d, const Config& sceneCfg, bool fine_, const LabInput
     case Deney::Balon: buildBalon(); break;
     case Deney::Karpuz: buildKarpuz(); break;
     case Deney::Jel: buildJel(); break;
+    case Deney::Damla: buildDamla(); break;
     }
     pw.reserve(int(code.size()) + cfg.i(pre + "ek_kapasite", 0));
     if (d == Deney::Bal && cfg.i("bal.yaylar", 1)) pw.reserveSprings(cfg.i("bal.yay_kapasite", 1200000));
@@ -220,12 +223,14 @@ void LabWorld::buildSu() {
     const int gT = pw.addGroup(0);
     addHeld(sampleProfileWalls(kTumbler.profile(), s, 0.75f * s), P_TUMBLER, gT);
     const int gB = pw.addGroup(0);
-    addHeld(sampleProfileWalls(kBeaker.profile(), s, 0.75f * s), P_BEAKER, gB);
+    const std::vector<float3> beakerWalls = sampleProfileWalls(kBeaker.profile(), s, 0.75f * s);
+    addHeld(beakerWalls, P_BEAKER, gB);
     // the water, at rest in the beaker: a spacing from the walls' particles
     const float wallIn = std::min(0.5f * s, 0.5f * kBeaker.wall), baseIn = std::min(0.5f * s, 0.5f * kBeaker.base);
     const float rWater = kBeaker.ri + wallIn - 0.5f * s;
     const float y0 = kBeaker.base - baseIn + 0.5f * s;
     std::vector<float3> water = fillCylinder(rWater, y0, y0 + cfg.f("su.dolum", 0.070f), s, 7u);
+    removeNear(water, beakerWalls, 0.9f * s);   // the beaker's rounded inside corner
     for (float3& p : water) p = xfApply(prop[P_BEAKER].xf, p);
     pw.addParticles(water, 1000.0f, 0);
     code.insert(code.end(), water.size(), DC_WATER);
@@ -498,13 +503,40 @@ void LabWorld::buildJel() {
     boxHi = make_float3(1.0f, 1.0f, 1.0f);
 }
 
+// ---------------------------------------------------------------------------------------------------- Damla
+// a glass petri dish with a thin layer of milk; the trigger lets a drop fall into it (placed just above the surface,
+// moving at the speed of a fall from `height`)
+
+namespace {
+const Glass kPetri{0.032f, 0.012f, 0.0015f, 0.003f, 0.98f, 0.0008f};
+}
+
+void LabWorld::buildDamla() {
+    propUsed[P_DISH] = true;
+    identity(prop[P_DISH].xf);
+    const int g = pw.addGroup(0);
+    const std::vector<float3> walls = sampleProfileWalls(kPetri.profile(), s, 0.75f * s);
+    addHeld(walls, P_DISH, g);
+    const float wallIn = std::min(0.5f * s, 0.5f * kPetri.wall), baseIn = std::min(0.5f * s, 0.5f * kPetri.base);
+    const float y0 = kPetri.base - baseIn + 0.5f * s;
+    const float depth = cfg.f("damla.derinlik", 0.003f);
+    std::vector<float3> milk = fillCylinder(kPetri.ri * kPetri.taper + wallIn - 0.5f * s, y0, y0 + depth, s, 13u);
+    removeNear(milk, walls, 0.9f * s);
+    pw.addParticles(milk, cfg.f("damla.yogunluk", 1030.0f), 0);
+    code.insert(code.end(), milk.size(), DC_MILK);
+    milkTop_ = y0 + depth - 0.5f * s;
+    aim = make_float3(0.0f, milkTop_, 0.0f);
+    boxLo = make_float3(-0.2f, -0.01f, -0.2f);
+    boxHi = make_float3(0.2f, 0.2f, 0.2f);
+}
+
 // ---------------------------------------------------------------------------------------------------- props
 
 HostMesh labPropMesh(Deney d, int id) {
     switch (id) {
     case LabWorld::P_TUMBLER: return d == Deney::Su ? revolve(kTumbler.profile(), 160) : HostMesh{};
     case LabWorld::P_BEAKER: return d == Deney::Su ? revolve(kBeaker.profile(), 160) : d == Deney::Kum ? revolve(kSandBeaker.profile(), 160) : HostMesh{};
-    case LabWorld::P_DISH: return d == Deney::Bal ? revolve(kDish.profile(), 160) : HostMesh{};
+    case LabWorld::P_DISH: return d == Deney::Bal ? revolve(kDish.profile(), 160) : d == Deney::Damla ? revolve(kPetri.profile(), 192) : HostMesh{};
     case LabWorld::P_DIPPER: return d == Deney::Bal ? dipperMesh(0.011f, 0.032f, 0.0045f, 0.26f) : HostMesh{};
     case LabWorld::P_FUNNEL: return d == Deney::Kum ? revolve(funnelProfile(0.045f, 0.0045f, 0.05f, 0.03f, 0.0018f), 128) : HostMesh{};
     case LabWorld::P_STAND: {
@@ -582,6 +614,26 @@ void LabWorld::trigger(const LabEvent& e) {
         for (int i = ballFirst; i < ballFirst + ballCount; ++i) c = c + x[size_t(i)];
         c = c * (1.0f / std::max(1, ballCount));
         pw.placeGroup(ballGroup, e.a - c, make_float3(0, 0, 0));
+    } else if (e.kind == LabEvent::Drop && deney == Deney::Damla) {
+        // a drop of radius r, a little above the milk, moving down at sqrt(2 g h): as if it fell from h
+        const float r = cfg.f("damla.yaricap", 0.0025f);
+        const float h = cfg.f("damla.yukseklik_en_az", 0.05f) + in.height * (cfg.f("damla.yukseklik_en_cok", 0.5f) - cfg.f("damla.yukseklik_en_az", 0.05f));
+        const float v = std::sqrt(2.0f * pw.params.gravity * h);
+        const float3 c = make_float3(e.a.x, milkTop_ + r + cfg.f("damla.aralik", 0.006f), e.a.z);
+        std::vector<float3> pos, vel;
+        const int k = int(std::ceil(r / s)) + 1;
+        for (int z = -k; z <= k; ++z)
+            for (int y = -k; y <= k; ++y)
+                for (int x = -k; x <= k; ++x) {
+                    const float3 p = make_float3(x * s, y * s, z * s);
+                    if (length(p) <= r - 0.3f * s) {
+                        pos.push_back(c + p);
+                        vel.push_back(make_float3(0.0f, -v, 0.0f));
+                    }
+                }
+        const int added = pw.appendFluid(pos, vel, cfg.f("damla.yogunluk", 1030.0f));
+        code.insert(code.end(), size_t(added), DC_MILK);
+        std::printf("damla: %d tanecik, %.1f mm, %.0f cm'den (%.2f m/s)\n", added, 2000.0f * r, h * 100.0f, v);
     } else if (e.kind == LabEvent::Prick && membraneFirst >= 0) {
         // a needle: the bonds of the membrane within a few millimetres of the point are cut (at its nearest membrane
         // particle: a recording's finer balloon sags a little differently). From now on a tear's tip runs: a bond

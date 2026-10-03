@@ -33,6 +33,7 @@ std::string deneyName(Deney d) {
     case Deney::Balon: return L("Su balonu", "Water balloon");
     case Deney::Karpuz: return L("Karpuz", "Watermelon");
     case Deney::Jel: return L("Jel", "Gel");
+    case Deney::Damla: return L("Süt damlası", "Milk drop");
     }
     return "";
 }
@@ -44,6 +45,7 @@ std::string deneyNote(Deney d) {
     case Deney::Balon: return L("Balona tıkla: iğne · kayıt", "Click the balloon: a needle · recorded");
     case Deney::Karpuz: return L("Karpuza tıkla: tüfek · kayıt", "Click the melon: a rifle · recorded");
     case Deney::Jel: return L("Balistik jel bloğu, bloğa tıkla: tabanca · kayıt", "A ballistic gel block, click it: a pistol · recorded");
+    case Deney::Damla: return L("İnce süt katmanına bir damla: taç · kayıt", "A drop into a thin layer of milk: the crown · recorded");
     }
     return "";
 }
@@ -91,7 +93,7 @@ public:
         i.accent = 0x6FC2B4;
         i.reloadable = true;
         i.keys = {{L("Deney", "Experiment"),
-                   {{"1-6", L("Su, bal, kum, balon, karpuz, jel", "Water, honey, sand, balloon, melon, gel")},
+                   {{"1-7", L("Su, bal, kum, balon, karpuz, jel, süt damlası", "Water, honey, sand, balloon, melon, gel, milk drop")},
                     {L("Boşluk", "Space"), L("Dök / akıt / durdur", "Pour / run / stop")},
                     {L("Sol tık", "Left click"), L("İğne, ateş; balda ve kumda sürükle: gezdir", "Needle, fire; honey and sand: drag to move")},
                     {"B", L("Kuma çelik bilye bırak", "Drop a steel ball on the sand")},
@@ -340,6 +342,18 @@ public:
             s.controls.push_back(c);
         }
         const LabInputs& li = in_[int(deney_)];
+        if (deney_ == Deney::Damla) {
+            app::Control c;
+            c.kind = app::Control::Kind::Slider;
+            c.id = "yukseklik";
+            c.title = L("Yükseklik", "Height");
+            c.section = true;
+            c.value = li.height;
+            const float h = a_.cfg.f("damla.yukseklik_en_az", 0.05f) + li.height * (a_.cfg.f("damla.yukseklik_en_cok", 0.5f) - a_.cfg.f("damla.yukseklik_en_az", 0.05f));
+            c.text = num(h * 100.0, 0) + " cm";
+            c.detail = L("Damlanın düştüğü yükseklik: çarpma hızı ", "The drop falls from here: it lands at ") + num(std::sqrt(2.0 * 9.81 * h), 1) + L(" m/sn", " m/s");
+            s.controls.push_back(c);
+        }
         if (deney_ == Deney::Su) {
             app::Control c;
             c.kind = app::Control::Kind::Slider;
@@ -407,6 +421,7 @@ public:
             if (deney_ == Deney::Su) { c.text = L("Dök", "Pour"); c.enabled = mode_ == Mode::Live && !w_.triggered(); }
             else if (deney_ == Deney::Bal || deney_ == Deney::Kum) c.text = li.flowing ? L("Durdur", "Stop") : (deney_ == Deney::Bal ? L("Akıt", "Run") : L("Dök", "Pour"));
             else if (deney_ == Deney::Balon) { c.text = L("İğne batır", "Prick it"); c.enabled = mode_ == Mode::Live; }
+            else if (deney_ == Deney::Damla) { c.text = L("Damla bırak", "Let a drop fall"); c.enabled = mode_ == Mode::Live; }
             else { c.text = L("Ateş et (ortadan)", "Fire (through the middle)"); c.enabled = mode_ == Mode::Live; }
             s.controls.push_back(c);
         }
@@ -593,6 +608,8 @@ private:
         if (deney_ == Deney::Su) {
             if (w_.triggered()) return;
             e.kind = LabEvent::Pour;
+        } else if (deney_ == Deney::Damla) {
+            e.kind = LabEvent::Drop;
         } else if (deney_ == Deney::Balon) {
             const float R = a_.cfg.f("balon.yaricap", 0.06f);
             const float3 m = a_.cfg.v3("balon.merkez", make_float3(0.0f, 0.20f, 0.0f));

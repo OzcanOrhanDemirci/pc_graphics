@@ -17,7 +17,9 @@ using Profile = std::vector<ProfilePoint>;
 
 // a tumbler or a beaker: inner radius at the top, height, wall, base thickness, taper (outer radius at the bottom / at
 // the top), a rounded rim (its radius = half the wall)
-Profile glassProfile(float innerRadius, float height, float wall, float base, float taper = 1.0f);
+Profile glassProfile(float innerRadius, float height, float wall, float base, float taper = 1.0f, float fillet = 0.004f);
+// fluid points closer than d to any of the wall points removed (a liquid must not be born inside its glass)
+void removeNear(std::vector<float3>& fluid, const std::vector<float3>& walls, float d);
 // the mesh: the profile turned about y (segments around), smooth normals where the profile is smooth
 HostMesh revolve(const Profile& p, int segments);
 // the solid's walls as particles: points inside the solid, half a spacing in from its surface where it is thick
