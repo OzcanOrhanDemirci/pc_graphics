@@ -834,8 +834,8 @@ std::string LabWorld::summary() const {
     int counts[kDrawCodes] = {};
     for (uint8_t c : code) counts[c]++;
     char b[256];
-    std::snprintf(b, sizeof(b), "%s %s: aralik %.2f mm, %d tanecik (cam/kaide %d, su %d, bal %d, kum %d, lastik %d, kabuk %d, et %d, celik %d)", deneyKey(deney),
-                  fine ? "ince" : "kaba", s * 1000.0f, pw.count(), counts[DC_NONE], counts[DC_WATER], counts[DC_HONEY], counts[DC_SAND], counts[DC_RUBBER],
-                  counts[DC_RIND], counts[DC_FLESH], counts[DC_STEEL]);
+    std::snprintf(b, sizeof(b), "%s %s: aralik %.2f mm, %d tanecik (cam/kaide %d, su %d, bal %d, kum %d, lastik %d, kabuk %d + %d, et %d, celik %d, jel %d, sut %d)",
+                  deneyKey(deney), fine ? "ince" : "kaba", s * 1000.0f, pw.count(), counts[DC_NONE], counts[DC_WATER], counts[DC_HONEY], counts[DC_SAND],
+                  counts[DC_RUBBER], counts[DC_RIND], counts[DC_PITH], counts[DC_FLESH], counts[DC_STEEL], counts[DC_GEL], counts[DC_MILK]);
     return b;
 }

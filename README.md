@@ -165,7 +165,11 @@ flowing is the scene.
 
 | Honey on a glass dish | A 7.62×51 round through a watermelon, 0 to 24 ms |
 | --- | --- |
-| ![An amber pool of honey in a glass dish, a glob falling from the dipper](docs/images/lab-bal.jpg) | ![The watermelon swelling, then its rind bursting open](docs/images/lab-karpuz-seri.jpg) |
+| ![An amber thread of honey folding into a pool in a glass dish](docs/images/lab-bal.jpg) | ![The watermelon swelling, then its rind bursting open](docs/images/lab-karpuz-seri.jpg) |
+
+| A milk drop's crown, 16 ms | A 9 mm round through ballistic gel, 1.2 ms: the track and its cavity |
+| --- | --- |
+| ![A crown of milk droplets rising from a thin layer of milk in a petri dish](docs/images/lab-damla.jpg) | ![A clear gelatin block with the bullet's track and temporary cavity along its length](docs/images/lab-jel.jpg) |
 
 How each is made, and what was measured on the way (the Turkish working journal has it all,
 [docs/laboratuvar/DURUM.md](docs/laboratuvar/DURUM.md)):

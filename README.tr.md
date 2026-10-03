@@ -162,7 +162,11 @@ saklanan fiziktir, her açıdan canlı çizilir. Bal ve kum yalnız canlı, çü
 
 | Cam tabakta bal | Karpuzdan geçen 7,62×51 mermi, 0-24 ms |
 | --- | --- |
-| ![Cam tabakta kehribar bir bal gölü, kaşıktan düşen bir damla](docs/images/lab-bal.jpg) | ![Karpuz şişiyor, sonra kabuğu patlayarak açılıyor](docs/images/lab-karpuz-seri.jpg) |
+| ![Cam tabakta göle katlanan kehribar bir bal ipi](docs/images/lab-bal.jpg) | ![Karpuz şişiyor, sonra kabuğu patlayarak açılıyor](docs/images/lab-karpuz-seri.jpg) |
+
+| Süt damlasının tacı, 16 ms | Balistik jelden geçen 9 mm, 1,2 ms: yol ve boşluğu |
+| --- | --- |
+| ![Petri kabındaki ince süt katmanından yükselen damlacıklı bir taç](docs/images/lab-damla.jpg) | ![Boyunca merminin yolu ve geçici boşluğu görünen saydam jel bloğu](docs/images/lab-jel.jpg) |
 
 Nasıl yapıldığı ve yolda neyin ölçüldüğü (çalışma günlüğünde hepsi:
 [docs/laboratuvar/DURUM.md](docs/laboratuvar/DURUM.md)):
