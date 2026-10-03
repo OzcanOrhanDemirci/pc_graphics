@@ -199,6 +199,8 @@ void LaboratuvarApp::setupScene(Deney d, int maxParticles, const std::vector<uin
     if (d == Deney::Karpuz) {
         FluidSurfaceSettings k = S;
         k.smoothing = cfg.f("karpuz.yuzey_yumusatma", 0.6f);
+        k.supportScale = cfg.f("karpuz.yuzey_destek", 2.0f);   // tighter kernels: crisper fragment edges
+        k.iso = cfg.f("karpuz.yuzey_seviye", 0.5f);
         surface(DC_RIND, mRind, k);
         // the white rind its own surface, or drawn with the green (karpuz.ic_kabuk_ayri 0): two shells of different
         // particles interleave where the rind breaks into a camouflage of small blobs
