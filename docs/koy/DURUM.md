@@ -3,7 +3,25 @@
 > Tek kaynak durum panosu. Plan: `docs/koy/PLAN.md` (kararlar, fazlar, duraklar). Veri ve denetimleri: `docs/koy/VERI.md`.
 > Gerçek fotoğraflardan başvuru panosu: `docs/koy/BASVURU.md`. CC0 taramalar: `assets/koy/fetch.py`, `assets/koy/LICENSES.md`.
 
-## Şu an · 2026-10-04 gece · 🛑 Ara durak 3: yüzeyin dalgacıkları (Özcan'ın bakışını bekliyor)
+## Şu an · 2026-10-04 gece · ✅ Ara durak 3 geçti, dalgacıklar kalıyor; kostik gürültüsü ölçüldü
+
+Özcan (düzeltilmiş dalgacıklara canlı baktı): *"Daha güzel oldu. Daha tanecikli ve aslında daha az stabil ama diğeri daha
+oyuncak gibi basitti. Bu şekilde daha gerçekçi oldu. Gerçekte de su biraz pütürlü ışığı noktacıklı yansıtan halde olur."*
+Dalgacık varsayılan açık kalıyor. Düzeltilmiş sürümün kare süresi (ekran kartı boşken): yukarı bakarken 21,7 ms (46 fps;
+dalgacıksız 20,6), yüzme görünümünde 19,2 ms.
+
+**Kostik gürültüsü (kararlılık ölçüsünün kör noktası, ölçüldü):** canlı ve referans aynı kostik hacmini paylaştığı için
+kostiğin kendi Monte Carlo gürültüsü kıpırtı ölçüsüne hiç girmiyordu. Ayrı ölçüldü: aynı durgun görünüm (kumdan 1 m, 45°
+aşağı, 60 kare) bir kez şimdiki ışınla (1024², dokuya ~1 ışın), bir kez 16 kat ışınla; canlı = şimdiki, referans = 16 kat.
+Kıpırtı piksel ort / %99 **0,0113 / 0,042**, 8×8 blok **0,0109 / 0,040**, bağıl 0,52 (aynı görünümün olağan kıpırtısı
+0,00032). Blok ≈ piksel: tanecik değil, yumuşak lekeler hâlinde kaynama. Kostik zaten hızlı dans ediyor (dibi ~0,7 m/s
+süpürüyor; 16 kat ışınla ikinci zaman farkı 10,7 gri RMS), gürültü buna ~yarısı kadar ek kaynama katıyor (12,4). Işınların
+sarsıntısı sabit (her kare aynı), yani sorun yeniden rastgeleleşme değil, dokuya düşen ışın sayısı. Ucuz çare yok: 4 kat
+ışın gürültüyü yarıya indirir ama kostik 4,7 → 9,5 ms; kare yüzerken 19,2 → 24,0 ms (41,6 fps, sınırda), yukarı bakarken
+21,7 → 26,5 ms (37,7 fps). Doğru çözüm gürültüsüz bir yöntem: her yüzey hücresinin ışığını nokta yerine hüzme olarak
+dibe yaymak (alan değişimi ya da ışın türevli çekirdek). Önerim: amfora planına.
+
+## Ara durak 3 · 2026-10-04 gece · yüzeyin dalgacıkları (geçti)
 
 Özcan: *"kostik ve su yüzeyindeki o küçük dalgacıkları yapmak kolay mı? Zorsa amforaya dahil edelim. Kolaysa yapalım,
 bakayım."* Altyapının çoğu vardı (FFT sınıfı, LEAN eğim piramidi), yapıldı.
