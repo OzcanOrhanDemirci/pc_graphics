@@ -110,6 +110,9 @@ public:
     virtual const std::string& root() const = 0;
     virtual std::string capturePath() = 0;    // captures/<id>_<date_time> (no extension)
     virtual const std::vector<std::string>& overrides() const = 0;   // --set key=value, for the scene's settings
+    // Present every n-th refresh, n chosen so the rate is nearest fps (165 Hz, 41 -> every 4th: 41.25 fps, even frame
+    // times); 0: as fast as the scene draws (the default). Reset to the gallery's when the scene closes.
+    virtual void pace(float fps) { (void)fps; }
 };
 
 struct LoadState {

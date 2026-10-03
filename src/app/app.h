@@ -30,6 +30,8 @@ struct Options {
 
 class App : public Host {
 public:
+    void pace(float fps) override;
+public:
     int run(const Options& opt);
 
     // Host
@@ -79,6 +81,8 @@ private:
     Options opt_;
     GLFWwindow* win_ = nullptr;
     int fbw_ = 0, fbh_ = 0;
+    int paceInterval_ = 0;
+    double pacePeriod_ = 0.0, lastPresent_ = 0.0;   // pace(): the frame's period, when the last one was presented
     theme::Scale S_;
     std::vector<SceneInfo> infos_;
     std::vector<Picture> pictures_;

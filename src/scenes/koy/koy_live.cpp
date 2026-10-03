@@ -110,6 +110,15 @@ public:
             k_.applyQuality();
             resetAccum();
         }
+        if (!paced_) {   // the first running frame: the frame rate the plan asks for (41 fps, every 4th refresh at 165 Hz)
+            host.pace(pace41_ ? 41.0f : 0.0f);
+            paced_ = true;
+        }
+        for (const app::ControlEvent& e : in.events)
+            if (e.id == "kare" && e.item >= 0) {
+                pace41_ = e.item == 0;
+                host.pace(pace41_ ? 41.0f : 0.0f);
+            }
         if (in.pressed(GLFW_KEY_TAB)) {
             look_ = !look_;
             host.captureMouse(look_);
@@ -193,6 +202,17 @@ public:
         {
             app::Control c;
             c.kind = app::Control::Kind::Choice;
+            c.id = "kare";
+            c.title = L("Kare", "Frames");
+            c.items = {L("41 sabit", "41 steady"), L("Serbest", "Free")};
+            c.active = pace41_ ? 0 : 1;
+            c.detail = L("41: ekranın her 4. tazelemesi, eşit aralık", "41: every 4th refresh of the screen, evenly spaced");
+            c.section = true;
+            s.controls.push_back(c);
+        }
+        {
+            app::Control c;
+            c.kind = app::Control::Kind::Choice;
             c.id = "suzgec";
             c.title = L("Süzgeç", "Filter");
             c.items = {L("Kutu", "Box"), "Blackman-Harris", "Mitchell", "Gauss"};
@@ -231,7 +251,7 @@ private:
     KoyApp k_;
     uchar4* pinned_ = nullptr;
     double t_ = 0.0;
-    bool paused_ = false, look_ = false;
+    bool paused_ = false, look_ = false, paced_ = false, pace41_ = true;
     int accum_ = 0;
 };
 

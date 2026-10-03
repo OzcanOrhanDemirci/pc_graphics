@@ -28,6 +28,7 @@ src/
     fener/      sahne 2 · Fener (gerçek zamanlı hacimsel ışık)
     yikim/      sahne 3 · Yıkım (ekran kartında fizik çözücü)
     laboratuvar/ sahne 4 · Laboratuvar (sıvı ve tanecik fiziği, ağır çekim kayıtları)
+    koy/        sahne 5 · Koy (su altı: sabit örnekli süper örnekleme, tayf tabloları, FFT yüzey, kostik hacmi)
       particles.*       tanecik çözücüsü (PBF, XPBD bağlar, şekil eşleme, taneler)  surface.* sıvı yüzeyi
       lab_world.*       beş deneyin kurulumu ve adımı (kaba ya da ince)  lab_record.* ince kayıt, işçi iş parçacığı
       lab_kernels.cu    çözücü, kayıt ve çizici arası küçük çekirdekler  weapons.* gerçek yükler, balistik
@@ -111,7 +112,7 @@ değişince uygulama bütün sahnelerin `info()`'sunu yeniden ister. Komut satı
 ## Tasarım dili
 
 - **Koyu, sessiz bir çerçeve, parlak resimler.** Arayüz nötr gri tonlarda; her sahne tek bir vurgu rengi getirir:
-  01 altın (`#E6B566`), 02 soğuk mavi (`#86B3DA`), 03 güvenlik turuncusu (`#E5764A`), 04 deniz yeşili (`#6FC2B4`). Galeri düğmesi, seçili öğe,
+  01 altın (`#E6B566`), 02 soğuk mavi (`#86B3DA`), 03 güvenlik turuncusu (`#E5764A`), 04 deniz yeşili (`#6FC2B4`), 05 deniz mavisi (`#4FB8C8`). Galeri düğmesi, seçili öğe,
   seçici ve ilerleme çubukları o rengi alır.
 - **Tek yazı ailesi, üç ses:** IBM Plex Serif adlar ve başlıklar, Plex Sans metin, Plex Mono sayılar ve tuş kapakları.
   Küçük başlıklar büyük harf ve harf aralıklı (Türkçe büyük harf: i → İ).

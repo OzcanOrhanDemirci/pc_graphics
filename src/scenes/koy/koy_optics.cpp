@@ -38,6 +38,16 @@ template <size_t N> float interp(const KoyPoint (&t)[N], float nm) {
     return t[N - 1].v;
 }
 float logistic(float x) { return 1.0f / (1.0f + std::exp(-x)); }
+std::string cfgString(const Config& cfg, const std::string& key, const std::string& def) {
+    const auto it = cfg.values.find(key);
+    if (it == cfg.values.end()) return def;
+    std::string v = it->second;
+    while (!v.empty() && (v.back() == ' ' || v.back() == '\r' || v.back() == '\t')) v.pop_back();
+    while (!v.empty() && (v.front() == ' ' || v.front() == '\t')) v.erase(v.begin());
+    const size_t hash = v.find('#');
+    if (hash != std::string::npos) { v = v.substr(0, hash); while (!v.empty() && v.back() == ' ') v.pop_back(); }
+    return v.empty() ? def : v;
+}
 // CIE 1931 2-degree colour matching functions, multi-lobe Gaussian fit (Wyman, Sloan & Shirley 2013), as in shared/spectrum.h
 float cmfLobe(float x, float mu, float s1, float s2) {
     const float t = (x - mu) / (x < mu ? s1 : s2);
@@ -133,30 +143,46 @@ float3 KoyOptics::xyzOf(const float* s) const {
 // ---------------------------------------------------------------------------------------------------
 void KoyOptics::spectra(const Config& cfg) {
     waterN = cfg.f("water.n", 1.333f);
-    chl = cfg.f("water.chl", 0.10f);
-    Bp = cfg.f("water.bp_fraction", 0.012f);
+    Bp = cfg.f("water.bp_fraction", 0.0183f);   // Petzold's average particle backscatter fraction
     bottomDepth = cfg.f("light.bottom", 8.0f);
     photons = cfg.i("light.photons", 400000);
     sunElevDeg = cfg.f("sun.elevation", 70.0f);
     sunAzimDeg = cfg.f("sun.azimuth", 180.0f);
     const float D2R = 3.14159265f / 180.0f;
-    // ---- absorption and scattering (GEÇİCİ particle model until the Solonenko & Mobley numbers are pinned:
-    //      phytoplankton Bricaud et al. 1998 style A Chl^E at 440 with a generic shape, CDOM exponential, particles a power law)
-    const float aph440 = 0.0654f * std::pow(chl, 0.668f);
-    const float acdom440 = cfg.f("water.cdom_ratio", 0.4f) * aph440;
-    const float bp550 = cfg.f("water.bp550_k", 0.416f) * std::pow(chl, 0.766f);
-    const float bpSlope = cfg.f("water.bp_slope", 0.8f);
+    // ---- absorption and scattering: a Jerlov water type as Solonenko & Mobley 2015 tabulate it. Absorption: pure water at
+    //      2.5 nm (Pope & Fry 1997) plus the type's non-water part (its tabulated a minus pure water, smooth, clamped at 0:
+    //      their pure-water column differs slightly from Pope & Fry in the red); scattering: their Haltrin two-component
+    //      formula (water + small + large particles).
+    const std::string type = cfgString(cfg, "water.jerlov", "IB");
+    const KoyJerlov* J = &kJerlov[0];
+    for (const KoyJerlov& k : kJerlov)
+        if (type == k.name) J = &k;
+    jerlov = J->name;
+    chl = J->chl;
+    auto nonWater = [&](float l) {
+        float prev = 0.0f;
+        for (int k = 0; k < J->n; ++k) {
+            const float v = std::max(0.0f, J->a[k] - interp(kWaterAbsorption, J->nm[k]));
+            if (l <= J->nm[k]) {
+                if (k == 0) return v;
+                const float t = (l - J->nm[k - 1]) / (J->nm[k] - J->nm[k - 1]);
+                return prev + (v - prev) * t;
+            }
+            prev = v;
+        }
+        return prev;
+    };
     for (int i = 0; i < NL; ++i) {
         const float l = lambdaOf(i);
-        aw[i] = interp(kWaterAbsorption, l);
-        // a two-peak chlorophyll shape (blue 440, red 675), normalised to 1 at 440
-        const float shape = std::exp(-0.5f * std::pow((l - 440.0f) / 32.0f, 2.0f)) * 0.95f + 0.05f * std::exp(-(l - 440.0f) / 120.0f) * (l > 440 ? 1.0f : 0.6f) +
-                            0.45f * std::exp(-0.5f * std::pow((l - 675.0f) / 12.0f, 2.0f));
-        aph[i] = aph440 * shape;
-        acdom[i] = acdom440 * std::exp(-0.014f * (l - 440.0f));
-        a[i] = aw[i] + aph[i] + acdom[i];
-        bw[i] = 0.00288f * std::pow(l / 500.0f, -4.32f);   // pure seawater, Morel 1974 (GEÇİCİ: to be checked)
-        bp[i] = bp550 * std::pow(550.0f / l, bpSlope);
+        // pure water beyond Pope & Fry's last row (727.5 nm): held at its rising end (the eye barely sees there and a metre
+        // of water swallows it)
+        aw[i] = l <= 727.5f ? interp(kWaterAbsorption, l) : 1.678f + (l - 727.5f) * 0.02f;
+        aph[i] = nonWater(l);
+        acdom[i] = 0.0f;
+        a[i] = aw[i] + aph[i];
+        const float r = 400.0f / l;
+        bw[i] = 0.00583f * std::pow(r, 4.322f);
+        bp[i] = (1.513f * J->Bs * std::pow(r, 1.7f) + 0.3411f * J->Bl * std::pow(r, 0.3f)) * cfg.f("water.particle_scale", 1.0f);
         b[i] = bw[i] + bp[i];
         c[i] = a[i] + b[i];
     }
@@ -173,7 +199,7 @@ void KoyOptics::spectra(const Config& cfg) {
         const float l = lambdaOf(i), lu = l / 1000.0f;
         const float tauR = 0.008569f * std::pow(lu, -4.0f) * (1.0f + 0.0113f * std::pow(lu, -2.0f) + 0.00013f * std::pow(lu, -4.0f));
         const float tauA = cfg.f("sky.aerosol", 0.08f) * std::pow(lu / 0.5f, -1.3f);
-        const float dir = interp(kSunDirect, l), glob = interp(kSunGlobal, l);
+        const float dir = interp(kSunDirect, std::min(l, 730.0f)), glob = interp(kSunGlobal, std::min(l, 730.0f));
         sunPerp[i] = dir * std::exp((tauR + tauA) * (1.5f - am));
         // the sky's diffuse light on a horizontal plane: the G173 global on its 37 degree plane minus the beam on it
         // (incidence 11.2 degrees), scaled by the sun's height; a clear sky's diffuse share
@@ -304,19 +330,23 @@ void KoyOptics::spectra(const Config& cfg) {
     }
     // ---- Fournier-Forand: n = 1.10 and the Junge slope that gives the particles' backscatter fraction (Mobley et al. 2002)
     {
-        ffN = cfg.f("water.ff_n", 1.10f);
-        ffD180 = 4.0f / (3.0f * (ffN - 1.0f) * (ffN - 1.0f));
+        // Mobley, Sundman & Boss 2002: on the line n = 1.01 + 0.1542 (mu - 3), find the Junge slope mu whose backscatter
+        // fraction is B_p (their Eqs. 3 and 7)
         auto backFrac = [&](float mu) {
+            const float n = 1.01f + 0.1542f * (mu - 3.0f);
+            const float d90 = 4.0f / (3.0f * (n - 1.0f) * (n - 1.0f)) * 0.5f;
             const float nu = 0.5f * (3.0f - mu);
-            const float d90 = ffD180 * 0.5f;
             return 1.0f - (1.0f - std::pow(d90, nu + 1.0f) - 0.5f * (1.0f - std::pow(d90, nu))) / ((1.0f - d90) * std::pow(d90, nu));
         };
-        float lo = 3.0f, hi = 5.0f;
-        for (int k = 0; k < 60; ++k) {
+        float lo = 3.0001f, hi = 5.0f;
+        const bool rising = backFrac(4.5f) > backFrac(3.2f);
+        for (int k = 0; k < 80; ++k) {
             const float mid = 0.5f * (lo + hi);
-            if (backFrac(mid) < Bp) lo = mid; else hi = mid;
+            if ((backFrac(mid) < Bp) == rising) lo = mid; else hi = mid;
         }
         ffMu = 0.5f * (lo + hi);
+        ffN = 1.01f + 0.1542f * (ffMu - 3.0f);
+        ffD180 = 4.0f / (3.0f * (ffN - 1.0f) * (ffN - 1.0f));
         ffNu = 0.5f * (3.0f - ffMu);
         // delta-M truncation: the phase is read no sharper than the sun's disc under water (0.2 degrees); what the
         // particles scatter inside that cone stays in the beam (it cannot be told apart from it). So: the phase is
@@ -699,7 +729,7 @@ std::string KoyOptics::summary() const {
     std::ostringstream s;
     s.setf(std::ios::fixed);
     s.precision(4);
-    s << "su (Chl " << chl << " mg/m3): c(450) " << c[at(450)] << ", c(530) " << c[at(530)] << ", c(600) " << c[at(600)]
+    s << "su (Jerlov " << jerlov << ", Chl " << chl << " mg/m3, FF n " << ffN << " Junge " << ffMu << "): c(450) " << c[at(450)] << ", c(530) " << c[at(530)] << ", c(600) " << c[at(600)]
       << " 1/m; b(530) " << b[at(530)] << ", gorus 4.8/c(530) " << 4.8f / c[at(530)] << " m; gunes suda " << std::acos(sunCosW) * 57.2958f
       << " derece; FF kesilen pay " << ffTruncated << "; Kd(490, 1-6 m) " << kdDown(at(490), 1.0f, 6.0f) << "; isik alani " << int(msField) << " ms, toplam " << int(msBuild) << " ms";
     return s.str();

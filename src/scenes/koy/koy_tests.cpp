@@ -4,6 +4,7 @@
 //   optik     the optics' self-checks: phase functions integrate to 1, the light field's Kd per wavelength
 //   kostik    the caustic volume's mean is 1 at every depth (energy), its sharpness against the sun's disc
 #include "scenes/koy/koy_app.h"
+#include "scenes/koy/koy_data.h"
 
 #include <algorithm>
 #include <cmath>
@@ -82,7 +83,8 @@ int testOptics(KoyApp& app) {
         tot += w;
         if (th > 0.5 * 3.14159265358979) bb += w;
     }
-    report("ff_geri", std::fabs(bb / tot - o.Bp) < 0.003, "geri sacilim payi %.4f, istenen %.4f", bb / tot, o.Bp);
+    report("ff_geri", std::fabs(bb / tot - o.Bp / (1.0 - o.ffTruncated)) < 0.002, "kesik fazin geri sacilim payi %.4f, beklenen B/(1-kesilen) %.4f", bb / tot,
+           o.Bp / (1.0 - o.ffTruncated));
     // the light field's downwelling irradiance with depth at 490 nm: direct beam and diffuse separately
     {
         const int li = int(std::round((490.0f - KoyOptics::L0) / KoyOptics::DL));
@@ -100,6 +102,46 @@ int testOptics(KoyApp& app) {
             const double dir = o.sunWaterPerp[li] * o.sunCosW * std::exp(-o.c[li] * j * dz / o.sunCosW);
             std::printf("         z %.2f m: Ed dogrudan %.4f + daginik %.4f = %.4f, Eu %.4f\n", j * dz, dir, ed, dir + ed, eu);
         }
+    }
+    // the radiance distribution at 5 m: horizontal and upward-looking radiance against Ed / pi (a white plate's radiance)
+    for (float nm : {490.0f, 550.0f}) {
+        const int li = int(std::round((nm - KoyOptics::L0) / KoyOptics::DL));
+        const int NZ = AP_Z, NM = AP_MU;
+        const float dz = AMB_ZMAX / float(NZ - 1);
+        const int j = int(std::round(5.0f / dz));
+        const float* L = o.field.data() + size_t(li) * NZ * NM + size_t(j) * NM;
+        double ed = o.sunWaterPerp[li] * o.sunCosW * std::exp(-o.c[li] * j * dz / o.sunCosW);
+        for (int m = 0; m < NM; ++m) {
+            const float mu = -1.0f + (m + 0.5f) * 2.0f / NM;
+            if (mu < 0) ed += L[m] * (-mu) * 2.0 * 3.14159265358979 * (2.0 / NM);
+        }
+        const double lh = 0.5 * (L[NM / 2 - 1] + L[NM / 2]), lup = L[0], ldown = L[NM - 1];
+        std::printf("         %.0f nm, 5 m: Ed/pi %.4f; yatay isinim %.4f (oran %.3f), asagidan gelen (yukari giden) %.4f (oran %.3f), yukaridan gelen daginik %.4f\n", nm,
+                    ed / 3.14159265, lh, lh / (ed / 3.14159265), ldown, ldown / (ed / 3.14159265), lup);
+    }
+    // Kd of the light field against Solonenko & Mobley's Kd for the same Jerlov type (PLAN §9 "derinlikte renk"). Their Kd
+    // is for deep water: the same optics with the sand far below (no light coming back up from a bright floor)
+    {
+        Config deep = app.cfg;
+        deep.set("light.bottom", "39");
+        KoyOptics od;
+        od.build(deep);
+        const KoyOptics& o = od;
+        const KoyJerlov* J = &kJerlov[0];
+        for (const KoyJerlov& k : kJerlov)
+            if (o.jerlov == k.name) J = &k;
+        double worst = 0.0;
+        for (int k = 0; k < J->n; ++k) {
+            const float nm = J->nm[k];
+            if (nm < 400.0f || nm > 600.0f) continue;
+            const int li = int(std::round((nm - KoyOptics::L0) / KoyOptics::DL));
+            const double kd = o.kdDown(li, 10.0f, 35.0f), kdNear = o.kdDown(li, 1.0f, 5.0f);
+            const double rel = std::fabs(kd - J->kd[k]) / J->kd[k];
+            worst = std::max(worst, rel);
+            std::printf("         Kd(%.0f nm): isik alani 10-35 m %.4f (1-5 m %.4f), Solonenko-Mobley %s %.4f (%+.0f%%)\n", nm, kd, kdNear, J->name, J->kd[k],
+                        100.0 * (kd - J->kd[k]) / J->kd[k]);
+        }
+        report("kd", worst < 0.15, "isik alaninin derindeki Kd'si (10-35 m, 400-600 nm) yayimlanan tipe en cok %%%.0f uzak (sinir %%15)", 100.0 * worst);
     }
     // Kd of the light field at a few wavelengths (printed; the comparison with the Jerlov type comes with the data)
     for (float nm : {450.0f, 490.0f, 530.0f, 570.0f, 600.0f}) {

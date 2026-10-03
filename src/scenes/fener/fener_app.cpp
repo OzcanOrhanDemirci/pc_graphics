@@ -167,6 +167,7 @@ int runFenerCli(int argc, char** argv) {
         const std::string o = out.empty() ? app.root + "/captures/kararlilik/fener_" + stabPath : out;
         std::filesystem::create_directories(o);
         const bool walk = stabPath == "yolculuk";
+        setPNGCompression(1);   // hundreds of frames: fast zlib, bigger files
         const float dt = 1.0f / stabFps;
         struct Moment { FCamera cam; float t, exposure; };
         std::vector<Moment> at(stab);

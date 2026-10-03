@@ -10,3 +10,7 @@ __pycache__/
 captures/
 # This computer's choices (the language: src/app/lang.h)
 user.cfg
+
+# Koy: CC0 scans fetched by assets/koy/fetch.py, not committed
+assets/koy/cc0/
+assets/koy/_dl/

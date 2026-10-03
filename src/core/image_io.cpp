@@ -13,6 +13,7 @@
 bool writePNG(const std::string& path, int w, int h, const unsigned char* rgba) {
     return stbi_write_png(path.c_str(), w, h, 4, rgba, w * 4) != 0;
 }
+void setPNGCompression(int level) { stbi_write_png_compression_level = level; }
 
 bool writeEXR(const std::string& path, int w, int h, int channels, const float* data) {
     const char* err = nullptr;

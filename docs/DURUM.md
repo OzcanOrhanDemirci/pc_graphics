@@ -4,6 +4,12 @@
 > `docs/altinsaat/`, `docs/fener/`, `docs/yikim/`, `docs/laboratuvar/`, `docs/koy/` (PLAN.md ve DURUM.md); `docs/tanecik/` arşiv.
 
 ## Şu an
+- **2026-10-03 (gece, otonom) · Koy K0 + K1 bitti, 🛑 Durak 1 (netlik ve kararlılık) Özcan'ın canlı bakışını bekliyor.**
+  Galeride 05 Koy (vurgu rengi deniz mavisi `#4FB8C8`). Ölçü düzeneği `tools/kararlilik.py` (Fener'e de
+  `--kararlilik` eklendi, taban ölçüldü); doğrulanmış veri `docs/koy/VERI.md`; CC0 taramalar `assets/koy/fetch.py`
+  (git dışı). Deneme alanında Koy, Fener tabanından ~10 kat sakin ve net, 53-60 fps. Neye bakılacağı, ölçümler, plandan
+  ayrılanlar ve NE DOĞRULANMADI: `docs/koy/DURUM.md`. Uygulamaya genel ekler: `--autotest` betiğinde tuş basılı tutma
+  adımı; `setPNGCompression` (kare dökümleri hızlı).
 - **2026-10-03 (akşam) · Sahne 5 "Koy" planlandı** (su altı: Akdeniz kayalık koyu, 3-15 m, birinci şahıs tüplü dalgıç).
   Özcan'la uzun konuşmayla: **netlik ve kararlılık her şeyin önünde** (kaba kuvvet süper örnekleme, zamansal tahmin yok,
   Fener taban), ışık + temas gerçek fizik, değişmeyen ışık fırınlanır, 41 fps sabit, su üstü yok. Tek kaynak

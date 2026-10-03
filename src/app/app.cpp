@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <ctime>
 #include <filesystem>
+#include <thread>
 
 namespace app {
 
@@ -175,6 +176,20 @@ void App::openScene(int index) {
     });
 }
 
+extern "C" __declspec(dllimport) unsigned int __stdcall timeBeginPeriod(unsigned int);   // winmm: 1 ms sleeps for pace()
+
+void App::pace(float fps) {
+    static bool fineTimer = false;
+    if (fps > 0.0f && !fineTimer) { timeBeginPeriod(1); fineTimer = true; }
+    GLFWmonitor* mon = glfwGetPrimaryMonitor();
+    const GLFWvidmode* vm = mon ? glfwGetVideoMode(mon) : nullptr;
+    const double hz = vm ? double(vm->refreshRate) : 60.0;
+    const int interval = fps > 0.0f ? std::max(1, int(hz / fps + 0.5)) : 0;
+    paceInterval_ = interval;
+    pacePeriod_ = interval > 0 ? interval / hz : 0.0;
+    glfwSwapInterval(interval > 0 ? 1 : 0);
+}
+
 void App::closeScene() {
     if (loader_.joinable()) {
         cancelLoad_ = true;
@@ -204,6 +219,8 @@ void App::closeScene() {
     pressOnPanel_ = false;
     mode_ = Mode::Gallery;
     modeT0_ = nowSec();
+    pacePeriod_ = 0.0;
+    paceInterval_ = 0;
     glfwSwapInterval(1);
 }
 
@@ -652,7 +669,15 @@ int App::run(const Options& opt) {
         frameMs_ = float((nowSec() - f0) * 1000.0);
         ++fpsFrames_;
         if (now - fpsT0_ > 0.5) { fps_ = float(fpsFrames_ / (now - fpsT0_)); fpsFrames_ = 0; fpsT0_ = now; }
+        if (pacePeriod_ > 0.0 && mode_ == Mode::Running) {
+            // wait until a little before the period is over (sleep, then spin the last 2 ms), then swap with vsync
+            const double due = lastPresent_ + pacePeriod_ - 0.0006;
+            for (double t = nowSec(); t < due; t = nowSec()) {
+                if (due - t > 0.002) std::this_thread::sleep_for(std::chrono::microseconds(int((due - t - 0.0015) * 1e6)));
+            }
+        }
         glfwSwapBuffers(win_);
+        lastPresent_ = nowSec();
     }
     closeScene();
     for (Picture& p : pictures_) { ui::freeImage(p.sharp); ui::freeImage(p.soft); }

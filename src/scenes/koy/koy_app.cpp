@@ -364,6 +364,7 @@ int runKoyCli(int argc, char** argv) {
         // PLAN §9: the live frames of a path (as the window draws them) and the converged reference of each moment
         const std::string o = out.empty() ? app.root + "/captures/kararlilik/koy_" + path : out;
         std::filesystem::create_directories(o);
+        setPNGCompression(1);   // hundreds of frames: fast zlib, bigger files
         const float dt = 1.0f / fps;
         struct Moment { Diver d; float t, exposure; };
         std::vector<Moment> at(frames);

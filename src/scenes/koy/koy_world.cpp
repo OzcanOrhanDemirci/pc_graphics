@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <map>
 #include <random>
@@ -241,6 +242,46 @@ KMeshCPU buildBoulder(const Config& cfg, float3 centre, float radius) {
     for (auto& n : m.nrm) n = normalize(n);
     return m;
 }
+// A scanned boulder: mesh.bin from assets/koy/fetch.py ('KOYM', counts, positions, normals, uvs, indices), scaled so its
+// longest horizontal side is `size` metres, standing on the floor at (x, z) sunk by `sink` of its height.
+bool loadScannedRock(const Config& cfg, const std::string& path, float3 at, float size, float sink, float yawDeg, KMeshCPU& m) {
+    FILE* f = std::fopen(path.c_str(), "rb");
+    if (!f) return false;
+    char magic[4];
+    unsigned int nv = 0, nt = 0;
+    bool ok = std::fread(magic, 1, 4, f) == 4 && std::memcmp(magic, "KOYM", 4) == 0 && std::fread(&nv, 4, 1, f) == 1 && std::fread(&nt, 4, 1, f) == 1;
+    if (ok) {
+        m.pos.resize(nv);
+        m.nrm.resize(nv);
+        m.uv.resize(nv);
+        m.idx.resize(nt);
+        ok = std::fread(m.pos.data(), sizeof(float3), nv, f) == nv && std::fread(m.nrm.data(), sizeof(float3), nv, f) == nv &&
+             std::fread(m.uv.data(), sizeof(float2), nv, f) == nv && std::fread(m.idx.data(), sizeof(uint3), nt, f) == nt;
+    }
+    std::fclose(f);
+    if (!ok || nv == 0) return false;
+    float3 lo = m.pos[0], hi = m.pos[0];
+    for (const float3& p : m.pos) {
+        lo = fminf3(lo, p);
+        hi = fmaxf3(hi, p);
+    }
+    const float s = size / std::max(hi.x - lo.x, hi.z - lo.z);
+    const float cy = std::cos(yawDeg * 3.14159265f / 180.0f), sy = std::sin(yawDeg * 3.14159265f / 180.0f);
+    const float cx = 0.5f * (lo.x + hi.x), cz = 0.5f * (lo.z + hi.z);
+    const float ground = koyFloor(cfg, at.x, at.z);
+    const float base = ground - sink * (hi.y - lo.y) * s;
+    for (size_t i = 0; i < m.pos.size(); ++i) {
+        const float3 p = m.pos[i];
+        const float x = (p.x - cx) * s, z = (p.z - cz) * s;
+        m.pos[i] = make_float3(at.x + cy * x + sy * z, base + (p.y - lo.y) * s, at.z - sy * x + cy * z);
+        const float3 n = m.nrm[i];
+        m.nrm[i] = normalize(make_float3(cy * n.x + sy * n.z, n.y, -sy * n.x + cy * n.z));
+    }
+    m.name = "kaya (taranmis)";
+    m.material = 1;
+    m.id = 2;
+    return true;
+}
 }   // namespace
 
 void KoyWorld::build(const Config& cfg, const std::string& root) {
@@ -254,19 +295,19 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
         KoyTextureSet t;
         if (koyLoadTextureSet(tdir, cfg.f("tex.use", 1.0f) > 0.5f ? "kum" : "-", t)) { sandSet = int(textures.size()); textures.push_back(t); }
         KoyTextureSet r;
-        if (koyLoadTextureSet(tdir, cfg.f("tex.use", 1.0f) > 0.5f ? "kaya" : "-", r)) { rockSet = int(textures.size()); textures.push_back(r); }
+        if (koyLoadTextureSet(tdir, cfg.f("tex.use", 1.0f) > 0.5f ? "kaya_model" : "-", r)) { rockSet = int(textures.size()); textures.push_back(r); }
     }
     KMaterial floorM{};
     floorM.kind = KM_TERRAIN;
     floorM.texSet = sandSet;
     floorM.albedo = sandSet >= 0 ? cfg.v3("floor.tint", make_float3(1.0f, 1.0f, 1.0f)) : cfg.v3("floor.albedo", make_float3(0.50f, 0.45f, 0.36f));
-    floorM.uvScale = 1.0f / cfg.f("floor.tile_m", 2.0f);
+    floorM.uvScale = 1.0f / cfg.f("floor.tile_m", 3.5f);   // ambientCG Ground054: about 3.5 m a tile
     floorM.normalStrength = cfg.f("floor.normal_strength", 1.0f);
     floorM.aoStrength = 1.0f;
     KMaterial rockM{};
     rockM.kind = rockSet >= 0 ? KM_MESH : KM_PLAIN;
     rockM.texSet = rockSet;
-    rockM.albedo = cfg.v3("rock.albedo", make_float3(0.34f, 0.32f, 0.28f));
+    rockM.albedo = rockSet >= 0 ? cfg.v3("rock.tint", make_float3(1.0f, 1.0f, 1.0f)) : cfg.v3("rock.albedo", make_float3(0.34f, 0.32f, 0.28f));
     rockM.uvScale = 1.0f;
     rockM.normalStrength = 1.0f;
     rockM.aoStrength = 1.0f;
@@ -282,7 +323,20 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
     rockCentre = cfg.v3("rock.centre", make_float3(-2.4f, 0.0f, -6.0f));
     rockRadius = cfg.f("rock.radius", 1.35f);
     rockCentre.y = koyFloor(cfg, rockCentre.x, rockCentre.z) + rockRadius * 0.45f;
-    meshes.push_back(buildBoulder(cfg, rockCentre, rockRadius));
+    {
+        KMeshCPU scanned;
+        if (rockSet >= 0 && loadScannedRock(cfg, tdir + "/kaya_model/mesh.bin", rockCentre, cfg.f("rock.size", 2.8f), cfg.f("rock.sink", 0.12f),
+                                            cfg.f("rock.yaw", 35.0f), scanned)) {
+            float3 lo = scanned.pos[0], hi = scanned.pos[0];
+            for (const float3& p : scanned.pos) { lo = fminf3(lo, p); hi = fmaxf3(hi, p); }
+            rockCentre = (lo + hi) * 0.5f;
+            rockRadius = 0.5f * std::max(hi.x - lo.x, hi.z - lo.z) * 0.8f;
+            meshes.push_back(scanned);
+        } else {
+            meshes.push_back(buildBoulder(cfg, rockCentre, rockRadius));
+            materials[1].kind = KM_PLAIN;
+        }
+    }
     for (int k = 0; k < int(meshes.size()); ++k) {
         KInstanceCPU in;
         in.mesh = k;

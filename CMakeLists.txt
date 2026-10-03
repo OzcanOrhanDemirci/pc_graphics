@@ -97,7 +97,7 @@ foreach(t pc_graphics)
         ${TP}/cuda/lib/x64/nvrtc.lib
         ${TP}/cuda/lib/x64/nvml.lib
         ${TP}/glfw/lib-vc2022/glfw3.lib
-        opengl32 advapi32 user32 gdi32 shell32)
+        opengl32 advapi32 user32 gdi32 shell32 winmm)
 endforeach()
 
 # NVRTC is loaded at run time: keep its DLLs next to the executables (both live in build/).
