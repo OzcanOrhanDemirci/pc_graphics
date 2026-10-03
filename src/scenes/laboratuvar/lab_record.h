@@ -21,7 +21,7 @@ public:
     // frameDt the world's step (every one kept while busy), sparseDt between; budget: GPU bytes for the frames (the busy
     // parts thin out to fit, then the end goes)
     bool start(const Config& cfg, Deney d, const LabInputs& in, const std::vector<LabEvent>& events, double after, double frameDt, double sparseDt,
-               double gapMax, size_t budgetBytes);
+               double gapMax, size_t budgetBytes, double busy = -1.0);   // busy: how long every step is kept after a trigger (< 0: after)
     void cancel();               // stops the worker (what is done stays playable)
     void release();              // frees everything
     ~LabRecording() { release(); }
@@ -43,6 +43,10 @@ public:
     int drawnCount() const { return drawn_.load(); }
     float spacing() const { return spacing_; }
     void frameAt(double t, float3* dPos, uint8_t* dCode, PropPose* poses, cudaStream_t st) const;
+    // the Küp experiment's: its cubes at t (2 float4 a cube); how many, how big
+    bool hasCubes() const { return cubes_; }
+    int cubeCount() const { return nCubes_; }
+    void cubesAt(double t, float4* pose, cudaStream_t st) const;
     // what the drawing needs from the fine world: the membrane (indices into the drawn set)
     int membraneFirst = -1, membraneCount = 0;
     std::vector<uint3> membraneTris;
@@ -58,7 +62,11 @@ private:
     mutable std::mutex stateMutex_;
     std::string state_;
     std::atomic<int> total_{0}, drawn_{0};
-    double dt_ = 1.0 / 600.0, after_ = 1.0, sparseDt_ = 1.0 / 120.0;
+    double dt_ = 1.0 / 600.0, after_ = 1.0, busy_ = 1.0, sparseDt_ = 1.0 / 120.0;
+    bool cubes_ = false;
+    int nCubes_ = 0;
+    float cubeEdge_ = 0.0f;
+    ushort4 *cubePos_ = nullptr, *cubeRot_ = nullptr;   // total_ x nCubes_ each
     size_t budget_ = 0;
     float spacing_ = 0.0f;
     QuantBox box_{};
@@ -68,5 +76,7 @@ private:
     std::vector<PropPose> poses_;    // total_ x P_COUNT
     void schedule(int denseStride);  // steps_ from events_, after_, dt_, sparseDt_
     void run(Config cfg, Deney d, LabInputs in);
+    void runCubes(LabWorld& w, double t0);
+    void locate(double t, int& k0, int& k1, float& a) const;   // the stored frames around t, how far between
     void setState(const std::string& s);
 };

@@ -192,7 +192,7 @@ __device__ inline void pairStep(Body& I, const Body& J, bool jMoves, int np, con
         lamT[k] = make_float3(0, 0, 0);
     }
     const float wP = jMoves ? 2.0f * C.invM : C.invM;
-    for (int it = 0; it < 4; ++it)
+    for (int it = 0; it < 3; ++it)
         for (int kk = 0; kk < np; ++kk) {
             const int k = (it & 1) ? np - 1 - kk : kk;
             const float3 ri = c[k] - I.x, rj = c[k] - J.x;
@@ -417,7 +417,6 @@ __global__ void kNarrow(int n, const float4* x, const float4* q, const float4* v
     I.v = xyz(v[i]);
     I.w = xyz(w[i]);
     const bool moving = dot(I.v, I.v) > C.sleepV * C.sleepV;
-    const float speedI = sqrtf(dot(I.v, I.v)) + sqrtf(dot(I.w, I.w)) * C.h * 1.7321f;
     const float reachMax = 1.7321f * C.a + C.maxMargin;
     const int3 c0 = cellOf(I.x, inv);
     uint32_t seen[27];
@@ -448,8 +447,11 @@ __global__ void kNarrow(int n, const float4* x, const float4* q, const float4* v
                     const bool jMoves = sj == S_AWAKE;
                     J.v = jMoves ? xyz(v[j]) : make_float3(0, 0, 0);
                     J.w = jMoves ? xyz(w[j]) : make_float3(0, 0, 0);
-                    const float speedJ = sqrtf(dot(J.v, J.v)) + sqrtf(dot(J.w, J.w)) * C.h * 1.7321f;
-                    const float margin = fminf(C.maxMargin, (speedI + speedJ) * C.hs * 1.2f + 0.001f * C.a);
+                    // how far the two may come together this substep: their relative speed (cubes falling together
+                    // are no nearer for it), turning included
+                    const float3 dv = I.v - J.v;
+                    const float rel = sqrtf(dot(dv, dv)) + (sqrtf(dot(I.w, I.w)) + sqrtf(dot(J.w, J.w))) * C.h * 1.7321f;
+                    const float margin = fminf(C.maxMargin, rel * C.hs * 1.2f + 0.001f * C.a);
                     if (dot(dd, dd) > (1.7321f * C.a + margin) * (1.7321f * C.a + margin)) continue;
                     J.R = qrot(q[j]);
                     // the pair in a fixed order (the lower id is A): both its cubes find the same points
@@ -694,7 +696,8 @@ __global__ void kQuantise(int n, const float4* x, const float4* q, const uint32_
     if (i >= n) return;
     const float3 p = (xyz(x[i]) - lo) * inv;
     auto u16 = [](float f) { return (unsigned short)fminf(65535.0f, fmaxf(0.0f, f + 0.5f)); };
-    pos[i] = make_ushort4(u16(p.x), u16(p.y), u16(p.z), st[i] == S_GONE ? 1 : 0);
+    const bool out = p.x < 0.0f || p.y < 0.0f || p.z < 0.0f || p.x > 65535.0f || p.y > 65535.0f || p.z > 65535.0f;
+    pos[i] = make_ushort4(u16(p.x), u16(p.y), u16(p.z), st[i] == S_GONE || out ? 1 : 0);
     const float4 qq = q[i];
     auto s16 = [](float f) { return (unsigned short)fminf(65535.0f, fmaxf(0.0f, (f * 0.5f + 0.5f) * 65535.0f + 0.5f)); };
     rot[i] = make_ushort4(s16(qq.x), s16(qq.y), s16(qq.z), s16(qq.w));
@@ -992,6 +995,7 @@ void CubeWorld::step(float dt) {
     const int base = std::max(1, int(std::lround(dt / h0)));
     const double hb = double(dt) / base;
     const CubeStats s = stats();
+    lastStats_ = s;
     lastSubs_ = 0;
     if (s.awake > 0) {
         // a fast cube may move at most half its edge a substep
@@ -1061,6 +1065,31 @@ void CubeWorld::quantise(ushort4* pos, ushort4* rot, float3 lo, float3 scale, cu
     if (!n_) return;
     CCUDA(cudaStreamSynchronize(stream_));
     kQuantise<<<nb(n_), kB, 0, st>>>(n_, x_, q_, state_, lo, make_float3(1.0f / scale.x, 1.0f / scale.y, 1.0f / scale.z), pos, rot);
+}
+
+namespace {
+__global__ void kCubeDequantise(const ushort4* p0, const ushort4* r0, const ushort4* p1, const ushort4* r1, float a, int n, float3 lo, float3 scale, float edge,
+                                float4* pose) {
+    const int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= n) return;
+    const ushort4 A = p0[i], B = p1 ? p1[i] : A;
+    const ushort4 ra = r0[i], rb = r1 ? r1[i] : ra;
+    const float3 pa = make_float3(lo.x + A.x * scale.x, lo.y + A.y * scale.y, lo.z + A.z * scale.z);
+    const float3 pb = make_float3(lo.x + B.x * scale.x, lo.y + B.y * scale.y, lo.z + B.z * scale.z);
+    const float3 p = pa + (pb - pa) * a;
+    auto sn = [](unsigned short u) { return u / 65535.0f * 2.0f - 1.0f; };
+    float4 qa = make_float4(sn(ra.x), sn(ra.y), sn(ra.z), sn(ra.w)), qb = make_float4(sn(rb.x), sn(rb.y), sn(rb.z), sn(rb.w));
+    if (qa.x * qb.x + qa.y * qb.y + qa.z * qb.z + qa.w * qb.w < 0.0f) qb = make_float4(-qb.x, -qb.y, -qb.z, -qb.w);
+    const float4 q = qnorm(make_float4(qa.x + (qb.x - qa.x) * a, qa.y + (qb.y - qa.y) * a, qa.z + (qb.z - qa.z) * a, qa.w + (qb.w - qa.w) * a));
+    const bool gone = A.w != 0 || (a > 0.5f && B.w != 0);
+    pose[2 * i] = make_float4(p.x, p.y, p.z, gone ? 0.0f : edge);
+    pose[2 * i + 1] = q;
+}
+}   // namespace
+
+void launchCubeDequantise(const ushort4* p0, const ushort4* r0, const ushort4* p1, const ushort4* r1, float a, int n, float3 lo, float3 scale, float edge,
+                          float4* pose, cudaStream_t st) {
+    if (n > 0) kCubeDequantise<<<nb(n), kB, 0, st>>>(p0, r0, p1, r1, a, n, lo, scale, edge, pose);
 }
 
 void CubeWorld::wakeAll(float3 v, float3 w) {

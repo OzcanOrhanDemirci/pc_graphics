@@ -15,6 +15,7 @@
 #include "core/image_io.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -103,8 +104,8 @@ void LaboratuvarApp::applyLook() {
 
 void LaboratuvarApp::setCamera(Deney d) {
     const std::string k = std::string("kamera.") + deneyKey(d);
-    const float3 defPos[kDeneyCount] = {{0.12f, 0.24f, 0.95f}, {0.0f, 0.16f, 0.50f}, {0.02f, 0.17f, 0.58f}, {0.0f, 0.2f, 0.78f}, {0.10f, 0.26f, 1.25f}, {0.06f, 0.13f, 0.55f}, {0.0f, 0.035f, 0.13f}};
-    const float3 defAim[kDeneyCount] = {{-0.03f, 0.20f, 0.0f}, {0.0f, 0.06f, 0.0f}, {0.03f, 0.07f, 0.0f}, {0.0f, 0.06f, 0.0f}, {0.0f, 0.17f, 0.0f}, {0.0f, 0.05f, 0.0f}, {0.0f, 0.012f, 0.0f}};
+    const float3 defPos[kDeneyCount] = {{0.12f, 0.24f, 0.95f}, {0.0f, 0.16f, 0.50f}, {0.02f, 0.17f, 0.58f}, {0.0f, 0.2f, 0.78f}, {0.10f, 0.26f, 1.25f}, {0.06f, 0.13f, 0.55f}, {0.0f, 0.035f, 0.13f}, {0.10f, 0.22f, 0.70f}};
+    const float3 defAim[kDeneyCount] = {{-0.03f, 0.20f, 0.0f}, {0.0f, 0.06f, 0.0f}, {0.03f, 0.07f, 0.0f}, {0.0f, 0.06f, 0.0f}, {0.0f, 0.17f, 0.0f}, {0.0f, 0.05f, 0.0f}, {0.0f, 0.012f, 0.0f}, {0.0f, 0.06f, -0.02f}};
     cam.lookAt(cfg.v3(k + ".konum", defPos[int(d)]), cfg.v3(k + ".hedef", defAim[int(d)]));
     cam.fovDeg = cfg.f(k + ".fov", cfg.f("kamera.fov", 30.0f));
     // a lens: a little depth of field, in focus at the experiment (the live window refocuses on the picture's middle)
@@ -165,6 +166,8 @@ void LaboratuvarApp::setupScene(Deney d, int maxParticles, const std::vector<uin
     gel.sigma = cfg.v3("jel.sogurma", make_float3(2.5f, 3.5f, 10.0f));
     const int mGel = add(gel);
     const int mMilk = add(mat(LM_WET, cfg.v3("damla.renk", make_float3(0.86f, 0.86f, 0.84f)), 0.03f, 5000.0f));
+    // moulded ABS (the Küp experiment's cubes): a glossy coat over its colour (each cube's own), edges rounded in the shading
+    const int mPlastic = add(mat(LM_DIFFUSE, cfg.v3("kup.renk", make_float3(1.0f, 1.0f, 1.0f)), cfg.f("kup.f0", 0.045f), cfg.f("kup.parlaklik", 700.0f)));
     R.uploadMaterials();
     // the set
     R.addMesh(tableMesh(0.75f, 0.32f, -0.40f, 0.03f), mSlate);
@@ -223,6 +226,8 @@ void LaboratuvarApp::setupScene(Deney d, int maxParticles, const std::vector<uin
         R.setDropletsVisible(surf[DC_GEL], cfg.i("jel.damla", 0) != 0);   // the crumbs a track spits out read as beads
     }
     objMembrane = -1;
+    objCubes = -1;
+    if (d == Deney::Kup) objCubes = R.addBoxes(maxParticles, mPlastic);
     release();
     if (d == Deney::Balon) {
         // room for the fine recording's membrane too (it has more particles and faces than the live one)
@@ -238,6 +243,16 @@ void LaboratuvarApp::setupScene(Deney d, int maxParticles, const std::vector<uin
     setCamera(d);
 }
 
+void LaboratuvarApp::setCubeColours(const uchar4* dColours, int n) {
+    if (objCubes < 0 || !dColours) return;
+    cudaMemcpy(renderer.boxColours(objCubes), dColours, size_t(n) * sizeof(uchar4), cudaMemcpyDeviceToDevice);
+    if (std::getenv("KUP_TANI")) {
+        uchar4 c[3];
+        cudaMemcpy(c, renderer.boxColours(objCubes), sizeof(c), cudaMemcpyDeviceToHost);
+        std::printf("kup renkleri: (%d %d %d) (%d %d %d) (%d %d %d), %d kup, nesne %d\n", c[0].x, c[0].y, c[0].z, c[1].x, c[1].y, c[1].z, c[2].x, c[2].y, c[2].z, n, objCubes);
+    }
+}
+
 void LaboratuvarApp::setMembraneTris(const std::vector<uint3>& tris) {
     if (!dMemTris) return;
     memTris = std::min(int(tris.size()), memTrisCap);
@@ -248,6 +263,7 @@ void LaboratuvarApp::setMembraneTris(const std::vector<uint3>& tris) {
 void LaboratuvarApp::draw(const DrawInput& in) {
     LabRenderer& R = renderer;
     const cudaStream_t st = R.stream();
+    if (objCubes >= 0 && in.cubePose) R.setBoxes(objCubes, in.cubePose, in.cubeCount);
     const int n = std::min(in.n, weightCap);
     for (int c = 0; c < kDrawCodes; ++c) {
         if (surf[c] < 0) continue;
@@ -317,6 +333,7 @@ LabEvent defaultEvent(Deney d, const Config& c) {
         break;
     }
     case Deney::Damla: e.kind = LabEvent::Drop; break;
+    case Deney::Kup: e.kind = LabEvent::Blast; e.power = c.f("test.kup_guc", 0.5f); break;
     default: break;
     }
     return e;
@@ -337,6 +354,8 @@ int runLaboratuvarCli(int argc, char** argv) {
     bool trig = false, recorded = false, frozen = false;
     float pan = 0.0f;
     int shots = 1;
+    int kupN = 0;
+    float kupPower = -1.0f;
     double shotGap = 0.5;
     double t = 0.0, t0 = 0.0, t1 = 1.0, live = 0.0;
     int frames = 10;
@@ -377,6 +396,8 @@ int runLaboratuvarCli(int argc, char** argv) {
         else if (a == "--akis") inputs.flow = std::stof(next());
         else if (a == "--guc") inputs.power = std::stof(next());
         else if (a == "--atis") shots = std::max(1, std::stoi(next()));        // the gel: so many shots (side by side)
+        else if (a == "--kup") kupN = std::max(1, std::stoi(next()));          // Kup: so many cubes along an edge
+        else if (a == "--siddet") kupPower = std::stof(next());                // Kup: the charge (0..1)
         else if (a == "--atis_ara") shotGap = std::stod(next());               // seconds between them
         else if (a == "--spp") spp = unsigned(std::stoi(next()));
         else if (a == "--width") app.width = unsigned(std::stoi(next()));
@@ -408,6 +429,11 @@ int runLaboratuvarCli(int argc, char** argv) {
     const double tStart = nowS();
     std::vector<uint3> memTris;
     int maxN = 0;
+    if (d == Deney::Kup && kupN > 0) {   // so many cubes an edge (the panel's nearest), allowed
+        inputs.fineness = kupFineness(kupN);
+        app.cfg.set("kup.en_cok_kenar", std::to_string(std::max(kupN, app.cfg.i("kup.en_cok_kenar", 100))));
+    }
+    if (d == Deney::Kup && kupPower >= 0.0f) app.cfg.set("test.kup_guc", std::to_string(kupPower));
     const LabEvent ev = defaultEvent(d, app.cfg);
     // the triggers: the default one, and for the gel more shots after it, each a little higher and further back
     std::vector<LabEvent> evs{ev};
@@ -423,7 +449,8 @@ int runLaboratuvarCli(int argc, char** argv) {
         const std::string pre = std::string(deneyKey(d)) + ".";
         const double cover = std::max(t, t1) + 0.01;
         rec.start(app.cfg, d, inputs, evs, std::max(0.05, cover - evs.back().at), 1.0 / app.cfg.f(pre + "kayit_hiz", 600.0f),
-                  1.0 / app.cfg.f("kayit.seyrek_hiz", 120.0f), 0.0, size_t(app.cfg.f("kayit.butce_mb", 4096.0f)) << 20);
+                  1.0 / app.cfg.f(pre + "kayit_seyrek_hiz", app.cfg.f("kayit.seyrek_hiz", 120.0f)), 0.0, size_t(app.cfg.f("kayit.butce_mb", 4096.0f)) << 20,
+                  app.cfg.f(pre + "kayit_yogun", -1.0f));
         while (rec.computing()) std::this_thread::sleep_for(std::chrono::milliseconds(50));
         if (rec.failed()) { std::printf("kayit basarisiz\n"); return 1; }
         maxN = rec.drawnCount();
@@ -438,6 +465,8 @@ int runLaboratuvarCli(int argc, char** argv) {
         maxN = w.count() + app.cfg.i(std::string(deneyKey(d)) + ".ek_kapasite", 0);
         memTris = w.membraneTris;
     }
+    const int nCubes = d == Deney::Kup ? (recorded ? rec.cubeCount() : w.cubes.count()) : 0;
+    if (d == Deney::Kup) maxN = std::max(maxN, nCubes);
     if (!app.initRenderer(log)) { std::printf("DERLEME HATASI\n%s\n", log.c_str()); return 1; }
     app.setupScene(d, std::max(maxN, 1024), &memTris);
     if (camGiven) {
@@ -447,16 +476,25 @@ int runLaboratuvarCli(int argc, char** argv) {
     }
     float3* dPos = nullptr;
     uint8_t* dCode = nullptr;
+    float4* dCubes = nullptr;
     cudaMalloc(reinterpret_cast<void**>(&dPos), size_t(maxN + 1) * sizeof(float3));
     cudaMalloc(reinterpret_cast<void**>(&dCode), size_t(maxN + 1));
+    if (nCubes > 0) {
+        cudaMalloc(reinterpret_cast<void**>(&dCubes), size_t(nCubes) * 2 * sizeof(float4));
+        // their colours: the world's (a recording's fine world built the same cubes from the same seed)
+        LabWorld cw;
+        if (recorded) cw.build(d, app.cfg, true, inputs);
+        app.setCubeColours(recorded ? cw.cubes.deviceColours() : w.cubes.deviceColours(), nCubes);
+    }
     PropPose poses[LabWorld::P_COUNT];
     double simT = 0.0;
     size_t nextEv = 1;   // the coarse world: the later shots as its time reaches them
     auto drawAt = [&](double tt) {
         DrawInput in;
         if (recorded) {
-            rec.frameAt(tt, dPos, dCode, poses, app.renderer.stream());
-            in.n = rec.drawnCount();
+            if (nCubes) rec.cubesAt(tt, dCubes, app.renderer.stream());
+            else rec.frameAt(tt, dPos, dCode, poses, app.renderer.stream());
+            in.n = nCubes ? 0 : rec.drawnCount();
             in.spacing = rec.spacing();
             in.membraneFirst = rec.membraneFirst;
             in.membraneCount = rec.membraneCount;
@@ -467,12 +505,15 @@ int runLaboratuvarCli(int argc, char** argv) {
                 while (nextEv < evs.size() && trig && evs[nextEv].at <= simT + 1e-9) w.trigger(evs[nextEv++]);
             }
             w.exportDraw(dPos, dCode, app.renderer.stream());
+            if (nCubes) w.exportCubes(dCubes, 1.0f, app.renderer.stream());
             for (int p = 0; p < LabWorld::P_COUNT; ++p) poses[p] = w.prop[p];
             in.n = w.count();
             in.spacing = w.s;
             in.membraneFirst = w.membraneFirst;
             in.membraneCount = w.membraneCount;
         }
+        in.cubePose = dCubes;
+        in.cubeCount = nCubes;
         in.pos = dPos;
         in.code = dCode;
         in.poses = poses;
@@ -504,6 +545,7 @@ int runLaboratuvarCli(int argc, char** argv) {
                 app.cam.apply(app.renderer.params().cam, app.width, app.height);
             }
             w.exportDraw(dPos, dCode, app.renderer.stream());
+            if (nCubes) w.exportCubes(dCubes, 1.0f, app.renderer.stream());
             for (int q = 0; q < LabWorld::P_COUNT; ++q) poses[q] = w.prop[q];
             DrawInput in;
             in.pos = dPos;
@@ -513,6 +555,8 @@ int runLaboratuvarCli(int argc, char** argv) {
             in.poses = poses;
             in.membraneFirst = w.membraneFirst;
             in.membraneCount = w.membraneCount;
+            in.cubePose = dCubes;
+            in.cubeCount = nCubes;
             app.draw(in);
             app.renderer.render(spp, false);
             app.renderer.download(px);

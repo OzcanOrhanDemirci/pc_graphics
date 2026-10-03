@@ -73,6 +73,11 @@ struct CubeStats {
     double kinetic = 0.0;
 };
 
+// a recording's cubes at a time between two stored frames: positions lerped, orientations nlerped, into 2 float4 a
+// cube (centre + edge, orientation); a gone cube's edge 0
+void launchCubeDequantise(const ushort4* p0, const ushort4* r0, const ushort4* p1, const ushort4* r1, float a, int n, float3 lo, float3 scale, float edge,
+                          float4* pose, cudaStream_t st);
+
 class CubeWorld {
 public:
     CubeParams params;
@@ -92,6 +97,7 @@ public:
     // cube would move more than half its edge
     void step(float dt);
     float lastStepMs() const { return lastMs_; }
+    const CubeStats& lastStats() const { return lastStats_; }   // as the last step began
     int lastSubsteps() const { return lastSubs_; }
     // the drawing: 2 float4 a cube (centre + edge, orientation xyzw), between the state before the last step and now
     void exportPoses(float4* pose, float alpha, cudaStream_t st) const;
@@ -112,6 +118,7 @@ private:
     float3 base_ = make_float3(0, 0, 0);
     double time_ = 0.0;
     float lastMs_ = 0.0f;
+    CubeStats lastStats_;
     int lastSubs_ = 0;
     cudaStream_t stream_ = nullptr;
     cudaEvent_t e0_ = nullptr, e1_ = nullptr;

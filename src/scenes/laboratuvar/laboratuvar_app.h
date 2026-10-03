@@ -58,6 +58,8 @@ struct DrawInput {
     float spacing = 0.0025f;
     const PropPose* poses = nullptr;
     int membraneFirst = -1, membraneCount = 0;
+    const float4* cubePose = nullptr;   // Kup: 2 float4 a cube (centre + edge, orientation), on the device
+    int cubeCount = 0;
 };
 
 struct LaboratuvarApp {
@@ -72,7 +74,7 @@ struct LaboratuvarApp {
     int matGlass = -1, matWood = -1, matSteel = -1;
     int objProp[LabWorld::P_COUNT];
     int surf[kDrawCodes];
-    int objGrains = -1, objMembrane = -1;
+    int objGrains = -1, objMembrane = -1, objCubes = -1;
     int grainsPer = 0, grainsCap = 0;
     uint3* dMemTris = nullptr;
     int memTris = 0, memTrisCap = 0;
@@ -92,8 +94,10 @@ struct LaboratuvarApp {
     bool isTarget(int obj) const {
         for (int c : {int(DC_RUBBER), int(DC_WATER), int(DC_RIND), int(DC_PITH), int(DC_FLESH), int(DC_GEL)})
             if (renderer.isSurfaceObject(surf[c], obj)) return true;
-        return obj >= 0 && obj == objMembrane;
+        return obj >= 0 && (obj == objMembrane || obj == objCubes);
     }
+    // Kup: the cubes' colours (sRGB, one a cube, on the device) into the renderer's
+    void setCubeColours(const uchar4* dColours, int n);
     void applyLook();
     void setCamera(Deney d);
     void release();

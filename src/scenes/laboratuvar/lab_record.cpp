@@ -23,11 +23,12 @@ std::string LabRecording::state() const {
 }
 
 bool LabRecording::start(const Config& cfg, Deney d, const LabInputs& in, const std::vector<LabEvent>& events, double after, double frameDt, double sparseDt,
-                         double gapMax, size_t budgetBytes) {
+                         double gapMax, size_t budgetBytes, double busy) {
     release();
     if (events.empty()) return false;
     dt_ = frameDt;
     after_ = std::max(frameDt, after);
+    busy_ = busy < 0.0 ? after_ : std::min(after_, std::max(frameDt, busy));
     sparseDt_ = std::max(frameDt, sparseDt);
     // the triggers' times from the first; a long pause shortened (nothing fast happens in it: the world only rests)
     events_ = events;
@@ -58,7 +59,7 @@ void LabRecording::schedule(int denseStride) {
     double busyUntil = -1.0;
     for (int k = 0; k <= last; ++k) {
         const double t = k * dt_;
-        while (next < events_.size() && events_[next].at <= t + 1e-9) busyUntil = events_[next++].at + after_;
+        while (next < events_.size() && events_[next].at <= t + 1e-9) busyUntil = events_[next++].at + busy_;
         const bool busy = t <= busyUntil + 1e-9;
         if ((busy && k % denseStride == 0) || k % sparse == 0 || k == last) steps_.push_back(k);
     }
@@ -82,6 +83,11 @@ void LabRecording::release() {
     cancel();
     if (frames_) cudaFree(frames_);
     frames_ = nullptr;
+    if (cubePos_) cudaFree(cubePos_);
+    if (cubeRot_) cudaFree(cubeRot_);
+    cubePos_ = cubeRot_ = nullptr;
+    cubes_ = false;
+    nCubes_ = 0;
     poses_.clear();
     steps_.clear();
     events_.clear();
@@ -109,6 +115,10 @@ void LabRecording::run(Config cfg, Deney d, LabInputs in) {
     // the first trigger first: it may add particles (a drop), and they must be among the drawn ones and fit the
     // buffers (the later ones only shoot: they add none)
     w.trigger(events_[0]);
+    if (d == Deney::Kup) {
+        runCubes(w, t0);
+        return;
+    }
     // the drawn particles, and where the membrane is among them
     std::vector<uint32_t> idx;
     std::vector<int> drawnOf(w.code.size(), -1);
@@ -187,6 +197,84 @@ void LabRecording::run(Config cfg, Deney d, LabInputs in) {
     w.destroy();
     setState("done");
     done_ = true;
+}
+
+// the Küp experiment: its cubes, 16 bytes each a frame (a position in the box, 16 bits an axis; an orientation,
+// snorm16), the busy part thinned first, then the end cut, to fit the budget
+void LabRecording::runCubes(LabWorld& w, double t0) {
+    const int n = w.cubes.count();
+    nCubes_ = n;
+    cubeEdge_ = w.cubes.edge();
+    spacing_ = cubeEdge_;
+    summary = w.summary();
+    box_.lo = w.boxLo;
+    const float3 ext = w.boxHi - w.boxLo;
+    box_.scale = make_float3(ext.x / 65535.0f, ext.y / 65535.0f, ext.z / 65535.0f);
+    const size_t perFrame = size_t(n) * 2 * sizeof(ushort4);
+    const size_t fitFrames = budget_ / std::max<size_t>(perFrame, 1);
+    for (int stride = 1; size_t(total_.load()) > fitFrames && stride < 16; ++stride) schedule(stride + 1);
+    if (size_t(total_.load()) > fitFrames) {
+        steps_.resize(std::max<size_t>(1, fitFrames));
+        total_ = int(steps_.size());
+        stepsTotal_ = steps_.back();
+        duration_ = steps_.back() * dt_;
+    }
+    if (cudaMalloc(reinterpret_cast<void**>(&cubePos_), perFrame / 2 * size_t(total_.load())) != cudaSuccess ||
+        cudaMalloc(reinterpret_cast<void**>(&cubeRot_), perFrame / 2 * size_t(total_.load())) != cudaSuccess) {
+        failed_ = true;
+        done_ = true;
+        return;
+    }
+    poses_.assign(size_t(total_.load()) * LabWorld::P_COUNT, PropPose{});
+    cubes_ = true;
+    drawn_ = n;
+    cudaStream_t st;
+    cudaStreamCreateWithFlags(&st, cudaStreamNonBlocking);
+    std::printf("kayit: %s; %d tetik, %d kare (yogun her %d adimda) x %.2f ms adim, %.2f s dunya zamani, %.0f MB (kurma %.1f s)\n", summary.c_str(),
+                int(events_.size()), total_.load(), denseStride_.load(), dt_ * 1000.0, duration_.load(), double(perFrame) * total_.load() / 1048576.0, nowS() - t0);
+    setState("compute");
+    const double tc = nowS();
+    const int total = total_.load();
+    size_t next = 1;
+    int stored = 0;
+    for (int k = 0; stored < total; ++k) {
+        if (stop_) break;
+        if (k > 0) w.step(float(dt_));
+        while (next < events_.size() && events_[next].at <= k * dt_ + 1e-9) w.trigger(events_[next++]);
+        stepsDone_ = k;
+        if (steps_[size_t(stored)] != k) continue;
+        w.cubes.quantise(cubePos_ + size_t(stored) * n, cubeRot_ + size_t(stored) * n, box_.lo, box_.scale, st);
+        cudaStreamSynchronize(st);
+        ++stored;
+        framesDone_.store(stored, std::memory_order_release);
+        msPerFrame_ = float((nowS() - tc) * 1000.0 / stored);
+        slowdown_ = float((nowS() - tc) / std::max(dt_, k * dt_));
+    }
+    std::printf("kayit bitti: %d kare, %.1f s (dunya saniyesi basina %.1f s)\n", framesDone_.load(), nowS() - tc, slowdown_.load());
+    cudaStreamDestroy(st);
+    w.destroy();
+    setState("done");
+    done_ = true;
+}
+
+void LabRecording::locate(double t, int& k0, int& k1, float& a) const {
+    const int done = framesDone();
+    const double s = std::max(0.0, t / dt_);
+    k0 = int(std::upper_bound(steps_.begin(), steps_.begin() + done, int(std::floor(s + 1e-9))) - steps_.begin()) - 1;
+    k0 = std::max(0, std::min(done - 1, k0));
+    k1 = std::min(done - 1, k0 + 1);
+    const double span = double(steps_[size_t(k1)] - steps_[size_t(k0)]);
+    a = k1 != k0 && span > 0.0 ? float(std::min(1.0, std::max(0.0, (s - steps_[size_t(k0)]) / span))) : 0.0f;
+}
+
+void LabRecording::cubesAt(double t, float4* pose, cudaStream_t st) const {
+    if (!cubes_ || framesDone() <= 0) return;
+    int k0, k1;
+    float a;
+    locate(t, k0, k1, a);
+    const size_t n = size_t(nCubes_);
+    launchCubeDequantise(cubePos_ + size_t(k0) * n, cubeRot_ + size_t(k0) * n, k1 != k0 ? cubePos_ + size_t(k1) * n : nullptr,
+                         k1 != k0 ? cubeRot_ + size_t(k1) * n : nullptr, a, nCubes_, box_.lo, box_.scale, cubeEdge_, pose, st);
 }
 
 void LabRecording::frameAt(double t, float3* dPos, uint8_t* dCode, PropPose* poses, cudaStream_t st) const {
