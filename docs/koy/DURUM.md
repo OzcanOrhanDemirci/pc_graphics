@@ -3,7 +3,14 @@
 > Tek kaynak durum panosu. Plan: `docs/koy/PLAN.md` (kararlar, fazlar, duraklar). Veri ve denetimleri: `docs/koy/VERI.md`.
 > Gerçek fotoğraflardan başvuru panosu: `docs/koy/BASVURU.md`. CC0 taramalar: `assets/koy/fetch.py`, `assets/koy/LICENSES.md`.
 
-## Şu an · 2026-10-03 gece · 🛑 Ara durak 2: 16K, panelde "Ultra" (Özcan'ın bakışını bekliyor)
+## Şu an · 2026-10-03 gece · ✅ Ara durak 2 geçti, 16K kalıyor
+
+Özcan canlı baktı: *"Kesinlikle farketti. Geceyle gündüz değil, şafakla gün batımı gibi farkedilme olarak. Net fark var ama
+hani oha kadar değil. Ama 16K olsun o konuda şüphe yok."* Ultra varsayılan kalıyor. Ölçüm de aynını söylüyordu: 30 cm'de
+Yüksek→Ultra, Standart→Yüksek adımının ~yarısı (FLIP 0,133 / 0,288). Sıradaki: amfora tarlası planı ("başla" bekleniyor);
+sohbette suyun kendi çözünürlüğü konuşuluyor.
+
+## Ara durak 2 · 2026-10-03 gece · 16K, panelde "Ultra" (geçti)
 
 Ara durak 1 (aşağıda) geçti: *"Geceyle gündüz gibi fark var"*. Sonra her şey 8K yapıldı. Özcan sordu: her şey 16K olabilir
 mi? Cevap ölçüyle verildi (aşağıda "Kaynak"); Özcan: *"Kum + atlas 16K olsun [...] Yüksek yanına ultra diye buton koy [...]
