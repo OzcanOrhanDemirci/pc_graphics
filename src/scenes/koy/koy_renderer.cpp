@@ -85,7 +85,9 @@ bool KoyRenderer::init(unsigned int width, unsigned int height, const std::strin
     params_.hdr = devAlloc<float4>(n);
     params_.output = devAlloc<uchar4>(n);
     params_.edgeIndex = devAlloc<unsigned int>(n);
-    params_.edgeCapacity = unsigned(n / 3);
+    // every pixel may be an edge pixel: 30 cm over the 16K sand its grain makes more than a third of the frame one
+    // (2026-10-03), and a capped list drops a different set every frame (the atomic order): flicker
+    params_.edgeCapacity = unsigned(n);
     params_.edgeList = devAlloc<unsigned int>(params_.edgeCapacity);
     params_.edgeAcc = devAlloc<float4>(size_t(params_.edgeCapacity) * 9);
     params_.edgeCount = devAlloc<unsigned int>(1);

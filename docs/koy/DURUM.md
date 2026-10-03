@@ -3,7 +3,83 @@
 > Tek kaynak durum panosu. Plan: `docs/koy/PLAN.md` (kararlar, fazlar, duraklar). Veri ve denetimleri: `docs/koy/VERI.md`.
 > Gerçek fotoğraflardan başvuru panosu: `docs/koy/BASVURU.md`. CC0 taramalar: `assets/koy/fetch.py`, `assets/koy/LICENSES.md`.
 
-## Şu an · 2026-10-03 gece · 🛑 Ara durak: yüksek çözünürlüklü doku (Özcan'ın bakışını bekliyor)
+## Şu an · 2026-10-03 gece · 🛑 Ara durak 2: 16K, panelde "Ultra" (Özcan'ın bakışını bekliyor)
+
+Ara durak 1 (aşağıda) geçti: *"Geceyle gündüz gibi fark var"*. Sonra her şey 8K yapıldı. Özcan sordu: her şey 16K olabilir
+mi? Cevap ölçüyle verildi (aşağıda "Kaynak"); Özcan: *"Kum + atlas 16K olsun [...] Yüksek yanına ultra diye buton koy [...]
+inanç değil ölçümle yapalım"*. Monitörü 32,5 inç, 2560×1440, yakından bakıyor.
+
+**Kaynak (indirildi ve sınandı):** ambientCG Ground054 16K (2,1 GB zip, boyutu API ile aynı) ve Poly Haven rock_boulder_dry
+16K (md5 tuttu). İkisi de gerçek 16K, büyütülmüş 8K değil: aynı fiziksel yamada 8K'nın gösteremediği yeni ince bandın gücü
+(gri seviye RMS) gerçek 16K'da kum rengi 7,0, kum normal haritası 19 (alttaki bantlar kadar), atlas 6,0; aynı yamanın
+Lanczos'la büyütülmüş 8K'sında 2,1 / 3,8 / 2,8. Kayanın kendi taraması (boulder_01) 8K'da bitiyor; amfora ve kemer adayları
+için 16K kaynak yok ya da fotoğraflanan alanları küçük (1-2 m), 8K zaten ekran sınırında.
+
+**Yapılanlar:**
+- **Panelde "Doku: Standart / Yüksek / Ultra".** Ultra = Yüksek'in aynısı, yalnız kum ve kayanın ayrıntı katmanı 16K (aynı
+  karo boyları: kum 3,5 m taban + 1,75 m kendi tanesi, atlas 1,8 m). Üçü de bellekte, geçiş anında. Varsayılan Ultra; 16K
+  dosyaları yoksa Yüksek'e, 8K yoksa Standart'a düşer (panel düşülen kipi gösterir, uyarı çıkar).
+- **Paralel yükleme:** her haritanın çözülmesi ve mip zinciri kendi iş parçacığında, GPU'ya yükleme sırayla; 1 GB'lık çözme
+  tamponu kopyalanmadan seviye 0 olur. 16K dahil yedi set **7,2 sn**; açılış yine ~10 sn (eskiden 8K'lık set tek iş
+  parçacığında yükleniyordu, açılış ~11 sn idi). Süreç RAM tepesi 6,0 GB.
+- **Dibe 30 cm:** dalgıcın gözü kuma en çok 0,3 m yaklaşır (eskiden 0,6; kaya için zaten 0,3). Bu olmadan 16K kumun
+  farkı ekranın ortasında görünmüyordu (0,6 m'de bir piksel kumda 0,35 mm, 8K tekstel 0,43 mm: 8K zaten sınırda).
+- **Kenar listesi bütün ekran:** 30 cm'den 16K kumda pikselin %38'i kenar sayılıyor (alt piksel tane karşıtlığı); liste
+  ekranın üçte birinde kesiliyordu ve atomik sıraya göre her karede başka pikseller dışarıda kalıyordu (kıpırtı). Liste
+  artık her piksele yer açar (+0,35 GB).
+- **Ölçü araçları:** `--doku` (aynı an, üç kip, tek pozlama: yalnız dokular farklı) + `tools/doku_kiyas.py` (FLIP Özcan'ın
+  ekranı ve uzaklığıyla, ekrandaki en ince oktavın gücü, kırpıntılar); `--yokla` (kumdan yükseklik, en yakın yüzey);
+  kararlılık yolu `--yol kum` (kumun 30 cm üstünde, aşağı bakarak ileri yüzme).
+
+**Ölçümler** (2560×1440, 4 örnek + kenar 16; FLIP 32,5 inç ekrana 50 cm'den: 31,1 piksel/derece, FLIP'in kendi bildirdiği
+değerle doğrulandı; "en ince ayrıntı" = merkezdeki 1024²'de ekranın en ince oktavının gri seviye gücü):
+
+| Görünüm | Ekrandaki en ince ayrıntı: Standart / Yüksek / Ultra | FLIP Yüksek→Ultra | FLIP Standart→Yüksek |
+|---|---|---|---|
+| Kum, 30 cm, aşağı bakış | 0,42 / 1,76 / **3,62** | **0,133** | 0,288 |
+| Kum, 60 cm, aşağı bakış | 0,56 / 4,69 / **6,80** | **0,079** | 0,251 |
+| Kum, 1 m, 45° | 2,25 / 6,48 / 6,52 | 0,028 | 0,128 |
+| Yüzme görünümü (kumdan 2 m) | 0,84 / 0,86 / 0,86 | 0,004 | 0,013 |
+| Kaya, 31 cm (ayrıntı katmanı) | 0,41 / 0,78 / 0,79 | 0,007 | 0,094 |
+| Kaya, 36 cm | 0,40 / 0,55 / 0,57 | 0,009 | 0,091 |
+| Kaya, 1,1 m | 0,60 / 1,32 / 1,32 | 0,005 | 0,048 |
+
+Ölçek: Standart→Yüksek, Özcan'ın "gece-gündüz" dediği adım. **Kum:** Yüksek→Ultra 30 cm'de o adımın ~yarısı (0,133 /
+0,288), 60 cm'de ~üçte biri, 1 m'de ~beşte biri; ekrandaki en ince ayrıntı 30 cm'de 2 kat. Uzakta fark yok. **Kaya:**
+Yüksek→Ultra o adımın ~onda biri: 16K atlas 31 cm'de bile görünmüyor (8K atlasın teksteli 0,22 mm, 30 cm'de bir piksel
+0,175 mm: 8K zaten sınırda); kayanın görünüşünü kendi 8K taraması belirliyor.
+
+🪤 İlk sürümde `doku_kiyas.py` FLIP'e ekranı ters sırayla veriyordu (`vc` = [uzaklık m, genişlik PİKSEL, genişlik m];
+FLIP sessizce ~0 piksel/derecede çalıştı); bağımsız gözden geçirme yakaladı, betik artık ppd verir ve FLIP'in kullandığını
+denetler. Sonuçlar aynı yönde, sayılar %10-25 düştü.
+
+**Kararlılık** (`--yol kum`, 60 kare; kıpırtı yakınsamış referansa karşı):
+
+| | Piksel kıpırtısı ort / %99 | 8×8 blok ort / %99 | Bağıl | FLIP | Kare (bu görünüm) |
+|---|---|---|---|---|---|
+| Yüksek, 4 örnek | 0,00088 / 0,0056 | 0,00016 / 0,00067 | 0,0098 | 0,0070 | 10,3 ms |
+| Ultra, 4 örnek | 0,00197 / 0,0098 | 0,00028 / 0,00123 | 0,0205 | 0,0111 | 12,4 ms |
+| Ultra, 8 örnek | 0,00116 / 0,0062 | 0,00019 / 0,00069 | 0,0121 | 0,0083 | 17,2 ms |
+| *Fener tabanı* | *0,0053-0,0061 / 0,050-0,080* | *0,0011-0,0026* | *0,45-1,24* | *0,026-0,038* | |
+
+Ultra yakın kumda daha çok ince ayrıntı taşıdığı için 4 örnekte ~2 kat kıpırdıyor; yine de Fener'in ~3 kat altında ve K0
+hedefinin içinde. 8 örnek kıpırtıyı Yüksek'e yakın düzeye çekiyor.
+
+**Bedeli:** doku dizileri GPU'da 7,44 GB (16K'sız 2,10 GB, hesap); kartta toplam 10,5 / 16 GB dolu (masaüstü dahil,
+ölçüldü). Kare: yakın kumda Yüksek 13,9 → Ultra 15,9 ms (kenar pikselleri 0,63 → 1,39 milyon); yüzme görünümünde fark yok
+(18,2 ms); uygulamada (otomatik test) üç kipte de 41 fps sabit.
+
+### Ara durak 2'de neye bakılacak
+Galeride 05 Koy (açılış ~10 sn). Panelde **Doku** satırı: Standart / Yüksek / Ultra. **C** ile kuma in (göz 30 cm'ye
+kadar iner), Tab ile fareyle aşağı bak. Aynı yerde Yüksek ↔ Ultra ↔ Standart arasında geç. Sonra kayaya sokul (30-40
+cm) ve aynı geçişi yap. Bir de yakın kumda yavaşça yüzerken Ultra'yı **Örnek 4** ve **8** ile kıyasla (kıpırtı). Karar:
+Ultra kalıyor mu, Yüksek mi?
+
+**Ne doğrulanmadı:** Özcan'ın gözüyle canlı bakılmadı (ölçümler kare ve kare dizisi üzerinden). FLIP'teki 50 cm oturma
+uzaklığı varsayım. Kararlılık yalnız kum yolunda ölçüldü; kayada Ultra'nın kıpırtısı ölçülmedi (görüntü farkı yok denecek
+kadar az). Doku sıkıştırma (BC7/BC5) yok, 16K sıkıştırmasız duruyor.
+
+## Ara durak 1 · 2026-10-03 gece · yüksek çözünürlüklü doku (geçti)
 
 **Durak 1 geçti** (Özcan canlı baktı): *"En düşük seçeneklerde 1 e 4 [...] gayet iyi [...] her şekilde net. Ayar
 bağımsız"*, en düşük ayarda 90 fps; *"Suyun maviliği çok güzel. Beğendim okey"*. Tek eleştiri: kaya yakından düşük

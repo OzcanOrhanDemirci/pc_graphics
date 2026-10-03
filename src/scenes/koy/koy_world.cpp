@@ -4,13 +4,17 @@
 #include "stb_image.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <future>
 #include <map>
 #include <random>
 #include <sstream>
+#include <utility>
 
 namespace {
 
@@ -288,23 +292,9 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
     meshes.clear();
     instances.clear();
     materials.clear();
-    // textures (CC0 scans fetched by assets/koy/fetch.sh; without them plain albedos)
+    // textures (CC0 scans fetched by assets/koy/fetch.py; without them plain albedos)
     const std::string tdir = root + "/assets/koy/cc0";
-    auto load = [&](const char* name) {
-        KoyTextureSet t;
-        if (cfg.f("tex.use", 1.0f) < 0.5f || !koyLoadTextureSet(tdir, name, t)) return -1;
-        textures.push_back(t);
-        return int(textures.size()) - 1;
-    };
-    setSand = load("kum");
-    setRock = load("kaya_model");
-    if (cfg.i("tex.high", 1)) {   // the high-resolution set, everything at 8K (the panel can switch between them live)
-        setSand4k = load("kum_8k");
-        if (setSand4k < 0) setSand4k = load("kum_4k");
-        setRock8k = load("kaya_model_8k");
-        setRockDetail = load("kaya_ayrinti_8k");
-        if (setRockDetail < 0) setRockDetail = load("kaya_ayrinti");
-    }
+    loadTextures(cfg, tdir);
     const int sandSet = setSand, rockSet = setRock;
     KMaterial floorM{};
     floorM.kind = KM_TERRAIN;
@@ -354,22 +344,33 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
     }
     grass.build(cfg);
     grass.toRibbons(ribbons, 2);
-    applyTextureMode(cfg, cfg.i("tex.mode", 1));
+    applyTextureMode(cfg, cfg.i("tex.mode", 2));
+}
+
+bool KoyWorld::hasMode(int mode) const {
+    if (mode >= 2) return setSand16k >= 0 && setRockDetail16k >= 0 && setRock8k >= 0;
+    if (mode == 1) return setSand4k >= 0 && setRock8k >= 0;
+    return true;
 }
 
 void KoyWorld::applyTextureMode(const Config& cfg, int mode) {
+    mode = std::min(std::max(mode, 0), 2);
+    while (mode > 0 && !hasMode(mode)) --mode;   // ultra without its 16K files falls to high, high without 8K to standard
     texMode = mode;
     KMaterial& f = materials[0];
     KMaterial& r = materials[1];
-    const bool high = mode == 1 && setSand4k >= 0 && setRock8k >= 0;
-    if (f.texSet >= 0) f.texSet = high ? setSand4k : setSand;
+    const bool high = mode >= 1;
+    // ultra is high with the 16K sand and the 16K rock detail: the same recipe, only the resolution differs
+    const int sandHigh = mode == 2 ? setSand16k : setSand4k;
+    const int rockDetail = mode == 2 ? setRockDetail16k : setRockDetail;
+    if (f.texSet >= 0) f.texSet = high ? sandHigh : setSand;
     if (r.texSet >= 0) r.texSet = high ? setRock8k : setRock;
-    // the detail layers: the sand's own grain at a quarter of its tile; the rock a weathered limestone scan, finer
-    f.detailSet = high && f.texSet >= 0 ? setSand4k : -1;
+    // the detail layers: the sand's own grain at half its tile; the rock a weathered limestone scan, finer
+    f.detailSet = high && f.texSet >= 0 ? sandHigh : -1;
     f.detailTile = cfg.f("tex.sand_detail_tile", 1.75f);
     f.detailNormal = cfg.f("tex.sand_detail_normal", 0.5f);
     f.detailAlbedo = cfg.f("tex.sand_detail_albedo", 0.25f);
-    r.detailSet = high && r.texSet >= 0 ? setRockDetail : -1;
+    r.detailSet = high && r.texSet >= 0 ? rockDetail : -1;
     r.detailTile = cfg.f("tex.rock_detail_tile", 1.8f);
     r.detailNormal = cfg.f("tex.rock_detail_normal", 0.6f);
     r.detailAlbedo = cfg.f("tex.rock_detail_albedo", 0.35f);
@@ -447,26 +448,54 @@ namespace {
 float srgbToLin(float c) { return c <= 0.04045f ? c / 12.92f : std::pow((c + 0.055f) / 1.055f, 2.4f); }
 float linToSrgb(float c) { return c <= 0.0031308f ? c * 12.92f : 1.055f * std::pow(c, 1.0f / 2.4f) - 0.055f; }
 
-// a mipmapped RGBA8 texture from pixels; sRGB: averaged in linear light, read back decoded by the hardware
-bool makeMipTexture(std::vector<unsigned char> px, int w, int h, bool srgb, KoyTextureSet& out, unsigned long long& tex) {
-    int levels = 1;
-    while ((w >> levels) > 0 || (h >> levels) > 0) ++levels;
-    cudaChannelFormatDesc fd = cudaCreateChannelDesc<uchar4>();
-    cudaMipmappedArray_t arr = nullptr;
-    if (cudaMallocMipmappedArray(&arr, &fd, make_cudaExtent(w, h, 0), levels) != cudaSuccess) return false;
-    std::vector<float> lut(256);
-    for (int i = 0; i < 256; ++i) lut[i] = srgb ? srgbToLin(i / 255.0f) : i / 255.0f;
+// The CPU half of a texture, made off the CUDA thread: a 16K map is a gigabyte and seconds of work on one core. Level 0
+// stays in the buffer it was decoded into (stb_image allocates with malloc: STBI_FREE is not overridden), no copy.
+struct HostTexture {
+    int w = 0, h = 0, levels = 0;
+    bool srgb = false;
+    bool found = false;                             // there was a file (base null then: it did not decode)
+    unsigned char* base = nullptr;                  // level 0, RGBA8
+    std::vector<std::vector<unsigned char>> mips;   // levels 1..
+    float3 mean{};                                  // the one-texel level in linear light (sRGB)
+    HostTexture() = default;
+    HostTexture(const HostTexture&) = delete;
+    HostTexture& operator=(const HostTexture&) = delete;
+    HostTexture(HostTexture&& o) noexcept { *this = std::move(o); }
+    HostTexture& operator=(HostTexture&& o) noexcept {
+        if (this != &o) {
+            std::free(base);
+            w = o.w;
+            h = o.h;
+            levels = o.levels;
+            srgb = o.srgb;
+            found = o.found;
+            mean = o.mean;
+            base = o.base;
+            o.base = nullptr;
+            mips = std::move(o.mips);
+        }
+        return *this;
+    }
+    ~HostTexture() { std::free(base); }
+    const unsigned char* level(int l) const { return l == 0 ? base : mips[size_t(l) - 1].data(); }
+};
+
+// the mip chain; sRGB: averaged in linear light (the hardware decodes it on fetch)
+void buildMips(HostTexture& t) {
+    t.levels = 1;
+    while ((t.w >> t.levels) > 0 || (t.h >> t.levels) > 0) ++t.levels;
+    float lut[256];
+    for (int i = 0; i < 256; ++i) lut[i] = t.srgb ? srgbToLin(i / 255.0f) : i / 255.0f;
     std::vector<unsigned char> inv(4096);   // linear 0..1 in 4096 steps -> 8-bit encoded
     for (int i = 0; i < 4096; ++i) {
         const float v = i / 4095.0f;
-        inv[i] = (unsigned char)std::min(255.0f, std::max(0.0f, (srgb ? linToSrgb(v) : v) * 255.0f + 0.5f));
+        inv[i] = (unsigned char)std::min(255.0f, std::max(0.0f, (t.srgb ? linToSrgb(v) : v) * 255.0f + 0.5f));
     }
-    int cw = w, ch = h;
-    for (int l = 0; l < levels; ++l) {
-        cudaArray_t a = nullptr;
-        cudaGetMipmappedArrayLevel(&a, arr, l);
-        cudaMemcpy2DToArray(a, 0, 0, px.data(), size_t(cw) * 4, size_t(cw) * 4, ch, cudaMemcpyHostToDevice);
-        if (l + 1 == levels) break;
+    t.mips.clear();
+    t.mips.reserve(size_t(t.levels));
+    const unsigned char* px = t.base;
+    int cw = t.w, ch = t.h;
+    for (int l = 1; l < t.levels; ++l) {
         const int nw = std::max(1, cw / 2), nh = std::max(1, ch / 2);
         std::vector<unsigned char> nx(size_t(nw) * nh * 4);
         for (int y = 0; y < nh; ++y)
@@ -483,12 +512,59 @@ bool makeMipTexture(std::vector<unsigned char> px, int w, int h, bool srgb, KoyT
                     nx[(size_t(y) * nw + x) * 4 + c] = c < 3 ? inv[std::min(4095, std::max(0, int(s * 4095.0f + 0.5f)))]
                                                              : (unsigned char)std::min(255.0f, std::max(0.0f, s * 255.0f + 0.5f));
                 }
-        px.swap(nx);
+        t.mips.push_back(std::move(nx));
+        px = t.mips.back().data();
         cw = nw;
         ch = nh;
     }
-    // the last level is one texel: the average (in linear light for sRGB)
-    if (srgb) out.set.meanAlbedo = make_float3(lut[px[0]], lut[px[1]], lut[px[2]]);
+    // the last level is one texel: the average
+    if (t.srgb) t.mean = make_float3(lut[px[0]], lut[px[1]], lut[px[2]]);
+}
+
+// <base>.jpg/.png/.jpeg decoded to RGBA8 and mipmapped; an empty texture if there is no such file
+HostTexture decodeImage(const std::string& base, bool srgb) {
+    HostTexture t;
+    for (const char* ext : {".jpg", ".png", ".jpeg"}) {
+        const std::string p = base + ext;
+        if (!std::filesystem::exists(p)) continue;
+        t.found = true;
+        int n = 0;
+        t.base = stbi_load(p.c_str(), &t.w, &t.h, &n, 4);
+        if (!t.base) {
+            std::printf("koy: %s okunamadi (%s)\n", p.c_str(), stbi_failure_reason());
+            return t;
+        }
+        t.srgb = srgb;
+        buildMips(t);
+        return t;
+    }
+    return t;
+}
+
+// the CUDA half: a mipmapped RGBA8 array and its texture object (sRGB read back decoded by the hardware)
+bool uploadTexture(const HostTexture& t, KoyTextureSet& out, unsigned long long& tex, size_t* bytes) {
+    if (!t.base) return false;
+    cudaChannelFormatDesc fd = cudaCreateChannelDesc<uchar4>();
+    cudaMipmappedArray_t arr = nullptr;
+    if (cudaMallocMipmappedArray(&arr, &fd, make_cudaExtent(t.w, t.h, 0), t.levels) != cudaSuccess) {
+        std::printf("koy: %s icin %dx%d dokuya GPU bellegi yetmedi\n", out.name.c_str(), t.w, t.h);
+        cudaGetLastError();
+        return false;
+    }
+    int cw = t.w, ch = t.h;
+    size_t total = 0;
+    for (int l = 0; l < t.levels; ++l) {
+        cudaArray_t a = nullptr;
+        cudaGetMipmappedArrayLevel(&a, arr, l);
+        if (cudaMemcpy2DToArray(a, 0, 0, t.level(l), size_t(cw) * 4, size_t(cw) * 4, ch, cudaMemcpyHostToDevice) != cudaSuccess) {
+            cudaFreeMipmappedArray(arr);
+            return false;
+        }
+        total += size_t(cw) * ch * 4;
+        cw = std::max(1, cw / 2);
+        ch = std::max(1, ch / 2);
+    }
+    if (t.srgb) out.set.meanAlbedo = t.mean;
     cudaResourceDesc rd{};
     rd.resType = cudaResourceTypeMipmappedArray;
     rd.res.mipmap.mipmap = arr;
@@ -498,42 +574,136 @@ bool makeMipTexture(std::vector<unsigned char> px, int w, int h, bool srgb, KoyT
     td.mipmapFilterMode = cudaFilterModeLinear;
     td.readMode = cudaReadModeNormalizedFloat;
     td.normalizedCoords = 1;
-    td.sRGB = srgb ? 1 : 0;
+    td.sRGB = t.srgb ? 1 : 0;
     td.maxAnisotropy = 16;
-    td.maxMipmapLevelClamp = float(levels - 1);
-    cudaTextureObject_t t = 0;
-    if (cudaCreateTextureObject(&t, &rd, &td, nullptr) != cudaSuccess) return false;
+    td.maxMipmapLevelClamp = float(t.levels - 1);
+    cudaTextureObject_t to = 0;
+    if (cudaCreateTextureObject(&to, &rd, &td, nullptr) != cudaSuccess) {
+        cudaFreeMipmappedArray(arr);
+        return false;
+    }
     out.arrays.push_back(arr);
-    out.textures.push_back(t);
-    tex = t;
+    out.textures.push_back(to);
+    tex = to;
+    if (bytes) *bytes += total;
     return true;
 }
-bool loadImage(const std::string& base, std::vector<unsigned char>& px, int& w, int& h) {
-    for (const char* ext : {".jpg", ".png", ".jpeg"}) {
-        const std::string p = base + ext;
-        if (!std::filesystem::exists(p)) continue;
-        int n = 0;
-        unsigned char* d = stbi_load(p.c_str(), &w, &h, &n, 4);
-        if (!d) return false;
-        px.assign(d, d + size_t(w) * h * 4);
-        stbi_image_free(d);
-        return true;
+
+// a mipmapped texture from pixels made here (the ripples)
+bool makeMipTexture(std::vector<unsigned char> px, int w, int h, bool srgb, KoyTextureSet& out, unsigned long long& tex) {
+    HostTexture t;
+    t.w = w;
+    t.h = h;
+    t.srgb = srgb;
+    t.base = static_cast<unsigned char*>(std::malloc(px.size()));
+    if (!t.base) return false;
+    std::memcpy(t.base, px.data(), px.size());
+    buildMips(t);
+    return uploadTexture(t, out, tex, nullptr);
+}
+
+// a set's maps, decoding (each on its own thread) or decoded; `rest`: the slot's other folders, should this one fail
+struct PendingSet {
+    std::string name;
+    std::vector<std::string> rest;
+    int* index = nullptr;
+    std::future<HostTexture> albedo, normal, rough;
+};
+
+void releaseSet(KoyTextureSet& t) {
+    for (auto o : t.textures) cudaDestroyTextureObject(cudaTextureObject_t(o));
+    for (void* a : t.arrays) cudaFreeMipmappedArray(static_cast<cudaMipmappedArray_t>(a));
+    t.textures.clear();
+    t.arrays.clear();
+}
+
+// The upload of a decoded set, all or nothing: every map whose file is there must decode and fit on the GPU, or the
+// set is dropped whole (a mode never runs on half a set, say the 16K sand without its normal map)
+bool uploadSet(const std::string& name, HostTexture albedo, HostTexture normal, HostTexture rough, KoyTextureSet& out, size_t* bytes) {
+    out = KoyTextureSet();
+    out.name = name;
+    out.set.texels = float(std::max(albedo.w, albedo.h));
+    size_t added = 0;
+    bool ok = albedo.base && uploadTexture(albedo, out, out.set.albedo, &added);
+    if (ok && normal.found) {
+        ok = uploadTexture(normal, out, out.set.normal, &added);
+        out.set.hasNormal = ok ? 1 : 0;
     }
+    if (ok && rough.found) ok = uploadTexture(rough, out, out.set.rough, &added);
+    if (!ok) {
+        releaseSet(out);
+        std::printf("koy: malzeme %s yuklenemedi\n", name.c_str());
+        return false;
+    }
+    if (bytes) *bytes += added;
+    std::printf("koy: malzeme %s %dx%d%s\n", name.c_str(), albedo.w, albedo.h, out.set.hasNormal ? " (normal haritali)" : "");
+    return true;
+}
+bool hasImage(const std::string& base) {
+    for (const char* ext : {".jpg", ".png", ".jpeg"})
+        if (std::filesystem::exists(base + ext)) return true;
     return false;
 }
 }   // namespace
 
 bool koyLoadTextureSet(const std::string& dir, const std::string& name, KoyTextureSet& out) {
     const std::string base = dir + "/" + name + "/";
-    std::vector<unsigned char> px;
-    int w = 0, h = 0;
-    if (!loadImage(base + "albedo", px, w, h)) return false;
-    out.name = name;
-    out.set = {};
-    out.set.texels = float(std::max(w, h));
-    if (!makeMipTexture(px, w, h, true, out, out.set.albedo)) return false;
-    if (loadImage(base + "normal", px, w, h) && makeMipTexture(px, w, h, false, out, out.set.normal)) out.set.hasNormal = 1;
-    if (loadImage(base + "rough", px, w, h)) makeMipTexture(px, w, h, false, out, out.set.rough);
-    std::printf("koy: malzeme %s %dx%d%s\n", name.c_str(), w, h, out.set.hasNormal ? " (normal haritali)" : "");
-    return true;
+    return uploadSet(name, decodeImage(base + "albedo", true), decodeImage(base + "normal", false), decodeImage(base + "rough", false), out, nullptr);
+}
+
+// Every set's maps are decoded and mipmapped at once, each on its own thread (the 16K maps alone take seconds each on
+// one core); the uploads follow here, in order, on the CUDA thread, each as soon as its maps are ready. The slots name
+// their fallbacks: the first folder that has an albedo is loaded.
+void KoyWorld::loadTextures(const Config& cfg, const std::string& dir) {
+    const auto t0 = std::chrono::steady_clock::now();
+    textureBytes = 0;
+    setSand = setRock = setSand4k = setRock8k = setRockDetail = setSand16k = setRockDetail16k = -1;
+    if (cfg.f("tex.use", 1.0f) < 0.5f) return;
+    struct Slot {
+        std::vector<const char*> names;
+        int* index;
+    };
+    std::vector<Slot> slots = {{{"kum"}, &setSand}, {{"kaya_model"}, &setRock}};
+    if (cfg.i("tex.high", 1)) {   // everything at 8K (panel "Yüksek")
+        slots.push_back({{"kum_8k", "kum_4k"}, &setSand4k});
+        slots.push_back({{"kaya_model_8k"}, &setRock8k});
+        slots.push_back({{"kaya_ayrinti_8k", "kaya_ayrinti"}, &setRockDetail});
+        if (cfg.i("tex.ultra", 1)) {   // the sand and the rock detail at 16K (panel "Ultra")
+            slots.push_back({{"kum_16k"}, &setSand16k});
+            slots.push_back({{"kaya_ayrinti_16k"}, &setRockDetail16k});
+        }
+    }
+    std::vector<PendingSet> pending;
+    for (const Slot& s : slots) {
+        std::vector<std::string> found;
+        for (const char* nm : s.names)
+            if (hasImage(dir + "/" + nm + "/albedo")) found.push_back(nm);
+        if (found.empty()) {
+            std::printf("koy: %s yok (python assets/koy/fetch.py)\n", s.names[0]);
+            continue;
+        }
+        PendingSet p;
+        p.name = found[0];
+        p.rest.assign(found.begin() + 1, found.end());
+        p.index = s.index;
+        const std::string base = dir + "/" + p.name + "/";
+        p.albedo = std::async(std::launch::async, [base] { return decodeImage(base + "albedo", true); });
+        p.normal = std::async(std::launch::async, [base] { return decodeImage(base + "normal", false); });
+        p.rough = std::async(std::launch::async, [base] { return decodeImage(base + "rough", false); });
+        pending.push_back(std::move(p));
+    }
+    for (PendingSet& p : pending) {
+        KoyTextureSet t;
+        bool ok = uploadSet(p.name, p.albedo.get(), p.normal.get(), p.rough.get(), t, &textureBytes);
+        for (size_t k = 0; !ok && k < p.rest.size(); ++k) {   // the slot's next folder, here and now (a failure path)
+            const std::string base = dir + "/" + p.rest[k] + "/";
+            ok = uploadSet(p.rest[k], decodeImage(base + "albedo", true), decodeImage(base + "normal", false), decodeImage(base + "rough", false), t,
+                           &textureBytes);
+        }
+        if (ok) {
+            textures.push_back(t);
+            *p.index = int(textures.size()) - 1;
+        }
+    }
+    textureSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
 }

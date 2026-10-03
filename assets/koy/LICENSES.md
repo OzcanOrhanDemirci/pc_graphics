@@ -11,3 +11,5 @@ Bu klasördeki taramalar depoya girmez; `python assets/koy/fetch.py` indirir ve 
 | `cc0/kum_4k` | ambientCG, Ground054, 4K | CC0 1.0 |
 | `cc0/kum_8k` | ambientCG, Ground054, 8K | CC0 1.0 |
 | `cc0/kaya_ayrinti_8k` | Poly Haven, rock_boulder_dry, 8K | CC0 1.0 |
+| `cc0/kum_16k` | ambientCG, Ground054, 16K | CC0 1.0 |
+| `cc0/kaya_ayrinti_16k` | Poly Haven, rock_boulder_dry, 16K | CC0 1.0 |

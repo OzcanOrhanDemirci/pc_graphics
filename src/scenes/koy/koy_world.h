@@ -43,10 +43,16 @@ struct KoyWorld {
     float3 rockCentre{};
     float rockRadius = 0.0f;
     KoyTextureSet ripples;          // the sand ripples: a world-space normal map (x, z over +-rippleHalf), mipmapped
-    // the texture choice (the panel's "Doku"): 0 standard (2K scans), 1 high (8K boulder, 4K sand, detail layers)
-    int texMode = 1;
+    // the texture choice (the panel's "Doku"): 0 standard (2K scans), 1 high (everything 8K, detail layers), 2 ultra (the
+    // sand and the rock's detail layer at 16K; the boulder's own scan ends at 8K). All of them stay loaded: live switching
+    int texMode = 2;
     int setSand = -1, setSand4k = -1, setRock = -1, setRock8k = -1, setRockDetail = -1;
-    void applyTextureMode(const Config& cfg, int mode);
+    int setSand16k = -1, setRockDetail16k = -1;
+    double textureSeconds = 0.0;    // decoding, mipmapping and uploading every set
+    size_t textureBytes = 0;        // the sets' GPU arrays, all levels
+    bool hasMode(int mode) const;
+    void applyTextureMode(const Config& cfg, int mode);   // takes the best mode that is there, at most `mode`
+    void loadTextures(const Config& cfg, const std::string& dir);   // every set decoded in parallel, uploaded in order
     float rippleHalf = 16.0f;
     void build(const Config& cfg, const std::string& root);
     void buildRipples(const Config& cfg);

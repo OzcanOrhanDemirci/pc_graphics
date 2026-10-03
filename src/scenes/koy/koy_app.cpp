@@ -6,6 +6,10 @@
 //            steadiness and sharpness (PLAN §9): N live frames of a path at 41 fps and the reference of each; then
 //            python tools/kararlilik.py <out>
 //   pc_graphics.exe --scene koy --zaman N                 N live frames: the passes' timings
+//   pc_graphics.exe --scene koy --doku --out captures/koy/doku/x --cam "x y z" --look "x y z" [--cam .. --look ..]
+//            each view in the three texture modes with one exposure (only the textures differ); then
+//            python tools/doku_kiyas.py captures/koy/doku/x
+//   pc_graphics.exe --scene koy --yokla --cam "x y z" [--cam ..]   height above the sand, the nearest surface
 //   pc_graphics.exe --scene koy --test [ad]               the physics tests (Snell's window, colour at depth, visibility, ...)
 //   pc_graphics.exe --scene koy --map captures/koy/harita.png   the trial area from above (the same floor function)
 //   options: --set key=value, --width W, --height H, --spp 1|4|8|16, --edge N, --filter 0..3
@@ -93,7 +97,13 @@ void KoyApp::setup() {
     p.shaftMax = std::max(cfg.f("shaft.max", 70.0f), 1.0f);
     p.farDistance = cfg.f("view.far", 180.0f);
     // the world
+    size_t freeBefore = 0, freeAfter = 0, totalMem = 0;
+    cudaMemGetInfo(&freeBefore, &totalMem);
     world.build(cfg, root);
+    cudaMemGetInfo(&freeAfter, &totalMem);
+    std::printf("koy dokular: %.1f s (paralel cozme), dizilerde %.2f GB; GPU bellegi dunyayla %.2f GB artti, kartta %.2f / %.2f GB dolu\n",
+                world.textureSeconds, world.textureBytes / 1073741824.0, (double(freeBefore) - double(freeAfter)) / 1073741824.0,
+                (totalMem - freeAfter) / 1073741824.0, totalMem / 1073741824.0);
     renderer.uploadWorld(world.meshes, world.instances, world.materials, world.textureSets(), &world.ribbons);
     p.rippleTex = world.ripples.set.normal;
     p.rippleHalf = world.rippleHalf;
@@ -175,8 +185,9 @@ void KoyApp::stepDiver(float fwd, float right, float up, bool strong, float look
         const float3 drag = v > 1e-5f ? diver.vel * (-0.5f * rho * cda * v) : make_float3(0, 0, 0);
         diver.vel = diver.vel + (wish * thrust + drag) * (h / mass);
         diver.pos = diver.pos + diver.vel * h;
-        // collisions: the floor (the eye at least 0.6 m above it), the boulder, the surface's ceiling (1 m under it)
-        const float fy = koyFloor(cfg, diver.pos.x, diver.pos.z) + 0.6f;
+        // collisions: the floor (the eye at least 0.3 m above it, as near as the boulder lets you), the boulder, the
+        // surface's ceiling (1 m under it)
+        const float fy = koyFloor(cfg, diver.pos.x, diver.pos.z) + cfg.f("diver.floor_clear", 0.3f);
         if (diver.pos.y < fy) { diver.pos.y = fy; diver.vel.y = std::max(diver.vel.y, 0.0f); }
         if (k == sub - 1) {   // the rocks: the probe's distances in 26 directions push the head out (0.3 m)
             float dist[26];
@@ -259,6 +270,7 @@ int runKoyCli(int argc, char** argv) {
     float t0 = 0.0f, fps = 41.0f;
     bool camGiven = false, ref = false, worker = false;
     float3 camPos{}, camLook{};
+    std::vector<float3> cams, looks;   // --doku and --yokla take several --cam/--look pairs
     int spp = -1, edge = -1, filter = -1;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
@@ -272,13 +284,15 @@ int runKoyCli(int argc, char** argv) {
         else if (a == "--zaman") { mode = "time"; timing = std::stoi(next()); }
         else if (a == "--test") { mode = "test"; testName = opt(); }
         else if (a == "--map") { mode = "map"; mapOut = next(); }
+        else if (a == "--doku") mode = "tex";
+        else if (a == "--yokla") mode = "probe";
         else if (a == "--yol") path = next();
         else if (a == "--kare") frames = std::stoi(next());
         else if (a == "--refn") refN = std::stoi(next());
         else if (a == "--hiz") fps = std::stof(next());
         else if (a == "--t") t0 = std::stof(next());
-        else if (a == "--cam") { camPos = parse3(next()); camGiven = true; }
-        else if (a == "--look") camLook = parse3(next());
+        else if (a == "--cam") { camPos = parse3(next()); camGiven = true; cams.push_back(camPos); }
+        else if (a == "--look") { camLook = parse3(next()); looks.push_back(camLook); }
         else if (a == "--spp") spp = std::stoi(next());
         else if (a == "--edge") edge = std::stoi(next());
         else if (a == "--filter") filter = std::stoi(next());
@@ -290,7 +304,7 @@ int runKoyCli(int argc, char** argv) {
         else { std::printf("bilinmeyen secenek %s\n", a.c_str()); return 2; }
     }
     if (mode.empty()) {
-        std::printf("koy: --headless, --kararlilik, --zaman N, --test, --map (canli sahne uygulamadan acilir)\n");
+        std::printf("koy: --headless, --kararlilik, --zaman N, --doku, --yokla, --test, --map (canli sahne uygulamadan acilir)\n");
         return 2;
     }
     app.loadConfig();
@@ -345,7 +359,61 @@ int runKoyCli(int argc, char** argv) {
     }
     int rc = 0;
     app.renderer.params().view = app.cfg.i("view.mode", 0);
-    if (mode == "still") {
+    auto aim = [&](size_t c) {   // the c-th --cam/--look pair
+        app.diver.pos = cams[c];
+        const float3 f = normalize((c < looks.size() ? looks[c] : cams[c] + make_float3(0, 0, -1)) - cams[c]);
+        app.diver.yaw = std::atan2(f.x, f.z);
+        app.diver.pitch = std::asin(std::max(-1.0f, std::min(1.0f, f.y)));
+        app.setCamera();
+    };
+    auto nearest = [&](float3 p, float3& dir) {   // the probe's nearest static surface (26 directions, up to 2 m)
+        float dist[26];
+        app.renderer.probe(p, dist);
+        int best = 0;
+        for (int q = 1; q < 26; ++q)
+            if (dist[q] < dist[best]) best = q;
+        const int kk = best >= 13 ? best + 1 : best;
+        dir = make_float3(float(kk % 3 - 1), float((kk / 3) % 3 - 1), float(kk / 9 - 1));
+        return dist[best];
+    };
+    if (mode == "probe") {
+        for (size_t c = 0; c < cams.size(); ++c) {
+            float3 dir;
+            const float d = nearest(cams[c], dir);
+            std::printf("yokla (%.2f %.2f %.2f): kumun %.2f m ustunde, en yakin yuzey %.2f m (yon %+.0f %+.0f %+.0f)\n", cams[c].x, cams[c].y,
+                        cams[c].z, cams[c].y - koyFloor(app.cfg, cams[c].x, cams[c].z), d, dir.x, dir.y, dir.z);
+        }
+    } else if (mode == "tex") {
+        // the same moment in the three texture modes (the panel's "Doku"), one exposure for all three (metered on
+        // "Yüksek"): the pictures differ by the textures alone. python tools/doku_kiyas.py <out> measures them
+        const std::string o = out.empty() ? app.root + "/captures/koy/doku/kiyas" : out;
+        std::filesystem::create_directories(std::filesystem::path(o).parent_path());
+        static const char* names[3] = {"standart", "yuksek", "ultra"};
+        for (size_t c = 0; c < std::max<size_t>(1, cams.size()); ++c) {
+            if (c < cams.size()) aim(c);
+            app.setTextureMode(1);
+            app.stepWorld(t0);
+            app.frame();
+            app.adaptExposure(0.0f, true);
+            const float exposure = app.renderer.params().exposure;
+            for (int m = 0; m < 3; ++m) {
+                app.setTextureMode(m);
+                if (app.world.texMode != m) {
+                    std::printf("doku %s yuklu degil: atlandi\n", names[m]);
+                    continue;
+                }
+                app.renderer.params().exposure = exposure;
+                app.frame();
+                char nm[48];
+                std::snprintf(nm, sizeof(nm), "_%02d_%s", int(c), names[m]);
+                app.save(o + nm);
+            }
+            float3 dir;
+            const float d = nearest(app.diver.pos, dir);
+            std::printf("doku kiyas %d: kamera kumun %.2f m ustunde, en yakin yuzey %.2f m -> %s_%02d_*.png\n", int(c),
+                        app.diver.pos.y - koyFloor(app.cfg, app.diver.pos.x, app.diver.pos.z), d, o.c_str(), int(c));
+        }
+    } else if (mode == "still") {
         app.stepWorld(t0);
         app.frame();
         app.adaptExposure(0.0f, true);
@@ -379,9 +447,13 @@ int runKoyCli(int argc, char** argv) {
         const float dt = 1.0f / fps;
         struct Moment { Diver d; float t, exposure; };
         std::vector<Moment> at(frames);
-        if (path == "yakin") {   // close to the boulder (about a metre), looking at it, gliding sideways along it
-            app.diver.pos = app.cfg.v3("path.near_pos", make_float3(-2.2f, -6.1f, -4.1f));
-            const float3 f = normalize(app.cfg.v3("path.near_look", make_float3(-2.4f, -6.6f, -6.0f)) - app.diver.pos);
+        if (path == "yakin" || path == "kum") {
+            // yakin: close to the boulder (about a metre), looking at it, gliding sideways along it; kum: 30 cm over the
+            // sand, looking down at it, swimming forward (the 16K grain at its nearest: the hardest case for shimmer)
+            const bool sand = path == "kum";
+            app.diver.pos = sand ? app.cfg.v3("path.sand_pos", make_float3(1.0f, -6.5f, 3.0f)) : app.cfg.v3("path.near_pos", make_float3(-2.2f, -6.1f, -4.1f));
+            const float3 look = sand ? app.cfg.v3("path.sand_look", make_float3(1.0f, -6.8f, 2.7f)) : app.cfg.v3("path.near_look", make_float3(-2.4f, -6.6f, -6.0f));
+            const float3 f = normalize(look - app.diver.pos);
             app.diver.yaw = std::atan2(f.x, f.z);
             app.diver.pitch = std::asin(f.y);
             app.diver.vel = make_float3(0, 0, 0);
@@ -395,7 +467,7 @@ int runKoyCli(int argc, char** argv) {
             const float t = t0 + k * dt;
             // the path: still (the world moves), swimming forward, turning, looking up at the surface, along the boulder
             float fwd = 0, right = 0, up = 0, lookX = 0, lookY = 0;
-            if (path == "yuz") fwd = 1.0f;
+            if (path == "yuz" || path == "kum") fwd = 1.0f;
             else if (path == "yakin") right = 1.0f;
             else if (path == "don") lookX = -dt * 12.0f / (app.cfg.f("diver.mouse", 0.0022f) * 57.2958f);   // 12 deg/s
             else if (path == "yukari" && k == 0) lookY = -(55.0f / 57.2958f) / app.cfg.f("diver.mouse", 0.0022f);

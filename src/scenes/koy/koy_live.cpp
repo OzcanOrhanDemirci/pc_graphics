@@ -109,8 +109,14 @@ public:
             if (e.id == "suzgec" && e.item >= 0) k_.quality.filter = e.item;
             if (e.id == "doku" && e.item >= 0) {
                 k_.setTextureMode(e.item);
-                host.toast(e.item ? L("Doku: yüksek (her şey 8K: kaya, kum, ayrıntı katmanı)", "Textures: high (everything 8K: rock, sand, detail layer)")
-                                  : L("Doku: standart (2K)", "Textures: standard (2K)"));
+                const int got = k_.world.texMode;   // the best that is loaded, at most the one asked for
+                if (got != e.item)
+                    host.toast(L("Bu doku yüklenmedi (dosya yok, GPU belleği yetmedi ya da ayarla kapalı; nedeni konsolda)",
+                                 "These textures did not load (no files, not enough GPU memory or turned off; the console says which)"));
+                else
+                    host.toast(got == 2   ? L("Doku: ultra (kum ve ayrıntı katmanı 16K, kaya 8K)", "Textures: ultra (sand and detail layer 16K, rock 8K)")
+                               : got == 1 ? L("Doku: yüksek (her şey 8K: kaya, kum, ayrıntı katmanı)", "Textures: high (everything 8K: rock, sand, detail layer)")
+                                          : L("Doku: standart (2K)", "Textures: standard (2K)"));
             }
             k_.applyQuality();
             resetAccum();
@@ -209,9 +215,10 @@ public:
             c.kind = app::Control::Kind::Choice;
             c.id = "doku";
             c.title = L("Doku", "Textures");
-            c.items = {L("Standart", "Standard"), L("Yüksek", "High")};
+            c.items = {L("Standart", "Standard"), L("Yüksek", "High"), "Ultra"};
             c.active = k_.world.texMode;
-            c.detail = L("Yüksek: her şey 8K (kaya, kum, yakın plan ayrıntı katmanı)", "High: everything 8K (rock, sand, close-up detail layer)");
+            c.detail = L("Standart 2K · Yüksek: her şey 8K · Ultra: kum ve ayrıntı katmanı 16K (kayanın kendi taraması 8K'da biter)",
+                         "Standard 2K · High: everything 8K · Ultra: sand and detail layer 16K (the rock's own scan ends at 8K)");
             c.section = true;
             s.controls.push_back(c);
         }

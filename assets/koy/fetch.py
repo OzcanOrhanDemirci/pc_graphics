@@ -9,6 +9,7 @@ import hashlib
 import io
 import json
 import os
+import shutil
 import struct
 import sys
 import urllib.request
@@ -49,6 +50,14 @@ FILES = {
                                        '9c83e90fa5215e828fa9d9368263b4365d35bba3c86a948c9af63f7f002bd473'),
     'Ground054_8K-JPG.zip': ('https://ambientcg.com/get?file=Ground054_8K-JPG.zip',
                              'e4a7478a126025cf7a1e92abbead028debaa47c88563a5727fb55e704f1f2ce8'),
+    # the 16K set, panel "Ultra" (2026-10-03 gece): Poly Haven md5 checked; the ambientCG zip's size equals its API's.
+    # Both were tested to be real 16K, not enlarged 8K (docs/koy/DURUM.md, "Ara durak 2")
+    'rock_boulder_dry_diff_16k.jpg': ('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/16k/rock_boulder_dry/rock_boulder_dry_diff_16k.jpg',
+                                      'e5af191c0c546aa331b17eb45a812cdc11315eb6bcf00bdf251f5e9785444c2f'),
+    'rock_boulder_dry_nor_gl_16k.jpg': ('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/16k/rock_boulder_dry/rock_boulder_dry_nor_gl_16k.jpg',
+                                        'b3866a4a280e19070d3cd5ebe714184508fae00520582a5f7e1066a12b322051'),
+    'Ground054_16K-JPG.zip': ('https://ambientcg.com/get?file=Ground054_16K-JPG.zip',
+                              'accbf0efe105003082a40348745f4336d909a6c21fa2abe479ffbe328eacec7e'),
 }
 # members of the sand zip, and their hashes
 SAND = {
@@ -78,6 +87,32 @@ def fetch(name):
     open(path, 'wb').write(data)
     print(f'indirildi: {name} ({len(data) / 1e6:.1f} MB)')
     return data
+
+
+def file_sha256(path):
+    h = hashlib.sha256()
+    with open(path, 'rb') as f:
+        for block in iter(lambda: f.read(1 << 22), b''):
+            h.update(block)
+    return h.hexdigest()
+
+
+def fetch_file(name):
+    """fetch() for the big files (the 16K set, up to 2 GB): streamed to disk and hashed in blocks; returns the path"""
+    url, want = FILES[name]
+    path = os.path.join(DL, name)
+    if os.path.exists(path) and file_sha256(path) == want:
+        return path
+    os.makedirs(DL, exist_ok=True)
+    req = urllib.request.Request(url, headers={'User-Agent': 'pc_graphics-koy-fetch'})
+    with urllib.request.urlopen(req, timeout=900) as r, open(path + '.part', 'wb') as f:
+        shutil.copyfileobj(r, f, 1 << 22)
+    got = file_sha256(path + '.part')
+    if got != want:
+        sys.exit(f'HASH TUTMADI: {name}\n  beklenen {want}\n  gelen    {got}')
+    os.replace(path + '.part', path)
+    print(f'indirildi: {name} ({os.path.getsize(path) / 1e6:.1f} MB)')
+    return path
 
 
 def gltf_to_mesh(gltf_bytes, bin_bytes, out_path):
@@ -168,6 +203,25 @@ def main():
             member = [n for n in names if n.endswith(key)][0]
             open(os.path.join(kum8, dst), 'wb').write(z.read(member))
         print('kum: ambientCG Ground054 (8K)')
+    # the 16K set (panel "Ultra"): the sand and the rock detail layer; the boulder's own scan ends at 8K
+    ayr16 = os.path.join(OUT, 'kaya_ayrinti_16k')
+    os.makedirs(ayr16, exist_ok=True)
+    for src, dst in (('rock_boulder_dry_diff_16k.jpg', 'albedo.jpg'), ('rock_boulder_dry_nor_gl_16k.jpg', 'normal.jpg')):
+        p = os.path.join(ayr16, dst)
+        if not os.path.exists(p):   # via .part: an interrupted copy never leaves a short file that later runs skip
+            shutil.copyfile(fetch_file(src), p + '.part')
+            os.replace(p + '.part', p)
+    kum16 = os.path.join(OUT, 'kum_16k')
+    os.makedirs(kum16, exist_ok=True)
+    if not os.path.exists(os.path.join(kum16, 'normal.jpg')):
+        with zipfile.ZipFile(fetch_file('Ground054_16K-JPG.zip')) as z:
+            names = z.namelist()
+            for key, dst in (('_Color.jpg', 'albedo.jpg'), ('_NormalGL.jpg', 'normal.jpg')):
+                member = [n for n in names if n.endswith(key)][0]
+                with z.open(member) as s, open(os.path.join(kum16, dst) + '.part', 'wb') as d:
+                    shutil.copyfileobj(s, d, 1 << 22)
+                os.replace(os.path.join(kum16, dst) + '.part', os.path.join(kum16, dst))
+        print('kum: ambientCG Ground054 (16K)')
     print('tamam:', OUT)
 
 
