@@ -3,7 +3,14 @@
 > Tek kaynak durum panosu. Plan: `docs/koy/PLAN.md` (kararlar, fazlar, duraklar). Veri ve denetimleri: `docs/koy/VERI.md`.
 > Gerçek fotoğraflardan başvuru panosu: `docs/koy/BASVURU.md`. CC0 taramalar: `assets/koy/fetch.py`, `assets/koy/LICENSES.md`.
 
-## Şu an · 2026-10-04 gece · ✅ Ara durak 3 geçti, dalgacıklar kalıyor; kostik gürültüsü ölçüldü
+## Şu an · 2026-10-04 00.50 · 🚀 Amfora planı kesinleşti, otonom görev A0'dan başlayacak
+
+**Aktif plan: `docs/koy/PLAN_AMFORA.md`** (batık bir Roma gemisinin amfora yükü ~12 m'de + ~30 m ötede doğal kireçtaşı
+kemeri; yücelik ışıkla; durak yok, sonuna kadar otonom). Özcan kostik ışın düğmesine baktı: *"Açıkçası farkı pek
+göremedim. Hüzme yöntemiyle kendi en iyi bildiğin şekilde yapmak daha sağlıklı olur."* Hüzme yöntemi planın A1'i.
+Sıradaki: **A0** (kaynak araştırması, başvuru panosu, gri kutu kompozisyon etüdü).
+
+## Ara durak 3 kararı · 2026-10-04 gece · ✅ geçti, dalgacıklar kalıyor; kostik gürültüsü ölçüldü
 
 Özcan (düzeltilmiş dalgacıklara canlı baktı): *"Daha güzel oldu. Daha tanecikli ve aslında daha az stabil ama diğeri daha
 oyuncak gibi basitti. Bu şekilde daha gerçekçi oldu. Gerçekte de su biraz pütürlü ışığı noktacıklı yansıtan halde olur."*
