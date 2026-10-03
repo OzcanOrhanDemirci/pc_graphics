@@ -73,9 +73,10 @@ struct KMesh {
     const float3* nrm;
     const float2* uv;
     const uint3* idx;
-    const float* ao;     // per vertex, baked (1 open .. 0 closed), may be null
+    const float* ao;     // per vertex, baked (1 open .. 0 closed), may be null; per instance when instanced:
+    unsigned int aoFirst, aoVerts;   // instance i's values at ao + (i - aoFirst) * aoVerts (its instances consecutive)
     unsigned int material;
-    unsigned int id;     // edge detection: a different surface (a different rock, the floor)
+    unsigned int id;     // edge detection: a different surface (a different rock, the floor); per instance in the hit
 };
 
 struct KInstance {       // object-to-world 3x4 rows, and the mesh

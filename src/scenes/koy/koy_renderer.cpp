@@ -313,6 +313,8 @@ void KoyRenderer::uploadWorld(const std::vector<KMeshCPU>& meshes, const std::ve
         dm.uv = upload(m.uv, worldBuffers_);
         dm.idx = upload(m.idx, worldBuffers_);
         dm.ao = nullptr;
+        dm.aoFirst = 0;
+        dm.aoVerts = unsigned(m.pos.size());
         dm.material = m.material;
         dm.id = m.id;
         if (m.idx.empty()) continue;
@@ -486,17 +488,33 @@ void KoyRenderer::bakeAO() {
     for (size_t k = 0; k < meshesCPU_.size() && k < KOY_MAX_MESHES; ++k) {
         const KMeshCPU& m = meshesCPU_[k];
         if (!m.bakeAO || m.pos.empty() || m.nrm.empty()) continue;
-        int instance = -1;
+        // every instance of the mesh its own occlusion (an amphora half sunk in the sand is darker than one on top of
+        // the pile); the instances of a mesh are consecutive
+        int first = -1, count = 0;
         for (size_t i = 0; i < instancesCPU_.size(); ++i)
-            if (instancesCPU_[i].mesh == int(k)) { instance = int(i); break; }
-        if (instance < 0) continue;
-        float* ao = devAlloc<float>(m.pos.size());
+            if (instancesCPU_[i].mesh == int(k)) {
+                if (first < 0) first = int(i);
+                ++count;
+            }
+        if (first < 0) continue;
+        float* ao = devAlloc<float>(m.pos.size() * size_t(count));
         worldBuffers_.push_back(ao);
+        for (int c = 0; c < count; ++c) {
+            if (instancesCPU_[size_t(first + c)].mesh != int(k)) {
+                std::printf("koy: %s orneklerinin sirasi bozuk, golgeleme yalniz ilk ornege\n", m.name.c_str());
+                count = 1;
+                break;
+            }
+        }
         params_.bakeMesh = int(k);
-        params_.bakeInstance = instance;
-        params_.bakeOut = ao;
-        launch(rgBakeAO_, unsigned(m.pos.size()), 1, 1, nullptr);
+        for (int c = 0; c < count; ++c) {
+            params_.bakeInstance = first + c;
+            params_.bakeOut = ao + m.pos.size() * size_t(c);
+            launch(rgBakeAO_, unsigned(m.pos.size()), 1, 1, nullptr);
+        }
         params_.meshes[k].ao = ao;
+        params_.meshes[k].aoFirst = unsigned(first);
+        params_.meshes[k].aoVerts = unsigned(m.pos.size());
     }
     CUDA_CHECK(cudaStreamSynchronize(stream_));
 }

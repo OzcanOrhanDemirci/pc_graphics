@@ -1,6 +1,9 @@
 // Scene 5 "Koy": the trial area's world (see koy_world.h).
 #include "scenes/koy/koy_world.h"
 
+#include "scenes/koy/koy_amphora.h"
+#include "scenes/koy/koy_arch.h"
+
 #include "stb_image.h"
 
 #include <algorithm>
@@ -72,16 +75,72 @@ std::vector<float> gridAxis(float inner, float h0, float outer, float hMax) {
     return axis;
 }
 
+// the same, the fine part between lo and hi (lo <= 0 <= hi need not hold)
+std::vector<float> gridAxis2(float lo, float hi, float h0, float outer, float hMax) {
+    std::vector<float> axis;
+    float x = -outer;
+    // coarse from -outer up to lo: the step shrinking towards lo
+    std::vector<float> left;
+    for (float p = lo; p > -outer;) {
+        const float h = std::min(hMax, h0 + (lo - p) * 0.012f);
+        p -= h;
+        left.push_back(std::max(p, -outer));
+    }
+    for (size_t k = left.size(); k-- > 0;) axis.push_back(left[k]);
+    for (x = lo; x < hi - 0.5f * h0; x += h0) axis.push_back(x);
+    axis.push_back(hi);
+    for (float p = hi; p < outer;) {
+        const float h = std::min(hMax, h0 + (p - hi) * 0.012f);
+        p += h;
+        axis.push_back(std::min(p, outer));
+    }
+    return axis;
+}
+
 }   // namespace
 
 // The floor's broad shape (the mesh). Its sand ripples are NOT in the mesh: sampled at the vertices they beat against the
 // grid (a 9 cm ripple on a 3 cm grid) and the shading shows wide moire bands. They live in a mipmapped normal map that
 // the ray cone filters (koyRipple, KoyWorld::buildRipples): sharp near, averaged out far, never aliased.
-float koyFloor(const Config& cfg, float x, float z) {
-    float y = cfg.f("floor.depth", -7.0f) + cfg.f("floor.slope", 0.05f) * z;
-    y += cfg.f("floor.undulation", 0.45f) * fbm3(x * 0.11f, 0.37f, z * 0.11f, 3);
+KoyFloorShape KoyFloorShape::from(const Config& cfg) {
+    KoyFloorShape s;
+    s.depth = cfg.f("floor.depth", -7.0f);
+    s.slope = cfg.f("floor.slope", 0.05f);
+    s.undulation = cfg.f("floor.undulation", 0.45f);
+    s.drop = cfg.f("floor.drop", 0.0f);
+    s.dropZ0 = cfg.f("floor.drop_z0", -6.0f);
+    s.dropZ1 = cfg.f("floor.drop_z1", -26.0f);
+    s.farDrop = cfg.f("floor.far_drop", 0.0f);
+    s.farZ0 = cfg.f("floor.far_z0", -42.0f);
+    s.farZ1 = cfg.f("floor.far_z1", -80.0f);
+    s.rise = cfg.f("floor.rise", 0.0f);
+    s.riseZ0 = cfg.f("floor.rise_z0", 10.0f);
+    s.riseZ1 = cfg.f("floor.rise_z1", 40.0f);
+    const float3 mc = cfg.v3("floor.mound_centre", make_float3(0.0f, 0.0f, 0.0f));
+    s.moundX = mc.x;
+    s.moundZ = mc.z;
+    s.moundA = cfg.f("floor.mound_a", 5.0f);
+    s.moundB = cfg.f("floor.mound_b", 3.0f);
+    s.moundH = cfg.f("floor.mound_h", 0.0f);
+    s.moundAngle = cfg.f("floor.mound_deg", 0.0f) * 3.14159265f / 180.0f;
+    return s;
+}
+float KoyFloorShape::operator()(float x, float z) const {
+    float y = depth + slope * z;
+    // descents towards -z (smoothstep from z0 down to z1, z1 < z0), the rise behind towards +z
+    if (drop != 0.0f) y -= drop * smooth01(dropZ0, dropZ1, z);
+    if (farDrop != 0.0f) y -= farDrop * smooth01(farZ0, farZ1, z);
+    if (rise != 0.0f) y += rise * smooth01(riseZ0, riseZ1, z);
+    // the wreck's mound: the hull's outline under the cargo, a long low swell of sand
+    if (moundH != 0.0f) {
+        const float dx = x - moundX, dz = z - moundZ, c = std::cos(moundAngle), s = std::sin(moundAngle);
+        const float u = (c * dx + s * dz) / moundA, v = (-s * dx + c * dz) / moundB;
+        y += moundH * std::exp(-1.6f * (u * u + v * v));
+    }
+    y += undulation * fbm3(x * 0.11f, 0.37f, z * 0.11f, 3);
     return y;
 }
+float koyFloor(const Config& cfg, float x, float z) { return KoyFloorShape::from(cfg)(x, z); }
 float koyRipple(const Config& cfg, float x, float z) {
     const float th = 0.35f + 0.5f * noise3(x * 0.07f, 1.7f, z * 0.07f);
     const float wl = cfg.f("floor.ripple_length", 0.09f);
@@ -170,24 +229,28 @@ KMeshCPU buildFloor(const Config& cfg) {
     m.name = "floor";
     m.material = 0;
     m.id = 1;
-    const std::vector<float> ax = gridAxis(cfg.f("floor.fine_reach", 12.0f), cfg.f("floor.fine_step", 0.03f), cfg.f("floor.extent", 110.0f), 1.5f);
-    const int n = int(ax.size());
-    m.pos.resize(size_t(n) * n);
-    m.nrm.resize(size_t(n) * n);
-    for (int j = 0; j < n; ++j)
-        for (int i = 0; i < n; ++i) {
-            const float x = ax[i], z = ax[j];
+    // fine over the wreck and down to the arch (x and z ranges of their own), growing outwards
+    const float reach = cfg.f("floor.fine_reach", 12.0f), step = cfg.f("floor.fine_step", 0.03f), ext = cfg.f("floor.extent", 110.0f);
+    const std::vector<float> axX = gridAxis2(cfg.f("floor.fine_x0", -reach), cfg.f("floor.fine_x1", reach), step, ext, 1.5f);
+    const std::vector<float> axZ = gridAxis2(cfg.f("floor.fine_z0", -reach), cfg.f("floor.fine_z1", reach), step, ext, 1.5f);
+    const int nx = int(axX.size()), nz = int(axZ.size());
+    const KoyFloorShape fs = KoyFloorShape::from(cfg);
+    m.pos.resize(size_t(nx) * nz);
+    m.nrm.resize(size_t(nx) * nz);
+    for (int j = 0; j < nz; ++j)
+        for (int i = 0; i < nx; ++i) {
+            const float x = axX[i], z = axZ[j];
             const float e = 0.004f;
-            const float y = koyFloor(cfg, x, z);
-            const float gx = (koyFloor(cfg, x + e, z) - koyFloor(cfg, x - e, z)) / (2 * e);
-            const float gz = (koyFloor(cfg, x, z + e) - koyFloor(cfg, x, z - e)) / (2 * e);
-            m.pos[size_t(j) * n + i] = make_float3(x, y, z);
-            m.nrm[size_t(j) * n + i] = normalize(make_float3(-gx, 1.0f, -gz));
+            const float y = fs(x, z);
+            const float gx = (fs(x + e, z) - fs(x - e, z)) / (2 * e);
+            const float gz = (fs(x, z + e) - fs(x, z - e)) / (2 * e);
+            m.pos[size_t(j) * nx + i] = make_float3(x, y, z);
+            m.nrm[size_t(j) * nx + i] = normalize(make_float3(-gx, 1.0f, -gz));
         }
-    m.idx.reserve(size_t(n - 1) * (n - 1) * 2);
-    for (int j = 0; j + 1 < n; ++j)
-        for (int i = 0; i + 1 < n; ++i) {
-            const unsigned a = unsigned(j * n + i), b = a + 1, c = a + unsigned(n), d = c + 1;
+    m.idx.reserve(size_t(nx - 1) * (nz - 1) * 2);
+    for (int j = 0; j + 1 < nz; ++j)
+        for (int i = 0; i + 1 < nx; ++i) {
+            const unsigned a = unsigned(j * nx + i), b = a + 1, c = a + unsigned(nx), d = c + 1;
             m.idx.push_back(make_uint3(a, c, b));
             m.idx.push_back(make_uint3(b, c, d));
         }
@@ -315,8 +378,19 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
     leafM.texSet = -1;
     leafM.albedo = cfg.v3("grass.albedo", make_float3(0.09f, 0.20f, 0.06f));
     leafM.aoStrength = 0.0f;
-    floorM.detailSet = rockM.detailSet = leafM.detailSet = -1;
-    materials = {floorM, rockM, leafM};
+    // Amfora: the arch's limestone and the jars' fired clay (A0: plain colours; A3 and A4 bring the scans)
+    KMaterial archM{};
+    archM.kind = KM_PLAIN;
+    archM.texSet = -1;
+    archM.albedo = cfg.v3("arch.albedo", make_float3(0.36f, 0.33f, 0.28f));
+    archM.aoStrength = 1.0f;
+    KMaterial jarM{};
+    jarM.kind = KM_PLAIN;
+    jarM.texSet = -1;
+    jarM.albedo = cfg.v3("amfora.albedo", make_float3(0.46f, 0.27f, 0.17f));
+    jarM.aoStrength = 1.0f;
+    floorM.detailSet = rockM.detailSet = leafM.detailSet = archM.detailSet = jarM.detailSet = -1;
+    materials = {floorM, rockM, leafM, archM, jarM};
 
     meshes.push_back(buildFloor(cfg));
     buildRipples(cfg);
@@ -337,10 +411,34 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
             materials[1].kind = KM_PLAIN;
         }
     }
+    // the arch (its feet on the floor at its centre)
+    if (cfg.i("arch.use", 0)) {
+        const float3 ac = cfg.v3("arch.centre", make_float3(3.0f, 0.0f, -33.0f));
+        const KoyArchShape shape = koyArchShape(cfg, koyFloor(cfg, ac.x, ac.z));
+        std::string log;
+        meshes.push_back(koyBuildArch(shape, cfg.f("arch.cell", 0.07f), 3, 3, &log));
+        std::printf("koy %s\n", log.c_str());
+    }
     for (int k = 0; k < int(meshes.size()); ++k) {
         KInstanceCPU in;
         in.mesh = k;
         instances.push_back(in);
+    }
+    // the amphorae: one mesh per type, their instances consecutive (each its own baked occlusion)
+    if (cfg.i("amfora.use", 0)) {
+        const KoyFloorShape fs = KoyFloorShape::from(cfg);
+        std::vector<KoyAmphoraPlacement> field = koyPlaceAmphorae(cfg, [&](float x, float z) { return fs(x, z); });
+        const int firstMesh = int(meshes.size());
+        for (int t = 0; t < koyAmphoraTypes(); ++t)
+            meshes.push_back(koyBuildAmphora(koyAmphoraType(t), cfg.i("amfora.segments", 96), 4, unsigned(10 + t)));
+        for (int t = 0; t < koyAmphoraTypes(); ++t)
+            for (const KoyAmphoraPlacement& P : field) {
+                if (P.type != t) continue;
+                KInstanceCPU in;
+                for (int q = 0; q < 12; ++q) in.m[q] = P.m[q];
+                in.mesh = firstMesh + t;
+                instances.push_back(in);
+            }
     }
     grass.build(cfg);
     grass.toRibbons(ribbons, 2);

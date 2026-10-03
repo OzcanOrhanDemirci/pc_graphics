@@ -3,12 +3,56 @@
 > Tek kaynak durum panosu. Plan: `docs/koy/PLAN.md` (kararlar, fazlar, duraklar). Veri ve denetimleri: `docs/koy/VERI.md`.
 > Gerçek fotoğraflardan başvuru panosu: `docs/koy/BASVURU.md`. CC0 taramalar: `assets/koy/fetch.py`, `assets/koy/LICENSES.md`.
 
-## Şu an · 2026-10-04 02.15 · A1 bitti (hüzme kostiği), A0 sürüyor
+## Şu an · 2026-10-04 02.30 · A0 ve A1 bitti; sırada A3 (amforalar), A2'nin ışık alanı işiyle birlikte
 
-**Aktif plan: `docs/koy/PLAN_AMFORA.md`** (otonom, durak yok). A0'ın kaynak araştırması bir ajanda sürüyor (amfora
-taramaları ve tipoloji, 8K pişmiş toprak ve kireçtaşı taramaları, batık ve kemer fotoğrafları; sonuç
-`docs/koy/AMFORA_KAYNAK.md` ve `BASVURU.md` §12-13). A1 bunu beklemeden yapıldı (bağımsız). Sıradaki: A0'ın gri kutu
-kompozisyon etüdü, sonra A2.
+**Aktif plan: `docs/koy/PLAN_AMFORA.md`** (otonom, durak yok). Yerleşim kuruldu (aşağıda A0), kompozisyon karelerle
+seçildi. Sıradaki: A3 (ArchAIDE profilleriyle gerçek amforalar, `clay_plaster` ve kabuk katmanları), A2'nin kalanı (iki
+derinlikli ışık alanı: tarla 12 m, duvarın dibi 36 m), A4 (kemerin dokuları), A5 (ışık).
+
+## A0 · kaynaklar ve kompozisyon · 2026-10-04 gece · ✅ bitti
+
+**Kaynaklar** (bir ajan araştırdı, ben okuyup karar verdim; tamamı `docs/koy/AMFORA_KAYNAK.md`, kareler `BASVURU.md`
+§12-13): amfora **döner yüzey**, tarama değil. Girişsiz indirilebilen üç taramanın dokusu 1024² (1 m'lik nesnede 2,4-2,7
+mm tekstel, hedefin 12 katı), ölçeksiz, ışık dokuya pişmiş; dokulu ve lisansı uygun bir Dressel 1B taraması yok.
+Profiller ArchAIDE'in Southampton çizimlerinden çıkardığı vektörler (CC BY 4.0, mm): Dressel 1B (118 cm, MARQ'taki gerçek
+bir 1B ile aynı boy), 1A, Dressel 2-4 İtalyan, Lamboglia 2; dış ve iç profil, kulplar. Malzeme: gövde Poly Haven
+`clay_plaster` (2,00 m: 16K'da 0,122 mm), kabuk ve konkresyon `coral_fort_wall_01` (1,36 m, 8K'da 0,166 mm), kemer
+depodaki 16K `rock_boulder_dry` (ek bellek yok) ya da ambientCG `Rock043S`. Kabuk canlıları için CC0 doku yok: kodla,
+ölçü ve renkleri kaynaklı tabloda. Başvuru panosuna 15 batık + 8 kemer karesi; en öğreticisi Albenga (2-3 kat yığılmış
+Dressel 1 tarlası), Tyre (üst yüzde tortu keçesi yandan ~4 kat parlak, gömülme çizgisi ~10 kat koyu).
+
+**Yerleşim** (`scenes/koy.cfg` "dunya: Amfora"; kod `koy_arch.*`, `koy_amphora.*`, `KoyFloorShape`):
+- Tarla: 12 m'de düzlük; ortada geminin gövde izi, 11 × 6 m, 45 cm'lik tümsek. Gemi ekseni kemere doğru (−75°): tarla
+  bakışı kemere taşıyan bir çizgi. 96 amfora (A0'da kaba profiller, düz renk), sıralar gemiye dik, çoğu yan yatmış, kenarda
+  ve uçlarda daha gömülü, birkaçı yarı dik.
+- Kemer: uzaklık alanı (yarım elips eğri boyunca kalınlığı değişen kaya tüpü; bükme, düzensiz kireçtaşı katmanları, dikey
+  çatlaklar, aşınma), iki yana alçalan kaya sırtları ve düşmüş bloklar; surface nets ile 7 cm hücre, 702 bin üçgen, 2,7 sn
+  (dar bant: yüzeyden uzak noktalar kaba ızgaradan). Açıklık ~13 m geniş, ~7,5 m yüksek; tepe ~4,5 m derinlikte.
+- Kemer tarladan **19 m** ötede, **16 m'lik bir sekide**, arkasında zemin 36 m'ye düşen bir duvar.
+- Güneş 50° yükseklik, azimut 165° (kemerin arkası, biraz sağ); suda dikeyden 29°.
+
+**Kompozisyon kararları (karelerle, gerekçe):**
+1. *Kemer 33 m'deydi, okunmuyordu:* kameradan ~41 m, IB suyunda karşıtlık e^(−0,1·41) ≈ %2; kubbe gibi bir gölge.
+   19 m'ye çekildi (kameradan ~25 m, ~%8): tarlanın arkasında kemer olarak okunuyor. Plan "~30 m" diyordu; Özcan'ın
+   *"biraz yüzmek gerekir"*i hâlâ geçerli (~20 m).
+2. *Açıklıktan karanlık zemin görünüyordu:* taban 20 m, kamera 11 m: açıklığa yukarıdan bakılıyor, arkadaki zemin
+   koyu. Taban 16 m'lik sekiye çıktı, arkası duvarla 36 m'ye düşüyor: açıklıktan açık su görünüyor ("maviye açılan kapı").
+3. *Kemer arı kovanı gibiydi:* düzenli yuvarlak katmanlar; katmanlar yamalı (yumuşak yatak geri çekilmiş, sert yatak
+   düz), eğik ve dalgalı, dikey çatlaklar, asimetrik ayaklar, eğik ve yassı tepe.
+4. Kayanın rengi 0,24 (su altında kabuk ve alg bağlamış kireçtaşı; kuru taşın ~0,35'i): siluet koyulaştı.
+5. Kahraman bakış: tarlanın ön kenarında alçak kamera, hafif yukarı (`--cam "1 -11.2 4" --look "2 -8.5 -20"`): önde
+   amforalar, arkada kemer, tepede ışık sütunları.
+
+**Okuma sırası:** şimdi tarla → kemer → sütunlar; sütunlar zayıf (11 m'de kamera, güneşe 50°'lik bakış). A5'in işi.
+**En kötü 3 şey (kompozisyon):** (1) amforalar düz renkli plastik şişe gibi (A3: profil, kil, kabuk, tortu, kırık);
+(2) kemerin yüzeyi pürüzsüz ve tepesi kubbe gibi yuvarlak (A4: doku, köşeli bloklar, sarkıntılar); (3) ışık düz ve mavi,
+sütunlar seçilmiyor (A5).
+
+**Bedel:** güneş alçalınca (70° → 50°) ışık suda daha eğik ve uzun yol alıyor, hüzmeler derinde daha çok örtüşüyor:
+kostik 5,97 → 8,95 ms (tam çözünürlük bandı 13,5 m'ye çekildi). Hız turu A6'da; şimdilik 41 fps'in altına düşebilir.
+
+**Ne doğrulanmadı:** kompozisyon yalnız durgun karelerle (pencerede yüzülmedi); ışık alanı tek derinlikte (dip 38 m):
+tarlanın kendi kumundan yansıyan ışık eksik (A2'de iki derinlik); kemerin dibinde ve duvarda yakın plan yok.
 
 ## A1 · hüzme kostiği · 2026-10-04 gece · ✅ bitti
 

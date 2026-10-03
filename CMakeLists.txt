@@ -64,6 +64,8 @@ add_library(pc_core OBJECT
     src/scenes/koy/koy_renderer.cpp
     src/scenes/koy/koy_optics.cpp
     src/scenes/koy/koy_world.cpp
+    src/scenes/koy/koy_arch.cpp
+    src/scenes/koy/koy_amphora.cpp
     src/scenes/koy/koy_tests.cpp
     src/scenes/koy/koy_kernels.cu
     ${TP}/tinyexr/miniz.c)

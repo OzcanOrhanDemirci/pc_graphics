@@ -182,8 +182,9 @@ static __forceinline__ __device__ Hit trace(float3 o, float3 d, float tmax) {
     h.ns = m.nrm ? normalize(xformV(in, m.nrm[tri.x] * b0 + m.nrm[tri.y] * b.x + m.nrm[tri.z] * b.y)) : h.ng;
     if (dot(h.ng, d) > 0.0f) h.ng = -h.ng;
     if (dot(h.ns, h.ng) < 0.0f) h.ns = -h.ns;
-    h.ao = m.ao ? (m.ao[tri.x] * b0 + m.ao[tri.y] * b.x + m.ao[tri.z] * b.y) : 1.0f;
-    h.id = m.id;
+    const float* ao = m.ao ? m.ao + size_t(ii - m.aoFirst) * m.aoVerts : nullptr;   // this instance's own
+    h.ao = ao ? (ao[tri.x] * b0 + ao[tri.y] * b.x + ao[tri.z] * b.y) : 1.0f;
+    h.id = (m.id << 20) | ii;   // every instance a surface of its own (two amphorae side by side make an edge)
     if (m.uv) {
         const float2 t0 = m.uv[tri.x], t1 = m.uv[tri.y], t2 = m.uv[tri.z];
         h.uv = make_float2(t0.x * b0 + t1.x * b.x + t2.x * b.y, t0.y * b0 + t1.y * b.x + t2.y * b.y);
