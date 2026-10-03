@@ -202,7 +202,7 @@ How each is made, and what was measured on the way (the Turkish working journal 
   clipped (ODE's way), Gauss-Seidel by colour on the GPU (cells a third of a diagonal wide, 64 colours: two cubes of one
   colour can never touch), split impulses (an overlap pushed out gives no speed), shock propagation for stacks
   (Guendelman, Bridson & Fedkiw 2003), Coulomb friction point by point, speculative contacts, air drag, sleep. Tests:
-  an 8-high stack of 512 awake cubes stands still to 0.07 mm, a bounce comes back to e² h, a slide stops at
+  an 8-high stack of 512 awake cubes stands still to 0.09 mm, a bounce comes back to e² h, a slide stops at
   v²/(2 μ g), a 1 mm cube falls at its drag's terminal speed. The blast is Gurney's per direction (a face's middle
   flies twice as fast as a corner), the table reflecting the downward half.
 - **The picture:** path tracing with OptiX; thick glass and refracting liquids with exact Fresnel, a liquid in its

@@ -11,10 +11,12 @@
 #include "scenes/laboratuvar/cubes.h"
 #include "shared/vec.h"
 
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -306,6 +308,48 @@ void testHizDebug() {
     }
 }
 
+// the fine pass beside a drawing: a recording's steps (0.5 ms dense, then 1/120 s apart) of a 16^3 burst while another
+// stream keeps the GPU full ~14 ms of every 17 (as the window's path tracing does), the stream urgent or not
+void testYarisma() {
+    int sms = 0;
+    cudaDeviceGetAttribute(&sms, cudaDevAttrMultiProcessorCount, 0);
+    for (int load = 0; load < 2; ++load)
+        for (int urgent = 1; urgent >= 0; --urgent) {
+            if (!load && !urgent) continue;
+            std::atomic<bool> stop{false};
+            std::thread drawer;
+            if (load)
+                drawer = std::thread([&] {
+                    cudaStream_t st;
+                    cudaStreamCreateWithFlags(&st, cudaStreamNonBlocking);
+                    while (!stop.load()) {
+                        launchBusyLoad(sms * 16 * 280, 50, st);   // ~16 resident blocks an SM, 280 rounds of 50 us
+                        cudaStreamSynchronize(st);
+                        std::this_thread::sleep_for(std::chrono::milliseconds(3));
+                    }
+                    cudaStreamDestroy(st);
+                });
+            CubeWorld w;
+            w.params.substeps = 48;
+            w.params.passes = 3;
+            w.params.urgent = urgent != 0;
+            w.build(16, 0.10f, make_float3(0, 0, -0.02f), 7);
+            CubeBlast b;
+            b.centre = w.centre();
+            b.charge = 0.00049f;
+            w.blast(b);
+            const auto t0 = std::chrono::steady_clock::now();
+            double world = 0.0;
+            for (int k = 0; k < 160; ++k, world += 0.0005) w.step(0.0005f);
+            for (int k = 0; k < 50; ++k, world += 1.0 / 120.0) w.step(1.0f / 120.0f);
+            const double wall = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+            stop = true;
+            if (drawer.joinable()) drawer.join();
+            std::printf("  %s, %s: %.2f s dunya %.1f s'de, dunya saniyesi basina %.1f s\n", load ? "cizim yukuyle" : "yuksuz", urgent ? "oncelikli akis" : "olagan akis",
+                        world, wall, wall / world);
+        }
+}
+
 void testProfil() {
     CubeWorld w;
     w.params.substeps = 20;
@@ -371,6 +415,10 @@ int runCubeTests(const std::string& only) {
     if (only == "durusd") return testDurusDebug();
     if (only == "ikili") return testIkili();
     if (only == "ikilid") return testIkiliDebug();
+    if (only == "yarisma") {
+        testYarisma();
+        return 0;
+    }
     if (only == "profil") {
         testProfil();
         return 0;

@@ -635,6 +635,7 @@ void LabWorld::buildKup() {
     P.drag = cfg.f("kup.hava_direnci", 1.05f);
     P.substeps = cfg.i(fine ? "kup.ince_alt_adim" : "kup.alt_adim", fine ? 48 : 20);
     P.passes = cfg.i(fine ? "kup.ince_gecis" : "kup.gecis", fine ? 3 : 2);
+    P.urgent = cfg.i("kup.oncelikli", 1) != 0;
     cubes.build(n, cfg.f("kup.boyut", 0.10f), cfg.v3("kup.yer", make_float3(0.0f, 0.0f, -0.02f)), unsigned(cfg.i("kup.tohum", 7)));
     boxLo = make_float3(-1.6f, -0.62f, -1.0f);
     boxHi = make_float3(1.6f, 2.6f, 1.6f);

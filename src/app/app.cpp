@@ -461,8 +461,14 @@ int App::run(const Options& opt) {
         key(GLFW_KEY_L); wait(0.6); shot("galeri_dil"); key(GLFW_KEY_L); wait(0.4);
         // the mouse: over the first entry, a click selects it
         mouse(0.18f, 0.43f); wait(0.5); click(); wait(0.6); shot("galeri_fare");
+        // "laboratuvar/kup": a scene, of it one part
+        std::string only = opt.autotestOnly, part;
+        if (const size_t k = only.find('/'); k != std::string::npos) {
+            part = only.substr(k + 1);
+            only = only.substr(0, k);
+        }
         for (int s = 0; s < int(infos_.size()); ++s) {
-            if (!opt.autotestOnly.empty() && infos_[s].id != opt.autotestOnly) continue;
+            if (!only.empty() && infos_[s].id != only) continue;
             key(GLFW_KEY_1 + s); wait(0.4);
             if (infos_[s].id == "yikim") { mouse(0.88f, 0.735f); wait(0.3); shot("galeri_dugme"); click(); }   // the "open" button
             else key(GLFW_KEY_ENTER);
@@ -518,43 +524,57 @@ int App::run(const Options& opt) {
             if (infos_[s].id == "laboratuvar") {
                 // every experiment: live, its trigger on the coarse world, the fine pass asked for, the recording as it
                 // computes and when it plays; the panel by mouse (the time bar, the speed); slow motion on a resting
-                // world; the gel shot three times
-                wait(1.0); shot("lab_su_canli");
-                control("eylem", 0); wait(1.2); log("lab su kaba"); shot("lab_su_kaba");
-                control("ince", 0); wait(9.0); log("lab su kayit"); shot("lab_su_kayit");
-                wait(6.0); shot("lab_su_bitti");
-                slide("zaman", 0.35f); wait(0.1); left(false); control("hiz", 1); control("durdur", 0); wait(2.0); shot("lab_su_yavas");
-                key(GLFW_KEY_R); wait(1.0); shot("lab_su_kabaya_don"); control("hiz", 0);
-                control("deney", 1); wait(6.0); log("lab bal"); shot("lab_bal");
-                mouse(0.45f, 0.70f); left(true); wait(0.1);
-                for (int k = 1; k <= 20; ++k) { mouse(0.45f + 0.004f * k, 0.70f); wait(0.05); }
-                left(false); wait(3.0); shot("lab_bal_gezdi");
-                control("hiz", 2); wait(3.0); log("lab bal x1/100"); shot("lab_bal_yavas"); control("hiz", 0);
-                control("deney", 2); wait(10.0); log("lab kum"); shot("lab_kum");
-                control("deney", 3); wait(4.0); shot("lab_balon");
-                mouse(0.50f, 0.50f); wait(0.2); click(); wait(0.6); log("lab balon tik"); shot("lab_balon_kaba");   // the needle by the mouse (the log says where)
-                control("ince", 0); wait(12.0); log("lab balon kayit"); shot("lab_balon_kayit");
-                control("deney", 4); wait(4.0); shot("lab_karpuz");
-                mouse(0.50f, 0.56f); wait(0.2); click(); wait(0.6); shot("lab_karpuz_tik"); log("lab karpuz tik");
-                key(GLFW_KEY_R); wait(4.0);
-                control("eylem", 0); wait(0.6); shot("lab_karpuz_kaba"); control("ince", 0); wait(14.0); log("lab karpuz kayit"); shot("lab_karpuz_kayit");
-                control("deney", 6); wait(4.0); shot("lab_damla");
-                control("hiz", 2); wait(3.0); log("lab damla x1/100 dokunmadan"); shot("lab_damla_yavas"); control("hiz", 0);
-                control("eylem", 0); wait(0.6); shot("lab_damla_kaba"); control("ince", 0); wait(8.0); log("lab damla kayit"); shot("lab_damla_kayit");
-                control("deney", 5); wait(4.0); shot("lab_jel");
-                control("eylem", 0); wait(1.2);
-                mouse(0.47f, 0.55f); wait(0.1); click(); wait(1.2);
-                mouse(0.53f, 0.58f); wait(0.1); click(); wait(0.6); log("lab jel uc atis"); shot("lab_jel_kaba");
-                control("ince", 0); wait(45.0); log("lab jel kayit"); shot("lab_jel_kayit");
+                // world; the gel shot three times ("laboratuvar/kup": only the cube, its fine pass to the end)
+                if (part.empty()) {
+                    wait(1.0); shot("lab_su_canli");
+                    control("eylem", 0); wait(1.2); log("lab su kaba"); shot("lab_su_kaba");
+                    control("ince", 0); wait(9.0); log("lab su kayit"); shot("lab_su_kayit");
+                    wait(6.0); shot("lab_su_bitti");
+                    slide("zaman", 0.35f); wait(0.1); left(false); control("hiz", 1); control("durdur", 0); wait(2.0); shot("lab_su_yavas");
+                    key(GLFW_KEY_R); wait(1.0); shot("lab_su_kabaya_don"); control("hiz", 0);
+                    control("deney", 1); wait(6.0); log("lab bal"); shot("lab_bal");
+                    mouse(0.45f, 0.70f); left(true); wait(0.1);
+                    for (int k = 1; k <= 20; ++k) { mouse(0.45f + 0.004f * k, 0.70f); wait(0.05); }
+                    left(false); wait(3.0); shot("lab_bal_gezdi");
+                    control("hiz", 2); wait(3.0); log("lab bal x1/100"); shot("lab_bal_yavas"); control("hiz", 0);
+                    control("deney", 2); wait(10.0); log("lab kum"); shot("lab_kum");
+                    control("deney", 3); wait(4.0); shot("lab_balon");
+                    mouse(0.50f, 0.50f); wait(0.2); click(); wait(0.6); log("lab balon tik"); shot("lab_balon_kaba");   // the needle by the mouse (the log says where)
+                    control("ince", 0); wait(12.0); log("lab balon kayit"); shot("lab_balon_kayit");
+                    control("deney", 4); wait(4.0); shot("lab_karpuz");
+                    mouse(0.50f, 0.56f); wait(0.2); click(); wait(0.6); shot("lab_karpuz_tik"); log("lab karpuz tik");
+                    key(GLFW_KEY_R); wait(4.0);
+                    control("eylem", 0); wait(0.6); shot("lab_karpuz_kaba"); control("ince", 0); wait(14.0); log("lab karpuz kayit"); shot("lab_karpuz_kayit");
+                    control("deney", 6); wait(4.0); shot("lab_damla");
+                    control("hiz", 2); wait(3.0); log("lab damla x1/100 dokunmadan"); shot("lab_damla_yavas"); control("hiz", 0);
+                    control("eylem", 0); wait(0.6); shot("lab_damla_kaba"); control("ince", 0); wait(8.0); log("lab damla kayit"); shot("lab_damla_kayit");
+                    control("deney", 5); wait(4.0); shot("lab_jel");
+                    control("eylem", 0); wait(1.2);
+                    mouse(0.47f, 0.55f); wait(0.1); click(); wait(1.2);
+                    mouse(0.53f, 0.58f); wait(0.1); click(); wait(0.6); log("lab jel uc atis"); shot("lab_jel_kaba");
+                    control("ince", 0); wait(45.0); log("lab jel kayit"); shot("lab_jel_kayit");
+                }
                 // the cube: set up, a medium blast, slow motion, the fine pass; then a finer cube
-                control("deney", 7); wait(3.0); log("lab kup"); shot("lab_kup");
-                slide("guc", 0.38f); wait(0.1); left(false); wait(0.2);
-                control("eylem", 0); wait(0.25); shot("lab_kup_patlama"); wait(1.2); log("lab kup dagildi"); shot("lab_kup_dagildi");
-                control("hiz", 2); wait(2.0); log("lab kup x1/100"); control("hiz", 0);
-                control("ince", 0); wait(30.0); log("lab kup kayit"); shot("lab_kup_kayit");
-                key(GLFW_KEY_R); wait(0.5); key(GLFW_KEY_R); wait(3.0);
-                slide("detay", 0.80f); wait(0.1); left(false); wait(5.0); log("lab kup ince kup"); shot("lab_kup_ince");
-                control("eylem", 0); wait(1.5); log("lab kup ince patladi"); shot("lab_kup_ince_dagildi");
+                if (part.empty() || part == "kup") {
+                    control("deney", 7); wait(3.0); log("lab kup"); shot("lab_kup");
+                    slide("guc", 0.38f); wait(0.1); left(false); wait(0.2);
+                    control("eylem", 0); wait(0.25); shot("lab_kup_patlama"); wait(1.2); log("lab kup dagildi"); shot("lab_kup_dagildi");
+                    control("hiz", 2); wait(2.0); log("lab kup x1/100"); control("hiz", 0);
+                    control("ince", 0); wait(part.empty() ? 30.0 : 150.0); log("lab kup kayit"); shot("lab_kup_kayit");
+                    key(GLFW_KEY_R); wait(0.5); key(GLFW_KEY_R); wait(3.0);
+                    slide("detay", 0.80f); wait(0.1); left(false); wait(5.0); log("lab kup ince kup"); shot("lab_kup_ince");
+                    control("eylem", 0); wait(1.5); log("lab kup ince patladi"); shot("lab_kup_ince_dagildi");
+                }
+                // "laboratuvar/kup1m": a million cubes through the fine pass to the end, then its burst at x1/100
+                if (part == "kup1m") {
+                    control("deney", 7); wait(3.0);
+                    slide("detay", 1.0f); wait(0.1); left(false); wait(15.0); log("lab kup 1m"); shot("lab_kup_1m");
+                    slide("guc", 0.38f); wait(0.1); left(false); wait(0.2);
+                    control("eylem", 0); wait(2.0); log("lab kup 1m patladi"); shot("lab_kup_1m_patladi");
+                    control("ince", 0); wait(600.0); log("lab kup 1m kayit"); shot("lab_kup_1m_kayit");
+                    slide("zaman", 0.03f); wait(0.1); left(false); control("hiz", 2); wait(2.0); log("lab kup 1m x1/100"); shot("lab_kup_1m_yavas");
+                    control("hiz", 0);
+                }
             }
             key(GLFW_KEY_H); wait(0.3); shot(infos_[s].id + "_arayuzsuz"); key(GLFW_KEY_H);
             key(GLFW_KEY_ESCAPE); gallery(); wait(0.8);

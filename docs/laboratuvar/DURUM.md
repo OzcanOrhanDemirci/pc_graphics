@@ -3,6 +3,67 @@
 > Tek kaynak durum panosu. Plan ve Özcan'ın sözleri `docs/laboratuvar/PLAN.md`'de. Eski "Tanecik" (insan) yolu
 > `docs/tanecik/` ve git etiketi `tanecik-insan-arsiv`'de (arşiv).
 
+## 🧊 Ek deney: Küp · 2026-10-03 öğleden sonra (otonom, 13:28 → ~16:00)
+
+**Özcan'ın isteği:** *"Bir küp olacak. Bu küp patlayacak. Küp [...] taneciklerden oluşacak [...] Patlat diye tuş [...] ne
+şiddette patlayacağını ve küpün tanecik sayısını çubukla seçeceğiz [...] milyon tanecikli küplere çıkabilirsin [...] pıt
+diye küpe hafif tanecik dökülmesinden [...] büyük patlamaya kadar. Yine fizik ne derse o [...] sert, bir arada durup
+nesne oluşturan tanecik. Yapışkan değil."* Malzeme: *"Renkli plastik, lego gibi [...] rubik küpler [...] onun gibi."*
+
+**Ne yapıldı:** sekizinci deney **Küp** (tuş 8). 10 cm'lik bir küp, n×n×n küçük plastik küpten (zeka küpünün altı rengi,
+küp başına rastgele), ortasında patlayıcı. Panel: **Küp sayısı** (4³ = 64 · 5³ · 6³ · 8³ · 10³ · 13³ · 16³ · 20³ · 25³ · 32³ ·
+40³ · 50³ · 64³ · 80³ · 100³ = 1 milyon; aşağı yukarı ikişer katla, küp 25 mm'den 1 mm'ye), **Şiddet** (3 µg → 2 g TNT
+eşdeğeri, logaritmik; altında yüzün ortasından çıkış hızı ve "dökülür / dağılır / patlar"), **Patlat** (Boşluk) ya da küpe
+tıkla, ağır çekim, ince hesap. Masaüstü `Laboratuvar\11-15`.
+
+**Çözücü (`cubes.h/.cu`, tanecik çözücüsünden ayrı):** her küçük küp katı cisim (konum + dönüş, eylemsizlik a²m/6).
+- Kutu-kutu temas: ayırıcı eksenler (15), en sığ eksen yüzse gelen yüz başvuru yüzünün yanlarıyla kırpılır (ODE dBoxBox),
+  kenar kenara bir nokta; en çok 4 nokta. Masa, fonun zemini, kavisi, duvarı köşelerle.
+- Ekran kartında renklere bölünmüş Gauss-Seidel: hücreler köşegenin üçte biri (a/√3, bir hücreye en çok bir küp
+  merkezi), 4³ = 64 renk, aynı renkten iki küp hiç değmez. İki evre: temaslar her alt adımda bir kez tam paralel bulunur,
+  renk geçişleri yalnız bu kayıtları okur (konum düzeltmesi öteleme olduğu için derinlik birebir güncellenir).
+- Ayrık itme (split impulses): iç içe geçme konumla, hız vermeden itilir; hız çözümü yaklaşmayı durdurur ve sekmeyi verir.
+  Sürtünme nokta nokta Coulomb konisiyle. Son geçiş tek yönlü yukarı (şok yayılımı, Guendelman, Bridson ve Fedkiw
+  2003): yığın durur. Masa son sözü söyler (her geçişte önce ve sonra). Öngörülü temas: bu adımda kapanacak boşluk da
+  temas, CFL bölmesine gerek kalmaz. Hava direnci (1,5 a² ortalama izdüşüm), uyuma, temas eden yavaş küpte titreşim sönümü.
+- Patlama: yön yön Gurney (o yöndeki koninin kütlesi / şarjın), içtekiler biraz daha hızlı ((r/R)^-0,5), hız log-normal
+  dağılır, yön ve dönüş biraz saçılır; masaya bakan yarı masadan yansır (yere oturan patlamanın ayna şarjı); tek sayıda
+  küpte ortadaki küp patlayıcının yeri. Yüzün ortası köşeden ~2,3 kat hızlı (testte 4,65 / 2,04 m/sn).
+
+**Testler (`--scene laboratuvar --kup-test`, 6/6):**
+
+| Test | Ölçülen | Ölçüt |
+|---|---|---|
+| Duruş: hepsi uyanık 8³ = 512 küp, 2 sn | en çok 0,09 mm kaydı, hepsi uyudu | < kenarın 1/10'u (1,2 mm) |
+| Sekme: 25 mm küp 10 cm'den | 18,0 mm geri | e² h = 20,2 mm (%70-135) |
+| Kayma: 1 m/sn | 16,9 cm, devrilmeden | v²/(2 μ g) = 17,0 cm |
+| Yüz: eğik, dönerek düşer | 0,00° eğik, yüzü masada | < 2° |
+| Hava: 1 mm küp 0,6 sn düşer | 3,11 m/sn | v_t tanh(gt/v_t) = 3,12 (havasız 5,89) |
+| Patlama: 16³, 2 mg | Gurney 5,84 J, küplerde 5,32 J (yansıma dahil); yüz 4,65, köşe 2,04 m/sn; durulur | enerji %55-110, yüz > 1,5 köşe |
+
+**Hız (RTX 4080):** canlı fizik kare başına 16³ patlamada en yoğun anda ~60-90 ms (2.000-2.500 küp birbirine ve masaya
+değerken), uyudukça 0'a iner; 32³ patlama ~30 ms, 64³ ~64 ms, 100³ ~210 ms (5 kare/sn); yumuşak çöküş (yoğun yığın) 2-3
+kat yavaş. Görüntü 1 milyon örnekli küple ~15-20 ms. İnce hesap dünya saniyesi başına 16³'te ~6 sn, 80³'te (512 bin) ~60 sn.
+Büyük sayılarda canlı yavaş: panel "ince hesapla izle" der.
+
+**Bulunan hatalar (düzeltildi):** sürtünme her noktada ayrı hesaplanıp toplanınca dört köşe kaymayı dört kez iptal
+ediyordu (yığın kendini sarsıp dağıttı) · hızı konum farkından türetmek metrelerce uzakta float yuvarlamasında hızı %10
+kaydırıyordu · Jacobi ortalaması yığında yakınsamıyordu (renkli Gauss-Seidel) · aynı hücredeki küpler aynı renkte
+birbirinin yarım yazılmışını okuyordu · plastik malzeme ekran kartına yüklendikten sonra eklenmişti (küpler simsiyah) ·
+`lalloc`'un sıfırlaması eski varsayılan akışta, büyüyen örnek dizisinde masayı ve fonu rastgele siliyordu (bütün
+deneyleri etkileyebilirdi) · sayı ↔ çubuk dönüşümü iki listedeydi.
+
+**Küp, NE DOĞRULANMADI:**
+- Elle kullanmadım: otomatik test (deney seçimi, şiddet çubuğu, Patlat, ×1/100, ince hesap, sayı çubuğu, 125 bin küp) ve
+  komut satırı kareleri. 1 milyon küpün ince hesabını uçtan uca uygulamada çalıştırmadım (komut satırında 512 bin, 1,2 sn,
+  73 sn sürdü; 1 milyonda 2,5 sn kabaca 4-6 dk tahmini).
+- Patlama modeli (Gurney yön yön, içtekiler (r/R)^-0,5, masa yansıması 0,6) gerçek bir patlayan küp kaydına karşı
+  ölçülmedi; enerji ve yüz/köşe oranı yalnız modelin kendi içinde tutarlı.
+- Kenar kenara temas tek nokta: dönmüş iki küpün kenarları birbirinden geçebilir (nadir; yığında görülmedi). Hızlı
+  patlamada (≫ 10 m/sn) küçük küpler birbirinin içinden geçebilir (öngörülü temasın payı a'nın 1,2 katı).
+- Canlıda büyük sayılar yavaş; canlı fiziği hızlandırmanın bir sonraki adımı bir küpün çiftlerini iş parçacıklarına bölmek
+  olurdu (yapılmadı).
+
 ## 🏁 Sahne tamamlandı · 2026-10-03
 
 Özcan: *"Kumda bilyeyi kaldıralım, içime sinmedi. Onun dışında güzel oldu. Bu sahneyi tamamladık."*
@@ -150,6 +211,7 @@ satırından (ya da 1-7). Kareler masaüstünde `Laboratuvar` klasöründe (00 g
 | Karpuz | kayıt | tabanca ya da tüfekle (5,56 → 7,62×51 → .50 BMG, gerçek yükler) | tüfek: ~600 J, birkaç ms şişer, kabuk taç gibi açılır, dağılır; tabanca: açar, kaideden düşürür |
 | Jel | kayıt | 24×10×10 cm balistik jel, tabancayla (.22 → 9 mm → .50 AE) | 9 mm: 24,5 cm'de 329 J; yol boyunca boşluk tüpü, blok sarsılır ve biraz zıplar |
 | Süt damlası | kayıt | petri kabında 3 mm süt, 5 mm damla 5-50 cm'den | 0,4 mm tanecik (134 bin), saniyenin 1/5000'i; taç açılır, damlacık saçar |
+| Küp | kayıt | 10 cm küp, 64 → 1 milyon plastik küp, ortasında 3 µg → 2 g TNT | katı küpler: yüzüne düşer, takla atar, seker, kayar; pıt diye dökülmeden büyük patlamaya |
 
 **Kayıt düzeni:** ince dünya bir işçi iş parçacığında kendi CUDA akışıyla; her an ekran kartında (16 bit konum + çizim
 kodu, tanecik başına 8 bayt); zaman çubuğu hesaplanan kısmı gösterir. Oynatma yalnız çizim, anlar arası doğrusal ara

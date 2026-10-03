@@ -44,6 +44,8 @@ struct CubeParams {
     int debug = 0;                      // print the contacts of cube 1 (a test)
     int maxSubdivide = 1;               // a fast step cut finer (a cube moving at most half its edge a substep); contacts
                                         // are speculative (a gap closing this substep is one), so it need not be
+    bool urgent = true;                 // the stream at the GPU's highest priority: the solver's many small kernels go
+                                        // ahead of the drawing's blocks, not after the whole frame (set before build)
     // the stage: the table's top (y = 0), the backdrop's floor, sweep and wall (as lab_geom draws them)
     float tableHalfWidth = 0.75f, tableFront = 0.32f, tableBack = -0.40f;
     float backHalfWidth = 1.2f, backWall = -0.62f, backSweep = 0.18f;
@@ -77,6 +79,9 @@ struct CubeStats {
 // cube (centre + edge, orientation); a gone cube's edge 0
 void launchCubeDequantise(const ushort4* p0, const ushort4* r0, const ushort4* p1, const ushort4* r1, float a, int n, float3 lo, float3 scale, float edge,
                           float4* pose, cudaStream_t st);
+
+// a test's stand-in for the drawing: blocks over the whole GPU, each busy this long
+void launchBusyLoad(int blocks, int usPerBlock, cudaStream_t st);
 
 class CubeWorld {
 public:

@@ -197,7 +197,7 @@ Nasıl yapıldığı ve yolda neyin ölçüldüğü (çalışma günlüğünde h
   yolu); ekran kartında renklere bölünmüş Gauss-Seidel (köşegenin üçte biri genişlikte hücreler, 64 renk: aynı renkten iki
   küp asla değmez), ayrık itme (dışarı itilen iç içe geçme hız vermez), yığınlar için şok yayılımı (Guendelman, Bridson ve
   Fedkiw 2003), nokta nokta Coulomb sürtünmesi, öngörülü temas, hava direnci, uyuma. Testler: hepsi uyanık 512 küplük 8 kat
-  yığın 0,07 mm içinde durur, sekme e² h'ye döner, kayma v²/(2 μ g)'de durur, 1 mm'lik küp direncinin son hızıyla düşer.
+  yığın 0,09 mm içinde durur, sekme e² h'ye döner, kayma v²/(2 μ g)'de durur, 1 mm'lik küp direncinin son hızıyla düşer.
   Patlama yön yön Gurney'nin (yüzün ortası köşeden iki kat hızlı uçar), masa aşağı giden yarıyı yansıtır.
 - **Görüntü:** OptiX ile yol izleme; kalınlıklı cam ve kırılan sıvılar tam Fresnel ile, bardaktaki su camla tek arayüzden
   geçer (yüzeyleri arasındaki kıl kadar hava yoksa ayna olurdu); yüzeyler her karede taneciklerden kurulur (anizotropik

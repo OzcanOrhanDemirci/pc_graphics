@@ -815,7 +815,13 @@ void CubeWorld::build(int n, float side, float3 base, unsigned seed) {
     const float pitch = a_ * (1.0f + params.gap);
     base_ = base;
     time_ = 0.0;
-    CCUDA(cudaStreamCreateWithFlags(&stream_, cudaStreamNonBlocking));
+    if (params.urgent) {
+        int least = 0, greatest = 0;
+        CCUDA(cudaDeviceGetStreamPriorityRange(&least, &greatest));
+        CCUDA(cudaStreamCreateWithPriority(&stream_, cudaStreamNonBlocking, greatest));
+    } else {
+        CCUDA(cudaStreamCreateWithFlags(&stream_, cudaStreamNonBlocking));
+    }
     CCUDA(cudaEventCreate(&e0_));
     CCUDA(cudaEventCreate(&e1_));
     for (float4** p : {&x_, &xp_, &v_, &w_, &q_, &qp_, &x0_, &q0_, &accX_, &accW_, &dvT_, &dwT_}) *p = dalloc<float4>(size_t(cap_));
@@ -990,9 +996,10 @@ void CubeWorld::step(float dt) {
     // the drawing interpolates from here
     kCopy4<<<nb(n_), kB, 0, stream_>>>(n_, x_, x0_);
     kCopy4<<<nb(n_), kB, 0, stream_>>>(n_, q_, q0_);
-    // whole substeps near the set length, exactly dt together
+    // whole substeps no longer than the set length, exactly dt together (rounded, a recording's 0.5 ms step took
+    // one 0.5 ms substep where the fine pass meant 0.35)
     const double h0 = 1.0 / (60.0 * baseSubsteps());
-    const int base = std::max(1, int(std::lround(dt / h0)));
+    const int base = std::max(1, int(std::ceil(dt / h0 * (1.0 - 1e-5))));
     const double hb = double(dt) / base;
     const CubeStats s = stats();
     lastStats_ = s;
@@ -1090,6 +1097,21 @@ __global__ void kCubeDequantise(const ushort4* p0, const ushort4* r0, const usho
 void launchCubeDequantise(const ushort4* p0, const ushort4* r0, const ushort4* p1, const ushort4* r1, float a, int n, float3 lo, float3 scale, float edge,
                           float4* pose, cudaStream_t st) {
     if (n > 0) kCubeDequantise<<<nb(n), kB, 0, st>>>(p0, r0, p1, r1, a, n, lo, scale, edge, pose);
+}
+
+namespace {
+__global__ void kBusy(unsigned long long ns, int* sink) {
+    unsigned long long t0, t;
+    asm volatile("mov.u64 %0, %%globaltimer;" : "=l"(t0));
+    do {
+        asm volatile("mov.u64 %0, %%globaltimer;" : "=l"(t));
+    } while (t - t0 < ns);
+    if (threadIdx.x == 0 && t == 0) *sink = 1;
+}
+}   // namespace
+
+void launchBusyLoad(int blocks, int usPerBlock, cudaStream_t st) {
+    if (blocks > 0) kBusy<<<blocks, 128, 0, st>>>(1000ull * unsigned(usPerBlock), nullptr);
 }
 
 void CubeWorld::wakeAll(float3 v, float3 w) {

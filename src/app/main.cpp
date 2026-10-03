@@ -4,7 +4,8 @@
 //   pc_graphics.exe --scene <id>            straight into a scene (altinsaat, fener, yikim); Esc leads to the gallery
 //   pc_graphics.exe --windowed              in a 1280x720 window
 //   pc_graphics.exe --autotest              the whole application once through by script, screens to captures/arayuz/
-//   pc_graphics.exe --autotest-only <id>    the same, but of the scenes only that one
+//   pc_graphics.exe --autotest-only <id>    the same, but of the scenes only that one (laboratuvar/kup: of it only the cube;
+//                                           laboratuvar/kup1m: a million cubes' fine pass to the end)
 //   pc_graphics.exe --set key=value         a setting for the scenes (scenes/<id>.cfg), repeatable
 //   pc_graphics.exe --lang tr|en            the language on screen (else the one chosen last, in user.cfg)
 //
