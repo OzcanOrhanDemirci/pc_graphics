@@ -140,12 +140,12 @@ void KoyApp::setup() {
                 (totalMem - freeAfter) / 1073741824.0, totalMem / 1073741824.0);
     renderer.uploadWorld(world.meshes, world.instances, world.materials, world.textureSets(), &world.ribbons);
     {   // the floor's depth under every (x, z): which light fields a point reads (koy.cu fieldsFor)
-        const int B = cfg.i("light.bottom_map", 512);
-        const float half = cfg.f("floor.extent", 110.0f);
+        const int B = cfg.i("light.bottom_map", 1024);
+        const float3 lo = cfg.v3("floor.extent_min", make_float3(-420.0f, 0.0f, -520.0f)), hi = cfg.v3("floor.extent_max", make_float3(420.0f, 0.0f, 480.0f));
         const KoyFloorShape fs = KoyFloorShape::from(cfg);
         std::vector<float> m(size_t(B) * B);
         for (int j = 0; j < B; ++j)
-            for (int i = 0; i < B; ++i) m[size_t(j) * B + i] = -fs((i + 0.5f) / B * 2.0f * half - half, (j + 0.5f) / B * 2.0f * half - half);
+            for (int i = 0; i < B; ++i) m[size_t(j) * B + i] = -fs(lo.x + (i + 0.5f) / B * (hi.x - lo.x), lo.z + (j + 0.5f) / B * (hi.z - lo.z));
         cudaChannelFormatDesc fd = cudaCreateChannelDesc<float>();
         cudaArray_t arr = nullptr;
         cudaMallocArray(&arr, &fd, B, B);
@@ -163,13 +163,21 @@ void KoyApp::setup() {
         bottomArr = arr;
         bottomTex = t;
         p.bottomMap = t;
-        p.bottomMapHalf = half;
+        p.bottomMapMin = make_float2(lo.x, lo.z);
+        p.bottomMapSize = make_float2(hi.x - lo.x, hi.z - lo.z);
         std::printf("koy isik alanlari: %d dip derinligi", p.fields);
         for (int f = 0; f < p.fields; ++f) std::printf(" %.1f", p.fieldBottom[f]);
         std::printf(" m\n");
     }
-    p.rippleTex = world.ripples.set.normal;
-    p.rippleHalf = world.rippleHalf;
+    {   // the sand ripples (analytic in koy.cu)
+        p.ripples = cfg.i("ripple.sand", 1);
+        p.rippleLength = cfg.f("floor.ripple_length", 0.09f);
+        p.rippleHeight = cfg.f("floor.ripple_height", 0.011f);
+        p.rippleDepth0 = cfg.f("floor.ripple_depth0", 6.0f);
+        p.rippleDepth1 = cfg.f("floor.ripple_depth1", 24.0f);
+        const float3 ic = cfg.v3("island.centre", make_float3(0.0f, 0.0f, 60.0f));
+        p.islandCentre = make_float2(ic.x, ic.z);
+    }
     std::printf("koy dunya: %s\n", world.summary().c_str());
     stepWorld(0.0f);
     const double t0 = know();
@@ -192,10 +200,7 @@ void KoyApp::setup() {
             p.blueNoise = d;
         }
     }
-    diver.pos = cfg.v3("diver.start", make_float3(0.0f, -4.6f, 6.0f));
-    diver.yaw = cfg.f("diver.yaw_deg", 180.0f) * 3.14159265f / 180.0f;
-    diver.pitch = cfg.f("diver.pitch_deg", -8.0f) * 3.14159265f / 180.0f;
-    diver.vel = make_float3(0, 0, 0);
+    restartDiver();
     ev = cfg.f("display.ev", 0.0f);
     torchOn = cfg.i("torch.on", 0) != 0;
     applyQuality();
@@ -289,6 +294,54 @@ void KoyApp::stepDiver(float fwd, float right, float up, bool strong, float look
     setCamera();
 }
 
+void KoyApp::restartDiver() {
+    diver.pos = cfg.v3("diver.start", make_float3(1.9f, -1.2f, 0.8f));
+    diver.yaw = cfg.f("diver.yaw_deg", 180.0f) * 3.14159265f / 180.0f;
+    diver.pitch = cfg.f("diver.pitch_deg", -8.0f) * 3.14159265f / 180.0f;
+    diver.vel = make_float3(0, 0, 0);
+    o2Dose = 0.0f;
+}
+
+// PLAN_ADA §6. Above ppO2 1.6 bar the dose builds, faster the higher it is (8 s at 1.6, 3 s at 1.8: an art shortening of
+// the real minutes, named in the plan); shallower it ebbs. Its symptoms: the field of view closing in. Full: the
+// convulsion (the view black within 1.4 s), the restart at the ladder in the dark, waking over 2 s.
+void KoyApp::stepBody(float dt) {
+    KoyParams& p = renderer.params();
+    const float limit = cfg.f("o2.limit", 1.6f), t0 = cfg.f("o2.seconds", 8.0f), k = cfg.f("o2.steep", 4.9f);
+    if (blackTimer > 0.0f) {
+        blackTimer += dt;
+        const float tA = 1.4f, tB = 2.6f, tC = 4.6f;
+        if (blackTimer < tA) {
+            const float u = blackTimer / tA;
+            p.tunnel = std::max(p.tunnel, u);
+            p.blackout = u * u;
+        } else if (blackTimer < tB) {
+            p.tunnel = 1.0f;
+            p.blackout = 1.0f;
+            if (blackTimer - dt < 2.0f && blackTimer >= 2.0f) {
+                restartDiver();
+                ++restarts;
+                setCamera();
+            }
+        } else if (blackTimer < tC) {
+            const float u = (blackTimer - tB) / (tC - tB);
+            p.blackout = 1.0f - u * u * (3.0f - 2.0f * u);
+            p.tunnel = 0.7f * (1.0f - u);
+        } else {
+            blackTimer = 0.0f;
+            p.tunnel = p.blackout = 0.0f;
+        }
+        return;
+    }
+    const float pp = ppO2();
+    if (pp > limit) o2Dose += dt / (t0 * std::exp(-k * (pp - limit)));
+    else o2Dose = std::max(0.0f, o2Dose - dt / 6.0f);
+    const float u = std::min(std::max((o2Dose - 0.1f) / 0.8f, 0.0f), 1.0f);
+    p.tunnel = 0.85f * u * u * (3.0f - 2.0f * u);
+    p.blackout = 0.0f;
+    if (o2Dose >= 1.0f) blackTimer = 1e-4f;
+}
+
 void KoyApp::stepWorld(float t) {
     worldTime = t;
     KoyParams& p = renderer.params();
@@ -376,6 +429,7 @@ int runKoyCli(int argc, char** argv) {
         else if (a == "--doku") mode = "tex";
         else if (a == "--dalgacik") mode = "ripple";
         else if (a == "--yokla") mode = "probe";
+        else if (a == "--kareler") mode = "views";
         else if (a == "--yol") path = next();
         else if (a == "--kare") frames = std::stoi(next());
         else if (a == "--refn") refN = std::stoi(next());
@@ -402,25 +456,87 @@ int runKoyCli(int argc, char** argv) {
     if (edge > 0) app.quality.edge = edge;
     if (filter >= 0) app.quality.filter = filter;
     if (mode == "map") {
-        // the trial area from above: the floor's height in grey, the boulder, the meadow, the start
-        const int W = 1024;
-        const float half = 16.0f;
-        std::vector<unsigned char> img(size_t(W) * W * 4);
-        KoyWorld w;
-        for (int y = 0; y < W; ++y)
+        // Ada from above (PLAN_ADA §4): the floor's depth (the same function as the mesh) shaded with contours every 5 m,
+        // the island, the pier, the buoy lines, the stations, the start; 10 cm a pixel
+        const float3 lo = app.cfg.v3("map.min", make_float3(-60.0f, 0.0f, -200.0f)), hi = app.cfg.v3("map.max", make_float3(60.0f, 0.0f, 100.0f));
+        const float px = app.cfg.f("map.pixel", 0.1f);
+        const int W = int((hi.x - lo.x) / px), H = int((hi.z - lo.z) / px);
+        std::vector<unsigned char> img(size_t(W) * H * 4);
+        const KoyFloorShape fs = KoyFloorShape::from(app.cfg);
+        std::vector<float> dep(size_t(W) * H);
+        for (int y = 0; y < H; ++y)
+            for (int x = 0; x < W; ++x) dep[size_t(y) * W + x] = -fs(lo.x + (x + 0.5f) * px, hi.z - (y + 0.5f) * px);
+        auto put = [&](int x, int y, unsigned char r, unsigned char g, unsigned char b) {
+            if (x < 0 || y < 0 || x >= W || y >= H) return;
+            unsigned char* q = &img[(size_t(y) * W + x) * 4];
+            q[0] = r; q[1] = g; q[2] = b; q[3] = 255;
+        };
+        for (int y = 0; y < H; ++y)
             for (int x = 0; x < W; ++x) {
-                const float wx = -half + 2 * half * (x + 0.5f) / W, wz = -half + 2 * half * (y + 0.5f) / W;
-                const float h = koyFloor(app.cfg, wx, wz);
-                const float v = std::min(1.0f, std::max(0.0f, (h + 9.0f) / 4.0f));
-                unsigned char* p = &img[(size_t(y) * W + x) * 4];
-                p[0] = (unsigned char)(60 + 150 * v);
-                p[1] = (unsigned char)(70 + 140 * v);
-                p[2] = (unsigned char)(90 + 120 * v);
-                p[3] = 255;
+                const float d = dep[size_t(y) * W + x];
+                const float v = std::exp(-d / 18.0f);   // shallow light, deep dark
+                const int band = int(d / 5.0f);
+                const bool line = x + 1 < W && y + 1 < H && (int(dep[size_t(y) * W + x + 1] / 5.0f) != band || int(dep[size_t(y + 1) * W + x] / 5.0f) != band);
+                const float o2 = 0.2095f * (1.013f + 0.1005f * d);
+                unsigned char r = (unsigned char)(20 + 200 * v), g = (unsigned char)(50 + 190 * v), b = (unsigned char)(90 + 160 * v);
+                if (o2 >= 1.6f) { r = (unsigned char)(r * 0.5f + 90); g = (unsigned char)(g * 0.5f); b = (unsigned char)(b * 0.5f); }
+                if (line) { r = g = b = (band % 2 == 0) ? 255 : 160; }
+                put(x, y, r, g, b);
             }
+        auto toPx = [&](float wx, float wz, int& x, int& y) { x = int((wx - lo.x) / px); y = int((hi.z - wz) / px); };
+        auto disc = [&](float wx, float wz, float rad, unsigned char r, unsigned char g, unsigned char b, bool ring) {
+            int cx, cy;
+            toPx(wx, wz, cx, cy);
+            const int R = int(rad / px) + 1;
+            for (int y = cy - R; y <= cy + R; ++y)
+                for (int x = cx - R; x <= cx + R; ++x) {
+                    const float dd = std::sqrt(float((x - cx) * (x - cx) + (y - cy) * (y - cy))) * px;
+                    if (ring ? std::fabs(dd - rad) < 1.5f * px : dd <= rad) put(x, y, r, g, b);
+                }
+        };
+        auto rect = [&](float x0, float z0, float x1, float z1, unsigned char r, unsigned char g, unsigned char b) {
+            int ax, ay, bx, by;
+            toPx(x0, z1, ax, ay);
+            toPx(x1, z0, bx, by);
+            for (int y = ay; y <= by; ++y)
+                for (int x = ax; x <= bx; ++x) put(x, y, r, g, b);
+        };
+        const float3 ic = app.cfg.v3("island.centre", make_float3(0.0f, 0.0f, 60.0f));
+        disc(ic.x, ic.z, app.cfg.f("island.radius", 35.0f), 120, 100, 70, false);
+        const float3 pm = app.cfg.v3("pier.min", make_float3(-1.5f, 0.0f, 0.0f)), pM = app.cfg.v3("pier.max", make_float3(1.5f, 0.0f, 28.0f));
+        rect(pm.x, pm.z, pM.x, pM.z, 150, 110, 70);
+        const float bh = app.cfg.f("buoy.half", 15.0f), bz0 = app.cfg.f("buoy.z0", 24.0f), bz1 = app.cfg.f("buoy.z1", -160.0f);
+        for (float z = bz1; z <= bz0; z += 3.0f) {
+            disc(-bh, z, 0.25f, 255, 210, 0, false);
+            disc(bh, z, 0.25f, 255, 210, 0, false);
+        }
+        for (float x = -bh; x <= bh; x += 3.0f) disc(x, bz1, 0.25f, 255, 210, 0, false);
+        const float3 sm = app.cfg.v3("samandira.pos", make_float3(0.0f, 0.0f, -160.0f));
+        disc(sm.x, sm.z, 0.8f, 255, 120, 0, false);
+        const float3 am = app.cfg.v3("amfora.centre", make_float3(0.0f, 0.0f, -50.0f));
+        disc(am.x, am.z, 6.0f, 200, 90, 50, true);
+        const float3 wc = app.cfg.v3("batik.centre", make_float3(2.0f, 0.0f, -95.0f));
+        {   // the wreck's outline: its length along batik.deg
+            const float a = app.cfg.f("batik.deg", 35.0f) * 3.14159265f / 180.0f, L = app.cfg.f("batik.length", 38.0f), B = app.cfg.f("batik.beam", 10.5f);
+            for (float u = -0.5f * L; u <= 0.5f * L; u += 0.1f)
+                for (float v = -0.5f * B; v <= 0.5f * B; v += 0.1f) {
+                    const float taper = 1.0f - std::pow(std::fabs(2.0f * u / L), 3.0f);
+                    if (std::fabs(v) > 0.5f * B * std::max(taper, 0.0f)) continue;
+                    int x, y;
+                    toPx(wc.x + std::sin(a) * u + std::cos(a) * v, wc.z - std::cos(a) * u + std::sin(a) * v, x, y);
+                    put(x, y, 110, 70, 40);
+                }
+        }
+        const float3 st = app.cfg.v3("diver.start", make_float3(1.9f, -1.2f, 0.8f));
+        disc(st.x, st.z, 0.6f, 255, 255, 255, false);
         std::filesystem::create_directories(std::filesystem::path(mapOut).parent_path());
-        writePNG(mapOut, W, W, img.data());
-        std::printf("harita: %s\n", mapOut.c_str());
+        writePNG(mapOut, W, H, img.data());
+        std::printf("harita: %s (%d x %d, %.2f m piksel)\n", mapOut.c_str(), W, H, px);
+        // the profile along the corridor's axis (x = 0): depth, slope, ppO2
+        for (float z = 20.0f; z >= -260.0f; z -= 10.0f) {
+            const float d = -fs(0.0f, z), d2 = -fs(0.0f, z - 1.0f);
+            std::printf("  z %6.0f: derinlik %6.1f m, egim %4.1f derece, ppO2 %.2f bar\n", z, d, std::atan(d2 - d) * 57.2958f, 0.2095f * (1.013f + 0.1005f * d));
+        }
         return 0;
     }
     app.renderer.init(app.width, app.height, app.root);
@@ -466,7 +582,26 @@ int runKoyCli(int argc, char** argv) {
         dir = make_float3(float(kk % 3 - 1), float((kk / 3) % 3 - 1), float(kk / 9 - 1));
         return dist[best];
     };
-    if (mode == "probe") {
+    if (mode == "views") {
+        // several views in one load: each --cam/--look pair, its own metered exposure (as the eye would settle there),
+        // world time --t; <out>_NN.png
+        const std::string o = out.empty() ? app.root + "/captures/koy/kareler" : out;
+        std::filesystem::create_directories(std::filesystem::path(o).parent_path());
+        for (size_t c = 0; c < cams.size(); ++c) {
+            aim(c);
+            app.stepWorld(t0);
+            app.frame();
+            app.adaptExposure(0.0f, true);
+            app.frame();
+            if (ref) app.renderer.renderReference(refN);
+            char nm[16];
+            std::snprintf(nm, sizeof(nm), "_%02d", int(c));
+            app.save(o + nm);
+            const KoyTimes& tm = app.renderer.times();
+            std::printf("kare %d: (%.1f %.1f %.1f) derinlik %.1f m, kum %.2f m altta, pozlama %+.2f EV, %.1f ms (kenar %u)\n", int(c), cams[c].x, cams[c].y,
+                        cams[c].z, -cams[c].y, cams[c].y - koyFloor(app.cfg, cams[c].x, cams[c].z), app.evAdapt, tm.total(), tm.edgePixels);
+        }
+    } else if (mode == "probe") {
         for (size_t c = 0; c < cams.size(); ++c) {
             float3 dir;
             const float d = nearest(cams[c], dir);

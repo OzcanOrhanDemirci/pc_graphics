@@ -8,6 +8,7 @@
 #include "scenes/koy/koy_renderer.h"
 #include "scenes/koy/koy_world.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -61,6 +62,13 @@ struct KoyApp {
     std::vector<uchar4> pixels;
     void* bottomArr = nullptr;             // the floor's depth map (the light fields' choice), cudaArray_t
     unsigned long long bottomTex = 0;
+    // Ada (docs/koy/PLAN_ADA.md §6): the pressure, the oxygen's partial pressure, the toxicity dose (0..1) it builds
+    // above the limit; full: the convulsion, the blackout, the restart at the ladder
+    float o2Dose = 0.0f, blackTimer = 0.0f;
+    int restarts = 0;
+    float pressureBar() const { return 1.013f + 0.1005f * std::max(0.0f, -diver.pos.y); }   // sea water: rho g = 1025 * 9.81
+    float ppO2() const { return 0.2095f * pressureBar(); }
+    bool blackedOut() const { return blackTimer > 0.0f; }
 
     void loadConfig();
     bool compile();
@@ -70,6 +78,8 @@ struct KoyApp {
     void setRipples(bool on);              // stays off if there are none
     void setCamera();                      // the diver's eye, the mask, the field of view
     void stepDiver(float fwd, float right, float up, bool strong, float lookDX, float lookDY, float dt);
+    void restartDiver();                   // at the ladder, as at the start
+    void stepBody(float dt);               // pressure and oxygen: the dose, the tunnel, the blackout and the restart
     void stepWorld(float t);               // waves, caustics, seagrass at world time t
     void frame();                          // stepWorld must have run; renders
     void adaptExposure(float dt, bool instant);

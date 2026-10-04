@@ -73,8 +73,8 @@ struct FW {
 };
 static __forceinline__ __device__ float bottomAt(float x, float z) {
     if (!params.bottomMap) return params.fieldBottom[params.fields - 1];
-    const float inv = 0.5f / params.bottomMapHalf;
-    return tex2D<float>((cudaTextureObject_t)params.bottomMap, x * inv + 0.5f, z * inv + 0.5f);
+    return tex2D<float>((cudaTextureObject_t)params.bottomMap, (x - params.bottomMapMin.x) / params.bottomMapSize.x,
+                        (z - params.bottomMapMin.y) / params.bottomMapSize.y);
 }
 // a surface: the two fields that bracket the floor under it (each read no deeper than its own floor: continuous where the
 // floor crosses a field's depth)
@@ -89,20 +89,12 @@ static __forceinline__ __device__ FW fieldsFor(float hf) {
     f.w = (b > a && hf > params.fieldBottom[a]) ? saturate((hf - params.fieldBottom[a]) / (params.fieldBottom[b] - params.fieldBottom[a])) : 0.0f;
     return f;
 }
-// a view path: the shallowest field lit down to its deepest point, eased into the next over the last 1.5 m above its
-// floor (no seam where the paths' ends cross a field's depth)
-static __forceinline__ __device__ FW fieldsForPath(float zmax) {
-    // the shallowest field whose floor the path does not pass by more than a metre (a field holds its floor's light a
-    // little below it), eased into the next over that metre: paths ending on the wreck's floor read the wreck's field
-    const int n = params.fields;
-    int k = 0;
-    while (k < n - 1 && params.fieldBottom[k] + 1.0f < zmax) ++k;
-    FW f;
-    f.a = k;
-    f.b = min(k + 1, n - 1);
-    f.w = f.b > f.a ? saturate(zmax - params.fieldBottom[k]) : 0.0f;
-    f.w = f.w * f.w * (3.0f - 2.0f * f.w);
-    return f;
+// Ada: a view path over a floor that keeps getting deeper: the fields that bracket the floor under the path (where its
+// light comes from: the first ~15 m), never shallower than the path's own deepest point within ~30 m (c ~ 0.1/m)
+static __forceinline__ __device__ FW pathFields(float3 o, float3 d, float tEnd) {
+    const float zmax = fmaxf(-o.y, -o.y - d.y * fminf(tEnd, 30.0f));
+    const float3 m = o + d * fminf(tEnd, 15.0f);
+    return fieldsFor(fmaxf(zmax, bottomAt(m.x, m.z)));
 }
 static __forceinline__ __device__ FW deepestField() {
     FW f;
@@ -352,6 +344,9 @@ static __forceinline__ __device__ float causticAt(float3 p, int level) {
     const float w = (lz - params.causticLz0) / (params.causticLz1 - params.causticLz0);
     const float inv = 1.0f / params.causticPatch;
     const float F = tex3D<float>((cudaTextureObject_t)params.caustic[level], p.x * inv, p.z * inv, tc(w, params.causticSlices));
+    // below the last slice the sun's disc has blurred the focusing (its width grows with depth) and the light that is
+    // left comes more and more from scattering: the pattern fades to 1 over the next half of the volume's depth
+    if (w > 1.0f) return lerpf(F, 1.0f, saturate((lz - params.causticLz1) / 0.405f));   // ln 1.5
     if (w >= 0.0f) return F;
     return lerpf(1.0f, F, saturate(z / expf(params.causticLz0)));
 }
@@ -545,21 +540,31 @@ static __forceinline__ __device__ float3 shadeSurface(const Hit& h, float3 d, fl
         const float3 nn = normalize(n + (h.ng - n) * (0.6f * s));   // the felt fills the fine relief
         n = dot(nn, h.ng) > 0.05f ? nn : n;
     }
-    // the sand ripples (world-space normal map, ray-cone filtered: sharp near, averaged out far)
-    if (m.kind == KM_TERRAIN && params.rippleTex && fabsf(h.p.x) < params.rippleHalf && fabsf(h.p.z) < params.rippleHalf) {
-        const float inv = 0.5f / params.rippleHalf;
-        const float2 uv = make_float2(h.p.x * inv + 0.5f, h.p.z * inv + 0.5f);
+    // the sand ripples, analytic: crests along the depth contours (circles round the island, the waves' fronts bend to the
+    // shore), wandering slowly; the height fades with depth (the swell no longer stirs the sand there). Band-limited by the
+    // footprint: a Gaussian of the cone's width filters each harmonic exactly (sharp near, gone far, never aliased)
+    if (m.kind == KM_TERRAIN && params.ripples) {
+        const float fade = 1.0f - sstep(params.rippleDepth0, params.rippleDepth1, -h.p.y);
         const float cosv = fmaxf(fabsf(dot(d, h.ng)), 0.05f);
-        float3 ax = d - h.ng * dot(d, h.ng);
-        const float axl = length(ax);
-        ax = axl > 1e-6f ? ax / axl : make_float3(1, 0, 0);
-        const float3 ay = cross(h.ng, ax);
-        const float2 du = make_float2(ax.x * width / cosv * inv, ax.z * width / cosv * inv);
-        const float2 dv = make_float2(ay.x * width * inv, ay.z * width * inv);
-        const float4 rn = tex2DGrad<float4>((cudaTextureObject_t)params.rippleTex, uv.x, uv.y, du, dv);
-        const float rx = rn.x * 2.0f - 1.0f, rz = rn.y * 2.0f - 1.0f;   // the ripple's tilt (world x, z), shortened when averaged
-        const float3 nn = normalize(n + make_float3(rx, 0.0f, rz) / fmaxf(rn.z * 2.0f - 1.0f, 0.2f));
-        n = dot(nn, h.ng) > 0.05f ? nn : n;
+        const float sigma = 0.5f * width / cosv;   // the footprint's spread along the view (its long axis)
+        const float k = 2.0f * M_PIf / params.rippleLength;
+        const float g1 = expf(-0.5f * sqr(k * sigma)), g2 = expf(-0.5f * sqr(2.0f * k * sigma));
+        if (fade > 0.0f && g1 > 1e-3f) {
+            const float2 rel = make_float2(h.p.x - params.islandCentre.x, h.p.z - params.islandCentre.y);
+            const float r = fmaxf(sqrtf(rel.x * rel.x + rel.y * rel.y), 1e-3f);
+            auto warp = [&](float x, float z) { return 1.3f * noise3(make_float3(x * 0.06f, 1.7f, z * 0.06f)); };
+            const float e = 0.5f;
+            const float wx = (warp(h.p.x + e, h.p.z) - warp(h.p.x - e, h.p.z)) / (2.0f * e);
+            const float wz = (warp(h.p.x, h.p.z + e) - warp(h.p.x, h.p.z - e)) / (2.0f * e);
+            // the phase reduced to whole cycles first: k r is thousands of radians and the fast cosine is only good near 0
+            const float cyc = (r + warp(h.p.x, h.p.z)) / params.rippleLength;
+            const float ph = 2.0f * M_PIf * (cyc - floorf(cyc)) + 2.2f * noise3(make_float3(h.p.x * 0.45f, 3.1f, h.p.z * 0.45f));
+            const float A = params.rippleHeight * fade * (0.65f + 0.35f * noise3(make_float3(h.p.x * 0.3f, 5.3f, h.p.z * 0.3f)));
+            const float dh = A * k * (0.55f * g1 * cosf(ph) + 0.44f * g2 * cosf(2.0f * ph + 0.7f));   // dh / d(r + warp)
+            const float sx = dh * (rel.x / r + wx), sz = dh * (rel.y / r + wz);
+            const float3 nn = normalize(n - make_float3(sx, 0.0f, sz));
+            n = dot(nn, h.ng) > 0.05f ? nn : n;
+        }
     }
     nOut = n;
     const float3 wk = basisWeights(albedo);
@@ -690,7 +695,7 @@ static __forceinline__ __device__ Lit shadeSample(float3 o, float3 d, float cone
     if (h.hit) {
         // the path's light field: the floor under where it ends, and lit down to its deepest point
         // (the depth the path reaches within ~30 m: the water's in-scattering comes almost all from there, c ~ 0.1/m)
-        const FW fp = fieldsForPath(fmaxf(z0, z0 - d.y * fminf(h.t, 30.0f)));
+        const FW fp = pathFields(o, d, h.t);
         r.L = shadeSurface(h, d, h.t, coneAngle, r.caustic, r.n) + (params.view >= 5 ? make_float3(0, 0, 0) : ambientPath(z0, d.y, h.t, fp));
         r.t = h.t;
         r.id = h.id;
@@ -699,13 +704,13 @@ static __forceinline__ __device__ Lit shadeSample(float3 o, float3 d, float cone
     if (d.y > 1e-4f) {
         const float ts = surfaceHit(o, d, coneAngle);
         const float3 q = o + d * ts;
-        r.L = shadeFromBelow(q, d, ts, coneAngle, r.n) + ambientPath(z0, d.y, ts, fieldsForPath(z0));
+        r.L = shadeFromBelow(q, d, ts, coneAngle, r.n) + ambientPath(z0, d.y, ts, pathFields(o, d, ts));
         r.t = ts;
         r.id = ID_WATER;
         return r;
     }
     // open water: the field lit down to the depth the ray reaches within ~30 m (its light comes almost all from there)
-    r.L = ambientPath(z0, d.y, params.farDistance, fieldsForPath(fmaxf(z0, z0 - d.y * 30.0f)));
+    r.L = ambientPath(z0, d.y, params.farDistance, pathFields(o, d, params.farDistance));
     r.t = params.farDistance;
     r.id = ID_OPEN;
     return r;
@@ -871,6 +876,15 @@ extern "C" __global__ void __raygen__final() {
     const uint3 idx = optixGetLaunchIndex();
     const unsigned int i = idx.y * params.width + idx.x;
     float3 c = f3(params.hdr[i]) * params.exposure;
+    // oxygen toxicity (Ada, PLAN_ADA §6): the field of view closes in from the edges (tunnel vision), then everything
+    // goes black; the restart opens it again
+    if (params.tunnel > 0.0f || params.blackout > 0.0f) {
+        const float ax = (idx.x + 0.5f) / params.width * 2.0f - 1.0f, ay = ((idx.y + 0.5f) / params.height * 2.0f - 1.0f) * float(params.height) / float(params.width);
+        const float rr = sqrtf(ax * ax + ay * ay);
+        const float r1 = lerpf(1.25f, 0.18f, params.tunnel), r0 = r1 * lerpf(0.55f, 0.35f, params.tunnel);
+        const float t = saturate((rr - r0) / fmaxf(r1 - r0, 1e-3f));
+        c = c * ((1.0f - t * t * (3.0f - 2.0f * t)) * (1.0f - params.blackout));
+    }
     c = gamutCompress(c, luminance709(c));
     c = agx(c);
     // a fixed TPDF dither from two decorrelated blue-noise tiles: no banding, and nothing that moves between frames

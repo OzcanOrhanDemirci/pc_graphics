@@ -146,10 +146,13 @@ void KoyOptics::spectra(const Config& cfg) {
     Bp = cfg.f("water.bp_fraction", 0.0183f);   // Petzold's average particle backscatter fraction
     bottomDepth = cfg.f("light.bottom", 8.0f);
     torchRel = cfg.f("torch.rel", 0.03f);
-    {   // the floors the light field is built for: light.bottoms (up to three, metres) or light.bottom alone
-        const float3 b = cfg.v3("light.bottoms", make_float3(0.0f, 0.0f, 0.0f));
+    {   // the floors the light field is built for: light.bottoms (up to KOY_FIELDS, metres) or light.bottom alone
+        std::string list = cfgString(cfg, "light.bottoms", "");
+        for (char& ch : list)
+            if (ch == ',') ch = ' ';
+        std::istringstream in(list);
         bottoms.clear();
-        for (float v : {b.x, b.y, b.z})
+        for (float v; in >> v;)
             if (v > 0.0f) bottoms.push_back(v);
         if (bottoms.empty()) bottoms.push_back(bottomDepth);
         std::sort(bottoms.begin(), bottoms.end());

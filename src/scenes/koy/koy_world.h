@@ -10,19 +10,23 @@
 #include <string>
 #include <vector>
 
-// the sea floor's shape, read once from the config (the mesh asks it millions of times)
+// The sea floor's shape, read once from the config (the mesh asks it millions of times). Ada (docs/koy/PLAN_ADA.md §4):
+// the sand deepens away from the island along one smooth profile (depth against s, the distance beyond the pier's end
+// measured from the island's centre), the same all round; a slow wander of s (noise) keeps the contours natural, small
+// undulations and long low sand waves ride on it. The island's rock covers it where it would rise above the water.
 struct KoyFloorShape {
-    float depth = -7.0f, slope = 0.05f, undulation = 0.45f;
-    // Amfora (docs/koy/PLAN_AMFORA.md §3): the wreck's sandy plain, a gentle rise behind towards the shore, and the
-    // wreck's own mound (the slope down to an arch and the wall behind it were removed, 2026-10-04: Ozcan)
-    float rise = 0.0f, riseZ0 = 10.0f, riseZ1 = 40.0f;
-    float moundX = 0.0f, moundZ = 0.0f, moundA = 5.0f, moundB = 3.0f, moundH = 0.0f, moundAngle = 0.0f;
+    float islandX = 0.0f, islandZ = 60.0f, pierR = 60.0f;   // the pier's end lies pierR from the island's centre
+    std::vector<float> ps, pd, pm;                          // profile knots: s, depth, slope (monotone cubic Hermite)
+    float undulation = 0.25f, sandWave = 0.5f, wander = 6.0f, shallowest = 0.3f;
     static KoyFloorShape from(const Config& cfg);
-    float operator()(float x, float z) const;
+    float depth(float s) const;                             // the profile alone (metres, positive down)
+    float sOf(float x, float z) const;                      // s at (x, z), wander included
+    float operator()(float x, float z) const;               // the floor's height y (negative down)
 };
 // the sea floor's height (y, negative down) at (x, z): the same function for the mesh, the diver's collisions and the map
 float koyFloor(const Config& cfg, float x, float z);
-float koyRipple(const Config& cfg, float x, float z);   // the sand ripples' height (not in the mesh: a filtered normal map)
+// a list of numbers from the config ("1 2 3", commas allowed); empty if the key is missing
+std::vector<float> koyList(const Config& cfg, const std::string& key);
 
 struct KoySeagrass {
     std::vector<KoyLeaf> leaves;
@@ -52,7 +56,6 @@ struct KoyWorld {
     KRibbonsCPU ribbons;
     float3 rockCentre{};
     float rockRadius = 0.0f;
-    KoyTextureSet ripples;          // the sand ripples: a world-space normal map (x, z over +-rippleHalf), mipmapped
     // the texture choice (the panel's "Doku"): 0 standard (2K scans), 1 high (everything 8K, detail layers), 2 ultra (the
     // sand and the rock's detail layer at 16K; the boulder's own scan ends at 8K). All of them stay loaded: live switching
     int texMode = 2;
@@ -64,9 +67,7 @@ struct KoyWorld {
     bool hasMode(int mode) const;
     void applyTextureMode(const Config& cfg, int mode);   // takes the best mode that is there, at most `mode`
     void loadTextures(const Config& cfg, const std::string& dir);   // every set decoded in parallel, uploaded in order
-    float rippleHalf = 16.0f;
     void build(const Config& cfg, const std::string& root);
-    void buildRipples(const Config& cfg);
     std::vector<KTextureSet> textureSets() const;
     void release();
     std::string summary() const;

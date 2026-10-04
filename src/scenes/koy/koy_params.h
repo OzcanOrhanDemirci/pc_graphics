@@ -16,8 +16,8 @@
 
 typedef unsigned long long KTex;   // cudaTextureObject_t (NVRTC sees it as this too)
 
-#define KOY_MAX_MESHES 32
-#define KOY_FIELDS 4             // the light field for up to this many floor depths
+#define KOY_MAX_MESHES 128
+#define KOY_FIELDS 8             // the light field for up to this many floor depths
 #define KOY_MAX_BASE 16          // base samples per pixel (1, 4, 8 or 16)
 #define KOY_MAX_EDGE 32          // samples of a pixel that sits on an edge, base included
 
@@ -39,15 +39,15 @@ typedef unsigned long long KTex;   // cudaTextureObject_t (NVRTC sees it as this
 // surface (a total internal reflection) and is seen after a further ts metres.
 #define AS_T 64
 #define AS_N 17
-#define AS_Z 64
+#define AS_Z 96
 #define AP_T 64
 #define AP_MU 48
-#define AP_Z 64
+#define AP_Z 96
 #define RP_T 64
 #define RP_MU 48
 #define RP_TS 32
 #define AMB_TMAX 200.0f          // t spans 0 .. AMB_TMAX (squared spacing: fine near)
-#define AMB_ZMAX 40.0f           // depth spans 0 .. AMB_ZMAX
+#define AMB_ZMAX 120.0f          // depth spans 0 .. AMB_ZMAX (Ada: the slope goes on past the oxygen limit, ~66 m)
 #define RP_TSMAX 60.0f
 
 enum KoyMaterialKind : int {
@@ -150,8 +150,11 @@ struct KoyParams {
     const KInstance* instances;
     const KMaterial* materials;
     const KTextureSet* texSets;
-    KTex rippleTex;                     // the sand ripples' normal map in world x, z over +-rippleHalf (0: none)
-    float rippleHalf;
+    // the sand ripples (analytic, band-limited by the footprint): crests along the depth contours round the island,
+    // wavelength rippleLength, height rippleHeight in the shallows, gone by rippleDepth1 (waves do not stir the deep sand)
+    int ripples;
+    float rippleLength, rippleHeight, rippleDepth0, rippleDepth1;
+    float2 islandCentre;                // x, z: the ripples' crests circle it
     KCamera cam;
     float time;
     float farDistance;                  // a ray that meets nothing ends here (the water has swallowed it)
@@ -166,8 +169,8 @@ struct KoyParams {
     KTex reflPath[KOY_FIELDS];
     int fields;
     float fieldBottom[KOY_FIELDS];      // ascending
-    KTex bottomMap;                     // the floor's depth under (x, z), over +-bottomMapHalf (0: none, the deepest field)
-    float bottomMapHalf;
+    KTex bottomMap;                     // the floor's depth under (x, z) over the rectangle bottomMapMin + [0, bottomMapSize]
+    float2 bottomMapMin, bottomMapSize; // (0: no map, the deepest field)
     float basisFix[3][3];               // linear sRGB albedo -> weights of the three basis spectra (exact round trip in daylight)
     float3 sunWater;                    // towards the sun, refracted (in water)
     float3 sunAir;                      // towards the sun, in air
@@ -216,6 +219,8 @@ struct KoyParams {
     // ---- display
     float exposure;                     // scene luminance (Y in our units) -> display
     int view;                           // 0 final, 1 edge pixels, 2 depth, 3 normal, 4 caustic factor, 5 ambient only
+    float tunnel;                       // oxygen toxicity: the field of view closing in (0 none .. 1 a pinhole)
+    float blackout;                     // 0 seeing .. 1 black (the convulsion, the restart)
     float3 xyzToRgb0, xyzToRgb1, xyzToRgb2;   // rows: CIE XYZ -> linear sRGB, white balanced to daylight above the water
     const float* blueNoise;             // 128 x 128, fixed: the dither does not move from frame to frame
 

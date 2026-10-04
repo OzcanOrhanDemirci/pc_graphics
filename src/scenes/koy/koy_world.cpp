@@ -16,6 +16,7 @@
 #include <map>
 #include <random>
 #include <sstream>
+#include <thread>
 #include <utility>
 
 namespace {
@@ -59,86 +60,86 @@ float smooth01(float a, float b, float x) {
     return t * t * (3.0f - 2.0f * t);
 }
 
-// grid coordinates: fine near the centre, growing outwards (the camera stays in the trial area)
-std::vector<float> gridAxis(float inner, float h0, float outer, float hMax) {
-    std::vector<float> pos{0.0f};
-    float x = 0.0f;
-    while (x < outer) {
-        const float h = x < inner ? h0 : std::min(hMax, h0 + (x - inner) * 0.012f);
-        x += h;
-        pos.push_back(std::min(x, outer));
-    }
+// the fine part between lo and hi, growing outwards to [outerLo, outerHi]
+std::vector<float> gridAxis2(float lo, float hi, float h0, float outerLo, float outerHi, float hMax) {
     std::vector<float> axis;
-    for (size_t k = pos.size(); k-- > 1;) axis.push_back(-pos[k]);
-    for (float p : pos) axis.push_back(p);
-    return axis;
-}
-
-// the same, the fine part between lo and hi (lo <= 0 <= hi need not hold)
-std::vector<float> gridAxis2(float lo, float hi, float h0, float outer, float hMax) {
-    std::vector<float> axis;
-    float x = -outer;
-    // coarse from -outer up to lo: the step shrinking towards lo
     std::vector<float> left;
-    for (float p = lo; p > -outer;) {
-        const float h = std::min(hMax, h0 + (lo - p) * 0.012f);
+    for (float p = lo; p > outerLo;) {
+        const float h = std::min(hMax, h0 + (lo - p) * 0.03f);
         p -= h;
-        left.push_back(std::max(p, -outer));
+        left.push_back(std::max(p, outerLo));
     }
     for (size_t k = left.size(); k-- > 0;) axis.push_back(left[k]);
-    for (x = lo; x < hi - 0.5f * h0; x += h0) axis.push_back(x);
+    for (float x = lo; x < hi - 0.5f * h0; x += h0) axis.push_back(x);
     axis.push_back(hi);
-    for (float p = hi; p < outer;) {
-        const float h = std::min(hMax, h0 + (p - hi) * 0.012f);
+    for (float p = hi; p < outerHi;) {
+        const float h = std::min(hMax, h0 + (p - hi) * 0.03f);
         p += h;
-        axis.push_back(std::min(p, outer));
+        axis.push_back(std::min(p, outerHi));
     }
     return axis;
 }
 
 }   // namespace
 
-// The floor's broad shape (the mesh). Its sand ripples are NOT in the mesh: sampled at the vertices they beat against the
-// grid (a 9 cm ripple on a 3 cm grid) and the shading shows wide moire bands. They live in a mipmapped normal map that
-// the ray cone filters (koyRipple, KoyWorld::buildRipples): sharp near, averaged out far, never aliased.
+std::vector<float> koyList(const Config& cfg, const std::string& key) {
+    std::vector<float> out;
+    const auto it = cfg.values.find(key);
+    if (it == cfg.values.end()) return out;
+    std::string v = it->second;
+    const size_t hash = v.find('#');
+    if (hash != std::string::npos) v = v.substr(0, hash);
+    for (char& ch : v)
+        if (ch == ',' || ch == ';' || ch == ':') ch = ' ';
+    std::istringstream in(v);
+    float x;
+    while (in >> x) out.push_back(x);
+    return out;
+}
+
+// The floor's broad shape (the mesh). The sand ripples are NOT in it: they are analytic in the shading, band-limited by
+// the footprint (koy.cu), so they never beat against the grid.
 KoyFloorShape KoyFloorShape::from(const Config& cfg) {
-    KoyFloorShape s;
-    s.depth = cfg.f("floor.depth", -7.0f);
-    s.slope = cfg.f("floor.slope", 0.05f);
-    s.undulation = cfg.f("floor.undulation", 0.45f);
-    s.rise = cfg.f("floor.rise", 0.0f);
-    s.riseZ0 = cfg.f("floor.rise_z0", 10.0f);
-    s.riseZ1 = cfg.f("floor.rise_z1", 40.0f);
-    const float3 mc = cfg.v3("floor.mound_centre", make_float3(0.0f, 0.0f, 0.0f));
-    s.moundX = mc.x;
-    s.moundZ = mc.z;
-    s.moundA = cfg.f("floor.mound_a", 5.0f);
-    s.moundB = cfg.f("floor.mound_b", 3.0f);
-    s.moundH = cfg.f("floor.mound_h", 0.0f);
-    s.moundAngle = cfg.f("floor.mound_deg", 0.0f) * 3.14159265f / 180.0f;
-    return s;
+    KoyFloorShape f;
+    const float3 ic = cfg.v3("island.centre", make_float3(0.0f, 0.0f, 60.0f));
+    f.islandX = ic.x;
+    f.islandZ = ic.z;
+    f.pierR = cfg.f("floor.pier_r", 60.0f);
+    f.undulation = cfg.f("floor.undulation", 0.25f);
+    f.sandWave = cfg.f("floor.sand_wave", 0.5f);
+    f.wander = cfg.f("floor.wander", 6.0f);
+    f.shallowest = cfg.f("floor.shallowest", 0.3f);
+    // knots: s depth slope, s depth slope, ... (PLAN_ADA §4: the stations sit where the slope eases)
+    std::vector<float> k = koyList(cfg, "floor.profile");
+    if (k.size() < 6 || k.size() % 3)
+        k = {-30, 0.3f, 0.02f, 0, 3.5f, 0.13f, 30, 7.5f, 0.14f, 56, 12.0f, 0.08f, 97, 22.0f, 0.12f, 125, 32.0f, 0.47f, 400, 161.0f, 0.47f};
+    for (size_t i = 0; i + 2 < k.size(); i += 3) {
+        f.ps.push_back(k[i]);
+        f.pd.push_back(k[i + 1]);
+        f.pm.push_back(k[i + 2]);
+    }
+    return f;
+}
+float KoyFloorShape::depth(float s) const {
+    const size_t n = ps.size();
+    if (s <= ps[0]) return pd[0] + pm[0] * (s - ps[0]);
+    if (s >= ps[n - 1]) return pd[n - 1] + pm[n - 1] * (s - ps[n - 1]);
+    size_t i = 0;
+    while (i + 2 < n && s > ps[i + 1]) ++i;
+    const float h = ps[i + 1] - ps[i], t = (s - ps[i]) / h, t2 = t * t, t3 = t2 * t;
+    return (2 * t3 - 3 * t2 + 1) * pd[i] + (t3 - 2 * t2 + t) * h * pm[i] + (-2 * t3 + 3 * t2) * pd[i + 1] + (t3 - t2) * h * pm[i + 1];
+}
+float KoyFloorShape::sOf(float x, float z) const {
+    const float dx = x - islandX, dz = z - islandZ;
+    return std::sqrt(dx * dx + dz * dz) - pierR + wander * fbm3(x * 0.012f, 2.9f, z * 0.012f, 2);
 }
 float KoyFloorShape::operator()(float x, float z) const {
-    float y = depth + slope * z;
-    // the rise behind towards +z (the shore)
-    if (rise != 0.0f) y += rise * smooth01(riseZ0, riseZ1, z);
-    // the wreck's mound: the hull's outline under the cargo, a long low swell of sand
-    if (moundH != 0.0f) {
-        const float dx = x - moundX, dz = z - moundZ, c = std::cos(moundAngle), s = std::sin(moundAngle);
-        const float u = (c * dx + s * dz) / moundA, v = (-s * dx + c * dz) / moundB;
-        y += moundH * std::exp(-1.6f * (u * u + v * v));
-    }
-    y += undulation * fbm3(x * 0.11f, 0.37f, z * 0.11f, 3);
-    return y;
+    float d = depth(sOf(x, z));
+    // long low sand waves (tens of metres) and small undulations, growing a little with depth
+    d += sandWave * fbm3(x * 0.035f, 7.1f, z * 0.035f, 2) + undulation * (1.0f + 0.01f * d) * fbm3(x * 0.11f, 0.37f, z * 0.11f, 3);
+    return -std::max(d, shallowest);
 }
 float koyFloor(const Config& cfg, float x, float z) { return KoyFloorShape::from(cfg)(x, z); }
-float koyRipple(const Config& cfg, float x, float z) {
-    const float th = 0.35f + 0.5f * noise3(x * 0.07f, 1.7f, z * 0.07f);
-    const float wl = cfg.f("floor.ripple_length", 0.09f);
-    const float ph = (x * std::cos(th) + z * std::sin(th)) * 6.2831853f / wl + 2.2f * noise3(x * 0.45f, 3.1f, z * 0.45f);
-    const float A = cfg.f("floor.ripple_height", 0.011f) * (0.65f + 0.35f * noise3(x * 0.3f, 5.3f, z * 0.3f));
-    return A * (0.55f * std::sin(ph) + 0.22f * std::sin(2.0f * ph + 0.7f));
-}
 
 // ---------------------------------------------------------------------------------------------------
 void KoySeagrass::build(const Config& cfg) {
@@ -220,24 +221,33 @@ KMeshCPU buildFloor(const Config& cfg) {
     m.name = "floor";
     m.material = 0;
     m.id = 1;
-    // fine over the wreck and down to the arch (x and z ranges of their own), growing outwards
-    const float reach = cfg.f("floor.fine_reach", 12.0f), step = cfg.f("floor.fine_step", 0.03f), ext = cfg.f("floor.extent", 110.0f);
-    const std::vector<float> axX = gridAxis2(cfg.f("floor.fine_x0", -reach), cfg.f("floor.fine_x1", reach), step, ext, 1.5f);
-    const std::vector<float> axZ = gridAxis2(cfg.f("floor.fine_z0", -reach), cfg.f("floor.fine_z1", reach), step, ext, 1.5f);
+    // fine over the corridor and round the pier (x and z ranges of their own), growing outwards to the world's edge
+    const float step = cfg.f("floor.fine_step", 0.12f), grow = cfg.f("floor.coarse_max", 4.0f);
+    const float3 lo = cfg.v3("floor.fine_min", make_float3(-45.0f, 0.0f, -190.0f)), hi = cfg.v3("floor.fine_max", make_float3(45.0f, 0.0f, 105.0f));
+    const float3 elo = cfg.v3("floor.extent_min", make_float3(-420.0f, 0.0f, -520.0f));
+    const float3 ehi = cfg.v3("floor.extent_max", make_float3(420.0f, 0.0f, 480.0f));
+    const std::vector<float> axX = gridAxis2(lo.x, hi.x, step, elo.x, ehi.x, grow);
+    const std::vector<float> axZ = gridAxis2(lo.z, hi.z, step, elo.z, ehi.z, grow);
     const int nx = int(axX.size()), nz = int(axZ.size());
     const KoyFloorShape fs = KoyFloorShape::from(cfg);
     m.pos.resize(size_t(nx) * nz);
     m.nrm.resize(size_t(nx) * nz);
-    for (int j = 0; j < nz; ++j)
-        for (int i = 0; i < nx; ++i) {
-            const float x = axX[i], z = axZ[j];
-            const float e = 0.004f;
-            const float y = fs(x, z);
-            const float gx = (fs(x + e, z) - fs(x - e, z)) / (2 * e);
-            const float gz = (fs(x, z + e) - fs(x, z - e)) / (2 * e);
-            m.pos[size_t(j) * nx + i] = make_float3(x, y, z);
-            m.nrm[size_t(j) * nx + i] = normalize(make_float3(-gx, 1.0f, -gz));
-        }
+    std::vector<std::future<void>> jobs;
+    const int T = std::max(1, int(std::thread::hardware_concurrency()));
+    for (int t = 0; t < T; ++t)
+        jobs.push_back(std::async(std::launch::async, [&, t] {
+            for (int j = t; j < nz; j += T)
+                for (int i = 0; i < nx; ++i) {
+                    const float x = axX[i], z = axZ[j];
+                    const float e = 0.004f;
+                    const float y = fs(x, z);
+                    const float gx = (fs(x + e, z) - fs(x - e, z)) / (2 * e);
+                    const float gz = (fs(x, z + e) - fs(x, z - e)) / (2 * e);
+                    m.pos[size_t(j) * nx + i] = make_float3(x, y, z);
+                    m.nrm[size_t(j) * nx + i] = normalize(make_float3(-gx, 1.0f, -gz));
+                }
+        }));
+    for (auto& j : jobs) j.get();
     m.idx.reserve(size_t(nx - 1) * (nz - 1) * 2);
     for (int j = 0; j + 1 < nz; ++j)
         for (int i = 0; i + 1 < nx; ++i) {
@@ -245,6 +255,7 @@ KMeshCPU buildFloor(const Config& cfg) {
             m.idx.push_back(make_uint3(a, c, b));
             m.idx.push_back(make_uint3(b, c, d));
         }
+    std::printf("koy zemin: %d x %d nokta (%.1f M ucgen)\n", nx, nz, m.idx.size() / 1e6);
     return m;
 }
 
@@ -398,7 +409,6 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
     materials = {floorM, rockM, leafM, jarM};
 
     meshes.push_back(buildFloor(cfg));
-    buildRipples(cfg);
     rockCentre = cfg.v3("rock.centre", make_float3(-2.4f, 0.0f, -6.0f));
     rockRadius = cfg.f("rock.radius", 1.35f);
     rockCentre.y = koyFloor(cfg, rockCentre.x, rockCentre.z) + rockRadius * 0.45f;
@@ -481,45 +491,6 @@ void KoyWorld::applyTextureMode(const Config& cfg, int mode) {
     }
 }
 
-namespace {
-bool makeMipTexture(std::vector<unsigned char> px, int w, int h, bool srgb, KoyTextureSet& out, unsigned long long& tex);
-}
-
-void KoyWorld::buildRipples(const Config& cfg) {
-    const int N = cfg.i("floor.ripple_texels", 2048);
-    const float half = cfg.f("floor.ripple_half", 16.0f);
-    const float reach = cfg.f("floor.ripple_reach", 13.0f);
-    const float texel = 2.0f * half / N;
-    std::vector<float> h(size_t(N) * N);
-    for (int j = 0; j < N; ++j)
-        for (int i = 0; i < N; ++i) {
-            const float x = -half + (i + 0.5f) * texel, z = -half + (j + 0.5f) * texel;
-            const float r = std::max(std::fabs(x), std::fabs(z));
-            const float fadeIn = 1.0f - smooth01(reach, std::min(reach + 3.0f, half - 0.2f), r);
-            h[size_t(j) * N + i] = fadeIn * koyRipple(cfg, x, z);
-        }
-    std::vector<unsigned char> px(size_t(N) * N * 4);
-    for (int j = 0; j < N; ++j)
-        for (int i = 0; i < N; ++i) {
-            auto H = [&](int a, int b) { return h[size_t(std::min(std::max(b, 0), N - 1)) * N + std::min(std::max(a, 0), N - 1)]; };
-            const float gx = (H(i + 1, j) - H(i - 1, j)) / (2.0f * texel), gz = (H(i, j + 1) - H(i, j - 1)) / (2.0f * texel);
-            const float3 n = normalize(make_float3(-gx, 1.0f, -gz));
-            unsigned char* p = &px[(size_t(j) * N + i) * 4];
-            p[0] = (unsigned char)std::lround((n.x * 0.5f + 0.5f) * 255.0f);
-            p[1] = (unsigned char)std::lround((n.z * 0.5f + 0.5f) * 255.0f);
-            p[2] = (unsigned char)std::lround((n.y * 0.5f + 0.5f) * 255.0f);
-            p[3] = 255;
-        }
-    ripples = KoyTextureSet();
-    ripples.name = "dalgacik";
-    unsigned long long t = 0;
-    if (makeMipTexture(px, N, N, false, ripples, t)) {
-        ripples.set.normal = t;
-        ripples.set.hasNormal = 1;
-        ripples.set.texels = float(N);
-    }
-    rippleHalf = half;
-}
 
 std::vector<KTextureSet> KoyWorld::textureSets() const {
     std::vector<KTextureSet> v;
@@ -529,9 +500,6 @@ std::vector<KTextureSet> KoyWorld::textureSets() const {
 
 void KoyWorld::release() {
     grass.release();
-    for (auto o : ripples.textures) cudaDestroyTextureObject(cudaTextureObject_t(o));
-    for (void* a : ripples.arrays) cudaFreeMipmappedArray(static_cast<cudaMipmappedArray_t>(a));
-    ripples = KoyTextureSet();
     for (auto& t : textures) {
         for (auto o : t.textures) cudaDestroyTextureObject(cudaTextureObject_t(o));
         for (void* a : t.arrays) cudaFreeMipmappedArray(static_cast<cudaMipmappedArray_t>(a));
@@ -692,19 +660,6 @@ bool uploadTexture(const HostTexture& t, KoyTextureSet& out, unsigned long long&
     tex = to;
     if (bytes) *bytes += total;
     return true;
-}
-
-// a mipmapped texture from pixels made here (the ripples)
-bool makeMipTexture(std::vector<unsigned char> px, int w, int h, bool srgb, KoyTextureSet& out, unsigned long long& tex) {
-    HostTexture t;
-    t.w = w;
-    t.h = h;
-    t.srgb = srgb;
-    t.base = static_cast<unsigned char*>(std::malloc(px.size()));
-    if (!t.base) return false;
-    std::memcpy(t.base, px.data(), px.size());
-    buildMips(t);
-    return uploadTexture(t, out, tex, nullptr);
 }
 
 // a set's maps, decoding (each on its own thread) or decoded; `rest`: the slot's other folders, should this one fail

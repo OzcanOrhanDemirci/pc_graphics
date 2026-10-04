@@ -190,8 +190,16 @@ public:
         const bool looking = look_ || in.rightDown;
         const float mdx = looking ? in.mouseDX : 0.0f, mdy = looking ? in.mouseDY : 0.0f;
         const Diver before = k_.diver;
-        k_.stepDiver(fwd, right, up, in.shift, mdx, mdy, dt);
-        const bool moved = length(k_.diver.pos - before.pos) > 1e-5f || k_.diver.yaw != before.yaw || k_.diver.pitch != before.pitch;
+        const bool out = k_.blackedOut();   // the convulsion and the blackout: no swimming, no looking
+        k_.stepDiver(out ? 0.0f : fwd, out ? 0.0f : right, out ? 0.0f : up, in.shift, out ? 0.0f : mdx, out ? 0.0f : mdy, dt);
+        const int restarts = k_.restarts;
+        const float tunnel0 = k_.renderer.params().tunnel, black0 = k_.renderer.params().blackout;
+        k_.stepBody(dt);
+        if (k_.restarts != restarts)
+            host.toast(L("Oksijen zehirlenmesi: ppO₂ 1,6 bar'ı aştı (~66 m). Merdivende yeniden başladın",
+                         "Oxygen toxicity: ppO₂ passed 1.6 bar (~66 m). You start again at the ladder"));
+        const bool moved = length(k_.diver.pos - before.pos) > 1e-5f || k_.diver.yaw != before.yaw || k_.diver.pitch != before.pitch ||
+                           k_.renderer.params().tunnel != tunnel0 || k_.renderer.params().blackout != black0;
         if (!paused_) t_ += in.dt;
         if (!paused_ || moved || refresh) {
             k_.stepWorld(float(t_));
@@ -214,12 +222,17 @@ public:
     void status(app::Status& s) override {
         using theme::num;
         const KoyTimes& tm = k_.renderer.times();
-        s.chips.push_back({L("Batık · 12 m", "Wreck · 12 m"), true});
         if (paused_) s.chips.push_back({accum_ ? L("Durdu · birikiyor", "Paused · accumulating") : L("Zaman durdu", "Time paused"), true});
         if (look_) s.chips.push_back({L("Fareyle bakış", "Mouse look")});
         if (k_.renderer.params().view == 1) s.chips.push_back({L("Kenar pikselleri", "Edge pixels"), true});
         if (!k_.caustics) s.chips.push_back({L("Kostik kapalı", "Caustics off"), true});
         s.metrics.push_back({L("Derinlik", "Depth"), num(-k_.diver.pos.y, 1) + " m"});
+        s.metrics.push_back({L("Basınç", "Pressure"), num(k_.pressureBar(), 2) + " bar"});
+        s.metrics.push_back({L("Oksijen (ppO₂)", "Oxygen (ppO₂)"), num(k_.ppO2(), 2) + " bar"});
+        if (k_.ppO2() >= k_.cfg.f("o2.limit", 1.6f))
+            s.chips.push_back({L("ppO₂ 1,6 üstü: oksijen zehirlenmesi", "ppO₂ above 1.6: oxygen toxicity"), true});
+        else if (k_.ppO2() >= 1.4f)
+            s.chips.push_back({L("ppO₂ 1,4 üstü: dalış sınırı", "ppO₂ above 1.4: the diving limit"), true});
         s.metrics.push_back({L("Dünya", "World"), num(tm.world, 1) + " ms"});
         s.metrics.push_back({L("Işık sütunları", "Light shafts"), num(tm.shafts, 1) + " ms"});
         s.metrics.push_back({L("Örnekler", "Samples"), num(tm.base, 1) + " ms"});
