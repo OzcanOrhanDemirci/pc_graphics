@@ -14,6 +14,14 @@
 > görünmediği yerlerde bile düştü: açık sığ kum 32 → 27 ms, eski çayırın önü 39 → 27,5 ms ve 46 → 31 ms; otomatik test
 > 33,3-35,4 fps (önce 32,3-34,5). Nedeni ayrıştırılmadı (boru hattındaki eğri bayrağı, eğri ağacı ya da her karedeki
 > yeniden uydurma). Testler 13/13. Aşağıdaki çayır satırları o anki durumdur.
+>
+> **Dokular en az 8K (Özcan, aynı akşam):** *"gözle fark edilmesinden ziyade tüm assetler 8K olmuş olsun [...] çok az
+> bile olsa o netlik ve keskinlik fark ediyor."* İskele ve batığın ahşabı (Poly Haven rough_wood) ve iskelenin betonu
+> (concrete_wall_008) 4K → 8K (`ahsap_8k`, `beton_8k`; md5 Poly Haven'a karşı, sha256 `fetch.py`'de; 8K yoksa 4K'ya
+> düşer). Ölçü: 1 m'deki ayakta ve batık güvertesinde 4K ile 8K arasındaki ortalama fark 0,1 / 255 (hesap: ahşap 21 cm'den,
+> beton 1,1 m'den uzakta 4K ekranın ötesinde). Bedeli: kartta 12,6 → 13,6 / 16 GB, dokular 9,1 → 10,1 GB. Kare süresi
+> değişmedi. Taranmış kaya (boulder_01) Poly Haven'da 8K'da bitiyor, 16K'sı yok (Ultra'da üstüne 16K kaya ayrıntı katmanı
+> biniyor). Şu an Ultra'da: kum 16K, kaya ayrıntısı 16K, taranmış kaya, amfora kili, kabuk, ahşap, beton 8K.
 
 ### Özcan'ın bakacağı yer
 
@@ -59,7 +67,7 @@ ayar dosyasını yeniden okur. Panelde derinlik, basınç, ppO2.
   0,00016, bağıl 0,22, FLIP 0,0084. Çayıra yüzüş (ince yapılar): piksel 0,0014 (p99 0,013), blok 0,00027, bağıl 0,17, FLIP 0,0090; batık yolu yelpazeler büyüdükten sonra piksel 0,00076, FLIP 0,0089 (değişmedi). Fener'in TAA tabanı piksel 0,0053-0,0061, FLIP 0,026-0,038: üçü de yarısının altında.
 - **Kare süresi** (2560×1440, komut satırı): salon 33 ms, açık kum ve koridor 20-27 ms, sığ kumda 1 m yükseklikte
   32-39 ms, batık 19-21 ms, çayırın içine bakınca 43-53 ms. Uygulamada otomatik test (`--autotest-only koy`): başlangıç 32,8 fps, yüzerken 32,3, doku ve dalgacık seçenekleri 33,8-34,5, 32 kenar örneğiyle 26,0; sahne kapanınca kart boşalıyor (14,9 / 16 GB boş).
-- **Bellek:** kartta 12,6 / 16 GB (dokular 9,1 GB). **Testler:** 13/13 (Snell penceresi 48,41°, kostik enerjisi, dalga
+- **Bellek:** kartta 12,6 / 16 GB (dokular 9,1 GB; 8K ahşap ve betonla 13,6 ve 10,1). **Testler:** 13/13 (Snell penceresi 48,41°, kostik enerjisi, dalga
   defteri, ışık alanının Kd'si, ppO2 1,600 bar 65,9 m'de, 50 m'de doz yok, 70 m'de tünel 2,2 sn → kararma 6,7 sn →
   merdiven 7,2 sn).
 

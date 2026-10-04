@@ -79,6 +79,15 @@ FILES = {
                                       '9452c58ce2256afe9e96f04952712a1c22c012b61dc048ad10a18e62f6c26c63'),
     'concrete_wall_008_nor_gl_4k.jpg': ('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/concrete_wall_008/concrete_wall_008_nor_gl_4k.jpg',
                                         '52de09b25a87b1c21435b8cae0d946d9a29141188cac827f240c9392466f853d'),
+    # the same two at 8K (Ozcan, 2026-10-04 evening: every scan at least 8K); Poly Haven md5 checked when pinned
+    'rough_wood_diff_8k.jpg': ('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/8k/rough_wood/rough_wood_diff_8k.jpg',
+        '2cd9c2bb90d645b4235edb0b881996968cf0a09f9350d7a32801ea424137df34'),
+    'rough_wood_nor_gl_8k.jpg': ('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/8k/rough_wood/rough_wood_nor_gl_8k.jpg',
+        '8f0687803b319c5012a031429171837569139bf041d5808692a5aaa06fcf5a50'),
+    'concrete_wall_008_diff_8k.jpg': ('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/8k/concrete_wall_008/concrete_wall_008_diff_8k.jpg',
+        '091a735dbf42ef28c792e542968e08f2f978f6646b3355f86a3041080f1d54a2'),
+    'concrete_wall_008_nor_gl_8k.jpg': ('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/8k/concrete_wall_008/concrete_wall_008_nor_gl_8k.jpg',
+        'a20b8a5afaa79e458b6fc9f868ac48cb17c7feef98706eef17859d1d57b32c60'),
 }
 # members of the sand zip, and their hashes
 SAND = {
@@ -201,8 +210,8 @@ def main():
             ('kaya_ayrinti_8k', (('rock_boulder_dry_diff_8k.jpg', 'albedo.jpg'), ('rock_boulder_dry_nor_gl_8k.jpg', 'normal.jpg'))),
             ('amfora_kil_8k', (('clay_plaster_diff_8k.jpg', 'albedo.jpg'), ('clay_plaster_nor_gl_8k.jpg', 'normal.jpg'))),
             ('kabuk_8k', (('coral_fort_wall_01_diff_8k.jpg', 'albedo.jpg'), ('coral_fort_wall_01_nor_gl_8k.jpg', 'normal.jpg'))),
-            ('ahsap_4k', (('rough_wood_diff_4k.jpg', 'albedo.jpg'), ('rough_wood_nor_gl_4k.jpg', 'normal.jpg'))),
-            ('beton_4k', (('concrete_wall_008_diff_4k.jpg', 'albedo.jpg'), ('concrete_wall_008_nor_gl_4k.jpg', 'normal.jpg'))))
+            ('ahsap_8k', (('rough_wood_diff_8k.jpg', 'albedo.jpg'), ('rough_wood_nor_gl_8k.jpg', 'normal.jpg'))),
+            ('beton_8k', (('concrete_wall_008_diff_8k.jpg', 'albedo.jpg'), ('concrete_wall_008_nor_gl_8k.jpg', 'normal.jpg'))))
     for folder, files in sets:
         d = os.path.join(OUT, folder)
         os.makedirs(d, exist_ok=True)

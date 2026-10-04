@@ -826,8 +826,8 @@ void KoyWorld::loadTextures(const Config& cfg, const std::string& dir) {
         slots.push_back({{"kaya_ayrinti_8k", "kaya_ayrinti"}, &setRockDetail});
         if (cfg.i("amfora.use", 0)) slots.push_back({{"amfora_kil_8k"}, &setClay});   // the jars' clay
         slots.push_back({{"kabuk_8k"}, &setCoat});      // the sea's concretion (jars, rock, piles, the wreck)
-        slots.push_back({{"ahsap_4k"}, &setWood});
-        slots.push_back({{"beton_4k"}, &setConcrete});
+        slots.push_back({{"ahsap_8k", "ahsap_4k"}, &setWood});      // the pier's and the wreck's boards
+        slots.push_back({{"beton_8k", "beton_4k"}, &setConcrete});  // the pier's concrete
         if (cfg.i("tex.ultra", 1)) {   // the sand and the rock detail at 16K (panel "Ultra")
             slots.push_back({{"kum_16k"}, &setSand16k});
             slots.push_back({{"kaya_ayrinti_16k"}, &setRockDetail16k});
