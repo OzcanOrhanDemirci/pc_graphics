@@ -3,6 +3,43 @@
 > Tek kaynak durum panosu. Son plan: **`docs/koy/PLAN_ADA.md`** (üçüncü bölüm "Ada", 🏁 bitti); önceki planlar
 > `PLAN.md`, `PLAN_AMFORA.md`. Veri: `docs/koy/VERI.md`. CC0 taramalar: `assets/koy/fetch.py`, `assets/koy/LICENSES.md`.
 
+## Şu an · 2026-10-04 gece · Ada zenginleştirildi (tam otonom, ajansız; plan `PLAN_ZENGIN.md`)
+
+**Özcan:** *"Sahneyi materyal olarak zenginleştir [...] dubaların içi [...] extra özenebilirsin [...] dubanın dışına bakınca da
+bir sürü şey olsun [...] uzaklara gidince daha boş ve sakin bir dünya olabilir [...] İnandırıcılık amaç."* Görev sırasında:
+*"aynı işlemi batık için de yap. Batık şuan yeni batmış tertemiz duruyor [...] kara inci gibi ama uçan hollandalı gibi
+olmalı şekil biçim olarak değil o bozulma, kirlenme, kabuk yosun tutma gibi olaylar olarak."*
+
+**Yapılanlar:**
+- **Taban:** ikinci kum taraması (Poly Haven coast_sand_04, 8K, kabuk kırıntılı), yüklemede hesaplanan taban haritası
+  (`koy_reef.cpp`): büyük ve küçük yamalar (tabanın ~%45'i), kayaların dibinde daha çok kabuk ve koyu iri tane, batığın
+  çevresinde ve derinde silt; yama sınırını taramanın kendi kabartması keser.
+- **Kayalıklar:** 108 küme, ~780 köşeli kireçtaşı bloğu (uzaklık alanı + yüzey ağı): koridor kenarlarında alçak yamalar,
+  aralarda kümeler, ortada tek tük iri bloklar; dışarıda 50 m'ye kadar uzaklaştıkça seyrek ve iri, ötesi sakin kum. Ada,
+  iskele, amfora yuvası, batık, şamandıra bloğu ve duba iplerinden uzak. Kümeye göre ağ (koridorda 7 cm, dışarıda 11-18 cm).
+- **Canlılar:** 13 m'den derin kayalara 90 yelpaze mercanı; kayalarda deniz kestaneleri (900), Padina tutamları, turuncu,
+  sarı ve koyu topak süngerler; kumda 900 tarak, 700 kalp kabuğu, 420 burgu (kabuklu yamalarda kümelenir), 140 kum yıldızı,
+  120 kırmızı deniz yıldızı, 130 deniz hıyarı, 64 yelpaze midyesi, ~1500 taş (kaya malzemesinde).
+- **Batık (Hollandalı):** ahşapta %70 kabuk örtüsü (büyük yumuşak yamalar: yeni `coatSoft`; ambarı girinti sayan kural
+  kısıldı: `coatRecess`), güçlü kabartma, üstlerde koyu yosun ve silt, yanlarda aşağı süzülen koyu lekeler (yeni `streak`),
+  demirde kalın kabuk; 13 bin midye (üçte biri sakal gibi öbek), 900 sünger, deniz kadehi ve kabuk topağı, 890 hidroid
+  çalısı. Enkaz alanı: 46 kalas, 12 fıçı (bütün ve patlamış), 177 gülle, 320 safra taşı tümseği. Ambar siltle dolmuş, kum
+  gövdeye yaslanmış (zeminde omurga boyunca tümsek; batık tümseksiz zemine oturur). Roma amforaları batığın yanına
+  konmadı (17. yy kalyonuyla zaman uyumsuzluğu).
+- 🪤 **Kalibrasyon:** kum dokusu gölgelendiricide iki kez sRGB'den çevriliyor, etkin albedo ~0,1. Düz renkli malzemeler
+  eski ölçekte 3-4 kat açıktı ("buz gibi kaya", Özcan'ın eski "alçı amfora"sı); kaya, ada kayası, çakıl, amfora kili,
+  ince tortu (`sediment.color` 0,36 → 0,11), canlı lekeleri ve yeni her renk kum ölçeğinde. Kumun kendi görünüşüne
+  dokunulmadı.
+- **Hız:** koridora yayılmış her tür tek bir ağdı, her birinin sınır kutusu bütün sahneydi (her ışın hepsine giriyordu):
+  30 m karolarda birleştirildi, üçgen başına malzeme (`KMesh.triMat`); temel geçiş 16,1 → 13,6 ms.
+
+**Ölçüler:** pencere testinde 30,8-33 fps (başlangıç 32,1); kart 14,5 / 16 GB (doku 10,8 GB; ~18,6 M üçgen); testler
+13/13. Kararlılık (40 kare yüzüş, 256 örnekli referansa karşı): koridorda (sığ kum, kabuklar, kayalar) piksel 0,00065 (p99 0,0059), blok 0,00014, bağıl 0,27, FLIP 0,0062; batığa yaklaşış piksel 0,00082 (önce 0,00076), FLIP 0,0122 (önce 0,0089: midyeler ve hidroidler), bağıl 0,36. Fener'in TAA tabanı piksel 0,0053-0,0061, FLIP 0,026-0,038: ikisi de yarısının çok altında.
+
+**NE DOĞRULANMADI:** canlı pencerede yüzülmedi (kareler komut satırından); küçük canlılar (kabuklar, Padina, hidroidler)
+uzaktan kıpırtı açısından yalnız iki yolda ölçüldü; batığın içinden geçerken çarpışma (yeni midye ve topaklar) denenmedi;
+bellek 16 GB'ın 14,5'inde: 16K yeni doku ya da çok daha fazla geometri sığmaz.
+
 ## Şu an · 2026-10-04 akşamı · Özcan canlı baktı: iskele salonunun iki revizesi
 
 **Özcan (canlı monitörde, batığa gelmeden):** *"İskele güzel olmuş 2 revize lazım: 1) iskelenin altının başladığı yerde bir

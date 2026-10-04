@@ -1,5 +1,8 @@
 # PLAN · Ada'yı zenginleştir (dubaların içi dolu, dışı serpiştirilmiş, uzağı sakin)
 
+> ✅ **1-5 yapıldı (2026-10-04 gece)**, batığın eskitilmesi araya girdi (Özcan'ın isteği). Durum, ölçüler ve
+> NE DOĞRULANMADI `DURUM.md` başında. Tüp anemonları ve ahtapot yuvası yapılmadı (önceliği düşük).
+
 > Tek kaynak plan. 2026-10-04 akşamı Özcan'ın emriyle, **tam otonom, ajansız**. Önceki: `PLAN_ADA.md` (🏁), durum
 > `DURUM.md`. Bağlam sıkışırsa önce bu dosya, sonra DURUM'un başı, sonra hafızada `genel/feedback_gpu_ve_grafik.md` §24.
 
