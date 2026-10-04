@@ -4,6 +4,8 @@
 //   optik     the optics' self-checks: phase functions integrate to 1, the light field's Kd per wavelength
 //   kostik    the caustic volume's mean is 1 at every depth (energy), its sharpness against the sun's disc
 //   dalga     each surface's slope variance as booked by its spectrum against the field the FFT really makes
+//   oksijen   Ada (PLAN_ADA §6): pressure and ppO2 at depth against the formula; at 70 m the dose builds, the view
+//             narrows, goes black and the diver starts again at the ladder; at 50 m nothing happens
 #include "scenes/koy/koy_app.h"
 #include "scenes/koy/koy_data.h"
 
@@ -28,7 +30,7 @@ int testSnell(KoyApp& app) {
     app.loadConfig();
     app.release();
     app.setup();
-    app.diver.pos = make_float3(0.0f, -5.0f, 6.0f);
+    app.diver.pos = make_float3(0.0f, -5.0f, -30.0f);   // open water in the corridor (Ada: the pier's head stands over z ~ 0)
     app.diver.yaw = 0.0f;
     app.diver.pitch = 1.5707f;
     app.setCamera();
@@ -267,6 +269,49 @@ int testWaves(KoyApp& app) {
     return 0;
 }
 
+int testOxygen(KoyApp& app) {
+    // the formula: P = 1.013 + 0.1005 d, ppO2 = 0.2095 P; 1.6 bar at ~65.9 m
+    app.diver.pos = make_float3(0.0f, -65.9f, -200.0f);
+    report("ppo2", std::fabs(app.ppO2() - 1.6f) < 0.01f, "65,9 m'de ppO2 %.3f bar (1,6 +- 0,01)", app.ppO2());
+    const float dt = 1.0f / 41.0f;
+    // 50 m for 20 s: below the limit, no dose, no tunnel
+    app.restartDiver();
+    app.diver.pos = make_float3(0.0f, -50.0f, -175.0f);
+    for (int k = 0; k < int(20.0f / dt); ++k) app.stepBody(dt);
+    report("50 m", app.o2Dose == 0.0f && app.renderer.params().tunnel == 0.0f && app.restarts == 0, "doz %.3f, tunel %.3f (0 olmali)",
+           app.o2Dose, app.renderer.params().tunnel);
+    // 70 m: the dose builds (ppO2 ~1.69: ~5 s), the tunnel closes, black, the restart at the ladder
+    app.restartDiver();
+    const int r0 = app.restarts;
+    float tTunnel = -1.0f, tBlack = -1.0f, tRestart = -1.0f, maxTunnel = 0.0f;
+    bool saved = false;
+    for (int k = 0; k < int(16.0f / dt); ++k) {
+        if (app.restarts == r0) app.diver.pos = make_float3(0.0f, -70.0f, -215.0f);   // held there until the restart
+        app.stepBody(dt);
+        const float t = k * dt;
+        const KoyParams& p = app.renderer.params();
+        maxTunnel = std::max(maxTunnel, p.tunnel);
+        if (tTunnel < 0.0f && p.tunnel > 0.3f) tTunnel = t;
+        if (tBlack < 0.0f && p.blackout > 0.99f) tBlack = t;
+        if (tRestart < 0.0f && app.restarts > r0) tRestart = t;
+        if (!saved && p.tunnel > 0.6f && p.blackout < 0.05f) {   // a frame with the view narrowed
+            app.setCamera();
+            app.stepWorld(0.0f);
+            app.frame();
+            app.adaptExposure(0.0f, true);
+            app.frame();
+            app.save(app.root + "/captures/koy/test_oksijen");
+            saved = true;
+        }
+    }
+    const float3 st = app.cfg.v3("diver.start", make_float3(0, 0, 0));
+    const bool home = length(app.diver.pos - st) < 0.01f;
+    std::printf("  70 m: tunel %.2f s'de, kararma %.2f s'de, yeniden baslama %.2f s'de; en dar tunel %.2f\n", tTunnel, tBlack, tRestart, maxTunnel);
+    report("70 m", tTunnel > 0.0f && tBlack > tTunnel && tRestart > tBlack && home && !app.blackedOut(),
+           "tunel -> kararma -> merdiven (%.1f s'de yeniden basladi)", tRestart);
+    return 0;
+}
+
 int runKoyTests(KoyApp& app, const std::string& which) {
     fails = 0;
     const bool all = which.empty();
@@ -274,6 +319,7 @@ int runKoyTests(KoyApp& app, const std::string& which) {
     if (which == "tablo") testTables(app);
     if (all || which == "kostik") testCaustic(app);
     if (all || which == "dalga") testWaves(app);
+    if (all || which == "oksijen") testOxygen(app);
     // last: it flattens the sea and sets the app up again with that (a wave test after it measured a flat sea)
     if (all || which == "snell") testSnell(app);
     std::printf("koy testleri: %d kalan\n", fails);

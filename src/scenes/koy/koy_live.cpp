@@ -22,45 +22,52 @@ public:
         app::SceneInfo i;
         i.id = "koy";
         i.number = "05";
-        i.title = L("Amfora", "Amphorae");
-        i.subtitle = L("Akdeniz'de bir Roma batığının yükü", "A Roman wreck's cargo in the Mediterranean");
-        i.description = L("On iki metrede, iki bin yıllık bir ticaret gemisinin şarap amforaları; kumda yarı gömülü, kabuk bağlamış, kimi "
-                          "kırık; kumluk bir düzlükte, tepeden inen ışık sütunlarının altında. Tüplü bir dalgıç gibi yüzülür.",
-                          "At twelve metres, the wine amphorae of a merchantman two thousand years old: half sunk in the sand, crusted, "
-                          "some broken; on a sandy plain, under shafts of light coming down. You swim it like a scuba diver.");
+        i.title = L("Ada", "The Island");
+        i.subtitle = L("Bir adanın iskelesinden maviye", "From an island's pier into the blue");
+        i.description = L("Küçük bir adanın beton iskelesinin altında karanlık bir salonda başlarsın. Dubaların çizdiği yoldan kum yavaş yavaş "
+                          "derinleşir: kayalara yaslanmış amforalar, yarı yıkık bir kalyon, en uçta dibi görünmeyen maviye inen bir "
+                          "şamandıra halatı. Yüzeye çıkılmaz; çok derine inersen basınç seni geri yollar.",
+                          "You start in a dark hall under a small island's concrete pier. Along a lane of buoys the sand deepens slowly: "
+                          "amphorae gathered against rocks, a half-fallen galleon, and at the far end a buoy's rope going down into a blue "
+                          "with no bottom in sight. There is no surfacing; go too deep and the pressure sends you back.");
         i.details = {
             {L("Netlik önce", "Sharpness first"),
-             L("Her piksel her karede aynı sabit alt piksel örnekleriyle çizilir (titreşim yok, geçmiş yok); kenardaki piksellere 32'ye "
-               "kadar örnek eklenir, pikselden biraz geniş bir süzgeçle birleştirilir. Zamansal tahmin kullanılmaz.",
+             L("Her piksel her karede aynı sabit alt piksel örnekleriyle çizilir (titreşim yok, geçmiş yok); kenardaki piksellere örnek "
+               "eklenir, pikselden biraz geniş bir süzgeçle birleştirilir. Zamansal tahmin kullanılmaz.",
                "Every pixel is drawn with the same fixed sub-pixel samples every frame (no jitter, no history); pixels on an edge get "
-               "up to 32 samples, joined by a filter a little wider than a pixel. No temporal guessing.")},
-            {L("Amforalar", "Amphorae"),
-             L("Dört tip (Dressel 1B, 1A, 2-4, Lamboglia 2), müze çizimlerinin profillerinden döndürülmüş: dış yüz, ağız içi, kulplar "
-               "(ArchAIDE, Southampton Üniversitesi çizimleri, CC BY 4.0). Kırık gövdeler, kulplu boyunlar, parçalar; 8K kil, kabuk "
-               "yamaları, üstte tortu keçesi.",
-               "Four types (Dressel 1B, 1A, 2-4, Lamboglia 2), turned from the profiles of museum drawings: outside, the mouth's "
-               "inside, the handles (ArchAIDE, University of Southampton drawings, CC BY 4.0). Broken bodies, necks with handles, "
-               "sherds; 8K clay, patches of concretion, a felt of sediment on top.")},
+               "more, joined by a filter a little wider than a pixel. No temporal guessing.")},
+            {L("Gerçek zamanlı ışık", "Real-time light"),
+             L("Güneşin gölgesi su yüzeyinden sonra havada da sürer: iskelenin tahta aralıklarından ve beton başlığın kırık "
+               "deliklerinden sızan ışık, kumda ve suda dalgayla salınır. Başlığın altında gökten gelen dağınık ışık da kesilir: "
+               "karanlık bir salon. Su üstü yalnız alttan, Snell penceresinden görünür.",
+               "The sun's shadow goes on through the air past the water's surface: the light leaking between the pier's boards and "
+               "through the broken holes of its concrete head sways with the waves on the sand and in the water. Under the head the "
+               "sky's diffuse light is cut too: a dark hall. Above the water is seen only from below, through Snell's window.")},
+            {L("Batık", "The wreck"),
+             L("38 metrelik bir kalyon, tek bir gövde fonksiyonundan kereste kereste kurulmuş: postalar, kaplama sıraları, iki "
+               "güverte, kıç ve baş kasaraları, pencereli ayna, lumbaralar ve toplar, kırık direkler, çapa. Yamaçta başı aşağıda, "
+               "sancağa yatmış; sancak tarafı çökmüş, kaburgaları açıkta. İçine girilir.",
+               "A 38 metre galleon built timber by timber from one hull function: frames, strakes of planking, two decks, the "
+               "castles fore and aft, the stern with its windows, gunports and guns, broken masts, an anchor. On the slope bow down, "
+               "listing to starboard; the starboard side has fallen in, its ribs bare. You can swim inside.")},
+            {L("Derinlik ve basınç", "Depth and pressure"),
+             L("Kum adadan uzaklaştıkça hep derinleşir: 3,5 m'den 100 m'nin ötesine. Derinde zemin görünmez, dalınca belirir. "
+               "Havadaki oksijenin kısmi basıncı 1,6 bar'ı (~66 m) aşınca zehirlenme başlar: görüş daralır, kararır, iskele "
+               "merdiveninde yeniden başlarsın.",
+               "The sand keeps deepening away from the island: from 3.5 m to past 100 m. Deep down the floor cannot be seen until "
+               "you dive towards it. When the oxygen's partial pressure in the air passes 1.6 bar (~66 m) toxicity sets in: the "
+               "view narrows, goes black, and you start again at the pier's ladder.")},
             {L("Tayfsal su", "Spectral water"),
-             L("Suyun soğurması ve saçılması 5 nm adımla, yayımlanmış ölçümlerden; güneş ve gök tayfı, göz eğrileri. Hepsi hazırlıkta "
-               "ışığın sudaki yol uzunluğuna göre tablolara pişirilir: renkler derinlikle kendiliğinden maviye döner.",
+             L("Suyun soğurması ve saçılması 5 nm adımla, yayımlanmış ölçümlerden; güneş ve gök tayfı, göz eğrileri. Renkler "
+               "derinlikle kendiliğinden maviye döner; gözün renk uyumu yarı yolda.",
                "The water's absorption and scattering every 5 nm from published measurements; the spectra of sun and sky, the eye's "
-               "curves. All baked beforehand into tables by the light's path length in water: colours turn blue with depth on "
-               "their own.")},
-            {L("Yüzey ve kostik", "Surface and caustics"),
-             L("Dalgalar Tessendorf'un FFT yöntemiyle, kusursuz döngüyle. Her karede yüzeyin bir milyon hücresi birer ışık "
-               "hüzmesi olarak kırılır; her derinlik diliminde hüzmenin ışığı kapladığı alana tam olarak yayılır (sayma yok, "
-               "gürültü yok). Güneş diski kostiği derinlikle bulanıklaştırır.",
-               "Waves by Tessendorf's FFT method, looping seamlessly. Every frame a million cells of the surface refract as beams "
-               "of light; at each depth slice a beam's light spreads exactly over the area it covers (nothing counted, no "
-               "noise). The sun's disc blurs the caustics with depth.")},
-            {L("Işık alanı", "Light field"),
-             L("Su sütununun dağınık ışığı (pencereden gök, çok kez saçılan güneş, kumdan yansıyan) hazırlıkta Monte Carlo ile "
-               "hesaplanır; parlak kum ışığı yukarı yansıtır: kumlu dibin üstünde su derinin üstündekinden ~%30 parlaktır.",
-               "The water column's diffuse light (the sky through the window, the sun scattered many times, the light off the "
-               "sand) is computed beforehand by Monte Carlo; bright sand sends light back up: over the sandy floor the water is "
-               "~30 % brighter than over the deep.")}};
-        i.tags = {L("Tayfsal su optiği", "Spectral water optics"), L("Gürültüsüz kostik", "Noise-free caustics"), L("Batık", "Wreck")};
+               "curves. Colours turn blue with depth on their own; the eye adapts its colour halfway.")},
+            {L("Amforalar", "Amphorae"),
+             L("Dört tip (Dressel 1B, 1A, 2-4, Lamboglia 2), müze çizimlerinin profillerinden (ArchAIDE, Southampton Üniversitesi, "
+               "CC BY 4.0); kırık gövdeler, kulplu boyunlar, parçalar.",
+               "Four types (Dressel 1B, 1A, 2-4, Lamboglia 2), from the profiles of museum drawings (ArchAIDE, University of "
+               "Southampton, CC BY 4.0); broken bodies, necks with handles, sherds.")}};
+        i.tags = {L("Gerçek zamanlı ışık", "Real-time light"), L("Batık", "Wreck"), L("Tayfsal su optiği", "Spectral water optics")};
         i.image = "assets/gallery/koy.jpg";
         i.accent = 0x4FB8C8;
         i.keys = {{L("Dalgıç", "Diver"),
@@ -195,8 +202,8 @@ public:
         const float tunnel0 = k_.renderer.params().tunnel, black0 = k_.renderer.params().blackout;
         k_.stepBody(dt);
         if (k_.restarts != restarts)
-            host.toast(L("Oksijen zehirlenmesi: ppO₂ 1,6 bar'ı aştı (~66 m). Merdivende yeniden başladın",
-                         "Oxygen toxicity: ppO₂ passed 1.6 bar (~66 m). You start again at the ladder"));
+            host.toast(L("Oksijen zehirlenmesi: ppO2 1,6 bar'ı aştı (~66 m). Merdivende yeniden başladın",
+                         "Oxygen toxicity: ppO2 passed 1.6 bar (~66 m). You start again at the ladder"));
         const bool moved = length(k_.diver.pos - before.pos) > 1e-5f || k_.diver.yaw != before.yaw || k_.diver.pitch != before.pitch ||
                            k_.renderer.params().tunnel != tunnel0 || k_.renderer.params().blackout != black0;
         if (!paused_) t_ += in.dt;
@@ -227,11 +234,11 @@ public:
         if (!k_.caustics) s.chips.push_back({L("Kostik kapalı", "Caustics off"), true});
         s.metrics.push_back({L("Derinlik", "Depth"), num(-k_.diver.pos.y, 1) + " m"});
         s.metrics.push_back({L("Basınç", "Pressure"), num(k_.pressureBar(), 2) + " bar"});
-        s.metrics.push_back({L("Oksijen (ppO₂)", "Oxygen (ppO₂)"), num(k_.ppO2(), 2) + " bar"});
+        s.metrics.push_back({L("Oksijen (ppO2)", "Oxygen (ppO2)"), num(k_.ppO2(), 2) + " bar"});
         if (k_.ppO2() >= k_.cfg.f("o2.limit", 1.6f))
-            s.chips.push_back({L("ppO₂ 1,6 üstü: oksijen zehirlenmesi", "ppO₂ above 1.6: oxygen toxicity"), true});
+            s.chips.push_back({L("ppO2 1,6 üstü: oksijen zehirlenmesi", "ppO2 above 1.6: oxygen toxicity"), true});
         else if (k_.ppO2() >= 1.4f)
-            s.chips.push_back({L("ppO₂ 1,4 üstü: dalış sınırı", "ppO₂ above 1.4: the diving limit"), true});
+            s.chips.push_back({L("ppO2 1,4 üstü: dalış sınırı", "ppO2 above 1.4: the diving limit"), true});
         s.metrics.push_back({L("Dünya", "World"), num(tm.world, 1) + " ms"});
         s.metrics.push_back({L("Işık sütunları", "Light shafts"), num(tm.shafts, 1) + " ms"});
         s.metrics.push_back({L("Örnekler", "Samples"), num(tm.base, 1) + " ms"});
