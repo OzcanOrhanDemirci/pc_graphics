@@ -396,9 +396,9 @@ static __forceinline__ __device__ float skyVisAt(float3 p) {
 // e^(-c a) - e^(-c b) of it (c ~ 0.1/m: 60 % of what reaches the eye comes from beyond 5 m), cut where the ray ends
 static __forceinline__ __device__ float pathSky(float3 o, float3 d, float tEnd) {
     if (params.sunMaps == 0) return 1.0f;
-    const float ts[5] = {0.5f, 2.0f, 5.0f, 10.0f, 20.0f}, edge[6] = {0.0f, 1.0f, 3.5f, 7.5f, 15.0f, 60.0f};
+    const float ts[3] = {1.0f, 5.0f, 16.0f}, edge[4] = {0.0f, 2.5f, 9.0f, 60.0f};
     float s = 0.0f, w = 0.0f;
-    for (int k = 0; k < 5 && edge[k] < tEnd; ++k) {
+    for (int k = 0; k < 3 && edge[k] < tEnd; ++k) {
         const float b = fminf(edge[k + 1], tEnd);
         const float wk = expf(-0.1f * edge[k]) - expf(-0.1f * b);
         s += wk * skyVisAt(o + d * fminf(ts[k], b));
@@ -776,7 +776,7 @@ static __forceinline__ __device__ float3 shadeFromBelow(float3 q, float3 d, floa
         // what stands above the water there (the pier, the island), or the sky
         Hit ha;
         ha.hit = false;
-        if (params.airGeometry) ha = trace(q + make_float3(0.0f, 0.002f, 0.0f), tdir, 2000.0f);
+        if (params.airGeometry) ha = trace(q + make_float3(0.0f, 0.002f, 0.0f), tdir, 400.0f);
         if (ha.hit) {
             L += shadeAir(ha, tdir, ts, coneAngle) * T;
         } else {
@@ -1010,6 +1010,26 @@ extern "C" __global__ void __raygen__resolve() {
     params.hdr[unsigned(y) * params.width + unsigned(x)] = make_float4(rgb.x, rgb.y, rgb.z, 1.0f);
 }
 
+// AgX with a look (display.h's agx with the power and saturation of Sobotka's looks between its contrast curve and its
+// outset): Koy's own, the shared one stays plain for the other scenes
+static __forceinline__ __device__ float3 agxLook(float3 c, float power, float sat) {
+    float3 v = make_float3(0.842479062253094f * c.x + 0.0784335999999992f * c.y + 0.0792237451477643f * c.z,
+                           0.0423282422610123f * c.x + 0.878468636469772f * c.y + 0.0791661274605434f * c.z,
+                           0.0423756549057051f * c.x + 0.0784336f * c.y + 0.879142973793104f * c.z);
+    const float minEv = -12.47393f, maxEv = 4.026069f;
+    v = make_float3(clampf(log2f(fmaxf(v.x, 1e-10f)), minEv, maxEv), clampf(log2f(fmaxf(v.y, 1e-10f)), minEv, maxEv),
+                    clampf(log2f(fmaxf(v.z, 1e-10f)), minEv, maxEv));
+    v = (v - make_float3(minEv, minEv, minEv)) * (1.0f / (maxEv - minEv));
+    v = agxContrast(v);
+    v = make_float3(powf(fmaxf(v.x, 0.0f), power), powf(fmaxf(v.y, 0.0f), power), powf(fmaxf(v.z, 0.0f), power));
+    const float luma = 0.2126f * v.x + 0.7152f * v.y + 0.0722f * v.z;
+    v = make_float3(luma, luma, luma) + (v - make_float3(luma, luma, luma)) * sat;
+    const float3 o = make_float3(1.19687900512017f * v.x - 0.0980208811401368f * v.y - 0.0990297440797205f * v.z,
+                                 -0.0528968517574562f * v.x + 1.15190312990417f * v.y - 0.0989611768448433f * v.z,
+                                 -0.0529716355144438f * v.x - 0.0980434501171241f * v.y + 1.15107367264116f * v.z);
+    return make_float3(powf(fmaxf(o.x, 0.0f), 2.2f), powf(fmaxf(o.y, 0.0f), 2.2f), powf(fmaxf(o.z, 0.0f), 2.2f));
+}
+
 // the light a white Lambert plane facing up gets at the eye's depth (the sun on it and the water's diffuse light), as linear
 // sRGB normalised to unit luminance: what the eye adapts its colour to
 static __forceinline__ __device__ float3 adaptingWhite() {
@@ -1044,7 +1064,7 @@ extern "C" __global__ void __raygen__final() {
         c = c * ((1.0f - t * t * (3.0f - 2.0f * t)) * (1.0f - params.blackout));
     }
     c = gamutCompress(c, luminance709(c));
-    c = agx(c);
+    c = (params.lookPower != 1.0f || params.lookSat != 1.0f) ? agxLook(c, params.lookPower, params.lookSat) : agx(c);
     // a fixed TPDF dither from two decorrelated blue-noise tiles: no banding, and nothing that moves between frames
     float n = 0.0f;
     if (params.blueNoise) {
@@ -1126,7 +1146,7 @@ extern "C" __global__ void __raygen__bakeAO() {
     const float rot = (hashU32(v) & 0xFFFF) * (1.0f / 65536.0f);
     for (unsigned int k = 0; k < R; ++k) {
         const float3 d = cosineDir(k, R, n, rot);
-        if (visible(offsetRay(p, n), d, 4.0f)) open += 1.0f;
+        if (visible(offsetRay(p, n), d, params.bakeAORange)) open += 1.0f;
     }
     params.bakeOut[v] = open / float(R);
 }

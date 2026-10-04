@@ -4,6 +4,7 @@
 #include "scenes/koy/koy_amphora.h"
 #include "scenes/koy/koy_island.h"
 #include "scenes/koy/koy_props.h"
+#include "scenes/koy/koy_wreck.h"
 
 #include "stb_image.h"
 
@@ -483,8 +484,27 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
     KMaterial pinnaM = plain(cfg.v3("props.pinna_rgb", make_float3(0.33f, 0.21f, 0.13f)));
     if (setCoat >= 0) coat(pinnaM, "pinna", 0.3f, 0.12f, make_float3(0.36f, 0.33f, 0.28f), 0.4f, 0.3f, 0.25f);
     KMaterial urchinM = plain(cfg.v3("props.urchin_rgb", make_float3(0.045f, 0.03f, 0.045f)));
+    // the wreck: oak gone grey-brown and soft, silt on every ledge, concretion and sponges in patches; the iron (guns,
+    // anchor) a lumpy concretion, rust showing through
+    KMaterial wreckWood = woodM;
+    wreckWood.albedo = cfg.v3("batik.wood_tint", make_float3(0.50f, 0.43f, 0.35f));
+    wreckWood.mottle = 0.3f;
+    // no concretion scan on the wood: its rule (more in recesses) finds the whole hold a recess and blotches it; silt on
+    // every ledge, a green-grey film on the sides, the colour wandering slowly instead
+    if (setCoat >= 0) coat(wreckWood, "batik", 0.0f, 0.1f, make_float3(0.24f, 0.22f, 0.19f), 0.85f, 0.45f, 0.35f);
+    wreckWood.coatSet = -1;
+    KMaterial wreckIron = plain(cfg.v3("batik.iron_rgb", make_float3(0.30f, 0.20f, 0.13f)));
+    if (setCoat >= 0) coat(wreckIron, "batik_demir", 0.65f, 0.12f, make_float3(0.32f, 0.27f, 0.22f), 0.5f, 0.2f, 0.35f);
+    // the sea fans: Paramuricea clavata's purple-red, Eunicella cavolini's yellow (true colours under the torch; at 22 m
+    // the daylight leaves them dark)
+    KMaterial fanRed = plain(cfg.v3("fans.red_rgb", make_float3(0.42f, 0.04f, 0.10f)));
+    fanRed.mottle = 0.25f;
+    fanRed.aoStrength = 0.4f;
+    KMaterial fanYellow = plain(cfg.v3("fans.yellow_rgb", make_float3(0.72f, 0.52f, 0.08f)));
+    fanYellow.mottle = 0.25f;
+    fanYellow.aoStrength = 0.4f;
     materials = {floorM, rockM, leafM, jarM, islandWet, islandDry, woodM, concWet, concDry, steelM, rustM, floatM, bigM, ropeM, musselM,
-                 stoneL, stoneD, starM, cukeM, pinnaM, urchinM};
+                 stoneL, stoneD, starM, cukeM, pinnaM, urchinM, wreckWood, wreckIron, fanRed, fanYellow};
 
     meshes.push_back(buildFloor(cfg));
     rockCentre = cfg.v3("rock.centre", make_float3(-2.4f, 0.0f, -6.0f));
@@ -569,6 +589,23 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
         std::string plog;
         koyBuildProps(cfg, fy, [&](float3 q) { return isl.sdf(q) < 0.15f || amphoraRocks.sdf(q) < 0.1f; }, rockMeshes, {15, 16, 17, 18, 19, 20}, 7, props, &plog);
         std::printf("koy susler: %s\n", plog.c_str());
+        // the wreck
+        {
+            std::string wlog;
+            const size_t w0 = meshes.size();
+            const KoyWreckPlacement wp = koyBuildWreck(cfg, fy, 21, 22, 16, 8, meshes, &wlog);
+            std::printf("koy %s\n", wlog.c_str());
+            std::vector<KMeshCPU> fans;
+            std::string flog;
+            koyBuildFans(cfg, wp.growth, 23, 24, 9, fans, &flog);
+            std::printf("koy %s\n", flog.c_str());
+            for (KMeshCPU& m : fans) meshes.push_back(std::move(m));
+            for (size_t k = w0; k < meshes.size(); ++k) {
+                KInstanceCPU in;
+                in.mesh = int(k);
+                instances.push_back(in);
+            }
+        }
         for (KMeshCPU& m : props) {
             meshes.push_back(std::move(m));
             KInstanceCPU in;

@@ -256,12 +256,16 @@ struct KoyParams {
     // adapts part of the way to the light around it (a white plane at the eye's depth), as it does to its brightness
     // (exposure: half). 0 the camera's daylight balance, 1 full (von Kries, in linear sRGB, luminance kept)
     float chromaAdapt;
+    // AgX's look (Sobotka's 'punchy': in the log space after its contrast curve, a power and a saturation): the water's
+    // long veils flatten a picture; 1, 1: plain AgX
+    float lookPower, lookSat;
     float blackout;                     // 0 seeing .. 1 black (the convulsion, the restart)
     float3 xyzToRgb0, xyzToRgb1, xyzToRgb2;   // rows: CIE XYZ -> linear sRGB, white balanced to daylight above the water
     const float* blueNoise;             // 128 x 128, fixed: the dither does not move from frame to frame
 
     // ---- load-time bakes, and the diver's collision probe
     int bakeMesh, bakeInstance;
+    float bakeAORange;
     float* bakeOut;
     float2 bakeMapMin;                  // __raygen__bakeSun: the map being baked
     float bakeMapTexel;

@@ -14,7 +14,7 @@ namespace {
 using app::L;
 
 const int kBaseChoices[] = {1, 4, 8, 16};
-const int kEdgeChoices[] = {4, 8, 16, 32};
+const int kEdgeChoices[] = {4, 8, 12, 16, 32};
 
 class KoyLive : public app::Scene {
 public:
@@ -254,8 +254,8 @@ public:
             c.kind = app::Control::Kind::Choice;
             c.id = "kenar";
             c.title = L("Kenar", "Edges");
-            c.items = {"4", "8", "16", "32"};
-            for (int k = 0; k < 4; ++k)
+            c.items = {"4", "8", "12", "16", "32"};
+            for (int k = 0; k < 5; ++k)
                 if (kEdgeChoices[k] == k_.quality.edge) c.active = k;
             c.detail = L("Kenardaki piksele toplam örnek", "Samples in all for a pixel on an edge");
             s.controls.push_back(c);

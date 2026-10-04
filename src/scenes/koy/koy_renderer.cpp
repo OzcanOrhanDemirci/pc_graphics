@@ -514,6 +514,7 @@ void KoyRenderer::bakeAO() {
             continue;
         }
         params_.bakeMesh = int(k);
+        params_.bakeAORange = m.aoRange;
         for (int c = 0; c < count; ++c) {
             params_.bakeInstance = first + c;
             params_.bakeOut = ao + m.pos.size() * size_t(c);

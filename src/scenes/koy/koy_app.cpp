@@ -135,6 +135,8 @@ void KoyApp::setup() {
     p.shadowSway = cfg.i("sun.sway", 1);
     p.upwell = cfg.f("air.upwell", 0.06f);
     p.chromaAdapt = cfg.f("display.chroma_adapt", 0.5f);
+    p.lookPower = cfg.f("display.look_power", 1.0f);
+    p.lookSat = cfg.f("display.look_sat", 1.0f);
     // the world
     size_t freeBefore = 0, freeAfter = 0, totalMem = 0;
     cudaMemGetInfo(&freeBefore, &totalMem);

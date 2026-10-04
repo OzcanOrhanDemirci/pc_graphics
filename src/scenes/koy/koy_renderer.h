@@ -23,6 +23,7 @@ struct KMeshCPU {
     std::vector<uint3> idx;
     unsigned int material = 0, id = 1;
     bool bakeAO = true;
+    float aoRange = 4.0f;   // metres the occlusion rays look (a wreck's hold wants more)
 };
 struct KInstanceCPU {
     float m[12] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0};

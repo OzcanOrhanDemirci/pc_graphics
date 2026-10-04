@@ -27,6 +27,11 @@ struct KoyRockField {
 KoyRockField koyAmphoraRocks(const Config& cfg, const std::function<float(float, float)>& floorY);
 KMeshCPU koyBuildRockField(const KoyRockField& f, float cell, unsigned int material, unsigned int id, std::string* log = nullptr);
 
+// sea fans (red Paramuricea clavata, yellow Eunicella cavolini): flat branching colonies across the current, on the up-
+// and side-facing faces of the host meshes deeper than minDepth (the wreck)
+void koyBuildFans(const Config& cfg, const std::vector<std::pair<float3, float3>>& sites, unsigned int matRed, unsigned int matYellow, unsigned int id,
+                  std::vector<KMeshCPU>& out, std::string* log = nullptr);
+
 struct KoyPropMaterials {
     unsigned int stoneLight, stoneDark, starfish, cucumber, pinna, urchin;
 };
