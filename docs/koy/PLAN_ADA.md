@@ -1,5 +1,9 @@
 # PLAN · sahne 5, üçüncü bölüm: "Ada" (iskele, amforalar, batık ve maviye inen halat)
 
+> 🏁 **Bitti (2026-10-04 akşamı): B0-B6 yapıldı.** Sonuç, ölçüler ve NE DOĞRULANMADI `docs/koy/DURUM.md` başında.
+> Yerleşim uygulamada plandan şu kadar ayrıldı: iskele ucu alçak beton T başlığı (Özcan'ın iskele altı fotoğrafı),
+> şamandıra z ≈ −160 (zemin ~47 m), duba hatları z = +24 → −160.
+
 > Tek kaynak plan. 2026-10-04 öğleden sonra Özcan'la konuşularak kesinleşti; uygulama **tam otonom**. Koy'un K0-K1'i, üç
 > ara durağı ve Amfora'nın A0-A7'si bitti (durum ve ölçümler `docs/koy/DURUM.md`). Mimari, veri ve ölçü düzeneği için
 > `PLAN.md` ve `PLAN_AMFORA.md` başvuru olarak durur. Bağlam sıkıştırılırsa önce bu dosyayı, sonra DURUM.md'nin başını,
@@ -116,13 +120,13 @@ Deniz suyunda basınç P = 1,013 + 0,1005 · d bar (ρg = 1025 · 9,81). Tüplü
 
 | Faz | İş | Sonu |
 |---|---|---|
-| B0 | Bu plan, ayar dosyası, `--map` yeni yerleşimle | harita |
-| B1 | Büyük dünya: zemin profili ve ağ, dip haritası, ışık alanı 120 m, kostik derinliği, dalgacıklar, başlangıç ve tavan, basınç ve ölüm, panel | koridordan sığ → mutlak mavi kareleri |
-| B2 | Ada (su altı kayalık etek + su üstü kaya), iskele (beton ayaklar, kirişler, güverte, merdiven), havada izleme, güneş derinlik haritası ve dalga salınımı | iskele altı kahraman karesi |
-| B3 | Midye ve yosun (ayaklar, halat), duba hatları (yüzen şamandıralar dalgayla iner kalkar, dibe inen ipler, bloklar), büyük şamandıra, halat ve blok | halat karesi |
-| B4 | Sığ kum süsleri (taş, deniz yıldızı, kabuk, deniz hıyarı, kestane), amforaların yeni yeri kayalar arasında, tek tük amforalar | sığ ve amfora kareleri |
-| B5 | Batık: gövde çizgileri, postalar, kaplama, güverteler, kıç kasarası ve pencereler, baş kasarası, direkler, toplar, çapa, dümen; hasar; ahşap ve demir malzeme, kabuk; içerde ışık | batık kareleri (dış, iç) |
-| B6 | Sanat turu (her istasyon, güneş, pozlama, renk, başlangıç bakışı), kararlılık ve hız ölçüleri, galeri adı ve resmi, README, GOSTERI, DURUM, kendi kod gözden geçirmem | Özcan'ın bakacağı yer |
+| B0 ✅ | Bu plan, ayar dosyası, `--map` yeni yerleşimle | harita |
+| B1 ✅ | Büyük dünya: zemin profili ve ağ, dip haritası, ışık alanı 120 m, kostik derinliği, dalgacıklar, başlangıç ve tavan, basınç ve ölüm, panel | koridordan sığ → mutlak mavi kareleri |
+| B2 ✅ | Ada (su altı kayalık etek + su üstü kaya), iskele (beton ayaklar, kirişler, güverte, merdiven), havada izleme, güneş derinlik haritası ve dalga salınımı | iskele altı kahraman karesi |
+| B3 ✅ | Midye ve yosun (ayaklar, halat), duba hatları (yüzen şamandıralar dalgayla iner kalkar, dibe inen ipler, bloklar), büyük şamandıra, halat ve blok | halat karesi |
+| B4 ✅ | Sığ kum süsleri (taş, deniz yıldızı, kabuk, deniz hıyarı, kestane), amforaların yeni yeri kayalar arasında, tek tük amforalar | sığ ve amfora kareleri |
+| B5 ✅ | Batık: gövde çizgileri, postalar, kaplama, güverteler, kıç kasarası ve pencereler, baş kasarası, direkler, toplar, çapa, dümen; hasar; ahşap ve demir malzeme, kabuk; içerde ışık | batık kareleri (dış, iç) |
+| B6 ✅ | Sanat turu (her istasyon, güneş, pozlama, renk, başlangıç bakışı), kararlılık ve hız ölçüleri, galeri adı ve resmi, README, GOSTERI, DURUM, kendi kod gözden geçirmem | Özcan'ın bakacağı yer |
 
 Her fazın sonunda kareler bakılarak eleştirilir (taze gözle: "göz ne görüyor, gerçek bir fotoğrafla yan yana durur mu"),
 commit + push. Kare göstermeden büyük öğe bitirilmez (kemer dersi): Özcan yokken bu kural kendi gözüm için geçerli, her

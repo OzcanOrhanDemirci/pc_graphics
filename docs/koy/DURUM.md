@@ -1,9 +1,79 @@
 # DURUM · sahne 5 "Koy" (su altı)
 
-> Tek kaynak durum panosu. Güncel plan: **`docs/koy/PLAN_ADA.md`** (üçüncü bölüm "Ada", tam otonom); önceki planlar
+> Tek kaynak durum panosu. Son plan: **`docs/koy/PLAN_ADA.md`** (üçüncü bölüm "Ada", 🏁 bitti); önceki planlar
 > `PLAN.md`, `PLAN_AMFORA.md`. Veri: `docs/koy/VERI.md`. CC0 taramalar: `assets/koy/fetch.py`, `assets/koy/LICENSES.md`.
 
-## Şu an · 2026-10-04 öğleden sonra · Ada: B1-B4 bitti, sırada B5 (batık)
+## 🏁 Şu an · 2026-10-04 akşamı · Ada bitti (B0-B6), Özcan'ın bakacağı yer
+
+### Özcan'ın bakacağı yer
+
+**Açmak:** `build\pc_graphics.exe` → galeride **05 Ada**. Yükleme ~30 sn (16K kum ve kaya taramaları, adanın ve
+kayaların ağları, batık). Dalgıç beton iskele başlığının altında, merdivenin dibinde, açığa bakarak başlar.
+
+**Tuşlar:** **W A S D** yüz · **Boşluk** yukarı · **C** aşağı · **Shift** güçlü vuruş · **Tab** fareyle bakış (ya da
+sağ tık basılı) · **F** fener · **P** zamanı durdur · **K** kostik · **E** kenar pikselleri · **↑/↓** pozlama · **F5**
+ayar dosyasını yeniden okur. Panelde derinlik, basınç, ppO2.
+
+**Sırayla dene:**
+1. **Salon (başlangıç, 1-3 m):** etrafına bak; kırık deliklerin altına git, kumdaki ışığın dalgayla salınışını izle.
+   Kıyıya dön (+z): tahta yürüyüş yolunun altı, tahta aralıklarından kuma düşen kıvrık ışık çizgileri.
+2. **Sığ kum (4-9 m):** dubaların arasından açığa yüz: kostik ağı, deniz yıldızları, taşlar, sağda deniz çayırı.
+3. **Amforalar (~12 m, z ≈ −52):** kayalara yaslanmış yığın, çevresinde tek tük amforalar. Yakında **F**: pişmiş toprak.
+4. **Batık (~22 m, z ≈ −97):** kıç kasarası sisten çıkar; sancak tarafındaki çöküntüden içeri gir, **F** ile ambar,
+   toplar, postalar; küpeştede yelpaze mercanları (fenerde kızıl).
+5. **Şamandıra (z ≈ −160):** midyeli halatı izleyerek in; 35-40 m'de dip belirir. 66 m'yi geçersen (ppO2 1,6 bar) görüş
+   daralır, kararır, merdivende yeniden başlarsın (~7 sn).
+
+### Yapılanlar (B5-B6; B1-B4 aşağıda)
+
+- **B5 · batık:** 38 m'lik üç direkli bir kalyon, tek bir gövde fonksiyonundan (dip açısı, içe çekik bordalar, güverte
+  çizgisi, ayna kıç) kereste kereste: 76 posta, 3277 kaplama parçası (1207'si eksik: gürültüyle seçilen bölgeler çöker,
+  tek tek rastgele eksik dama tahtası gibi okunuyordu), omurga, baş ve kıç bodoslaması, ambar ağızlı iki güverte, kıç
+  ve baş kasaraları, pencereli ayna ve kıç balkonları, lumbaralar (birkaç kapağı sarkık), 13 top, kırık direkler (ana
+  direğin üstü ve seren kumda), cıvadra, dümen, çapa, safra taşları. Yamaçta başı aşağıda (yamacın eğimi), sancağa 18°
+  yatmış, sancak tarafı çökmüş (kaburgalar açıkta), 1,3 m gömülü. Ahşap gri kahve, kabuk yok (girinti kuralı bütün
+  ambarı girinti sayıp lekeliyordu). 57 yelpaze mercanı batığın verdiği noktalarda (küpeşte, kasara kenarı, kaburga
+  tepesi; yüzeye serpince gövdenin içine düşüyorlardı), 0,7-1,3 m, yedi kuşak dallanma.
+- **B6 · sanat turu:** AgX "punchy" görünüm (üs 1,35, doygunluk 1,3: 10 m'de her şeyi saran düz camgöbeğini kırdı);
+  su biraz berrak (parçacık 0,55: IA ile IB arası, uzak siluet ve karşıtlık için; Akdeniz açığı için gerçekçi); göz
+  uyumu açık su ölçüsüyle %30 (salon karanlık kalır), rengin %50'si; deniz çayırının kenarı 1,6 m boyunca seyrelir ve
+  kısalır (uzaktan budanmış çit duvarı gibiydi). Galeri kartı "05 Ada", galeri
+  resmi salon (256 örnek), README EN/TR sahne 5 bölümü ve üç görsel, GOSTERI/DEMO tuşları, oksijen testi.
+- **Hız kararları:** kenar örneği 16 → 12 (fark gözle seçilmedi, salon 44 → 33 ms), kostik dilimi 32 → 20 (8,4 → 5,2
+  ms; 30 m'de zaten sönüyor), dalga salınımı en çok 4 m, gök görünürlüğü 3 örnek, havadaki ışın en çok 400 m.
+
+### Ölçüler
+
+- **Kararlılık** (40 kare yüzüş, 256 örnekli referansa karşı, `--kararlilik` + `tools/kararlilik.py`):
+  salona yüzüş piksel 0,0023 (p99 0,038), blok 0,00057, bağıl 0,25, FLIP 0,0116; batığa yaklaşış piksel 0,0007, blok
+  0,00016, bağıl 0,22, FLIP 0,0084. Çayıra yüzüş (ince yapılar): piksel 0,0014 (p99 0,013), blok 0,00027, bağıl 0,17, FLIP 0,0090; batık yolu yelpazeler büyüdükten sonra piksel 0,00076, FLIP 0,0089 (değişmedi). Fener'in TAA tabanı piksel 0,0053-0,0061, FLIP 0,026-0,038: üçü de yarısının altında.
+- **Kare süresi** (2560×1440, komut satırı): salon 33 ms, açık kum ve koridor 20-27 ms, sığ kumda 1 m yükseklikte
+  32-39 ms, batık 19-21 ms, çayırın içine bakınca 43-53 ms. Uygulamada otomatik test (`--autotest-only koy`): başlangıç 32,8 fps, yüzerken 32,3, doku ve dalgacık seçenekleri 33,8-34,5, 32 kenar örneğiyle 26,0; sahne kapanınca kart boşalıyor (14,9 / 16 GB boş).
+- **Bellek:** kartta 12,6 / 16 GB (dokular 9,1 GB). **Testler:** 13/13 (Snell penceresi 48,41°, kostik enerjisi, dalga
+  defteri, ışık alanının Kd'si, ppO2 1,600 bar 65,9 m'de, 50 m'de doz yok, 70 m'de tünel 2,2 sn → kararma 6,7 sn →
+  merdiven 7,2 sn).
+
+### NE DOĞRULANMADI
+
+- **Özcan'ın gözü:** canlı pencerede yüzülmedi; her şey komut satırı kareleri, kararlılık yolları ve otomatik testin
+  ekran görüntüleri. Salonun "tedirgin edici" olup olmadığı, ışığın dalgayla salınışının canlı hissi kareden tartıldı.
+- **Bağımsız gözden geçirme yok:** Özcan ajan istemedi; kodu ve belgeleri yalnız ben okudum. Kendi gözden geçirmem:
+  oksijen ve yeniden başlama akışı, dubaların ekran kartı tamponları, güneş haritalarının ömrü (serbest bırakılmıyor
+  sandım: uygulama sahne kapanınca kartı sıfırlıyor, sızıntı yok); otomatik testin "kenar 32" adımı seçenek listesine
+  12 eklenince 16'yı seçiyordu, düzeltildi.
+- **Batığın içi:** ışık ve fener yalnız durağan karelerle; içeride yüzerken çarpışma (dalgıç kerestelerin arasından
+  geçebiliyor mu, takılıyor mu) denenmedi.
+- **Hareket:** dubaların dalgayla inip kalkışı, deniz çayırının salınışı canlı görülmedi (kod ve tek kareler).
+- **Kararlılık** yelpaze mercanlarının dibinde (yakın planda ince dallar) ölçülmedi; batık yolu ve çayır yolu ölçüldü.
+- **Kare hızı çayırın içine bakınca 30'un altında:** 43-53 ms (19-23 fps): temel geçiş 26 ms, kenar 18 ms (yaprak
+  kenarlarının örnekleri gölge ışınlarıyla pahalı). Denendi: yaprakları yarıya indirmek ve kenar eşiğini iki katına
+  çıkarmak yalnız 3-5 ms kazandırdı, varsayılanlar değişmedi. Denenmedi: yaprakların birbirine gölge düşürmemesi,
+  yaprak kenarında daha az örnek. Koridorun geri kalanı 30-45 fps.
+- **Yükleme** ~30 sn; kısaltılmadı.
+
+**hafıza itildi:** evet (Ada görevi 🏁, hasat [[gpu-ve-grafik]] §24).
+
+## B1-B4 · 2026-10-04 öğleden sonra · büyük dünya, ada ve iskele, dubalar, süsler
 
 **Yapılanlar (her biri kareyle bakılarak):**
 - **B1 · büyük dünya:** adanın çevresinde yavaş yavaş derinleşen kum (iskelenin ucu 3,5 m, amforalar ~12 m, batık
@@ -29,7 +99,7 @@
   tek tük amfora; sığda taş öbekleri, kırmızı deniz yıldızları, deniz hıyarları, yelpaze midyesi kabukları, kayalarda
   deniz kestaneleri.
 
-**Sırada:** B5 batık (yarı yıkık büyük kalyon, içine girilir), B6 sanat turu (renk ve kontrast düz: 10 m'de her şey
+**Sırada (o an):** B5 batık (yarı yıkık büyük kalyon, içine girilir), B6 sanat turu (renk ve kontrast düz: 10 m'de her şey
 camgöbeği; ton eğrisi, güneş, pozlama), ölçüler, galeri, README.
 
 **NE DOĞRULANMADI:** canlı pencerede yüzülmedi (yalnız komut satırı kareleri); kararlılık ve kare hızı yeni öğelerle

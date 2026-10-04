@@ -250,8 +250,9 @@ yarı yıkık bir kalyon, en uçta dibi görünmeyen maviye inen bir şamandıra
   yüksekse o kadar hızlı; gerçek gecikme kısaltıldı, kodda adıyla yazıyor): görüş daralır, kararır, merdivende yeniden
   başlarsın. Derinlik sarhoşluğu zihinsel bir etki, çizilmez.
 
-Açık kalanlar: kare hızı 30-45 fps (en yavaşı iskelenin salonu: sütunlar, midyeler ve tepedeki dalgacıklı ayna çok kenar
-pikseli üretiyor); batığın içindeki ışık ve görünüş komut satırı kareleriyle tartıldı. Hepsi `docs/koy/DURUM.md`'de.
+Açık kalanlar: kare hızı koridor boyunca 30-45 fps, ama deniz çayırının içine yakından bakınca 19-23 fps (yaprak
+kenarlarının örnekleri gölge ışınlarıyla); batığın içindeki ışık ve görünüş komut satırı kareleriyle tartıldı, canlı
+yüzülerek henüz bakılmadı. Hepsi `docs/koy/DURUM.md`'de.
 
 ## Sahne 1: neyi hesaplıyor
 

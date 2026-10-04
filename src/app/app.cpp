@@ -610,7 +610,7 @@ int App::run(const Options& opt) {
                 for (int k = 1; k <= 10; ++k) { mouse(0.50f + 0.008f * k, 0.50f); wait(0.03); }
                 right(false); wait(0.5); shot("koy_saga_bakti");
                 control("ornek", 3); wait(1.0); log("koy 16 ornek"); shot("koy_16_ornek");
-                control("ornek", 1); control("kenar", 3); wait(1.0); log("koy kenar 32"); shot("koy_kenar_32");
+                control("ornek", 1); control("kenar", 4); wait(1.0); log("koy kenar 32"); shot("koy_kenar_32");
                 control("kenar", 2); control("suzgec", 0); wait(0.6); shot("koy_kutu_suzgec"); control("suzgec", 1);
                 control("doku", 0); wait(0.6); log("koy doku standart"); shot("koy_doku_standart");
                 control("doku", 1); wait(0.6); log("koy doku yuksek"); shot("koy_doku_yuksek");
