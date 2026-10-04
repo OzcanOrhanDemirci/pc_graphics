@@ -587,6 +587,25 @@ void KoyWorld::applyTextureMode(const Config& cfg, int mode) {
         j.detailNormal = cfg.f("amfora.detail_normal", 0.8f);
         j.detailAlbedo = cfg.f("amfora.detail_albedo", 0.55f);
     }
+    // Ada (Ozcan, 2026-10-04: the 16K detail layer on every material it suits): the pier's concrete (7 wet, 8 dry) takes
+    // its own 8K scan again at a third of the tile (0.9 m: 0.11 mm a texel, the 16K rock detail's density); the pebbles
+    // (15 light, 16 dark) and the wreck's iron concretion (22) the rock detail itself
+    if (materials.size() > 22) {
+        for (size_t k : {size_t(7), size_t(8)}) {
+            KMaterial& q = materials[k];
+            q.detailSet = high && setConcrete >= 0 ? setConcrete : -1;
+            q.detailTile = cfg.f("pier.concrete_detail_tile", 0.9f);
+            q.detailNormal = cfg.f("pier.concrete_detail_normal", 0.5f);
+            q.detailAlbedo = cfg.f("pier.concrete_detail_albedo", 0.3f);
+        }
+        for (size_t k : {size_t(15), size_t(16), size_t(22)}) {
+            KMaterial& q = materials[k];
+            q.detailSet = high ? rockDetail : -1;
+            q.detailTile = cfg.f("props.stone_detail_tile", 1.8f);
+            q.detailNormal = cfg.f("props.stone_detail_normal", k == 22 ? 0.7f : 0.8f);
+            q.detailAlbedo = cfg.f("props.stone_detail_albedo", k == 22 ? 0.4f : 0.5f);
+        }
+    }
 }
 
 

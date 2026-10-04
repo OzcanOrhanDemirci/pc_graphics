@@ -22,6 +22,17 @@
 > beton 1,1 m'den uzakta 4K ekranın ötesinde). Bedeli: kartta 12,6 → 13,6 / 16 GB, dokular 9,1 → 10,1 GB. Kare süresi
 > değişmedi. Taranmış kaya (boulder_01) Poly Haven'da 8K'da bitiyor, 16K'sı yok (Ultra'da üstüne 16K kaya ayrıntı katmanı
 > biniyor). Şu an Ultra'da: kum 16K, kaya ayrıntısı 16K, taranmış kaya, amfora kili, kabuk, ahşap, beton 8K.
+>
+> **16K ayrıntı katmanı ("atlas") uyan her malzemeye (Özcan, aynı akşam):** iskelenin betonu (ıslak ve kuru) kendi 8K
+> taramasını üçte bir karoyla ikinci kez alıyor (0,9 m: 0,11 mm, 16K kaya katmanının yoğunluğu; ek bellek yok); deniz
+> taşları ve batığın demir kabuğu 16K kaya katmanını alıyor (Yüksek'te 8K, Standart'ta yok). Ölçü (aynı an, katman
+> ağırlığı 0 ile karşılaştırma, en çok değişen 640×400 kutu): taşlar ortalama 0,28 / 255 (en çok 26: pürüzsüz çakıl
+> taş dokusu kazandı, gözle açık), beton 0,44 (en çok 12), demir 0,13 (en çok 15). Kare süresi değişmedi (±0,6 ms).
+> **Yapılamayanlar:** halat ve midye için Poly Haven'da hiç tarama yok (ne kabuk ne halat); yeni bir 16K set (renk +
+> normal, mip'li, sıkıştırmasız) ~2,9 GB ve kart 13,6 / 16 GB: sığmıyor. Yol: (1) Ultra'da kullanılmayan 8K setleri
+> (kum_8k, kaya_ayrinti_8k) yüklememek ~1,7 GB açar ama paneldeki geçiş anlık olmaktan çıkar; (2) blok sıkıştırma (BC7
+> renk, BC5 normal) bütün dokuları ~dörtte birine indirir: büyük iş, netliğe etkisi ölçülmeli; (3) halat ve midyeye
+> taramasız, hesapla üretilen ince ayrıntı (lif, büyüme çizgileri): çözünürlük sınırı yok, sanat işi.
 
 ### Özcan'ın bakacağı yer
 
