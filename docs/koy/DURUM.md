@@ -56,16 +56,33 @@ gibi okundu (karede), büyütüldü. Kemere 16K kaya ayrıntısı ve daha az kab
 (üç kareyle kıyas; alçak güneş 42° sütunları düzleştirdi, 50° kaldı). Duvar yalnız kemerin arkasında, kenarı kıvrılıyor.
 
 **A6 · ölçüler.** Kostik 28 dilim, 0,5-18 m (seki 16-17 m; daha derini son dilimi alır): 10,3 → 7,2 ms. Kararlılık (60
-kare, 256 örnekli referansa karşı, `--kararlilik`):
+kare, 256 örnekli referansa karşı, `--kararlilik`; yollar `--cam/--look` ile başlatıldı):
 
-| Yol | Piksel ort / %99 | 8×8 blok ort / %99 | Bağıl | FLIP |
-|---|---|---|---|---|
-| amfora (tarlanın 1 m üstünde süzülme, 0,5 m/sn) | 0,00166 / 0,0135 | 0,00023 / 0,0016 | 0,149 | 0,0090 |
-| kemer (kemere yüzüş) | 0,00043 / 0,0039 | 0,00009 / 0,0005 | 0,496 | 0,0050 |
-| *Fener tabanı* | *0,0053-0,0061* | *0,0011-0,0026* | *0,45-1,24* | *0,026-0,038* |
+| Yol | Piksel ort / %99 | 8×8 blok ort / %99 | Bağıl | FLIP | Kare (o yolda) |
+|---|---|---|---|---|---|
+| amfora (tarlanın ~1 m üstünde süzülme, 0,5 m/sn) | 0,00166 / 0,0135 | 0,00023 / 0,0016 | 0,149 | 0,0090 | 19,9 ms |
+| kemer (kemere yüzüş) | 0,00039 / 0,0036 | 0,00008 / 0,0004 | 0,306 | 0,0045 | 18,8 ms |
+| yukarı (55° yukarı bakış, tarla) | 0,00059 / 0,0087 | 0,00016 / 0,0019 | 0,100 | 0,0047 | 27,1 → 21,2 ms |
+| kum (kumun ~0,5-1 m üstü, aşağı bakarak) | **0,00444** / 0,0213 | 0,00052 / 0,0022 | 0,068 | **0,0206** | 29,9 ms |
+| *Fener tabanı* | *0,0053-0,0061* | *0,0011-0,0026* | *0,45-1,24* | *0,026-0,038* | |
 
-Kemer yolunun bağıl ölçüsü Fener'in alt değerinin yarısını aşıyor: uzaktaki kemere yavaş yaklaşırken referansın kendisi
-çok az değişiyor (payda küçük); mutlak kıpırtı Fener'in 12 katı altında.
+Hedef "her ölçüde Fener'in yarısından iyi": amfora ve yukarı dört ölçüde tuttu; kemer bağılda değil (0,306; uzaktaki
+kemere yavaş yaklaşırken referansın kendisi az değişiyor, payda küçük; mutlak kıpırtı Fener'in 13 katı altında); **kum
+pikselde ve FLIP'te tutmuyor** (Fener'in 0,8 katı). Kaynağı ayrıldı: rüzgâr değil (2,5 m/s ile 0,00441, aynı), kenar
+eşiği 0,06 kötüleştiriyor (0,00505). Bu bakışta 16K kumun piksel altı tanesi 4 örnekte titriyor (deneme alanındaki kum
+yolu 30 cm'den, taneler piksele göre iriydi: 0,00197). Bilinen çare 8 örnek (deneme alanında 0,00116), kareye ~5 ms;
+varsayılan değişmedi.
+
+**Kare hızı** (2560×1440, varsayılan 4 + 16, Ultra, dalgacık açık): kahraman bakış 20,0 ms, tarla 19,9, kemer 18,8,
+yukarı 21,2 (tam iç yansıma aynasında görülen yüzeyler artık katmanların ortalamasıyla: temel geçiş 13,7 → 9,6 ms), kum
+29,9 ms (33 fps: görüntünün %60'ı kenar pikseli; keskin hüzme kostiği kumda piksel altı karşıtlığı artırdı, deneme
+alanında 1,39 milyon kenar pikseli vardı, şimdi 2,2). Uygulamada (otomatik test) açılış 41,4 fps, yüzerken 41,2, bazı
+panel adımlarında 39,7-40,9. Planın öncelik sırasında kararlılık kare hızının önünde ve 30'un altına inilmiyor: kenar
+örneği kısılmadı. **Bellek:** kartta 12,1 / 16 GB (hedef ≤ 14). Testler 11/11.
+
+🪤 **Bu gece iki yolun ölçüsü sessizce bozuldu:** uzun ölçüm exe'nin kopyasından koşuyordu, ama cihaz kodu her açılışta
+kaynaktan derleniyor; `KMaterial` büyüyünce eski kopya her alanı kaymış okudu (kumda mavi-yeşil lekeler: karesine bakınca
+anlaşıldı). İki yol yeniden ölçüldü; artık ana kod ve cihaz kodu yapı boyutlarını kıyaslıyor, tutmazsa kare macenta.
 
 ## A0 · kaynaklar ve kompozisyon · 2026-10-04 gece · ✅ bitti
 
