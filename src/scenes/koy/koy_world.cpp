@@ -122,6 +122,15 @@ KoyFloorShape KoyFloorShape::from(const Config& cfg) {
         f.pd.push_back(k[i + 1]);
         f.pm.push_back(k[i + 2]);
     }
+    f.moundH = cfg.i("batik.use", 1) ? cfg.f("batik.mound", 0.8f) : 0.0f;
+    f.moundW = cfg.f("batik.mound_width", 4.5f);
+    {
+        const float3 c = cfg.v3("batik.centre", make_float3(2.0f, 0.0f, -97.0f));
+        const float yaw = cfg.f("batik.deg", 35.0f) * 3.14159265f / 180.0f;
+        const float2 d = make_float2(std::sin(yaw), -std::cos(yaw));   // towards the bow (koy_wreck.cpp's placement)
+        f.moundA = make_float2(c.x + d.x * 17.0f, c.z + d.y * 17.0f);
+        f.moundB = make_float2(c.x - d.x * 17.0f, c.z - d.y * 17.0f);
+    }
     return f;
 }
 float KoyFloorShape::depth(float s) const {
@@ -137,11 +146,28 @@ float KoyFloorShape::sOf(float x, float z) const {
     const float dx = x - islandX, dz = z - islandZ;
     return std::sqrt(dx * dx + dz * dz) - pierR + wander * fbm3(x * 0.012f, 2.9f, z * 0.012f, 2);
 }
-float KoyFloorShape::operator()(float x, float z) const {
+float KoyFloorShape::base(float x, float z) const {
     float d = depth(sOf(x, z));
     // long low sand waves (tens of metres) and small undulations, growing a little with depth
     d += sandWave * fbm3(x * 0.035f, 7.1f, z * 0.035f, 2) + undulation * (1.0f + 0.01f * d) * fbm3(x * 0.11f, 0.37f, z * 0.11f, 3);
     return -std::max(d, shallowest);
+}
+float KoyFloorShape::operator()(float x, float z) const {
+    float y = base(x, z);
+    if (moundH > 0.0f) {   // the wreck's mound: across the keel a smooth bump (the hold silted, the sand banked against the hull)
+        const float2 ab = make_float2(moundB.x - moundA.x, moundB.y - moundA.y), ap = make_float2(x - moundA.x, z - moundA.y);
+        const float L2 = std::max(ab.x * ab.x + ab.y * ab.y, 1e-6f);
+        const float t = (ap.x * ab.x + ap.y * ab.y) / L2;
+        if (t > -0.15f && t < 1.15f) {
+            const float tc = std::min(std::max(t, 0.0f), 1.0f);
+            const float dx = ap.x - ab.x * tc, dz = ap.y - ab.y * tc;
+            const float across = std::sqrt(dx * dx + dz * dz) / moundW;
+            const float a = std::max(0.0f, 1.0f - across * across), along = std::sin(3.14159265f * std::min(std::max(t, 0.0f), 1.0f));
+            const float edge = std::min(std::max((0.15f - std::fabs(t - 0.5f) + 0.5f) / 0.15f, 0.0f), 1.0f);   // ends fade
+            y += moundH * a * a * (0.35f + 0.65f * along) * edge * (0.85f + 0.15f * fbm3(x * 0.4f, 3.3f, z * 0.4f, 2));
+        }
+    }
+    return y;
 }
 float koyFloor(const Config& cfg, float x, float z) { return KoyFloorShape::from(cfg)(x, z); }
 
@@ -557,7 +583,7 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
         {
             std::string wlog;
             const size_t w0 = meshes.size();
-            const KoyWreckPlacement wp = koyBuildWreck(cfg, fy, 21, 22, 16, 8, meshes, &wlog);
+            const KoyWreckPlacement wp = koyBuildWreck(cfg, [&](float x, float z) { return fs.base(x, z); }, 21, 22, 16, 8, meshes, &wlog);
             wreckBow = wp.bow;
             wreckStern = wp.stern;
             wreckGrowth = wp.growth;

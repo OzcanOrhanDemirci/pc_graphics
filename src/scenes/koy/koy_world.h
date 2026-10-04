@@ -21,6 +21,11 @@ struct KoyFloorShape {
     float islandX = 0.0f, islandZ = 60.0f, pierR = 60.0f;   // the pier's end lies pierR from the island's centre
     std::vector<float> ps, pd, pm;                          // profile knots: s, depth, slope (monotone cubic Hermite)
     float undulation = 0.25f, sandWave = 0.5f, wander = 6.0f, shallowest = 0.3f;
+    // Ada enriched: the sand drifted into the wreck's hold and against its hull, a low mound along the keel (bow, stern
+    // from batik.centre / batik.deg as the wreck itself is placed); the wreck stands on base(), not on its own mound
+    float moundH = 0.0f, moundW = 4.5f;
+    float2 moundA{}, moundB{};
+    float base(float x, float z) const;                     // the floor without the wreck's mound
     static KoyFloorShape from(const Config& cfg);
     float depth(float s) const;                             // the profile alone (metres, positive down)
     float sOf(float x, float z) const;                      // s at (x, z), wander included
