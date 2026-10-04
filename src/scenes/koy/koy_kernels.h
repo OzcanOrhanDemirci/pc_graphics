@@ -21,6 +21,9 @@ struct KoyCurrent {
 };
 void koyGrassPoints(const KoyLeaf* leaves, int n, int pointsPerLeaf, float t, KoyCurrent cur, float4* pts, float3* nrm, cudaStream_t s);
 
+// the sea surface's height at n points (x, z) from its periodic texture (level 0): the floats ride it
+void koySampleHeights(unsigned long long surface, float patch, const float2* pts, int n, float* out, cudaStream_t s);
+
 // acc = acc * keep + src * w (the reference's average of shifted frames)
 void koyBlend(float4* acc, const float4* src, size_t n, float keep, float w, cudaStream_t s);
 

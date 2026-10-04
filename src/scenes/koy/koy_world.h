@@ -3,6 +3,7 @@
 // wreck, a buoy's rope down into the blue.
 #pragma once
 #include "core/config.h"
+#include "scenes/koy/koy_buoys.h"
 #include "scenes/koy/koy_kernels.h"
 #include "scenes/koy/koy_renderer.h"
 
@@ -54,6 +55,7 @@ struct KoyWorld {
     std::vector<KMaterial> materials;
     std::vector<KoyTextureSet> textures;
     KoySeagrass grass;
+    KoyBuoys buoys;                 // Ada: the buoy lines and the mooring buoy (moving instances)
     KRibbonsCPU ribbons;
     float3 rockCentre{};
     float rockRadius = 0.0f;

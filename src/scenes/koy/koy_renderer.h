@@ -6,6 +6,7 @@
 #include <cuda_runtime.h>
 #include <optix.h>
 
+#include <array>
 #include <string>
 #include <vector>
 
@@ -52,6 +53,8 @@ public:
     bool bakeSunMap(float2 mn, float2 mx, float texel);
     void setSampling(int baseSpp, int edgeSpp, int filter, float radius, float edgeContrast);
     void updateMaterials(const std::vector<KMaterial>& materials);   // the same count as uploaded (texture choice)
+    // new object-to-world transforms for some of the world's instances (their indices as uploaded); refits the IAS
+    void setTransforms(const std::vector<int>& idx, const std::vector<std::array<float, 12>>& m);
     // distances to the static geometry from p in 26 directions (index = 9 (z+1) + 3 (y+1) + (x+1), the centre skipped)
     void probe(float3 p, float out[26]);
     void renderFrame();                                           // base -> edge -> resolve -> meter -> final
@@ -104,6 +107,9 @@ private:
     unsigned int* ribbonSeg_ = nullptr;
     unsigned int ribbonPointCount_ = 0, ribbonSegCount_ = 0;
     OptixInstance* dInstances_ = nullptr;
+    std::vector<OptixInstance> instHost_;
+    std::vector<KInstance> kinstHost_;
+    std::vector<int> instMap_;          // the world's instance index -> its place in the arrays (-1: none)
     unsigned int instanceCount_ = 0;
     void* iasBuf_ = nullptr;
     void* iasTemp_ = nullptr;

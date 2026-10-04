@@ -1,7 +1,41 @@
 # DURUM · sahne 5 "Koy" (su altı)
 
-> Tek kaynak durum panosu. Plan: `docs/koy/PLAN.md` (kararlar, fazlar, duraklar). Veri ve denetimleri: `docs/koy/VERI.md`.
-> Gerçek fotoğraflardan başvuru panosu: `docs/koy/BASVURU.md`. CC0 taramalar: `assets/koy/fetch.py`, `assets/koy/LICENSES.md`.
+> Tek kaynak durum panosu. Güncel plan: **`docs/koy/PLAN_ADA.md`** (üçüncü bölüm "Ada", tam otonom); önceki planlar
+> `PLAN.md`, `PLAN_AMFORA.md`. Veri: `docs/koy/VERI.md`. CC0 taramalar: `assets/koy/fetch.py`, `assets/koy/LICENSES.md`.
+
+## Şu an · 2026-10-04 öğleden sonra · Ada: B1-B4 bitti, sırada B5 (batık)
+
+**Yapılanlar (her biri kareyle bakılarak):**
+- **B1 · büyük dünya:** adanın çevresinde yavaş yavaş derinleşen kum (iskelenin ucu 3,5 m, amforalar ~12 m, batık
+  ~22 m, şamandıra ~47 m, 66 m z ≈ −202), ışık alanı 120 m'ye ve 7 dip derinliğine, kostik 30 m'ye (ötesinde söner),
+  analitik kum dalgacıkları (kıyıya paralel, derinde söner; 🪤 hızlı `cosf` binlerce radyanda bozuluyordu: faz önce tam
+  turlara indirildi), basınç ve oksijen zehirlenmesi (ppO₂ 1,6 bar üstünde doz, tünel görüş, kararma, merdivende
+  yeniden başlama), `--map` (yerleşim haritası + profil), `--kareler` (tek yüklemede çok bakış; `--yerden` ile kumdan
+  yükseklik).
+- **B2 · ada ve iskele:** ada bir uzaklık alanı (alçak falez, tepe, su altında kaya, köşeli kaya blokları), koyun iki
+  yanından iskele boyunca uzanan iki sualtı kayalık sırtı (başlangıçta çevre kaya: kemer dersi). İskele: kumsaldan tahta
+  yol (tahtalar boyuna, aralıklı: güneş azimutu iskele boyunca, ışık çizgileri) ve ucunda **alçak beton T başlığı**
+  (22 × 14 m, kirişli tavan, 35 kabuklu ayak, 4 kırık delik ve paslı filizler, altında moloz). **Özcan görev sırasında
+  bir fotoğraf ve iki mesaj gönderdi:** iskele altı çevresinden karanlık, aralıklardan ışık sızıyor; *"gerçek karanlık
+  [...] biraz korkutucu olsun [...] altına girmek tedirgin etmeli"*. Karşılığı: beton başlık, gök görünürlüğü haritası
+  (güvertenin altında suyun dağınık ışığı da söner), göz uyumu %30 (açık su ölçüsüyle), başlangıç başlığın altında.
+  Su üstü artık Snell penceresinden izleniyor (güverte, ayaklar, ada); gölge ışını havada sürüyor; güneş haritası
+  (derinlik + havadan geçiş + gök) ışık sütunlarına ve yüzeylere; gölgeler dalgayla salınıyor. Gözün renk uyumu %50
+  (kırmızı gamın dışına düşünce kazanç sınırlı: 10 m altında beyaz kare hatası buradan çıktı, düzeltildi).
+- **B3 · dubalar ve halat:** iki yanda ve uçta duba hatları (163 duba dalgayla iner kalkar: dalga yüksekliği her karede
+  ekran kartında örnekleniyor, örneklerin dönüşümleri güncelleniyor), her 25 m'de dibe ip ve blok; büyük şamandıra ve
+  45,9 m'lik halatı (3 kollu örgü, üst metrelerinde ~1300 midye), ayaklarda ~9700 midye.
+- **B4 · süsler ve amforalar:** kayalık yuva (4 büyük blok aşağı yamaçta, 12 küçük), amfora yığını kayalara yaslı, 14
+  tek tük amfora; sığda taş öbekleri, kırmızı deniz yıldızları, deniz hıyarları, yelpaze midyesi kabukları, kayalarda
+  deniz kestaneleri.
+
+**Sırada:** B5 batık (yarı yıkık büyük kalyon, içine girilir), B6 sanat turu (renk ve kontrast düz: 10 m'de her şey
+camgöbeği; ton eğrisi, güneş, pozlama), ölçüler, galeri, README.
+
+**NE DOĞRULANMADI:** canlı pencerede yüzülmedi (yalnız komut satırı kareleri); kararlılık ve kare hızı yeni öğelerle
+ölçülmedi (kare süreleri 25-45 ms arası görüldü: kostik 8-10 ms, kenar pikselleri yoğun yerlerde 10 ms); oksijen
+zehirlenmesi akışı uygulamada denenmedi; dubaların hareketi karelerde değil yalnız kodda.
+
 
 ## Şu an · 2026-10-04 sabahı · Özcan sınadı: hüzme iyi, kemer ve kemere inen kum kaldırıldı
 

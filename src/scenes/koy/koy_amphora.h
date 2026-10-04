@@ -7,6 +7,7 @@
 #include "scenes/koy/koy_renderer.h"
 
 #include <functional>
+#include <string>
 #include <vector>
 
 struct KoyAmphoraType {
@@ -46,4 +47,7 @@ struct KoyAmphoraPlacement {
     float burial;                 // 0 lying on the sand .. 1 its width under it
 };
 // the wreck's field on its mound: positions, turns, how deep each jar sank (floorY: the floor's height)
-std::vector<KoyAmphoraPlacement> koyPlaceAmphorae(const Config& cfg, const std::function<float(float, float)>& floorY);
+// key: the config prefix of this field (centre, count, sherds, ship_deg, half_length, half_width, seed); obstacle: the
+// distance to rocks they must not pass into (empty: none)
+std::vector<KoyAmphoraPlacement> koyPlaceAmphorae(const Config& cfg, const std::function<float(float, float)>& floorY, const std::string& key = "amfora",
+                                                 const std::function<float(float3)>& obstacle = {});

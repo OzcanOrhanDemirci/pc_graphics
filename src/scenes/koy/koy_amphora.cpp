@@ -448,7 +448,8 @@ KMeshCPU koyBuildPiece(const KoyAmphoraPiece& pc, int segments, unsigned int mat
 // rolled a little; sand drifted over the lower ones and the edges; many broke (bodies whose necks snapped, necks with their
 // handles, halves), and sherds lie everywhere about. Every piece is placed so it does not pass through another (its body
 // as a capsule), lying on the floor or sunk into it.
-std::vector<KoyAmphoraPlacement> koyPlaceAmphorae(const Config& cfg, const std::function<float(float, float)>& floorY) {
+std::vector<KoyAmphoraPlacement> koyPlaceAmphorae(const Config& cfg, const std::function<float(float, float)>& floorY, const std::string& key,
+                                                 const std::function<float(float3)>& obstacle) {
     std::vector<KoyAmphoraPlacement> out;
     const std::vector<KoyAmphoraPiece> pieces = koyAmphoraPieces();
     // the shells and sherds are placed by their own lowest point (their mesh's vertices): their edges touch the sand
@@ -460,12 +461,12 @@ std::vector<KoyAmphoraPlacement> koyPlaceAmphorae(const Config& cfg, const std::
         for (const float3& v : verts[size_t(piece)]) lo = std::min(lo, rx.y * v.x + ax.y * v.y + rz.y * v.z);
         return lo;
     };
-    const int n = cfg.i("amfora.count", 96), nSherds = cfg.i("amfora.sherds", 40);
-    const float3 c = cfg.v3("amfora.centre", make_float3(0.0f, 0.0f, 0.0f));
-    const float ship = cfg.f("amfora.ship_deg", -75.0f) * 3.14159265f / 180.0f;
-    const float halfL = cfg.f("amfora.half_length", 4.4f), halfW = cfg.f("amfora.half_width", 1.9f);
+    const int n = cfg.i(key + ".count", 96), nSherds = cfg.i(key + ".sherds", 40);
+    const float3 c = cfg.v3(key + ".centre", make_float3(0.0f, 0.0f, 0.0f));
+    const float ship = cfg.f(key + ".ship_deg", -75.0f) * 3.14159265f / 180.0f;
+    const float halfL = cfg.f(key + ".half_length", 4.4f), halfW = cfg.f(key + ".half_width", 1.9f);
     const float2 U = make_float2(std::cos(ship), std::sin(ship)), V = make_float2(-U.y, U.x);
-    std::mt19937 rng(unsigned(cfg.i("amfora.seed", 5)));
+    std::mt19937 rng(unsigned(cfg.i(key + ".seed", 5)));
     std::uniform_real_distribution<float> uni(0.0f, 1.0f);
     std::normal_distribution<float> gauss(0.0f, 1.0f);
     struct Cap { float3 a, b; float r; };
@@ -568,6 +569,10 @@ std::vector<KoyAmphoraPlacement> koyPlaceAmphorae(const Config& cfg, const std::
         bool clash = false;
         for (const Cap& o : caps)
             if (segDist(me.a, me.b, o.a, o.b) < me.r + o.r) { clash = true; break; }
+        // the rocks they lie among: not into them
+        if (!clash && obstacle)
+            for (float t : {0.0f, 0.5f, 1.0f})
+                if (obstacle(me.a + (me.b - me.a) * t) < me.r + 0.04f) { clash = true; break; }
         if (clash) continue;
         caps.push_back(me);
         emit(piece, rx, ax, rz, tip, burial);
@@ -593,7 +598,7 @@ std::vector<KoyAmphoraPlacement> koyPlaceAmphorae(const Config& cfg, const std::
         float3 tip = make_float3(px, 0.0f, pz) - ax * mid - outward * r;
         tip.y = fy - (0.005f + 0.02f * uni(rng)) - lowest(piece, rx, ax, rz);   // its lowest point just in the sand
         const Cap me{make_float3(px, fy, pz), make_float3(px, fy + 0.01f, pz), 0.10f};
-        bool clash = false;
+        bool clash = obstacle && obstacle(me.a) < 0.12f;
         for (const Cap& o : caps)
             if (segDist(me.a, me.b, o.a, o.b) < me.r + o.r) { clash = true; break; }
         if (clash) continue;
@@ -601,6 +606,6 @@ std::vector<KoyAmphoraPlacement> koyPlaceAmphorae(const Config& cfg, const std::
         emit(piece, rx, ax, rz, tip, 0.2f);
         ++placed;
     }
-    std::printf("amfora tarlasi: %zu parca (%d butun ya da kirik, %d kirik parcacik; %d deneme)\n", out.size(), int(out.size()) - placed, placed, tries + stries);
+    std::printf("amfora tarlasi (%s): %zu parca (%d butun ya da kirik, %d kirik parcacik; %d deneme)\n", key.c_str(), out.size(), int(out.size()) - placed, placed, tries + stries);
     return out;
 }

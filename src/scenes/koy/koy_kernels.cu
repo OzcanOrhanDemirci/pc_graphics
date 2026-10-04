@@ -44,6 +44,15 @@ void koyMeter(const float4* hdr, int w, int h, float* tiles, cudaStream_t s) {
     meterKernel<<<dim3((w + 31) / 32, (h + 31) / 32), 256, 0, s>>>(hdr, w, h, tiles);
 }
 
+__global__ void sampleHeightsKernel(cudaTextureObject_t tex, float inv, const float2* pts, int n, float* out) {
+    const int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= n) return;
+    out[i] = tex2DLod<float4>(tex, pts[i].x * inv, pts[i].y * inv, 0.0f).x;
+}
+void koySampleHeights(unsigned long long surface, float patch, const float2* pts, int n, float* out, cudaStream_t s) {
+    if (n <= 0 || !surface) return;
+    sampleHeightsKernel<<<(n + 127) / 128, 128, 0, s>>>(cudaTextureObject_t(surface), 1.0f / patch, pts, n, out);
+}
 __global__ void blendKernel(float4* acc, const float4* src, size_t n, float keep, float w) {
     const size_t i = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
     if (i >= n) return;

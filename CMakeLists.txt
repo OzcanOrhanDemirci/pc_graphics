@@ -66,6 +66,8 @@ add_library(pc_core OBJECT
     src/scenes/koy/koy_world.cpp
     src/scenes/koy/koy_amphora.cpp
     src/scenes/koy/koy_island.cpp
+    src/scenes/koy/koy_buoys.cpp
+    src/scenes/koy/koy_props.cpp
     src/scenes/koy/koy_sdf.cpp
     src/scenes/koy/koy_tests.cpp
     src/scenes/koy/koy_kernels.cu

@@ -1017,8 +1017,9 @@ static __forceinline__ __device__ float3 adaptingWhite() {
     const float3 wk = basisWeights(make_float3(1.0f, 1.0f, 1.0f));
     const float3 xyz = sunOnSurface(wk, z, 0.0f) * params.sunCosW + ambientOnSurface(wk, z, 1.0f, 0.0f, fieldsFor(bottomAt(params.cam.pos.x, params.cam.pos.z)));
     const float3 rgb = xyzToRgb(xyz);
-    const float Y = 0.2126f * rgb.x + 0.7152f * rgb.y + 0.0722f * rgb.z;
-    return rgb * (1.0f / fmaxf(Y, 1e-12f));
+    const float Y = fmaxf(0.2126f * rgb.x + 0.7152f * rgb.y + 0.0722f * rgb.z, 1e-12f);
+    // deep blue light leaves sRGB's gamut (red below zero): no channel under a tenth of the luminance
+    return make_float3(fmaxf(rgb.x / Y, 0.1f), fmaxf(rgb.y / Y, 0.1f), fmaxf(rgb.z / Y, 0.1f));
 }
 
 extern "C" __global__ void __raygen__final() {
@@ -1028,7 +1029,7 @@ extern "C" __global__ void __raygen__final() {
     if (params.chromaAdapt > 0.0f) {   // von Kries towards the light around the eye, part of the way
         const float3 w = adaptingWhite();
         const float a = params.chromaAdapt;
-        const float3 g = make_float3(powf(fmaxf(w.x, 1e-3f), -a), powf(fmaxf(w.y, 1e-3f), -a), powf(fmaxf(w.z, 1e-3f), -a));
+        const float3 g = make_float3(fminf(powf(w.x, -a), 4.0f), fminf(powf(w.y, -a), 4.0f), fminf(powf(w.z, -a), 4.0f));
         const float gy = 0.2126f * g.x * w.x + 0.7152f * g.y * w.y + 0.0722f * g.z * w.z;   // the white's luminance after
         const float Yw = 0.2126f * w.x + 0.7152f * w.y + 0.0722f * w.z;
         c = make_float3(c.x * g.x, c.y * g.y, c.z * g.z) * (Yw / fmaxf(gy, 1e-6f));

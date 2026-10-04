@@ -94,7 +94,12 @@ float KoyIslandShape::sdf(float3 p0) const {
         if (q.x * q.x + q.z * q.z > (B.r * 1.6f + 1.0f) * (B.r * 1.6f + 1.0f)) continue;
         float db = -1e9f;   // the polyhedron: the farthest of its planes (a convex block)
         for (int k = 0; k < 9; ++k) db = std::max(db, dot(B.n[k], q) - B.d[k]);
-        if (db < 0.5f) db += 0.06f * B.r * kn::fbm3(q.x * 2.2f / B.r + B.ang * 9.0f, q.y * 2.2f / B.r, q.z * 2.2f / B.r, 3);
+        if (db < 0.5f) {   // its own relief: lumps, eroded creases, a crack or two
+            db += 0.11f * B.r * kn::fbm3(q.x * 2.2f / B.r + B.ang * 9.0f, q.y * 2.2f / B.r, q.z * 2.2f / B.r, 4);
+            db -= 0.05f * B.r * (kn::ridged3(q.x * 1.6f / B.r, q.y * 1.6f / B.r + B.ang * 5.0f, q.z * 1.6f / B.r, 3) - 0.5f);
+            const kn::Cell cc = kn::cellular3(q.x / (0.9f * B.r) + B.ang * 3.0f, q.y / (0.7f * B.r), q.z / (0.9f * B.r), seed);
+            db += 0.035f * B.r * (1.0f - kn::smoothstep(0.0f, 0.05f, cc.f2 - cc.f1));
+        }
         // worn edges: the block's corners rounded towards a sphere a little
         db = std::max(db, (length(q) - 1.25f * B.r) * 0.8f);
         d = std::min(d, db);
@@ -537,7 +542,23 @@ void koyBuildPier(const KoyPierSpec& p, const std::function<float(float, float)>
                         }
                     }
                 }
-            std::printf("koy iskele basligi: beton plaka %d x %d hucre, %d delik, %d filiz\n", nx, nz, nHoles, rebars);
+            // what fell through: chunks of the slab on the sand under each hole, half sunk, fouled
+            int chunks = 0;
+            for (const Blob& B : blobs)
+                for (int k = 0; k < 3; ++k) {
+                    const float x = B.x + (U(rng) - 0.5f) * 1.4f * B.a, z = B.z + (U(rng) - 0.5f) * 1.4f * B.b;
+                    const float sz = 0.08f + 0.22f * U(rng);
+                    const float g = floorY(x, z);
+                    const float yaw = U(rng) * kPi, tilt = (U(rng) - 0.5f) * 0.8f;
+                    const float3 ax = normalize(make_float3(std::cos(yaw), tilt, std::sin(yaw)));
+                    const float3 az0 = make_float3(-std::sin(yaw), 0.0f, std::cos(yaw));
+                    const float3 ay = normalize(cross(az0, ax));
+                    const float3 az = cross(ax, ay);
+                    addBox(wet, make_float3(x, g + 0.3f * sz, z), ax, ay, az, make_float3(sz * (1.0f + U(rng)), 0.5f * slabT * (0.6f + 0.4f * U(rng)), sz),
+                           2.7f, make_float2(U(rng) * 5.0f, U(rng) * 5.0f), 0.15f);
+                    ++chunks;
+                }
+            std::printf("koy iskele basligi: beton plaka %d x %d hucre, %d delik, %d filiz, %d moloz\n", nx, nz, nHoles, rebars, chunks);
             continue;
         }
         // caps across each row (concrete), stringers along each column (timber)

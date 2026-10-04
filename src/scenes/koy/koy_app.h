@@ -60,6 +60,8 @@ struct KoyApp {
     bool torchOn = false;                  // the diver's torch (panel, F)
     float worldTime = 0.0f;
     std::vector<uchar4> pixels;
+    float2* dFloatPts = nullptr;           // the floats' x, z and their sampled wave heights (device)
+    float* dFloatH = nullptr;
     void* bottomArr = nullptr;             // the floor's depth map (the light fields' choice), cudaArray_t
     unsigned long long bottomTex = 0;
     // Ada (docs/koy/PLAN_ADA.md §6): the pressure, the oxygen's partial pressure, the toxicity dose (0..1) it builds

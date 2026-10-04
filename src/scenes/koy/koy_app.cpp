@@ -362,6 +362,23 @@ void KoyApp::stepWorld(float t) {
     const double t0 = know();
     ocean.update(t, renderer.stream(), caustics);
     if (ripplesOn) ripples.update(t, renderer.stream(), false);
+    // the floats ride the waves: the surface's height under each, then their instances and their ropes moved
+    if (!world.buoys.floaters.empty()) {
+        const std::vector<float2> pts = world.buoys.samplePoints();
+        if (!dFloatPts) {
+            cudaMalloc(reinterpret_cast<void**>(&dFloatPts), pts.size() * sizeof(float2));
+            cudaMalloc(reinterpret_cast<void**>(&dFloatH), pts.size() * sizeof(float));
+            cudaMemcpy(dFloatPts, pts.data(), pts.size() * sizeof(float2), cudaMemcpyHostToDevice);
+        }
+        koySampleHeights(ocean.surfaceTexture(), ocean.oset.patch, dFloatPts, int(pts.size()), dFloatH, renderer.stream());
+        std::vector<float> h(pts.size());
+        cudaMemcpyAsync(h.data(), dFloatH, h.size() * sizeof(float), cudaMemcpyDeviceToHost, renderer.stream());
+        cudaStreamSynchronize(renderer.stream());
+        std::vector<int> idx;
+        std::vector<std::array<float, 12>> m;
+        world.buoys.transforms(h, idx, m);
+        renderer.setTransforms(idx, m);
+    }
     if ((grassMoves && cfg.i("grass.move", 1)) || t == 0.0f) {
         world.grass.update(t, renderer.ribbonPoints(), renderer.ribbonNormals(), renderer.stream());
         renderer.updateRibbons(nullptr, nullptr);
@@ -409,6 +426,10 @@ void KoyApp::release() {
     bottomTex = 0;
     bottomArr = nullptr;
     renderer.params().bottomMap = 0;
+    if (dFloatPts) cudaFree(dFloatPts);
+    if (dFloatH) cudaFree(dFloatH);
+    dFloatPts = nullptr;
+    dFloatH = nullptr;
     ocean.release();
     ripples.release();
     world.release();
@@ -436,7 +457,7 @@ int runKoyCli(int argc, char** argv) {
     std::string mode, out, path = "sabit", testName, mapOut;
     int frames = 120, refN = 4, timing = 0;
     float t0 = 0.0f, fps = 41.0f;
-    bool camGiven = false, ref = false, worker = false, liveOnly = false;
+    bool camGiven = false, ref = false, worker = false, liveOnly = false, fromFloor = false;
     float3 camPos{}, camLook{};
     std::vector<float3> cams, looks;   // --doku and --yokla take several --cam/--look pairs
     int spp = -1, edge = -1, filter = -1;
@@ -457,6 +478,7 @@ int runKoyCli(int argc, char** argv) {
         else if (a == "--dalgacik") mode = "ripple";
         else if (a == "--yokla") mode = "probe";
         else if (a == "--kareler") mode = "views";
+        else if (a == "--yerden") fromFloor = true;   // --cam / --look y: metres over the sand there
         else if (a == "--yol") path = next();
         else if (a == "--kare") frames = std::stoi(next());
         else if (a == "--refn") refN = std::stoi(next());
@@ -479,6 +501,12 @@ int runKoyCli(int argc, char** argv) {
         return 2;
     }
     app.loadConfig();
+    if (fromFloor) {   // the given heights are over the sand
+        for (auto& c : cams) c.y += koyFloor(app.cfg, c.x, c.z);
+        for (auto& l : looks) l.y += koyFloor(app.cfg, l.x, l.z);
+        if (!cams.empty()) camPos = cams[0];
+        if (!looks.empty()) camLook = looks[0];
+    }
     if (spp > 0) app.quality.base = spp;
     if (edge > 0) app.quality.edge = edge;
     if (filter >= 0) app.quality.filter = filter;

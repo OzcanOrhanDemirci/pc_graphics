@@ -389,8 +389,11 @@ void KoyRenderer::uploadWorld(const std::vector<KMeshCPU>& meshes, const std::ve
     // the instances (the ribbons last, identity, the second hit record)
     std::vector<OptixInstance> inst;
     std::vector<KInstance> kinst;
-    for (const KInstanceCPU& in : instances) {
+    instMap_.assign(instances.size(), -1);
+    for (size_t wi = 0; wi < instances.size(); ++wi) {
+        const KInstanceCPU& in = instances[wi];
         if (in.mesh < 0 || size_t(in.mesh) >= gas_.size() || !gas_[in.mesh]) continue;
+        instMap_[wi] = int(inst.size());
         OptixInstance oi{};
         std::memcpy(oi.transform, in.m, sizeof(in.m));
         oi.instanceId = unsigned(inst.size());
@@ -426,6 +429,8 @@ void KoyRenderer::uploadWorld(const std::vector<KMeshCPU>& meshes, const std::ve
     instanceCount_ = unsigned(inst.size());
     dInstances_ = upload(inst, worldBuffers_);
     params_.instances = upload(kinst, worldBuffers_);
+    instHost_ = inst;
+    kinstHost_ = kinst;
     params_.materials = upload(materials, worldBuffers_);
     params_.texSets = upload(texSets, worldBuffers_);
     iasBuf_ = nullptr;
@@ -691,6 +696,23 @@ void KoyRenderer::renderReference(int n) {
     params_.samples = live;
     allocatedBase_ = base0;
     setSampling(base0, edge0, filter0, radius0, contrast0);
+}
+
+void KoyRenderer::setTransforms(const std::vector<int>& idx, const std::vector<std::array<float, 12>>& m) {
+    if (idx.empty() || !dInstances_) return;
+    for (size_t k = 0; k < idx.size() && k < m.size(); ++k) {
+        if (idx[k] < 0 || size_t(idx[k]) >= instMap_.size() || instMap_[size_t(idx[k])] < 0) continue;
+        const int q = instMap_[size_t(idx[k])];
+        std::memcpy(instHost_[size_t(q)].transform, m[k].data(), sizeof(float) * 12);
+        KInstance& f = kinstHost_[size_t(q)];
+        f.r0 = make_float4(m[k][0], m[k][1], m[k][2], m[k][3]);
+        f.r1 = make_float4(m[k][4], m[k][5], m[k][6], m[k][7]);
+        f.r2 = make_float4(m[k][8], m[k][9], m[k][10], m[k][11]);
+    }
+    CUDA_CHECK(cudaMemcpyAsync(dInstances_, instHost_.data(), instHost_.size() * sizeof(OptixInstance), cudaMemcpyHostToDevice, stream_));
+    CUDA_CHECK(cudaMemcpyAsync(const_cast<KInstance*>(params_.instances), kinstHost_.data(), kinstHost_.size() * sizeof(KInstance),
+                               cudaMemcpyHostToDevice, stream_));
+    buildIAS(true);
 }
 
 void KoyRenderer::updateMaterials(const std::vector<KMaterial>& materials) {

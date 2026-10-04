@@ -3,6 +3,7 @@
 
 #include "scenes/koy/koy_amphora.h"
 #include "scenes/koy/koy_island.h"
+#include "scenes/koy/koy_props.h"
 
 #include "stb_image.h"
 
@@ -421,7 +422,7 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
     };
     KMaterial islandWet = plain(cfg.v3("island.wet_rgb", make_float3(0.30f, 0.29f, 0.25f)));
     KMaterial islandDry = plain(cfg.v3("island.dry_rgb", make_float3(0.62f, 0.58f, 0.50f)));
-    if (setCoat >= 0) coat(islandWet, "island", 0.25f, 0.6f, make_float3(0.34f, 0.31f, 0.27f), 0.8f, 0.3f, 0.3f);
+    if (setCoat >= 0) coat(islandWet, "island", 0.12f, 0.6f, make_float3(0.30f, 0.27f, 0.24f), 1.0f, 0.4f, 0.35f);
     islandWet.sedimentColor = cfg.v3("island.algae_rgb", make_float3(0.11f, 0.12f, 0.05f));   // the turf: Padina, Dictyota, Cystoseira
     islandWet.filmColor = cfg.v3("island.film_rgb", make_float3(0.80f, 0.92f, 0.70f));
     islandDry.sediment = cfg.f("island.scrub", 0.6f);
@@ -452,7 +453,38 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
     KMaterial steelM = plain(cfg.v3("pier.steel_rgb", make_float3(0.55f, 0.56f, 0.57f)));
     KMaterial rustM = plain(cfg.v3("pier.rust_rgb", make_float3(0.30f, 0.13f, 0.05f)));
     rustM.mottle = 0.4f;
-    materials = {floorM, rockM, leafM, jarM, islandWet, islandDry, woodM, concWet, concDry, steelM, rustM};
+    // the floats (yellow plastic, a green film where they sit in the water), the mooring buoy (orange), the ropes
+    // (polypropylene gone brown-green), the mussels (blue-black)
+    KMaterial floatM = plain(cfg.v3("buoy.rgb", make_float3(0.78f, 0.52f, 0.04f)));
+    floatM.film = 0.35f;
+    floatM.filmColor = make_float3(0.55f, 0.75f, 0.45f);
+    floatM.stainTop = 0.0f;
+    floatM.stainBand = 0.25f;
+    floatM.stainDark = 0.55f;   // what sits in the water is slimed
+    KMaterial bigM = floatM;
+    bigM.albedo = cfg.v3("samandira.rgb", make_float3(0.78f, 0.24f, 0.05f));
+    KMaterial ropeM = plain(cfg.v3("rope.rgb", make_float3(0.26f, 0.24f, 0.17f)));
+    ropeM.film = 0.4f;
+    ropeM.filmColor = make_float3(0.7f, 0.85f, 0.6f);
+    ropeM.mottle = 0.3f;
+    KMaterial musselM = plain(cfg.v3("mussel.rgb", make_float3(0.035f, 0.04f, 0.055f)));
+    musselM.mottle = 0.35f;
+    musselM.film = 0.25f;
+    musselM.filmColor = make_float3(1.6f, 1.7f, 1.4f);   // worn edges lighter
+    // the shallows' small things (koy_props.h)
+    KMaterial stoneL = plain(cfg.v3("props.stone_light", make_float3(0.44f, 0.42f, 0.37f)));
+    stoneL.mottle = 0.3f;
+    KMaterial stoneD = plain(cfg.v3("props.stone_dark", make_float3(0.11f, 0.11f, 0.12f)));
+    stoneD.mottle = 0.3f;
+    KMaterial starM = plain(cfg.v3("props.starfish_rgb", make_float3(0.62f, 0.11f, 0.05f)));   // Echinaster sepositus
+    starM.mottle = 0.15f;
+    KMaterial cukeM = plain(cfg.v3("props.cucumber_rgb", make_float3(0.09f, 0.065f, 0.045f)));
+    cukeM.mottle = 0.25f;
+    KMaterial pinnaM = plain(cfg.v3("props.pinna_rgb", make_float3(0.33f, 0.21f, 0.13f)));
+    if (setCoat >= 0) coat(pinnaM, "pinna", 0.3f, 0.12f, make_float3(0.36f, 0.33f, 0.28f), 0.4f, 0.3f, 0.25f);
+    KMaterial urchinM = plain(cfg.v3("props.urchin_rgb", make_float3(0.045f, 0.03f, 0.045f)));
+    materials = {floorM, rockM, leafM, jarM, islandWet, islandDry, woodM, concWet, concDry, steelM, rustM, floatM, bigM, ropeM, musselM,
+                 stoneL, stoneD, starM, cukeM, pinnaM, urchinM};
 
     meshes.push_back(buildFloor(cfg));
     rockCentre = cfg.v3("rock.centre", make_float3(-2.4f, 0.0f, -6.0f));
@@ -477,10 +509,27 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
         in.mesh = k;
         instances.push_back(in);
     }
-    // the amphorae: one mesh per type, their instances consecutive (each its own baked occlusion)
+    // Ada: the rocks the amphorae gathered among
+    const KoyFloorShape fsAll = KoyFloorShape::from(cfg);
+    const KoyRockField amphoraRocks = koyAmphoraRocks(cfg, [&](float x, float z) { return fsAll(x, z); });
+    int amphoraRockMesh = -1;
+    {
+        std::string log;
+        meshes.push_back(koyBuildRockField(amphoraRocks, cfg.f("amfora_kaya.cell", 0.07f), 4, 6, &log));
+        amphoraRockMesh = int(meshes.size()) - 1;
+        KInstanceCPU in;
+        in.mesh = amphoraRockMesh;
+        instances.push_back(in);
+        std::printf("koy %s\n", log.c_str());
+    }
+    // the amphorae: one mesh per type, their instances consecutive (each its own baked occlusion); the cargo among its
+    // rocks, and a few strays before and after it (PLAN_ADA §3)
     if (cfg.i("amfora.use", 0)) {
         const KoyFloorShape fs = KoyFloorShape::from(cfg);
-        std::vector<KoyAmphoraPlacement> field = koyPlaceAmphorae(cfg, [&](float x, float z) { return fs(x, z); });
+        auto rocksAt = [&](float3 q) { return amphoraRocks.sdf(q); };
+        std::vector<KoyAmphoraPlacement> field = koyPlaceAmphorae(cfg, [&](float x, float z) { return fs(x, z); }, "amfora", rocksAt);
+        const std::vector<KoyAmphoraPlacement> strays = koyPlaceAmphorae(cfg, [&](float x, float z) { return fs(x, z); }, "amfora_tek", rocksAt);
+        field.insert(field.end(), strays.begin(), strays.end());
         const int firstMesh = int(meshes.size());
         const std::vector<KoyAmphoraPiece> pieces = koyAmphoraPieces();
         for (size_t t = 0; t < pieces.size(); ++t)
@@ -508,6 +557,22 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
         for (size_t k = first; k < meshes.size(); ++k) {
             KInstanceCPU in;
             in.mesh = int(k);
+            instances.push_back(in);
+        }
+        std::string blog;
+        buoys.build(cfg, fy, meshes, instances, 11, 12, 13, 7, 14, 5, &blog);
+        std::printf("koy dubalar: %s\n", blog.c_str());
+        // the shallows' small things, and the urchins on the island's wet rock and the amphorae's rocks
+        std::vector<const KMeshCPU*> rockMeshes = {&meshes[first]};
+        if (amphoraRockMesh >= 0) rockMeshes.push_back(&meshes[size_t(amphoraRockMesh)]);
+        std::vector<KMeshCPU> props;
+        std::string plog;
+        koyBuildProps(cfg, fy, [&](float3 q) { return isl.sdf(q) < 0.15f || amphoraRocks.sdf(q) < 0.1f; }, rockMeshes, {15, 16, 17, 18, 19, 20}, 7, props, &plog);
+        std::printf("koy susler: %s\n", plog.c_str());
+        for (KMeshCPU& m : props) {
+            meshes.push_back(std::move(m));
+            KInstanceCPU in;
+            in.mesh = int(meshes.size()) - 1;
             instances.push_back(in);
         }
     }
