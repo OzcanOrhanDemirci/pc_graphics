@@ -4,6 +4,10 @@
 > `docs/altinsaat/`, `docs/fener/`, `docs/yikim/`, `docs/laboratuvar/`, `docs/koy/` (PLAN.md ve DURUM.md); `docs/tanecik/` arşiv.
 
 ## Şu an
+- **2026-10-04 (gece, otonom) · Sahne 5 ikinci bölüm "Amfora" (plan `docs/koy/PLAN_AMFORA.md`).** Galeride artık **05
+  Amfora** (kodda `koy` kalıyor): ~12 m'de bir Roma batığının amfora yükü (ArchAIDE profilleriyle dört tip, kırıklar,
+  kabuk ve tortu), 19 m ötede 16 m'lik sekide doğal kireçtaşı kemeri, arkasında maviye duvar. Hüzme kostiği
+  (gürültüsüz), üç dip derinlikli ışık alanı. Ayrıntı, ölçümler ve "Özcan'ın bakacağı yer": `docs/koy/DURUM.md`.
 - **2026-10-03 (gece, otonom) · Koy K0 + K1 bitti, 🛑 Durak 1 (netlik ve kararlılık) Özcan'ın canlı bakışını bekliyor.**
   Galeride 05 Koy (vurgu rengi deniz mavisi `#4FB8C8`). Ölçü düzeneği `tools/kararlilik.py` (Fener'e de
   `--kararlilik` eklendi, taban ölçüldü); doğrulanmış veri `docs/koy/VERI.md`; CC0 taramalar `assets/koy/fetch.py`

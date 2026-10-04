@@ -3,11 +3,69 @@
 > Tek kaynak durum panosu. Plan: `docs/koy/PLAN.md` (kararlar, fazlar, duraklar). Veri ve denetimleri: `docs/koy/VERI.md`.
 > Gerçek fotoğraflardan başvuru panosu: `docs/koy/BASVURU.md`. CC0 taramalar: `assets/koy/fetch.py`, `assets/koy/LICENSES.md`.
 
-## Şu an · 2026-10-04 02.30 · A0 ve A1 bitti; sırada A3 (amforalar), A2'nin ışık alanı işiyle birlikte
+## Özcan'ın bakacağı yer · 2026-10-04 sabahı
 
-**Aktif plan: `docs/koy/PLAN_AMFORA.md`** (otonom, durak yok). Yerleşim kuruldu (aşağıda A0), kompozisyon karelerle
-seçildi. Sıradaki: A3 (ArchAIDE profilleriyle gerçek amforalar, `clay_plaster` ve kabuk katmanları), A2'nin kalanı (iki
-derinlikli ışık alanı: tarla 12 m, duvarın dibi 36 m), A4 (kemerin dokuları), A5 (ışık).
+**Açmak:** `build\pc_graphics.exe` → galeride **05 Amfora** (ilk açılış ~14 sn: dokular, üç ışık alanı, kemerin ağı).
+Dalgıç tarlanın 9 m gerisinden, 1,6 m yukarıdan başlar, kemere doğru bakar. Tuşlar aynı: **W A S D** yüz, **Boşluk**
+yukarı, **C** aşağı, **Shift** güçlü vuruş, **Tab** fareyle bakış, **P** zamanı durdur (durunca örnekler birikir).
+
+**Nereye bakılacak:**
+1. *İlk bakış:* önde kumdan taşan amforalar, arkada mavide kemer, tepede ışık sütunları. Okuma sırası tarla → kemer →
+   sütunlar mı, kemer kemer gibi mi okunuyor?
+2. *Tarlaya in* (C, 30-50 cm'ye kadar): kırık gövdeler (içleri tortulu), kulplu boyunlar, kırık parçalar, kabuk yamaları,
+   üstte tortu keçesi. Gerçek bir batık fotoğrafının yanında durur mu? (`docs/koy/BASVURU.md` §12)
+3. *Kemere yüz* (~20 m, 40 sn): açıklıktan derin mavi, dibinde 16K kaya, düşmüş bloklar, arkadaki duvar.
+4. *Yukarı bak:* ışık sütunları, Snell penceresi, dalgacıklar (önceki duraktaki gibi).
+5. Panel: **Kostik: Hüzme / Işın (eski)** (gürültüsüz kostikle eski kaynayan yöntemin farkı), **Doku**, **Örnek**.
+
+**Karar istenenler (benim önerilerimle):** kemerin biçimi yeterince doğal mı (öneri: uzaktan hâlâ biraz kabuk gibi,
+sırtları ve köşeleri artırırım); amforaların rengi (öneri: suyun maviliğine dokunmadan gözün renk uyumunu panelde
+seçenek olarak eklemek); ışık sütunlarının gücü (rüzgâr 4 m/s seçildi).
+
+## Şu an · 2026-10-04 03.10 · A0-A5 ilk turları bitti, A6 ölçüleri ve A7 sürüyor
+
+**Aktif plan: `docs/koy/PLAN_AMFORA.md`** (otonom, durak yok). Sıradaki: kararlılık yollarının kalanı (yukarı, kum),
+kare süresi ölçüsü, galeri resmi, README görselleri, bağımsız gözden geçirme, hasat.
+
+## A2-A6 · zemin ve ışık alanı, amforalar, kemer, ışık, ölçüler · 2026-10-04 gece
+
+**A2 · üç dip derinlikli ışık alanı.** Tek alan (dip 38 m) ile tek alan (dip 12,5 m) aynı pozlamada kıyaslandı: tarla
+%34, kum %38, üstteki su %29 parlak (parlak kum ışığı yukarı yansıtıyor, bütün su sütunu aydınlanıyor). Şimdi ışık alanı
+üç dip için (`light.bottoms = 12.6 16.6 38`: tarla, seki, duvarın dibi; hazırlık +3 sn). Zeminin derinlik haritası
+(`KoyFloorShape`'ten 512²) her yüzeye altındaki dibi söylüyor; yüzey, dibi ayraçlayan iki alanı okuyor, her alanı kendi
+dibinden derinde dibindeki değeriyle (eşyükselti boyunca dikiş yok, yamaçta kareyle bakıldı). Bakış yolları ilk 30 m'de
+ulaştıkları derinliğe kadar aydınlık en sığ alanı alıyor (yolun ışığının ~%95'i oradan gelir, c ≈ 0,1/m), alanın dibine
+1,5 m kala bir sonrakine yumuşak geçiyor. 🪤 İlk sürümde "aşağı bakan kaçan ışın = en derin alan" kuralı ufukta koyu
+bir şerit çiziyordu (110 m'lik zemine çarpmayan, hafif aşağı bakan ışınlar); 30 m kuralı kaldırdı. Sonuç: tarla bölgesi
+12,5 m'lik tek alanla aynı (0,99), kemer bölgesi seki alanıyla (0,89 / 12,5 m alanına).
+
+**A3 · amforalar.** ArchAIDE profilleri (dört tip, dış ve iç yüz, kulplar; atıf `assets/koy/LICENSES.md` ve README).
+Genel parça üreteci (yükseklik ve açı aralığıyla duvar parçası, tırtıklı kırık, kırık yüzü duvar kalınlığı): tarlada 96
+parça (sağlam amforalar, boynu kopmuş gövdeler tortuyla dolu, kulplu boyunlar, yarım gövdeler) + 40 çanak çömlek
+parçası; dik olanlar omza kadar gömülü. Malzeme: `clay_plaster` 8K ayrıntı katmanı (2,00 m'lik tarama 1,64 m'lik karoya
+basıldı: 0,2 mm tekstel, kil taneleri %18 küçük; plandan sapma), `coral_fort_wall_01` kabuk (0,8 m'lik karo: 1,36 m'de
+damarları mermer gibi okunuyordu), gürültü maskesi (girintide çok, kumun aşındırdığı alt yüzde az), yukarı bakan yüzde
+tortu keçesi, yanlarda yeşilimsi film, yavaş renk oynaması, birkaç cm'lik sünger ve kireçli alg lekeleri. 🪤 `KMaterial{}`
+sıfırla başlıyor: `coatSet = 0` geçerli bir doku seti, bütün malzemeler istemeden kabuk alırdı; açıkça −1.
+
+**A4 · kemer.** Hücresel gürültüyle 4,5 × 2,2 m'lik bloklar (dar çatlak, her blok kendi kayması), katmanların yalnız
+bazısı çıkıntı ya da oluk, yassı tepe (`arch.flat = 0.55`). İlk denemede 2,3 × 1,25 m'lik hücreler taş örgü bir köprü
+gibi okundu (karede), büyütüldü. Kemere 16K kaya ayrıntısı ve daha az kabuk.
+
+**A5 · ışık (ilk tur).** Rüzgâr 2,5 → 4 m/s: sakin denizde sütunlar seçilmiyordu, yaz esintisiyle açıkça görünüyor
+(üç kareyle kıyas; alçak güneş 42° sütunları düzleştirdi, 50° kaldı). Duvar yalnız kemerin arkasında, kenarı kıvrılıyor.
+
+**A6 · ölçüler.** Kostik 28 dilim, 0,5-18 m (seki 16-17 m; daha derini son dilimi alır): 10,3 → 7,2 ms. Kararlılık (60
+kare, 256 örnekli referansa karşı, `--kararlilik`):
+
+| Yol | Piksel ort / %99 | 8×8 blok ort / %99 | Bağıl | FLIP |
+|---|---|---|---|---|
+| amfora (tarlanın 1 m üstünde süzülme, 0,5 m/sn) | 0,00166 / 0,0135 | 0,00023 / 0,0016 | 0,149 | 0,0090 |
+| kemer (kemere yüzüş) | 0,00043 / 0,0039 | 0,00009 / 0,0005 | 0,496 | 0,0050 |
+| *Fener tabanı* | *0,0053-0,0061* | *0,0011-0,0026* | *0,45-1,24* | *0,026-0,038* |
+
+Kemer yolunun bağıl ölçüsü Fener'in alt değerinin yarısını aşıyor: uzaktaki kemere yavaş yaklaşırken referansın kendisi
+çok az değişiyor (payda küçük); mutlak kıpırtı Fener'in 12 katı altında.
 
 ## A0 · kaynaklar ve kompozisyon · 2026-10-04 gece · ✅ bitti
 

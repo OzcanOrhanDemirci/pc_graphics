@@ -81,6 +81,8 @@ struct KMaterial {
     float film;          // the film on the sides (0..1), towards filmColor
     float3 filmColor;
     float mottle;        // slow colour variation (0..1)
+    float life;          // small living patches on the concretion (0..1): sponge (lifeA), coralline crust (lifeB)
+    float3 lifeA, lifeB;
 };
 
 struct KMesh {
@@ -136,6 +138,10 @@ struct KoyParams {
     float4* hdr;                        // resolved scene-referred linear sRGB
     uchar4* output;
     unsigned int frameIndex;
+    // the host's sizeof(KoyParams) and sizeof(KMaterial): the device program is compiled from source at run time
+    // (NVRTC), so a stale executable with a changed struct reads every field shifted, silently. The final pass compares
+    // them with its own and paints the frame magenta if they differ (2026-10-04: a measurement copy did just that)
+    unsigned int layoutParams, layoutMaterial;
 
     // ---- scene
     OptixTraversableHandle handle;

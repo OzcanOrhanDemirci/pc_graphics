@@ -411,6 +411,9 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
         M.film = cfg.f((std::string(key) + ".film").c_str(), film);
         M.filmColor = cfg.v3("film.color", make_float3(0.78f, 0.95f, 0.72f));
         M.mottle = cfg.f((std::string(key) + ".mottle").c_str(), mottle);
+        M.life = cfg.f((std::string(key) + ".life").c_str(), 0.8f);
+        M.lifeA = cfg.v3("life.sponge", make_float3(0.55f, 0.16f, 0.06f));   // Crambe crambe: orange-red
+        M.lifeB = cfg.v3("life.coralline", make_float3(0.52f, 0.30f, 0.38f));  // Lithophyllum: pale pink-mauve
     };
     if (setCoat >= 0) {
         coat(jarM, "amfora", 0.55f, 0.22f, make_float3(0.42f, 0.40f, 0.36f), 0.75f, 0.35f, 0.22f);

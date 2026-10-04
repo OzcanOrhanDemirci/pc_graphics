@@ -442,7 +442,10 @@ static __device__ Tri triplanar(int set, float tile, float3 p, float3 ng, float 
 
 // A surface: the scanned material (ray-cone filtered), the direct sun (caustic factor, a shadow ray) and the water's
 // diffuse light (baked occlusion), all seen through tPath metres of water.
-static __forceinline__ __device__ float3 shadeSurface(const Hit& h, float3 d, float tPath, float coneAngle, float& causticOut, float3& nOut) {
+// cheap: a surface seen in the wavy mirror of total internal reflection (blurred and distorted there): the costly
+// layers (the detail scan, the noise masks of the coat) give way to their averages
+static __forceinline__ __device__ float3 shadeSurface(const Hit& h, float3 d, float tPath, float coneAngle, float& causticOut, float3& nOut,
+                                                     bool cheap = false) {
     const KMaterial m = params.materials[h.mat];
     float3 albedo = m.albedo;
     float3 n = h.ns;
@@ -482,7 +485,7 @@ static __forceinline__ __device__ float3 shadeSurface(const Hit& h, float3 d, fl
     }
     // the detail layer: a tiling scan laid over in world space (planar on the floor, triplanar on rocks and jars), its
     // colour modulating around its own mean, its normal map bending the surface: grain that holds up at 30 cm
-    if (m.detailSet >= 0) {
+    if (m.detailSet >= 0 && !cheap) {
         const Tri t = triplanar(m.detailSet, m.detailTile, h.p, h.ng, width, m.kind == KM_TERRAIN);
         if (t.ok) {
             const float3 mean = params.texSets[m.detailSet].meanAlbedo;
@@ -499,12 +502,16 @@ static __forceinline__ __device__ float3 shadeSurface(const Hit& h, float3 d, fl
         const float t = fminf(fmaxf((x - a) / (b - a), 0.0f), 1.0f);
         return t * t * (3.0f - 2.0f * t);
     };
-    if (m.mottle > 0.0f) albedo = albedo * (1.0f + m.mottle * 2.0f * fbm3(h.p * 1.7f + make_float3(5.0f, 1.0f, 3.0f), 3));
-    if (m.film > 0.0f) {
+    if (cheap) {   // the layers' averages: the coat over about its cover, the felt on what looks up
+        if (m.coatSet >= 0) albedo = albedo + (m.coatTint - albedo) * fminf(fmaxf(m.coatCover, 0.0f), 1.0f);
+        if (m.sediment > 0.0f) albedo = albedo + (m.sedimentColor - albedo) * (0.75f * m.sediment * sstep(0.30f, 0.85f, n.y));
+    }
+    if (m.mottle > 0.0f && !cheap) albedo = albedo * (1.0f + m.mottle * 2.0f * fbm3(h.p * 1.7f + make_float3(5.0f, 1.0f, 3.0f), 3));
+    if (m.film > 0.0f && !cheap) {
         const float side = 1.0f - sstep(0.2f, 0.7f, n.y);
         albedo = albedo + (albedo * m.filmColor - albedo) * (m.film * side);
     }
-    if (m.coatSet >= 0) {
+    if (m.coatSet >= 0 && !cheap) {
         const float nv = fbm3(h.p * (1.0f / m.coatScale), 4);
         const float recess = (1.0f - h.ao) * sstep(-0.4f, 0.0f, n.y);
         const float scour = sstep(-0.2f, -0.7f, n.y);
@@ -521,7 +528,14 @@ static __forceinline__ __device__ float3 shadeSurface(const Hit& h, float3 d, fl
             }
         }
     }
-    if (m.sediment > 0.0f) {
+    if (m.life > 0.0f && !cheap) {   // a few cm each, some 8 % of the surface: orange-red sponge, pink coralline crust (dark at depth)
+        const float3 q = h.p * 9.0f;
+        const float a = sstep(0.40f, 0.52f, noise3(q + make_float3(3.0f, 1.0f, 7.0f))) * m.life;
+        const float b = sstep(0.38f, 0.48f, noise3(q * 0.7f + make_float3(11.0f, 5.0f, 2.0f))) * m.life * 0.8f;
+        albedo = albedo + (m.lifeA - albedo) * a;
+        albedo = albedo + (m.lifeB - albedo) * b;
+    }
+    if (m.sediment > 0.0f && !cheap) {
         const float up = sstep(0.30f, 0.85f, n.y);
         const float s = m.sediment * up * (0.55f + 0.45f * sstep(-0.25f, 0.25f, fbm3(h.p * 3.1f + make_float3(2.0f, 7.0f, 1.0f), 3)));
         albedo = albedo + (m.sedimentColor - albedo) * s;
@@ -579,7 +593,7 @@ static __forceinline__ __device__ float3 shadeReflected(float3 q, float3 r, floa
     if (h.hit) {
         float c;
         float3 n;
-        L = shadeSurface(h, r, h.t + tBefore, coneAngle, c, n);
+        L = shadeSurface(h, r, h.t + tBefore, coneAngle, c, n, true);   // seen in the wavy mirror: the cheap layers
         L += reflectedPath(r.y, h.t, tBefore, deepestField());   // reflected rays go down: the deep field is lit all the way
     } else {
         L = reflectedPath(r.y, params.farDistance, tBefore, deepestField());
@@ -853,6 +867,10 @@ extern "C" __global__ void __raygen__final() {
     const float r = fminf(fmaxf(srgbOetf(c.x) * 255.0f + 0.5f + n, 0.0f), 255.0f);
     const float g = fminf(fmaxf(srgbOetf(c.y) * 255.0f + 0.5f + n, 0.0f), 255.0f);
     const float b = fminf(fmaxf(srgbOetf(c.z) * 255.0f + 0.5f + n, 0.0f), 255.0f);
+    if (params.layoutParams != sizeof(KoyParams) || params.layoutMaterial != sizeof(KMaterial)) {
+        params.output[i] = make_uchar4(255, 0, 255, 255);   // host and device disagree on the structs: rebuild
+        return;
+    }
     params.output[i] = make_uchar4((unsigned char)r, (unsigned char)g, (unsigned char)b, 255);
 }
 

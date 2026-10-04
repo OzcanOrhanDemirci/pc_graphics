@@ -210,6 +210,40 @@ Nasıl yapıldığı ve yolda neyin ölçüldüğü (çalışma günlüğünde h
 Açık: bal ipinin yüzeyi boğumlu (bir-üç tanecik kalınlığında); karpuz parçaları keskin kırık değil yumuşak yüzeyler olarak çiziliyor; balon asılı değil masada
 (asılıyken hafif lastik suyun ağırlığını düğüme zamanında taşıyamadı).
 
+### 5 · Amfora · Ekim 2026
+
+| ![12 m'de kumlu bir tümsekte kabuk bağlamış amforalar, arkalarında mavide doğal bir kaya kemeri, tepeden ışık sütunları](docs/images/amfora-tarla.jpg) |
+|---|
+| ![Yakından: kuma yarı gömülü, kabuk bağlamış kırık ve sağlam amforalar, üstlerinde tortu keçesi](docs/images/amfora-yakin.jpg) |
+
+Akdeniz'de su altı, tüplü bir dalgıç gibi yüzülür: 12 metrede, MÖ 1. yüzyıldan bir Roma ticaret gemisinin şarap yükü;
+gövde çürüyünce düştükleri yerde yatan amforalar, yarı gömülü, kabuk bağlamış, çoğu kırık. 19 m ötede, 16 m'lik bir
+sekide ters ışıkta doğal bir kireçtaşı kemeri; zemin arkasında düştüğü için açıklığından derin mavi görünür. Önce netlik
+ve kararlılık; ışık fiziksel.
+
+- **Zamansal hilesiz netlik:** her piksel her karede aynı sabit alt piksel örnekleriyle çizilir (4, döndürülmüş ızgara;
+  titreşim yok, geçmiş yok), kenardaki piksellere 32'ye kadar ek örnek, pikselden biraz geniş bir Blackman-Harris süzgeci.
+  Kamera yollarında yakınsamış referansa karşı ölçülen kıpırtı (`tools/kararlilik.py`) sahne 2'nin TAA'sından 3-10 kat
+  düşük.
+- **Pişirilmiş tayfsal su:** soğurma ve saçılma 5 nm adımla yayımlanmış ölçümlerden (Pope ve Fry, bir Jerlov tipi,
+  Fournier-Forand), güneş ve gök tayfı, göz eğrileri; hepsi ışığın yol uzunluğuna göre tablolara. Su sütununun dağınık
+  ışığı Monte Carlo ışık alanı, üç dip derinliği için: batığın parlak kumu üstünde su derinin üstündekinden ~%30 parlak,
+  her yüzey altındaki dibin alanını okur.
+- **Gürültüsüz kostik (hüzme):** FFT yüzeyinin her hücresi (bir milyon) bir ışık hüzmesi; 28 derinlik diliminin her
+  birinde hüzmenin akısı köşelerinin kurduğu iki üçgene yayılır, her doku pikseli o üçgenlerin alanından tam payını alır
+  (Green teoremi, satır satır). Hiçbir şey sayılmadığı için kaynamıyor: eski ışın saymaya göre kostiğin kendi kıpırtısı
+  13-15 kat düştü (16 kat ışın bile hüzmenin 4 katı gürültü bırakıyordu). 7 ms.
+- **Amforalar:** Southampton Üniversitesi çizimlerinin ArchAIDE vektörlerinden döndürülmüş dört tip (Dressel 1B, 1A,
+  2-4, Lamboglia 2; dış yüz, ağız içi, kulplar; CC BY 4.0) ve kırık parçaları: boynu kopmuş gövdeler (tortuyla dolu),
+  kulplu boyunlar, yarım gövdeler, çanak çömlek parçaları. Kabuk yamaları altında 8K kil; girintilerde çok, kumun
+  aşındırdığı yerde az; yukarı bakan her yerde tortu keçesi.
+- **Kemer:** uzaklık alanı (yarım elips üstüne bükülmüş, kalınlığı değişen kaya tüpü, kireçtaşı katmanları, çatlaklarla
+  ayrılmış bloklar, aşınmış sırtlar, düşmüş bloklar); surface nets ile 7 cm'de 2,7 sn'de ağ, üstüne dünya uzayında 16K
+  kaya taraması.
+
+Açık kalanlar: kemer uzaktan hâlâ biraz kabuk gibi okunuyor; ışık sütunları güneşe doğru bakılmadıkça soluk; kararlılık
+dört kamera yolunda ölçüldü, görünüş gerçek batık fotoğraflarıyla gözle tartıldı. Hepsi `docs/koy/DURUM.md`'de.
+
 ## Sahne 1: neyi hesaplıyor
 
 | | |
@@ -478,7 +512,10 @@ third_party/fetch.sh  bağımlılıkları indirir; klasörün kendisi git'te de�
 
 ## Lisans
 
-Özel depo. Tüm hakları saklıdır. Üçüncü taraf bileşenler derleme sırasında kendi lisanslarıyla indirilir: NVIDIA
+Özel depo. Tüm hakları saklıdır. Sahne 5'in amfora profilleri koda şuradan yazıldı: ArchAIDE konsorsiyumu (2019),
+Southampton Üniversitesi çizimlerinin vektör profilleri (P. Copeland, *Roman Amphorae: a digital resource*, 2014), CC BY
+4.0, https://doi.org/10.5284/1050896; taranmış dokuları (Poly Haven, ambientCG) CC0, `assets/koy/fetch.py` indirir
+(`assets/koy/LICENSES.md`). Üçüncü taraf bileşenler derleme sırasında kendi lisanslarıyla indirilir: NVIDIA
 CUDA dağıtım arşivleri ve OptiX SDK başlıkları, GLFW (zlib), stb (kamu malı), tinyexr (BSD). `assets/fonts`
 altındaki IBM Plex yazı tipleri SIL Open Font License ile (`assets/fonts/LICENSE.txt`). Deprem kayıtları: ESM,
 Engineering Strong-Motion veritabanı (Mascandola ve diğ., doi 10.13127/esm.3) ve AFAD TADAS.

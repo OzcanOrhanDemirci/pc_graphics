@@ -217,6 +217,41 @@ Open: the honey thread's surface is lumpy (it is one to three particles thick); 
 balloon rests on the table rather than hanging (hanging, the light rubber could not carry the water's weight to the
 knot in time).
 
+### 5 · Amphorae *(Amfora)* · October 2026
+
+| ![Encrusted amphorae on a sandy mound at 12 m, a natural rock arch in the blue behind them, shafts of light from above](docs/images/amfora-tarla.jpg) |
+|---|
+| ![Close: broken and whole amphorae half sunk in the sand, crusted, a felt of sediment on top](docs/images/amfora-yakin.jpg) |
+
+Under water in the Mediterranean, swum like a scuba diver: at 12 m the wine cargo of a Roman merchantman of the 1st
+century BC, the jars lying where they fell when the hull rotted away, half sunk, crusted, many broken; 19 m beyond, on
+a shelf at 16 m, a natural limestone arch against the light, the deep blue through its opening where the floor drops
+away. Sharpness and steadiness come first; the light is physical.
+
+- **Sharpness without temporal tricks:** every pixel is drawn with the same fixed sub-pixel samples every frame (4,
+  rotated grid; no jitter, no history), edge pixels get up to 32 more, a Blackman-Harris filter a little wider than a
+  pixel joins them. Measured against a converged reference along camera paths (`tools/kararlilik.py`), the shimmer is
+  3 to 10 times below the TAA of scene 2.
+- **Spectral water, baked:** absorption and scattering every 5 nm from published measurements (Pope and Fry, a Jerlov
+  type, Fournier-Forand), the sun and sky spectra, the eye's curves, all baked into tables by the light's path length.
+  The water column's diffuse light is a Monte Carlo light field, built for three floor depths: over the wreck's bright
+  sand the water is about 30 % brighter than over the deep, and every surface reads the field of the floor below it.
+- **Caustics without noise (beams):** every cell of the FFT surface (a million) is a beam of light; at each of 28 depth
+  slices the beam's flux spreads over the two triangles its corners span, every texel receiving exactly its share of
+  their area (Green's theorem, row by row). Nothing is counted, so nothing boils: against the old counted rays the
+  caustics' own flicker fell 13 to 15 times (16 times the rays had still left four times the beams' noise). 7 ms.
+- **The amphorae:** four types turned from the profiles of the University of Southampton's drawings as vectorised by
+  ArchAIDE (Dressel 1B, 1A, 2-4, Lamboglia 2; outside, the mouth's inside, the handles; CC BY 4.0), and broken pieces of
+  them: bodies whose necks snapped (filled with sediment), necks with their handles, halves, sherds. 8K clay under
+  patches of concretion, more in recesses, less where the sand scours; a felt of sediment on everything that looks up.
+- **The arch:** a distance field (a tube of rock of varying thickness bent over a half-ellipse, limestone beds, blocks
+  split along joints, eroded ridges, fallen blocks), meshed by surface nets at 7 cm in 2.7 s, a 16K rock scan laid over
+  it in world space.
+
+Open: the arch still reads a little like a shell from afar; the light shafts are faint unless you look towards the sun;
+steadiness was measured on four camera paths, the look judged by eye against real wreck photographs. Everything in
+`docs/koy/DURUM.md`.
+
 ## What scene 1 computes
 
 | | |
@@ -496,7 +531,10 @@ third_party/fetch.sh  fetches the dependencies; the folder itself is not committ
 
 ## Licence
 
-Private repository. All rights reserved. Third-party components are fetched at build time under their own licences:
+Private repository. All rights reserved. Scene 5's amphora profiles are written into the code from ArchAIDE consortium
+(2019), vector profiles of the University of Southampton's drawings (P. Copeland, *Roman Amphorae: a digital resource*,
+2014), CC BY 4.0, https://doi.org/10.5284/1050896; its scanned textures (Poly Haven, ambientCG) are CC0 and fetched by
+`assets/koy/fetch.py` (`assets/koy/LICENSES.md`). Third-party components are fetched at build time under their own licences:
 the NVIDIA CUDA redistributables and OptiX SDK headers, GLFW (zlib), stb (public domain), tinyexr (BSD). The IBM Plex
 fonts in `assets/fonts` are under the SIL Open Font License (`assets/fonts/LICENSE.txt`). Earthquake records: ESM, the
 Engineering Strong-Motion database (Mascandola et al., doi 10.13127/esm.3), and AFAD TADAS.

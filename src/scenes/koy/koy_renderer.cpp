@@ -62,6 +62,8 @@ template <class T> static T* upload(const std::vector<T>& v, std::vector<void*>&
 }
 
 bool KoyRenderer::init(unsigned int width, unsigned int height, const std::string& root) {
+    params_.layoutParams = unsigned(sizeof(KoyParams));     // the final pass checks the device program agrees
+    params_.layoutMaterial = unsigned(sizeof(KMaterial));
     root_ = root;
     width_ = width;
     height_ = height;
