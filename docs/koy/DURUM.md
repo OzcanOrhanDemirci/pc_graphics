@@ -3,7 +3,12 @@
 > Tek kaynak durum panosu. Son plan: **`docs/koy/PLAN_ADA.md`** (üçüncü bölüm "Ada", 🏁 bitti); önceki planlar
 > `PLAN.md`, `PLAN_AMFORA.md`. Veri: `docs/koy/VERI.md`. CC0 taramalar: `assets/koy/fetch.py`, `assets/koy/LICENSES.md`.
 
-## Şu an · 2026-10-05 gece · panel sadeleşti, doku seviyeleri kartı gerçekten boşaltıyor
+## 🏁 Sahne 5 tamamlandı · 2026-10-05 gece
+
+**Özcan:** *"Sahneyi tamamladık. Oturumu kapatabiliriz. Bir sonraki grafik devamda yeni sahneye geçeceğiz."* Aşağıdaki son
+bölüm sahnenin son hâli; açık kalan küçük notlar ("NE DOĞRULANMADI") yeni bir istek gelmedikçe açılmaz.
+
+## 2026-10-05 gece · panel sadeleşti, doku seviyeleri kartı gerçekten boşaltıyor
 
 **Özcan:** *"Fener olmasın, kaldıralım [...] Şu ayarlar sabitlensin seçmeyelim: Kostik yeni, backman harris olan, dalgacık
 açık, kare serbest. Örneklerde ikisi de 32 olsun sınır [...] Bir kere yüksekte başlayınca vrami salmıyor, düşük yapınca
