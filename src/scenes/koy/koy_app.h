@@ -56,6 +56,7 @@ struct KoyApp {
     KoyQuality quality;
     float ev = 0.0f, evAdapt = 0.0f, adaptRef = 0.0f;
     bool caustics = true, grassMoves = true;
+    bool torchOn = false;                  // the diver's torch (panel, F)
     float worldTime = 0.0f;
     std::vector<uchar4> pixels;
     void* bottomArr = nullptr;             // the floor's depth map (the light fields' choice), cudaArray_t

@@ -76,7 +76,7 @@ public:
                     {L("Sağ tık", "Right button"), L("Basılı tutup bak", "Hold to look")}}},
                   {L("Sahne", "Scene"),
                    {{"P", L("Zamanı durdur (durunca örnekler birikir)", "Pause time (still: samples accumulate)")},
-                    {"E", L("Kenar piksellerini göster", "Show the edge pixels")}, {"K", L("Kostik aç/kapa", "Caustics on/off")},
+                    {"E", L("Kenar piksellerini göster", "Show the edge pixels")}, {"K", L("Kostik aç/kapa", "Caustics on/off")}, {"F", L("Fener aç/kapa", "Torch on/off")},
                     {"↑|↓", L("Pozlama", "Exposure")}}}};
         i.reloadable = true;
         return i;
@@ -136,6 +136,11 @@ public:
                                : got == 1 ? L("Doku: yüksek (her şey 8K: kaya, kum, ayrıntı katmanı)", "Textures: high (everything 8K: rock, sand, detail layer)")
                                           : L("Doku: standart (2K)", "Textures: standard (2K)"));
             }
+            if (e.id == "fener" && e.item >= 0) {
+                k_.torchOn = e.item == 1;
+                k_.setCamera();
+                refresh = true;
+            }
             if (e.id == "dalgacik" && e.item >= 0) {
                 k_.setRipples(e.item == 1);
                 if (e.item == 1 && !k_.ripplesOn)
@@ -173,6 +178,13 @@ public:
             resetAccum();
         }
         if (in.pressed(GLFW_KEY_E)) k_.renderer.params().view = k_.renderer.params().view == 1 ? 0 : 1;
+        if (in.pressed(GLFW_KEY_F)) {
+            k_.torchOn = !k_.torchOn;
+            k_.setCamera();
+            host.toast(k_.torchOn ? L("Fener açık: yakında gerçek renkler (kırmızı birkaç metrede söner)", "Torch on: true colours close up (red dies within metres)")
+                                  : L("Fener kapalı", "Torch off"));
+            resetAccum();
+        }
         if (in.pressed(GLFW_KEY_K)) {
             k_.caustics = !k_.caustics;
             host.toast(k_.caustics ? L("Kostik açık", "Caustics on") : L("Kostik kapalı (düz güneş)", "Caustics off (flat sun)"));
@@ -264,6 +276,19 @@ public:
             c.active = k_.ripplesOn ? 1 : 0;
             c.detail = L("Su yüzeyinin 2-35 cm'lik dalgaları; yalnız bakışta (Snell penceresi, ayna, pırıltı), kostik değişmez",
                          "The surface's 2-35 cm waves; in the view alone (Snell's window, the mirror, the glints), the caustics unchanged");
+            s.controls.push_back(c);
+        }
+        {
+            app::Control c;
+            c.kind = app::Control::Kind::Choice;
+            c.id = "fener";
+            c.title = L("Fener", "Torch");
+            c.items = {L("Kapalı", "Off"), L("Açık", "On")};
+            c.active = k_.torchOn ? 1 : 0;
+            c.detail = L("Dalgıcın el feneri (beyaz LED, 1 m'de ~3000 lx): yakında amforanın kil rengi, süngerin turuncusu; ışığı suda "
+                         "gidip döner, kırmızı birkaç metrede söner",
+                         "The diver's torch (white LED, ~3000 lx at 1 m): close up the jars' clay, the sponges' orange; its light goes "
+                         "through the water and back, red dies within metres");
             s.controls.push_back(c);
         }
         {

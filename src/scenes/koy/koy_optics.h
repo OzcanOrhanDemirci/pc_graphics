@@ -40,6 +40,7 @@ struct KoyOptics {
     float chl = 0.05f;
     std::string jerlov = "IA";
     float bottomDepth = 8.0f;                   // the floor of the light field being built
+    float torchRel = 0.03f;                     // the torch's illuminance at 1 m over the sun's just below the surface
     std::vector<float> bottoms;                 // every floor depth a field is built for (ascending; light.bottoms)
     float basisFix[3][3] = {};
     float3 xyzToRgb[3] = {};

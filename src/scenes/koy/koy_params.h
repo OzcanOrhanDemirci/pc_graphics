@@ -31,7 +31,8 @@ typedef unsigned long long KTex;   // cudaTextureObject_t (NVRTC sees it as this
 #define PT_SKY0 5                // 3 rows: the sky's spectral basis j entering the water (n^2), after L metres
 #define PT_SUN_AIR 8             // the sun's irradiance in air (on a plane facing it) after L metres of water (glints)
 #define PT_TRANS 9               // the transmission of a flat white spectrum (grey reference), x: luminance-weighted e^{-cL}
-#define PT_ROWS 10
+#define PT_TORCH0 10             // 3 rows: Lambert basis k lit by the diver's torch at 1 m, after L metres of water (/pi)
+#define PT_ROWS 13
 // ambSurf[k]: 3D (path length t: AS_T, normal's vertical component: AS_N, depth: AS_Z): diffuse light of the water on a
 // Lambert surface of basis k, seen after t metres; ambPath: 3D (t, view direction's mu: AP_MU, depth of the ray's start):
 // the in-scattered diffuse light along a view ray; reflPath: 3D (t2, mu2, ts): the same for a ray that starts at the
@@ -180,6 +181,11 @@ struct KoyParams {
     float perez[5];                     // Perez sky shape A..E
     float perezNorm;                    // 1 / F(zenith)
     float coastHeight;                  // sine of the cove's rim's elevation above the horizon (the rocky shore in Snell's window)
+    // the diver's torch (PLAN_AMFORA §3: the jars' true fired-clay colour close up): on the hand beside the eye, a cone,
+    // inverse square, its light crossing the water there and back (the PT_TORCH0 rows: red is gone within a few metres)
+    int torch;
+    float3 torchPos, torchDir;
+    float torchCos0, torchCos1;         // full inside cos0, nothing outside cos1
 
     // ---- the surface (Tessendorf FFT, periodic) and its caustics
     KTex ocean;                         // float4: height, d/dx, d/dz, slope variance; mipmapped, periodic over oceanPatch

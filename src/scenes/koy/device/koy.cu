@@ -578,6 +578,19 @@ static __forceinline__ __device__ float3 shadeSurface(const Hit& h, float3 d, fl
     // the water's diffuse light
     const float occ = lerpf(1.0f, h.ao, m.aoStrength);
     L += ambientOnSurface(wk, z, n.y, tPath, fieldsFor(bottomAt(h.p.x, h.p.z))) * occ;
+    // the diver's torch: inverse square, a cone, a shadow ray to the hand; its light crosses the water to the surface and
+    // on to the eye (tPath), red gone within a few metres
+    if (params.torch) {
+        const float3 tv = params.torchPos - h.p;
+        const float d2 = fmaxf(dot(tv, tv), 1e-4f), dt = sqrtf(d2);
+        const float3 tl = tv * (1.0f / dt);
+        const float cs = dot(n, tl);
+        const float spot = sstep(params.torchCos1, params.torchCos0, dot(tl * -1.0f, params.torchDir));
+        if (cs > 0.0f && spot > 0.0f && dot(h.ng, tl) > -0.05f && visible(offsetRay(h.p, h.ng), tl, dt - 0.02f)) {
+            const float Lt = dt + tPath;
+            L += (pathRow(PT_TORCH0 + 0, Lt) * wk.x + pathRow(PT_TORCH0 + 1, Lt) * wk.y + pathRow(PT_TORCH0 + 2, Lt) * wk.z) * (cs * spot / d2);
+        }
+    }
     // debug views: grey levels in display terms (5 occlusion, 6 the sun's shadow ray, 7 the normal's height)
     if (params.view >= 5 && params.view <= 7) {
         const float tUp = (params.oceanHeightMax - h.p.y) / fmaxf(params.sunWater.y, 0.05f);

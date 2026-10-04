@@ -16,7 +16,9 @@ yukarı, **C** aşağı, **Shift** güçlü vuruş, **Tab** fareyle bakış, **P
    üstte tortu keçesi. Gerçek bir batık fotoğrafının yanında durur mu? (`docs/koy/BASVURU.md` §12)
 3. *Kemere yüz* (~20 m, 40 sn): açıklıktan derin mavi, dibinde 16K kaya, düşmüş bloklar, arkadaki duvar.
 4. *Yukarı bak:* ışık sütunları, Snell penceresi, dalgacıklar (önceki duraktaki gibi).
-5. Panel: **Kostik: Hüzme / Işın (eski)** (gürültüsüz kostikle eski kaynayan yöntemin farkı), **Doku**, **Örnek**.
+5. **Fener** (panel ya da **F**): yakında amforanın kil rengi ve süngerlerin turuncusu belirir, birkaç metrede söner
+   (ışık suda gidip döner). Tarlaya 50 cm'den fenerle bak.
+6. Panel: **Kostik: Hüzme / Işın (eski)** (gürültüsüz kostikle eski kaynayan yöntemin farkı), **Doku**, **Örnek**.
 
 **Karar istenenler (benim önerilerimle):** kemerin biçimi yeterince doğal mı (uzaktan hâlâ biraz kabuk gibi; bükme,
 eğiklik ve sırtlar artırıldı, istenirse köşeli kırılmalar eklerim); amforaların rengi (öneri: suyun maviliğine
@@ -86,6 +88,11 @@ gibi okundu (karede), büyütüldü. Kemere 16K kaya ayrıntısı ve daha az kab
 
 **A5 · ışık (ilk tur).** Rüzgâr 2,5 → 4 m/s: sakin denizde sütunlar seçilmiyordu, yaz esintisiyle açıkça görünüyor
 (üç kareyle kıyas; alçak güneş 42° sütunları düzleştirdi, 50° kaldı). Duvar yalnız kemerin arkasında, kenarı kıvrılıyor.
+**Fener kararı (plan §3):** yapıldı, varsayılan kapalı (gündüz dalışı), panelde **Fener** ve **F**. Beyaz LED (5500 K
+kara cisim), 1 m'de güneşin yüzeydeki aydınlatmasının %3'ü (2500 lm'lik dalış feneri ~3000 lx, öğle güneşi ~100 000 lx),
+koni 20-32°, el gözün 25 cm sağında, gölge ışınıyla; ışığı suda gidip döner (yol uzunluğu tablosunda üç yeni satır).
+Karede: 0,8 m'deki kırık amforanın kırık yüzü turuncu, sünger lekeleri kırmızı-turuncu; 2 m ötesi değişmiyor. Bedeli
+yakın planda 20,4 → 24,7 ms. Fenerin sudaki kendi saçılımı (huzme, partiküller) yok.
 
 **A6 · ölçüler.** Kostik 28 dilim, 0,5-18 m (seki 16-17 m; daha derini son dilimi alır): 10,3 → 7,2 ms. Kararlılık (60
 kare, 256 örnekli referansa karşı, `--kararlilik`; yollar `--cam/--look` ile başlatıldı):

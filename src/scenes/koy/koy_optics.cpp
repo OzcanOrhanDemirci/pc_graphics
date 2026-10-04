@@ -145,6 +145,7 @@ void KoyOptics::spectra(const Config& cfg) {
     waterN = cfg.f("water.n", 1.333f);
     Bp = cfg.f("water.bp_fraction", 0.0183f);   // Petzold's average particle backscatter fraction
     bottomDepth = cfg.f("light.bottom", 8.0f);
+    torchRel = cfg.f("torch.rel", 0.03f);
     {   // the floors the light field is built for: light.bottoms (up to three, metres) or light.bottom alone
         const float3 b = cfg.v3("light.bottoms", make_float3(0.0f, 0.0f, 0.0f));
         bottoms.clear();
@@ -707,6 +708,18 @@ void KoyOptics::tables() {
     std::vector<float> flat(NL);
     double yFlat = 0;
     for (int li = 0; li < NL; ++li) yFlat += cmf[1][li] * sunWaterPerp[li] * DL;
+    // the torch: a white LED as a 5500 K blackbody, its illuminance at 1 m torchRel of the sun's in the water just
+    // below the surface (a 2500 lm dive light, ~3000 lx at 1 m, against ~100 000 lx of noon sun: 0.03)
+    std::vector<double> torchS(NL);
+    {
+        double yT = 0.0;
+        for (int li = 0; li < NL; ++li) {
+            const double lm = double(lambdaOf(li)) * 1e-9, Tk = 5500.0;
+            torchS[li] = 1.0 / (lm * lm * lm * lm * lm * (std::exp(0.0143877735 / (lm * Tk)) - 1.0));
+            yT += cmf[1][li] * torchS[li] * DL;
+        }
+        for (int li = 0; li < NL; ++li) torchS[li] *= double(torchRel) * yFlat / yT;
+    }
     parallelFor(PT_W, [&](int x) {
         const float L = PT_LMAX * float(x) / float(PT_W - 1);
         double R[PT_ROWS][3] = {};
@@ -723,6 +736,7 @@ void KoyOptics::tables() {
                 R[PT_SKY0 + 1][q] += cm * n2 * skyWhite[li] * T;
                 R[PT_SKY0 + 2][q] += cm * n2 * rim[li] * T;
                 R[PT_SUN_AIR][q] += cm * sunPerp[li] * T;
+                for (int k = 0; k < 3; ++k) R[PT_TORCH0 + k][q] += cm * basis[k][li] / PI * torchS[li] * T;
             }
             grey += cmf[1][li] * sunWaterPerp[li] * T;
         }

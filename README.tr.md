@@ -241,6 +241,8 @@ ve kararlılık; ışık fiziksel.
 - **Kemer:** uzaklık alanı (yarım elips üstüne bükülmüş, kalınlığı değişen kaya tüpü, kireçtaşı katmanları, çatlaklarla
   ayrılmış bloklar, aşınmış sırtlar, düşmüş bloklar); surface nets ile 7 cm'de ağ (770 bin üçgen, 4,4 sn), üstüne dünya
   uzayında 16K kaya taraması.
+- **Dalgıç feneri** (panel ya da F, varsayılan kapalı): ışığı suda gidip dönen beyaz bir LED; yakında kilin ve süngerlerin
+  kırmızısı geri gelir, birkaç metrede söner.
 
 Açık kalanlar: kemer uzaktan hâlâ biraz kabuk gibi okunuyor; ışık sütunları güneşe doğru bakılmadıkça soluk; kumun
 yakınında kararlılık hedefi tutmuyor ve kare 33 fps'e iniyor (birincisini 8 örnek çözer); kararlılık

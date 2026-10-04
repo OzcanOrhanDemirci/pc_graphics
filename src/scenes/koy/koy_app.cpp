@@ -197,6 +197,7 @@ void KoyApp::setup() {
     diver.pitch = cfg.f("diver.pitch_deg", -8.0f) * 3.14159265f / 180.0f;
     diver.vel = make_float3(0, 0, 0);
     ev = cfg.f("display.ev", 0.0f);
+    torchOn = cfg.i("torch.on", 0) != 0;
     applyQuality();
     setCamera();
 }
@@ -236,6 +237,13 @@ void KoyApp::setCamera() {
     c.tanHalfY = c.tanHalfX * float(height) / float(width);
     c.portN = cfg.f("camera.port", 1.0f) > 0.5f ? optics.waterN : 1.0f;
     c.pixelAngle = 2.0f * c.tanHalfX / float(width) / c.portN;
+    // the torch in the right hand, a little ahead and below the eye, aimed at a point two metres out
+    KoyParams& p = renderer.params();
+    p.torch = torchOn ? 1 : 0;
+    p.torchPos = c.pos + r * 0.25f - u * 0.12f + f * 0.10f;
+    p.torchDir = normalize(c.pos + f * 2.0f - p.torchPos);
+    p.torchCos0 = std::cos(cfg.f("torch.inner_deg", 20.0f) * 3.14159265f / 180.0f);
+    p.torchCos1 = std::cos(cfg.f("torch.outer_deg", 32.0f) * 3.14159265f / 180.0f);
 }
 
 void KoyApp::stepDiver(float fwd, float right, float up, bool strong, float lookDX, float lookDY, float dt) {

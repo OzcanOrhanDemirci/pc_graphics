@@ -249,6 +249,8 @@ away. Sharpness and steadiness come first; the light is physical.
 - **The arch:** a distance field (a tube of rock of varying thickness bent over a half-ellipse, limestone beds, blocks
   split along joints, eroded ridges, fallen blocks), meshed by surface nets at 7 cm (770 thousand triangles, 4.4 s), a
   16K rock scan laid over it in world space.
+- **A diver's torch** (panel or F, off by default): a white LED whose light crosses the water there and back, so close
+  up the clay's and the sponges' reds come back and die within a couple of metres.
 
 Open: the arch still reads a little like a shell from afar; the light shafts are faint unless you look towards the sun;
 close over the sand the steadiness target is missed and the frame rate drops to 33 fps (8 samples would fix the first);
