@@ -135,6 +135,7 @@ void KoyApp::setup() {
     p.shadowSway = cfg.i("sun.sway", 1);
     p.upwell = cfg.f("air.upwell", 0.06f);
     p.chromaAdapt = cfg.f("display.chroma_adapt", 0.5f);
+    p.glare = cfg.f("display.glare", 0.04f);
     p.lookPower = cfg.f("display.look_power", 1.0f);
     p.lookSat = cfg.f("display.look_sat", 1.0f);
     // the world
@@ -202,6 +203,19 @@ void KoyApp::setup() {
         }
     }
     std::printf("koy firin: golgeleme ve %d gunes derinlik haritasi (%.1f M tekstel) %.2f s\n", renderer.params().sunMaps, mapTexels / 1e6, know() - t0);
+    // the light under the pier: hall.box = x0 y0 z0 x1 y1 z1, hall.cell, hall.dirs (no box: the sky map's cone)
+    renderer.params().hallOn = 0;
+    {
+        const std::vector<float> b = koyList(cfg, "hall.box");
+        if (b.size() >= 6 && cfg.i("hall.use", 1)) {
+            const double th = know();
+            renderer.bakeHall(make_float3(b[0], b[1], b[2]), make_float3(b[3], b[4], b[5]), cfg.f("hall.cell", 0.25f), cfg.i("hall.dirs", 256),
+                               cfg.i("hall.bounces", 2));
+            const KoyParams& hp = renderer.params();
+            std::printf("koy iskele alti isik hacmi: %d x %d x %d hucre, %d yon, pay %.3f - %.3f, %.2f s\n", hp.hallNx, hp.hallNy, hp.hallNz,
+                        cfg.i("hall.dirs", 256), renderer.hallStats_[0], renderer.hallStats_[1], know() - th);
+        }
+    }
     // blue noise for the dither
     {
         int w = 0, h = 0;

@@ -238,6 +238,13 @@ struct KoyParams {
     KSunMap sunMap[KOY_SUNMAPS];
     int sunMaps;
     float swayMax;                      // metres below the surface the shafts still sway with the waves (deeper: the mean sun)
+    // the light under the pier (Ozcan 2026-10-04: no black, no wall): the share of open water's diffuse light that reaches
+    // each point of a box, baked at load by tracing every direction (__raygen__bakeHall); trilinear in cells
+    KTex hallVol;
+    float3 hallMin;
+    float hallCell;
+    int hallNx, hallNy, hallNz, hallOn;
+    float glare;                        // that share (display.glare)
     float shaftStep0, shaftStepGrow;    // in-scattering march: first step (m), growth per metre travelled
     float shaftMax;                     // metres
     // The sun's single scattering along view rays, marched once per 2x2 pixels at fixed distances ("knots", spaced
@@ -249,6 +256,7 @@ struct KoyParams {
 
     // ---- display
     float exposure;                     // scene luminance (Y in our units) -> display
+    float3 veil;                        // the eye's veiling glare: a share of the frame's mean light over every pixel
     int view;                           // 0 final, 1 edge pixels, 2 depth, 3 normal, 4 caustic factor, 5 ambient only
     float tunnel;                       // oxygen toxicity: the field of view closing in (0 none .. 1 a pinhole)
     // the eye's colour adaptation (Ada): the camera is white balanced for daylight above the water; under it the eye
@@ -269,5 +277,8 @@ struct KoyParams {
     float2 bakeMapMin;                  // __raygen__bakeSun: the map being baked
     float bakeMapTexel;
     int bakeMapW, bakeMapAir;           // bakeMapAir: 0 the depth pass, 1 the air pass (to the sun), 2 the sky pass (straight up)
+    float3 bakeHallMin;                 // __raygen__bakeHall: the box's corner, its cell, its size in cells, the directions
+    float bakeHallCell;
+    int bakeHallNx, bakeHallNy, bakeHallDirs;
     float3 probeOrigin;                 // __raygen__probe: distances to static geometry in 26 directions from here
 };

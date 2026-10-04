@@ -40,6 +40,9 @@ public:
     void bakeAO();                                                // every mesh's per-vertex occlusion (once, after upload)
     // a sun depth map over the surface rectangle [min, max] (x, z), texel metres (once, after upload); false if full
     bool bakeSunMap(float2 mn, float2 mx, float texel);
+    // the light under the pier: a box of cells, `dirs` directions each (after the sun maps: it reads them)
+    bool bakeHall(float3 mn, float3 mx, float cell, int dirs, int bounces);
+    float hallStats_[2] = {0.0f, 0.0f};   // the baked share's least and most
     void setSampling(int baseSpp, int edgeSpp, int filter, float radius, float edgeContrast);
     void updateMaterials(const std::vector<KMaterial>& materials);   // the same count as uploaded (texture choice)
     // new object-to-world transforms for some of the world's instances (their indices as uploaded); refits the IAS
@@ -71,7 +74,7 @@ private:
     OptixPipeline pipeline_ = nullptr;
     std::vector<OptixProgramGroup> groups_;
     OptixShaderBindingTable sbt_{};
-    CUdeviceptr rgBase_ = 0, rgEdge_ = 0, rgResolve_ = 0, rgFinal_ = 0, rgBakeAO_ = 0, rgBakeSun_ = 0, rgShafts_ = 0, rgEdgeFind_ = 0, rgProbe_ = 0,
+    CUdeviceptr rgBase_ = 0, rgEdge_ = 0, rgResolve_ = 0, rgFinal_ = 0, rgBakeAO_ = 0, rgBakeSun_ = 0, rgShafts_ = 0, rgEdgeFind_ = 0, rgProbe_ = 0, rgBakeHall_ = 0,
                 missRecord_ = 0, hitRecords_ = 0;
     float* probeBuf_ = nullptr;
     cudaArray_t shaftArr_ = nullptr;
@@ -97,6 +100,8 @@ private:
     size_t iasTempSize_ = 0, iasSize_ = 0;
     void buildIAS(bool update);
     float* meterBuf_ = nullptr;
+    float4* meanBuf_ = nullptr;
+    std::vector<float4> meanHost_;
     float4* refAcc_ = nullptr;
     float4* refSamples_ = nullptr;
     std::vector<float> meterHost_;

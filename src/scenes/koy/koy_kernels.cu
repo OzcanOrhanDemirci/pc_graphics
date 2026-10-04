@@ -43,6 +43,33 @@ __global__ void meterKernel(const float4* hdr, int w, int h, float* tiles) {
 void koyMeter(const float4* hdr, int w, int h, float* tiles, cudaStream_t s) {
     meterKernel<<<dim3((w + 31) / 32, (h + 31) / 32), 256, 0, s>>>(hdr, w, h, tiles);
 }
+__global__ void meanColourKernel(const float4* hdr, int w, int h, float4* tiles) {
+    __shared__ float3 part[256];
+    const int tx = blockIdx.x, ty = blockIdx.y;
+    float3 c = make_float3(0.0f, 0.0f, 0.0f);
+    int n = 0;
+    for (int k = threadIdx.x; k < 1024; k += 256) {
+        const int x = tx * 32 + (k & 31), y = ty * 32 + (k >> 5);
+        if (x >= w || y >= h) continue;
+        const float4 v = hdr[size_t(y) * w + x];
+        c.x += v.x; c.y += v.y; c.z += v.z;
+        ++n;
+    }
+    part[threadIdx.x] = n ? make_float3(c.x / n, c.y / n, c.z / n) : make_float3(0.0f, 0.0f, 0.0f);
+    __syncthreads();
+    for (int st = 128; st > 0; st >>= 1) {   // fixed order: deterministic
+        if (threadIdx.x < st) {
+            part[threadIdx.x].x += part[threadIdx.x + st].x;
+            part[threadIdx.x].y += part[threadIdx.x + st].y;
+            part[threadIdx.x].z += part[threadIdx.x + st].z;
+        }
+        __syncthreads();
+    }
+    if (threadIdx.x == 0) tiles[ty * gridDim.x + tx] = make_float4(part[0].x / 256.0f, part[0].y / 256.0f, part[0].z / 256.0f, 0.0f);
+}
+void koyMeanColour(const float4* hdr, int w, int h, float4* tiles, cudaStream_t s) {
+    meanColourKernel<<<dim3((w + 31) / 32, (h + 31) / 32), 256, 0, s>>>(hdr, w, h, tiles);
+}
 
 __global__ void sampleHeightsKernel(cudaTextureObject_t tex, float inv, const float2* pts, int n, float* out) {
     const int i = blockIdx.x * blockDim.x + threadIdx.x;

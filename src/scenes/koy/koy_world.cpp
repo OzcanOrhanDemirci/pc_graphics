@@ -593,7 +593,7 @@ void KoyWorld::applyTextureMode(const Config& cfg, int mode) {
     if (materials.size() > 22) {
         for (size_t k : {size_t(7), size_t(8)}) {
             KMaterial& q = materials[k];
-            q.detailSet = high && setConcrete >= 0 ? setConcrete : -1;
+            q.detailSet = high && setConcrete >= 0 && cfg.i("pier.concrete_detail", 1) ? setConcrete : -1;
             q.detailTile = cfg.f("pier.concrete_detail_tile", 0.9f);
             q.detailNormal = cfg.f("pier.concrete_detail_normal", 0.5f);
             q.detailAlbedo = cfg.f("pier.concrete_detail_albedo", 0.3f);

@@ -3,7 +3,40 @@
 > Tek kaynak durum panosu. Son plan: **`docs/koy/PLAN_ADA.md`** (üçüncü bölüm "Ada", 🏁 bitti); önceki planlar
 > `PLAN.md`, `PLAN_AMFORA.md`. Veri: `docs/koy/VERI.md`. CC0 taramalar: `assets/koy/fetch.py`, `assets/koy/LICENSES.md`.
 
-## 🏁 Şu an · 2026-10-04 akşamı · Ada bitti (B0-B6), Özcan'ın bakacağı yer
+## Şu an · 2026-10-04 akşamı · Özcan canlı baktı: iskele salonunun iki revizesi
+
+**Özcan (canlı monitörde, batığa gelmeden):** *"İskele güzel olmuş 2 revize lazım: 1) iskelenin altının başladığı yerde bir
+ışık duvarı var, doğal değil yani görünmez duvar gibi saydam duvar [...] rtxe en yakışmayan şey. [...] en sığ yerlerde
+delikli ve gölgeli çok iyi ama orta noktasında bir alan simsiyah ve çok yapay duruyor. Karanlık ayrı simsiyah ayrı. [...]
+Yine o gerçekçi rtx fizik ne derse o ışığımıza hiç uymuyor."* Titreme, netlik ve FPS sorunu yok dedi.
+
+**Teşhis:** suyun dağınık ışığını yapının altında "yüzeyden yukarısı ne kadar açık" (45°'lik koni) ile kısıyordum. (1) Bakış
+ışını boyunca yalnız 3 noktada örneklenince başlığın kenarı bir örneği geçtiği anda ışının bütün bir dilimi birden
+kararıyordu: ekranda saydam bir duvar. (2) Koni yanlardan gelen ışığı (açık su, dışarıda güneşteki kum) hiç görmüyordu.
+
+**Yapılan:**
+- **Işık hacmi** (`__raygen__bakeHall`, `hall.box/cell/dirs/bounces`): iskelenin altında 25 cm'lik hücrelerde (112×19×164)
+  her yöne 256 ışın: açık suya kaçan suyun o yöndeki ışığını (Snell penceresinden gök, havada açık mı diye sınanarak; dışında
+  saçılmış ışık), yüzeye çarpan o yüzeyin ışığını (güneş haritasından güneş, kum ya da beton yansıtması), aradaki su ile
+  getirir; açık sudaki aynı toplama bölünür. İki sekme turu (kum↔tavan). Yükleme 0,13 sn.
+- **Bakış ışınının payı sütun yürüyüşünde:** güneş sütunlarını hesaplayan geçiş her ışını ince adımlarla zaten yürüyor;
+  dağınık ışığın payı da orada toplanıp sütun hacminin boş dördüncü kanalına yazılıyor, örnek aynı okumada alıyor (duvar
+  yok; 8 noktalı ilk deneme +20 ms idi, bu yol ~+0,5 ms).
+- **Fizik "simsiyah" dedi:** başlık hem alçak hem geniş (22×14 m); ortaya yalnız yere neredeyse paralel ışınlar ulaşıyor,
+  onları da ayaklar kesiyor: açık suyun %0,1-1'i. Özcan'ın ilk izniyle (*"iskeleyi altı karanlık kalacak şekilde
+  konumlandırıp şekillendirebilirsin"*) yapı değişti: **8 kırık delik** (4 idi, ikisi aynı bölmedeydi), her biri ayrı bölmede,
+  birbirinden en uzak bölmelere; içeriye güneş lekeleri ve sütunlar düşüyor. Filizler yarıya (her ~40 cm).
+- **Göz:** gerçek bir gözün bu karanlığa uyumu ve parlak açıklıkların göz merceğinde yaydığı **perde** (veiling glare):
+  `display.glare = 0.06` (karenin ortalama ışığının %6'sı her piksele: yalnız karşıtlığı yüksek karelerde, salonda fark
+  eder) ve `display.adapt` 0,3 → 0,5. Etkisi: batıkta +0,17 EV, 43 m'de +0,5 EV (derin hâlâ koyu lacivert).
+- **Ölçüler:** testler 13/13; pencere testinde 30-32 fps (önce 33-35; kenar pikselleri başlangıçta 477 bin → 539 bin: yeni
+  ışık lekeleri ve artık seçilen karanlık ayrıntı). Beton ayrıntı katmanının bedeli ölçülemeyecek kadar az
+  (`pier.concrete_detail` ile kapanır).
+
+**NE DOĞRULANMADI:** canlı pencerede bakılmadı (Özcan bakacak); salonun kıpırtısı yeniden ölçülmedi (ışık hacmi yavaş
+değişen bir alan, sütun hacmiyle aynı okumada); batığın içi aynı yöntemle pişirilmedi (orada eski koni duruyor).
+
+## 🏁 Ada bitti (B0-B6), Özcan'ın bakacağı yer · 2026-10-04 akşamı
 
 > **Son değişiklik (Özcan, 10-04 akşamı, karelere telefondan baktı):** *"Çayır yani o hareketli yosunlara gerek yok. Bu
 > sahnede amacımız fizik değil. Her sahnenin bir amacı vardı. Bu sahnede gerçekçi su ışık ve yüksek çözünürlük yani net

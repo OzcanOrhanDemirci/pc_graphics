@@ -393,6 +393,7 @@ KoyPierSpec koyPierSpec(const Config& cfg) {
     p.gap = cfg.f("pier.gap", 0.025f);
     p.missing = cfg.f("pier.missing", 0.05f);
     p.ladder = cfg.v3("pier.ladder", make_float3(2.6f, 0.0f, -2.0f));
+    p.headHoles = cfg.i("pier.head_holes", 8);
     auto lin = [](float a, float b, int n) {
         std::vector<float> v;
         for (int k = 0; k < n; ++k) v.push_back(n == 1 ? 0.5f * (a + b) : a + (b - a) * float(k) / float(n - 1));
@@ -472,10 +473,25 @@ void koyBuildPier(const KoyPierSpec& p, const std::function<float(float, float)>
             const int nx = int(std::ceil((S.x1 - S.x0) / cell)), nz = int(std::ceil((S.z1 - S.z0) / cell));
             struct Blob { float x, z, a, b, ang; };
             std::vector<Blob> blobs;
-            const int nHoles = 4;
+            // between beams: a bay's middle, so the slab breaks where it spans. Each hole a bay of its own, the bays taken
+            // spread out (Ozcan 2026-10-04: the hall's middle, far from every hole, went pitch black): farthest-first
+            // from the ones already broken, the first at random
+            const int bnx = int(S.pileX.size()) - 1, bnz = int(S.pileZ.size()) - 1;
+            const int nHoles = std::min(p.headHoles, bnx * bnz);
+            std::vector<std::pair<int, int>> bays;
             for (int k = 0; k < nHoles; ++k) {
-                // between beams: a bay's middle, so the slab breaks where it spans
-                const int bx = int(U(rng) * float(S.pileX.size() - 1)), bz = int(U(rng) * float(S.pileZ.size() - 1));
+                int bx = int(U(rng) * float(bnx)), bz = int(U(rng) * float(bnz));
+                if (k > 0) {
+                    float best = -1.0f;
+                    for (int ix = 0; ix < bnx; ++ix)
+                        for (int iz = 0; iz < bnz; ++iz) {
+                            float dmin = 1e9f;
+                            for (const auto& b : bays) dmin = std::min(dmin, float((ix - b.first) * (ix - b.first) + (iz - b.second) * (iz - b.second)));
+                            const float score = dmin + 0.6f * U(rng);   // a little chance: not a checkerboard
+                            if (score > best) { best = score; bx = ix; bz = iz; }
+                        }
+                }
+                bays.push_back({bx, bz});
                 const float cx = 0.5f * (S.pileX[size_t(bx)] + S.pileX[size_t(bx) + 1]) + (U(rng) - 0.5f) * 1.0f;
                 const float cz = 0.5f * (S.pileZ[size_t(bz)] + S.pileZ[size_t(bz) + 1]) + (U(rng) - 0.5f) * 1.0f;
                 const int parts = 2 + int(U(rng) * 2.0f);
@@ -530,10 +546,10 @@ void koyBuildPier(const KoyPierSpec& p, const std::function<float(float, float)>
                         quad(make_float3(x0, bot, z0), make_float3(x1, bot, z1), make_float3(x1, p.deck, z1), make_float3(x0, p.deck, z0), n,
                              make_float2((x0 + z0) * T, bot * T), make_float2((x1 + z1) * T, bot * T), make_float2((x1 + z1) * T, p.deck * T),
                              make_float2((x0 + z0) * T, p.deck * T));
-                        // a reinforcing bar where the edge is a hole's (not the slab's outer edge), every ~20 cm: rusted,
+                        // a reinforcing bar where the edge is a hole's (not the slab's outer edge), every ~40 cm: rusted,
                         // sticking out into the hole, sagging
                         const bool inner = i + di[e] >= 0 && j + dj[e] >= 0 && i + di[e] < nx && j + dj[e] < nz;
-                        if (inner && kn::hash01(i * 3 + e, j, 19) < 0.45f) {
+                        if (inner && kn::hash01(i * 3 + e, j, 19) < 0.25f) {
                             const float len = 0.06f + 0.3f * kn::hash01(i, j * 5 + e, 23);
                             const float3 a0 = make_float3(0.5f * (x0 + x1), slabBottom + 0.07f + 0.12f * kn::hash01(i, j, 29), 0.5f * (z0 + z1));
                             const float3 a1 = a0 + n * len + make_float3(0.0f, -0.35f * len * len - 0.02f, 0.0f);

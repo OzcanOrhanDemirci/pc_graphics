@@ -312,6 +312,7 @@ static __forceinline__ __device__ float3 skyWeights(float3 w) {
 // =====================================================================================================
 struct Lit {
     float3 L;           // XYZ arriving at the camera, without the in-scattering of the first segment's sun light
+    float3 amb;         // the first segment's diffuse in-scattering, before the deck's share (the march has it per block)
     float t;            // where the first segment ends (the sun's in-scattering is marched up to here)
     unsigned int id;
     float3 n;           // for the views
@@ -375,20 +376,40 @@ static __forceinline__ __device__ float skyVisAt(float3 p) {
     const float lod = fminf(log2f(fmaxf(radius / (2.0f * M.texel), 1.0f)), M.skyLevels - 1.0f);
     return tex2DLod<float>((cudaTextureObject_t)M.sky, (p.x - M.min.x) / (M.w * M.texel), (p.z - M.min.y) / (M.h * M.texel), lod);
 }
-// the same along a view ray, weighted as its in-scattered light is: each sample stands for a stretch of the ray, worth
-// e^(-c a) - e^(-c b) of it (c ~ 0.1/m: 60 % of what reaches the eye comes from beyond 5 m), cut where the ray ends
-static __forceinline__ __device__ float pathSky(float3 o, float3 d, float tEnd) {
+// The light under the pier: inside the baked box, the share of open water's diffuse light that really reaches p (from
+// every direction: the sky through the holes, the water and the sunlit sand beyond the edges); elsewhere the sky map
+static __forceinline__ __device__ bool inHall(float3 p) {
+    if (!params.hallOn) return false;
+    const float3 u = (p - params.hallMin) * (1.0f / params.hallCell);
+    return u.x >= 0.0f && u.y >= 0.0f && u.z >= 0.0f && u.x <= float(params.hallNx) && u.y <= float(params.hallNy) && u.z <= float(params.hallNz);
+}
+static __forceinline__ __device__ float diffuseVis(float3 p) {
+    if (p.y >= 0.0f) return 1.0f;
+    if (inHall(p)) {
+        const float3 u = (p - params.hallMin) * (1.0f / params.hallCell);
+        return tex3D<float>((cudaTextureObject_t)params.hallVol, u.x, u.y, u.z);
+    }
+    return skyVisAt(p);
+}
+// the same along a ray, weighted as its in-scattered light is: each sample stands for a stretch of the ray, worth
+// e^(-c a) - e^(-c b) of it (c ~ 0.1/m: 60 % of what reaches the eye comes from beyond 5 m), cut where the ray ends.
+// Eight stretches (the bake, the reflected rays). The camera's own rays get it from the shafts' march, step by step: with
+// three samples here the pier's edge crossing one switched a whole stretch at once (Ozcan: a wall of light)
+template <bool kBaked>
+static __forceinline__ __device__ float pathSkyT(float3 o, float3 d, float tEnd) {
     if (params.sunMaps == 0) return 1.0f;
-    const float ts[3] = {1.0f, 5.0f, 16.0f}, edge[4] = {0.0f, 2.5f, 9.0f, 60.0f};
+    const float edge[9] = {0.0f, 0.6f, 1.4f, 2.5f, 4.0f, 6.0f, 9.0f, 14.0f, 60.0f};
     float s = 0.0f, w = 0.0f;
-    for (int k = 0; k < 3 && edge[k] < tEnd; ++k) {
+    for (int k = 0; k < 8 && edge[k] < tEnd; ++k) {
         const float b = fminf(edge[k + 1], tEnd);
         const float wk = expf(-0.1f * edge[k]) - expf(-0.1f * b);
-        s += wk * skyVisAt(o + d * fminf(ts[k], b));
+        const float3 q = o + d * (0.5f * (edge[k] + b));
+        s += wk * (kBaked ? diffuseVis(q) : skyVisAt(q));
         w += wk;
     }
     return w > 0.0f ? s / w : 1.0f;
 }
+static __forceinline__ __device__ float pathSky(float3 o, float3 d, float tEnd) { return pathSkyT<true>(o, d, tEnd); }
 static __forceinline__ __device__ float sunMapVis(float3 p) {
     if (params.sunMaps == 0 || p.y >= 0.0f) return 1.0f;
     const float dist = -p.y / params.sunWater.y;
@@ -689,7 +710,7 @@ static __forceinline__ __device__ float3 shadeSurface(const Hit& h, float3 d, fl
     }
     // the water's diffuse light
     const float occ = lerpf(1.0f, h.ao, m.aoStrength);
-    L += ambientOnSurface(wk, z, n.y, tPath, fieldsFor(bottomAt(h.p.x, h.p.z))) * (occ * skyVisAt(h.p));
+    L += ambientOnSurface(wk, z, n.y, tPath, fieldsFor(bottomAt(h.p.x, h.p.z))) * (occ * diffuseVis(h.p));
     // the diver's torch: inverse square, a cone, a shadow ray to the hand; its light crosses the water to the surface and
     // on to the eye (tPath), red gone within a few metres
     if (params.torch) {
@@ -817,7 +838,8 @@ static __forceinline__ __device__ Lit shadeSample(float3 o, float3 d, float cone
         // the path's light field: the floor under where it ends, and lit down to its deepest point
         // (the depth the path reaches within ~30 m: the water's in-scattering comes almost all from there, c ~ 0.1/m)
         const FW fp = pathFields(o, d, h.t);
-        r.L = shadeSurface(h, d, h.t, coneAngle, r.caustic, r.n) + (params.view >= 5 ? make_float3(0, 0, 0) : ambientPath(z0, d.y, h.t, fp) * pathSky(o, d, h.t));
+        r.L = shadeSurface(h, d, h.t, coneAngle, r.caustic, r.n);
+        r.amb = params.view >= 5 ? make_float3(0, 0, 0) : ambientPath(z0, d.y, h.t, fp);
         r.t = h.t;
         r.id = h.id;
         return r;
@@ -825,13 +847,15 @@ static __forceinline__ __device__ Lit shadeSample(float3 o, float3 d, float cone
     if (d.y > 1e-4f) {
         const float ts = surfaceHit(o, d, coneAngle);
         const float3 q = o + d * ts;
-        r.L = shadeFromBelow(q, d, ts, coneAngle, r.n) + ambientPath(z0, d.y, ts, pathFields(o, d, ts)) * pathSky(o, d, ts);
+        r.L = shadeFromBelow(q, d, ts, coneAngle, r.n);
+        r.amb = ambientPath(z0, d.y, ts, pathFields(o, d, ts));
         r.t = ts;
         r.id = ID_WATER;
         return r;
     }
     // open water: the field lit down to the depth the ray reaches within ~30 m (its light comes almost all from there)
-    r.L = ambientPath(z0, d.y, params.farDistance, pathFields(o, d, params.farDistance)) * pathSky(o, d, params.farDistance);
+    r.L = make_float3(0.0f, 0.0f, 0.0f);
+    r.amb = ambientPath(z0, d.y, params.farDistance, pathFields(o, d, params.farDistance));
     r.t = params.farDistance;
     r.id = ID_OPEN;
     return r;
@@ -846,11 +870,16 @@ static __forceinline__ __device__ float knotT(int k) {
 static __forceinline__ __device__ float knotCoord(float t) {
     return sqrtf(fminf(fmaxf(t, 0.0f), params.shaftMax) / params.shaftMax) * float(params.shaftKnots - 1);
 }
-// the shafts' light reaching the camera from the first t metres of a sample's ray (px, py: its position on the screen)
-static __forceinline__ __device__ float3 shaftAt(float px, float py, float t) {
+// the shafts' light reaching the camera from the first t metres of a sample's ray (px, py: its position on the screen),
+// and in w the share of open water's diffuse light along those metres (the deck's shade, weighted as in-scattering is)
+static __forceinline__ __device__ float4 shaftAt(float px, float py, float t) {
     // block i's centre sits at pixel 2i - 1 (texel centres at i + 0.5, unnormalised coordinates)
     const float bx = (px + 1.0f) * 0.5f + 0.5f, by = (py + 1.0f) * 0.5f + 0.5f, bz = knotCoord(t) + 0.5f;
-    return f3(tex3D<float4>((cudaTextureObject_t)params.shaftTex, bx, by, bz));
+    return tex3D<float4>((cudaTextureObject_t)params.shaftTex, bx, by, bz);
+}
+static __forceinline__ __device__ float3 litSample(const Lit& l, float px, float py) {
+    const float4 sh = shaftAt(px, py, l.t);
+    return l.L + l.amb * (params.sunMaps ? sh.w : 1.0f) + f3(sh);
 }
 
 // =====================================================================================================
@@ -871,7 +900,7 @@ extern "C" __global__ void __raygen__base() {
         const float2 sp = params.basePattern[s] + params.patternShift;
         const float3 d = cameraRay(cam, idx.x + sp.x, idx.y + sp.y);
         const Lit l = shadeSample(cam.pos, d, cone);
-        const float3 c = l.L + shaftAt(idx.x + sp.x, idx.y + sp.y, l.t);
+        const float3 c = litSample(l, idx.x + sp.x, idx.y + sp.y);
         params.samples[size_t(pix) * N + s] = make_float4(c.x, c.y, c.z, __uint_as_float(l.id));
     }
 }
@@ -949,7 +978,7 @@ extern "C" __global__ void __raygen__edge() {
         const float2 sp = params.edgePattern[N + s] + params.patternShift;
         const float3 d = cameraRay(cam, x + sp.x, y + sp.y);
         const Lit l = shadeSample(cam.pos, d, cone);
-        const float3 c = (l.L + shaftAt(x + sp.x, y + sp.y, l.t)) * invN;
+        const float3 c = litSample(l, x + sp.x, y + sp.y) * invN;
         // towards the output pixel at (x + jx, y + jy): neighbour j = (jy + 1) * 3 + (jx + 1)
         const float wx[3] = {filter1(sp.x + 0.5f), filter1(sp.x - 0.5f), filter1(sp.x - 1.5f)};
         const float wy[3] = {filter1(sp.y + 0.5f), filter1(sp.y - 0.5f), filter1(sp.y - 1.5f)};
@@ -1028,7 +1057,9 @@ static __forceinline__ __device__ float3 adaptingWhite() {
 extern "C" __global__ void __raygen__final() {
     const uint3 idx = optixGetLaunchIndex();
     const unsigned int i = idx.y * params.width + idx.x;
-    float3 c = f3(params.hdr[i]) * params.exposure;
+    // the eye's veiling glare (its lens and fluid scatter a few per cent of all the light entering it over the whole
+    // field): the dark under the pier, seen beside bright openings, is dark, never a flat black (Ozcan 2026-10-04)
+    float3 c = (f3(params.hdr[i]) + params.veil) * params.exposure;
     if (params.chromaAdapt > 0.0f) {   // von Kries towards the light around the eye, part of the way
         const float3 w = adaptingWhite();
         const float a = params.chromaAdapt;
@@ -1077,7 +1108,10 @@ extern "C" __global__ void __raygen__shafts() {
     const float3 o = cam.pos;
     float3 acc = make_float3(0.0f, 0.0f, 0.0f);
     const int K = params.shaftKnots;
-    surf3Dwrite(make_float4(0.0f, 0.0f, 0.0f, 0.0f), (cudaSurfaceObject_t)params.shaftSurf, int(idx.x * sizeof(float4)), int(idx.y), 0);
+    // the diffuse share: each step weighted as its in-scattering reaches the eye, c e^(-c t) ds (c ~ 0.1/m)
+    const float v0 = params.sunMaps ? diffuseVis(o) : 1.0f;
+    float vs = 0.0f, ws = 0.0f;
+    surf3Dwrite(make_float4(0.0f, 0.0f, 0.0f, v0), (cudaSurfaceObject_t)params.shaftSurf, int(idx.x * sizeof(float4)), int(idx.y), 0);
     float t0 = 0.0f;
     for (int k = 1; k < K; ++k) {
         const float t1 = knotT(k);
@@ -1095,8 +1129,14 @@ extern "C" __global__ void __raygen__shafts() {
             const float F = causticAt(p, min(level, params.causticLevels - 1));
             const float V = sunMapVis(p);
             acc += src * (F * V * ds);
+            if (params.sunMaps) {
+                const float wk = expf(-0.1f * sm) * ds;
+                vs += wk * diffuseVis(p);
+                ws += wk;
+            }
         }
-        surf3Dwrite(make_float4(acc.x, acc.y, acc.z, 0.0f), (cudaSurfaceObject_t)params.shaftSurf, int(idx.x * sizeof(float4)), int(idx.y), k);
+        const float share = ws > 0.0f ? vs / ws : v0;
+        surf3Dwrite(make_float4(acc.x, acc.y, acc.z, share), (cudaSurfaceObject_t)params.shaftSurf, int(idx.x * sizeof(float4)), int(idx.y), k);
         t0 = t1;
     }
 }
@@ -1136,6 +1176,84 @@ extern "C" __global__ void __raygen__bakeAO() {
 
 // a sun map's texel, from its point on the still surface: the air pass, 1 if the sun is in sight through the air (the
 // pier's deck); the depth pass, how far down the refracted sun goes before something under the water stops it (or 400 m)
+// The light under the pier (Ozcan 2026-10-04: "karanlık ayrı simsiyah ayrı"): at every cell of a box, the share of open
+// water's diffuse light that reaches it, from every direction (a Fibonacci sphere of bakeHallDirs). A ray that leaves to
+// open water brings the water's radiance that way (Snell's window: the sky, mostly transmitted; outside it: scattered,
+// itself dimmed where its path ran under the deck); a ray that meets a surface brings that surface's light (the sun
+// where the sun map lets it through, the sky as the sky map has it, a sand or concrete albedo), faded with the water
+// between. The same sum for open water at the same depth over flat sunlit sand divides it: 1 in open water, less under
+// the deck, more than nothing in the middle (the sides, the sunlit sand beyond the edges, the holes). Relative radiances
+// for clear shallow water: window 1, scattered 0.06 above the horizon and 0.04 below, the sun on a level floor 4x the
+// sky. -1: under the sand or inside a pile (filled from the neighbours on the host).
+static __forceinline__ __device__ float hallWater(float3 d) {
+    const float cw = 0.661f;   // cos 48.6: the window's edge
+    if (d.y > cw) return 1.0f;
+    if (d.y > 0.0f) return 0.06f + 0.94f * powf(fmaxf((d.y - 0.55f) / (cw - 0.55f), 0.0f), 3.0f) * (d.y > 0.55f ? 1.0f : 0.0f);
+    return 0.04f;
+}
+static __forceinline__ __device__ float hallSurface(float3 q, float3 n, float albedo) {
+    const float eSky = 1.85f, eSun = 4.0f * eSky;
+    const float3 s = params.sunWater;
+    const float sun = eSun * sunMapVis(q) * fmaxf(dot(n, s), 0.0f) / fmaxf(s.y, 0.2f);
+    const float sky = eSky * (params.hallOn ? diffuseVis(q) : skyVisAt(q)) * (0.5f + 0.5f * n.y);
+    return albedo * (sun + sky) * 0.31831f;
+}
+extern "C" __global__ void __raygen__bakeHall() {
+    const uint3 idx = optixGetLaunchIndex();
+    const float3 p = params.bakeHallMin + make_float3(idx.x + 0.5f, idx.y + 0.5f, idx.z + 0.5f) * params.bakeHallCell;
+    const size_t out = (size_t(idx.z) * params.bakeHallNy + idx.y) * params.bakeHallNx + idx.x;
+    const float floorD = bottomAt(p.x, p.z);   // the floor's depth here (m, positive)
+    const float z = -p.y;
+    if (z <= 0.02f) { params.bakeOut[out] = 1.0f; return; }
+    if (z >= floorD - 0.02f) { params.bakeOut[out] = -1.0f; return; }
+    const float c = 0.1f;   // the water's attenuation (1/m, the green of IB water)
+    const float sandSun = 0.35f * (4.0f * 1.85f + 1.85f) * 0.31831f;   // open water's floor: all in the sun, all under the sky
+    const unsigned int n = (unsigned int)params.bakeHallDirs;
+    float sumP = 0.0f, sumR = 0.0f;
+    unsigned int near = 0;
+    for (unsigned int k = 0; k < n; ++k) {
+        // Fibonacci sphere: even, fixed directions
+        const float y = 1.0f - 2.0f * (k + 0.5f) / float(n);
+        const float r = sqrtf(fmaxf(1.0f - y * y, 0.0f)), ph = 2.39996323f * float(k);
+        const float3 d = make_float3(r * cosf(ph), y, r * sinf(ph));
+        // open water over flat sand at this depth, the sun on it
+        float Lr;
+        if (d.y > 0.0f) {
+            Lr = hallWater(d);
+        } else {
+            const float t = (floorD - z) / -d.y, f = expf(-c * t);
+            Lr = (params.sunMaps ? sandSun : 0.0f) * f + hallWater(d) * (1.0f - f);
+        }
+        // this point
+        float Lp;
+        const float tSurf = d.y > 0.0f ? z / d.y : 1e9f;
+        const Hit h = trace(p, d, fminf(tSurf, 60.0f));
+        if (!h.hit) {
+            if (d.y > 0.661f) {
+                // through Snell's window: the sky, if the air above the exit is open (the deck and the head stand there)
+                const float3 e = p + d * tSurf;
+                const float3 hA = make_float3(d.x, 0.0f, d.z) * params.waterN;
+                const float3 dA = make_float3(hA.x, sqrtf(fmaxf(1.0f - dot(hA, hA), 0.0f)), hA.z);
+                const bool open = visible(make_float3(e.x, 0.002f, e.z), normalize(dA), 400.0f);
+                Lp = open ? hallWater(d) : 0.06f * (params.hallOn ? pathSkyT<true>(p, d, tSurf) : pathSkyT<false>(p, d, tSurf));
+            } else {
+                const float tt = fminf(tSurf, 60.0f);
+                Lp = hallWater(d) * (params.hallOn ? pathSkyT<true>(p, d, tt) : pathSkyT<false>(p, d, tt));
+            }
+        } else {
+            if (h.t < 0.6f) ++near;
+            const KMaterial& M = params.materials[h.mat];
+            const float alb = (M.kind == KM_PLAIN) ? fminf(fmaxf(0.2126f * M.albedo.x + 0.7152f * M.albedo.y + 0.0722f * M.albedo.z, 0.03f), 0.6f) : 0.35f;
+            const float f = expf(-c * h.t);
+            Lp = hallSurface(h.p + h.ng * 0.01f, h.ns, alb) * f +
+                 hallWater(d) * (1.0f - f) * (params.hallOn ? pathSkyT<true>(p, d, h.t) : pathSkyT<false>(p, d, h.t));
+        }
+        sumP += Lp;
+        sumR += Lr;
+    }
+    // inside a pile: nearly every ray met a surface within 0.6 m
+    params.bakeOut[out] = near > (n * 9u) / 10u ? -1.0f : fminf(sumP / fmaxf(sumR, 1e-6f), 1.0f);
+}
 extern "C" __global__ void __raygen__bakeSun() {
     const uint3 idx = optixGetLaunchIndex();
     const float3 s = make_float3(params.bakeMapMin.x + (idx.x + 0.5f) * params.bakeMapTexel, 0.0f, params.bakeMapMin.y + (idx.y + 0.5f) * params.bakeMapTexel);

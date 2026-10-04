@@ -56,6 +56,7 @@ struct KoyPierSpec {
     float pileR = 0.25f;
     float plankW = 0.14f, plankT = 0.045f, gap = 0.025f, missing = 0.05f;
     float3 ladder{2.6f, 0.0f, -2.0f};     // the ladder's centre (x, z) on the head's seaward edge
+    int headHoles = 8;                    // holes broken through the head's slab, each in a bay of its own
 };
 KoyPierSpec koyPierSpec(const Config& cfg);
 // meshes: wood, wet concrete, dry concrete, steel, rust (in that order, with those materials)

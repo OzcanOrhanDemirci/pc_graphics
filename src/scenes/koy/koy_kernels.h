@@ -16,6 +16,8 @@ void koyBlend(float4* acc, const float4* src, size_t n, float keep, float w, cud
 // mean log2 luminance per 32x32 tile of a linear sRGB image
 int koyMeterTiles(int w, int h);
 void koyMeter(const float4* hdr, int w, int h, float* tiles, cudaStream_t s);
+// the plain mean colour per 32x32 tile (the eye's glare scatters the light as it is, not its log)
+void koyMeanColour(const float4* hdr, int w, int h, float4* tiles, cudaStream_t s);
 
 struct KoyOceanSettings {
     int N = 512;                 // grid (power of two)

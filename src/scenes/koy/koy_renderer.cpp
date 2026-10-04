@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <sstream>
@@ -91,6 +92,7 @@ bool KoyRenderer::init(unsigned int width, unsigned int height, const std::strin
     params_.edgeAcc = devAlloc<float4>(size_t(params_.edgeCapacity) * 9);
     params_.edgeCount = devAlloc<unsigned int>(1);
     meterBuf_ = devAlloc<float>(koyMeterTiles(int(width), int(height)));
+    meanBuf_ = devAlloc<float4>(koyMeterTiles(int(width), int(height)));
     {   // the shaft knots: (W/2 + 2) x (H/2 + 2) blocks x knots, float4, written as a surface and read as a texture
         params_.shaftBlocksX = int(width / 2 + 2);
         params_.shaftBlocksY = int(height / 2 + 2);
@@ -199,9 +201,9 @@ bool KoyRenderer::compileDevice(std::string& log) {
     OptixResult r = optixModuleCreate(context_, &mco, &pco, ir.data(), ir.size(), olog, &olen, &module);
     if (r != OPTIX_SUCCESS) { log = std::string("optixModuleCreate: ") + optixGetErrorString(r) + "\n" + olog; return false; }
 
-    const char* rgNames[9] = {"__raygen__base", "__raygen__edge", "__raygen__resolve", "__raygen__final", "__raygen__bakeAO", "__raygen__bakeSun",
-                              "__raygen__shafts", "__raygen__edgeFind", "__raygen__probe"};
-    const int RG = 9;
+    const char* rgNames[10] = {"__raygen__base", "__raygen__edge", "__raygen__resolve", "__raygen__final", "__raygen__bakeAO", "__raygen__bakeSun",
+                               "__raygen__shafts", "__raygen__edgeFind", "__raygen__probe", "__raygen__bakeHall"};
+    const int RG = 10;
     std::vector<OptixProgramGroupDesc> d(RG + 2);
     for (auto& x : d) std::memset(&x, 0, sizeof(x));
     for (int i = 0; i < RG; ++i) {
@@ -247,6 +249,7 @@ bool KoyRenderer::compileDevice(std::string& log) {
     record(groups_[6], rgShafts_);
     record(groups_[7], rgEdgeFind_);
     record(groups_[8], rgProbe_);
+    record(groups_[9], rgBakeHall_);
     record(groups_[RG + 0], missRecord_);
     record(groups_[RG + 1], hitRecords_);   // one hit record: the built-in triangles
     sbt_ = {};
@@ -505,6 +508,88 @@ bool KoyRenderer::bakeSunMap(float2 mn, float2 mx, float texel) {
     return true;
 }
 
+bool KoyRenderer::bakeHall(float3 mn, float3 mx, float cell, int dirs, int bounces) {
+    const int nx = std::max(1, int(std::ceil((mx.x - mn.x) / cell))), ny = std::max(1, int(std::ceil((mx.y - mn.y) / cell))),
+              nz = std::max(1, int(std::ceil((mx.z - mn.z) / cell)));
+    const size_t n = size_t(nx) * ny * nz;
+    float* out = devAlloc<float>(n);
+    params_.bakeOut = out;
+    params_.bakeHallMin = mn;
+    params_.bakeHallCell = cell;
+    params_.bakeHallNx = nx;
+    params_.bakeHallNy = ny;
+    params_.bakeHallDirs = dirs;
+    const int sway = params_.shadowSway;
+    params_.shadowSway = 0;   // the mean sun: the bake does not freeze one moment's waves into the hall
+    params_.hallOn = 0;
+    std::vector<float> v(n);
+    cudaArray_t arr = nullptr;
+    cudaTextureObject_t tex = 0;
+    // pass 1: the surfaces and the water lit as the sky map has it; pass 2 (and on): as the pass before found (one more
+    // bounce each: the sand lit at the hall's edge lights the ceiling, which lights the sand further in)
+    for (int pass = 0; pass < bounces + 1; ++pass) {
+    launch(rgBakeHall_, unsigned(nx), unsigned(ny), unsigned(nz), nullptr);
+    CUDA_CHECK(cudaStreamSynchronize(stream_));
+    CUDA_CHECK(cudaMemcpy(v.data(), out, n * sizeof(float), cudaMemcpyDeviceToHost));
+    // the cells under the sand and inside the piles take their neighbours' mean (trilinear reads near a surface then see
+    // the light beside it, not the dark inside)
+    auto at = [&](int x, int y, int z) -> float& { return v[(size_t(z) * ny + y) * nx + x]; };
+    for (int pass = 0; pass < 200; ++pass) {
+        std::vector<float> next = v;
+        size_t left = 0;
+        for (int z = 0; z < nz; ++z)
+            for (int y = 0; y < ny; ++y)
+                for (int x = 0; x < nx; ++x) {
+                    if (at(x, y, z) >= 0.0f) continue;
+                    float sum = 0.0f;
+                    int cnt = 0;
+                    const int nb[6][3] = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
+                    for (const auto& o : nb) {
+                        const int a = x + o[0], b = y + o[1], c = z + o[2];
+                        if (a < 0 || b < 0 || c < 0 || a >= nx || b >= ny || c >= nz) continue;
+                        const float q = at(a, b, c);
+                        if (q >= 0.0f) { sum += q; ++cnt; }
+                    }
+                    if (cnt) next[(size_t(z) * ny + y) * nx + x] = sum / cnt;
+                    else ++left;
+                }
+        v.swap(next);
+        if (!left) break;
+    }
+    for (float& q : v) q = q < 0.0f ? 1.0f : q;
+    cudaChannelFormatDesc fd = cudaCreateChannelDesc<float>();
+    if (!arr) CUDA_CHECK(cudaMalloc3DArray(&arr, &fd, make_cudaExtent(nx, ny, nz)));
+    cudaMemcpy3DParms cp{};
+    cp.srcPtr = make_cudaPitchedPtr(v.data(), size_t(nx) * sizeof(float), nx, ny);
+    cp.dstArray = arr;
+    cp.extent = make_cudaExtent(nx, ny, nz);
+    cp.kind = cudaMemcpyHostToDevice;
+    CUDA_CHECK(cudaMemcpy3D(&cp));
+    cudaResourceDesc rd{};
+    rd.resType = cudaResourceTypeArray;
+    rd.res.array.array = arr;
+    cudaTextureDesc td{};
+    td.addressMode[0] = td.addressMode[1] = td.addressMode[2] = cudaAddressModeClamp;
+    td.filterMode = cudaFilterModeLinear;
+    td.readMode = cudaReadModeElementType;
+    td.normalizedCoords = 0;
+    if (!tex) CUDA_CHECK(cudaCreateTextureObject(&tex, &rd, &td, nullptr));
+    params_.hallVol = tex;
+    params_.hallMin = mn;
+    params_.hallCell = cell;
+    params_.hallNx = nx;
+    params_.hallNy = ny;
+    params_.hallNz = nz;
+    params_.hallOn = 1;
+    }
+    cudaFree(out);
+    params_.shadowSway = sway;
+    hallStats_[0] = 1e9f;
+    hallStats_[1] = 0.0f;
+    for (float q : v) { hallStats_[0] = std::min(hallStats_[0], q); hallStats_[1] = std::max(hallStats_[1], q); }
+    return true;
+}
+
 void KoyRenderer::launch(CUdeviceptr raygen, unsigned int w, unsigned int h, unsigned int d, float* ms) {
     if (w == 0 || h == 0 || d == 0) {
         if (ms) *ms = 0.0f;
@@ -539,11 +624,18 @@ void KoyRenderer::renderFrame() {
     {   // metering for the eye's adaptation
         const int tiles = koyMeterTiles(int(width_), int(height_));
         koyMeter(params_.hdr, int(width_), int(height_), meterBuf_, stream_);
+        koyMeanColour(params_.hdr, int(width_), int(height_), meanBuf_, stream_);
         meterHost_.resize(tiles);
+        meanHost_.resize(tiles);
         CUDA_CHECK(cudaMemcpyAsync(meterHost_.data(), meterBuf_, tiles * sizeof(float), cudaMemcpyDeviceToHost, stream_));
+        CUDA_CHECK(cudaMemcpyAsync(meanHost_.data(), meanBuf_, tiles * sizeof(float4), cudaMemcpyDeviceToHost, stream_));
         CUDA_CHECK(cudaStreamSynchronize(stream_));
         double s = 0.0;
         for (float v : meterHost_) s += v;
+        double mr = 0.0, mg = 0.0, mb = 0.0;
+        for (const float4& v : meanHost_) { mr += v.x; mg += v.y; mb += v.z; }
+        const double nt = double(std::max(1, tiles));
+        params_.veil = make_float3(float(mr / nt) * params_.glare, float(mg / nt) * params_.glare, float(mb / nt) * params_.glare);
         metered_ = float(s / std::max(1, tiles));
     }
     launch(rgFinal_, width_, height_, 1, &times_.final);
