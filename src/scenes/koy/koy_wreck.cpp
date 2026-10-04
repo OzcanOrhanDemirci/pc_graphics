@@ -536,9 +536,9 @@ KoyWreckPlacement koyBuildWreck(const Config& cfg, const std::function<float(flo
         // broken tops of the starboard ribs, the mast stumps' tops
         {
             std::vector<std::pair<float3, float3>> loc;
-            for (float x = -17.5f; x < 17.0f; x += 1.2f) {
+            for (float x = -17.5f; x < 17.0f; x += 0.8f) {
                 const float y = H.railY(x) - 0.05f;
-                if (D.rnd(int(x * 5), 1, 70) < 0.35f) continue;
+                if (D.rnd(int(x * 5), 1, 70) < 0.25f) continue;
                 loc.push_back({make_float3(x, y, H.half(x, y) - 0.05f), normalize(make_float3(0.0f, 1.0f, 0.5f))});
             }
             for (float z = -2.6f; z <= 2.7f; z += 1.3f) loc.push_back({make_float3(H.xs + 0.25f, H.railY(H.xs) + 1.2f, z), normalize(make_float3(-0.4f, 1.0f, 0.0f))});

@@ -156,10 +156,15 @@ void KoySeagrass::build(const Config& cfg) {
         for (float z = c.z - R - 0.6f; z <= c.z + R + 0.6f; z += spacing) {
             const float jx = x + (U(rng) - 0.5f) * spacing, jz = z + (U(rng) - 0.5f) * spacing;
             const float d = std::sqrt((jx - c.x) * (jx - c.x) + (jz - c.z) * (jz - c.z));
-            const float edge = R * (1.0f + 0.25f * noise3(jx * 0.9f, 7.7f, jz * 0.9f));
+            const float edge = R * (1.0f + 0.4f * noise3(jx * 0.45f, 7.7f, jz * 0.45f) + 0.12f * noise3(jx * 1.7f, 2.1f, jz * 1.7f));
             if (d > edge) continue;
-            const float dens = smooth01(edge, edge - 0.5f, d);
-            if (U(rng) > 0.35f + 0.65f * dens) continue;
+            // a wide ragged margin: shoots thin out and shorten over the last 1.6 m (seen from afar, no hedge wall)
+            const float dens = smooth01(edge, edge - 1.6f, d);
+            if (U(rng) > 0.15f + 0.85f * dens) continue;
+            // the meadow is patchy: bare holes and taller and shorter stands (no clipped hedge)
+            const float patchN = noise3(jx * 1.3f, 4.4f, jz * 1.3f);
+            if (patchN < -0.35f) continue;
+            const float stand = 0.55f + 0.45f * smooth01(-0.35f, 0.4f, patchN);
             const float shootYaw = U(rng) * 6.2831853f;
             const int nl = 4 + int(U(rng) * 3.0f);
             const float y = koyFloor(cfg, jx, jz) - 0.01f;
@@ -167,9 +172,9 @@ void KoySeagrass::build(const Config& cfg) {
                 KoyLeaf L;
                 L.base = make_float3(jx + (U(rng) - 0.5f) * 0.012f, y, jz + (U(rng) - 0.5f) * 0.012f);
                 L.yaw = shootYaw + (k - 0.5f * nl) * 0.35f + (U(rng) - 0.5f) * 0.3f;
-                L.lean = 0.08f + 0.3f * U(rng) * (k == 0 || k == nl - 1 ? 1.5f : 1.0f);
+                L.lean = 0.22f + 0.4f * U(rng) * (k == 0 || k == nl - 1 ? 1.5f : 1.0f);   // Posidonia's ribbons bow with the swell
                 L.length = (cfg.f("grass.length_min", 0.32f) + (cfg.f("grass.length_max", 0.75f) - cfg.f("grass.length_min", 0.32f)) * U(rng)) *
-                           (0.7f + 0.3f * dens);
+                           (0.3f + 0.7f * dens) * stand;
                 L.halfWidth = cfg.f("grass.half_width", 0.0048f) * (0.85f + 0.3f * U(rng));
                 L.phase = U(rng);
                 L.stiffness = 0.8f + 0.5f * U(rng);

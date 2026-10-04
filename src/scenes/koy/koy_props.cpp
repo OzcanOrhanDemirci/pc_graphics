@@ -208,10 +208,10 @@ void koyBuildFans(const Config& cfg, const std::vector<std::pair<float3, float3>
         float3 across = cross(current, up);
         if (length(across) < 1e-3f) across = make_float3(1, 0, 0);
         across = normalize(across);
-        const float H = 0.35f + 0.45f * U(rng);
+        const float H = 0.7f + 0.6f * U(rng);
         // branches: a stack of (start, direction in the plane as an angle from up, length, radius, generation)
         struct Br { float3 p; float a; float len, r; int gen; };
-        std::vector<Br> stack = {{s.first - s.second * 0.01f, (U(rng) - 0.5f) * 0.3f, H * 0.35f, 0.009f, 0}};
+        std::vector<Br> stack = {{s.first - s.second * 0.01f, (U(rng) - 0.5f) * 0.3f, H * 0.3f, 0.014f, 0}};
         while (!stack.empty()) {
             const Br b = stack.back();
             stack.pop_back();
@@ -229,11 +229,11 @@ void koyBuildFans(const Config& cfg, const std::vector<std::pair<float3, float3>
                 p = p + d * (b.len / nseg) + current * ((U(rng) - 0.5f) * 0.004f);
             }
             appendTube(m, c, r, current, 1.0f, 5, [](float, float) { return 0.0f; });
-            if (b.gen < 6) {   // forks, spreading the fan; the outer ones shorter
-                const int kids = b.gen < 1 ? 3 : 2;
+            if (b.gen < 7) {   // forks, spreading the fan into a dense lace; the outer ones shorter
+                const int kids = b.gen < 2 ? 3 : 2;
                 for (int q = 0; q < kids; ++q) {
                     const float spread = (q - 0.5f * (kids - 1)) * (0.45f + 0.25f * U(rng));
-                    stack.push_back({p, a + spread, b.len * (0.72f + 0.12f * U(rng)), r.back() * 0.85f, b.gen + 1});
+                    stack.push_back({p, a + spread * (b.gen < 3 ? 1.0f : 0.6f), b.len * (0.68f + 0.12f * U(rng)), r.back() * 0.85f, b.gen + 1});
                 }
             }
         }
