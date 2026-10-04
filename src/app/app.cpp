@@ -385,6 +385,7 @@ void App::autotestStep(double now) {
         case 7: virtualMouse_ = true; virtualX_ = s.fx * fbw_; virtualY_ = s.fy * fbh_; break;
         case 8: leftClick_ = true; return;   // seen by this frame
         case 9: virtualRight_ = s.key != 0; break;
+        case 14: scroll_ += s.fx; break;   // the wheel, fx notches (+ away from the user: in)
         case 13: {   // hold a key (fx 1) or let it go (fx 0)
             const auto it = std::find(virtualHeld_.begin(), virtualHeld_.end(), s.key);
             if (s.fx > 0.5f && it == virtualHeld_.end()) virtualHeld_.push_back(s.key);
@@ -477,6 +478,7 @@ int App::run(const Options& opt) {
         auto control = [&](const std::string& id, int item) { script_.push_back({11, 0, item, id}); };
         auto slide = [&](const std::string& id, float v) { Step st{12, 0, 0, id}; st.fx = v; script_.push_back(st); };
         auto hold = [&](int k, bool down) { Step st{13, 0, k, ""}; st.fx = down ? 1.0f : 0.0f; script_.push_back(st); };
+        auto wheel = [&](float notches) { Step st{14, 0, 0, ""}; st.fx = notches; script_.push_back(st); };
         wait(1.5); shot("galeri_1");
         key(GLFW_KEY_DOWN); wait(0.8); shot("galeri_2");
         key(GLFW_KEY_DOWN); wait(0.8); shot("galeri_3");
@@ -548,6 +550,25 @@ int App::run(const Options& opt) {
                 control("buyukluk", 5); wait(0.3); key(GLFW_KEY_SPACE); wait(14.0); log("yikim sismik deprem 8"); shot("yikim_sismik_deprem");
                 key(GLFW_KEY_SPACE); wait(2.0);
                 control("yapi", 0); wait(6.0);
+            }
+            if (infos_[s].id == "heykel") {
+                // the study: still (accumulating), the wheel towards the middle twice, the light by a click and a drag,
+                // the turn with the right button, back with R, then every candidate from the panel
+                wait(3.0); log("heykel ilk"); shot("heykel_ilk");
+                mouse(0.50f, 0.45f); wait(0.2); wheel(4.0f); wait(2.0); log("heykel yakin"); shot("heykel_yakin");
+                wheel(4.0f); wait(4.0); log("heykel daha yakin"); shot("heykel_daha_yakin");
+                mouse(0.44f, 0.52f); wait(0.1); left(true); wait(0.1); left(false); wait(3.0); shot("heykel_isik");
+                left(true); wait(0.05);
+                for (int k = 1; k <= 12; ++k) { mouse(0.44f + 0.008f * k, 0.52f - 0.004f * k); wait(0.03); }
+                left(false); wait(3.0); shot("heykel_isik_dondu");
+                mouse(0.50f, 0.50f); right(true); wait(0.05);
+                for (int k = 1; k <= 12; ++k) { mouse(0.50f + 0.01f * k, 0.50f); wait(0.03); }
+                right(false); wait(3.0); log("heykel cevrildi"); shot("heykel_cevrildi");
+                key(GLFW_KEY_R); wait(1.0);
+                for (int c = 1; c < 5; ++c) {
+                    control("aday", c); wait(4.0); log("heykel aday " + std::to_string(c)); shot("heykel_aday_" + std::to_string(c));
+                }
+                control("aday", 0); wait(1.0);
             }
             if (infos_[s].id == "laboratuvar") {
                 // every experiment: live, its trigger on the coarse world, the fine pass asked for, the recording as it

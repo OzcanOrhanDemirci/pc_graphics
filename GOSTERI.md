@@ -122,3 +122,17 @@ merdivende yeniden başlarsın.
 Panel (sağ üst): derinlik, basınç, oksijenin kısmi basıncı (ppO2), geçişlerin süreleri. **Dene:** başlığın altında
 deliklerin altına git, ışığın kumda salınışını izle; batığın sancak tarafındaki kırıktan içeri gir, feneri aç; şamandıra
 halatını izleyerek in, 35-40 m'de dibin belirişine bak. Ayarlar `scenes/koy.cfg` (F5 ile).
+
+## 06 · Heykel — karanlık bir odada, kaidede beyaz bir fraktal (taslak)
+Geometrinin sahnesi: ayrıntı dokuda değil gerçek geometride, yaklaştıkça bitmiyor. Bu taslakta beş aday var (panelden ya
+da 1-5): Şehir, Katedral, Yıldız, Tohum, Dantel. Kıpırdamadığın sürece görüntü birikir ve netleşir.
+
+| Tuş | Ne yapar |
+|---|---|
+| **Tekerlek** | imlecin gösterdiği yere yaklaş, uzaklaş (o nokta ekranda yerinde kalır; taslakta en fazla 1.000 kat) |
+| **Sol tık** | ışığı tıklanan yere çevir · **sürükle:** ışığı o noktanın çevresinde döndür |
+| **Sağ tık** | sürükle: heykeli çevir · **R** ilk görünüm · **↑ / ↓** pozlama |
+
+**Dene:** Katedral'de bir kemerin kenarına 10-100 kat yaklaş ve dur; ışığı yatık açıya sürükle. Ayarlar
+`scenes/heykel.cfg` (F5 ile).
+

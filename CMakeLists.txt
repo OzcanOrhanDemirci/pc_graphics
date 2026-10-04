@@ -73,6 +73,9 @@ add_library(pc_core OBJECT
     src/scenes/koy/koy_sdf.cpp
     src/scenes/koy/koy_tests.cpp
     src/scenes/koy/koy_kernels.cu
+    src/scenes/heykel/heykel_app.cpp
+    src/scenes/heykel/heykel_live.cpp
+    src/scenes/heykel/heykel_kernels.cu
     ${TP}/tinyexr/miniz.c)
 add_executable(pc_graphics src/app/main.cpp $<TARGET_OBJECTS:pc_core>)
 

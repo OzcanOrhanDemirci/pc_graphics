@@ -160,7 +160,7 @@ private:
     struct Step {
         // 0 wait s, 1 key, 2 capture name, 3 wait until running, 4 wait until gallery, 5 log, 6 quit,
         // 7 mouse to (fx, fy) of the screen, 8 left click, 9 right button (key: 1 down, 0 up), 10 left button held
-        // (key: 1 down, a press; 0 up)
+        // (key: 1 down, a press; 0 up), 11 a panel control, 12 a slider, 13 a key held, 14 the wheel (fx notches)
         int kind;
         double seconds;
         int key;

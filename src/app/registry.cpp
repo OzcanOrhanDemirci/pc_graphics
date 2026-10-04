@@ -27,6 +27,11 @@ app::SceneInfo info();
 std::unique_ptr<app::Scene> make();
 int cli(int argc, char** argv);
 }
+namespace heykel {
+app::SceneInfo info();
+std::unique_ptr<app::Scene> make();
+int cli(int argc, char** argv);
+}
 
 namespace app {
 
@@ -37,6 +42,7 @@ const std::vector<Entry>& registry() {
         {yikim::info, yikim::make, yikim::cli},
         {laboratuvar::info, laboratuvar::make, laboratuvar::cli},
         {koy::info, koy::make, koy::cli},
+        {heykel::info, heykel::make, heykel::cli},
     };
     return scenes;
 }

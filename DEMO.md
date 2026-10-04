@@ -131,3 +131,18 @@ wreck at ~22 m, at the far end the mooring buoy and its rope going down. There i
 Panel (top right): depth, pressure, the oxygen's partial pressure (ppO2), the passes' timings. **Try:** under the head go
 beneath the holes and watch the light sway on the sand; enter the wreck through its fallen starboard side and switch the
 torch on; follow the buoy's rope down and watch the floor appear at 35-40 m. Settings `scenes/koy.cfg` (F5).
+
+## 06 · The Sculpture — a white fractal on a plinth in a dark room (draft)
+The scene of geometry: the detail lives in real geometry, not in textures, and does not end as you come closer. This
+draft has five candidates (on the panel, or 1-5): City, Cathedral, Star, Seed, Lace. As long as nothing moves the
+picture accumulates and sharpens.
+
+| Key | What it does |
+|---|---|
+| **Wheel** | zoom towards the cursor, and out (that point stays put on the screen; at most 1,000 times in the draft) |
+| **Left button** | point the light at what is clicked · **drag:** swing the light around that spot |
+| **Right button** | drag: turn the sculpture · **R** the first view · **↑ / ↓** exposure |
+
+**Try:** on the Cathedral, zoom 10-100 times into the edge of an arch and wait; drag the light to a raking angle.
+Settings `scenes/heykel.cfg` (F5).
+
