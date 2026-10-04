@@ -513,56 +513,6 @@ __global__ void bufferToSurf(const float* src, cudaSurfaceObject_t dst, int n, i
 }
 
 // =====================================================================================================
-// seagrass: every leaf's control points from its rest shape and the near-bottom current (K1: kinematic; K3: XPBD)
-// =====================================================================================================
-__global__ void grassKernel(const KoyLeaf* leaves, int n, int ppl, float t, KoyCurrent cur, float4* pts, float3* nrm) {
-    const int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i >= n) return;
-    const KoyLeaf L = leaves[i];
-    const float3 up = make_float3(0.0f, 1.0f, 0.0f);
-    const float3 h = make_float3(cosf(L.yaw), 0.0f, sinf(L.yaw));
-    // the current at this leaf: the swell's orbital velocity, its phase travelling along the swell's direction
-    const float u = cur.speed * cosf(cur.omega * t - cur.k * (L.base.x * cur.dir.x + L.base.z * cur.dir.z) + 0.15f * L.phase);
-    const float flut = cur.flutter * sinf(2.7f * t + 6.2831853f * L.phase) * sinf(0.9f * t + 3.0f * L.phase);
-    // the leaf as a polyline Q0 (base) .. Q[ppl-1] (tip), bent along its length
-    const int m = ppl - 1;
-    const float ds = L.length / float(m);
-    float3 Q[8];
-    Q[0] = L.base;
-    float3 dirLast = up, tiltLast = h;
-    for (int k = 1; k <= m; ++k) {
-        const float sg = (float(k) - 0.5f) / float(m);
-        // tilt in the horizontal plane: the rest lean grows along the leaf, the current bends the upper part more
-        const float3 T = h * (L.lean * powf(sg, 0.7f)) + cur.dir * (u * 6.0f * powf(sg, 1.3f) / L.stiffness) + cross(up, h) * (flut * sg);
-        const float lt = length(T);
-        const float ang = fminf(lt, 1.45f);
-        const float3 Th = lt > 1e-5f ? T / lt : h;
-        const float3 d = up * cosf(ang) + Th * sinf(ang);
-        Q[k] = Q[k - 1] + d * ds;
-        dirLast = d;
-        tiltLast = Th;
-    }
-    // quadratic B-spline points that start at the base and end at the tip: the ends mirrored
-    float3 P[8];
-    for (int k = 0; k <= m; ++k) P[k] = Q[k];
-    P[0] = Q[0] * 2.0f - Q[1];
-    P[m] = Q[m] * 2.0f - Q[m - 1];
-    // the ribbon faces the way it bends (its flat side to the flow)
-    float3 nface = tiltLast - dirLast * dot(tiltLast, dirLast);
-    nface = length(nface) > 1e-4f ? normalize(nface) : h;
-    for (int k = 0; k <= m; ++k) {
-        const float sg = float(k) / float(m);
-        const float w = L.halfWidth * (1.0f - 0.35f * sg * sg * sg);
-        pts[size_t(i) * ppl + k] = make_float4(P[k].x, P[k].y, P[k].z, w);
-        nrm[size_t(i) * ppl + k] = nface;
-    }
-}
-void koyGrassPoints(const KoyLeaf* leaves, int n, int pointsPerLeaf, float t, KoyCurrent cur, float4* pts, float3* nrm, cudaStream_t s) {
-    if (n <= 0) return;
-    grassKernel<<<(n + 127) / 128, 128, 0, s>>>(leaves, n, pointsPerLeaf, t, cur, pts, nrm);
-}
-
-// =====================================================================================================
 // host
 // =====================================================================================================
 static float jonswap(float w, float wind, float fetchM, float gamma) {

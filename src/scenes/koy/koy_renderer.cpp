@@ -34,9 +34,6 @@ struct __align__(OPTIX_SBT_RECORD_ALIGNMENT) KRecord {
     char header[OPTIX_SBT_RECORD_HEADER_SIZE];
 };
 
-static const unsigned int kRibbonBuildFlags =
-    OPTIX_BUILD_FLAG_ALLOW_UPDATE | OPTIX_BUILD_FLAG_ALLOW_RANDOM_VERTEX_ACCESS | OPTIX_BUILD_FLAG_PREFER_FAST_TRACE;
-
 static void optixLog(unsigned int level, const char* tag, const char* msg, void*) {
     if (level <= 2) std::fprintf(stderr, "[optix %u][%s] %s\n", level, tag, msg);
 }
@@ -194,26 +191,18 @@ bool KoyRenderer::compileDevice(std::string& log) {
     pco.exceptionFlags = OPTIX_EXCEPTION_FLAG_NONE;
     pco.pipelineLaunchParamsVariableName = "params";
     pco.pipelineLaunchParamsSizeInBytes = sizeof(KoyParams);
-    pco.usesPrimitiveTypeFlags = OPTIX_PRIMITIVE_TYPE_FLAGS_TRIANGLE | OPTIX_PRIMITIVE_TYPE_FLAGS_FLAT_QUADRATIC_BSPLINE;
+    pco.usesPrimitiveTypeFlags = OPTIX_PRIMITIVE_TYPE_FLAGS_TRIANGLE;
 
     char olog[8192];
     size_t olen = sizeof(olog);
     OptixModule module = nullptr;
     OptixResult r = optixModuleCreate(context_, &mco, &pco, ir.data(), ir.size(), olog, &olen, &module);
     if (r != OPTIX_SUCCESS) { log = std::string("optixModuleCreate: ") + optixGetErrorString(r) + "\n" + olog; return false; }
-    OptixModule curveModule = nullptr;
-    OptixBuiltinISOptions bio{};
-    bio.builtinISModuleType = OPTIX_PRIMITIVE_TYPE_FLAT_QUADRATIC_BSPLINE;
-    bio.usesMotionBlur = 0;
-    bio.buildFlags = kRibbonBuildFlags;
-    bio.curveEndcapFlags = OPTIX_CURVE_ENDCAP_DEFAULT;
-    r = optixBuiltinISModuleGet(context_, &mco, &pco, &bio, &curveModule);
-    if (r != OPTIX_SUCCESS) { log = std::string("optixBuiltinISModuleGet: ") + optixGetErrorString(r); return false; }
 
     const char* rgNames[9] = {"__raygen__base", "__raygen__edge", "__raygen__resolve", "__raygen__final", "__raygen__bakeAO", "__raygen__bakeSun",
                               "__raygen__shafts", "__raygen__edgeFind", "__raygen__probe"};
     const int RG = 9;
-    std::vector<OptixProgramGroupDesc> d(RG + 3);
+    std::vector<OptixProgramGroupDesc> d(RG + 2);
     for (auto& x : d) std::memset(&x, 0, sizeof(x));
     for (int i = 0; i < RG; ++i) {
         d[i].kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
@@ -222,9 +211,6 @@ bool KoyRenderer::compileDevice(std::string& log) {
     }
     d[RG + 0].kind = OPTIX_PROGRAM_GROUP_KIND_MISS;        // traversal only: no programs
     d[RG + 1].kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;    // built-in triangles
-    d[RG + 2].kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;    // ribbons: the built-in intersection
-    d[RG + 2].hitgroup.moduleIS = curveModule;
-    d[RG + 2].hitgroup.entryFunctionNameIS = nullptr;
     std::vector<OptixProgramGroup> groups(d.size());
     OptixProgramGroupOptions go{};
     olen = sizeof(olog);
@@ -242,11 +228,9 @@ bool KoyRenderer::compileDevice(std::string& log) {
     if (pipeline_) optixPipelineDestroy(pipeline_);
     for (auto g : groups_) optixProgramGroupDestroy(g);
     if (module_) optixModuleDestroy(module_);
-    if (curveModule_) optixModuleDestroy(curveModule_);
     pipeline_ = pipeline;
     groups_ = groups;
     module_ = module;
-    curveModule_ = curveModule;
 
     auto record = [&](OptixProgramGroup g, CUdeviceptr& dst) {
         KRecord rec{};
@@ -264,20 +248,14 @@ bool KoyRenderer::compileDevice(std::string& log) {
     record(groups_[7], rgEdgeFind_);
     record(groups_[8], rgProbe_);
     record(groups_[RG + 0], missRecord_);
-    {   // two hit records: [0] triangles, [1] ribbons (instances pick theirs with sbtOffset)
-        KRecord recs[2];
-        OPTIX_CHECK(optixSbtRecordPackHeader(groups_[RG + 1], &recs[0]));
-        OPTIX_CHECK(optixSbtRecordPackHeader(groups_[RG + 2], &recs[1]));
-        if (!hitRecords_) CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&hitRecords_), sizeof(recs)));
-        CUDA_CHECK(cudaMemcpy(reinterpret_cast<void*>(hitRecords_), recs, sizeof(recs), cudaMemcpyHostToDevice));
-    }
+    record(groups_[RG + 1], hitRecords_);   // one hit record: the built-in triangles
     sbt_ = {};
     sbt_.missRecordBase = missRecord_;
     sbt_.missRecordStrideInBytes = sizeof(KRecord);
     sbt_.missRecordCount = 1;
     sbt_.hitgroupRecordBase = hitRecords_;
     sbt_.hitgroupRecordStrideInBytes = sizeof(KRecord);
-    sbt_.hitgroupRecordCount = 2;
+    sbt_.hitgroupRecordCount = 1;
     log = nvlog;
     return true;
 }
@@ -299,7 +277,7 @@ static void* buildAS(OptixDeviceContext ctx, const OptixBuildInput& bi, unsigned
 }
 
 void KoyRenderer::uploadWorld(const std::vector<KMeshCPU>& meshes, const std::vector<KInstanceCPU>& instances, const std::vector<KMaterial>& materials,
-                              const std::vector<KTextureSet>& texSets, const KRibbonsCPU* ribbons) {
+                              const std::vector<KTextureSet>& texSets) {
     CUDA_CHECK(cudaDeviceSynchronize());
     for (void* p : worldBuffers_) cudaFree(p);
     worldBuffers_.clear();
@@ -336,57 +314,7 @@ void KoyRenderer::uploadWorld(const std::vector<KMeshCPU>& meshes, const std::ve
         bi.triangleArray.numSbtRecords = 1;
         worldBuffers_.push_back(buildAS(context_, bi, OPTIX_BUILD_FLAG_PREFER_FAST_TRACE, gas_[k]));
     }
-    // the ribbons
-    ribbonGas_ = 0;
-    ribbonPts_ = nullptr;
-    ribbonNrm_ = nullptr;
-    ribbonPointCount_ = ribbonSegCount_ = 0;
-    int ribbonMesh = -1;
-    if (ribbons && !ribbons->segments.empty() && meshes.size() < KOY_MAX_MESHES) {
-        ribbonMesh = int(meshes.size());
-        ribbonPointCount_ = unsigned(ribbons->points.size());
-        ribbonSegCount_ = unsigned(ribbons->segments.size());
-        ribbonPts_ = upload(ribbons->points, worldBuffers_);
-        ribbonNrm_ = upload(ribbons->normals, worldBuffers_);
-        ribbonSeg_ = upload(ribbons->segments, worldBuffers_);
-        KMesh& dm = params_.meshes[ribbonMesh];
-        dm = {};
-        dm.material = ribbons->material;
-        dm.id = 0x10000u;
-        OptixBuildInput bi{};
-        bi.type = OPTIX_BUILD_INPUT_TYPE_CURVES;
-        CUdeviceptr verts = CUdeviceptr(ribbonPts_), widths = CUdeviceptr(reinterpret_cast<char*>(ribbonPts_) + 12),
-                    nrms = CUdeviceptr(ribbonNrm_);
-        bi.curveArray.curveType = OPTIX_PRIMITIVE_TYPE_FLAT_QUADRATIC_BSPLINE;
-        bi.curveArray.numPrimitives = ribbonSegCount_;
-        bi.curveArray.vertexBuffers = &verts;
-        bi.curveArray.numVertices = ribbonPointCount_;
-        bi.curveArray.vertexStrideInBytes = sizeof(float4);
-        bi.curveArray.widthBuffers = &widths;
-        bi.curveArray.widthStrideInBytes = sizeof(float4);
-        bi.curveArray.normalBuffers = &nrms;
-        bi.curveArray.normalStrideInBytes = sizeof(float3);
-        bi.curveArray.indexBuffer = CUdeviceptr(ribbonSeg_);
-        bi.curveArray.indexStrideInBytes = sizeof(unsigned int);
-        bi.curveArray.flag = OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT;
-        bi.curveArray.primitiveIndexOffset = 0;
-        bi.curveArray.endcapFlags = OPTIX_CURVE_ENDCAP_DEFAULT;
-        OptixAccelBuildOptions ao{};
-        ao.buildFlags = kRibbonBuildFlags;
-        ao.operation = OPTIX_BUILD_OPERATION_BUILD;
-        OptixAccelBufferSizes sizes{};
-        OPTIX_CHECK(optixAccelComputeMemoryUsage(context_, &ao, &bi, 1, &sizes));
-        ribbonTempSize_ = std::max(sizes.tempSizeInBytes, sizes.tempUpdateSizeInBytes);
-        ribbonGasSize_ = sizes.outputSizeInBytes;
-        CUDA_CHECK(cudaMalloc(&ribbonTemp_, ribbonTempSize_));
-        CUDA_CHECK(cudaMalloc(&ribbonGasBuf_, ribbonGasSize_));
-        worldBuffers_.push_back(ribbonTemp_);
-        worldBuffers_.push_back(ribbonGasBuf_);
-        OPTIX_CHECK(optixAccelBuild(context_, stream_, &ao, &bi, 1, CUdeviceptr(ribbonTemp_), ribbonTempSize_, CUdeviceptr(ribbonGasBuf_),
-                                    ribbonGasSize_, &ribbonGas_, nullptr, 0));
-        CUDA_CHECK(cudaStreamSynchronize(stream_));
-    }
-    // the instances (the ribbons last, identity, the second hit record)
+    // the instances
     std::vector<OptixInstance> inst;
     std::vector<KInstance> kinst;
     instMap_.assign(instances.size(), -1);
@@ -407,23 +335,6 @@ void KoyRenderer::uploadWorld(const std::vector<KMeshCPU>& meshes, const std::ve
         f.r1 = make_float4(in.m[4], in.m[5], in.m[6], in.m[7]);
         f.r2 = make_float4(in.m[8], in.m[9], in.m[10], in.m[11]);
         f.mesh = in.mesh;
-        kinst.push_back(f);
-    }
-    if (ribbonGas_) {
-        OptixInstance oi{};
-        const float id[12] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0};
-        std::memcpy(oi.transform, id, sizeof(id));
-        oi.instanceId = unsigned(inst.size());
-        oi.sbtOffset = 1;
-        oi.visibilityMask = 2;
-        oi.flags = OPTIX_INSTANCE_FLAG_NONE;
-        oi.traversableHandle = ribbonGas_;
-        inst.push_back(oi);
-        KInstance f{};
-        f.r0 = make_float4(1, 0, 0, 0);
-        f.r1 = make_float4(0, 1, 0, 0);
-        f.r2 = make_float4(0, 0, 1, 0);
-        f.mesh = ribbonMesh;
         kinst.push_back(f);
     }
     instanceCount_ = unsigned(inst.size());
@@ -459,36 +370,6 @@ void KoyRenderer::buildIAS(bool update) {
     OptixTraversableHandle h = 0;
     OPTIX_CHECK(optixAccelBuild(context_, stream_, &ao, &bi, 1, CUdeviceptr(iasTemp_), iasTempSize_, CUdeviceptr(iasBuf_), iasSize_, &h, nullptr, 0));
     params_.handle = h;
-}
-
-void KoyRenderer::updateRibbons(const float4* devPoints, const float3* devNormals) {
-    if (!ribbonGas_) return;
-    if (devPoints && devPoints != ribbonPts_)
-        CUDA_CHECK(cudaMemcpyAsync(ribbonPts_, devPoints, size_t(ribbonPointCount_) * sizeof(float4), cudaMemcpyDeviceToDevice, stream_));
-    if (devNormals && devNormals != ribbonNrm_)
-        CUDA_CHECK(cudaMemcpyAsync(ribbonNrm_, devNormals, size_t(ribbonPointCount_) * sizeof(float3), cudaMemcpyDeviceToDevice, stream_));
-    OptixBuildInput bi{};
-    bi.type = OPTIX_BUILD_INPUT_TYPE_CURVES;
-    CUdeviceptr verts = CUdeviceptr(ribbonPts_), widths = CUdeviceptr(reinterpret_cast<char*>(ribbonPts_) + 12), nrms = CUdeviceptr(ribbonNrm_);
-    bi.curveArray.curveType = OPTIX_PRIMITIVE_TYPE_FLAT_QUADRATIC_BSPLINE;
-    bi.curveArray.numPrimitives = ribbonSegCount_;
-    bi.curveArray.vertexBuffers = &verts;
-    bi.curveArray.numVertices = ribbonPointCount_;
-    bi.curveArray.vertexStrideInBytes = sizeof(float4);
-    bi.curveArray.widthBuffers = &widths;
-    bi.curveArray.widthStrideInBytes = sizeof(float4);
-    bi.curveArray.normalBuffers = &nrms;
-    bi.curveArray.normalStrideInBytes = sizeof(float3);
-    bi.curveArray.indexBuffer = CUdeviceptr(ribbonSeg_);
-    bi.curveArray.indexStrideInBytes = sizeof(unsigned int);
-    bi.curveArray.flag = OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT;
-    bi.curveArray.endcapFlags = OPTIX_CURVE_ENDCAP_DEFAULT;
-    OptixAccelBuildOptions ao{};
-    ao.buildFlags = kRibbonBuildFlags;
-    ao.operation = OPTIX_BUILD_OPERATION_UPDATE;
-    OPTIX_CHECK(optixAccelBuild(context_, stream_, &ao, &bi, 1, CUdeviceptr(ribbonTemp_), ribbonTempSize_, CUdeviceptr(ribbonGasBuf_), ribbonGasSize_,
-                                &ribbonGas_, nullptr, 0));
-    buildIAS(true);
 }
 
 void KoyRenderer::bakeAO() {
@@ -746,11 +627,9 @@ void KoyRenderer::shutdown() {
     if (pipeline_) optixPipelineDestroy(pipeline_);
     for (auto g : groups_) optixProgramGroupDestroy(g);
     if (module_) optixModuleDestroy(module_);
-    if (curveModule_) optixModuleDestroy(curveModule_);
     if (context_) optixDeviceContextDestroy(context_);
     pipeline_ = nullptr;
     groups_.clear();
     module_ = nullptr;
-    curveModule_ = nullptr;
     context_ = nullptr;
 }

@@ -5,6 +5,16 @@
 
 ## 🏁 Şu an · 2026-10-04 akşamı · Ada bitti (B0-B6), Özcan'ın bakacağı yer
 
+> **Son değişiklik (Özcan, 10-04 akşamı, karelere telefondan baktı):** *"Çayır yani o hareketli yosunlara gerek yok. Bu
+> sahnede amacımız fizik değil. Her sahnenin bir amacı vardı. Bu sahnede gerçekçi su ışık ve yüksek çözünürlük yani net
+> ve stabil görüntü hedefledik. Yosun fiziği bu sahnenin aslında amacına ters. Ondan kaldırabilirsin."* → Deniz çayırı
+> sahneden ve koddan kaldırıldı: yapraklar ve salınım çekirdeği, her karedeki güncelleme, çizicide şerit eğrisi desteği
+> (OptiX eğri ilkeli, ikinci isabet kaydı, güncellenen eğri ağacı). Kod git geçmişinde (commit `a667573` ve öncesi).
+> Malzeme 2 numara boş yer tutucu (arkasındakilerin numarası değişmesin). **Yan kazanç:** kare süreleri çayırın hiç
+> görünmediği yerlerde bile düştü: açık sığ kum 32 → 27 ms, eski çayırın önü 39 → 27,5 ms ve 46 → 31 ms; otomatik test
+> 33,3-35,4 fps (önce 32,3-34,5). Nedeni ayrıştırılmadı (boru hattındaki eğri bayrağı, eğri ağacı ya da her karedeki
+> yeniden uydurma). Testler 13/13. Aşağıdaki çayır satırları o anki durumdur.
+
 ### Özcan'ın bakacağı yer
 
 **Açmak:** `build\pc_graphics.exe` → galeride **05 Ada**. Yükleme ~30 sn (16K kum ve kaya taramaları, adanın ve
@@ -17,7 +27,7 @@ ayar dosyasını yeniden okur. Panelde derinlik, basınç, ppO2.
 **Sırayla dene:**
 1. **Salon (başlangıç, 1-3 m):** etrafına bak; kırık deliklerin altına git, kumdaki ışığın dalgayla salınışını izle.
    Kıyıya dön (+z): tahta yürüyüş yolunun altı, tahta aralıklarından kuma düşen kıvrık ışık çizgileri.
-2. **Sığ kum (4-9 m):** dubaların arasından açığa yüz: kostik ağı, deniz yıldızları, taşlar, sağda deniz çayırı.
+2. **Sığ kum (4-9 m):** dubaların arasından açığa yüz: kostik ağı, deniz yıldızları, taşlar.
 3. **Amforalar (~12 m, z ≈ −52):** kayalara yaslanmış yığın, çevresinde tek tük amforalar. Yakında **F**: pişmiş toprak.
 4. **Batık (~22 m, z ≈ −97):** kıç kasarası sisten çıkar; sancak tarafındaki çöküntüden içeri gir, **F** ile ambar,
    toplar, postalar; küpeştede yelpaze mercanları (fenerde kızıl).
@@ -63,12 +73,10 @@ ayar dosyasını yeniden okur. Panelde derinlik, basınç, ppO2.
   12 eklenince 16'yı seçiyordu, düzeltildi.
 - **Batığın içi:** ışık ve fener yalnız durağan karelerle; içeride yüzerken çarpışma (dalgıç kerestelerin arasından
   geçebiliyor mu, takılıyor mu) denenmedi.
-- **Hareket:** dubaların dalgayla inip kalkışı, deniz çayırının salınışı canlı görülmedi (kod ve tek kareler).
-- **Kararlılık** yelpaze mercanlarının dibinde (yakın planda ince dallar) ölçülmedi; batık yolu ve çayır yolu ölçüldü.
-- **Kare hızı çayırın içine bakınca 30'un altında:** 43-53 ms (19-23 fps): temel geçiş 26 ms, kenar 18 ms (yaprak
-  kenarlarının örnekleri gölge ışınlarıyla pahalı). Denendi: yaprakları yarıya indirmek ve kenar eşiğini iki katına
-  çıkarmak yalnız 3-5 ms kazandırdı, varsayılanlar değişmedi. Denenmedi: yaprakların birbirine gölge düşürmemesi,
-  yaprak kenarında daha az örnek. Koridorun geri kalanı 30-45 fps.
+- **Hareket:** dubaların dalgayla inip kalkışı canlı görülmedi (kod ve tek kareler).
+- **Kararlılık** yelpaze mercanlarının dibinde (yakın planda ince dallar) ölçülmedi; salon ve batık yolu ölçüldü
+  (çayır kaldırıldıktan sonra yeniden ölçülmedi: yalnız bir öğe eksildi).
+- ~~Kare hızı çayırın içinde 30'un altında~~: çayır kaldırıldı (yukarıda); en yavaş yer artık başlangıç salonu, 32 ms.
 - **Yükleme** ~30 sn; kısaltılmadı.
 
 **hafıza itildi:** evet (Ada görevi 🏁, hasat [[gpu-ve-grafik]] §24).

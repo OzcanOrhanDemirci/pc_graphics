@@ -145,84 +145,6 @@ float KoyFloorShape::operator()(float x, float z) const {
 float koyFloor(const Config& cfg, float x, float z) { return KoyFloorShape::from(cfg)(x, z); }
 
 // ---------------------------------------------------------------------------------------------------
-void KoySeagrass::build(const Config& cfg) {
-    leaves.clear();
-    std::mt19937 rng(cfg.i("grass.seed", 11));
-    std::uniform_real_distribution<float> U(0.0f, 1.0f);
-    const float3 c = cfg.v3("grass.centre", make_float3(3.4f, 0.0f, -4.0f));
-    const float R = cfg.f("grass.radius", 2.6f);
-    const float spacing = 1.0f / std::sqrt(cfg.f("grass.shoots_per_m2", 400.0f));
-    for (float x = c.x - R - 0.6f; x <= c.x + R + 0.6f; x += spacing)
-        for (float z = c.z - R - 0.6f; z <= c.z + R + 0.6f; z += spacing) {
-            const float jx = x + (U(rng) - 0.5f) * spacing, jz = z + (U(rng) - 0.5f) * spacing;
-            const float d = std::sqrt((jx - c.x) * (jx - c.x) + (jz - c.z) * (jz - c.z));
-            const float edge = R * (1.0f + 0.4f * noise3(jx * 0.45f, 7.7f, jz * 0.45f) + 0.12f * noise3(jx * 1.7f, 2.1f, jz * 1.7f));
-            if (d > edge) continue;
-            // a wide ragged margin: shoots thin out and shorten over the last 1.6 m (seen from afar, no hedge wall)
-            const float dens = smooth01(edge, edge - 1.6f, d);
-            if (U(rng) > 0.15f + 0.85f * dens) continue;
-            // the meadow is patchy: bare holes and taller and shorter stands (no clipped hedge)
-            const float patchN = noise3(jx * 1.3f, 4.4f, jz * 1.3f);
-            if (patchN < -0.35f) continue;
-            const float stand = 0.55f + 0.45f * smooth01(-0.35f, 0.4f, patchN);
-            const float shootYaw = U(rng) * 6.2831853f;
-            const int nl = 4 + int(U(rng) * 3.0f);
-            const float y = koyFloor(cfg, jx, jz) - 0.01f;
-            for (int k = 0; k < nl; ++k) {
-                KoyLeaf L;
-                L.base = make_float3(jx + (U(rng) - 0.5f) * 0.012f, y, jz + (U(rng) - 0.5f) * 0.012f);
-                L.yaw = shootYaw + (k - 0.5f * nl) * 0.35f + (U(rng) - 0.5f) * 0.3f;
-                L.lean = 0.22f + 0.4f * U(rng) * (k == 0 || k == nl - 1 ? 1.5f : 1.0f);   // Posidonia's ribbons bow with the swell
-                L.length = (cfg.f("grass.length_min", 0.32f) + (cfg.f("grass.length_max", 0.75f) - cfg.f("grass.length_min", 0.32f)) * U(rng)) *
-                           (0.3f + 0.7f * dens) * stand;
-                L.halfWidth = cfg.f("grass.half_width", 0.0048f) * (0.85f + 0.3f * U(rng));
-                L.phase = U(rng);
-                L.stiffness = 0.8f + 0.5f * U(rng);
-                leaves.push_back(L);
-            }
-        }
-    // the swell's current at the floor (linear wave theory): amplitude a, period T, depth d -> u_b = a w / sinh(k d)
-    const float a = cfg.f("swell.amplitude", 0.12f), T = cfg.f("swell.period", 7.0f), d = -cfg.f("floor.depth", -7.0f);
-    const float w = 2.0f * 3.14159265f / T;
-    float k = w * w / 9.81f;
-    for (int it = 0; it < 50; ++it) k = w * w / (9.81f * std::tanh(k * d));
-    const float dirDeg = cfg.f("swell.direction", 250.0f) * 3.14159265f / 180.0f;
-    current.dir = make_float3(std::cos(dirDeg), 0.0f, std::sin(dirDeg));
-    current.speed = a * w / std::sinh(k * d);
-    current.omega = w;
-    current.k = k;
-    current.flutter = cfg.f("grass.flutter", 0.04f);
-    cudaMalloc(reinterpret_cast<void**>(&dLeaves), std::max<size_t>(1, leaves.size()) * sizeof(KoyLeaf));
-    cudaMemcpy(dLeaves, leaves.data(), leaves.size() * sizeof(KoyLeaf), cudaMemcpyHostToDevice);
-}
-
-void KoySeagrass::toRibbons(KRibbonsCPU& r, unsigned int material) const {
-    r = KRibbonsCPU();
-    r.material = material;
-    const int ppl = pointsPerLeaf;
-    r.points.resize(leaves.size() * ppl);
-    r.normals.resize(leaves.size() * ppl);
-    for (size_t i = 0; i < leaves.size(); ++i) {
-        const KoyLeaf& L = leaves[i];
-        for (int k = 0; k < ppl; ++k) {
-            const float s = L.length * (float(k) - 0.5f) / float(ppl - 2);
-            r.points[i * ppl + k] = make_float4(L.base.x, L.base.y + s, L.base.z, L.halfWidth);
-            r.normals[i * ppl + k] = make_float3(std::cos(L.yaw), 0.0f, std::sin(L.yaw));
-        }
-        for (int s = 0; s < ppl - 2; ++s) r.segments.push_back(unsigned(i * ppl + s));
-    }
-}
-
-void KoySeagrass::update(float t, float4* pts, float3* nrm, cudaStream_t s) const {
-    koyGrassPoints(dLeaves, int(leaves.size()), pointsPerLeaf, t, current, pts, nrm, s);
-}
-
-void KoySeagrass::release() {
-    if (dLeaves) cudaFree(dLeaves);
-    dLeaves = nullptr;
-}
-
-// ---------------------------------------------------------------------------------------------------
 namespace {
 KMeshCPU buildFloor(const Config& cfg) {
     KMeshCPU m;
@@ -383,19 +305,20 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
     rockM.uvScale = 1.0f;
     rockM.normalStrength = 1.0f;
     rockM.aoStrength = 1.0f;
-    KMaterial leafM{};
-    leafM.kind = KM_LEAF;
-    leafM.texSet = -1;
-    leafM.albedo = cfg.v3("grass.albedo", make_float3(0.09f, 0.20f, 0.06f));
-    leafM.aoStrength = 0.0f;
+    // slot 2 was the seagrass (removed 2026-10-04, Ozcan: the scene is about light and sharpness, not physics); kept
+    // empty so the materials after it keep their indices
+    KMaterial spareM{};
+    spareM.kind = KM_PLAIN;
+    spareM.texSet = -1;
+    spareM.albedo = make_float3(0.5f, 0.5f, 0.5f);
     // Amfora: the jars' fired clay (the clay scan and the coat below)
     KMaterial jarM{};
     jarM.kind = KM_PLAIN;
     jarM.texSet = -1;
     jarM.albedo = cfg.v3("amfora.albedo", make_float3(0.46f, 0.27f, 0.17f));
     jarM.aoStrength = 1.0f;
-    floorM.detailSet = rockM.detailSet = leafM.detailSet = jarM.detailSet = -1;
-    floorM.coatSet = rockM.coatSet = leafM.coatSet = jarM.coatSet = -1;   // not 0: that is a texture set
+    floorM.detailSet = rockM.detailSet = spareM.detailSet = jarM.detailSet = -1;
+    floorM.coatSet = rockM.coatSet = spareM.coatSet = jarM.coatSet = -1;   // not 0: that is a texture set
     // the sea's coat (KMaterial) on the jars
     auto coat = [&](KMaterial& M, const char* key, float cover, float scale, float3 tint, float sediment, float film, float mottle) {
         M.coatSet = setCoat;
@@ -508,7 +431,7 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
     KMaterial fanYellow = plain(cfg.v3("fans.yellow_rgb", make_float3(0.72f, 0.52f, 0.08f)));
     fanYellow.mottle = 0.25f;
     fanYellow.aoStrength = 0.4f;
-    materials = {floorM, rockM, leafM, jarM, islandWet, islandDry, woodM, concWet, concDry, steelM, rustM, floatM, bigM, ropeM, musselM,
+    materials = {floorM, rockM, spareM, jarM, islandWet, islandDry, woodM, concWet, concDry, steelM, rustM, floatM, bigM, ropeM, musselM,
                  stoneL, stoneD, starM, cukeM, pinnaM, urchinM, wreckWood, wreckIron, fanRed, fanYellow};
 
     meshes.push_back(buildFloor(cfg));
@@ -618,8 +541,6 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
             instances.push_back(in);
         }
     }
-    grass.build(cfg);
-    grass.toRibbons(ribbons, 2);
     applyTextureMode(cfg, cfg.i("tex.mode", 2));
 }
 
@@ -676,7 +597,6 @@ std::vector<KTextureSet> KoyWorld::textureSets() const {
 }
 
 void KoyWorld::release() {
-    grass.release();
     for (auto& t : textures) {
         for (auto o : t.textures) cudaDestroyTextureObject(cudaTextureObject_t(o));
         for (void* a : t.arrays) cudaFreeMipmappedArray(static_cast<cudaMipmappedArray_t>(a));
@@ -688,8 +608,7 @@ std::string KoyWorld::summary() const {
     size_t tris = 0;
     for (const auto& m : meshes) tris += m.idx.size();
     std::ostringstream s;
-    s << meshes.size() << " ag (" << tris << " ucgen), " << grass.leaves.size() << " yaprak (" << ribbons.segments.size() << " serit parcasi), "
-      << textures.size() << " taranmis malzeme";
+    s << meshes.size() << " ag (" << tris << " ucgen), " << textures.size() << " taranmis malzeme";
     return s.str();
 }
 

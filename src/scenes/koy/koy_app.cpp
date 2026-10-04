@@ -145,7 +145,7 @@ void KoyApp::setup() {
     std::printf("koy dokular: %.1f s (paralel cozme), dizilerde %.2f GB; GPU bellegi dunyayla %.2f GB artti, kartta %.2f / %.2f GB dolu\n",
                 world.textureSeconds, world.textureBytes / 1073741824.0, (double(freeBefore) - double(freeAfter)) / 1073741824.0,
                 (totalMem - freeAfter) / 1073741824.0, totalMem / 1073741824.0);
-    renderer.uploadWorld(world.meshes, world.instances, world.materials, world.textureSets(), &world.ribbons);
+    renderer.uploadWorld(world.meshes, world.instances, world.materials, world.textureSets());
     {   // the floor's depth under every (x, z): which light fields a point reads (koy.cu fieldsFor)
         const int B = cfg.i("light.bottom_map", 1024);
         const float3 lo = cfg.v3("floor.extent_min", make_float3(-420.0f, 0.0f, -520.0f)), hi = cfg.v3("floor.extent_max", make_float3(420.0f, 0.0f, 480.0f));
@@ -380,10 +380,6 @@ void KoyApp::stepWorld(float t) {
         std::vector<std::array<float, 12>> m;
         world.buoys.transforms(h, idx, m);
         renderer.setTransforms(idx, m);
-    }
-    if ((grassMoves && cfg.i("grass.move", 1)) || t == 0.0f) {
-        world.grass.update(t, renderer.ribbonPoints(), renderer.ribbonNormals(), renderer.stream());
-        renderer.updateRibbons(nullptr, nullptr);
     }
     cudaStreamSynchronize(renderer.stream());
     renderer.worldMs = float((know() - t0) * 1000.0);

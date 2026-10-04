@@ -259,9 +259,9 @@ water is seen only from below; there is no surfacing, and too deep the oxygen's 
   it is; the real delay is shortened, and the code says so): the view narrows, goes black, and you start again at the
   ladder. Nitrogen narcosis is a matter of the mind, not drawn.
 
-Open: frame rate 30-45 fps along the lane, but 19-23 fps looking into the seagrass close up (its blades' edge
-samples with their shadow rays); the wreck's interior light and the look were judged on still frames from the command
-line, and no one has swum it live yet. Everything in `docs/koy/DURUM.md`.
+Open: 33-35 fps in the application's own test (the pier's hall, where you start, is the slowest at ~32 ms a frame);
+the wreck's interior light and the look were judged on still frames from the command line, and no one has swum it
+live yet. Everything in `docs/koy/DURUM.md`.
 
 ## What scene 1 computes
 

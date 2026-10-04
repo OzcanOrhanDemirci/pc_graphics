@@ -30,18 +30,6 @@ float koyFloor(const Config& cfg, float x, float z);
 // a list of numbers from the config ("1 2 3", commas allowed); empty if the key is missing
 std::vector<float> koyList(const Config& cfg, const std::string& key);
 
-struct KoySeagrass {
-    std::vector<KoyLeaf> leaves;
-    int pointsPerLeaf = 5;          // quadratic B-spline control points: 3 segments a leaf
-    KoyLeaf* dLeaves = nullptr;
-    KoyCurrent current{};
-    void build(const Config& cfg);
-    void toRibbons(KRibbonsCPU& r, unsigned int material) const;
-    // the leaves sway with the swell's orbital current at the floor (K1 kinematic; K3: XPBD with contact)
-    void update(float t, float4* pts, float3* nrm, cudaStream_t s) const;
-    void release();
-};
-
 struct KoyTextureSet {
     std::string name;
     KTextureSet set{};
@@ -54,9 +42,7 @@ struct KoyWorld {
     std::vector<KInstanceCPU> instances;
     std::vector<KMaterial> materials;
     std::vector<KoyTextureSet> textures;
-    KoySeagrass grass;
     KoyBuoys buoys;                 // Ada: the buoy lines and the mooring buoy (moving instances)
-    KRibbonsCPU ribbons;
     float3 rockCentre{};
     float rockRadius = 0.0f;
     // the texture choice (the panel's "Doku"): 0 standard (2K scans), 1 high (everything 8K, detail layers), 2 ultra (the

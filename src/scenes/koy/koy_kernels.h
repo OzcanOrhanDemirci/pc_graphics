@@ -7,20 +7,6 @@
 
 #include <vector>
 
-// a seagrass leaf: its base, the direction it leans towards at rest (yaw, lean angle), its size, its own phase and stiffness
-struct KoyLeaf {
-    float3 base;
-    float yaw, lean, length, halfWidth, phase, stiffness;
-};
-// the near-bottom current that sways the meadow: a swell's orbital velocity (linear wave theory at the floor's depth)
-struct KoyCurrent {
-    float3 dir;                  // horizontal direction the swell travels
-    float speed;                 // orbital velocity amplitude at the floor (m/s)
-    float omega, k;              // swell angular frequency, wavenumber
-    float flutter;               // small fast fluttering (rad)
-};
-void koyGrassPoints(const KoyLeaf* leaves, int n, int pointsPerLeaf, float t, KoyCurrent cur, float4* pts, float3* nrm, cudaStream_t s);
-
 // the sea surface's height at n points (x, z) from its periodic texture (level 0): the floats ride it
 void koySampleHeights(unsigned long long surface, float patch, const float2* pts, int n, float* out, cudaStream_t s);
 

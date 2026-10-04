@@ -56,7 +56,7 @@ struct KoyApp {
     Diver diver;
     KoyQuality quality;
     float ev = 0.0f, evAdapt = 0.0f, adaptRef = 0.0f;
-    bool caustics = true, grassMoves = true;
+    bool caustics = true;
     bool torchOn = false;                  // the diver's torch (panel, F)
     float worldTime = 0.0f;
     std::vector<uchar4> pixels;
@@ -82,7 +82,7 @@ struct KoyApp {
     void stepDiver(float fwd, float right, float up, bool strong, float lookDX, float lookDY, float dt);
     void restartDiver();                   // at the ladder, as at the start
     void stepBody(float dt);               // pressure and oxygen: the dose, the tunnel, the blackout and the restart
-    void stepWorld(float t);               // waves, caustics, seagrass at world time t
+    void stepWorld(float t);               // waves, caustics, the floats at world time t
     void frame();                          // stepWorld must have run; renders
     void adaptExposure(float dt, bool instant);
     // the eye's reference adaptation: metered on open water (from the start, looking out to sea), whatever the start

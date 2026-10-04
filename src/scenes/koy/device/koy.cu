@@ -184,7 +184,6 @@ struct Hit {
     float3 dpdu, dpdv;          // world-space surface derivatives along uv (texture footprints, normal maps)
     float ao;
     unsigned int mat, id;
-    bool leaf;
 };
 static __forceinline__ __device__ float3 xformP(const KInstance& in, float3 p) {
     return make_float3(in.r0.x * p.x + in.r0.y * p.y + in.r0.z * p.z + in.r0.w, in.r1.x * p.x + in.r1.y * p.y + in.r1.z * p.z + in.r1.w,
@@ -198,7 +197,6 @@ static __forceinline__ __device__ Hit trace(float3 o, float3 d, float tmax) {
     optixTraverse(params.handle, o, d, 0.0f, tmax, 0.0f, OptixVisibilityMask(3u), OPTIX_RAY_FLAG_DISABLE_ANYHIT, 0, 1, 0);
     Hit h;
     h.hit = optixHitObjectIsHit();
-    h.leaf = false;
     if (!h.hit) return h;
     const unsigned int ii = optixHitObjectGetInstanceIndex();
     const unsigned int prim = optixHitObjectGetPrimitiveIndex();
@@ -206,21 +204,6 @@ static __forceinline__ __device__ Hit trace(float3 o, float3 d, float tmax) {
     const KMesh& m = params.meshes[in.mesh];
     h.t = optixHitObjectGetRayTmax();
     h.mat = m.material;
-    if (optixGetPrimitiveType(optixHitObjectGetHitKind()) == OPTIX_PRIMITIVE_TYPE_FLAT_QUADRATIC_BSPLINE) {
-        // a seagrass ribbon: its normal from OptiX, its id per leaf (every leaf a different surface)
-        const float2 rp = optixHitObjectGetRibbonParameters();
-        h.leaf = true;
-        h.p = o + d * h.t;
-        h.ng = normalize(xformV(in, optixHitObjectGetRibbonNormal(rp)));
-        if (dot(h.ng, d) > 0.0f) h.ng = -h.ng;
-        h.ns = h.ng;
-        h.uv = make_float2(rp.x, rp.y);
-        h.dpdu = make_float3(0, 0, 0);
-        h.dpdv = make_float3(0, 0, 0);
-        h.ao = m.ao ? m.ao[prim] : 1.0f;
-        h.id = 0x10000u + prim / 4u;
-        return h;
-    }
     const float2 b = optixHitObjectGetTriangleBarycentrics();
     const uint3 tri = m.idx[prim];
     const float3 v0 = m.pos[tri.x], v1 = m.pos[tri.y], v2 = m.pos[tri.z];
@@ -935,7 +918,7 @@ extern "C" __global__ void __raygen__edgeFind() {
     params.edgeIndex[pix] = e;
 }
 
-// The diver's collision probe: distance to the static geometry (rocks, floor; not the seagrass, which bends) in 26
+// The diver's collision probe: distance to the geometry (rocks, floor, the pier, the wreck) in 26
 // directions from probeOrigin, up to 2 m.
 extern "C" __global__ void __raygen__probe() {
     const unsigned int k = optixGetLaunchIndex().x;

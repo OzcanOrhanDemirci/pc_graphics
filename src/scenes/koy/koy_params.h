@@ -58,7 +58,6 @@ enum KoyMaterialKind : int {
     KM_TERRAIN = 0,      // the sea floor: a scanned texture set mapped in world x, z
     KM_MESH = 1,         // a mesh with its own uv (a scanned rock)
     KM_PLAIN = 2,        // a plain albedo
-    KM_LEAF = 3,         // a seagrass ribbon
 };
 
 struct KMaterial {

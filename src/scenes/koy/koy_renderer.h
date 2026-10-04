@@ -1,5 +1,5 @@
-// Scene 5 "Koy": the OptiX pipeline (NVRTC hot reload of device/koy.cu), the acceleration structures (triangles for the
-// floor and the rocks, flat curves for the seagrass, refitted every frame), the frame's passes and their timings.
+// Scene 5 "Koy": the OptiX pipeline (NVRTC hot reload of device/koy.cu), the acceleration structures (triangles; the
+// moving floats' instances refitted every frame), the frame's passes and their timings.
 #pragma once
 #include "scenes/koy/koy_params.h"
 
@@ -29,26 +29,14 @@ struct KInstanceCPU {
     float m[12] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0};
     int mesh = 0;
 };
-// a set of ribbons (seagrass): flat quadratic B-splines, control points x y z + half width; every leaf is a strip of
-// segments sharing points (n points -> n-2 segments)
-struct KRibbonsCPU {
-    std::vector<float4> points;          // x, y, z, half width
-    std::vector<float3> normals;         // per point: the ribbon's facing (OptiX orients the flat curve by it)
-    std::vector<unsigned int> segments;  // index of each segment's first control point
-    unsigned int material = 0;
-};
-
 class KoyRenderer {
 public:
     bool init(unsigned int width, unsigned int height, const std::string& root);
     void shutdown();
     bool compileDevice(std::string& log);
-    // the world's static geometry, materials and the seagrass (whose points are updated every frame: updateRibbons)
+    // the world's geometry and materials
     void uploadWorld(const std::vector<KMeshCPU>& meshes, const std::vector<KInstanceCPU>& instances, const std::vector<KMaterial>& materials,
-                     const std::vector<KTextureSet>& texSets, const KRibbonsCPU* ribbons);
-    void updateRibbons(const float4* devPoints, const float3* devNormals);   // device arrays, same layout as uploaded; refits
-    float4* ribbonPoints() { return ribbonPts_; }
-    float3* ribbonNormals() { return ribbonNrm_; }
+                     const std::vector<KTextureSet>& texSets);
     void bakeAO();                                                // every mesh's per-vertex occlusion (once, after upload)
     // a sun depth map over the surface rectangle [min, max] (x, z), texel metres (once, after upload); false if full
     bool bakeSunMap(float2 mn, float2 mx, float texel);
@@ -70,7 +58,7 @@ public:
     float meteredLog2() const { return metered_; }   // mean log2 luminance (Y) of the last frame, before exposure
     cudaStream_t stream() const { return stream_; }
     std::string deviceName() const { return deviceName_; }
-    float worldMs = 0.0f;                             // set by the owner: the time spent on the world (waves, caustics, grass)
+    float worldMs = 0.0f;                             // set by the owner: the time spent on the world (waves, caustics, floats)
 
 private:
     void launch(CUdeviceptr raygen, unsigned int w, unsigned int h, unsigned int d, float* ms);
@@ -79,7 +67,7 @@ private:
     std::string root_, deviceName_;
     unsigned int width_ = 0, height_ = 0;
     OptixDeviceContext context_ = nullptr;
-    OptixModule module_ = nullptr, curveModule_ = nullptr;
+    OptixModule module_ = nullptr;
     OptixPipeline pipeline_ = nullptr;
     std::vector<OptixProgramGroup> groups_;
     OptixShaderBindingTable sbt_{};
@@ -97,16 +85,8 @@ private:
     std::vector<void*> worldBuffers_;
     std::vector<KMeshCPU> meshesCPU_;
     std::vector<KInstanceCPU> instancesCPU_;
-    // acceleration structures: the static geometry's GASes, the ribbons' GAS (updatable), the IAS over all
+    // acceleration structures: the meshes' GASes, the IAS over all (updatable: the floats move)
     std::vector<OptixTraversableHandle> gas_;
-    OptixTraversableHandle ribbonGas_ = 0;
-    void* ribbonGasBuf_ = nullptr;
-    void* ribbonTemp_ = nullptr;
-    size_t ribbonTempSize_ = 0, ribbonGasSize_ = 0;
-    float4* ribbonPts_ = nullptr;
-    float3* ribbonNrm_ = nullptr;
-    unsigned int* ribbonSeg_ = nullptr;
-    unsigned int ribbonPointCount_ = 0, ribbonSegCount_ = 0;
     OptixInstance* dInstances_ = nullptr;
     std::vector<OptixInstance> instHost_;
     std::vector<KInstance> kinstHost_;
