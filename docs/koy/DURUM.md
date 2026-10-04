@@ -3,32 +3,23 @@
 > Tek kaynak durum panosu. Plan: `docs/koy/PLAN.md` (kararlar, fazlar, duraklar). Veri ve denetimleri: `docs/koy/VERI.md`.
 > Gerçek fotoğraflardan başvuru panosu: `docs/koy/BASVURU.md`. CC0 taramalar: `assets/koy/fetch.py`, `assets/koy/LICENSES.md`.
 
-## Özcan'ın bakacağı yer · 2026-10-04 sabahı
+## Şu an · 2026-10-04 sabahı · Özcan sınadı: hüzme iyi, kemer ve kemere inen kum kaldırıldı
 
-**Açmak:** `build\pc_graphics.exe` → galeride **05 Amfora** (ilk açılış ~14 sn: dokular, üç ışık alanı, kemerin ağı).
-Dalgıç tarlanın 9 m gerisinden, 1,6 m yukarıdan başlar, kemere doğru bakar. Tuşlar aynı: **W A S D** yüz, **Boşluk**
-yukarı, **C** aşağı, **Shift** güçlü vuruş, **Tab** fareyle bakış, **P** zamanı durdur (durunca örnekler birikir).
+**Özcan (canlı baktı):** *"Hüzme daha iyi olmuş. Kemer kötü olmuş, kum de çevreyi düzenlemeden derine iniş çok kötü ve
+yapay. O nedenle bu bir anda derine inen kumu ve kemeri silebilirsin."*
 
-**Nereye bakılacak:**
-1. *İlk bakış:* önde kumdan taşan amforalar, arkada mavide kemer, tepede ışık sütunları. Okuma sırası tarla → kemer →
-   sütunlar mı, kemer kemer gibi mi okunuyor?
-2. *Tarlaya in* (C, 30-50 cm'ye kadar): kırık gövdeler (içleri tortulu), kulplu boyunlar, kırık parçalar, kabuk yamaları,
-   üstte tortu keçesi. Gerçek bir batık fotoğrafının yanında durur mu? (`docs/koy/BASVURU.md` §12)
-3. *Kemere yüz* (~20 m, 40 sn): açıklıktan derin mavi, dibinde 16K kaya, düşmüş bloklar, arkadaki duvar.
-4. *Yukarı bak:* ışık sütunları, Snell penceresi, dalgacıklar (önceki duraktaki gibi).
-5. **Fener** (panel ya da **F**): yakında amforanın kil rengi ve süngerlerin turuncusu belirir, birkaç metrede söner
-   (ışık suda gidip döner). Tarlaya 50 cm'den fenerle bak.
-6. Panel: **Kostik: Hüzme / Işın (eski)** (gürültüsüz kostikle eski kaynayan yöntemin farkı), **Doku**, **Örnek**.
+**Yapılan:** kemer sahneden ve koddan kaldırıldı (`koy_arch.*` silindi; uzaklık alanı ve surface nets git geçmişinde,
+commit `a2a9378`); zemin profilinden tarladan inen yamaç ve kemerin arkasındaki duvar çıktı (arkadaki kıyıya doğru hafif
+yükseliş kaldı). Sahne artık ~12 m'de kumluk bir düzlükte batık tarlası. Bunlara bağlı ayarlar sadeleşti: ışık alanı tek
+dip (12,6 m; çok dipli yapı kodda duruyor, `light.bottoms`), kostik 0,5-14 m (6,9 ms), ince zemin ağı yalnız tarlanın
+çevresinde, güneş görünürlük kutusu tarlaya küçüldü. Galeri ve README metinleri, galeri resmi ve README görselleri
+kemersiz. Testler 11/11.
 
-**Karar istenenler (benim önerilerimle):** kemerin biçimi yeterince doğal mı (uzaktan hâlâ biraz kabuk gibi; bükme,
-eğiklik ve sırtlar artırıldı, istenirse köşeli kırılmalar eklerim); amforaların rengi (öneri: suyun maviliğine
-dokunmadan gözün renk uyumunu panelde seçenek olarak eklemek); ışık sütunlarının gücü (rüzgâr 4 m/s seçildi); kum
-yakın planda 8 örnek mi (kıpırtı yarıya iner, kare ~5 ms ağırlaşır).
+**Açmak:** `build\pc_graphics.exe` → galeride **05 Amfora**. Dalgıç tarlanın 9 m gerisinden başlar. Tuşlar: **W A S D**
+yüz, **Boşluk** yukarı, **C** aşağı, **Shift** güçlü vuruş, **Tab** fareyle bakış, **P** durdur, **F** fener.
 
-## Şu an · 2026-10-04 03.50 · A0-A7 bitti; Özcan'ın canlı bakışı bekleniyor
-
-**Aktif plan: `docs/koy/PLAN_AMFORA.md`** (otonom). Bütün fazların ilk turu bitti, bağımsız gözden geçirmenin
-bulguları düzeltildi (aşağıda A7). Kalan sanat işi Özcan'ın yorumuna göre.
+**Sıradaki (Özcan'ın seçimi):** kemerin yerine yücelik veren bir şey olsun mu (ör. tarlanın kenarında gerçek bir kayalık
+resif, ya da yalnız ışık ve derinlik); amforaların rengi (gözün renk uyumu seçeneği); kum yakın planda 8 örnek.
 
 ## A7 · bitiş · 2026-10-04 gece
 

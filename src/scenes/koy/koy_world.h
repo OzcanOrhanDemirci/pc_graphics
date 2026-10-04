@@ -13,11 +13,8 @@
 // the sea floor's shape, read once from the config (the mesh asks it millions of times)
 struct KoyFloorShape {
     float depth = -7.0f, slope = 0.05f, undulation = 0.45f;
-    // Amfora (docs/koy/PLAN_AMFORA.md §3): the wreck's plateau, the slope down to the arch's basin (towards -z), on beyond
-    // it into the blue, a gentle rise behind towards the shore, and the wreck's own mound
-    float drop = 0.0f, dropZ0 = -6.0f, dropZ1 = -26.0f;
-    float farDrop = 0.0f, farZ0 = -42.0f, farZ1 = -80.0f;
-    float farX = 0.0f, farHalf = 1e9f, farEdge = 0.0f;   // the drop only behind x = farX (its width), its edge wandering
+    // Amfora (docs/koy/PLAN_AMFORA.md §3): the wreck's sandy plain, a gentle rise behind towards the shore, and the
+    // wreck's own mound (the slope down to an arch and the wall behind it were removed, 2026-10-04: Ozcan)
     float rise = 0.0f, riseZ0 = 10.0f, riseZ1 = 40.0f;
     float moundX = 0.0f, moundZ = 0.0f, moundA = 5.0f, moundB = 3.0f, moundH = 0.0f, moundAngle = 0.0f;
     static KoyFloorShape from(const Config& cfg);

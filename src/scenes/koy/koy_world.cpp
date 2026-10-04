@@ -2,7 +2,6 @@
 #include "scenes/koy/koy_world.h"
 
 #include "scenes/koy/koy_amphora.h"
-#include "scenes/koy/koy_arch.h"
 
 #include "stb_image.h"
 
@@ -107,15 +106,6 @@ KoyFloorShape KoyFloorShape::from(const Config& cfg) {
     s.depth = cfg.f("floor.depth", -7.0f);
     s.slope = cfg.f("floor.slope", 0.05f);
     s.undulation = cfg.f("floor.undulation", 0.45f);
-    s.drop = cfg.f("floor.drop", 0.0f);
-    s.dropZ0 = cfg.f("floor.drop_z0", -6.0f);
-    s.dropZ1 = cfg.f("floor.drop_z1", -26.0f);
-    s.farDrop = cfg.f("floor.far_drop", 0.0f);
-    s.farZ0 = cfg.f("floor.far_z0", -42.0f);
-    s.farZ1 = cfg.f("floor.far_z1", -80.0f);
-    s.farX = cfg.f("floor.far_x", 0.0f);
-    s.farHalf = cfg.f("floor.far_half", 1e9f);
-    s.farEdge = cfg.f("floor.far_edge", 0.0f);
     s.rise = cfg.f("floor.rise", 0.0f);
     s.riseZ0 = cfg.f("floor.rise_z0", 10.0f);
     s.riseZ1 = cfg.f("floor.rise_z1", 40.0f);
@@ -130,13 +120,7 @@ KoyFloorShape KoyFloorShape::from(const Config& cfg) {
 }
 float KoyFloorShape::operator()(float x, float z) const {
     float y = depth + slope * z;
-    // descents towards -z (smoothstep from z0 down to z1, z1 < z0), the rise behind towards +z
-    if (drop != 0.0f) y -= drop * smooth01(dropZ0, dropZ1, z);
-    if (farDrop != 0.0f) {   // the wall: behind the arch only (a bay of deep water), its edge wandering
-        const float wz = farEdge * fbm3(x * 0.07f, 4.1f, 0.3f, 3);
-        const float across = farHalf < 1e8f ? 1.0f - smooth01(farHalf, farHalf * 2.2f, std::fabs(x - farX) + 0.6f * farEdge * fbm3(z * 0.08f, 1.7f, 2.2f, 2)) : 1.0f;
-        y -= farDrop * smooth01(farZ0 + wz, farZ1 + wz, z) * across;
-    }
+    // the rise behind towards +z (the shore)
     if (rise != 0.0f) y += rise * smooth01(riseZ0, riseZ1, z);
     // the wreck's mound: the hull's outline under the cargo, a long low swell of sand
     if (moundH != 0.0f) {
@@ -385,20 +369,15 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
     leafM.texSet = -1;
     leafM.albedo = cfg.v3("grass.albedo", make_float3(0.09f, 0.20f, 0.06f));
     leafM.aoStrength = 0.0f;
-    // Amfora: the arch's limestone and the jars' fired clay (A0: plain colours; A3 and A4 bring the scans)
-    KMaterial archM{};
-    archM.kind = KM_PLAIN;
-    archM.texSet = -1;
-    archM.albedo = cfg.v3("arch.albedo", make_float3(0.36f, 0.33f, 0.28f));
-    archM.aoStrength = 1.0f;
+    // Amfora: the jars' fired clay (the clay scan and the coat below)
     KMaterial jarM{};
     jarM.kind = KM_PLAIN;
     jarM.texSet = -1;
     jarM.albedo = cfg.v3("amfora.albedo", make_float3(0.46f, 0.27f, 0.17f));
     jarM.aoStrength = 1.0f;
-    floorM.detailSet = rockM.detailSet = leafM.detailSet = archM.detailSet = jarM.detailSet = -1;
-    floorM.coatSet = rockM.coatSet = leafM.coatSet = archM.coatSet = jarM.coatSet = -1;   // not 0: that is a texture set
-    // the sea's coat (KMaterial): the jars heavily, the arch's rock less, the scanned boulder lightly
+    floorM.detailSet = rockM.detailSet = leafM.detailSet = jarM.detailSet = -1;
+    floorM.coatSet = rockM.coatSet = leafM.coatSet = jarM.coatSet = -1;   // not 0: that is a texture set
+    // the sea's coat (KMaterial) on the jars
     auto coat = [&](KMaterial& M, const char* key, float cover, float scale, float3 tint, float sediment, float film, float mottle) {
         M.coatSet = setCoat;
         M.coatTile = cfg.f("tex.coat_tile", 1.36f);
@@ -415,11 +394,8 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
         M.lifeA = cfg.v3("life.sponge", make_float3(0.55f, 0.16f, 0.06f));   // Crambe crambe: orange-red
         M.lifeB = cfg.v3("life.coralline", make_float3(0.52f, 0.30f, 0.38f));  // Lithophyllum: pale pink-mauve
     };
-    if (setCoat >= 0) {
-        coat(jarM, "amfora", 0.55f, 0.22f, make_float3(0.42f, 0.40f, 0.36f), 0.75f, 0.35f, 0.22f);
-        coat(archM, "arch", 0.45f, 0.80f, make_float3(0.30f, 0.28f, 0.25f), 0.55f, 0.40f, 0.30f);
-    }
-    materials = {floorM, rockM, leafM, archM, jarM};
+    if (setCoat >= 0) coat(jarM, "amfora", 0.55f, 0.22f, make_float3(0.42f, 0.40f, 0.36f), 0.75f, 0.35f, 0.22f);
+    materials = {floorM, rockM, leafM, jarM};
 
     meshes.push_back(buildFloor(cfg));
     buildRipples(cfg);
@@ -440,14 +416,6 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
             materials[1].kind = KM_PLAIN;
         }
     }
-    // the arch (its feet on the floor at its centre)
-    if (cfg.i("arch.use", 0)) {
-        const float3 ac = cfg.v3("arch.centre", make_float3(3.0f, 0.0f, -33.0f));
-        const KoyArchShape shape = koyArchShape(cfg, koyFloor(cfg, ac.x, ac.z));
-        std::string log;
-        meshes.push_back(koyBuildArch(shape, cfg.f("arch.cell", 0.07f), 3, 3, &log));
-        std::printf("koy %s\n", log.c_str());
-    }
     for (int k = 0; k < int(meshes.size()); ++k) {
         KInstanceCPU in;
         in.mesh = k;
@@ -460,7 +428,7 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
         const int firstMesh = int(meshes.size());
         const std::vector<KoyAmphoraPiece> pieces = koyAmphoraPieces();
         for (size_t t = 0; t < pieces.size(); ++t)
-            meshes.push_back(koyBuildPiece(pieces[t], cfg.i("amfora.segments", 96), 4, unsigned(10 + t)));
+            meshes.push_back(koyBuildPiece(pieces[t], cfg.i("amfora.segments", 96), 3, unsigned(10 + t)));
         for (int t = 0; t < int(pieces.size()); ++t)
             for (const KoyAmphoraPlacement& P : field) {
                 if (P.piece != t) continue;
@@ -502,15 +470,10 @@ void KoyWorld::applyTextureMode(const Config& cfg, int mode) {
     r.detailTile = cfg.f("tex.rock_detail_tile", 1.8f);
     r.detailNormal = cfg.f("tex.rock_detail_normal", 0.6f);
     r.detailAlbedo = cfg.f("tex.rock_detail_albedo", 0.35f);
-    // Amfora: the arch's limestone takes the rock's detail scan (the same 16K in Ultra), the jars the clay (8K in both
-    // high modes; 2.00 m pressed to a 1.64 m tile: 0.2 mm a texel, the clay's grain 18 % finer than scanned)
-    if (materials.size() > 4) {
-        KMaterial& a = materials[3];
-        KMaterial& j = materials[4];
-        a.detailSet = high ? rockDetail : -1;
-        a.detailTile = cfg.f("arch.detail_tile", 1.8f);
-        a.detailNormal = cfg.f("arch.detail_normal", 0.9f);
-        a.detailAlbedo = cfg.f("arch.detail_albedo", 0.6f);
+    // Amfora: the jars take the clay (8K in both high modes; 2.00 m pressed to a 1.64 m tile: 0.2 mm a texel, the clay's
+    // grain 18 % finer than scanned)
+    if (materials.size() > 3) {
+        KMaterial& j = materials[3];
         j.detailSet = high ? setClay : -1;
         j.detailTile = cfg.f("amfora.detail_tile", 1.64f);
         j.detailNormal = cfg.f("amfora.detail_normal", 0.8f);

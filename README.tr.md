@@ -212,14 +212,13 @@ Açık: bal ipinin yüzeyi boğumlu (bir-üç tanecik kalınlığında); karpuz 
 
 ### 5 · Amfora · Ekim 2026
 
-| ![12 m'de kumlu bir tümsekte kabuk bağlamış amforalar, arkalarında mavide doğal bir kaya kemeri, tepeden ışık sütunları](docs/images/amfora-tarla.jpg) |
+| ![12 m'de kumlu bir tümsekte kabuk bağlamış amforalar, maviden inen ışık sütunları](docs/images/amfora-tarla.jpg) |
 |---|
 | ![Yakından: kuma yarı gömülü, kabuk bağlamış kırık ve sağlam amforalar, üstlerinde tortu keçesi](docs/images/amfora-yakin.jpg) |
 
 Akdeniz'de su altı, tüplü bir dalgıç gibi yüzülür: 12 metrede, MÖ 1. yüzyıldan bir Roma ticaret gemisinin şarap yükü;
-gövde çürüyünce düştükleri yerde yatan amforalar, yarı gömülü, kabuk bağlamış, çoğu kırık. 19 m ötede, 16 m'lik bir
-sekide ters ışıkta doğal bir kireçtaşı kemeri; zemin arkasında düştüğü için açıklığından derin mavi görünür. Önce netlik
-ve kararlılık; ışık fiziksel.
+gövde çürüyünce kumluk bir düzlükte düştükleri yerde yatan amforalar, yarı gömülü, kabuk bağlamış, çoğu kırık. Önce
+netlik ve kararlılık; ışık fiziksel.
 
 - **Zamansal hilesiz netlik:** her piksel her karede aynı sabit alt piksel örnekleriyle çizilir (4, döndürülmüş ızgara;
   titreşim yok, geçmiş yok), kenardaki piksele toplam 32'ye kadar örnek (varsayılan 16), pikselden biraz geniş bir
@@ -238,13 +237,13 @@ ve kararlılık; ışık fiziksel.
   2-4, Lamboglia 2; dış yüz, ağız içi, kulplar; CC BY 4.0) ve kırık parçaları: boynu kopmuş gövdeler (tortuyla dolu),
   kulplu boyunlar, yarım gövdeler, çanak çömlek parçaları. Kabuk yamaları altında 8K kil; girintilerde çok, kumun
   aşındırdığı yerde az; yukarı bakan her yerde tortu keçesi.
-- **Kemer:** uzaklık alanı (yarım elips üstüne bükülmüş, kalınlığı değişen kaya tüpü, kireçtaşı katmanları, çatlaklarla
-  ayrılmış bloklar, aşınmış sırtlar, düşmüş bloklar); surface nets ile 7 cm'de ağ (770 bin üçgen, 4,4 sn), üstüne dünya
-  uzayında 16K kaya taraması.
 - **Dalgıç feneri** (panel ya da F, varsayılan kapalı): ışığı suda gidip dönen beyaz bir LED; yakında kilin ve süngerlerin
   kırmızısı geri gelir, birkaç metrede söner.
 
-Açık kalanlar: kemer uzaktan hâlâ biraz kabuk gibi okunuyor; ışık sütunları güneşe doğru bakılmadıkça soluk; kumun
+19 m ötede, arkası maviye düşen daha derin bir sekide doğal bir kaya kemeri kuruldu, pencereden bakıldıktan sonra
+kaldırıldı: kemer kötü okunuyordu, çevresi kurulmadan derine inen kum yapay duruyordu.
+
+Açık kalanlar: ışık sütunları güneşe doğru bakılmadıkça soluk; kumun
 yakınında kararlılık hedefi tutmuyor ve kare 33 fps'e iniyor (birincisini 8 örnek çözer); kararlılık
 dört kamera yolunda ölçüldü, görünüş gerçek batık fotoğraflarıyla gözle tartıldı. Hepsi `docs/koy/DURUM.md`'de.
 

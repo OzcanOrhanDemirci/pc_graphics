@@ -219,14 +219,13 @@ knot in time).
 
 ### 5 · Amphorae *(Amfora)* · October 2026
 
-| ![Encrusted amphorae on a sandy mound at 12 m, a natural rock arch in the blue behind them, shafts of light from above](docs/images/amfora-tarla.jpg) |
+| ![Encrusted amphorae on a sandy mound at 12 m, shafts of light coming down through the blue](docs/images/amfora-tarla.jpg) |
 |---|
 | ![Close: broken and whole amphorae half sunk in the sand, crusted, a felt of sediment on top](docs/images/amfora-yakin.jpg) |
 
 Under water in the Mediterranean, swum like a scuba diver: at 12 m the wine cargo of a Roman merchantman of the 1st
-century BC, the jars lying where they fell when the hull rotted away, half sunk, crusted, many broken; 19 m beyond, on
-a shelf at 16 m, a natural limestone arch against the light, the deep blue through its opening where the floor drops
-away. Sharpness and steadiness come first; the light is physical.
+century BC, the jars lying where they fell when the hull rotted away on a sandy plain, half sunk, crusted, many broken.
+Sharpness and steadiness come first; the light is physical.
 
 - **Sharpness without temporal tricks:** every pixel is drawn with the same fixed sub-pixel samples every frame (4,
   rotated grid; no jitter, no history), edge pixels get up to 32 in all (16 by default), a Blackman-Harris filter a
@@ -246,13 +245,13 @@ away. Sharpness and steadiness come first; the light is physical.
   ArchAIDE (Dressel 1B, 1A, 2-4, Lamboglia 2; outside, the mouth's inside, the handles; CC BY 4.0), and broken pieces of
   them: bodies whose necks snapped (filled with sediment), necks with their handles, halves, sherds. 8K clay under
   patches of concretion, more in recesses, less where the sand scours; a felt of sediment on everything that looks up.
-- **The arch:** a distance field (a tube of rock of varying thickness bent over a half-ellipse, limestone beds, blocks
-  split along joints, eroded ridges, fallen blocks), meshed by surface nets at 7 cm (770 thousand triangles, 4.4 s), a
-  16K rock scan laid over it in world space.
 - **A diver's torch** (panel or F, off by default): a white LED whose light crosses the water there and back, so close
   up the clay's and the sponges' reds come back and die within a couple of metres.
 
-Open: the arch still reads a little like a shell from afar; the light shafts are faint unless you look towards the sun;
+A natural rock arch 19 m off, on a deeper shelf with a wall into the blue behind it, was built and taken out again after a
+look in the window: the arch read badly and the sand falling away with nothing around it looked artificial.
+
+Open: the light shafts are faint unless you look towards the sun;
 close over the sand the steadiness target is missed and the frame rate drops to 33 fps (8 samples would fix the first);
 steadiness was measured on four camera paths, the look judged by eye against real wreck photographs. Everything in
 `docs/koy/DURUM.md`.

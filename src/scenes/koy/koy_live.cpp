@@ -23,13 +23,11 @@ public:
         i.id = "koy";
         i.number = "05";
         i.title = L("Amfora", "Amphorae");
-        i.subtitle = L("Akdeniz'de bir Roma batığının yükü, ötede bir kaya kemeri", "A Roman wreck's cargo in the Mediterranean, a rock arch beyond");
+        i.subtitle = L("Akdeniz'de bir Roma batığının yükü", "A Roman wreck's cargo in the Mediterranean");
         i.description = L("On iki metrede, iki bin yıllık bir ticaret gemisinin şarap amforaları; kumda yarı gömülü, kabuk bağlamış, kimi "
-                          "kırık. Ötede ters ışıkta doğal bir kireçtaşı kemeri, açıklığından derin mavi görünür; tepeden ışık sütunları "
-                          "iner. Tüplü bir dalgıç gibi yüzülür.",
+                          "kırık; kumluk bir düzlükte, tepeden inen ışık sütunlarının altında. Tüplü bir dalgıç gibi yüzülür.",
                           "At twelve metres, the wine amphorae of a merchantman two thousand years old: half sunk in the sand, crusted, "
-                          "some broken. Beyond, a natural limestone arch against the light, the deep blue through its opening; shafts "
-                          "of light come down from above. You swim it like a scuba diver.");
+                          "some broken; on a sandy plain, under shafts of light coming down. You swim it like a scuba diver.");
         i.details = {
             {L("Netlik önce", "Sharpness first"),
              L("Her piksel her karede aynı sabit alt piksel örnekleriyle çizilir (titreşim yok, geçmiş yok); kenardaki piksellere 32'ye "
@@ -43,11 +41,6 @@ public:
                "Four types (Dressel 1B, 1A, 2-4, Lamboglia 2), turned from the profiles of museum drawings: outside, the mouth's "
                "inside, the handles (ArchAIDE, University of Southampton drawings, CC BY 4.0). Broken bodies, necks with handles, "
                "sherds; 8K clay, patches of concretion, a felt of sediment on top.")},
-            {L("Kemer", "The arch"),
-             L("Bir uzaklık alanından: kalınlığı değişen bükülmüş bir kaya tüpü, kireçtaşı katmanları, çatlaklarla ayrılmış bloklar, "
-               "iki yana alçalan sırtlar. 7 cm'lik hücrelerle ağa çevrilir, üstüne 16K kaya taraması.",
-               "From a distance field: a bent tube of rock of varying thickness, limestone beds, blocks split along joints, ridges "
-               "falling away on both sides. Turned into a mesh at 7 cm cells, a 16K rock scan over it.")},
             {L("Tayfsal su", "Spectral water"),
              L("Suyun soğurması ve saçılması 5 nm adımla, yayımlanmış ölçümlerden; güneş ve gök tayfı, göz eğrileri. Hepsi hazırlıkta "
                "ışığın sudaki yol uzunluğuna göre tablolara pişirilir: renkler derinlikle kendiliğinden maviye döner.",
@@ -62,11 +55,11 @@ public:
                "of light; at each depth slice a beam's light spreads exactly over the area it covers (nothing counted, no "
                "noise). The sun's disc blurs the caustics with depth.")},
             {L("Işık alanı", "Light field"),
-             L("Su sütununun dağınık ışığı (pencereden gök, çok kez saçılan güneş, kumdan yansıyan) hazırlıkta Monte Carlo ile, üç "
-               "dip derinliği için hesaplanır: kumlu tarlanın üstünde su derinin üstündekinden ~%30 parlaktır.",
+             L("Su sütununun dağınık ışığı (pencereden gök, çok kez saçılan güneş, kumdan yansıyan) hazırlıkta Monte Carlo ile "
+               "hesaplanır; parlak kum ışığı yukarı yansıtır: kumlu dibin üstünde su derinin üstündekinden ~%30 parlaktır.",
                "The water column's diffuse light (the sky through the window, the sun scattered many times, the light off the "
-               "sand) is computed beforehand by Monte Carlo for three floor depths: over the sandy wreck the water is ~30 % "
-               "brighter than over the deep.")}};
+               "sand) is computed beforehand by Monte Carlo; bright sand sends light back up: over the sandy floor the water is "
+               "~30 % brighter than over the deep.")}};
         i.tags = {L("Tayfsal su optiği", "Spectral water optics"), L("Gürültüsüz kostik", "Noise-free caustics"), L("Batık", "Wreck")};
         i.image = "assets/gallery/koy.jpg";
         i.accent = 0x4FB8C8;
