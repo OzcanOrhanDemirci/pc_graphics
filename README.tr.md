@@ -222,9 +222,9 @@ sekide ters ışıkta doğal bir kireçtaşı kemeri; zemin arkasında düştü�
 ve kararlılık; ışık fiziksel.
 
 - **Zamansal hilesiz netlik:** her piksel her karede aynı sabit alt piksel örnekleriyle çizilir (4, döndürülmüş ızgara;
-  titreşim yok, geçmiş yok), kenardaki piksellere 32'ye kadar ek örnek, pikselden biraz geniş bir Blackman-Harris süzgeci.
-  Kamera yollarında yakınsamış referansa karşı ölçülen kıpırtı (`tools/kararlilik.py`) sahne 2'nin TAA'sından 3-10 kat
-  düşük.
+  titreşim yok, geçmiş yok), kenardaki piksele toplam 32'ye kadar örnek (varsayılan 16), pikselden biraz geniş bir
+  Blackman-Harris süzgeci. Dört kamera yolunda yakınsamış referansa karşı ölçülen kıpırtı (`tools/kararlilik.py`) sahne
+  2'nin TAA'sından 3-13 kat düşük; 16K kumun yakınında yalnız 1,2 kat (hedef 2 kattı).
 - **Pişirilmiş tayfsal su:** soğurma ve saçılma 5 nm adımla yayımlanmış ölçümlerden (Pope ve Fry, bir Jerlov tipi,
   Fournier-Forand), güneş ve gök tayfı, göz eğrileri; hepsi ışığın yol uzunluğuna göre tablolara. Su sütununun dağınık
   ışığı Monte Carlo ışık alanı, üç dip derinliği için: batığın parlak kumu üstünde su derinin üstündekinden ~%30 parlak,
@@ -232,16 +232,18 @@ ve kararlılık; ışık fiziksel.
 - **Gürültüsüz kostik (hüzme):** FFT yüzeyinin her hücresi (bir milyon) bir ışık hüzmesi; 28 derinlik diliminin her
   birinde hüzmenin akısı köşelerinin kurduğu iki üçgene yayılır, her doku pikseli o üçgenlerin alanından tam payını alır
   (Green teoremi, satır satır). Hiçbir şey sayılmadığı için kaynamıyor: eski ışın saymaya göre kostiğin kendi kıpırtısı
-  13-15 kat düştü (16 kat ışın bile hüzmenin 4 katı gürültü bırakıyordu). 7 ms.
+  7-12 m'de 13-15 kat, dilimlerin yarım çözünürlüklü olduğu 20 m'de 4,7 kat düştü (16 kat ışın bile hüzmenin 4 katı
+  gürültü bırakıyordu). ~7 ms.
 - **Amforalar:** Southampton Üniversitesi çizimlerinin ArchAIDE vektörlerinden döndürülmüş dört tip (Dressel 1B, 1A,
   2-4, Lamboglia 2; dış yüz, ağız içi, kulplar; CC BY 4.0) ve kırık parçaları: boynu kopmuş gövdeler (tortuyla dolu),
   kulplu boyunlar, yarım gövdeler, çanak çömlek parçaları. Kabuk yamaları altında 8K kil; girintilerde çok, kumun
   aşındırdığı yerde az; yukarı bakan her yerde tortu keçesi.
 - **Kemer:** uzaklık alanı (yarım elips üstüne bükülmüş, kalınlığı değişen kaya tüpü, kireçtaşı katmanları, çatlaklarla
-  ayrılmış bloklar, aşınmış sırtlar, düşmüş bloklar); surface nets ile 7 cm'de 2,7 sn'de ağ, üstüne dünya uzayında 16K
-  kaya taraması.
+  ayrılmış bloklar, aşınmış sırtlar, düşmüş bloklar); surface nets ile 7 cm'de ağ (770 bin üçgen, 4,4 sn), üstüne dünya
+  uzayında 16K kaya taraması.
 
-Açık kalanlar: kemer uzaktan hâlâ biraz kabuk gibi okunuyor; ışık sütunları güneşe doğru bakılmadıkça soluk; kararlılık
+Açık kalanlar: kemer uzaktan hâlâ biraz kabuk gibi okunuyor; ışık sütunları güneşe doğru bakılmadıkça soluk; kumun
+yakınında kararlılık hedefi tutmuyor ve kare 33 fps'e iniyor (birincisini 8 örnek çözer); kararlılık
 dört kamera yolunda ölçüldü, görünüş gerçek batık fotoğraflarıyla gözle tartıldı. Hepsi `docs/koy/DURUM.md`'de.
 
 ## Sahne 1: neyi hesaplıyor

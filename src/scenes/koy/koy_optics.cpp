@@ -504,6 +504,12 @@ void KoyOptics::lightField() {
         }
         const double dOmega = 2.0 * 3.14159265358979 * (2.0 / NM);
         for (size_t k = 0; k < acc.size(); ++k) L[k] = float(acc[k] / dOmega);
+        // the planes below the floor: no photon crosses them, so they stayed zero and a lookup near the floor blended
+        // towards it (at the floor itself 15 % of the light; found by the independent review, 2026-10-04): they take the
+        // last lit plane's value (a field read a little below its floor stays near right)
+        const int jLast = std::min(NZ - 1, int(std::floor(H / dz + 1e-4f)));
+        for (int j = jLast + 1; j < NZ; ++j)
+            for (int m = 0; m < NM; ++m) L[size_t(j) * NM + m] = L[size_t(jLast) * NM + m];
     });
     msField = nowMs() - t0;
 }

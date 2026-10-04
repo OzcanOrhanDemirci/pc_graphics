@@ -97,7 +97,8 @@ static float baseSdf(const KoyArchShape& a, float x, float y, float z) {
     // fallen blocks: rough spheres about the feet, half sunk
     for (int b = 0; b < a.blocks; ++b) {
         const float hx = kn::hash01(b, int(a.seed), 21), hz = kn::hash01(b, int(a.seed), 22), hr = kn::hash01(b, int(a.seed), 23);
-        const float bx = (hx - 0.5f) * 2.0f * (w + 6.0f), bz = (hz - 0.5f) * 2.0f * (a.footD + 6.0f) * (hz < 0.5f ? 1.0f : 0.7f);
+        // about the feet only (behind the arch the floor falls away to the deep: a block there would hang in the water)
+        const float bx = (hx - 0.5f) * 2.0f * (w + 4.0f), bz = (hz - 0.5f) * 2.0f * (a.footD + 2.5f);
         if (std::fabs(bz) < a.footD + 0.5f && std::fabs(bx) < w - a.footR) continue;   // not under the span itself
         const float br = 0.7f + 1.6f * hr;
         const float dx = x - bx, dy = y - 0.25f * br, dz = z - bz;
@@ -136,8 +137,9 @@ float KoyArchShape::sdf(float3 world) const {
     const float hl = kn::hash01(layer, int(seed), 11);
     const float step = hl > 0.62f ? bedStep * (hl - 0.62f) / 0.38f * 2.0f : 0.0f;   // a protruding ledge, some beds only
     d -= patch * step * (1.0f - kn::smoothstep(0.75f, 1.0f, fr)) * kn::smoothstep(0.0f, 0.15f, fr);
-    if (kn::hash01(layer, int(seed), 12) > 0.55f)   // a groove at this bedding plane
-        d += patch * 0.06f * (1.0f - kn::smoothstep(0.0f, 0.07f, std::min(fr, 1.0f - fr)));
+    // a groove along some bedding planes: chosen per plane (the same on both of its sides: no step in the field)
+    if (kn::hash01(layer, int(seed), 12) > 0.55f) d += patch * 0.06f * (1.0f - kn::smoothstep(0.0f, 0.07f, fr));            // the plane below
+    if (kn::hash01(layer + 1, int(seed), 12) > 0.55f) d += patch * 0.06f * (1.0f - kn::smoothstep(0.0f, 0.07f, 1.0f - fr));  // the plane above
     // mid relief and eroded creases
     d += bump * kn::fbm3(x * 0.45f + o, y * 0.5f, z * 0.45f, 6);
     d -= 0.4f * bump * (kn::ridged3(x * 0.3f, y * 0.3f + o, z * 0.3f, 4) - 0.5f);
@@ -203,7 +205,9 @@ KMeshCPU koyBuildArch(const KoyArchShape& a, float cell, unsigned int material, 
             for (size_t i = 0; i < cx; ++i)
                 fc[(size_t(k) * cy + j) * cx + i] = a.sdf(world(lx0 + i * C8 * cell, ly0 + j * C8 * cell, lz0 + k * C8 * cell));
     });
-    const float safe = 1.6f * float(C8) * cell * 1.7320508f;   // the coarse cell's diagonal, with room
+    // the coarse cell's diagonal times the field's steepest slope (the warp stretches it ~1.7x, the blocks' y scale more:
+    // ~2.2), plus the relief's own reach (~1.1 m): only beyond that is the sign certain
+    const float safe = 2.2f * float(C8) * cell * 1.7320508f + 1.1f;
     std::vector<float> f(px * py * pz);
     std::atomic<size_t> evaluated{0};
     kn::parallelFor(int(pz), [&](int k) {

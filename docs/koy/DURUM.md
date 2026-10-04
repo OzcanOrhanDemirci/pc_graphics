@@ -18,14 +18,44 @@ yukarı, **C** aşağı, **Shift** güçlü vuruş, **Tab** fareyle bakış, **P
 4. *Yukarı bak:* ışık sütunları, Snell penceresi, dalgacıklar (önceki duraktaki gibi).
 5. Panel: **Kostik: Hüzme / Işın (eski)** (gürültüsüz kostikle eski kaynayan yöntemin farkı), **Doku**, **Örnek**.
 
-**Karar istenenler (benim önerilerimle):** kemerin biçimi yeterince doğal mı (öneri: uzaktan hâlâ biraz kabuk gibi,
-sırtları ve köşeleri artırırım); amforaların rengi (öneri: suyun maviliğine dokunmadan gözün renk uyumunu panelde
-seçenek olarak eklemek); ışık sütunlarının gücü (rüzgâr 4 m/s seçildi).
+**Karar istenenler (benim önerilerimle):** kemerin biçimi yeterince doğal mı (uzaktan hâlâ biraz kabuk gibi; bükme,
+eğiklik ve sırtlar artırıldı, istenirse köşeli kırılmalar eklerim); amforaların rengi (öneri: suyun maviliğine
+dokunmadan gözün renk uyumunu panelde seçenek olarak eklemek); ışık sütunlarının gücü (rüzgâr 4 m/s seçildi); kum
+yakın planda 8 örnek mi (kıpırtı yarıya iner, kare ~5 ms ağırlaşır).
 
-## Şu an · 2026-10-04 03.10 · A0-A5 ilk turları bitti, A6 ölçüleri ve A7 sürüyor
+## Şu an · 2026-10-04 03.50 · A0-A7 bitti; Özcan'ın canlı bakışı bekleniyor
 
-**Aktif plan: `docs/koy/PLAN_AMFORA.md`** (otonom, durak yok). Sıradaki: kararlılık yollarının kalanı (yukarı, kum),
-kare süresi ölçüsü, galeri resmi, README görselleri, bağımsız gözden geçirme, hasat.
+**Aktif plan: `docs/koy/PLAN_AMFORA.md`** (otonom). Bütün fazların ilk turu bitti, bağımsız gözden geçirmenin
+bulguları düzeltildi (aşağıda A7). Kalan sanat işi Özcan'ın yorumuna göre.
+
+## A7 · bitiş · 2026-10-04 gece
+
+Galeride **05 Amfora** (ad, açıklama, altı başlıklı ayrıntılar, ArchAIDE atfı; panelde "Batık · 12 m"), yeni galeri resmi
+(256 örnek), README EN/TR sahne 5 bölümü ve iki görsel, lisans bölümünde CC BY atfı. Otomatik test temiz (açılış 41,4
+fps; kartta 12,1 GB; kapanınca bellek geri). Testler 11/11.
+
+**Bağımsız gözden geçirme** (tek ajan, yalnız kod ve belge okudu; 11 bulgu, hepsi koda bakılarak doğrulandı):
+1. *Işık alanı dibine yaklaşınca sönüyordu* (yukarıda A2'de): dibin altındaki düzlemler son aydınlık düzlemin değerini
+   alıyor; bakış yolu geçişi tarlanın zeminini yutmayacak şekilde alanın dibinin 1 m altına kaydı.
+2. *Kulp uçları açıktı ve gövdeye gömülmüyordu* (alt uç omzun 0,8-1,5 cm dışında, iki tipte üst uç ağzın boşluğunda):
+   uç noktaları duvarın içine alındı, kesit uçlara doğru %65'e inceliyor, iki uç kapalı.
+3. *Boyun parçasında kulp ayakları kırığın altında havadaydı:* kırık kulp ayaklarının altına indi.
+4. *Bir yarım gövdenin topuk ucu açıktı:* parça boşluğun başladığı yüksekliğin üstünden başlıyor.
+5. *Kubbe gibi yatan yarım gövdelerin kenarları kumun 1-5 cm üstündeydi:* yarım gövdeler ve parçacıklar ağın en alçak
+   köşesine göre kuma oturuyor.
+6. *README'de ölçülenden geniş aralıklar* ("3-10 kat", "13-15 kat"): ölçülen uçlar yazıldı (1,2-13 kat; kostikte 4,7-15).
+7. *Dar bant işareti garanti etmiyordu* (alanın eğimi 1,6'yı aşıyor): pay 2,2 × köşegen + kabartmanın erimi (1,1 m);
+   tam hesaplanan pay %19 → %34, kurulum 4,4 sn.
+8. *Oluk katman başına seçilip alanda 6 cm'lik basamak yapıyordu:* düzlem başına (iki yanında aynı).
+9. *Canlı lekeler kabuğa bağlı değildi:* kabuk maskesiyle çarpılıyor.
+10. *Ortam kararmasında sıra bozulursa tampon dışı okuma riski:* o ağın kararması kapanıyor (şu an tetiklenmiyor).
+11. *Bayat belge satırları:* "Şu an", kemer sayıları, açıklık (~12 m), README "32 örnek", ayar dosyası başlığı, bir yorum.
+Emin olunmayanlardan biri (düşmüş blokların duvarın düştüğü yerde havada kalabilmesi) de giderildi: bloklar ayaklara yakın.
+
+**NE DOĞRULANMADI:** Özcan'ın gözü (canlı pencerede yüzülmedi; her şey komut satırı kareleri, kararlılık yolları ve
+otomatik test); düzeltmelerden sonra kararlılık yolları yeniden ölçülmedi (ışık alanı ve kulplar değişti; kostik ve
+örnekleme aynı); kum yolunda 8 örnekle ölçüm yapılmadı (deneme alanındaki 30 cm'lik ölçüden çıkarım); kemerin dibine
+30 cm'den 16K bakılmadı; gözün renk uyumu yalnız fikir.
 
 ## A2-A6 · zemin ve ışık alanı, amforalar, kemer, ışık, ölçüler · 2026-10-04 gece
 
@@ -37,7 +67,9 @@ dibinden derinde dibindeki değeriyle (eşyükselti boyunca dikiş yok, yamaçta
 ulaştıkları derinliğe kadar aydınlık en sığ alanı alıyor (yolun ışığının ~%95'i oradan gelir, c ≈ 0,1/m), alanın dibine
 1,5 m kala bir sonrakine yumuşak geçiyor. 🪤 İlk sürümde "aşağı bakan kaçan ışın = en derin alan" kuralı ufukta koyu
 bir şerit çiziyordu (110 m'lik zemine çarpmayan, hafif aşağı bakan ışınlar); 30 m kuralı kaldırdı. Sonuç: tarla bölgesi
-12,5 m'lik tek alanla aynı (0,99), kemer bölgesi seki alanıyla (0,89 / 12,5 m alanına).
+12,5 m'lik tek alanla aynı (0,99), kemer bölgesi seki alanıyla (0,89 / 12,5 m alanına). ⚠️ Bu kıyas bir kusuru
+paylaşıyordu (A7'de bulundu, düzeltildi): alanın derinlik düzlemleri 0,635 m arayla, dibin altındaki düzlem sıfırdı ve
+dibe yakın okuma ona karışıyordu (12,6 m'de ışığın %15'i). Düzeltmeden sonra kum, suya göre %8,5 daha aydınlık.
 
 **A3 · amforalar.** ArchAIDE profilleri (dört tip, dış ve iç yüz, kulplar; atıf `assets/koy/LICENSES.md` ve README).
 Genel parça üreteci (yükseklik ve açı aralığıyla duvar parçası, tırtıklı kırık, kırık yüzü duvar kalınlığı): tarlada 96
@@ -102,7 +134,8 @@ Dressel 1 tarlası), Tyre (üst yüzde tortu keçesi yandan ~4 kat parlak, göm�
   ve uçlarda daha gömülü, birkaçı yarı dik.
 - Kemer: uzaklık alanı (yarım elips eğri boyunca kalınlığı değişen kaya tüpü; bükme, düzensiz kireçtaşı katmanları, dikey
   çatlaklar, aşınma), iki yana alçalan kaya sırtları ve düşmüş bloklar; surface nets ile 7 cm hücre, 702 bin üçgen, 2,7 sn
-  (dar bant: yüzeyden uzak noktalar kaba ızgaradan). Açıklık ~13 m geniş, ~7,5 m yüksek; tepe ~4,5 m derinlikte.
+  (dar bant: yüzeyden uzak noktalar kaba ızgaradan). Açıklık ~12 m geniş, ~7,5 m yüksek; tepe ~4,5 m derinlikte. (A0'daki
+  sayı; A4-A5'ten sonra 767 bin üçgen, 4,4 sn: bloklar, daha güçlü bükme ve daha güvenli dar bant.)
 - Kemer tarladan **19 m** ötede, **16 m'lik bir sekide**, arkasında zemin 36 m'ye düşen bir duvar.
 - Güneş 50° yükseklik, azimut 165° (kemerin arkası, biraz sağ); suda dikeyden 29°.
 

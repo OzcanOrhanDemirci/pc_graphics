@@ -24,7 +24,7 @@ int koyAmphoraTypes();
 
 // the jar's mesh in its own frame: the axis +y, the toe's tip at the origin. UVs: u around (metres of circumference,
 // a whole number of texture tiles), v along the profile (metres).
-KMeshCPU koyBuildAmphora(const KoyAmphoraType& t, int segments, unsigned int material, unsigned int id);
+KMeshCPU koyBuildAmphora(const KoyAmphoraType& t, int segments, unsigned int material, unsigned int id, bool handles = true);
 
 // A whole jar or what is left of it: a stretch of its wall between two heights and two angles, the boundaries jagged
 // where it broke (a whole jar: the full height, all round). The break shows the wall's thickness between the outside and

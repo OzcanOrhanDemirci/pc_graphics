@@ -92,14 +92,15 @@ static __forceinline__ __device__ FW fieldsFor(float hf) {
 // a view path: the shallowest field lit down to its deepest point, eased into the next over the last 1.5 m above its
 // floor (no seam where the paths' ends cross a field's depth)
 static __forceinline__ __device__ FW fieldsForPath(float zmax) {
+    // the shallowest field whose floor the path does not pass by more than a metre (a field holds its floor's light a
+    // little below it), eased into the next over that metre: paths ending on the wreck's floor read the wreck's field
     const int n = params.fields;
     int k = 0;
-    while (k < n - 1 && params.fieldBottom[k] < zmax) ++k;
+    while (k < n - 1 && params.fieldBottom[k] + 1.0f < zmax) ++k;
     FW f;
     f.a = k;
     f.b = min(k + 1, n - 1);
-    const float b = params.fieldBottom[k];
-    f.w = f.b > f.a ? saturate((zmax - (b - 1.5f)) / 1.5f) : 0.0f;
+    f.w = f.b > f.a ? saturate(zmax - params.fieldBottom[k]) : 0.0f;
     f.w = f.w * f.w * (3.0f - 2.0f * f.w);
     return f;
 }
@@ -511,11 +512,13 @@ static __forceinline__ __device__ float3 shadeSurface(const Hit& h, float3 d, fl
         const float side = 1.0f - sstep(0.2f, 0.7f, n.y);
         albedo = albedo + (albedo * m.filmColor - albedo) * (m.film * side);
     }
+    float coatMask = 0.0f;   // where the concretion lies (the living patches grow only there)
     if (m.coatSet >= 0 && !cheap) {
         const float nv = fbm3(h.p * (1.0f / m.coatScale), 4);
         const float recess = (1.0f - h.ao) * sstep(-0.4f, 0.0f, n.y);
         const float scour = sstep(-0.2f, -0.7f, n.y);
         const float mask = sstep(-0.10f, 0.10f, nv + 1.2f * (m.coatCover - 0.5f) + 0.9f * recess - 0.5f * scour);
+        coatMask = mask;
         if (mask > 0.01f) {
             const Tri c = triplanar(m.coatSet, m.coatTile, h.p, h.ng, width, false);
             if (c.ok) {
@@ -528,10 +531,10 @@ static __forceinline__ __device__ float3 shadeSurface(const Hit& h, float3 d, fl
             }
         }
     }
-    if (m.life > 0.0f && !cheap) {   // a few cm each, some 8 % of the surface: orange-red sponge, pink coralline crust (dark at depth)
+    if (m.life > 0.0f && !cheap && coatMask > 0.01f) {   // a few cm each on the concretion: orange-red sponge, pink coralline crust (dark at depth)
         const float3 q = h.p * 9.0f;
-        const float a = sstep(0.40f, 0.52f, noise3(q + make_float3(3.0f, 1.0f, 7.0f))) * m.life;
-        const float b = sstep(0.38f, 0.48f, noise3(q * 0.7f + make_float3(11.0f, 5.0f, 2.0f))) * m.life * 0.8f;
+        const float a = sstep(0.40f, 0.52f, noise3(q + make_float3(3.0f, 1.0f, 7.0f))) * m.life * coatMask;
+        const float b = sstep(0.38f, 0.48f, noise3(q * 0.7f + make_float3(11.0f, 5.0f, 2.0f))) * m.life * 0.8f * coatMask;
         albedo = albedo + (m.lifeA - albedo) * a;
         albedo = albedo + (m.lifeB - albedo) * b;
     }
@@ -688,7 +691,7 @@ static __forceinline__ __device__ Lit shadeSample(float3 o, float3 d, float cone
         r.id = ID_WATER;
         return r;
     }
-    // open water: the floor under the camera while the ray stays above it, the deepest field once it goes down into the blue
+    // open water: the field lit down to the depth the ray reaches within ~30 m (its light comes almost all from there)
     r.L = ambientPath(z0, d.y, params.farDistance, fieldsForPath(fmaxf(z0, z0 - d.y * 30.0f)));
     r.t = params.farDistance;
     r.id = ID_OPEN;

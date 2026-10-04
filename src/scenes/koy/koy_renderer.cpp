@@ -501,12 +501,12 @@ void KoyRenderer::bakeAO() {
         if (first < 0) continue;
         float* ao = devAlloc<float>(m.pos.size() * size_t(count));
         worldBuffers_.push_back(ao);
-        for (int c = 0; c < count; ++c) {
-            if (instancesCPU_[size_t(first + c)].mesh != int(k)) {
-                std::printf("koy: %s orneklerinin sirasi bozuk, golgeleme yalniz ilk ornege\n", m.name.c_str());
-                count = 1;
-                break;
-            }
+        bool ordered = true;
+        for (int c = 0; c < count; ++c)
+            if (instancesCPU_[size_t(first + c)].mesh != int(k)) ordered = false;
+        if (!ordered) {   // the device reads instance i at (i - aoFirst): with gaps it would read past the buffer
+            std::printf("koy: %s ornekleri ardisik degil: ortam kararmasi bu ag icin kapali\n", m.name.c_str());
+            continue;
         }
         params_.bakeMesh = int(k);
         for (int c = 0; c < count; ++c) {

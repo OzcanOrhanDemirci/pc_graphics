@@ -41,10 +41,12 @@ const Row kL2[] = {{0.0f, 0.00f, -1}, {0.5f, 2.16f, -1}, {3.7f, 3.90f, -1}, {6.0
                    {84.9f, 7.96f, 6.69f}, {85.5f, 7.28f, 7.28f}};
 // handle centre lines (radius, height) in cm: inside the neck under the rim, out, down the free part (between the
 // handle's outer and inner edges of §2.5), into the shoulder
-const float2 h1B[] = {{5.0f, 107.8f}, {7.5f, 108.2f}, {9.6f, 107.0f}, {10.05f, 103.0f}, {10.1f, 95.0f}, {10.1f, 87.0f}, {10.2f, 81.0f}, {10.9f, 77.6f}, {11.4f, 75.4f}};
-const float2 h1A[] = {{4.8f, 91.5f}, {7.0f, 92.3f}, {8.9f, 91.2f}, {9.35f, 87.5f}, {9.3f, 78.0f}, {9.4f, 68.0f}, {9.6f, 62.5f}, {10.6f, 60.0f}, {11.4f, 59.0f}};
-const float2 h24[] = {{4.5f, 90.0f}, {7.5f, 90.6f}, {9.9f, 89.0f}, {10.2f, 86.0f}, {9.7f, 81.0f}, {9.3f, 75.5f}, {9.4f, 72.5f}, {9.9f, 70.6f}, {10.0f, 69.9f}};
-const float2 hL2[] = {{4.6f, 78.0f}, {8.0f, 79.0f}, {10.8f, 78.0f}, {11.4f, 75.0f}, {11.4f, 68.0f}, {11.4f, 61.5f}, {12.0f, 58.5f}, {12.2f, 56.6f}};
+// (both ends inside the wall, between the cavity's and the outside's radius at that height: the tapered, capped ends
+// are buried; first written with the lower ends 0.8-1.5 cm outside the shoulder and two upper ends in the mouth's cavity)
+const float2 h1B[] = {{5.9f, 107.8f}, {7.5f, 108.2f}, {9.6f, 107.0f}, {10.05f, 103.0f}, {10.1f, 95.0f}, {10.1f, 87.0f}, {10.2f, 81.0f}, {10.9f, 77.6f}, {10.9f, 75.0f}};
+const float2 h1A[] = {{6.3f, 91.5f}, {7.4f, 92.3f}, {8.9f, 91.2f}, {9.35f, 87.5f}, {9.3f, 78.0f}, {9.4f, 68.0f}, {9.6f, 62.5f}, {10.6f, 60.0f}, {11.0f, 58.8f}};
+const float2 h24[] = {{5.8f, 90.0f}, {7.6f, 90.6f}, {9.9f, 89.0f}, {10.2f, 86.0f}, {9.7f, 81.0f}, {9.3f, 75.5f}, {9.4f, 72.5f}, {9.5f, 70.8f}, {8.6f, 69.6f}};
+const float2 hL2[] = {{4.8f, 78.0f}, {8.0f, 79.0f}, {10.8f, 78.0f}, {11.4f, 75.0f}, {11.4f, 68.0f}, {11.4f, 61.5f}, {11.6f, 58.4f}, {10.3f, 56.3f}};
 
 template <size_t N, size_t H>
 KoyAmphoraType makeType(const char* name, const Row (&rows)[N], const float2 (&hp)[H], float hr, float ht, bool dbl, float fill) {
@@ -115,7 +117,7 @@ void lathe(KMeshCPU& m, const std::vector<float2>& prof, int S, bool facingAxis,
 int koyAmphoraTypes() { return int(sizeof(kTypes) / sizeof(kTypes[0])); }
 const KoyAmphoraType& koyAmphoraType(int k) { return kTypes[std::min(std::max(k, 0), koyAmphoraTypes() - 1)]; }
 
-KMeshCPU koyBuildAmphora(const KoyAmphoraType& t, int segments, unsigned int material, unsigned int id) {
+KMeshCPU koyBuildAmphora(const KoyAmphoraType& t, int segments, unsigned int material, unsigned int id, bool handles) {
     KMeshCPU m;
     m.name = t.name;
     m.material = material;
@@ -151,6 +153,7 @@ KMeshCPU koyBuildAmphora(const KoyAmphoraType& t, int segments, unsigned int mat
     }
     // two handles: a section swept along the centre line (Catmull-Rom between its points), elliptic (radial x
     // tangential), or two round rods side by side for the bifid Dressel 2-4 handle; their ends sink into the jar
+    if (!handles) return m;
     const int HC = 12;
     auto curve = [&](float u) {   // u in 0..1 along the centre line
         const int n = int(t.handle.size());
@@ -172,15 +175,18 @@ KMeshCPU koyBuildAmphora(const KoyAmphoraType& t, int segments, unsigned int mat
             const float halfR = 0.5f * t.handleR, halfT = t.doubleRod ? 0.5f * t.handleR : 0.5f * t.handleT;
             const float shift = t.doubleRod ? (rod == 0 ? -1.0f : 1.0f) * (0.5f * t.handleT - halfT) : 0.0f;
             const unsigned base = unsigned(m.pos.size());
+            const unsigned firstRing = unsigned(m.pos.size());
             for (int i = 0; i <= HS; ++i) {
                 const float u = float(i) / HS;
+                // the section narrows to 65 % towards both ends (they merge into the wall instead of standing out of it)
+                const float taper = 1.0f - 0.35f * kn::smoothstep(0.85f, 1.0f, u) - 0.35f * (1.0f - kn::smoothstep(0.0f, 0.15f, u));
                 const float2 p = curve(u), q = curve(std::min(u + 0.01f, 1.0f)), o = curve(std::max(u - 0.01f, 0.0f));
                 const float dr = q.x - o.x, dh = q.y - o.y, L = std::max(std::hypot(dr, dh), 1e-6f);
                 const float3 T = make_float3(out.x * dr / L, dh / L, out.z * dr / L);   // along the handle
                 const float3 Nn = normalize(cross(tan, T));                                 // radial-ish, in the profile plane
                 for (int c = 0; c <= HC; ++c) {
                     const float ph = twoPi * float(c) / float(HC);
-                    const float3 dir = Nn * (halfR * std::cos(ph)) + tan * (halfT * std::sin(ph) + shift);
+                    const float3 dir = Nn * (taper * halfR * std::cos(ph)) + tan * (taper * halfT * std::sin(ph) + shift);
                     const float3 nrm = normalize(Nn * (std::cos(ph) / halfR) + tan * (std::sin(ph) / halfT));
                     m.pos.push_back(make_float3(out.x * p.x, p.y, out.z * p.x) + dir);
                     m.nrm.push_back(nrm);
@@ -193,6 +199,19 @@ KMeshCPU koyBuildAmphora(const KoyAmphoraType& t, int segments, unsigned int mat
                     m.idx.push_back(make_uint3(a, cc, b));
                     m.idx.push_back(make_uint3(b, cc, d));
                 }
+            // caps on both ends: no open tube ever shows
+            for (int end = 0; end < 2; ++end) {
+                const unsigned ring = firstRing + unsigned(end == 0 ? 0 : HS * (HC + 1));
+                float3 ctr = make_float3(0.0f, 0.0f, 0.0f);
+                for (int c = 0; c < HC; ++c) ctr = ctr + m.pos[ring + unsigned(c)];
+                ctr = ctr * (1.0f / float(HC));
+                const float3 along = m.pos[ring + unsigned(end == 0 ? HC + 1 : 0) + 0u] - m.pos[ring];   // towards the tube's inside
+                const unsigned ci = unsigned(m.pos.size());
+                m.pos.push_back(ctr);
+                m.nrm.push_back(normalize(end == 0 ? -along : along));
+                m.uv.push_back(make_float2(0.0f, end == 0 ? 0.0f : 0.6f));
+                for (int c = 0; c < HC; ++c) m.idx.push_back(make_uint3(ci, ring + unsigned(c), ring + unsigned(c + 1)));
+            }
         }
     }
     return m;
@@ -256,9 +275,9 @@ std::vector<KoyAmphoraPiece> koyAmphoraPieces() {
     v.push_back({0, 1, 0.0f, 0.76f, 0.0f, twoPi, 0.05f, 12u});    // body broken through the shoulder
     v.push_back({1, 1, 0.0f, 0.66f, 0.0f, twoPi, 0.04f, 13u});    // a Dressel 1A body
     v.push_back({2, 1, 0.0f, 0.62f, 0.0f, twoPi, 0.04f, 14u});    // a Lamboglia 2 body
-    v.push_back({0, 2, sh - 0.04f, top, 0.0f, twoPi, 0.03f, 21u});   // a Dressel 1B neck with its handles
-    v.push_back({1, 2, 0.585f, 0.978f, 0.0f, twoPi, 0.03f, 22u});    // a Dressel 1A neck
-    v.push_back({0, 3, 0.18f, 0.74f, -0.15f, pi + 0.2f, 0.05f, 31u});    // half bodies
+    v.push_back({0, 2, sh - 0.09f, top, 0.0f, twoPi, 0.03f, 21u});   // a Dressel 1B neck with its handles (broken below their feet)
+    v.push_back({1, 2, 0.55f, 0.978f, 0.0f, twoPi, 0.03f, 22u});     // a Dressel 1A neck
+    v.push_back({0, 3, 0.24f, 0.74f, -0.15f, pi + 0.2f, 0.05f, 31u});    // half bodies (above the solid toe: the break shows the wall)
     v.push_back({0, 3, 0.26f, 0.70f, 0.3f, pi + 0.1f, 0.06f, 32u});
     v.push_back({0, 4, 0.40f, 0.62f, 0.0f, 0.9f, 0.03f, 41u});   // sherds: hand-sized pieces of the wall
     v.push_back({0, 4, 0.30f, 0.46f, 1.0f, 1.65f, 0.025f, 42u});
@@ -409,8 +428,8 @@ KMeshCPU koyBuildPiece(const KoyAmphoraPiece& pc, int segments, unsigned int mat
     // a neck keeps its handles: the whole jar's, cut to the piece's heights by taking only those inside it
     if (pc.kind == 2) {
         KMeshCPU whole = koyBuildAmphora(t, segments, material, id);
-        // the handles are the whole jar's last vertices: everything after its lathe, rim, cavity and fill
-        const size_t handleStart = whole.pos.size() - size_t((t.doubleRod ? 4 : 2) * 41 * 13);
+        // the handles are the whole jar's last vertices: everything after the body built without them
+        const size_t handleStart = koyBuildAmphora(t, segments, material, id, false).pos.size();
         const unsigned off = unsigned(m.pos.size());
         for (size_t v = handleStart; v < whole.pos.size(); ++v) {
             m.pos.push_back(whole.pos[v]);
@@ -432,6 +451,15 @@ KMeshCPU koyBuildPiece(const KoyAmphoraPiece& pc, int segments, unsigned int mat
 std::vector<KoyAmphoraPlacement> koyPlaceAmphorae(const Config& cfg, const std::function<float(float, float)>& floorY) {
     std::vector<KoyAmphoraPlacement> out;
     const std::vector<KoyAmphoraPiece> pieces = koyAmphoraPieces();
+    // the shells and sherds are placed by their own lowest point (their mesh's vertices): their edges touch the sand
+    std::vector<std::vector<float3>> verts(pieces.size());
+    for (size_t i = 0; i < pieces.size(); ++i)
+        if (pieces[i].kind >= 3) verts[i] = koyBuildPiece(pieces[i], 48, 0, 0).pos;
+    auto lowest = [&](int piece, float3 rx, float3 ax, float3 rz) {   // the lowest vertex's height over the piece's origin
+        float lo = 1e9f;
+        for (const float3& v : verts[size_t(piece)]) lo = std::min(lo, rx.y * v.x + ax.y * v.y + rz.y * v.z);
+        return lo;
+    };
     const int n = cfg.i("amfora.count", 96), nSherds = cfg.i("amfora.sherds", 40);
     const float3 c = cfg.v3("amfora.centre", make_float3(0.0f, 0.0f, 0.0f));
     const float ship = cfg.f("amfora.ship_deg", -75.0f) * 3.14159265f / 180.0f;
@@ -529,7 +557,9 @@ std::vector<KoyAmphoraPlacement> koyPlaceAmphorae(const Config& cfg, const std::
             centre = make_float3(px, fy - shoulder * (0.75f + 0.25f * uni(rng)) + ax.y * mid, pz);
             burial = 0.9f;
         } else if (PC.kind == 3) {
-            centre = make_float3(px, fy + rmax * (0.25f - 0.5f * burial), pz);   // a shell: its edges in the sand
+            // a shell: its lowest point (an edge, or its back) a few cm in the sand
+            const float sink = 0.01f + 0.04f * burial;
+            centre = make_float3(px, fy - sink - lowest(piece, rx, ax, rz) + ax.y * mid, pz);
         } else {
             centre = make_float3(px, fy + rmax * (1.0f - 2.0f * burial) * 0.98f, pz);
         }
@@ -560,7 +590,8 @@ std::vector<KoyAmphoraPlacement> koyPlaceAmphorae(const Config& cfg, const std::
         const float fy = floorY(px, pz);
         // the sherd's middle point sits at the floor: its offset from the axis is r along the rolled normal
         const float3 outward = rx * std::cos(am) + rz * std::sin(am);
-        const float3 tip = make_float3(px, fy + 0.01f - 0.03f * uni(rng), pz) - ax * mid - outward * r;
+        float3 tip = make_float3(px, 0.0f, pz) - ax * mid - outward * r;
+        tip.y = fy - (0.005f + 0.02f * uni(rng)) - lowest(piece, rx, ax, rz);   // its lowest point just in the sand
         const Cap me{make_float3(px, fy, pz), make_float3(px, fy + 0.01f, pz), 0.10f};
         bool clash = false;
         for (const Cap& o : caps)
