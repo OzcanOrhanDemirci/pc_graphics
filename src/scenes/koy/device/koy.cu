@@ -856,14 +856,53 @@ static __forceinline__ __device__ float3 shadeFromBelow(float3 q, float3 d, floa
 
 // One sample: trace, shade what is hit, carry it through the water to the camera (the diffuse in-scattering included;
 // the sun's single scattering of the first segment is added by the march).
-static __forceinline__ __device__ Lit shadeSample(float3 o, float3 d, float coneAngle) {
+// The thermocline's interface at q bends a ray d: Snell from the warm water into the cold (or back), the interface's
+// normal tilted by slow internal waves and a finer turbulent ripple (moving); past the critical angle (~87.8 degrees:
+// nearly level rays from the cold side) it reflects totally
+// (foot: the pixel's footprint on the layer, metres; ripples finer than it average out instead of sparkling: a grazing
+// ray's pixel stretches along the layer by 1/sin of its angle)
+static __forceinline__ __device__ float3 thermoBend(float3 q, float3 d, float foot) {
+    const float t = params.time, a = params.thermoSlope;
+    const float wb = 1.0f / (1.0f + sqr(foot / 4.0f)), wf = 0.45f / (1.0f + sqr(foot / 0.5f));
+    const float sx = a * (wb * noise3(make_float3(q.x * 0.12f + 0.05f * t, 3.1f, q.z * 0.12f)) +
+                          wf * noise3(make_float3(q.x * 0.9f, 0.4f * t + 7.0f, q.z * 0.9f)));
+    const float sz = a * (wb * noise3(make_float3(q.x * 0.12f, 8.3f + 0.04f * t, q.z * 0.12f + 2.0f)) +
+                          wf * noise3(make_float3(q.x * 0.9f + 5.0f, 0.4f * t + 1.0f, q.z * 0.9f)));
+    float3 n = normalize(make_float3(-sx, 1.0f, -sz));
+    if (dot(d, n) > 0.0f) n = n * -1.0f;
+    const float n1 = d.y < 0.0f ? 1.0f : 1.0f + params.thermoDn, n2 = d.y < 0.0f ? 1.0f + params.thermoDn : 1.0f;
+    const float eta = n1 / n2, ci = -dot(d, n), k = 1.0f - eta * eta * (1.0f - ci * ci);
+    if (k < 0.0f) return normalize(d - n * (2.0f * dot(d, n)));
+    return normalize(d * eta + n * (eta * ci - sqrtf(k)));
+}
+
+static __forceinline__ __device__ Lit shadeSample(float3 eye, float3 d0, float coneAngle) {
     Lit r;
     r.n = make_float3(0, 0, 0);
     r.caustic = 1.0f;
-    const float z0 = -o.y;
-    float tmax = params.farDistance;
+    const float z0 = -eye.y;
+    // the thermocline: a ray that reaches it with nothing in the way goes on from there, bent (tOff: the metres before)
+    float3 o = eye, d = d0;
+    float tOff = 0.0f;
+    Hit h;
+    h.hit = false;
+    bool traced = false;
+    if (params.thermoOn && (eye.y - params.thermoY) * d0.y < 0.0f) {
+        const float tc = (params.thermoY - eye.y) / d0.y;
+        if (tc > 1e-3f && tc < params.farDistance) {
+            h = trace(eye, d0, tc);
+            traced = h.hit;
+            if (!h.hit) {
+                o = eye + d0 * tc;
+                d = thermoBend(o, d0, coneAngle * tc / fmaxf(fabsf(d0.y), 0.02f));
+                tOff = tc;
+                o = o + d * 1e-3f;
+            }
+        }
+    }
+    float tmax = params.farDistance - tOff;
     if (d.y > 1e-4f) tmax = fminf(tmax, (params.oceanHeightMax - o.y) / d.y);
-    Hit h = trace(o, d, tmax);
+    if (!traced) h = trace(o, d, tmax);
     if (h.hit && d.y > 1e-4f && h.p.y > -params.oceanHeightMax) {
         // something standing through the surface (a pile) hit near the water line: if the wave there is lower than the
         // hit, the ray left the water before it (it meets that from the air, through the surface)
@@ -872,26 +911,27 @@ static __forceinline__ __device__ Lit shadeSample(float3 o, float3 d, float cone
     }
     if (h.hit) {
         // the path's light field: the floor under where it ends, and lit down to its deepest point
-        // (the depth the path reaches within ~30 m: the water's in-scattering comes almost all from there, c ~ 0.1/m)
-        const FW fp = pathFields(o, d, h.t);
-        r.L = shadeSurface(h, d, h.t, coneAngle, r.caustic, r.n);
-        r.amb = params.view >= 5 ? make_float3(0, 0, 0) : ambientPath(z0, d.y, h.t, fp);
-        r.t = h.t;
+        // (the depth the path reaches within ~30 m: the water's in-scattering comes almost all from there, c ~ 0.1/m);
+        // along the eye's own direction (the thermocline's bend must not switch the fields at the layer)
+        const FW fp = pathFields(eye, d0, tOff + h.t);
+        r.L = shadeSurface(h, d, tOff + h.t, coneAngle, r.caustic, r.n);
+        r.amb = params.view >= 5 ? make_float3(0, 0, 0) : ambientPath(z0, d0.y, tOff + h.t, fp);
+        r.t = tOff + h.t;
         r.id = h.id;
         return r;
     }
     if (d.y > 1e-4f) {
         const float ts = surfaceHit(o, d, coneAngle);
         const float3 q = o + d * ts;
-        r.L = shadeFromBelow(q, d, ts, coneAngle, r.n);
-        r.amb = ambientPath(z0, d.y, ts, pathFields(o, d, ts));
-        r.t = ts;
+        r.L = shadeFromBelow(q, d, tOff + ts, coneAngle, r.n);
+        r.amb = ambientPath(z0, d0.y, tOff + ts, pathFields(eye, d0, tOff + ts));
+        r.t = tOff + ts;
         r.id = ID_WATER;
         return r;
     }
     // open water: the field lit down to the depth the ray reaches within ~30 m (its light comes almost all from there)
     r.L = make_float3(0.0f, 0.0f, 0.0f);
-    r.amb = ambientPath(z0, d.y, params.farDistance, pathFields(o, d, params.farDistance));
+    r.amb = ambientPath(z0, d0.y, params.farDistance, pathFields(eye, d0, params.farDistance));
     r.t = params.farDistance;
     r.id = ID_OPEN;
     return r;
@@ -1209,7 +1249,10 @@ extern "C" __global__ void __raygen__shafts() {
             const float3 src = pathRow(PT_SHAFT_W, L) * pW + pathRow(PT_SHAFT_P, L) * pP;
             const float F = causticAt(p, min(level, params.causticLevels - 1));
             const float V = sunMapVis(p);
-            acc += src * (F * V * ds);
+            // the thermocline's particle layer: plankton and fine silt gather on the density step (marine snow): the sun
+            // scatters more in its metre (seen edge on: a faint hazy band)
+            const float th = params.thermoOn ? 1.0f + params.thermoHaze * expf(-sqr((p.y - params.thermoY) / 0.55f)) : 1.0f;
+            acc += src * (F * V * ds * th);
             if (params.sunMaps) {
                 const float wk = expf(-0.1f * sm) * ds;
                 vs += wk * diffuseVis(p);

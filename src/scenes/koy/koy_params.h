@@ -272,6 +272,12 @@ struct KoyParams {
     // exhaled bubbles as screen ellipses far to near (x, y, radius in pixels, height/width), the water's light around
     // (the frame's mean: what a bubble's silver rim mirrors) and the sun's glint on them
     int maskOn;
+    // the thermocline (Ozcan 2026-10-04: "gerçek fizik ne derse"): summer's warm water over the cold, a sharp step at
+    // thermoY; the cold water's index higher by thermoDn (relative); its interface tilted by internal waves and mixing
+    // (slopes ~thermoSlope): the camera's rays refract there, and graze into a total reflection (the shimmering layer)
+    int thermoOn;
+    float thermoY, thermoDn, thermoSlope;
+    float thermoHaze;                   // the particles gathered on the step: extra scattering at its peak (1: twice)
     int bubbleCount;
     float4 bubbles[KOY_BUBBLES];
     float bubbleBlur[KOY_BUBBLES];      // the eye's defocus for each (pixels)

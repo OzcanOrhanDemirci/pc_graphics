@@ -136,6 +136,13 @@ void KoyApp::setup() {
     p.upwell = cfg.f("air.upwell", 0.06f);
     p.chromaAdapt = cfg.f("display.chroma_adapt", 0.5f);
     p.glare = cfg.f("display.glare", 0.04f);
+    // the thermocline: dn/dT of sea water ~ -1.2e-4 per degree near 20 C: 8 degrees colder, the index 1e-3 higher (7.2e-4
+    // of 1.338 relative); the step's slopes from internal waves and the mixing at its face
+    p.thermoOn = cfg.i("thermo.use", 1);
+    p.thermoY = -cfg.f("thermo.depth", 27.0f);
+    p.thermoDn = cfg.f("thermo.dt", 8.0f) * 1.2e-4f / 1.338f;
+    p.thermoSlope = cfg.f("thermo.slope", 0.18f);
+    p.thermoHaze = cfg.f("thermo.haze", 2.5f);
     p.lookPower = cfg.f("display.look_power", 1.0f);
     p.lookSat = cfg.f("display.look_sat", 1.0f);
     // the world
@@ -372,7 +379,11 @@ void KoyApp::stepBreath(float dt, bool strong) {
         return;
     }
     // the cycle: inhale over 40 %, a pause, exhale over 50 %; harder work breathes faster
-    const float period = cfg.f("breath.period", 4.6f) * (strong ? 0.7f : 1.0f);
+    // deeper the gas is denser (P bar: P times the surface's), each breath more work: divers breathe slower and deeper,
+    // the exhale drawn out (a slow cycle grows about 7 % a bar; the tidal volume a little)
+    const float Pb = pressureBar();
+    const float period = cfg.f("breath.period", 4.6f) * (strong ? 0.7f : 1.0f) * (1.0f + 0.07f * std::max(Pb - 1.0f, 0.0f));
+    const float tidal = 0.0015f * (1.0f + 0.04f * std::max(Pb - 1.0f, 0.0f));
     const float ph0 = breathPhase;
     breathPhase = std::fmod(breathPhase + dt / period, 1.0f);
     // the lungs: +-0.75 l about the mean (a relaxed tidal breath of 1.5 l): rho g dV
@@ -382,9 +393,9 @@ void KoyApp::stepBreath(float dt, bool strong) {
         if (ph < 0.98f) return 0.5f + 0.5f * std::cos(3.14159265f * (ph - 0.48f) / 0.50f);
         return 0.0f;
     };
-    buoyancy = 1025.0f * 9.81f * 0.0015f * (lung(breathPhase) - 0.5f);
+    buoyancy = 1025.0f * 9.81f * tidal * (lung(breathPhase) - 0.5f);
     // the exhale's gas leaves as bubbles: its volume at this depth is the tidal volume (the lungs at ambient pressure)
-    const float exhaled = std::max(0.0f, lung(ph0) - lung(breathPhase)) * 0.0015f;   // m3 this step (a cycle wrap gives 0)
+    const float exhaled = std::max(0.0f, lung(ph0) - lung(breathPhase)) * tidal;   // m3 this step (a cycle wrap gives 0)
     const KCamera& c = renderer.params().cam;
     const float depth0 = std::max(-c.pos.y, 0.0f);
     exhaleCarry += exhaled;

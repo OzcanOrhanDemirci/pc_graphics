@@ -3,6 +3,47 @@
 > Tek kaynak durum panosu. Son plan: **`docs/koy/PLAN_ADA.md`** (üçüncü bölüm "Ada", 🏁 bitti); önceki planlar
 > `PLAN.md`, `PLAN_AMFORA.md`. Veri: `docs/koy/VERI.md`. CC0 taramalar: `assets/koy/fetch.py`, `assets/koy/LICENSES.md`.
 
+## Şu an · 2026-10-04 gece · derin suyun gerçek etkileri (Özcan: "gerçek fizik ne derse onu hissedelim")
+
+**Özcan:** *"Peki çok derine inince nasıl bir gerçek etki oluyor"*, sonra *"Gerçekçi ve deneyimi çok bozmayacak şekilde
+ekleyebildiğin etkileri ekle. Yani o gerçek fizik ne derse o yu hissedelim."*
+
+**Zaten olanlar (derinlikle kendiliğinden gelen):** ışık derinlikle azalır ve kırmızı önce söner (spektral su), basınç
+kabarcıkları küçültür (Boyle, önceki bölüm), dalgıç nefesle inip kalkar.
+
+**Eklenenler:**
+- **Termoklin (`thermo.*`):** yazın Ege'de üstte ılık su, ~27 m'de keskin bir sınırla soğuk su (23 → 15 °C). Deniz suyunun
+  kırılma indisi her derecede ~1,2e-4 değişir: soğuk taraf ~7e-4 daha yoğun. Kameranın ışını sınırı geçerken Snell ile
+  kırılır; sınır iç dalgalar ve karışmayla eğimli (`thermo.slope` 0,18) ve yavaşça kıpırdar.
+  - **Ne görünür:** sıyırarak bakınca katmanın ötesindeki zemin hafifçe kayar ve titrer (sıcak havanın üstündeki asfalt
+    gibi). Alttan, soğuk sudan neredeyse yatay (≤ ~2,2° yukarı) bakınca sınır tam yansıtır: dar, dalgalı bir ayna bandı.
+    Dik bakınca bükülme binde birden azdır; batığın ve halatın netliği bozulmaz.
+  - **Pus:** yoğunluk sınırında plankton ve ince tortu birikir: o metrede güneş ışığı 3,5 kat saçılır (`thermo.haze`
+    2,5). Yukarıdan eğik bakınca yumuşak bir pus şeridi, katmanın içinde yatay bakınca hafif süt rengi.
+  - **Kıpırtı önlemi:** sınırın ince dalgacıkları pikselin katmandaki izinden (sıyıran ışında 1/sin kadar uzar) küçükse
+    ortalanır; uzakta parıldamaz.
+  - Batığın en derin ucu ~26,5 m'de; katman onun hemen altında, eğimden aşağı ve halata inerken geçilir.
+- **Nefes derinde ağırlaşır:** gaz her barda bir kat yoğunlaşır, her nefes daha çok iş: dalgıçlar derinde daha yavaş ve
+  derin solur. Nefes döngüsü her bar için ~%7 uzar (27 m'de 4,6 → 7,0 sn), soluk hacmi %4 artar.
+
+**Bilerek eklenmeyenler:**
+- **Narkoz (azot sarhoşluğu):** 30 m'den sonra başlar ama zihinseldir (yargı, dikkat). Görüntüye "bulanıklık" koymak
+  gerçek değil, oyun efekti olurdu.
+- **Elbisenin sıkışması (neopren basınçla incelir, dalgıç ağırlaşır):** gerçek dalgıç bunu yelekle sürekli dengeler;
+  dengelersek fark edilmez, dengelemezsek dalgıç hep batar ve rahatsız eder.
+- **Soğuk:** bir dalgıcın hissidir, görüntüde karşılığı yok (elde titreme ya da buğu olurdu, ikisi de oyunlaştırır).
+
+**Ölçüler:** derin bakışlarda kare süresi 22,9 → 24,1, 23,6 → 27,0, 20,1 → 22,2 ms (katmanı geçen ışın iki kez izlenir);
+oralarda 37-45 fps. Katmanı geçmeyen bakışlarda fark yok: yalnız koy turunda 30,5-35 fps, açık ve kapalı aynı. Testler
+13/13.
+
+**Gözlem (termoklinle ilgisiz, önceden var):** tam pencere turunda (`--autotest`, önce diğer sahneler) koy'un "16 örnek"
+adımından sonraki adımları 21-25 fps; yalnız koy turunda (`--autotest-only koy`) aynı adımlar 32-35 fps. Termoklin
+kapalıyken de aynı. Şüphe: kart belleği (koy 14,5 / 16 GB; 16 örneğin tamponu ~1 GB) sınırı aşıyor; ölçülmedi.
+
+**NE DOĞRULANMADI:** canlı pencerede yüzülmedi (termoklinin kıpırtısı yalnız kod ve durağan karelerle; zamanla akışı
+gözle görülmedi); nefesin derinde yavaşlaması yalnız kodla; 16 örnek sonrası yavaşlamanın nedeni.
+
 ## Şu an · 2026-10-04 gece · yüzme hızı, maske görüşü ve nefes (Özcan: "gerçek fizikle", gösterge yok)
 
 **Özcan:** *"Yüzme hızını biraz arttırır mısın [...] gemiye gitmek lazım [...] gözlük bakışı, basınç ve hava baloncuklarını
