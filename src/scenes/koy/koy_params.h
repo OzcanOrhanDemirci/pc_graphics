@@ -78,6 +78,9 @@ struct KMaterial {
     float coatTile;      // metres a tile of it covers
     float coatCover;     // share of the surface it covers (0..1), before recesses and facing
     float coatScale;     // metres: the size of its patches
+    float coatRecess;    // how much more it gathers in recesses (0.9; a wreck's hold is all recess: low)
+    float coatSoft;      // its patches' edge width (0.1 sharp; a blanket of growth: wide)
+    float streak;        // dark stains run down the sides (rust and silt from above: an old wreck), 0..1
     float coatNormal;    // how strongly its normal map bends the surface
     float3 coatTint;     // its colour (linear sRGB; the scan's variation around its mean on top)
     float sediment;      // the felt on upward faces (0..1)

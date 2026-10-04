@@ -603,6 +603,11 @@ static __device__ void surfaceLook(const Hit& h, float3 d, float coneAngle, bool
         if (m.sediment > 0.0f) albedo = albedo + (m.sedimentColor - albedo) * (0.75f * m.sediment * sstep(0.30f, 0.85f, n.y));
     }
     if (m.mottle > 0.0f && !cheap) albedo = albedo * (1.0f + m.mottle * 2.0f * fbm3(h.p * 1.7f + make_float3(5.0f, 1.0f, 3.0f), 3));
+    if (m.streak > 0.0f && !cheap) {   // stains run down what stands up: noise stretched along y, on the sides only
+        const float side = 1.0f - sstep(0.25f, 0.75f, fabsf(n.y));
+        const float st = sstep(0.05f, 0.45f, fbm3(make_float3(h.p.x * 3.1f, h.p.y * 0.22f, h.p.z * 3.1f) + make_float3(1.3f, 7.7f, 2.9f), 3));
+        albedo = albedo * (1.0f - m.streak * side * st);
+    }
     if (m.film > 0.0f && !cheap) {
         const float side = 1.0f - sstep(0.2f, 0.7f, n.y);
         albedo = albedo + (albedo * m.filmColor - albedo) * (m.film * side);
@@ -612,7 +617,8 @@ static __device__ void surfaceLook(const Hit& h, float3 d, float coneAngle, bool
         const float nv = fbm3(h.p * (1.0f / m.coatScale), 4);
         const float recess = (1.0f - h.ao) * sstep(-0.4f, 0.0f, n.y);
         const float scour = sstep(-0.2f, -0.7f, n.y);
-        const float mask = sstep(-0.10f, 0.10f, nv + 1.2f * (m.coatCover - 0.5f) + 0.9f * recess - 0.5f * scour);
+        const float soft = fmaxf(m.coatSoft, 0.02f);
+        const float mask = sstep(-soft, soft, nv + 1.2f * (m.coatCover - 0.5f) + m.coatRecess * recess - 0.5f * scour);
         coatMask = mask;
         if (mask > 0.01f) {
             const Tri c = triplanar(m.coatSet, m.coatTile, h.p, h.ng, width, false);

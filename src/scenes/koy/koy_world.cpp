@@ -332,6 +332,8 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
         M.film = cfg.f((std::string(key) + ".film").c_str(), film);
         M.filmColor = cfg.v3("film.color", make_float3(0.78f, 0.95f, 0.72f));
         M.mottle = cfg.f((std::string(key) + ".mottle").c_str(), mottle);
+        M.coatRecess = cfg.f((std::string(key) + ".coat_recess").c_str(), 0.9f);
+        M.coatSoft = cfg.f((std::string(key) + ".coat_soft").c_str(), 0.1f);
         M.life = cfg.f((std::string(key) + ".life").c_str(), 0.8f);
         M.lifeA = cfg.v3("life.sponge", make_float3(0.55f, 0.16f, 0.06f));   // Crambe crambe: orange-red
         M.lifeB = cfg.v3("life.coralline", make_float3(0.52f, 0.30f, 0.38f));  // Lithophyllum: pale pink-mauve
@@ -417,12 +419,18 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
     KMaterial wreckWood = woodM;
     wreckWood.albedo = cfg.v3("batik.wood_tint", make_float3(0.50f, 0.43f, 0.35f));
     wreckWood.mottle = 0.3f;
-    // no concretion scan on the wood: its rule (more in recesses) finds the whole hold a recess and blotches it; silt on
-    // every ledge, a green-grey film on the sides, the colour wandering slowly instead
-    if (setCoat >= 0) coat(wreckWood, "batik", 0.0f, 0.1f, make_float3(0.24f, 0.22f, 0.19f), 0.85f, 0.45f, 0.35f);
-    wreckWood.coatSet = -1;
+    // years under water (Ozcan 2026-10-04: "uçan Hollandalı gibi"): the concretion back on the wood in patches, its
+    // recess rule nearly off (the hold is all recess: it blotched); turf and silt on every ledge, a green film on the
+    // sides, sponges and coralline on the concretion
+    if (setCoat >= 0) coat(wreckWood, "batik", 0.7f, 1.4f, make_float3(0.06f, 0.058f, 0.05f), 0.9f, 0.55f, 0.3f);
+    wreckWood.coatRecess = cfg.f("batik.coat_recess", 0.12f);
+    wreckWood.coatSoft = cfg.f("batik.coat_soft", 0.35f);
+    wreckWood.coatNormal = cfg.f("batik.coat_normal", 2.5f);
+    wreckWood.streak = cfg.f("batik.streak", 0.55f);
+    wreckWood.sedimentColor = cfg.v3("batik.turf_rgb", make_float3(0.055f, 0.058f, 0.035f));
     KMaterial wreckIron = plain(cfg.v3("batik.iron_rgb", make_float3(0.30f, 0.20f, 0.13f)));
-    if (setCoat >= 0) coat(wreckIron, "batik_demir", 0.65f, 0.12f, make_float3(0.32f, 0.27f, 0.22f), 0.5f, 0.2f, 0.35f);
+    if (setCoat >= 0) coat(wreckIron, "batik_demir", 0.85f, 0.12f, make_float3(0.09f, 0.075f, 0.06f), 0.6f, 0.3f, 0.35f);
+    wreckIron.streak = cfg.f("batik_demir.streak", 0.4f);
     // the sea fans: Paramuricea clavata's purple-red, Eunicella cavolini's yellow (true colours under the torch; at 22 m
     // the daylight leaves them dark)
     KMaterial fanRed = plain(cfg.v3("fans.red_rgb", make_float3(0.42f, 0.04f, 0.10f)));
@@ -433,6 +441,19 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
     fanYellow.aoStrength = 0.4f;
     // Ada enriched: the outcrops' limestone (the island's wet rock with more of the sea on it: turf on every ledge,
     // concretion, sponges and coralline crust in patches)
+    // Ada enriched: what grows on the wreck (sand scale: the sand's own albedo reads ~0.1 in this shader)
+    KMaterial spongeO = plain(cfg.v3("foul.orange_rgb", make_float3(0.30f, 0.07f, 0.02f)));   // Crambe crambe
+    spongeO.mottle = 0.25f;
+    KMaterial spongeY = plain(cfg.v3("foul.yellow_rgb", make_float3(0.30f, 0.19f, 0.03f)));   // Agelas oroides
+    spongeY.mottle = 0.25f;
+    KMaterial squirtM = plain(cfg.v3("foul.squirt_rgb", make_float3(0.22f, 0.04f, 0.05f)));   // Halocynthia papillosa
+    squirtM.mottle = 0.2f;
+    KMaterial crustM = plain(cfg.v3("foul.crust_rgb", make_float3(0.05f, 0.048f, 0.042f)));  // worm tubes, bryozoans, silt
+    crustM.mottle = 0.35f;
+    crustM.sediment = 0.25f;
+    KMaterial hydroM = plain(cfg.v3("foul.hydroid_rgb", make_float3(0.11f, 0.095f, 0.06f)));   // Eudendrium: pale, stiff
+    hydroM.mottle = 0.2f;
+    crustM.sedimentColor = cfg.v3("sediment.color", make_float3(0.11f, 0.105f, 0.09f));
     KMaterial reefM = islandWet;
     reefM.albedo = cfg.v3("reef.rgb", make_float3(0.24f, 0.23f, 0.20f));
     if (setCoat >= 0) coat(reefM, "reef", 0.32f, 0.45f, make_float3(0.30f, 0.27f, 0.23f), 1.0f, 0.55f, 0.4f);
@@ -441,7 +462,8 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
     reefM.filmColor = cfg.v3("reef.film_rgb", make_float3(0.62f, 0.78f, 0.52f));
     reefM.life = cfg.f("reef.life", 1.0f);
     materials = {floorM, rockM, spareM, jarM, islandWet, islandDry, woodM, concWet, concDry, steelM, rustM, floatM, bigM, ropeM, musselM,
-                 stoneL, stoneD, starM, cukeM, pinnaM, urchinM, wreckWood, wreckIron, fanRed, fanYellow, reefM};
+                 stoneL, stoneD, starM, cukeM, pinnaM, urchinM, wreckWood, wreckIron, fanRed, fanYellow, reefM,
+                 spongeO, spongeY, squirtM, crustM, hydroM};
 
     meshes.push_back(buildFloor(cfg));
     rockCentre = cfg.v3("rock.centre", make_float3(-2.4f, 0.0f, -6.0f));
@@ -535,6 +557,13 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
             koyBuildFans(cfg, wp.growth, 23, 24, 9, fans, &flog);
             std::printf("koy %s\n", flog.c_str());
             for (KMeshCPU& m : fans) meshes.push_back(std::move(m));
+            if (cfg.i("foul.use", 1)) {   // years under water: mussel clumps, sponges, sea squirts, crusts
+                std::vector<KMeshCPU> foul;
+                std::string olog;
+                koyFoulWreck(cfg, meshes[w0], meshes[w0 + 1], {14, 26, 27, 28, 29, 30}, 12, foul, &olog);
+                std::printf("koy batik ortusu: %s\n", olog.c_str());
+                for (KMeshCPU& m : foul) meshes.push_back(std::move(m));
+            }
             for (size_t k = w0; k < meshes.size(); ++k) {
                 KInstanceCPU in;
                 in.mesh = int(k);

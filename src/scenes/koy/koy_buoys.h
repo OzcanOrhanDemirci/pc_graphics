@@ -12,6 +12,9 @@
 #include <string>
 #include <vector>
 
+// one Mediterranean mussel (Mytilus galloprovincialis): hinge at `at`, along `axis`, its flat side towards `side`
+void koyAddMussel(KMeshCPU& m, float3 at, float3 axis, float3 side, float len, unsigned seed);
+
 struct KoyBuoys {
     struct Floater {
         float x, z, r;

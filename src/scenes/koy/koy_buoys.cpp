@@ -118,6 +118,8 @@ void addMussel(KMeshCPU& m, float3 at, float3 axis, float3 side, float len, unsi
 }
 }   // namespace
 
+void koyAddMussel(KMeshCPU& m, float3 at, float3 axis, float3 side, float len, unsigned seed) { addMussel(m, at, axis, side, len, seed); }
+
 void KoyBuoys::build(const Config& cfg, const std::function<float(float, float)>& floorY, std::vector<KMeshCPU>& meshes, std::vector<KInstanceCPU>& instances,
                      unsigned int matFloat, unsigned int matBig, unsigned int matRope, unsigned int matBlock, unsigned int matMussel, unsigned int id,
                      std::string* log) {

@@ -45,3 +45,12 @@ struct KoyReefAvoid {
 KoyReefRocks koyReefRocks(const Config& cfg, const std::function<float(float, float)>& floorY, const KoyReefAvoid& avoid);
 // meshes: one per region (lane, near, far), material and id as given
 void koyBuildReefRocks(const KoyReefRocks& r, unsigned int material, unsigned int id, std::vector<KMeshCPU>& out, std::string* log = nullptr);
+
+// The wreck as years under water leave it (Ozcan 2026-10-04: "uçan Hollandalı gibi olmalı [...] bozulma, kirlenme, kabuk
+// yosun tutma"): mussel clumps where the current runs (the rails, the gunports' sills, the castles' edges, the broken
+// frames' tops, the outward planking), encrusting sponges and sea squirts in patches; on the given wood and iron meshes.
+struct KoyFoulMaterials {
+    unsigned int mussel, spongeOrange, spongeYellow, squirt, crust, hydroid;
+};
+void koyFoulWreck(const Config& cfg, const KMeshCPU& wood, const KMeshCPU& iron, const KoyFoulMaterials& mat, unsigned int id,
+                  std::vector<KMeshCPU>& out, std::string* log = nullptr);

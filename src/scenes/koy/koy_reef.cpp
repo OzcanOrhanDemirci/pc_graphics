@@ -1,6 +1,7 @@
 // Scene 5 "Koy", Ada, enriched (see koy_reef.h).
 #include "scenes/koy/koy_reef.h"
 
+#include "scenes/koy/koy_buoys.h"
 #include "scenes/koy/koy_noise.h"
 
 #include <algorithm>
@@ -214,6 +215,194 @@ void koyBuildReefRocks(const KoyReefRocks& r, unsigned int material, unsigned in
         char buf[200];
         std::snprintf(buf, sizeof(buf), "%d kume (koridor %d, yakin %d, uzak %d), %d blok, %zu ucgen, %.2f s", int(r.clusters.size()), n[0], n[1], n[2], blocks,
                       tris, std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count());
+        *log = buf;
+    }
+}
+
+namespace {
+// an icosphere of radius 1 (level 1: 80 faces), for the encrusting blobs
+void ico1(std::vector<float3>& v, std::vector<uint3>& f) {
+    const float t = 1.6180340f;
+    v = {{-1, t, 0}, {1, t, 0}, {-1, -t, 0}, {1, -t, 0}, {0, -1, t}, {0, 1, t}, {0, -1, -t}, {0, 1, -t}, {t, 0, -1}, {t, 0, 1}, {-t, 0, -1}, {-t, 0, 1}};
+    for (auto& p : v) p = normalize(p);
+    f = {{0, 11, 5}, {0, 5, 1}, {0, 1, 7}, {0, 7, 10}, {0, 10, 11}, {1, 5, 9}, {5, 11, 4}, {11, 10, 2}, {10, 7, 6}, {7, 1, 8},
+         {3, 9, 4}, {3, 4, 2}, {3, 2, 6}, {3, 6, 8}, {3, 8, 9}, {4, 9, 5}, {2, 4, 11}, {6, 2, 10}, {8, 6, 7}, {9, 8, 1}};
+    std::vector<uint3> g;
+    std::vector<float3> w = v;
+    auto mid = [&](unsigned a, unsigned b) { w.push_back(normalize((w[a] + w[b]) * 0.5f)); return unsigned(w.size() - 1); };
+    for (const uint3& q : f) {
+        const unsigned a = mid(q.x, q.y), b = mid(q.y, q.z), c = mid(q.z, q.x);
+        g.push_back(make_uint3(q.x, a, c));
+        g.push_back(make_uint3(q.y, b, a));
+        g.push_back(make_uint3(q.z, c, b));
+        g.push_back(make_uint3(a, b, c));
+    }
+    v = w;
+    f = g;
+}
+}   // namespace
+
+void koyFoulWreck(const Config& cfg, const KMeshCPU& wood, const KMeshCPU& iron, const KoyFoulMaterials& mat, unsigned int id,
+                  std::vector<KMeshCPU>& out, std::string* log) {
+    std::mt19937 rng(unsigned(cfg.i("foul.seed", 77)));
+    std::uniform_real_distribution<float> U(0.0f, 1.0f);
+    KMeshCPU mussels, orange, yellow, squirt, crust, hydro;
+    mussels.name = "batik (midyeler)";
+    orange.name = "batik (turuncu sungerler)";
+    yellow.name = "batik (sari sungerler)";
+    squirt.name = "batik (deniz kadehleri)";
+    crust.name = "batik (kabuk topaklari)";
+    hydro.name = "batik (hidroidler)";
+    hydro.material = mat.hydroid;
+    hydro.id = id;
+    mussels.material = mat.mussel;
+    orange.material = mat.spongeOrange;
+    yellow.material = mat.spongeYellow;
+    squirt.material = mat.squirt;
+    crust.material = mat.crust;
+    mussels.id = orange.id = yellow.id = squirt.id = crust.id = id;
+    // the surfaces, by area: a triangle's chance of a site goes with its area and with where the current runs over it
+    // (edges and tops: a facing up or out; less on faces looking down, none inside the sand)
+    struct Site { float3 p, n; };
+    auto collect = [&](const KMeshCPU& m, std::vector<float>& cdf, std::vector<Site>& tri) {
+        float acc = 0.0f;
+        for (const uint3& t : m.idx) {
+            const float3 a = m.pos[t.x], b = m.pos[t.y], c = m.pos[t.z];
+            float3 n = cross(b - a, c - a);
+            const float area = 0.5f * length(n);
+            if (area < 1e-6f) continue;
+            n = n * (1.0f / (2.0f * area));
+            if (!m.nrm.empty()) {   // the mesh's own outward normal
+                const float3 sn = m.nrm[t.x] + m.nrm[t.y] + m.nrm[t.z];
+                if (dot(sn, n) < 0.0f) n = n * -1.0f;
+            }
+            const float w = area * (n.y > -0.3f ? 1.0f : 0.25f) * (0.6f + 0.4f * std::max(n.y, 0.0f));
+            acc += w;
+            cdf.push_back(acc);
+            tri.push_back({(a + b + c) * (1.0f / 3.0f), n});
+        }
+    };
+    std::vector<float> cdfW, cdfI, cdfT;
+    std::vector<Site> triW, triI, triT;
+    collect(wood, cdfW, triW);
+    collect(iron, cdfI, triI);
+    {   // the tops of the wood: what faces up and stands clear (the current runs over it: mussels, hydroids)
+        float acc = 0.0f;
+        for (size_t k = 0; k < triW.size(); ++k) {
+            if (triW[k].n.y < 0.55f) continue;
+            const float w = (cdfW[k] - (k ? cdfW[k - 1] : 0.0f));
+            acc += w;
+            cdfT.push_back(acc);
+            triT.push_back(triW[k]);
+        }
+    }
+    auto pick = [&](const std::vector<float>& cdf, const std::vector<Site>& tri) -> Site {
+        const float r = U(rng) * cdf.back();
+        const size_t k = size_t(std::lower_bound(cdf.begin(), cdf.end(), r) - cdf.begin());
+        return tri[std::min(k, tri.size() - 1)];
+    };
+    std::vector<float3> sph;
+    std::vector<uint3> sphF;
+    ico1(sph, sphF);
+    auto blob = [&](KMeshCPU& m, float3 p, float3 n, float r, float flat, float lump, unsigned seed) {
+        // a low dome on the surface (an encrusting sponge, a crust of tube worms and coralline), lumpy
+        const float3 t = normalize(cross(std::fabs(n.y) < 0.9f ? make_float3(0, 1, 0) : make_float3(1, 0, 0), n)), b = cross(n, t);
+        const unsigned base = unsigned(m.pos.size());
+        const float o = float(seed % 97) * 1.7f;
+        for (size_t i = 0; i < sph.size(); ++i) {
+            const float3 d = sph[i];
+            const float l = 1.0f + lump * kn::fbm3(d.x * 2.2f + o, d.y * 2.2f, d.z * 2.2f, 2);
+            const float h = std::max(d.y, -0.15f) * flat;   // flattened against the wood, a little sunk into it
+            m.pos.push_back(p + (t * (d.x * r * l)) + (b * (d.z * r * l)) + n * (h * r * l));
+            m.nrm.push_back(normalize(t * d.x + b * d.z + n * (d.y / std::max(flat, 0.2f))));
+        }
+        for (const uint3& f : sphF) m.idx.push_back(make_uint3(base + f.x, base + f.y, base + f.z));
+    };
+    // mussel clumps: a site, then a clump of 6-30 about it, each its own axis (hinge to the wood, the shell standing out)
+    int nMussel = 0, clumps = 0;
+    const int wantClumps = cfg.i("foul.mussel_clumps", 480);
+    for (int c = 0; c < wantClumps && !triW.empty(); ++c) {
+        const Site S = (!triT.empty() && U(rng) < 0.6f) ? pick(cdfT, triT) : pick(cdfW, triW);
+        if (S.n.y < -0.5f) continue;
+        const bool beard = U(rng) < 0.35f;   // some clumps grow into beards: dozens, layered, hanging off the edge
+        const int n = beard ? 30 + int(U(rng) * 40.0f) : 6 + int(U(rng) * 18.0f);
+        const float rad = beard ? 0.12f + 0.14f * U(rng) : 0.05f + 0.1f * U(rng);
+        const float3 t = normalize(cross(std::fabs(S.n.y) < 0.9f ? make_float3(0, 1, 0) : make_float3(1, 0, 0), S.n)), b = cross(S.n, t);
+        for (int k = 0; k < n; ++k) {
+            const float a = U(rng) * 6.2831853f, r = rad * std::sqrt(U(rng));
+            const float3 at = S.p + t * (std::cos(a) * r) + b * (std::sin(a) * r) - S.n * 0.005f + S.n * (beard ? 0.03f * U(rng) : 0.0f);
+            const float3 axis = normalize(S.n * (0.6f + 0.6f * U(rng)) + t * (U(rng) - 0.5f) + b * (U(rng) - 0.5f));
+            const float len = 0.035f + 0.04f * U(rng);
+            koyAddMussel(mussels, at, axis, t * (U(rng) - 0.5f) + b, len, unsigned(c * 131 + k));
+            ++nMussel;
+        }
+        ++clumps;
+    }
+    // encrusting life: sponges (orange Crambe crambe, yellow Agelas oroides), red sea squirts (Halocynthia papillosa),
+    // grey crusts (worm tubes, bryozoans, coralline under silt); on wood and on iron
+    int nBlobs = 0;
+    const int wantBlobs = cfg.i("foul.blobs", 900);
+    for (int k = 0; k < wantBlobs; ++k) {
+        const bool onIron = !triI.empty() && U(rng) < 0.22f;
+        if (!onIron && triW.empty()) break;
+        const Site S = onIron ? pick(cdfI, triI) : ((!triT.empty() && U(rng) < 0.5f) ? pick(cdfT, triT) : pick(cdfW, triW));
+        const float kind = U(rng);
+        if (kind < 0.18f) blob(orange, S.p, S.n, 0.03f + 0.07f * U(rng), 0.3f, 0.55f, unsigned(k));
+        else if (kind < 0.30f) blob(yellow, S.p, S.n, 0.03f + 0.07f * U(rng), 0.5f, 0.4f, unsigned(k));
+        else if (kind < 0.40f) blob(squirt, S.p, S.n, 0.025f + 0.03f * U(rng), 1.6f, 0.25f, unsigned(k));   // a squat barrel standing out
+        else blob(crust, S.p, S.n, 0.03f + 0.07f * U(rng), 0.35f, 0.8f, unsigned(k));
+        ++nBlobs;
+    }
+    int nHydro = 0;
+    const int wantTufts = cfg.i("foul.hydroid_tufts", 220);
+    for (int c = 0; c < wantTufts && !triT.empty(); ++c) {
+        const Site S = pick(cdfT, triT);
+        const int n = 2 + int(U(rng) * 5.0f);
+        const float3 t = normalize(cross(std::fabs(S.n.y) < 0.9f ? make_float3(0, 1, 0) : make_float3(1, 0, 0), S.n)), bb = cross(S.n, t);
+        for (int k = 0; k < n; ++k) {
+            const float a = U(rng) * 6.2831853f, r = 0.12f * std::sqrt(U(rng));
+            const float3 base = S.p + t * (std::cos(a) * r) + bb * (std::sin(a) * r) - S.n * 0.004f;
+            const float H = 0.10f + 0.18f * U(rng);
+            struct Br { float3 p, d; float len, r; int gen; };
+            std::vector<Br> st = {{base, normalize(S.n + make_float3(0, 0.6f, 0)), H * 0.45f, 0.006f, 0}};
+            while (!st.empty()) {
+                const Br q = st.back();
+                st.pop_back();
+                const float3 e = q.p + q.d * q.len;
+                // a short tapered tube (6 sides)
+                const float3 u = normalize(cross(std::fabs(q.d.y) < 0.9f ? make_float3(0, 1, 0) : make_float3(1, 0, 0), q.d)), v = cross(q.d, u);
+                const unsigned b0 = unsigned(hydro.pos.size());
+                for (int ring = 0; ring < 2; ++ring)
+                    for (int i = 0; i < 6; ++i) {
+                        const float ph = 6.2831853f * float(i) / 6.0f;
+                        const float rr = ring ? q.r * 0.7f : q.r;
+                        const float3 off = u * (std::cos(ph) * rr) + v * (std::sin(ph) * rr);
+                        hydro.pos.push_back((ring ? e : q.p) + off);
+                        hydro.nrm.push_back(normalize(off));
+                    }
+                for (int i = 0; i < 6; ++i) {
+                    const unsigned a0 = b0 + unsigned(i), a1 = b0 + unsigned((i + 1) % 6), c0 = a0 + 6, c1 = a1 + 6;
+                    hydro.idx.push_back(make_uint3(a0, a1, c1));
+                    hydro.idx.push_back(make_uint3(a0, c1, c0));
+                }
+                if (q.gen < 3) {
+                    const int kids = 2 + (U(rng) < 0.4f ? 1 : 0);
+                    for (int j = 0; j < kids; ++j) {
+                        const float3 dj = normalize(q.d * 1.2f + u * ((U(rng) - 0.5f) * 1.3f) + v * ((U(rng) - 0.5f) * 1.3f));
+                        st.push_back({e, dj, q.len * (0.62f + 0.15f * U(rng)), q.r * 0.75f, q.gen + 1});
+                    }
+                }
+            }
+            ++nHydro;
+        }
+    }
+    for (KMeshCPU* m : {&mussels, &orange, &yellow, &squirt, &crust, &hydro}) {
+        m->aoRange = 0.6f;
+        if (!m->idx.empty()) out.push_back(std::move(*m));
+    }
+    if (log) {
+        char buf[160];
+        std::snprintf(buf, sizeof(buf), "%d midye (%d kume), %d sunger ve kabuk topagi, %d hidroid", nMussel, clumps, nBlobs, nHydro);
         *log = buf;
     }
 }
