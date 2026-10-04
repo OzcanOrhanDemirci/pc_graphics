@@ -583,11 +583,46 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
         {
             std::string wlog;
             const size_t w0 = meshes.size();
-            const KoyWreckPlacement wp = koyBuildWreck(cfg, [&](float x, float z) { return fs.base(x, z); }, 21, 22, 16, 8, meshes, &wlog);
+            KoyWreckPlacement wp = koyBuildWreck(cfg, [&](float x, float z) { return fs.base(x, z); }, 21, 22, 16, 8, meshes, &wlog);
             wreckBow = wp.bow;
             wreckStern = wp.stern;
-            wreckGrowth = wp.growth;
             std::printf("koy %s\n", wlog.c_str());
+            {   // the fans' sites come from the hull's plan (the rail every 0.8 m, a rib's broken top at a random height): where
+                // the rail is gone or the rib broke lower they stood in the water (Ozcan 2026-10-05). Put each on the wood
+                // that is there; none within reach (or only an underside): no fan
+                std::vector<const KMeshCPU*> hull;
+                for (size_t k = w0; k < meshes.size(); ++k) hull.push_back(&meshes[k]);
+                const KoySurfaceSnap snap(hull, 0.25f);
+                std::vector<std::pair<float3, float3>> kept;
+                int onWood = 0, moved = 0, far = 0, dropped = 0;
+                float worst = 0.0f;
+                for (const auto& g : wp.growth) {
+                    float3 q, n;
+                    float d = 0.0f;
+                    if (!snap.nearest(g.first, 0.35f, q, n, &d) || n.y < -0.2f) {
+                        // the rib broke lower, the rail is gone: the nearest wood that looks up within reach, or none
+                        if (!snap.nearest(g.first, 1.5f, q, n, &d) || n.y < 0.3f) {
+                            ++dropped;
+                            continue;
+                        }
+                        ++far;
+                        kept.push_back({q, normalize(g.second + n)});
+                        continue;
+                    }
+                    if (d > 0.03f) {
+                        ++moved;
+                        worst = std::max(worst, d);
+                    } else {
+                        ++onWood;
+                    }
+                    kept.push_back({q, normalize(g.second + n)});
+                }
+                std::printf("koy batik yelpaze yerleri: %d, yuzeyde %d, tasinan %d (en uzak %.2f m), 1,5 m icinde yukari bakan tahtaya "
+                            "tasinan %d, atilan %d\n",
+                            int(wp.growth.size()), onWood, moved, worst, far, dropped);
+                wp.growth = kept;
+            }
+            wreckGrowth = wp.growth;
             std::vector<KMeshCPU> fans;
             std::string flog;
             koyBuildFans(cfg, wp.growth, 23, 24, 9, fans, &flog);

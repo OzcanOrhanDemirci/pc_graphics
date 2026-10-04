@@ -3,7 +3,42 @@
 > Tek kaynak durum panosu. Son plan: **`docs/koy/PLAN_ADA.md`** (üçüncü bölüm "Ada", 🏁 bitti); önceki planlar
 > `PLAN.md`, `PLAN_AMFORA.md`. Veri: `docs/koy/VERI.md`. CC0 taramalar: `assets/koy/fetch.py`, `assets/koy/LICENSES.md`.
 
-## Şu an · 2026-10-04 gece · derin suyun gerçek etkileri (Özcan: "gerçek fizik ne derse onu hissedelim")
+## Şu an · 2026-10-05 gece · Özcan canlı baktı: iki revize (havadaki bitkiler, ufuk çizgisi)
+
+**Özcan:** *"Sahne çok güzel oldu. Hem eskitme hem son eklemeler hem de bu zemin güncellemesi gayet iyi. 2 revize lazım
+[...] 1) Deniz bitkileri var, geminin üzerinde ve başka yerde onlar havada duruyor"*, *"2) Çok derinde gemiden sonra ve
+gemi civarında ekranda ufuk çizgisi gibi koyu mavi bir çizgi oluyor, doğallığı bozuyor"*.
+
+**1) Havadaki bitkiler:** yüzeyde büyüyen her şey artık gerçek yüzeye konuyor (`KoySurfaceSnap`, `koy_reef.h`: ağın
+üçgenleri bir hücre ızgarasında, en yakın yüzey noktası). Ölçülen (yükleme günlüğünde her açılışta yazar):
+- **Batıktaki yelpaze mercanları:** yerleri gövdenin kâğıt üstündeki planından geliyordu (küpeşte her 0,8 m'de,
+  kırık kaburga tepesi rastgele bir yükseklikte, direk kütüklerinin tepesi). Küpeştesi kopmuş, kaburgası daha alçaktan
+  kırılmış, direği devrilmiş yerde suda asılı kaldılar. 57 yerin 36'sı tahtadaydı. 5'i en çok 34 cm kaydırılıp tahtaya
+  kondu, 3'ü 1,5 m içindeki yukarı bakan tahtaya taşındı. 13'ünün yanında tahta yok, kaldırıldı: ikisi kıç kasaranın
+  üstünde 8 m derinlikte, biri devrilmiş ana direğin olmayan tepesinde, gerisi yıkılmış sancak tarafının olmayan kaburga
+  uçlarında. Batıkta 44 yelpaze kaldı.
+- **Hidroidler ve midyeler:** bir tutamın dalları yerinin 12 cm, bir midye kümesi 26 cm çevresine saçılıyordu. Dar
+  tahtanın kenarını aşan suda kalıyordu. Her dal ve kabuk kendi dibinin 4 cm yakınındaki yüzeye oturuyor, yoksa
+  konmuyor: 51 hidroid dalı ve 737 midye (12.765'ten) atıldı.
+- **Kayalardaki padina:** tutamın yaprakları yatayda kaydırılıyordu; dik yüzde ve küçük bloğun omzunda havada
+  kalıyordu. Şimdi kayaya oturuyorlar; yalnız 12 yaprak yer bulamayıp atıldı.
+
+**2) Ufuk çizgisi:** son eklenen termoklinin pus katmanı ince, yatay bir tabakaydı. Katmanın yakınındayken göz hizasında
+aydınlık bir şerit, hemen altında ya da üstünde koyu bir bant çiziyordu. Alttan bakınca tam yansıma bandı da aynı yere
+düşüyordu. Gerçek termoklin metrelerce kalın, karışık bir geçiştir; tek keskin tabaka bunu taklit edemedi. **Termoklin
+kapatıldı** (`thermo.use 0`; kod duruyor). Kırılma tek başına neredeyse hiçbir şey değiştirmiyordu (aynı kamera
+listesiyle ölçüldü). Ufukta katmansız da yumuşak bir kararma var (en koyu yer yataydan biraz aşağıda, ~%4): bu gerçek.
+Uzaklara aşağı doğru bakan bakış daha derin, daha karanlık suyu görür; yakın kumsa yukarıdan aydınlanır. Daha önce de
+vardı. Derinde ağırlaşan nefes kalıyor.
+
+**Ölçüler:** testler 13/13. Pencere testi koşulmadı: Özcan o sırada aynı makinede canlı test ediyordu (kareler de onunla
+paylaşılan kartta, süreleri anlamsız).
+
+**NE DOĞRULANMADI:** canlı pencerede bakılmadı (batığın dört yanı ve düzeltilen yerler durağan karelerle); midye ve
+hidroid atılmasının görünüşe etkisi tek tek incelenmedi; kayalık yelpaze mercanları üçgen merkezine konduğu için
+ölçülmedi (tanım gereği yüzeyde); ufuktaki doğal kararma Özcan'a hâlâ çizgi gibi gelebilir.
+
+## 2026-10-04 gece · derin suyun gerçek etkileri (Özcan: "gerçek fizik ne derse onu hissedelim") · ⚠️ termoklin 10-05'te kapatıldı
 
 **Özcan:** *"Peki çok derine inince nasıl bir gerçek etki oluyor"*, sonra *"Gerçekçi ve deneyimi çok bozmayacak şekilde
 ekleyebildiğin etkileri ekle. Yani o gerçek fizik ne derse o yu hissedelim."*

@@ -138,7 +138,7 @@ void KoyApp::setup() {
     p.glare = cfg.f("display.glare", 0.04f);
     // the thermocline: dn/dT of sea water ~ -1.2e-4 per degree near 20 C: 8 degrees colder, the index 1e-3 higher (7.2e-4
     // of 1.338 relative); the step's slopes from internal waves and the mixing at its face
-    p.thermoOn = cfg.i("thermo.use", 1);
+    p.thermoOn = cfg.i("thermo.use", 0);   // off: one sharp sheet drew a band at eye level (Ozcan 10-05: "ufuk cizgisi")
     p.thermoY = -cfg.f("thermo.depth", 27.0f);
     p.thermoDn = cfg.f("thermo.dt", 8.0f) * 1.2e-4f / 1.338f;
     p.thermoSlope = cfg.f("thermo.slope", 0.18f);

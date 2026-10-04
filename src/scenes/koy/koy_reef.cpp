@@ -24,7 +24,80 @@ float segDist(float3 p, float3 a, float3 b) {   // horizontal distance from p to
     return std::sqrt(dx * dx + dz * dz);
 }
 unsigned char u8(float v) { return (unsigned char)std::lround(std::min(std::max(v, 0.0f), 1.0f) * 255.0f); }
+uint64_t cellKey(int x, int y, int z) {
+    return (uint64_t(uint32_t(x + (1 << 20)) & 0x1fffff) << 42) | (uint64_t(uint32_t(y + (1 << 20)) & 0x1fffff) << 21) |
+           uint64_t(uint32_t(z + (1 << 20)) & 0x1fffff);
+}
+// the point of triangle abc nearest p (Ericson, Real-Time Collision Detection 5.1.5)
+float3 closestOnTri(float3 p, float3 a, float3 b, float3 c) {
+    const float3 ab = b - a, ac = c - a, ap = p - a;
+    const float d1 = dot(ab, ap), d2 = dot(ac, ap);
+    if (d1 <= 0.0f && d2 <= 0.0f) return a;
+    const float3 bp = p - b;
+    const float d3 = dot(ab, bp), d4 = dot(ac, bp);
+    if (d3 >= 0.0f && d4 <= d3) return b;
+    const float vc = d1 * d4 - d3 * d2;
+    if (vc <= 0.0f && d1 >= 0.0f && d3 <= 0.0f) return a + ab * (d1 / (d1 - d3));
+    const float3 cp = p - c;
+    const float d5 = dot(ab, cp), d6 = dot(ac, cp);
+    if (d6 >= 0.0f && d5 <= d6) return c;
+    const float vb = d5 * d2 - d1 * d6;
+    if (vb <= 0.0f && d2 >= 0.0f && d6 <= 0.0f) return a + ac * (d2 / (d2 - d6));
+    const float va = d3 * d6 - d5 * d4;
+    if (va <= 0.0f && (d4 - d3) >= 0.0f && (d5 - d6) >= 0.0f) return b + (c - b) * ((d4 - d3) / ((d4 - d3) + (d5 - d6)));
+    const float den = 1.0f / (va + vb + vc);
+    return a + ab * (vb * den) + ac * (vc * den);
+}
 }   // namespace
+
+int KoySurfaceSnap::cellOf(float v) const { return int(std::floor(v / cell_)); }
+
+KoySurfaceSnap::KoySurfaceSnap(const std::vector<const KMeshCPU*>& meshes, float cell, const std::function<bool(float3)>& keep) : cell_(cell) {
+    for (const KMeshCPU* m : meshes)
+        for (const uint3& t : m->idx) {
+            const float3 a = m->pos[t.x], b = m->pos[t.y], c = m->pos[t.z];
+            float3 n = cross(b - a, c - a);
+            const float l = length(n);
+            if (l < 1e-9f) continue;
+            if (keep && !keep((a + b + c) * (1.0f / 3.0f))) continue;
+            n = n * (1.0f / l);
+            if (!m->nrm.empty() && dot(m->nrm[t.x] + m->nrm[t.y] + m->nrm[t.z], n) < 0.0f) n = n * -1.0f;
+            const unsigned k = unsigned(a_.size());
+            a_.push_back(a);
+            b_.push_back(b);
+            c_.push_back(c);
+            n_.push_back(n);
+            const float3 lo = fminf3(a, fminf3(b, c)), hi = fmaxf3(a, fmaxf3(b, c));
+            for (int z = cellOf(lo.z); z <= cellOf(hi.z); ++z)
+                for (int y = cellOf(lo.y); y <= cellOf(hi.y); ++y)
+                    for (int x = cellOf(lo.x); x <= cellOf(hi.x); ++x) grid_[cellKey(x, y, z)].push_back(k);
+        }
+}
+
+bool KoySurfaceSnap::nearest(float3 p, float maxD, float3& q, float3& n, float* dist) const {
+    float best = maxD * maxD;
+    bool found = false;
+    const int r = int(std::ceil(maxD / cell_));
+    const int cx = cellOf(p.x), cy = cellOf(p.y), cz = cellOf(p.z);
+    for (int z = cz - r; z <= cz + r; ++z)
+        for (int y = cy - r; y <= cy + r; ++y)
+            for (int x = cx - r; x <= cx + r; ++x) {
+                const auto it = grid_.find(cellKey(x, y, z));
+                if (it == grid_.end()) continue;
+                for (const unsigned k : it->second) {
+                    const float3 c = closestOnTri(p, a_[k], b_[k], c_[k]);
+                    const float d2 = dot(c - p, c - p);
+                    if (d2 < best) {
+                        best = d2;
+                        q = c;
+                        n = n_[k];
+                        found = true;
+                    }
+                }
+            }
+    if (found && dist) *dist = std::sqrt(best);
+    return found;
+}
 
 KoyFloorMask koyBuildFloorMask(const Config& cfg, const std::function<float(float, float)>& floorY,
                                const std::vector<std::function<float(float3)>>& rocks, float3 wreckBow, float3 wreckStern,
@@ -321,7 +394,9 @@ void koyFoulWreck(const Config& cfg, const KMeshCPU& wood, const KMeshCPU& iron,
         for (const uint3& f : sphF) m.idx.push_back(make_uint3(base + f.x, base + f.y, base + f.z));
     };
     // mussel clumps: a site, then a clump of 6-30 about it, each its own axis (hinge to the wood, the shell standing out)
-    int nMussel = 0, clumps = 0;
+    // the wood and the iron as they are (a tuft or a clump spreads about its site: each piece is put down on what is there)
+    const KoySurfaceSnap snap({&wood, &iron}, 0.25f);
+    int nMussel = 0, clumps = 0, musselOff = 0;
     const int wantClumps = cfg.i("foul.mussel_clumps", 480);
     for (int c = 0; c < wantClumps && !triW.empty(); ++c) {
         const Site S = (!triT.empty() && U(rng) < 0.6f) ? pick(cdfT, triT) : pick(cdfW, triW);
@@ -332,8 +407,14 @@ void koyFoulWreck(const Config& cfg, const KMeshCPU& wood, const KMeshCPU& iron,
         const float3 t = normalize(cross(std::fabs(S.n.y) < 0.9f ? make_float3(0, 1, 0) : make_float3(1, 0, 0), S.n)), b = cross(S.n, t);
         for (int k = 0; k < n; ++k) {
             const float a = U(rng) * 6.2831853f, r = rad * std::sqrt(U(rng));
-            const float3 at = S.p + t * (std::cos(a) * r) + b * (std::sin(a) * r) - S.n * 0.005f + S.n * (beard ? 0.03f * U(rng) : 0.0f);
-            const float3 axis = normalize(S.n * (0.6f + 0.6f * U(rng)) + t * (U(rng) - 0.5f) + b * (U(rng) - 0.5f));
+            const float lift = beard ? 0.03f * U(rng) : 0.0f;   // a beard's shells layered on the others
+            float3 mq, sn;
+            if (!snap.nearest(S.p + t * (std::cos(a) * r) + b * (std::sin(a) * r), 0.04f, mq, sn)) {
+                ++musselOff;
+                continue;
+            }
+            const float3 at = mq - sn * 0.005f + sn * lift;
+            const float3 axis = normalize(sn * (0.6f + 0.6f * U(rng)) + t * (U(rng) - 0.5f) + b * (U(rng) - 0.5f));
             const float len = 0.035f + 0.04f * U(rng);
             koyAddMussel(mussels, at, axis, t * (U(rng) - 0.5f) + b, len, unsigned(c * 131 + k));
             ++nMussel;
@@ -355,7 +436,7 @@ void koyFoulWreck(const Config& cfg, const KMeshCPU& wood, const KMeshCPU& iron,
         else blob(crust, S.p, S.n, 0.03f + 0.07f * U(rng), 0.35f, 0.8f, unsigned(k));
         ++nBlobs;
     }
-    int nHydro = 0;
+    int nHydro = 0, hydroOff = 0;
     const int wantTufts = cfg.i("foul.hydroid_tufts", 220);
     for (int c = 0; c < wantTufts && !triT.empty(); ++c) {
         const Site S = pick(cdfT, triT);
@@ -363,10 +444,15 @@ void koyFoulWreck(const Config& cfg, const KMeshCPU& wood, const KMeshCPU& iron,
         const float3 t = normalize(cross(std::fabs(S.n.y) < 0.9f ? make_float3(0, 1, 0) : make_float3(1, 0, 0), S.n)), bb = cross(S.n, t);
         for (int k = 0; k < n; ++k) {
             const float a = U(rng) * 6.2831853f, r = 0.12f * std::sqrt(U(rng));
-            const float3 base = S.p + t * (std::cos(a) * r) + bb * (std::sin(a) * r) - S.n * 0.004f;
             const float H = 0.10f + 0.18f * U(rng);
+            float3 hq, sn;
+            if (!snap.nearest(S.p + t * (std::cos(a) * r) + bb * (std::sin(a) * r), 0.04f, hq, sn) || sn.y < -0.2f) {
+                ++hydroOff;   // past the plank's edge: no wood under it
+                continue;
+            }
+            const float3 base = hq - sn * 0.004f;
             struct Br { float3 p, d; float len, r; int gen; };
-            std::vector<Br> st = {{base, normalize(S.n + make_float3(0, 0.6f, 0)), H * 0.45f, 0.006f, 0}};
+            std::vector<Br> st = {{base, normalize(sn + make_float3(0, 0.6f, 0)), H * 0.45f, 0.006f, 0}};
             while (!st.empty()) {
                 const Br q = st.back();
                 st.pop_back();
@@ -403,8 +489,9 @@ void koyFoulWreck(const Config& cfg, const KMeshCPU& wood, const KMeshCPU& iron,
         if (!m->idx.empty()) out.push_back(std::move(*m));
     }
     if (log) {
-        char buf[160];
-        std::snprintf(buf, sizeof(buf), "%d midye (%d kume), %d sunger ve kabuk topagi, %d hidroid", nMussel, clumps, nBlobs, nHydro);
+        char buf[240];
+        std::snprintf(buf, sizeof(buf), "%d midye (%d kume), %d sunger ve kabuk topagi, %d hidroid; yuzeyde yer bulamayip atilan %d midye, %d hidroid",
+                      nMussel, clumps, nBlobs, nHydro, musselOff, hydroOff);
         *log = buf;
     }
 }
@@ -622,15 +709,23 @@ void koyBuildSandLife(const Config& cfg, const std::function<float(float, float)
         const size_t k = size_t(std::lower_bound(cdf.begin(), cdf.end(), U(rng) * acc) - cdf.begin());
         return tri[std::min(k, tri.size() - 1)];
     };
-    int nPadina = 0, nSponge = 0;
+    int nPadina = 0, nSponge = 0, padinaOff = 0;
+    const KoySurfaceSnap rockSnap(rockMeshes, 0.25f, [&](float3 c) {
+        return c.y < -0.5f && c.y > -16.6f && std::fabs(c.x) <= lane + 26.5f && c.z <= 24.5f && c.z >= -178.5f;
+    });
     for (int k = 0; k < cfg.i("life.padina_tufts", 420) && !tri.empty(); ++k) {
         const Site S = pick();
         if (S.n.y < 0.35f || S.p.y < -16.0f) continue;   // light-loving: the shallow tops
         const int n = 4 + int(U(rng) * 9.0f);
+        const float3 t = normalize(cross(std::fabs(S.n.y) < 0.9f ? make_float3(0, 1, 0) : make_float3(1, 0, 0), S.n)), bb = cross(S.n, t);
         for (int q = 0; q < n; ++q) {
             const float R = 0.025f + 0.035f * U(rng);
-            const float3 off = make_float3((U(rng) - 0.5f) * 0.12f, 0.0f, (U(rng) - 0.5f) * 0.12f);
-            const LifeFrame F = lifeFrameAt(S.p + off - S.n * 0.004f, normalize(S.n + make_float3((U(rng) - 0.5f) * 0.8f, 0.4f, (U(rng) - 0.5f) * 0.8f)), U(rng) * 6.2831853f);
+            float3 at, sn;
+            if (!rockSnap.nearest(S.p + t * ((U(rng) - 0.5f) * 0.12f) + bb * ((U(rng) - 0.5f) * 0.12f), 0.04f, at, sn) || sn.y < 0.2f) {
+                ++padinaOff;   // over a block's edge, or onto its side
+                continue;
+            }
+            const LifeFrame F = lifeFrameAt(at - sn * 0.004f, normalize(sn + make_float3((U(rng) - 0.5f) * 0.8f, 0.4f, (U(rng) - 0.5f) * 0.8f)), U(rng) * 6.2831853f);
             // a fan rolled into a funnel: angle across, height up; the rim curls outward
             const int nu = 12, nv = 5;
             std::vector<float3> pts;
@@ -675,9 +770,9 @@ void koyBuildSandLife(const Config& cfg, const std::function<float(float, float)
         if (!m->idx.empty()) out.push_back(std::move(*m));
     }
     if (log) {
-        char buf[200];
-        std::snprintf(buf, sizeof(buf), "%d tarak, %d kalp kabugu, %d burgu, %d kum yildizi; kayalarda %d padina tutami, %d sunger", nScallop, nCockle,
-                      nTower, nStar, nPadina, nSponge);
+        char buf[260];
+        std::snprintf(buf, sizeof(buf), "%d tarak, %d kalp kabugu, %d burgu, %d kum yildizi; kayalarda %d padina tutami (%d yaprak kayada yer bulamayip atildi), %d sunger",
+                      nScallop, nCockle, nTower, nStar, nPadina, padinaOff, nSponge);
         *log = buf;
     }
 }

@@ -9,9 +9,28 @@
 
 #include <cuda_runtime.h>
 
+#include <cstdint>
 #include <functional>
 #include <string>
+#include <unordered_map>
 #include <vector>
+
+// The nearest point of some meshes' surface (Ozcan 2026-10-05: "deniz bitkileri [...] havada duruyor"): what grows on a
+// surface is put down on it, not where a plan or an offset says the surface should be. Triangles in a grid of cells;
+// keep(centroid) limits which (the rest of a big mesh costs memory and is never asked about).
+class KoySurfaceSnap {
+public:
+    KoySurfaceSnap(const std::vector<const KMeshCPU*>& meshes, float cell, const std::function<bool(float3)>& keep = nullptr);
+    // the surface point nearest p within maxD, and the triangle's outward normal there; false if none is that near
+    bool nearest(float3 p, float maxD, float3& q, float3& n, float* dist = nullptr) const;
+    size_t triangles() const { return a_.size(); }
+
+private:
+    float cell_;
+    std::unordered_map<uint64_t, std::vector<unsigned>> grid_;
+    std::vector<float3> a_, b_, c_, n_;
+    int cellOf(float v) const;
+};
 
 struct KoyFloorMask {
     int w = 0, h = 0;
