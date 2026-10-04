@@ -150,6 +150,10 @@ static __forceinline__ __device__ float phaseFF(float c) {
 // =====================================================================================================
 // textures of the scanned materials (mipmapped, filtered by the ray cone)
 // =====================================================================================================
+static __forceinline__ __device__ float sstep01(float x) {
+    const float t = fminf(fmaxf(x, 0.0f), 1.0f);
+    return t * t * (3.0f - 2.0f * t);
+}
 static __forceinline__ __device__ float3 srgbDecode(float3 c) {
     auto f = [](float x) { return x <= 0.04045f ? x * (1.0f / 12.92f) : powf((x + 0.055f) * (1.0f / 1.055f), 2.4f); };
     return make_float3(f(c.x), f(c.y), f(c.z));
@@ -1091,7 +1095,52 @@ extern "C" __global__ void __raygen__final() {
     const unsigned int i = idx.y * params.width + idx.x;
     // the eye's veiling glare (its lens and fluid scatter a few per cent of all the light entering it over the whole
     // field): the dark under the pier, seen beside bright openings, is dark, never a flat black (Ozcan 2026-10-04)
-    float3 c = (f3(params.hdr[i]) + params.veil) * params.exposure;
+    float3 c = f3(params.hdr[i]) + params.veil;
+    // the exhaled bubbles (KoyApp::stepBreath): air spheres in water, far to near over the picture. Water to air beyond
+    // 48.6 degrees reflects totally: the silver rim mirrors the water's light, brighter where it looks up at the sky's
+    // window; through the middle the background shows small and upright (an air sphere in water is a diverging lens);
+    // the sun glints off the top. The edge's coverage analytic (no shimmer)
+    const bool inBox = idx.x + 0.5f >= params.bubbleBox.x && idx.y + 0.5f >= params.bubbleBox.y && idx.x + 0.5f <= params.bubbleBox.z &&
+                       idx.y + 0.5f <= params.bubbleBox.w;
+    for (int k = 0; inBox && k < params.bubbleCount; ++k) {
+        const float4 B = params.bubbles[k];
+        const float dx = (idx.x + 0.5f - B.x) / B.z, dy = (idx.y + 0.5f - B.y) / (B.z * B.w);
+        const float d2 = dx * dx + dy * dy;
+        if (d2 > 1.4f + 2.0f * params.bubbleBlur[k] / fmaxf(B.z, 1.0f)) continue;
+        const float blur = params.bubbleBlur[k];   // the eye's defocus (pixels): bubbles nearer than its near point
+        const float cover = saturate((1.0f - sqrtf(d2)) * B.z * fminf(B.w, 1.0f) / (1.0f + blur) + 0.5f) * (B.z / (B.z + 0.5f * blur));
+        if (cover <= 0.0f) continue;
+        const float nz = sqrtf(fmaxf(1.0f - fminf(d2, 1.0f), 0.0f));
+        const float fr = 0.0204f + 0.9796f * powf(1.0f - nz, 5.0f);
+        const float tir = saturate((0.80f - nz) / (0.80f - 0.661f));
+        const float R = fr + (1.0f - fr) * tir * tir * (3.0f - 2.0f * tir);
+        const KCamera& cm = params.cam;
+        const float3 n = normalize(cm.right * dx - cm.up * dy - cm.fwd * nz);
+        const float3 r = cm.fwd - n * (2.0f * dot(cm.fwd, n));
+        // the water's light that way: about the frame's mean level sideways, the sky's window above much brighter, the
+        // floor below a little darker (a rough radiance distribution: the rim must never read darker than the water)
+        const float upr = saturate(r.y), dnr = saturate(-r.y);
+        const float3 env = params.bubbleEnv * (1.0f + 2.6f * upr * upr - 0.3f * dnr);
+        const int sx = min(max(int(B.x + dx * B.z * 0.45f), 0), int(params.width) - 1);
+        const int sy = min(max(int(B.y + dy * B.z * B.w * 0.45f), 0), int(params.height) - 1);
+        const float3 behind = f3(params.hdr[sy * params.width + sx]) + params.veil;
+        const float glint = powf(saturate(dot(r, params.sunWater)), 2500.0f) * params.bubbleGlint;
+        const float3 bub = behind * ((1.0f - R) * 0.9f) + env * R + params.bubbleEnv * glint;
+        c = c + (bub - c) * cover;
+    }
+    // the mask: its black silicone frame 2-3 cm from the eye, far inside the eye's near point: never in focus, a wide soft
+    // dark border; the nose pocket rises into the bottom middle
+    if (params.maskOn) {
+        const float ax = (idx.x + 0.5f) / params.width * 2.0f - 1.0f;
+        const float ay = ((idx.y + 0.5f) / params.height * 2.0f - 1.0f) * float(params.height) / float(params.width);   // down +
+        const float sx = fabsf(ax) / 1.12f, sy = fabsf(ay + 0.01f) / 0.66f;
+        const float e = powf(powf(sx, 3.5f) + powf(sy, 3.1f), 1.0f / 3.3f);
+        float t = 1.0f - sstep01((e - 0.84f) / 0.32f);
+        const float nose = (ay - (0.48f + 4.8f * ax * ax)) / 0.10f;   // a low rounded bump at the bottom middle
+        t *= 1.0f - 0.95f * sstep01(nose + 0.5f);
+        c = params.bubbleEnv * 0.035f + (c - params.bubbleEnv * 0.035f) * t;
+    }
+    c = c * params.exposure;
     if (params.chromaAdapt > 0.0f) {   // von Kries towards the light around the eye, part of the way
         const float3 w = adaptingWhite();
         const float a = params.chromaAdapt;

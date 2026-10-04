@@ -198,6 +198,7 @@ public:
         const Diver before = k_.diver;
         const bool out = k_.blackedOut();   // the convulsion and the blackout: no swimming, no looking
         k_.stepDiver(out ? 0.0f : fwd, out ? 0.0f : right, out ? 0.0f : up, in.shift, out ? 0.0f : mdx, out ? 0.0f : mdy, dt);
+        k_.stepBreath(paused_ ? 0.0f : dt, in.shift && (fwd != 0.0f || right != 0.0f || up != 0.0f));
         const int restarts = k_.restarts;
         const float tunnel0 = k_.renderer.params().tunnel, black0 = k_.renderer.params().blackout;
         k_.stepBody(dt);

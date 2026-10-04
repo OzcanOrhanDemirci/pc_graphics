@@ -3,6 +3,38 @@
 > Tek kaynak durum panosu. Son plan: **`docs/koy/PLAN_ADA.md`** (üçüncü bölüm "Ada", 🏁 bitti); önceki planlar
 > `PLAN.md`, `PLAN_AMFORA.md`. Veri: `docs/koy/VERI.md`. CC0 taramalar: `assets/koy/fetch.py`, `assets/koy/LICENSES.md`.
 
+## Şu an · 2026-10-04 gece · yüzme hızı, maske görüşü ve nefes (Özcan: "gerçek fizikle", gösterge yok)
+
+**Özcan:** *"Yüzme hızını biraz arttırır mısın [...] gemiye gitmek lazım [...] gözlük bakışı, basınç ve hava baloncuklarını
+da ekle [...] fizik ve ışık ne derse o şeklinde yap. FPS kameraya uygun, mantıklı olsun."* Sonra: *"Yok göstergeler
+olmasın o oyunlaştırır. Görüş, nefes gibi gerçek fizikle o etkileri göster."*
+
+**Yapılanlar:**
+- **Hız:** palet itişi 32 → 92 N (rahat ama hızlı palet ~0,85 m/s; önce ~0,5), güçlü vuruş 110 → 290 N (~1,5 m/s;
+  önce ~0,9). Sürükleme ½ ρ CdA v² (CdA 0,25 m²): 1,5 m/s'de 290 N, iyi paletli bir dalgıcın kısa süreli itişi kadar.
+- **Maske:** gözün 2-3 cm önündeki siyah silikon çerçeve, gözün yakın noktasının çok içinde: hiç odaklanmaz, kenarlarda
+  geniş yumuşak kararma; alt ortada burun cebi (`view.mask`).
+- **Nefes:** 4,6 sn'lik döngü (güçlü vuruşta 3,2): nefes alma %40, durak, verme %50. Ciğerdeki ±0,75 l (1,5 l'lik
+  sakin nefes) ρ g ΔV kadar kaldırır ve batırır: dalgıç birkaç santim inip çıkar (suyun yavaş hızlardaki doğrusal
+  sürüklemesiyle sönümlü).
+- **Kabarcıklar (basınç):** verilen gaz, regülatörün iki yan çıkışından kabarcık olur; hacmi o derinlikte ciğer hacmi
+  kadar. Birkaç iri şapka kabarcık (8-25 mm) hacmin çoğunu, bir bulut küçük kabarcık (1-5 mm) kalanını taşır.
+  - **Yükselme:** son hızlarıyla; küçükler 0,12-0,25 m/s, şapkalar 0,711 √(g d) (Davies-Taylor), zikzak çizerek.
+  - **Basınç:** yükseldikçe Boyle ile büyürler (r ∝ P^(-1/3)), yüzeyde patlarlar.
+  - **Işık:** su→hava sınırında 48,6°'nin ötesinde tam iç yansıma kenarı gümüşe çevirir; kenar yukarı baktığı yerde
+    yüzeyin parlaklığını yansıtır. Ortadan arkası küçülmüş ve düz görünür (sudaki hava küresi ıraksak mercektir), tepesinde
+    güneş parıltısı vardır. Gözün yakın noktasından (~0,3 m) yakın olanlar bulanık gümüşi lekeye döner.
+  - **Kenar yumuşatma:** analitik, kıpırtı yok.
+  - **Hareket:** kabarcıklar dünyada kalır; ileri yüzerken geride bırakılırlar, dururken ve yukarı bakınca görünürler
+    (`view.bubbles`, `breath.period`).
+- **Ölçü araçları:** `--nefes S` (kareler ve zaman ölçümü için S saniye nefes önceden). Son geçiş kabarcıklarla da
+  0,53 ms (hepsini kapsayan ekran kutusu dışındaki pikseller bakmaz; kutusuz 1,33 ms idi). Pencere testinde 29,2-33 fps
+  ("yüzdü" adımı daha hızlı yüzüşle salonun daha derinine varıyor), testler 13/13.
+
+**NE DOĞRULANMADI:** canlı pencerede yüzülmedi (kabarcıkların akışı, nefesin inip çıkışı yalnız kod ve durağan karelerle);
+kabarcıklar sahnenin derinliğiyle sınanmıyor (önlerinde bir kaya olsa da üstte çizilirler; 8 m'den uzaktakiler ve yüzün
+arkasındakiler atılıyor); iri şapkaların yalpası basit bir yassılık salınımı.
+
 ## Şu an · 2026-10-04 gece · Ada zenginleştirildi (tam otonom, ajansız; plan `PLAN_ZENGIN.md`)
 
 **Özcan:** *"Sahneyi materyal olarak zenginleştir [...] dubaların içi [...] extra özenebilirsin [...] dubanın dışına bakınca da

@@ -17,6 +17,7 @@
 typedef unsigned long long KTex;   // cudaTextureObject_t (NVRTC sees it as this too)
 
 #define KOY_MAX_MESHES 128
+#define KOY_BUBBLES 96
 #define KOY_FIELDS 8             // the light field for up to this many floor depths
 #define KOY_MAX_BASE 16          // base samples per pixel (1, 4, 8 or 16)
 #define KOY_MAX_EDGE 32          // samples of a pixel that sits on an edge, base included
@@ -267,6 +268,16 @@ struct KoyParams {
     // ---- display
     float exposure;                     // scene luminance (Y in our units) -> display
     float3 veil;                        // the eye's veiling glare: a share of the frame's mean light over every pixel
+    // the diver's own view (Ozcan 2026-10-04: "görüş, nefes gibi gerçek fizikle", no gauges): the mask's frame, and the
+    // exhaled bubbles as screen ellipses far to near (x, y, radius in pixels, height/width), the water's light around
+    // (the frame's mean: what a bubble's silver rim mirrors) and the sun's glint on them
+    int maskOn;
+    int bubbleCount;
+    float4 bubbles[KOY_BUBBLES];
+    float bubbleBlur[KOY_BUBBLES];      // the eye's defocus for each (pixels)
+    float4 bubbleBox;                   // all of them: min x, min y, max x, max y (pixels); outside it no pixel looks
+    float3 bubbleEnv;
+    float bubbleGlint;
     int view;                           // 0 final, 1 edge pixels, 2 depth, 3 normal, 4 caustic factor, 5 ambient only
     float tunnel;                       // oxygen toxicity: the field of view closing in (0 none .. 1 a pinhole)
     // the eye's colour adaptation (Ada): the camera is white balanced for daylight above the water; under it the eye

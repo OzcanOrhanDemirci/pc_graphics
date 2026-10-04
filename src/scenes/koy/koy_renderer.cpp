@@ -637,6 +637,7 @@ void KoyRenderer::renderFrame() {
         for (const float4& v : meanHost_) { mr += v.x; mg += v.y; mb += v.z; }
         const double nt = double(std::max(1, tiles));
         params_.veil = make_float3(float(mr / nt) * params_.glare, float(mg / nt) * params_.glare, float(mb / nt) * params_.glare);
+        params_.bubbleEnv = make_float3(float(mr / nt), float(mg / nt), float(mb / nt));
         metered_ = float(s / std::max(1, tiles));
     }
     launch(rgFinal_, width_, height_, 1, &times_.final);

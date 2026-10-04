@@ -329,7 +329,10 @@ void KoyApp::stepDiver(float fwd, float right, float up, bool strong, float look
         const float h = dt / sub;
         const float v = length(diver.vel);
         const float3 drag = v > 1e-5f ? diver.vel * (-0.5f * rho * cda * v) : make_float3(0, 0, 0);
-        diver.vel = diver.vel + (wish * thrust + drag) * (h / mass);
+        // the breath's buoyancy (stepBreath): a little up on the inhale, down on the exhale, damped by the water's linear
+        // drag at walking-slow speeds (the quadratic one vanishes there)
+        const float3 lift = make_float3(0.0f, buoyancy - 6.0f * diver.vel.y, 0.0f);
+        diver.vel = diver.vel + (wish * thrust + drag + lift) * (h / mass);
         diver.pos = diver.pos + diver.vel * h;
         // collisions: the floor (the eye at least 0.3 m above it, as near as the boulder lets you), the boulder, the
         // surface's ceiling (1 m under it)
@@ -360,6 +363,120 @@ void KoyApp::restartDiver() {
     diver.pitch = cfg.f("diver.pitch_deg", -8.0f) * 3.14159265f / 180.0f;
     diver.vel = make_float3(0, 0, 0);
     o2Dose = 0.0f;
+}
+
+void KoyApp::stepBreath(float dt, bool strong) {
+    if (!cfg.i("view.bubbles", 1)) {
+        bubbleList.clear();
+        buoyancy = 0.0f;
+        return;
+    }
+    // the cycle: inhale over 40 %, a pause, exhale over 50 %; harder work breathes faster
+    const float period = cfg.f("breath.period", 4.6f) * (strong ? 0.7f : 1.0f);
+    const float ph0 = breathPhase;
+    breathPhase = std::fmod(breathPhase + dt / period, 1.0f);
+    // the lungs: +-0.75 l about the mean (a relaxed tidal breath of 1.5 l): rho g dV
+    auto lung = [](float ph) {   // 0..1 of the tidal volume
+        if (ph < 0.40f) return 0.5f - 0.5f * std::cos(3.14159265f * ph / 0.40f);
+        if (ph < 0.48f) return 1.0f;
+        if (ph < 0.98f) return 0.5f + 0.5f * std::cos(3.14159265f * (ph - 0.48f) / 0.50f);
+        return 0.0f;
+    };
+    buoyancy = 1025.0f * 9.81f * 0.0015f * (lung(breathPhase) - 0.5f);
+    // the exhale's gas leaves as bubbles: its volume at this depth is the tidal volume (the lungs at ambient pressure)
+    const float exhaled = std::max(0.0f, lung(ph0) - lung(breathPhase)) * 0.0015f;   // m3 this step (a cycle wrap gives 0)
+    const KCamera& c = renderer.params().cam;
+    const float depth0 = std::max(-c.pos.y, 0.0f);
+    exhaleCarry += exhaled;
+    auto rnd = [&](unsigned k) { unsigned x = k * 747796405u + 2891336453u; x = ((x >> ((x >> 28u) + 4u)) ^ x) * 277803737u; return float((x >> 22u) ^ x) / 4294967296.0f; };
+    // each bubble's volume: a few big wobbling caps (r 8-25 mm) carry most of it, a cloud of small ones (1-5 mm) the rest
+    while (exhaleCarry > 1e-6f && int(bubbleList.size()) < 400) {
+        const unsigned id = ++bubbleSeq;
+        const bool big = rnd(id * 3u) < 0.16f;
+        const float r = big ? 0.008f + 0.017f * rnd(id * 5u) : 0.001f + 0.004f * rnd(id * 7u);
+        const float vol = 4.18879f * r * r * r;
+        if (vol > exhaleCarry && !bubbleList.empty()) break;
+        exhaleCarry -= vol;
+        Bubble B;
+        const float side = rnd(id * 11u) < 0.5f ? -1.0f : 1.0f;   // the regulator's two exhausts, at the mouth's corners
+        B.p = c.pos - c.up * 0.11f + c.fwd * 0.07f + c.right * (0.06f * side);
+        B.v = c.right * (0.25f * side) - c.up * 0.05f + make_float3(0, 0.1f, 0);
+        B.r0 = r;
+        B.y0 = B.p.y;
+        B.age = 0.0f;
+        B.seed = rnd(id * 13u) * 100.0f;
+        bubbleList.push_back(B);
+    }
+    if (exhaleCarry > 0.003f) exhaleCarry = 0.0f;
+    // the motion: the exhaust's push dies in the water (~0.2 s); rise at the bubble's terminal speed (small: Stokes to
+    // a quarter metre a second; caps: 0.711 sqrt(g d), Davies and Taylor), wobbling; Boyle as they rise; gone at the
+    // surface or far off
+    std::vector<Bubble> keep;
+    keep.reserve(bubbleList.size());
+    for (Bubble B : bubbleList) {
+        B.age += dt;
+        const float P0 = 1.013f + 0.1005f * std::max(-B.y0, 0.0f), P = 1.013f + 0.1005f * std::max(-B.p.y, 0.0f);
+        const float r = B.r0 * std::cbrt(P0 / P);
+        const float U = r < 0.0007f ? 0.12f : r < 0.005f ? 0.20f + 8.0f * (r - 0.0007f) : std::max(0.25f, 0.711f * std::sqrt(9.81f * 2.0f * r));
+        const float k = std::exp(-dt / 0.2f);
+        B.v = B.v * k + make_float3(0.0f, U, 0.0f) * (1.0f - k);
+        const float w = (r > 0.005f ? 0.6f : 0.25f) * U;   // zigzag: bigger for the wobbling caps
+        const float3 wob = make_float3(std::sin(B.age * 7.0f + B.seed), 0.0f, std::cos(B.age * 5.3f + 1.7f * B.seed)) * w;
+        B.p = B.p + (B.v + wob) * dt;
+        const float far = length(B.p - c.pos);
+        if (B.p.y > -0.02f || far > 8.0f || B.age > 40.0f) continue;
+        keep.push_back(B);
+    }
+    bubbleList.swap(keep);
+    (void)depth0;
+}
+
+// the bubbles on the screen: the camera's own mapping inverted (the mask's flat port: tangential times n), far to near
+void KoyApp::projectBubbles() {
+    KoyParams& p = renderer.params();
+    p.maskOn = cfg.i("view.mask", 1);
+    p.bubbleGlint = cfg.f("view.bubble_glint", 40.0f);
+    struct S { float4 b; float d, blur; };
+    std::vector<S> list;
+    const KCamera& c = p.cam;
+    for (const Bubble& B : bubbleList) {
+        const float3 v = B.p - c.pos;
+        const float d = length(v);
+        if (d < 0.05f) continue;
+        const float3 dir = v * (1.0f / d);
+        const float z = dot(dir, c.fwd);
+        if (z < 0.05f) continue;
+        float tx = dot(dir, c.right), ty = dot(dir, c.up);
+        if (c.portN > 1.0f) { tx *= c.portN; ty *= c.portN; }
+        const float t2 = tx * tx + ty * ty;
+        if (t2 >= 0.999f) continue;
+        const float zA = std::sqrt(1.0f - t2);
+        const float u = tx / zA / c.tanHalfX, w = ty / zA / c.tanHalfY;
+        const float px = (u + 1.0f) * 0.5f * float(width), py = (1.0f - w) * 0.5f * float(height);
+        const float P0 = 1.013f + 0.1005f * std::max(-B.y0, 0.0f), P = 1.013f + 0.1005f * std::max(-B.p.y, 0.0f);
+        const float r = B.r0 * std::cbrt(P0 / P);
+        const float rpx = (c.portN > 1.0f ? c.portN : 1.0f) * (r / d) / zA * float(width) / (2.0f * c.tanHalfX);
+        if (rpx < 0.35f) continue;   // below a pixel's third: lost in the water
+        if (px < -rpx || py < -rpx || px > float(width) + rpx || py > float(height) + rpx) continue;
+        const float squash = r > 0.006f ? 0.62f + 0.1f * std::sin(B.age * 9.0f + B.seed) : 1.0f;   // caps flatten and rock
+        // the eye's defocus: nearer than its near point (~0.3 m; the mask shows things a quarter nearer) a blur circle of
+        // the pupil's (4 mm) size seen through the defocus, in pixels
+        const float dv = d / (c.portN > 1.0f ? c.portN : 1.0f), nearPt = 0.3f;
+        const float blur = dv < nearPt ? 0.004f * (1.0f / dv - 1.0f / nearPt) * nearPt * float(width) / (2.0f * c.tanHalfX) : 0.0f;
+        list.push_back({make_float4(px, py, rpx, squash), d, blur});
+    }
+    std::sort(list.begin(), list.end(), [](const S& a, const S& b) { return a.d > b.d; });
+    if (list.size() > KOY_BUBBLES) list.erase(list.begin(), list.begin() + (list.size() - KOY_BUBBLES));   // keep the nearest
+    p.bubbleCount = int(list.size());
+    float4 box = make_float4(1e9f, 1e9f, -1e9f, -1e9f);
+    for (size_t k = 0; k < list.size(); ++k) {
+        p.bubbles[k] = list[k].b;
+        p.bubbleBlur[k] = list[k].blur;
+        const float ext = 1.25f * list[k].b.z + 2.0f * list[k].blur + 2.0f;
+        box = make_float4(std::min(box.x, list[k].b.x - ext), std::min(box.y, list[k].b.y - ext), std::max(box.z, list[k].b.x + ext),
+                          std::max(box.w, list[k].b.y + ext));
+    }
+    p.bubbleBox = box;
 }
 
 // PLAN_ADA §6. Above ppO2 1.6 bar the dose builds, faster the higher it is (8 s at 1.6, 3 s at 1.8: an art shortening of
@@ -430,7 +547,10 @@ void KoyApp::stepWorld(float t) {
     renderer.worldMs = float((know() - t0) * 1000.0);
 }
 
-void KoyApp::frame() { renderer.renderFrame(); }
+void KoyApp::frame() {
+    projectBubbles();
+    renderer.renderFrame();
+}
 
 // The eye adapts halfway (PLAN §5.9): deeper and darker the exposure opens, but only half the difference.
 void KoyApp::adaptExposure(float dt, bool instant) {
@@ -504,6 +624,7 @@ int runKoyCli(int argc, char** argv) {
     KoyApp app;
     std::string mode, out, path = "sabit", testName, mapOut;
     int frames = 120, refN = 4, timing = 0;
+    float breathe = 0.0f;   // --nefes S: seconds of breathing before each still (the bubbles)
     float t0 = 0.0f, fps = 41.0f;
     bool camGiven = false, ref = false, worker = false, liveOnly = false, fromFloor = false;
     float3 camPos{}, camLook{};
@@ -516,6 +637,7 @@ int runKoyCli(int argc, char** argv) {
         if (a == "--scene") next();
         else if (a == "--headless") mode = "still";
         else if (a == "--ref") ref = true;
+        else if (a == "--nefes") breathe = std::stof(next());
         else if (a == "--isci") worker = true;
         else if (a == "--kararlilik") mode = "stab";
         else if (a == "--canli") liveOnly = true;   // --kararlilik: the live pass alone (two runs that differ in one setting)
@@ -699,6 +821,8 @@ int runKoyCli(int argc, char** argv) {
         app.calibrateEye();
         for (size_t c = 0; c < cams.size(); ++c) {
             aim(c);
+            app.bubbleList.clear();
+            for (float tb = 0.0f; tb < breathe; tb += 1.0f / 60.0f) app.stepBreath(1.0f / 60.0f, false);
             app.stepWorld(t0);
             app.frame();
             app.adaptExposure(1e6f, false);
@@ -791,8 +915,10 @@ int runKoyCli(int argc, char** argv) {
         std::printf("yazildi: %s.png (pozlama %+.2f EV, olculen log2 Y %.2f)\n", o.c_str(), app.evAdapt, app.renderer.meteredLog2());
     } else if (mode == "time") {
         double sum = 0.0;
+        for (float tb = 0.0f; tb < breathe; tb += 1.0f / 60.0f) app.stepBreath(1.0f / 60.0f, false);   // --nefes: bubbles there
         for (int k = 0; k < timing; ++k) {
             const double s = know();
+            if (breathe > 0.0f) app.stepBreath(1.0f / fps, false);
             app.stepWorld(t0 + k / fps);
             app.frame();
             app.adaptExposure(1.0f / fps, k == 0);

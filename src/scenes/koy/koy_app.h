@@ -83,6 +83,15 @@ struct KoyApp {
     void setCamera();                      // the diver's eye, the mask, the field of view
     void stepDiver(float fwd, float right, float up, bool strong, float lookDX, float lookDY, float dt);
     void restartDiver();                   // at the ladder, as at the start
+    // breathing (Ozcan 2026-10-04: "nefes gibi gerçek fizikle"): the cycle, the lungs' volume lifting and sinking the diver
+    // (rho g dV), the exhaled bubbles from the regulator's two exhausts rising (by size), growing as the pressure falls
+    // (Boyle) and popping at the surface; projected for the final pass each frame
+    struct Bubble { float3 p, v; float r0, y0, age, seed; };
+    std::vector<Bubble> bubbleList;
+    float breathPhase = 0.0f, buoyancy = 0.0f, exhaleCarry = 0.0f;
+    unsigned bubbleSeq = 0;
+    void stepBreath(float dt, bool strong);
+    void projectBubbles();
     void stepBody(float dt);               // pressure and oxygen: the dose, the tunnel, the blackout and the restart
     void stepWorld(float t);               // waves, caustics, the floats at world time t
     void frame();                          // stepWorld must have run; renders
