@@ -39,6 +39,7 @@ struct KoyTextureSet {
 };
 
 struct KoyWorld {
+    void tileScatter(float tile);   // the scattered meshes merged by tile (koy_world.cpp)
     std::vector<KMeshCPU> meshes;
     std::vector<KInstanceCPU> instances;
     std::vector<KMaterial> materials;

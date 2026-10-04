@@ -54,3 +54,19 @@ struct KoyFoulMaterials {
 };
 void koyFoulWreck(const Config& cfg, const KMeshCPU& wood, const KMeshCPU& iron, const KoyFoulMaterials& mat, unsigned int id,
                   std::vector<KMeshCPU>& out, std::string* log = nullptr);
+
+// The sand's and the rocks' small life over the whole lane (and thinner outside it): empty shells (scallops Pecten
+// jacobaeus whole and broken, cockles, tower shells Turritella), sand stars (Astropecten aranciacus) on the sand; on the
+// rocks, peacock's tail (Padina pavonica: pale curled fans in tufts, the shallows) and encrusting sponges (orange, yellow).
+struct KoyLifeMaterials {
+    unsigned int shell, shellPink, sandStar, padina, spongeOrange, spongeYellow, spongeDark;
+};
+// shelly(x, z): the shell-strewn sand's share there (the floor map): the empty shells gather where it is
+void koyBuildSandLife(const Config& cfg, const std::function<float(float, float)>& floorY, const std::function<bool(float3)>& isRock,
+                      const std::function<float(float, float)>& shelly,
+                      const std::vector<const KMeshCPU*>& rockMeshes, const KoyLifeMaterials& mat, unsigned int id, std::vector<KMeshCPU>& out,
+                      std::string* log = nullptr);
+
+// where sea fans stand on the outcrops: the tops and upper sides of the rock deeper than minDepth (gorgonians want the
+// current and less light), spread out (no two within `gap` metres)
+std::vector<std::pair<float3, float3>> koyReefFanSites(const std::vector<const KMeshCPU*>& rocks, float minDepth, int count, float gap, unsigned seed);

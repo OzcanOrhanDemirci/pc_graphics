@@ -1,5 +1,6 @@
 // Scene 5 "Koy": the trial area's world (see koy_world.h).
 #include "scenes/koy/koy_world.h"
+#include "scenes/koy/koy_noise.h"
 
 #include "scenes/koy/koy_amphora.h"
 #include "scenes/koy/koy_island.h"
@@ -454,6 +455,15 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
     KMaterial hydroM = plain(cfg.v3("foul.hydroid_rgb", make_float3(0.11f, 0.095f, 0.06f)));   // Eudendrium: pale, stiff
     hydroM.mottle = 0.2f;
     crustM.sedimentColor = cfg.v3("sediment.color", make_float3(0.11f, 0.105f, 0.09f));
+    // Ada enriched: the sand's and the rocks' small life (sand scale)
+    KMaterial shellM = plain(cfg.v3("life.shell_rgb", make_float3(0.14f, 0.13f, 0.11f)));
+    shellM.mottle = 0.3f;
+    KMaterial shellPinkM = plain(cfg.v3("life.shell_pink_rgb", make_float3(0.14f, 0.095f, 0.085f)));
+    shellPinkM.mottle = 0.3f;
+    KMaterial sandStarM = plain(cfg.v3("life.sand_star_rgb", make_float3(0.15f, 0.075f, 0.035f)));   // Astropecten aranciacus
+    sandStarM.mottle = 0.2f;
+    KMaterial padinaM = plain(cfg.v3("life.padina_rgb", make_float3(0.12f, 0.12f, 0.085f)));   // calcified, pale olive
+    padinaM.mottle = 0.25f;
     KMaterial reefM = islandWet;
     reefM.albedo = cfg.v3("reef.rgb", make_float3(0.24f, 0.23f, 0.20f));
     if (setCoat >= 0) coat(reefM, "reef", 0.32f, 0.45f, make_float3(0.30f, 0.27f, 0.23f), 1.0f, 0.55f, 0.4f);
@@ -463,7 +473,7 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
     reefM.life = cfg.f("reef.life", 1.0f);
     materials = {floorM, rockM, spareM, jarM, islandWet, islandDry, woodM, concWet, concDry, steelM, rustM, floatM, bigM, ropeM, musselM,
                  stoneL, stoneD, starM, cukeM, pinnaM, urchinM, wreckWood, wreckIron, fanRed, fanYellow, reefM,
-                 spongeO, spongeY, squirtM, crustM, hydroM};
+                 spongeO, spongeY, squirtM, crustM, hydroM, shellM, shellPinkM, sandStarM, padinaM};
 
     meshes.push_back(buildFloor(cfg));
     rockCentre = cfg.v3("rock.centre", make_float3(-2.4f, 0.0f, -6.0f));
@@ -573,6 +583,7 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
         // Ada enriched: the outcrops (lane, near, far), meshed per cluster
         KoyReefRocks reef;
         const size_t reef0 = meshes.size();
+        size_t reefEnd = reef0;
         if (cfg.i("reef.use", 1)) {
             KoyReefAvoid av;
             av.island = [&](float3 q) { return isl.sdf(q); };
@@ -583,21 +594,57 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
             std::string rlog;
             koyBuildReefRocks(reef, 25, 11, meshes, &rlog);
             std::printf("koy kayaliklar: %s\n", rlog.c_str());
+            reefEnd = meshes.size();
             for (size_t k = reef0; k < meshes.size(); ++k) {
                 KInstanceCPU in;
                 in.mesh = int(k);
                 instances.push_back(in);
             }
         }
+        // sea fans on the deep outcrops (red Paramuricea, yellow Eunicella), as on the wreck
+        if (cfg.i("reef.fans", 90) > 0 && reefEnd > reef0) {
+            std::vector<const KMeshCPU*> rr;
+            for (size_t k = reef0; k < reefEnd; ++k) rr.push_back(&meshes[k]);
+            if (amphoraRockMesh >= 0) rr.push_back(&meshes[size_t(amphoraRockMesh)]);
+            const auto sites = koyReefFanSites(rr, cfg.f("reef.fan_depth", 13.0f), cfg.i("reef.fans", 90), 1.6f, 911u);
+            std::vector<KMeshCPU> rf;
+            std::string flog;
+            koyBuildFans(cfg, sites, 23, 24, 9, rf, &flog);
+            std::printf("koy kayalik mercanlari: %s\n", flog.c_str());
+            for (KMeshCPU& m : rf) {
+                m.scatter = true;
+                meshes.push_back(std::move(m));
+                KInstanceCPU in;
+                in.mesh = int(meshes.size()) - 1;
+                instances.push_back(in);
+            }
+        }
         // the shallows' small things, and the urchins on the island's wet rock, the amphorae's rocks and the outcrops
         std::vector<const KMeshCPU*> rockMeshes = {&meshes[first]};
         if (amphoraRockMesh >= 0) rockMeshes.push_back(&meshes[size_t(amphoraRockMesh)]);
-        for (size_t k = reef0; k < meshes.size(); ++k) rockMeshes.push_back(&meshes[k]);
+        for (size_t k = reef0; k < reefEnd; ++k) rockMeshes.push_back(&meshes[k]);
         std::vector<KMeshCPU> props;
         std::string plog;
         koyBuildProps(cfg, fy, [&](float3 q) { return isl.sdf(q) < 0.15f || amphoraRocks.sdf(q) < 0.1f || reef.sdf(q) < 0.1f; }, rockMeshes,
-                      {15, 16, 17, 18, 19, 20}, 7, props, &plog);
+                      {25, 16, 17, 18, 19, 20}, 7, props, &plog);   // the light pebbles in the reef's limestone (turf, grain)
+        for (KMeshCPU& m : props) {
+            m.scatter = true;
+            m.aoRange = 0.6f;
+        }
         std::printf("koy susler: %s\n", plog.c_str());
+        if (cfg.i("life.use", 1)) {   // Ada enriched: shells, sand stars; Padina and sponges on the rocks
+            std::string llog;
+            // the shell-strewn patches: the floor map's rule, the same noise (koy_reef.cpp koyBuildFloorMask)
+            const float cover = cfg.f("floor2.cover", 0.42f);
+            auto shelly = [&](float x, float z) {
+                const float big = kn::fbm3(x * 0.045f + 3.1f, 0.7f, z * 0.045f, 3), small = kn::fbm3(x * 0.21f, 4.2f, z * 0.21f + 7.0f, 2);
+                const float v = 0.6f * big + 0.28f * small + (cover - 0.42f) * 2.0f;
+                return std::min(std::max((v - 0.02f) / 0.3f, 0.0f), 1.0f);
+            };
+            koyBuildSandLife(cfg, fy, [&](float3 q) { return isl.sdf(q) < 0.15f || amphoraRocks.sdf(q) < 0.1f || reef.sdf(q) < 0.1f; }, shelly, rockMeshes,
+                             {31, 32, 33, 34, 26, 27, 29}, 13, props, &llog);
+            std::printf("koy canlilar: %s\n", llog.c_str());
+        }
         for (KMeshCPU& m : props) {
             meshes.push_back(std::move(m));
             KInstanceCPU in;
@@ -613,7 +660,89 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
             std::printf("koy taban haritasi: %s\n", mlog.c_str());
         }
     }
+    if (cfg.i("scatter.tiles", 1)) tileScatter(cfg.f("scatter.tile", 30.0f));
     applyTextureMode(cfg, cfg.i("tex.mode", 2));
+}
+
+// Everything spread over the whole floor (the outcrops, the pebbles, shells, stars, sponges, the reef's fans) was one mesh
+// per kind, each one instance whose bounds covered the scene: every ray entered every one of them (Ada enriched: +2 ms
+// where none of them shows). Merged by tile instead (a material per triangle), the bounds are local: a ray meets only the
+// tiles it crosses. The big things (rocks, fans: a long occlusion range) and the small (a short one) tile apart. Their
+// instances come after the moving floats' (whose indices are kept).
+void KoyWorld::tileScatter(float tile) {
+    std::vector<KMeshCPU> keep, scat;
+    std::vector<int> remap(meshes.size(), -1);
+    for (size_t k = 0; k < meshes.size(); ++k) {
+        if (meshes[k].scatter) {
+            scat.push_back(std::move(meshes[k]));
+        } else {
+            remap[k] = int(keep.size());
+            keep.push_back(std::move(meshes[k]));
+        }
+    }
+    if (scat.empty()) {
+        meshes = std::move(keep);
+        return;
+    }
+    std::vector<KInstanceCPU> inst;
+    for (const KInstanceCPU& in : instances)
+        if (in.mesh >= 0 && size_t(in.mesh) < remap.size() && remap[size_t(in.mesh)] >= 0) {
+            KInstanceCPU q = in;
+            q.mesh = remap[size_t(in.mesh)];
+            inst.push_back(q);
+        }
+    struct Key { int x, z, big; bool operator<(const Key& o) const { return x != o.x ? x < o.x : z != o.z ? z < o.z : big < o.big; } };
+    std::map<Key, KMeshCPU> tiles;
+    std::vector<int> stamp, local;
+    for (const KMeshCPU& m : scat) {
+        const int big = m.aoRange > 1.0f ? 1 : 0;
+        stamp.assign(m.pos.size(), -1);
+        local.assign(m.pos.size(), 0);
+        // the triangles by tile
+        std::map<Key, std::vector<size_t>> buckets;
+        for (size_t t = 0; t < m.idx.size(); ++t) {
+            const uint3 q = m.idx[t];
+            const float3 c = (m.pos[q.x] + m.pos[q.y] + m.pos[q.z]) * (1.0f / 3.0f);
+            buckets[{int(std::floor(c.x / tile)), int(std::floor(c.z / tile)), big}].push_back(t);
+        }
+        int tag = 0;
+        for (auto& kv : buckets) {
+            KMeshCPU& T = tiles[kv.first];
+            if (T.idx.empty() && T.pos.empty()) {
+                T.name = "dagilim";
+                T.material = m.material;
+                T.id = m.id;
+                T.aoRange = big ? 4.0f : 0.6f;
+            }
+            ++tag;
+            const unsigned base = unsigned(T.pos.size());
+            unsigned added = 0;
+            auto vtx = [&](unsigned v) {
+                if (stamp[v] != tag) {
+                    stamp[v] = tag;
+                    local[v] = int(base + added++);
+                    T.pos.push_back(m.pos[v]);
+                    T.nrm.push_back(v < m.nrm.size() ? m.nrm[v] : make_float3(0, 1, 0));
+                }
+                return unsigned(local[v]);
+            };
+            for (size_t t : kv.second) {
+                const uint3 q = m.idx[t];
+                T.idx.push_back(make_uint3(vtx(q.x), vtx(q.y), vtx(q.z)));
+                T.triMat.push_back((unsigned short)(m.triMat.empty() ? m.material : m.triMat[t]));
+            }
+        }
+    }
+    meshes = std::move(keep);
+    for (auto& kv : tiles) {
+        kv.second.uv.clear();
+        meshes.push_back(std::move(kv.second));
+        KInstanceCPU in;
+        in.mesh = int(meshes.size()) - 1;
+        inst.push_back(in);
+    }
+    instances = std::move(inst);
+    std::printf("koy dagilim: %zu ag -> %zu karo (%.0f m)\n", scat.size(), tiles.size(), tile);
 }
 
 bool KoyWorld::hasMode(int mode) const {

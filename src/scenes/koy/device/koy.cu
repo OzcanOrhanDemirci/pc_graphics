@@ -203,7 +203,7 @@ static __forceinline__ __device__ Hit trace(float3 o, float3 d, float tmax) {
     const KInstance in = params.instances[ii];
     const KMesh& m = params.meshes[in.mesh];
     h.t = optixHitObjectGetRayTmax();
-    h.mat = m.material;
+    h.mat = m.triMat ? (unsigned int)m.triMat[prim] : m.material;
     const float2 b = optixHitObjectGetTriangleBarycentrics();
     const uint3 tri = m.idx[prim];
     const float3 v0 = m.pos[tri.x], v1 = m.pos[tri.y], v2 = m.pos[tri.z];

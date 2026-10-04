@@ -21,7 +21,9 @@ struct KMeshCPU {
     std::vector<float3> pos, nrm;
     std::vector<float2> uv;
     std::vector<uint3> idx;
+    std::vector<unsigned short> triMat;   // optional: a material per triangle
     unsigned int material = 0, id = 1;
+    bool scatter = false;   // spread over the whole floor: merged by tile at the end of the build (local bounds for the rays)
     bool bakeAO = true;
     float aoRange = 4.0f;   // metres the occlusion rays look (a wreck's hold wants more)
 };

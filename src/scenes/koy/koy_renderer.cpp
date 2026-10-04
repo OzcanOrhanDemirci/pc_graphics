@@ -295,6 +295,7 @@ void KoyRenderer::uploadWorld(const std::vector<KMeshCPU>& meshes, const std::ve
         dm.nrm = upload(m.nrm, worldBuffers_);
         dm.uv = upload(m.uv, worldBuffers_);
         dm.idx = upload(m.idx, worldBuffers_);
+        dm.triMat = m.triMat.empty() ? nullptr : upload(m.triMat, worldBuffers_);
         dm.ao = nullptr;
         dm.aoFirst = 0;
         dm.aoVerts = unsigned(m.pos.size());

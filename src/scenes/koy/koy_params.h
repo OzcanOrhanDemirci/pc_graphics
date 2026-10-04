@@ -100,6 +100,7 @@ struct KMesh {
     const float3* nrm;
     const float2* uv;
     const uint3* idx;
+    const unsigned short* triMat;   // a material per triangle (scattered things merged by tile), may be null: `material`
     const float* ao;     // per vertex, baked (1 open .. 0 closed), may be null; per instance when instanced:
     unsigned int aoFirst, aoVerts;   // instance i's values at ao + (i - aoFirst) * aoVerts (its instances consecutive)
     unsigned int material;
