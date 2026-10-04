@@ -33,11 +33,12 @@ yok. Sahne 1 spektral bir yol izleyicidir: referans görüntüye yakınsayan **d
 gürültü gidericisiyle saniyede 20-30 kare tutan **canlı kip**. Sahne 2 gerçek zamanlı, hacimsel bir gece. Sahne 3
 kendi yazdığımız bir katı cisim ve kırılma çözücüsü; sade bir gündüz ışın izleyicisiyle çiziliyor. Sahne 4 bir tanecik
 çözücüsü (sıvılar, taneler, kopabilen bağlar); hızlı anları arka planda ince hesaplanır ve video olarak değil, fizik
-olarak saklanır.
+olarak saklanır. Sahne 5 su altında: ışığı yüzeyin üstünde havada da süren deterministik, tayfsal bir ışın izleyici;
+küçük bir adanın iskelesinden bir batığa ve maviye inen bir halata uzanan bir yol.
 
 ## Uygulama
 
-Dört sahne tek bir programda yaşıyor. Program bir galeriyle açılır; sahne bir yükleme ekranının arkasında yüklenir
+Beş sahne tek bir programda yaşıyor. Program bir galeriyle açılır; sahne bir yükleme ekranının arkasında yüklenir
 (programları derlenir, dünyası kurulur; bunlar ayrı bir iş parçacığında yapıldığı için pencere canlı kalır) ve sonra hepsi
 için aynı olan bir arayüzün altında çalışır: kim ve ne sol altta, süreler sağ üstte, çıkış yolu sağ altta, tuşlar F1'de.
 Sol alttaki panel fareyle kullanılır: sahne oraya seçenek sıraları, kaydırma çubukları ve düğmeler koyabilir (Yıkım'da
@@ -210,42 +211,47 @@ Nasıl yapıldığı ve yolda neyin ölçüldüğü (çalışma günlüğünde h
 Açık: bal ipinin yüzeyi boğumlu (bir-üç tanecik kalınlığında); karpuz parçaları keskin kırık değil yumuşak yüzeyler olarak çiziliyor; balon asılı değil masada
 (asılıyken hafif lastik suyun ağırlığını düğüme zamanında taşıyamadı).
 
-### 5 · Amfora · Ekim 2026
+### 5 · Ada · Ekim 2026
 
-| ![12 m'de kumlu bir tümsekte kabuk bağlamış amforalar, maviden inen ışık sütunları](docs/images/amfora-tarla.jpg) |
+| ![Bir iskelenin beton başlığının altı: kabuk bağlamış sütunlardan karanlık bir salon, kırık bir delikten inen güneş, dışarıda parlak kum](docs/images/ada-salon.jpg) |
 |---|
-| ![Yakından: kuma yarı gömülü, kabuk bağlamış kırık ve sağlam amforalar, üstlerinde tortu keçesi](docs/images/amfora-yakin.jpg) |
+| ![22 m'de bir kalyon batığının çökmüş sancak tarafı: açıkta kaburgalar, çaprazlama devrik direk, lumbaraların ardında toplar](docs/images/ada-batik.jpg) |
+| ![9 m'den yukarı bakış: yüzeyde şamandıra, midye kaplı halatı aşağı iniyor; yüzme alanının dubaları](docs/images/ada-samandira.jpg) |
 
-Akdeniz'de su altı, tüplü bir dalgıç gibi yüzülür: 12 metrede, MÖ 1. yüzyıldan bir Roma ticaret gemisinin şarap yükü;
-gövde çürüyünce kumluk bir düzlükte düştükleri yerde yatan amforalar, yarı gömülü, kabuk bağlamış, çoğu kırık. Önce
-netlik ve kararlılık; ışık fiziksel.
+Akdeniz'de su altı, tüplü bir dalgıç gibi yüzülür. Küçük bir adanın iskelesinin beton başlığının altında karanlık bir
+salonda başlarsın; dubaların çizdiği yoldan kum yavaş yavaş derinleşir: 12 m'de kayalara yaslanmış amforalar, 22 m'de
+yarı yıkık bir kalyon, en uçta dibi görünmeyen maviye inen bir şamandıra halatı. Su üstü yalnız alttan görünür; yüzeye
+çıkılmaz, çok derine inersen havadaki oksijenin kısmi basıncı seni geri yollar.
 
 - **Zamansal hilesiz netlik:** her piksel her karede aynı sabit alt piksel örnekleriyle çizilir (4, döndürülmüş ızgara;
-  titreşim yok, geçmiş yok), kenardaki piksele toplam 32'ye kadar örnek (varsayılan 16), pikselden biraz geniş bir
-  Blackman-Harris süzgeci. Dört kamera yolunda yakınsamış referansa karşı ölçülen kıpırtı (`tools/kararlilik.py`) sahne
-  2'nin TAA'sından 3-13 kat düşük; 16K kumun yakınında yalnız 1,2 kat (hedef 2 kattı).
+  titreşim yok, geçmiş yok), kenardaki piksele varsayılan toplam 12 örnek (32'ye kadar), pikselden biraz geniş bir
+  Blackman-Harris süzgeci. Yakınsamış referansa karşı ölçülen kıpırtı (`tools/kararlilik.py`) ölçülen her yolda
+  (iskelenin salonuna yüzüş, batığa yaklaşış) sahne 2'nin TAA'sının yarısının altında.
+- **Su üstündekinden geçen gerçek zamanlı ışık:** güneşin gölge ışını yüzeyden sonra havada sürer, sudan çıkan ışık
+  oradaki dalgayla kırılır; yürüyüş yolunun tahta aralıklarından ve başlığın kırık deliklerinden sızan ışık kumda
+  kostik gibi salınır. Işık sütunları için her yapının üstünde bir güneş haritası: yüzeyin her noktasından kırılan
+  güneşin ne kadar aşağı indiği ve güvertenin ne kadarını geçirdiği (mip düzeyli, o derinlikte güneş diskinin genişliği
+  kadar okunur: çizgiler gerçekleri kadar yumuşak); bir gök haritası aynısını suyun dağınık ışığı için yapar, başlığın
+  altında suyun kendisi kararır.
 - **Pişirilmiş tayfsal su:** soğurma ve saçılma 5 nm adımla yayımlanmış ölçümlerden (Pope ve Fry, bir Jerlov tipi,
-  Fournier-Forand), güneş ve gök tayfı, göz eğrileri; hepsi ışığın yol uzunluğuna göre tablolara. Su sütununun dağınık
-  ışığı Monte Carlo ışık alanı, üç dip derinliği için: batığın parlak kumu üstünde su derinin üstündekinden ~%30 parlak,
-  her yüzey altındaki dibin alanını okur.
-- **Gürültüsüz kostik (hüzme):** FFT yüzeyinin her hücresi (bir milyon) bir ışık hüzmesi; 28 derinlik diliminin her
-  birinde hüzmenin akısı köşelerinin kurduğu iki üçgene yayılır, her doku pikseli o üçgenlerin alanından tam payını alır
-  (Green teoremi, satır satır). Hiçbir şey sayılmadığı için kaynamıyor: eski ışın saymaya göre kostiğin kendi kıpırtısı
-  7-12 m'de 13-15 kat, dilimlerin yarım çözünürlüklü olduğu 20 m'de 4,7 kat düştü (16 kat ışın bile hüzmenin 4 katı
-  gürültü bırakıyordu). ~7 ms.
-- **Amforalar:** Southampton Üniversitesi çizimlerinin ArchAIDE vektörlerinden döndürülmüş dört tip (Dressel 1B, 1A,
-  2-4, Lamboglia 2; dış yüz, ağız içi, kulplar; CC BY 4.0) ve kırık parçaları: boynu kopmuş gövdeler (tortuyla dolu),
-  kulplu boyunlar, yarım gövdeler, çanak çömlek parçaları. Kabuk yamaları altında 8K kil; girintilerde çok, kumun
-  aşındırdığı yerde az; yukarı bakan her yerde tortu keçesi.
-- **Dalgıç feneri** (panel ya da F, varsayılan kapalı): ışığı suda gidip dönen beyaz bir LED; yakında kilin ve süngerlerin
-  kırmızısı geri gelir, birkaç metrede söner.
+  Fournier-Forand), güneş ve gök tayfı, göz eğrileri; ışığın yol uzunluğuna göre tablolar, dağınık ışık alanı 110 m'ye
+  kadar yedi dip derinliği için. Göz rengini çevresindeki ışığa yarı yolda, parlaklığını %30 uyarlar: salon karanlık kalır.
+- **Gürültüsüz kostik (hüzme):** FFT yüzeyinin her hücresi, her derinlik diliminde kapladığı alana tam olarak yayılan bir
+  ışık hüzmesi; hiçbir şey sayılmaz, kaynamaz. Güneş diskinin bulanıklaştırdığı 30 m'nin altında söner. ~5 ms.
+- **Batık:** tek bir gövde fonksiyonundan (dip açısı, içe çekik bordalar, güverte çizgisi, ayna kıç) kereste kereste
+  kurulmuş 38 metrelik bir kalyon: postalar, ek yerli kaplama sıraları, ambar ağızlı iki güverte, büyük kamaranın
+  pencereli aynasıyla kıç kasaraları, baş kasarası, lumbaralar ve toplar, kırık direkler, dümen, çapa, küpeştede yelpaze
+  mercanları. Yamaçta başı aşağıda, sancağa yatmış; sancak tarafı çökmüş. İçine girilir.
+- **Gerisi:** adanın kireçtaşı ve iki sualtı sırtı uzaklık alanı olarak (yüzey ağı), köşeli bloklar; ayaklarda ve
+  şamandıra halatında midyeler (~11 000); dalgayla inip kalkan dubalar (dalga yükseklikleri her karede ekran kartında
+  örneklenir); önceki bölümün amforaları kayaların arasında (ArchAIDE profilleri, CC BY 4.0); taşlar, kırmızı deniz
+  yıldızları, deniz hıyarları, yelpaze midyesi kabukları, siyah deniz kestaneleri.
+- **Basınç:** P = 1,013 + 0,1005 d bar, ppO2 = 0,2095 P. 1,6 bar'ı (~66 m) aşınca bir zehirlenme dozu birikir (ne kadar
+  yüksekse o kadar hızlı; gerçek gecikme kısaltıldı, kodda adıyla yazıyor): görüş daralır, kararır, merdivende yeniden
+  başlarsın. Derinlik sarhoşluğu zihinsel bir etki, çizilmez.
 
-19 m ötede, arkası maviye düşen daha derin bir sekide doğal bir kaya kemeri kuruldu, pencereden bakıldıktan sonra
-kaldırıldı: kemer kötü okunuyordu, çevresi kurulmadan derine inen kum yapay duruyordu.
-
-Açık kalanlar: ışık sütunları güneşe doğru bakılmadıkça soluk; kumun
-yakınında kararlılık hedefi tutmuyor ve kare 33 fps'e iniyor (birincisini 8 örnek çözer); kararlılık
-dört kamera yolunda ölçüldü, görünüş gerçek batık fotoğraflarıyla gözle tartıldı. Hepsi `docs/koy/DURUM.md`'de.
+Açık kalanlar: kare hızı 30-45 fps (en yavaşı iskelenin salonu: sütunlar, midyeler ve tepedeki dalgacıklı ayna çok kenar
+pikseli üretiyor); batığın içindeki ışık ve görünüş komut satırı kareleriyle tartıldı. Hepsi `docs/koy/DURUM.md`'de.
 
 ## Sahne 1: neyi hesaplıyor
 

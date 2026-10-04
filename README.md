@@ -32,11 +32,12 @@ engine underneath. Scene 1 is a spectral path tracer with a **still mode** that 
 and a **live mode** that keeps 20 to 30 frames per second with NVIDIA's AI denoiser. Scene 2 is a real-time volumetric
 night. Scene 3 is a rigid-body and fracture solver of its own, drawn by a plain daylight ray tracer. Scene 4 is a
 particle solver (fluids, grains, breakable bonds) whose fast moments are recomputed finely in the background and
-kept as physics, not video.
+kept as physics, not video. Scene 5 is under water: a deterministic spectral ray tracer whose light goes on through
+the air above the surface, along a lane from a small island's pier to a wreck and a rope into the blue.
 
 ## The application
 
-The four scenes live in one program. It opens on a gallery; a scene loads behind a loading screen (its programs
+The five scenes live in one program. It opens on a gallery; a scene loads behind a loading screen (its programs
 compile and its world is built on a worker thread, so the window stays alive) and then runs under an interface that is
 the same for all of them: who and what at the bottom left, timings at the top right, the way out at the bottom right,
 the keys on F1. The panel at the bottom left takes the mouse: a scene can put rows of choices, sliders and buttons there
@@ -217,43 +218,49 @@ Open: the honey thread's surface is lumpy (it is one to three particles thick); 
 balloon rests on the table rather than hanging (hanging, the light rubber could not carry the water's weight to the
 knot in time).
 
-### 5 · Amphorae *(Amfora)* · October 2026
+### 5 · The Island *(Ada)* · October 2026
 
-| ![Encrusted amphorae on a sandy mound at 12 m, shafts of light coming down through the blue](docs/images/amfora-tarla.jpg) |
+| ![Under the concrete head of a pier: a dark hall of fouled piles, a shaft of sun through a broken hole, bright sand outside](docs/images/ada-salon.jpg) |
 |---|
-| ![Close: broken and whole amphorae half sunk in the sand, crusted, a felt of sediment on top](docs/images/amfora-yakin.jpg) |
+| ![The fallen-in starboard side of a galleon wreck at 22 m: bare ribs, a broken mast across, guns behind the gunports](docs/images/ada-batik.jpg) |
+| ![From 9 m, looking up: the mooring buoy at the surface, its mussel-crusted rope going down; the swimming lane's floats](docs/images/ada-samandira.jpg) |
 
-Under water in the Mediterranean, swum like a scuba diver: at 12 m the wine cargo of a Roman merchantman of the 1st
-century BC, the jars lying where they fell when the hull rotted away on a sandy plain, half sunk, crusted, many broken.
-Sharpness and steadiness come first; the light is physical.
+Under water in the Mediterranean, swum like a scuba diver. You start in a dark hall under the concrete head of a small
+island's pier; along a lane of buoys the sand deepens slowly: amphorae gathered against rocks at 12 m, a half-fallen
+galleon at 22 m, and at the far end a mooring buoy's rope going down into a blue with no bottom in sight. Above the
+water is seen only from below; there is no surfacing, and too deep the oxygen's partial pressure sends you back.
 
 - **Sharpness without temporal tricks:** every pixel is drawn with the same fixed sub-pixel samples every frame (4,
-  rotated grid; no jitter, no history), edge pixels get up to 32 in all (16 by default), a Blackman-Harris filter a
-  little wider than a pixel joins them. Measured against a converged reference along four camera paths
-  (`tools/kararlilik.py`), the shimmer is 3 to 13 times below the TAA of scene 2; close over the 16K sand only 1.2
-  times (the target was twice).
+  rotated grid; no jitter, no history), edge pixels get 12 in all by default (up to 32), a Blackman-Harris filter a
+  little wider than a pixel joins them. Measured against a converged reference (`tools/kararlilik.py`), the shimmer is
+  under half of scene 2's TAA everywhere it was measured (swimming into the pier's hall, approaching the wreck).
+- **Real-time light through what stands above the water:** the sun's shadow ray goes on through the air past the
+  surface, and the light leaving the water bends with the waves there, so the light leaking between the walkway's
+  boards and through the broken holes of the head's slab sways on the sand as the caustics do. For the light shafts a
+  sun map over each structure keeps how far the refracted sun gets down from every point of the surface and how much of
+  it the deck lets through (mipmapped, read as wide as the sun's disc is at that depth: the stripes are as soft as real
+  ones); a sky map does the same for the water's diffuse light, so under the head the water itself goes dark.
 - **Spectral water, baked:** absorption and scattering every 5 nm from published measurements (Pope and Fry, a Jerlov
-  type, Fournier-Forand), the sun and sky spectra, the eye's curves, all baked into tables by the light's path length.
-  The water column's diffuse light is a Monte Carlo light field, built for three floor depths: over the wreck's bright
-  sand the water is about 30 % brighter than over the deep, and every surface reads the field of the floor below it.
-- **Caustics without noise (beams):** every cell of the FFT surface (a million) is a beam of light; at each of 28 depth
-  slices the beam's flux spreads over the two triangles its corners span, every texel receiving exactly its share of
-  their area (Green's theorem, row by row). Nothing is counted, so nothing boils: against the old counted rays the
-  caustics' own flicker fell 13 to 15 times at 7 to 12 m, 4.7 times at 20 m where the slices are half resolution (16
-  times the rays had still left four times the beams' noise). About 7 ms.
-- **The amphorae:** four types turned from the profiles of the University of Southampton's drawings as vectorised by
-  ArchAIDE (Dressel 1B, 1A, 2-4, Lamboglia 2; outside, the mouth's inside, the handles; CC BY 4.0), and broken pieces of
-  them: bodies whose necks snapped (filled with sediment), necks with their handles, halves, sherds. 8K clay under
-  patches of concretion, more in recesses, less where the sand scours; a felt of sediment on everything that looks up.
-- **A diver's torch** (panel or F, off by default): a white LED whose light crosses the water there and back, so close
-  up the clay's and the sponges' reds come back and die within a couple of metres.
+  type, Fournier-Forand), the sun and sky spectra, the eye's curves, baked into tables by the light's path length; the
+  diffuse light field for seven floor depths down to 110 m. The eye adapts half its colour to the light around it and
+  30 % of its brightness: the hall stays dark.
+- **Caustics without noise (beams):** every cell of the FFT surface is a beam of light spread exactly over the area it
+  covers at each depth slice; nothing is counted, so nothing boils. They fade below 30 m where the sun's disc has
+  blurred them. About 5 ms.
+- **The wreck:** a 38 m galleon built timber by timber from one hull function (deadrise, tumblehome, sheer, transom):
+  frames, strakes of planking with butt joints, two decks with hatches, the quarterdeck and poop with the great cabin's
+  stern windows, the forecastle, gunports and guns, broken masts, the rudder, an anchor, sea fans on the rails. Bow down
+  on the slope, listing to starboard; the starboard side has fallen in. You can swim inside.
+- **The rest:** the island's limestone and two reef arms as distance fields (surface nets), angular blocks; mussels on
+  the piles and on the buoy's rope (about 11 000); floats that ride the waves (their heights sampled on the GPU every
+  frame); the amphorae of the earlier part among their rocks (ArchAIDE profiles, CC BY 4.0); pebbles, red starfish, sea
+  cucumbers, fan mussel shells, black urchins.
+- **Pressure:** P = 1.013 + 0.1005 d bar, ppO2 = 0.2095 P. Past 1.6 bar (~66 m) a toxicity dose builds (faster the higher
+  it is; the real delay is shortened, and the code says so): the view narrows, goes black, and you start again at the
+  ladder. Nitrogen narcosis is a matter of the mind, not drawn.
 
-A natural rock arch 19 m off, on a deeper shelf with a wall into the blue behind it, was built and taken out again after a
-look in the window: the arch read badly and the sand falling away with nothing around it looked artificial.
-
-Open: the light shafts are faint unless you look towards the sun;
-close over the sand the steadiness target is missed and the frame rate drops to 33 fps (8 samples would fix the first);
-steadiness was measured on four camera paths, the look judged by eye against real wreck photographs. Everything in
+Open: frame rate 30-45 fps (the pier's hall is the slowest: its piles, mussels and the rippled mirror above make many
+edge pixels); the wreck's interior light and the look were judged on still frames from the command line. Everything in
 `docs/koy/DURUM.md`.
 
 ## What scene 1 computes

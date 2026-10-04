@@ -2,9 +2,9 @@
 
 ## Açmak
 `C:\dev\pc_graphics\build\pc_graphics.exe` — çift tıkla. Birincil monitörde kenarlıksız tam ekran **galeri** açılır:
-solda dört sahne, sağda seçilenin resmi ve açıklaması.
+solda beş sahne, sağda seçilenin resmi ve açıklaması.
 
-- **↑ / ↓** (ya da **1-4**, ya da fare) seç, **Enter** (ya da **Sahneyi aç** düğmesi) aç.
+- **↑ / ↓** (ya da **1-5**, ya da fare) seç, **Enter** (ya da **Sahneyi aç** düğmesi) aç.
 - **A** (ya da **Ayrıntılar** düğmesi): resmin üstünde sahnenin nasıl yapıldığı, teknik başlıklarla; **Esc** kapatır.
 - **L** (ya da sağ üstte **TR | EN**): uygulamanın dili, Türkçe ↔ İngilizce; seçim hatırlanır. İngilizce rehber: `DEMO.md`.
 - Açılan sahne birkaç saniye yükleme ekranında hazırlanır (sahne 1'in programları ilk açılışta daha uzun derlenir).
@@ -105,3 +105,20 @@ kısım hemen izlenir; bitince bir kez gerçek hızda oynar, sonra serbest incel
 an balon biçiminde durur. Suyu en yüksekten (45 cm) dök, sıçramayı ×1/10'da dondurup etrafında dolaş. Kumu bir yere
 yığ (koni ~32°), sonra huniyi behere götür. Jele altı yedi kez farklı yerlerden ateş et. Karpuzu ×1/100'de izle: önce şişer, sonra kabuk açılır.
 Ayarlar `scenes/laboratuvar.cfg` (F5 ile).
+
+## 05 · Ada — bir adanın iskelesinden maviye: amforalar, bir kalyon batığı, derine inen halat
+İskelenin beton başlığının altında, merdivenin dibinde başlarsın: karanlık bir salon, kabuk bağlamış sütunlar, kırık
+deliklerden inen güneş. Dubaların çizdiği yoldan açığa (adanın tersine) yüz: sığ kum, ~12 m'de amforalar, ~22 m'de
+batık, en uçta şamandıra ve dibe inen halatı. Yüzeye çıkılmaz; ppO2 1,6 bar'ı (~66 m) aşarsan görüş daralır, kararır,
+merdivende yeniden başlarsın.
+
+| Tuş | Ne yapar |
+|---|---|
+| **W A S D** | yüz (baktığın yöne) · **Boşluk** yukarı · **C** aşağı · **Shift** güçlü palet vuruşu |
+| **Tab** | fareyle bak (aç/kapa) · **sağ tık** basılı tutup bak |
+| **F** | dalgıç feneri (batığın içi, salonun karanlığı; yakında gerçek renkler: kızıl yelpaze mercanları, turuncu süngerler) |
+| **P** | zamanı durdur (durunca örnekler birikir) · **K** kostik aç/kapa · **E** kenar pikselleri · **↑ / ↓** pozlama |
+
+Panel (sağ üst): derinlik, basınç, oksijenin kısmi basıncı (ppO2), geçişlerin süreleri. **Dene:** başlığın altında
+deliklerin altına git, ışığın kumda salınışını izle; batığın sancak tarafındaki kırıktan içeri gir, feneri aç; şamandıra
+halatını izleyerek in, 35-40 m'de dibin belirişine bak. Ayarlar `scenes/koy.cfg` (F5 ile).

@@ -114,3 +114,20 @@ rubber peels back in 20-30 ms while the water keeps the balloon's shape for a mo
 (45 cm), freeze the splash at ×1/10 and fly round it. Heap the sand in one place (a cone of ~32°), then take the funnel
 to the beaker. Shoot the gel six or seven times in different places. Watch the melon at ×1/100: first it swells, then the rind opens.
 Settings `scenes/laboratuvar.cfg` (F5).
+
+## 05 · The Island — from an island's pier into the blue: amphorae, a galleon wreck, a rope going down
+You start under the pier's concrete head, at the foot of the ladder: a dark hall, fouled piles, the sun coming down
+through broken holes. Swim out along the lane of buoys (away from the island): shallow sand, amphorae at ~12 m, the
+wreck at ~22 m, at the far end the mooring buoy and its rope going down. There is no surfacing; past ppO2 1.6 bar
+(~66 m) the view narrows, goes black, and you start again at the ladder.
+
+| Key | What it does |
+|---|---|
+| **W A S D** | swim (where you look) · **Space** up · **C** down · **Shift** a strong kick |
+| **Tab** | mouse look (on/off) · **right button** hold to look |
+| **F** | the diver's torch (inside the wreck, in the hall's dark; true colours close up: the red sea fans, orange sponges) |
+| **P** | pause time (still: samples accumulate) · **K** caustics on/off · **E** edge pixels · **↑ / ↓** exposure |
+
+Panel (top right): depth, pressure, the oxygen's partial pressure (ppO2), the passes' timings. **Try:** under the head go
+beneath the holes and watch the light sway on the sand; enter the wreck through its fallen starboard side and switch the
+torch on; follow the buoy's rope down and watch the floor appear at 35-40 m. Settings `scenes/koy.cfg` (F5).
