@@ -5,6 +5,7 @@
 #include "core/config.h"
 #include "scenes/koy/koy_buoys.h"
 #include "scenes/koy/koy_kernels.h"
+#include "scenes/koy/koy_reef.h"
 #include "scenes/koy/koy_renderer.h"
 
 #include <cuda_runtime.h>
@@ -51,6 +52,8 @@ struct KoyWorld {
     int setSand = -1, setSand4k = -1, setRock = -1, setRock8k = -1, setRockDetail = -1;
     int setSand16k = -1, setRockDetail16k = -1;
     int setClay = -1, setCoat = -1;   // Amfora: the jars' clay (8K, a 1.64 m tile) and the concretion (8K, 1.36 m)
+    int setFloor2 = -1;                   // Ada enriched: the second sand (shell-strewn, 8K, 3 m)
+    KoyFloorMask floorMask;               // where it lies, where silt and grit are (koy_reef.h)
     int setWood = -1, setConcrete = -1;   // Ada: the pier's and the wreck's boards (4K, 0.5 m), the piles' concrete (4K, 2.7 m)
     double textureSeconds = 0.0;    // decoding, mipmapping and uploading every set
     size_t textureBytes = 0;        // the sets' GPU arrays, all levels

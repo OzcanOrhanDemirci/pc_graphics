@@ -121,6 +121,8 @@ void appendTube(KMeshCPU& m, const std::vector<float3>& c, const std::vector<flo
 }
 }   // namespace
 
+void koyMakeBlock(KoyRockField::Rock& R, std::mt19937& rng) { makeBlock(R, rng); }
+
 float KoyRockField::sdf(float3 p) const {
     float d = 1e9f;
     for (const Rock& R : rocks) {

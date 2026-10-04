@@ -195,6 +195,12 @@ struct KoyParams {
     int fields;
     float fieldBottom[KOY_FIELDS];      // ascending
     KTex bottomMap;                     // the floor's depth under (x, z) over the rectangle bottomMapMin + [0, bottomMapSize]
+    // Ada enriched: the second sand over the first where floorMask.r says (silt in g, a rock's grit in b)
+    KTex floorMask;
+    float2 floorMaskMin, floorMaskSize;
+    int floor2Set;
+    float floor2Tile, floor2Normal;
+    float3 floor2Tint, siltTint, gritTint;
     float2 bottomMapMin, bottomMapSize; // (0: no map, the deepest field)
     float basisFix[3][3];               // linear sRGB albedo -> weights of the three basis spectra (exact round trip in daylight)
     float3 sunWater;                    // towards the sun, refracted (in water)

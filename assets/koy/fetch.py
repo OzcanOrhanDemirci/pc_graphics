@@ -79,6 +79,11 @@ FILES = {
                                       '9452c58ce2256afe9e96f04952712a1c22c012b61dc048ad10a18e62f6c26c63'),
     'concrete_wall_008_nor_gl_4k.jpg': ('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/concrete_wall_008/concrete_wall_008_nor_gl_4k.jpg',
                                         '52de09b25a87b1c21435b8cae0d946d9a29141188cac827f240c9392466f853d'),
+    # Ada zenginlestirme (2026-10-04 aksami): ikinci taban, kabuk kirintili kiyi kumu (Poly Haven coast_sand_04, 3,94 m)
+    'coast_sand_04_diff_8k.jpg': ('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/8k/coast_sand_04/coast_sand_04_diff_8k.jpg',
+        '8cd5a71662cfc251978a4479a2e0578067ab7bb6787307ce552b6eed39d7913c'),
+    'coast_sand_04_nor_gl_8k.jpg': ('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/8k/coast_sand_04/coast_sand_04_nor_gl_8k.jpg',
+        '3ceda095e59f3d9d29318d967da0480b7a7d3400afaa1e2f3425aabf11ff2f81'),
     # the same two at 8K (Ozcan, 2026-10-04 evening: every scan at least 8K); Poly Haven md5 checked when pinned
     'rough_wood_diff_8k.jpg': ('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/8k/rough_wood/rough_wood_diff_8k.jpg',
         '2cd9c2bb90d645b4235edb0b881996968cf0a09f9350d7a32801ea424137df34'),
@@ -211,7 +216,8 @@ def main():
             ('amfora_kil_8k', (('clay_plaster_diff_8k.jpg', 'albedo.jpg'), ('clay_plaster_nor_gl_8k.jpg', 'normal.jpg'))),
             ('kabuk_8k', (('coral_fort_wall_01_diff_8k.jpg', 'albedo.jpg'), ('coral_fort_wall_01_nor_gl_8k.jpg', 'normal.jpg'))),
             ('ahsap_8k', (('rough_wood_diff_8k.jpg', 'albedo.jpg'), ('rough_wood_nor_gl_8k.jpg', 'normal.jpg'))),
-            ('beton_8k', (('concrete_wall_008_diff_8k.jpg', 'albedo.jpg'), ('concrete_wall_008_nor_gl_8k.jpg', 'normal.jpg'))))
+            ('beton_8k', (('concrete_wall_008_diff_8k.jpg', 'albedo.jpg'), ('concrete_wall_008_nor_gl_8k.jpg', 'normal.jpg'))),
+            ('kum2_8k', (('coast_sand_04_diff_8k.jpg', 'albedo.jpg'), ('coast_sand_04_nor_gl_8k.jpg', 'normal.jpg'))))
     for folder, files in sets:
         d = os.path.join(OUT, folder)
         os.makedirs(d, exist_ok=True)

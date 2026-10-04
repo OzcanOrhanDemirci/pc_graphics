@@ -8,6 +8,7 @@
 #include "scenes/koy/koy_renderer.h"
 
 #include <functional>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -22,6 +23,8 @@ struct KoyRockField {
     std::vector<Rock> rocks;
     float sdf(float3 p) const;   // < 0 inside a rock
 };
+// an angular limestone block about R.c of radius R.r (its faces from rng)
+void koyMakeBlock(KoyRockField::Rock& R, std::mt19937& rng);
 // the amphorae's rocks about amfora.centre: a crescent of big blocks on the down-slope side (the trap the cargo slid
 // against) and smaller ones about
 KoyRockField koyAmphoraRocks(const Config& cfg, const std::function<float(float, float)>& floorY);

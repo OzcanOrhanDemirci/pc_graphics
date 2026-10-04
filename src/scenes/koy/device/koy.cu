@@ -553,6 +553,32 @@ static __device__ void surfaceLook(const Hit& h, float3 d, float coneAngle, bool
             n = dot(nn, h.ng) > 0.02f ? nn : n;
         }
     }
+    // Ada enriched: the floor's variety. The second sand (shell-strewn) over the first where the map says, the edge of
+    // each patch cut by the second scan's own relief (its bright shells stand proud of the line); silt dulls it about the
+    // wreck and in the deep; a rock's foot is coarse and darker
+    if (m.kind == KM_TERRAIN && params.floorMask) {
+        const float4 mk = tex2D<float4>((cudaTextureObject_t)params.floorMask, (h.p.x - params.floorMaskMin.x) / params.floorMaskSize.x,
+                                        (h.p.z - params.floorMaskMin.y) / params.floorMaskSize.y);
+        if (mk.x > 0.01f && params.floor2Set >= 0) {
+            if (cheap) {
+                albedo = albedo + (srgbDecode(params.texSets[params.floor2Set].meanAlbedo) * params.floor2Tint - albedo) * mk.x;
+            } else {
+                const Tri t2 = triplanar(params.floor2Set, params.floor2Tile, h.p, h.ng, width, true);
+                if (t2.ok) {
+                    const float3 a2 = srgbDecode(t2.albedo) * params.floor2Tint;
+                    const float3 mean2 = srgbDecode(params.texSets[params.floor2Set].meanAlbedo) * params.floor2Tint;
+                    const float lumR = (0.2126f * a2.x + 0.7152f * a2.y + 0.0722f * a2.z) / fmaxf(0.2126f * mean2.x + 0.7152f * mean2.y + 0.0722f * mean2.z, 1e-4f);
+                    const float t = fminf(fmaxf((mk.x - 0.5f) * 4.0f + 0.5f + 0.8f * (lumR - 1.0f), 0.0f), 1.0f);
+                    const float w = t * t * (3.0f - 2.0f * t);
+                    albedo = albedo + (a2 - albedo) * w;
+                    const float3 nn = normalize(n + t2.tilt * (params.floor2Normal * w));
+                    n = dot(nn, h.ng) > 0.05f ? nn : n;
+                }
+            }
+        }
+        if (mk.y > 0.01f) albedo = albedo * (make_float3(1.0f, 1.0f, 1.0f) + (params.siltTint - make_float3(1.0f, 1.0f, 1.0f)) * mk.y);
+        if (mk.z > 0.01f) albedo = albedo * (make_float3(1.0f, 1.0f, 1.0f) + (params.gritTint - make_float3(1.0f, 1.0f, 1.0f)) * mk.z);
+    }
     // the detail layer: a tiling scan laid over in world space (planar on the floor, triplanar on rocks and jars), its
     // colour modulating around its own mean, its normal map bending the surface: grain that holds up at 30 cm
     if (m.detailSet >= 0 && !cheap) {

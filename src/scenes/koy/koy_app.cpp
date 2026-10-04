@@ -177,6 +177,37 @@ void KoyApp::setup() {
         for (int f = 0; f < p.fields; ++f) std::printf(" %.1f", p.fieldBottom[f]);
         std::printf(" m\n");
     }
+    {   // the floor's variety (Ada enriched): the second sand's patches, silt, grit; zero outside the map
+        const KoyFloorMask& fm = world.floorMask;
+        p.floorMask = 0;
+        p.floor2Set = world.setFloor2;
+        p.floor2Tile = cfg.f("floor2.tile", 3.0f);
+        p.floor2Normal = cfg.f("floor2.normal", 1.0f);
+        p.floor2Tint = cfg.v3("floor2.tint", make_float3(1.0f, 1.0f, 1.0f));
+        p.siltTint = cfg.v3("floor2.silt_tint", make_float3(0.72f, 0.70f, 0.60f));
+        p.gritTint = cfg.v3("floor2.grit_tint", make_float3(0.78f, 0.76f, 0.70f));
+        if (fm.w > 0 && fm.h > 0) {
+            cudaChannelFormatDesc fd = cudaCreateChannelDesc<uchar4>();
+            cudaArray_t arr = nullptr;
+            cudaMallocArray(&arr, &fd, fm.w, fm.h);
+            cudaMemcpy2DToArray(arr, 0, 0, fm.px.data(), size_t(fm.w) * sizeof(uchar4), size_t(fm.w) * sizeof(uchar4), fm.h, cudaMemcpyHostToDevice);
+            cudaResourceDesc rd{};
+            rd.resType = cudaResourceTypeArray;
+            rd.res.array.array = arr;
+            cudaTextureDesc td{};
+            td.addressMode[0] = td.addressMode[1] = cudaAddressModeBorder;
+            td.filterMode = cudaFilterModeLinear;
+            td.readMode = cudaReadModeNormalizedFloat;
+            td.normalizedCoords = 1;
+            cudaTextureObject_t t = 0;
+            cudaCreateTextureObject(&t, &rd, &td, nullptr);
+            floorMaskArr = arr;
+            floorMaskTex = t;
+            p.floorMask = t;
+            p.floorMaskMin = fm.min;
+            p.floorMaskSize = fm.size;
+        }
+    }
     {   // the sand ripples (analytic in koy.cu)
         p.ripples = cfg.i("ripple.sand", 1);
         p.rippleLength = cfg.f("floor.ripple_length", 0.09f);
@@ -434,6 +465,11 @@ void KoyApp::save(const std::string& prefix) {
 
 void KoyApp::release() {
     if (bottomTex) cudaDestroyTextureObject(cudaTextureObject_t(bottomTex));
+    if (floorMaskTex) cudaDestroyTextureObject(cudaTextureObject_t(floorMaskTex));
+    if (floorMaskArr) cudaFreeArray(static_cast<cudaArray_t>(floorMaskArr));
+    floorMaskTex = 0;
+    floorMaskArr = nullptr;
+    renderer.params().floorMask = 0;
     if (bottomArr) cudaFreeArray(static_cast<cudaArray_t>(bottomArr));
     bottomTex = 0;
     bottomArr = nullptr;

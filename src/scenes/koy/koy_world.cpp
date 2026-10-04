@@ -431,8 +431,17 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
     KMaterial fanYellow = plain(cfg.v3("fans.yellow_rgb", make_float3(0.72f, 0.52f, 0.08f)));
     fanYellow.mottle = 0.25f;
     fanYellow.aoStrength = 0.4f;
+    // Ada enriched: the outcrops' limestone (the island's wet rock with more of the sea on it: turf on every ledge,
+    // concretion, sponges and coralline crust in patches)
+    KMaterial reefM = islandWet;
+    reefM.albedo = cfg.v3("reef.rgb", make_float3(0.24f, 0.23f, 0.20f));
+    if (setCoat >= 0) coat(reefM, "reef", 0.32f, 0.45f, make_float3(0.30f, 0.27f, 0.23f), 1.0f, 0.55f, 0.4f);
+    // the turf: a dense, dark olive-brown felt of small algae on everything that looks up (not the sand's grey silt)
+    reefM.sedimentColor = cfg.v3("reef.turf_rgb", make_float3(0.12f, 0.13f, 0.06f));
+    reefM.filmColor = cfg.v3("reef.film_rgb", make_float3(0.62f, 0.78f, 0.52f));
+    reefM.life = cfg.f("reef.life", 1.0f);
     materials = {floorM, rockM, spareM, jarM, islandWet, islandDry, woodM, concWet, concDry, steelM, rustM, floatM, bigM, ropeM, musselM,
-                 stoneL, stoneD, starM, cukeM, pinnaM, urchinM, wreckWood, wreckIron, fanRed, fanYellow};
+                 stoneL, stoneD, starM, cukeM, pinnaM, urchinM, wreckWood, wreckIron, fanRed, fanYellow, reefM};
 
     meshes.push_back(buildFloor(cfg));
     rockCentre = cfg.v3("rock.centre", make_float3(-2.4f, 0.0f, -6.0f));
@@ -463,7 +472,7 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
     int amphoraRockMesh = -1;
     {
         std::string log;
-        meshes.push_back(koyBuildRockField(amphoraRocks, cfg.f("amfora_kaya.cell", 0.07f), 4, 6, &log));
+        meshes.push_back(koyBuildRockField(amphoraRocks, cfg.f("amfora_kaya.cell", 0.07f), 25, 6, &log));   // the reef's limestone (Ada enriched)
         amphoraRockMesh = int(meshes.size()) - 1;
         KInstanceCPU in;
         in.mesh = amphoraRockMesh;
@@ -510,18 +519,16 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
         std::string blog;
         buoys.build(cfg, fy, meshes, instances, 11, 12, 13, 7, 14, 5, &blog);
         std::printf("koy dubalar: %s\n", blog.c_str());
-        // the shallows' small things, and the urchins on the island's wet rock and the amphorae's rocks
-        std::vector<const KMeshCPU*> rockMeshes = {&meshes[first]};
-        if (amphoraRockMesh >= 0) rockMeshes.push_back(&meshes[size_t(amphoraRockMesh)]);
-        std::vector<KMeshCPU> props;
-        std::string plog;
-        koyBuildProps(cfg, fy, [&](float3 q) { return isl.sdf(q) < 0.15f || amphoraRocks.sdf(q) < 0.1f; }, rockMeshes, {15, 16, 17, 18, 19, 20}, 7, props, &plog);
-        std::printf("koy susler: %s\n", plog.c_str());
         // the wreck
+        float3 wreckBow{}, wreckStern{};
+        std::vector<std::pair<float3, float3>> wreckGrowth;
         {
             std::string wlog;
             const size_t w0 = meshes.size();
             const KoyWreckPlacement wp = koyBuildWreck(cfg, fy, 21, 22, 16, 8, meshes, &wlog);
+            wreckBow = wp.bow;
+            wreckStern = wp.stern;
+            wreckGrowth = wp.growth;
             std::printf("koy %s\n", wlog.c_str());
             std::vector<KMeshCPU> fans;
             std::string flog;
@@ -534,11 +541,47 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
                 instances.push_back(in);
             }
         }
+        // Ada enriched: the outcrops (lane, near, far), meshed per cluster
+        KoyReefRocks reef;
+        const size_t reef0 = meshes.size();
+        if (cfg.i("reef.use", 1)) {
+            KoyReefAvoid av;
+            av.island = [&](float3 q) { return isl.sdf(q); };
+            av.amphoraCentre = cfg.v3("amfora.centre", make_float3(-3.0f, 0.0f, -52.0f));
+            av.wreckBow = wreckBow;
+            av.wreckStern = wreckStern;
+            reef = koyReefRocks(cfg, fy, av);
+            std::string rlog;
+            koyBuildReefRocks(reef, 25, 11, meshes, &rlog);
+            std::printf("koy kayaliklar: %s\n", rlog.c_str());
+            for (size_t k = reef0; k < meshes.size(); ++k) {
+                KInstanceCPU in;
+                in.mesh = int(k);
+                instances.push_back(in);
+            }
+        }
+        // the shallows' small things, and the urchins on the island's wet rock, the amphorae's rocks and the outcrops
+        std::vector<const KMeshCPU*> rockMeshes = {&meshes[first]};
+        if (amphoraRockMesh >= 0) rockMeshes.push_back(&meshes[size_t(amphoraRockMesh)]);
+        for (size_t k = reef0; k < meshes.size(); ++k) rockMeshes.push_back(&meshes[k]);
+        std::vector<KMeshCPU> props;
+        std::string plog;
+        koyBuildProps(cfg, fy, [&](float3 q) { return isl.sdf(q) < 0.15f || amphoraRocks.sdf(q) < 0.1f || reef.sdf(q) < 0.1f; }, rockMeshes,
+                      {15, 16, 17, 18, 19, 20}, 7, props, &plog);
+        std::printf("koy susler: %s\n", plog.c_str());
         for (KMeshCPU& m : props) {
             meshes.push_back(std::move(m));
             KInstanceCPU in;
             in.mesh = int(meshes.size()) - 1;
             instances.push_back(in);
+        }
+        // the floor's variety: the shell-strewn sand, silt about the wreck, grit at the rocks' feet
+        {
+            std::string mlog;
+            const std::vector<std::function<float(float3)>> rockSdfs = {[&](float3 q) { return isl.sdf(q); }, [&](float3 q) { return amphoraRocks.sdf(q); },
+                                                                         [&](float3 q) { return reef.sdf(q); }};
+            floorMask = koyBuildFloorMask(cfg, fy, rockSdfs, wreckBow, wreckStern, &mlog);
+            std::printf("koy taban haritasi: %s\n", mlog.c_str());
         }
     }
     applyTextureMode(cfg, cfg.i("tex.mode", 2));
@@ -573,7 +616,8 @@ void KoyWorld::applyTextureMode(const Config& cfg, int mode) {
     r.detailAlbedo = cfg.f("tex.rock_detail_albedo", 0.35f);
     // Amfora: the jars take the clay (8K in both high modes; 2.00 m pressed to a 1.64 m tile: 0.2 mm a texel, the clay's
     // grain 18 % finer than scanned)
-    for (size_t k = 4; k <= 5 && k < materials.size(); ++k) {   // Ada: the island's rock (wet, dry): the limestone detail scan
+    for (size_t k : {size_t(4), size_t(5), size_t(25)}) {   // Ada: the island's rock (wet, dry), the reef's: the limestone detail scan
+        if (k >= materials.size()) continue;
         KMaterial& q = materials[k];
         q.detailSet = rockDetail >= 0 ? rockDetail : setRockDetail;
         q.detailTile = cfg.f("island.detail_tile", 2.4f);
@@ -833,6 +877,7 @@ void KoyWorld::loadTextures(const Config& cfg, const std::string& dir) {
     const auto t0 = std::chrono::steady_clock::now();
     textureBytes = 0;
     setSand = setRock = setSand4k = setRock8k = setRockDetail = setSand16k = setRockDetail16k = setClay = setCoat = setWood = setConcrete = -1;
+    setFloor2 = -1;
     if (cfg.f("tex.use", 1.0f) < 0.5f) return;
     struct Slot {
         std::vector<const char*> names;
@@ -847,6 +892,7 @@ void KoyWorld::loadTextures(const Config& cfg, const std::string& dir) {
         slots.push_back({{"kabuk_8k"}, &setCoat});      // the sea's concretion (jars, rock, piles, the wreck)
         slots.push_back({{"ahsap_8k", "ahsap_4k"}, &setWood});      // the pier's and the wreck's boards
         slots.push_back({{"beton_8k", "beton_4k"}, &setConcrete});  // the pier's concrete
+        slots.push_back({{"kum2_8k"}, &setFloor2});                 // the shell-strewn sand's patches
         if (cfg.i("tex.ultra", 1)) {   // the sand and the rock detail at 16K (panel "Ultra")
             slots.push_back({{"kum_16k"}, &setSand16k});
             slots.push_back({{"kaya_ayrinti_16k"}, &setRockDetail16k});
