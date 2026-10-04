@@ -32,7 +32,11 @@ typedef unsigned long long KTex;   // cudaTextureObject_t (NVRTC sees it as this
 #define PT_SUN_AIR 8             // the sun's irradiance in air (on a plane facing it) after L metres of water (glints)
 #define PT_TRANS 9               // the transmission of a flat white spectrum (grey reference), x: luminance-weighted e^{-cL}
 #define PT_TORCH0 10             // 3 rows: Lambert basis k lit by the diver's torch at 1 m, after L metres of water (/pi)
-#define PT_ROWS 13
+#define PT_AIRSUN0 13            // 3 rows: a Lambert surface in AIR (basis k) lit by the sun at normal incidence, its light
+                                 // entering the water (n^2) and crossing L metres of it (/pi): the pier, the island seen
+                                 // through Snell's window
+#define PT_AIRSKY0 16            // 3 rows: the same lit by the sky's diffuse light on a horizontal plane
+#define PT_ROWS 19
 // ambSurf[k]: 3D (path length t: AS_T, normal's vertical component: AS_N, depth: AS_Z): diffuse light of the water on a
 // Lambert surface of basis k, seen after t metres; ambPath: 3D (t, view direction's mu: AP_MU, depth of the ray's start):
 // the in-scattered diffuse light along a view ray; reflPath: 3D (t2, mu2, ts): the same for a ray that starts at the
@@ -84,6 +88,9 @@ struct KMaterial {
     float mottle;        // slow colour variation (0..1)
     float life;          // small living patches on the concretion (0..1): sponge (lifeA), coralline crust (lifeB)
     float3 lifeA, lifeB;
+    // Ada: the tide's stain on what stands in the water: below stainTop (metres, world y) the albedo times stainDark,
+    // blending over stainBand (the wet, dark band of algae and barnacles at the waterline); stainDark 0: none
+    float stainTop, stainBand, stainDark;
 };
 
 struct KMesh {
@@ -108,6 +115,25 @@ struct KTextureSet {     // a scanned material: albedo (sRGB, decoded on fetch),
     float texels;        // texels across the texture (LOD from the ray cone)
     int hasNormal;
     float3 meanAlbedo;   // linear, the whole texture's average (a detail layer modulates around it)
+};
+
+// A sun map (Ada), over a rectangle of the water's surface: (1) how far the refracted sun's light gets down from each
+// point before something under the water stops it (the piles), point sampled, the comparison filtered by hand; (2) how
+// much of it the things above the water let through (the deck's boards and gaps), at half the texel, mipmapped: a point
+// reads it blurred as wide as the sun's disc is at its depth (the stripes under the pier are as soft as the real ones).
+#define KOY_SUNMAPS 4
+struct KSunMap {
+    KTex tex;            // depth: float, unnormalised coordinates, point sampled
+    KTex air;            // air transmission: uchar normalised, mipmapped, normalised coordinates
+    float2 min;          // x, z of the rectangle's corner
+    float texel;         // metres (depth); the air map's texel is half of it
+    int w, h;            // depth texels
+    float airLevels;
+    // (3) how open the sky is straight above (the deck's footprint), at twice the texel, mipmapped: the water's diffuse
+    // light comes down through Snell's window, a cone of 48.6 degrees, so a point d metres down reads it averaged over a
+    // disc about d wide: under the head the light dims, a hall of shade (Ozcan's reference)
+    KTex sky;
+    float skyLevels;
 };
 
 struct KCamera {
@@ -184,6 +210,11 @@ struct KoyParams {
     float perez[5];                     // Perez sky shape A..E
     float perezNorm;                    // 1 / F(zenith)
     float coastHeight;                  // sine of the cove's rim's elevation above the horizon (the rocky shore in Snell's window)
+    // Ada: what stands above the water (the pier, the island) seen through Snell's window and shading the water: the
+    // shadow ray goes on through the air; it leaves the water along the sun refracted by the waves there (the shadows
+    // sway with them); a face looking down in the air gets upwell x the light falling on the sea
+    int airGeometry, shadowSway;
+    float upwell;
     // the diver's torch (PLAN_AMFORA §3: the jars' true fired-clay colour close up): on the hand beside the eye, a cone,
     // inverse square, its light crossing the water there and back (the PT_TORCH0 rows: red is gone within a few metres)
     int torch;
@@ -205,8 +236,9 @@ struct KoyParams {
     float causticLz0, causticLz1;       // slices spaced in log depth: ln z0 .. ln z1
     int causticSlices;
     int causticFlat;                    // debug: F = 1 everywhere
-    KTex sunVis;                        // 3D sun visibility in the test area (1 lit .. 0 shadowed), world box below
-    float3 sunVisMin, sunVisSize;
+    KSunMap sunMap[KOY_SUNMAPS];
+    int sunMaps;
+    float swayMax;                      // metres below the surface the shafts still sway with the waves (deeper: the mean sun)
     float shaftStep0, shaftStepGrow;    // in-scattering march: first step (m), growth per metre travelled
     float shaftMax;                     // metres
     // The sun's single scattering along view rays, marched once per 2x2 pixels at fixed distances ("knots", spaced
@@ -220,6 +252,10 @@ struct KoyParams {
     float exposure;                     // scene luminance (Y in our units) -> display
     int view;                           // 0 final, 1 edge pixels, 2 depth, 3 normal, 4 caustic factor, 5 ambient only
     float tunnel;                       // oxygen toxicity: the field of view closing in (0 none .. 1 a pinhole)
+    // the eye's colour adaptation (Ada): the camera is white balanced for daylight above the water; under it the eye
+    // adapts part of the way to the light around it (a white plane at the eye's depth), as it does to its brightness
+    // (exposure: half). 0 the camera's daylight balance, 1 full (von Kries, in linear sRGB, luminance kept)
+    float chromaAdapt;
     float blackout;                     // 0 seeing .. 1 black (the convulsion, the restart)
     float3 xyzToRgb0, xyzToRgb1, xyzToRgb2;   // rows: CIE XYZ -> linear sRGB, white balanced to daylight above the water
     const float* blueNoise;             // 128 x 128, fixed: the dither does not move from frame to frame
@@ -227,5 +263,8 @@ struct KoyParams {
     // ---- load-time bakes, and the diver's collision probe
     int bakeMesh, bakeInstance;
     float* bakeOut;
+    float2 bakeMapMin;                  // __raygen__bakeSun: the map being baked
+    float bakeMapTexel;
+    int bakeMapW, bakeMapAir;           // bakeMapAir: 0 the depth pass, 1 the air pass (to the sun), 2 the sky pass (straight up)
     float3 probeOrigin;                 // __raygen__probe: distances to static geometry in 26 directions from here
 };

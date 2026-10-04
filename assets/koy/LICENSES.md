@@ -15,6 +15,8 @@ Bu klasördeki taramalar depoya girmez; `python assets/koy/fetch.py` indirir ve 
 | `cc0/kaya_ayrinti_16k` | Poly Haven, rock_boulder_dry, 16K | CC0 1.0 |
 | `cc0/amfora_kil_8k` | Poly Haven, clay_plaster, 8K (https://polyhaven.com/a/clay_plaster), 2,00 m (amforada 1,64 m'lik karo) | CC0 1.0 |
 | `cc0/kabuk_8k` | Poly Haven, coral_fort_wall_01, 8K (https://polyhaven.com/a/coral_fort_wall_01), 1,36 m | CC0 1.0 |
+| `cc0/ahsap_4k` | Poly Haven, rough_wood, 4K (https://polyhaven.com/a/rough_wood), 0,5 m (iskele ve batığın tahtaları) | CC0 1.0 |
+| `cc0/beton_4k` | Poly Haven, concrete_wall_008, 4K (https://polyhaven.com/a/concrete_wall_008), 2,7 m (iskelenin ayakları) | CC0 1.0 |
 
 ## Atıf zorunlu (CC BY 4.0)
 

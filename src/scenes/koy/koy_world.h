@@ -1,5 +1,6 @@
-// Scene 5 "Koy": the world. K1 (docs/koy/PLAN.md §10) is a trial area of about 20 x 20 m: rippled sand, a boulder and a
-// patch of seagrass under the FFT surface; the sand reaches far beyond it so the water swallows its edge.
+// Scene 5 "Koy": the world. Ada (docs/koy/PLAN_ADA.md): a small island with a pier, the sand deepening slowly all round
+// it (hundreds of metres, so the water swallows every edge), along a corridor of buoys: shallow sand, the amphorae, a
+// wreck, a buoy's rope down into the blue.
 #pragma once
 #include "core/config.h"
 #include "scenes/koy/koy_kernels.h"
@@ -62,6 +63,7 @@ struct KoyWorld {
     int setSand = -1, setSand4k = -1, setRock = -1, setRock8k = -1, setRockDetail = -1;
     int setSand16k = -1, setRockDetail16k = -1;
     int setClay = -1, setCoat = -1;   // Amfora: the jars' clay (8K, a 1.64 m tile) and the concretion (8K, 1.36 m)
+    int setWood = -1, setConcrete = -1;   // Ada: the pier's and the wreck's boards (4K, 0.5 m), the piles' concrete (4K, 2.7 m)
     double textureSeconds = 0.0;    // decoding, mipmapping and uploading every set
     size_t textureBytes = 0;        // the sets' GPU arrays, all levels
     bool hasMode(int mode) const;

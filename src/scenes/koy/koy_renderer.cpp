@@ -521,36 +521,101 @@ void KoyRenderer::bakeAO() {
     CUDA_CHECK(cudaStreamSynchronize(stream_));
 }
 
-void KoyRenderer::bakeSunVisibility(float3 boxMin, float3 boxSize, int3 dims) {
-    const size_t n = size_t(dims.x) * dims.y * dims.z;
-    float* out = devAlloc<float>(n);
-    params_.sunVisMin = boxMin;
-    params_.sunVisSize = boxSize;
-    params_.sunVis = 0;
-    params_.bakeOut = out;
-    launch(rgBakeSun_, unsigned(dims.x), unsigned(dims.y), unsigned(dims.z), nullptr);
-    CUDA_CHECK(cudaStreamSynchronize(stream_));
-    cudaChannelFormatDesc fd = cudaCreateChannelDesc<float>();
-    cudaArray_t arr = nullptr;
-    CUDA_CHECK(cudaMalloc3DArray(&arr, &fd, make_cudaExtent(dims.x, dims.y, dims.z)));
-    cudaMemcpy3DParms cp{};
-    cp.srcPtr = make_cudaPitchedPtr(out, size_t(dims.x) * sizeof(float), dims.x, dims.y);
-    cp.dstArray = arr;
-    cp.extent = make_cudaExtent(dims.x, dims.y, dims.z);
-    cp.kind = cudaMemcpyDeviceToDevice;
-    CUDA_CHECK(cudaMemcpy3D(&cp));
-    cudaResourceDesc rd{};
-    rd.resType = cudaResourceTypeArray;
-    rd.res.array.array = arr;
-    cudaTextureDesc td{};
-    td.addressMode[0] = td.addressMode[1] = td.addressMode[2] = cudaAddressModeClamp;
-    td.filterMode = cudaFilterModeLinear;
-    td.readMode = cudaReadModeElementType;
-    td.normalizedCoords = 1;
-    cudaTextureObject_t tex = 0;
-    CUDA_CHECK(cudaCreateTextureObject(&tex, &rd, &td, nullptr));
-    params_.sunVis = tex;
-    cudaFree(out);
+bool KoyRenderer::bakeSunMap(float2 mn, float2 mx, float texel) {
+    if (params_.sunMaps >= KOY_SUNMAPS) return false;
+    const int w = std::max(1, int(std::ceil((mx.x - mn.x) / texel))), h = std::max(1, int(std::ceil((mx.y - mn.y) / texel)));
+    KSunMap M{};
+    M.min = mn;
+    M.texel = texel;
+    M.w = w;
+    M.h = h;
+    // the depth pass
+    {
+        float* out = devAlloc<float>(size_t(w) * h);
+        params_.bakeOut = out;
+        params_.bakeMapMin = mn;
+        params_.bakeMapTexel = texel;
+        params_.bakeMapW = w;
+        params_.bakeMapAir = 0;
+        launch(rgBakeSun_, unsigned(w), unsigned(h), 1, nullptr);
+        CUDA_CHECK(cudaStreamSynchronize(stream_));
+        cudaChannelFormatDesc fd = cudaCreateChannelDesc<float>();
+        cudaArray_t arr = nullptr;
+        CUDA_CHECK(cudaMallocArray(&arr, &fd, w, h));
+        CUDA_CHECK(cudaMemcpy2DToArray(arr, 0, 0, out, size_t(w) * sizeof(float), size_t(w) * sizeof(float), h, cudaMemcpyDeviceToDevice));
+        cudaFree(out);
+        cudaResourceDesc rd{};
+        rd.resType = cudaResourceTypeArray;
+        rd.res.array.array = arr;
+        cudaTextureDesc td{};
+        td.addressMode[0] = td.addressMode[1] = cudaAddressModeClamp;
+        td.filterMode = cudaFilterModePoint;
+        td.readMode = cudaReadModeElementType;
+        td.normalizedCoords = 0;
+        cudaTextureObject_t tex = 0;
+        CUDA_CHECK(cudaCreateTextureObject(&tex, &rd, &td, nullptr));
+        M.tex = tex;
+    }
+    // the air pass at half the texel and the sky pass at twice it, each mip chain averaged on the host
+    auto passMip = [&](int mode, float tex, KTex& outTex, float& outLevels) {
+        const int aw = std::max(1, int(std::ceil((mx.x - mn.x) / tex))), ah = std::max(1, int(std::ceil((mx.y - mn.y) / tex)));
+        float* out = devAlloc<float>(size_t(aw) * ah);
+        params_.bakeOut = out;
+        params_.bakeMapTexel = tex;
+        params_.bakeMapW = aw;
+        params_.bakeMapAir = mode;
+        launch(rgBakeSun_, unsigned(aw), unsigned(ah), 1, nullptr);
+        CUDA_CHECK(cudaStreamSynchronize(stream_));
+        std::vector<float> lvl(size_t(aw) * ah);
+        CUDA_CHECK(cudaMemcpy(lvl.data(), out, lvl.size() * sizeof(float), cudaMemcpyDeviceToHost));
+        cudaFree(out);
+        int levels = 1;
+        while ((aw >> levels) > 0 && (ah >> levels) > 0) ++levels;
+        cudaChannelFormatDesc fd = cudaCreateChannelDesc<unsigned char>();
+        cudaMipmappedArray_t arr = nullptr;
+        CUDA_CHECK(cudaMallocMipmappedArray(&arr, &fd, make_cudaExtent(aw, ah, 0), levels));
+        int cw = aw, ch = ah;
+        std::vector<unsigned char> b8;
+        for (int l = 0; l < levels; ++l) {
+            if (l > 0) {   // halve: the mean of 2x2
+                const int nw = std::max(1, cw / 2), nh = std::max(1, ch / 2);
+                std::vector<float> nx(size_t(nw) * nh);
+                for (int y = 0; y < nh; ++y)
+                    for (int x = 0; x < nw; ++x) {
+                        float sum = 0.0f;
+                        for (int q = 0; q < 4; ++q)
+                            sum += lvl[size_t(std::min(ch - 1, 2 * y + (q >> 1))) * cw + std::min(cw - 1, 2 * x + (q & 1))];
+                        nx[size_t(y) * nw + x] = 0.25f * sum;
+                    }
+                lvl.swap(nx);
+                cw = nw;
+                ch = nh;
+            }
+            b8.resize(lvl.size());
+            for (size_t i = 0; i < lvl.size(); ++i) b8[i] = (unsigned char)std::lround(std::min(std::max(lvl[i], 0.0f), 1.0f) * 255.0f);
+            cudaArray_t la = nullptr;
+            CUDA_CHECK(cudaGetMipmappedArrayLevel(&la, arr, l));
+            CUDA_CHECK(cudaMemcpy2DToArray(la, 0, 0, b8.data(), size_t(cw), size_t(cw), ch, cudaMemcpyHostToDevice));
+        }
+        cudaResourceDesc rd{};
+        rd.resType = cudaResourceTypeMipmappedArray;
+        rd.res.mipmap.mipmap = arr;
+        cudaTextureDesc td{};
+        td.addressMode[0] = td.addressMode[1] = cudaAddressModeClamp;
+        td.filterMode = cudaFilterModeLinear;
+        td.mipmapFilterMode = cudaFilterModeLinear;
+        td.readMode = cudaReadModeNormalizedFloat;
+        td.normalizedCoords = 1;
+        td.maxMipmapLevelClamp = float(levels - 1);
+        cudaTextureObject_t t = 0;
+        CUDA_CHECK(cudaCreateTextureObject(&t, &rd, &td, nullptr));
+        outTex = t;
+        outLevels = float(levels);
+    };
+    passMip(1, 0.5f * texel, M.air, M.airLevels);
+    passMip(2, 2.0f * texel, M.sky, M.skyLevels);
+    params_.sunMap[params_.sunMaps++] = M;
+    return true;
 }
 
 void KoyRenderer::launch(CUdeviceptr raygen, unsigned int w, unsigned int h, unsigned int d, float* ms) {

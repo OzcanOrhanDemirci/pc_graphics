@@ -350,11 +350,82 @@ static __forceinline__ __device__ float causticAt(float3 p, int level) {
     if (w >= 0.0f) return F;
     return lerpf(1.0f, F, saturate(z / expf(params.causticLz0)));
 }
-static __forceinline__ __device__ float sunVisAt(float3 p) {
-    const float3 q = make_float3((p.x - params.sunVisMin.x) / params.sunVisSize.x, (p.y - params.sunVisMin.y) / params.sunVisSize.y,
-                                 (p.z - params.sunVisMin.z) / params.sunVisSize.z);
-    if (q.x < 0.0f || q.y < 0.0f || q.z < 0.0f || q.x > 1.0f || q.y > 1.0f || q.z > 1.0f || !params.sunVis) return 1.0f;
-    return tex3D<float>((cudaTextureObject_t)params.sunVis, q.x, q.y, q.z);
+// The sun's light under water through a sun map: the entry point c on the surface (swayed by the waves near it), the
+// air's transmission there blurred over the sun's disc as seen from dist metres down (and the deck's own height), and,
+// with depth, whether something under the water stops it first. -1 where no map covers c.
+static __forceinline__ __device__ float3 swayedEntry(float3 p, float dist) {
+    float3 c = p + params.sunWater * dist;
+    if (params.shadowSway && dist < params.swayMax) {
+        const Wave w = waveAt(c.x, c.z, 0.05f, false);
+        const float3 m = normalize(make_float3(-w.sx, 1.0f, -w.sz));
+        const float3 i = params.sunAir * -1.0f;
+        const float eta = 1.0f / params.waterN, ci = -dot(i, m);
+        const float kk = 1.0f - eta * eta * (1.0f - ci * ci);
+        if (kk > 0.0f) {
+            const float3 t = normalize(i * eta + m * (eta * ci - sqrtf(kk)));
+            if (t.y < -0.05f) c = p - t * (p.y / t.y);   // up, against the light, to y = 0
+        }
+    }
+    return c;
+}
+static __forceinline__ __device__ int sunMapAt(float3 c) {
+    for (int k = 0; k < params.sunMaps; ++k) {
+        const KSunMap& M = params.sunMap[k];
+        if (c.x >= M.min.x && c.z >= M.min.y && c.x <= M.min.x + M.w * M.texel && c.z <= M.min.y + M.h * M.texel) return k;
+    }
+    return -1;
+}
+static __forceinline__ __device__ float airSun(const KSunMap& M, float3 c, float dist) {
+    // the disc's radius: 0.27 degrees in the air over the deck's ~1.3 m, 0.2 degrees in the water over dist
+    const float blur = 0.006f + dist * 0.0035f;
+    const float at = 0.5f * M.texel;
+    const float lod = fminf(log2f(fmaxf(blur / at, 1.0f)), M.airLevels - 1.0f);
+    return tex2DLod<float>((cudaTextureObject_t)M.air, (c.x - M.min.x) / (M.w * M.texel), (c.z - M.min.y) / (M.h * M.texel), lod);
+}
+// how open the sky is above p under water (1 where no map covers it): the sky map averaged over Snell's window's disc
+static __forceinline__ __device__ float skyVisAt(float3 p) {
+    if (params.sunMaps == 0 || p.y >= 0.0f) return 1.0f;
+    const int k = sunMapAt(make_float3(p.x, 0.0f, p.z));
+    if (k < 0) return 1.0f;
+    const KSunMap& M = params.sunMap[k];
+    const float radius = 0.3f + 1.0f * (-p.y);
+    const float lod = fminf(log2f(fmaxf(radius / (2.0f * M.texel), 1.0f)), M.skyLevels - 1.0f);
+    return tex2DLod<float>((cudaTextureObject_t)M.sky, (p.x - M.min.x) / (M.w * M.texel), (p.z - M.min.y) / (M.h * M.texel), lod);
+}
+// the same along a view ray, weighted as its in-scattered light is: each sample stands for a stretch of the ray, worth
+// e^(-c a) - e^(-c b) of it (c ~ 0.1/m: 60 % of what reaches the eye comes from beyond 5 m), cut where the ray ends
+static __forceinline__ __device__ float pathSky(float3 o, float3 d, float tEnd) {
+    if (params.sunMaps == 0) return 1.0f;
+    const float ts[5] = {0.5f, 2.0f, 5.0f, 10.0f, 20.0f}, edge[6] = {0.0f, 1.0f, 3.5f, 7.5f, 15.0f, 60.0f};
+    float s = 0.0f, w = 0.0f;
+    for (int k = 0; k < 5 && edge[k] < tEnd; ++k) {
+        const float b = fminf(edge[k + 1], tEnd);
+        const float wk = expf(-0.1f * edge[k]) - expf(-0.1f * b);
+        s += wk * skyVisAt(o + d * fminf(ts[k], b));
+        w += wk;
+    }
+    return w > 0.0f ? s / w : 1.0f;
+}
+static __forceinline__ __device__ float sunMapVis(float3 p) {
+    if (params.sunMaps == 0 || p.y >= 0.0f) return 1.0f;
+    const float dist = -p.y / params.sunWater.y;
+    const float3 c = swayedEntry(p, dist);
+    const int k = sunMapAt(c);
+    if (k < 0) return 1.0f;
+    const KSunMap& M = params.sunMap[k];
+    const float T = airSun(M, c, dist);
+    if (T <= 0.0f) return 0.0f;
+    const float u = (c.x - M.min.x) / M.texel - 0.5f, v = (c.z - M.min.y) / M.texel - 0.5f;
+    const float fu = floorf(u), fv = floorf(v), au = u - fu, av = v - fv;
+    const float bias = 0.02f + 0.5f * M.texel;
+    float vis = 0.0f;
+    for (int q = 0; q < 4; ++q) {
+        const float x = fminf(fmaxf(fu + float(q & 1), 0.0f), float(M.w - 1)), y = fminf(fmaxf(fv + float(q >> 1), 0.0f), float(M.h - 1));
+        const float depth = tex2D<float>((cudaTextureObject_t)M.tex, x + 0.5f, y + 0.5f);
+        const float wq = ((q & 1) ? au : 1.0f - au) * ((q >> 1) ? av : 1.0f - av);
+        if (dist < depth - bias) vis += wq;
+    }
+    return vis * T;
 }
 
 // gradient noise (the load-time builders' kn::noise3, same hash): masks for the concretion and the mottling
@@ -440,8 +511,7 @@ static __device__ Tri triplanar(int set, float tile, float3 p, float3 ng, float 
 // diffuse light (baked occlusion), all seen through tPath metres of water.
 // cheap: a surface seen in the wavy mirror of total internal reflection (blurred and distorted there): the costly
 // layers (the detail scan, the noise masks of the coat) give way to their averages
-static __forceinline__ __device__ float3 shadeSurface(const Hit& h, float3 d, float tPath, float coneAngle, float& causticOut, float3& nOut,
-                                                     bool cheap = false) {
+static __device__ void surfaceLook(const Hit& h, float3 d, float coneAngle, bool cheap, float3& albedoOut, float3& nOut) {
     const KMaterial m = params.materials[h.mat];
     float3 albedo = m.albedo;
     float3 n = h.ns;
@@ -566,6 +636,61 @@ static __forceinline__ __device__ float3 shadeSurface(const Hit& h, float3 d, fl
             n = dot(nn, h.ng) > 0.05f ? nn : n;
         }
     }
+    if (m.stainDark > 0.0f) {   // the tide's dark band
+        const float t = fminf(fmaxf((h.p.y - (m.stainTop - m.stainBand)) / fmaxf(m.stainBand, 1e-3f), 0.0f), 1.0f);
+        albedo = albedo * (m.stainDark + (1.0f - m.stainDark) * t * t * (3.0f - 2.0f * t));
+    }
+    albedoOut = albedo;
+    nOut = n;
+}
+
+// How much of the sun reaches p under water: the beam enters where the mean refracted sun meets the surface, the waves'
+// slope there bends it (the shadows sway with the waves, as the caustics do); it must cross the water unblocked (a shadow
+// ray), and the air: through a sun map's air transmission where one covers the entry (soft as the sun's disc), else a ray
+static __device__ float sunReaches(float3 p, float3 ng) {
+    const float dist = -p.y / params.sunWater.y;
+    const float3 c = swayedEntry(p, dist);
+    const float3 dir = normalize(c - p);
+    const float tUp = (params.oceanHeightMax - p.y) / fmaxf(dir.y, 0.05f);
+    if (!visible(offsetRay(p, ng), dir, tUp)) return 0.0f;
+    if (!params.airGeometry) return 1.0f;
+    const int k = sunMapAt(c);
+    if (k >= 0) return airSun(params.sunMap[k], c, dist);
+    return visible(c, params.sunAir, 400.0f) ? 1.0f : 0.0f;
+}
+
+static __forceinline__ __device__ float3 airRow(int row, float3 wk, float L) {
+    return pathRow(row + 0, L) * wk.x + pathRow(row + 1, L) * wk.y + pathRow(row + 2, L) * wk.z;
+}
+// Something above the water (the pier, the island's rock, the beach) seen from below through Snell's window, ts metres of
+// water after its light enters: the sun with a shadow ray, the sky on what looks up, the sea's glow on what looks down
+static __device__ float3 shadeAir(const Hit& h, float3 d, float ts, float coneAngle) {
+    const KMaterial m = params.materials[h.mat];
+    float3 albedo, n;
+    surfaceLook(h, d, coneAngle, true, albedo, n);
+    const float3 wk = basisWeights(albedo);
+    float3 L = make_float3(0.0f, 0.0f, 0.0f);
+    const float cs = dot(n, params.sunAir);
+    const float3 sun = airRow(PT_AIRSUN0, wk, ts), sky = airRow(PT_AIRSKY0, wk, ts);
+    if (cs > 0.0f && dot(h.ng, params.sunAir) > -0.05f && visible(offsetRay(h.p, h.ng), params.sunAir, 400.0f)) L += sun * cs;
+    // under the head's slab the sky is hidden too (the sky map read about a metre wide at the point)
+    const float skyOpen = h.p.y < 1.5f ? skyVisAt(make_float3(h.p.x, -0.7f, h.p.z)) : 1.0f;
+    const float occ = lerpf(1.0f, h.ao, m.aoStrength) * skyOpen;
+    const float up = 0.5f + 0.5f * n.y;
+    const float glow = params.upwell * skyVisAt(make_float3(h.p.x, -1.0f, h.p.z));   // under the head the water below is dark
+    L += (sky * up + (sun * params.sunAir.y + sky) * (glow * (1.0f - up))) * occ;
+    return L;
+}
+
+static __forceinline__ __device__ float3 shadeSurface(const Hit& h, float3 d, float tPath, float coneAngle, float& causticOut, float3& nOut,
+                                                     bool cheap = false) {
+    const KMaterial m = params.materials[h.mat];
+    float3 albedo, n;
+    surfaceLook(h, d, coneAngle, cheap, albedo, n);
+    auto sstep = [](float a, float b, float x) {
+        const float t = fminf(fmaxf((x - a) / (b - a), 0.0f), 1.0f);
+        return t * t * (3.0f - 2.0f * t);
+    };
     nOut = n;
     const float3 wk = basisWeights(albedo);
     const float z = -h.p.y;
@@ -576,13 +701,12 @@ static __forceinline__ __device__ float3 shadeSurface(const Hit& h, float3 d, fl
     if (cs > 0.0f && dot(h.ng, params.sunWater) > -0.05f) {
         const float F = causticAt(h.p, 0);
         causticOut = F;
-        const float tUp = (params.oceanHeightMax - h.p.y) / fmaxf(params.sunWater.y, 0.05f);
-        const bool lit = visible(offsetRay(h.p, h.ng), params.sunWater, tUp);
-        if (lit) L += sunOnSurface(wk, z, tPath) * (cs * F);
+        const float V = sunReaches(h.p, h.ng);
+        if (V > 0.0f) L += sunOnSurface(wk, z, tPath) * (cs * F * V);
     }
     // the water's diffuse light
     const float occ = lerpf(1.0f, h.ao, m.aoStrength);
-    L += ambientOnSurface(wk, z, n.y, tPath, fieldsFor(bottomAt(h.p.x, h.p.z))) * occ;
+    L += ambientOnSurface(wk, z, n.y, tPath, fieldsFor(bottomAt(h.p.x, h.p.z))) * (occ * skyVisAt(h.p));
     // the diver's torch: inverse square, a cone, a shadow ray to the hand; its light crosses the water to the surface and
     // on to the eye (tPath), red gone within a few metres
     if (params.torch) {
@@ -599,7 +723,7 @@ static __forceinline__ __device__ float3 shadeSurface(const Hit& h, float3 d, fl
     // debug views: grey levels in display terms (5 occlusion, 6 the sun's shadow ray, 7 the normal's height)
     if (params.view >= 5 && params.view <= 7) {
         const float tUp = (params.oceanHeightMax - h.p.y) / fmaxf(params.sunWater.y, 0.05f);
-        const float v = params.view == 5 ? h.ao : params.view == 6 ? (visible(offsetRay(h.p, h.ng), params.sunWater, tUp) ? 1.0f : 0.0f) : n.y;
+        const float v = params.view == 5 ? h.ao : params.view == 6 ? sunReaches(h.p, h.ng) : n.y;
         const float g = 0.18f * v / fmaxf(params.exposure, 1e-9f);
         return make_float3(0.9505f * g, g, 1.089f * g);
     }
@@ -615,9 +739,9 @@ static __forceinline__ __device__ float3 shadeReflected(float3 q, float3 r, floa
         float c;
         float3 n;
         L = shadeSurface(h, r, h.t + tBefore, coneAngle, c, n, true);   // seen in the wavy mirror: the cheap layers
-        L += reflectedPath(r.y, h.t, tBefore, deepestField());   // reflected rays go down: the deep field is lit all the way
+        L += reflectedPath(r.y, h.t, tBefore, deepestField()) * pathSky(q, r, h.t);   // reflected rays go down: the deep field is lit all the way
     } else {
-        L = reflectedPath(r.y, params.farDistance, tBefore, deepestField());
+        L = reflectedPath(r.y, params.farDistance, tBefore, deepestField()) * pathSky(q, r, params.farDistance);
     }
     return L;
 }
@@ -649,8 +773,16 @@ static __forceinline__ __device__ float3 shadeFromBelow(float3 q, float3 d, floa
         const float rs = (n1 * ci - ct) / (n1 * ci + ct), rp = (ci - n1 * ct) / (ci + n1 * ct);
         fresnel = 0.5f * (rs * rs + rp * rp);
         const float T = (1.0f - fresnel) * pass;
-        const float3 sw = skyWeights(tdir);
-        L += (pathRow(PT_SKY0 + 0, ts) * sw.x + pathRow(PT_SKY0 + 1, ts) * sw.y + pathRow(PT_SKY0 + 2, ts) * sw.z) * T;
+        // what stands above the water there (the pier, the island), or the sky
+        Hit ha;
+        ha.hit = false;
+        if (params.airGeometry) ha = trace(q + make_float3(0.0f, 0.002f, 0.0f), tdir, 2000.0f);
+        if (ha.hit) {
+            L += shadeAir(ha, tdir, ts, coneAngle) * T;
+        } else {
+            const float3 sw = skyWeights(tdir);
+            L += (pathRow(PT_SKY0 + 0, ts) * sw.x + pathRow(PT_SKY0 + 1, ts) * sw.y + pathRow(PT_SKY0 + 2, ts) * sw.z) * T;
+        }
         // the sun's glint: microfacet transmission (Walter et al. 2007) with Beckmann slopes of the footprint's spread
         // plus the sun's own disc mapped to slopes, evaluated for the one normal that refracts d into the sun
         const float3 s = params.sunAir;
@@ -691,12 +823,18 @@ static __forceinline__ __device__ Lit shadeSample(float3 o, float3 d, float cone
     const float z0 = -o.y;
     float tmax = params.farDistance;
     if (d.y > 1e-4f) tmax = fminf(tmax, (params.oceanHeightMax - o.y) / d.y);
-    const Hit h = trace(o, d, tmax);
+    Hit h = trace(o, d, tmax);
+    if (h.hit && d.y > 1e-4f && h.p.y > -params.oceanHeightMax) {
+        // something standing through the surface (a pile) hit near the water line: if the wave there is lower than the
+        // hit, the ray left the water before it (it meets that from the air, through the surface)
+        const Wave w = waveAt(h.p.x, h.p.z, coneAngle * h.t, false);
+        if (h.p.y > w.h) h.hit = false;
+    }
     if (h.hit) {
         // the path's light field: the floor under where it ends, and lit down to its deepest point
         // (the depth the path reaches within ~30 m: the water's in-scattering comes almost all from there, c ~ 0.1/m)
         const FW fp = pathFields(o, d, h.t);
-        r.L = shadeSurface(h, d, h.t, coneAngle, r.caustic, r.n) + (params.view >= 5 ? make_float3(0, 0, 0) : ambientPath(z0, d.y, h.t, fp));
+        r.L = shadeSurface(h, d, h.t, coneAngle, r.caustic, r.n) + (params.view >= 5 ? make_float3(0, 0, 0) : ambientPath(z0, d.y, h.t, fp) * pathSky(o, d, h.t));
         r.t = h.t;
         r.id = h.id;
         return r;
@@ -704,13 +842,13 @@ static __forceinline__ __device__ Lit shadeSample(float3 o, float3 d, float cone
     if (d.y > 1e-4f) {
         const float ts = surfaceHit(o, d, coneAngle);
         const float3 q = o + d * ts;
-        r.L = shadeFromBelow(q, d, ts, coneAngle, r.n) + ambientPath(z0, d.y, ts, pathFields(o, d, ts));
+        r.L = shadeFromBelow(q, d, ts, coneAngle, r.n) + ambientPath(z0, d.y, ts, pathFields(o, d, ts)) * pathSky(o, d, ts);
         r.t = ts;
         r.id = ID_WATER;
         return r;
     }
     // open water: the field lit down to the depth the ray reaches within ~30 m (its light comes almost all from there)
-    r.L = ambientPath(z0, d.y, params.farDistance, pathFields(o, d, params.farDistance));
+    r.L = ambientPath(z0, d.y, params.farDistance, pathFields(o, d, params.farDistance)) * pathSky(o, d, params.farDistance);
     r.t = params.farDistance;
     r.id = ID_OPEN;
     return r;
@@ -872,10 +1010,29 @@ extern "C" __global__ void __raygen__resolve() {
     params.hdr[unsigned(y) * params.width + unsigned(x)] = make_float4(rgb.x, rgb.y, rgb.z, 1.0f);
 }
 
+// the light a white Lambert plane facing up gets at the eye's depth (the sun on it and the water's diffuse light), as linear
+// sRGB normalised to unit luminance: what the eye adapts its colour to
+static __forceinline__ __device__ float3 adaptingWhite() {
+    const float z = fmaxf(-params.cam.pos.y, 0.0f);
+    const float3 wk = basisWeights(make_float3(1.0f, 1.0f, 1.0f));
+    const float3 xyz = sunOnSurface(wk, z, 0.0f) * params.sunCosW + ambientOnSurface(wk, z, 1.0f, 0.0f, fieldsFor(bottomAt(params.cam.pos.x, params.cam.pos.z)));
+    const float3 rgb = xyzToRgb(xyz);
+    const float Y = 0.2126f * rgb.x + 0.7152f * rgb.y + 0.0722f * rgb.z;
+    return rgb * (1.0f / fmaxf(Y, 1e-12f));
+}
+
 extern "C" __global__ void __raygen__final() {
     const uint3 idx = optixGetLaunchIndex();
     const unsigned int i = idx.y * params.width + idx.x;
     float3 c = f3(params.hdr[i]) * params.exposure;
+    if (params.chromaAdapt > 0.0f) {   // von Kries towards the light around the eye, part of the way
+        const float3 w = adaptingWhite();
+        const float a = params.chromaAdapt;
+        const float3 g = make_float3(powf(fmaxf(w.x, 1e-3f), -a), powf(fmaxf(w.y, 1e-3f), -a), powf(fmaxf(w.z, 1e-3f), -a));
+        const float gy = 0.2126f * g.x * w.x + 0.7152f * g.y * w.y + 0.0722f * g.z * w.z;   // the white's luminance after
+        const float Yw = 0.2126f * w.x + 0.7152f * w.y + 0.0722f * w.z;
+        c = make_float3(c.x * g.x, c.y * g.y, c.z * g.z) * (Yw / fmaxf(gy, 1e-6f));
+    }
     // oxygen toxicity (Ada, PLAN_ADA §6): the field of view closes in from the edges (tunnel vision), then everything
     // goes black; the restart opens it again
     if (params.tunnel > 0.0f || params.blackout > 0.0f) {
@@ -932,7 +1089,7 @@ extern "C" __global__ void __raygen__shafts() {
             const float L = z / params.sunCosW + sm;
             const float3 src = pathRow(PT_SHAFT_W, L) * pW + pathRow(PT_SHAFT_P, L) * pP;
             const float F = causticAt(p, min(level, params.causticLevels - 1));
-            const float V = sunVisAt(p);
+            const float V = sunMapVis(p);
             acc += src * (F * V * ds);
         }
         surf3Dwrite(make_float4(acc.x, acc.y, acc.z, 0.0f), (cudaSurfaceObject_t)params.shaftSurf, int(idx.x * sizeof(float4)), int(idx.y), k);
@@ -973,26 +1130,17 @@ extern "C" __global__ void __raygen__bakeAO() {
     params.bakeOut[v] = open / float(R);
 }
 
+// a sun map's texel, from its point on the still surface: the air pass, 1 if the sun is in sight through the air (the
+// pier's deck); the depth pass, how far down the refracted sun goes before something under the water stops it (or 400 m)
 extern "C" __global__ void __raygen__bakeSun() {
-    // voxel (x, y, z) of the sun-visibility box: rays towards the refracted sun spread by the waves' slopes
     const uint3 idx = optixGetLaunchIndex();
-    const uint3 dim = optixGetLaunchDimensions();
-    const float3 p = params.sunVisMin + make_float3((idx.x + 0.5f) / dim.x * params.sunVisSize.x, (idx.y + 0.5f) / dim.y * params.sunVisSize.y,
-                                                    (idx.z + 0.5f) / dim.z * params.sunVisSize.z);
-    float vis = 0.0f;
-    if (p.y < -0.02f) {
-        const Frame f = Frame::from(params.sunWater);
-        const unsigned int R = 16;
-        const float spread = 0.035f;   // ~2 degrees: the refracted sun wanders with the slopes of the waves
-        for (unsigned int k = 0; k < R; ++k) {
-            const float a = 2.0f * M_PIf * (k + 0.5f) / R * 2.618f, r = spread * sqrtf((k + 0.5f) / R);
-            const float3 d = normalize(f.toWorld(make_float3(r * cosf(a), r * sinf(a), 1.0f)));
-            const float tUp = (params.oceanHeightMax - p.y) / fmaxf(d.y, 0.05f);
-            if (visible(p, d, tUp)) vis += 1.0f;
-        }
-        vis /= float(R);
+    const float3 s = make_float3(params.bakeMapMin.x + (idx.x + 0.5f) * params.bakeMapTexel, 0.0f, params.bakeMapMin.y + (idx.y + 0.5f) * params.bakeMapTexel);
+    float v;
+    if (params.bakeMapAir) {
+        v = visible(s, params.bakeMapAir == 2 ? make_float3(0.0f, 1.0f, 0.0f) : params.sunAir, 400.0f) ? 1.0f : 0.0f;
     } else {
-        vis = 1.0f;
+        const Hit h = trace(s + make_float3(0.0f, -0.001f, 0.0f), params.sunWater * -1.0f, 400.0f);
+        v = h.hit ? h.t : 400.0f;
     }
-    params.bakeOut[(size_t(idx.z) * dim.y + idx.y) * dim.x + idx.x] = vis;
+    params.bakeOut[size_t(idx.y) * params.bakeMapW + idx.x] = v;
 }

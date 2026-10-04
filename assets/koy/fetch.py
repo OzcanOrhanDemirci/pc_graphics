@@ -68,6 +68,17 @@ FILES = {
                                        '14204ac93866d4ebeaeb4d7c22bd5cbb8072a3c1c2052afecc50773f6b82fdec'),
     'coral_fort_wall_01_nor_gl_8k.jpg': ('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/8k/coral_fort_wall_01/coral_fort_wall_01_nor_gl_8k.jpg',
                                          '2ccb8e22c14248adc0d8bd16800f04358cf0bc759562fe4142d17f08e2906140'),
+    # Ada (2026-10-04, docs/koy/PLAN_ADA.md): the pier's and the wreck's wood (Poly Haven rough_wood, 0.5 m: one board's
+    # weathered grain, the boards are geometry) and the pier's concrete piles (concrete_wall_008, 2.7 m); 4K is past the
+    # screen at their distances; Poly Haven md5 checked when pinned
+    'rough_wood_diff_4k.jpg': ('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rough_wood/rough_wood_diff_4k.jpg',
+                               '2a7714192151b892e1fc3850e0d83beac385b933e7615b356d5537aa42ad3410'),
+    'rough_wood_nor_gl_4k.jpg': ('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/rough_wood/rough_wood_nor_gl_4k.jpg',
+                                 '6d01bfa129d42d90a6b58bdc1dcf358a37bbbeca9422ac6e974ed2457ff01c05'),
+    'concrete_wall_008_diff_4k.jpg': ('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/concrete_wall_008/concrete_wall_008_diff_4k.jpg',
+                                      '9452c58ce2256afe9e96f04952712a1c22c012b61dc048ad10a18e62f6c26c63'),
+    'concrete_wall_008_nor_gl_4k.jpg': ('https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/concrete_wall_008/concrete_wall_008_nor_gl_4k.jpg',
+                                        '52de09b25a87b1c21435b8cae0d946d9a29141188cac827f240c9392466f853d'),
 }
 # members of the sand zip, and their hashes
 SAND = {
@@ -189,7 +200,9 @@ def main():
             ('kaya_ayrinti', (('rock_boulder_dry_diff_4k.jpg', 'albedo.jpg'), ('rock_boulder_dry_nor_gl_4k.jpg', 'normal.jpg'))),
             ('kaya_ayrinti_8k', (('rock_boulder_dry_diff_8k.jpg', 'albedo.jpg'), ('rock_boulder_dry_nor_gl_8k.jpg', 'normal.jpg'))),
             ('amfora_kil_8k', (('clay_plaster_diff_8k.jpg', 'albedo.jpg'), ('clay_plaster_nor_gl_8k.jpg', 'normal.jpg'))),
-            ('kabuk_8k', (('coral_fort_wall_01_diff_8k.jpg', 'albedo.jpg'), ('coral_fort_wall_01_nor_gl_8k.jpg', 'normal.jpg'))))
+            ('kabuk_8k', (('coral_fort_wall_01_diff_8k.jpg', 'albedo.jpg'), ('coral_fort_wall_01_nor_gl_8k.jpg', 'normal.jpg'))),
+            ('ahsap_4k', (('rough_wood_diff_4k.jpg', 'albedo.jpg'), ('rough_wood_nor_gl_4k.jpg', 'normal.jpg'))),
+            ('beton_4k', (('concrete_wall_008_diff_4k.jpg', 'albedo.jpg'), ('concrete_wall_008_nor_gl_4k.jpg', 'normal.jpg'))))
     for folder, files in sets:
         d = os.path.join(OUT, folder)
         os.makedirs(d, exist_ok=True)

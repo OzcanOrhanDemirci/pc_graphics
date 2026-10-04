@@ -83,6 +83,9 @@ struct KoyApp {
     void stepWorld(float t);               // waves, caustics, seagrass at world time t
     void frame();                          // stepWorld must have run; renders
     void adaptExposure(float dt, bool instant);
+    // the eye's reference adaptation: metered on open water (from the start, looking out to sea), whatever the start
+    // view holds; then exposure set for the current view from there (display.adapt of the way)
+    void calibrateEye();
     void save(const std::string& prefix);
     void release();
 };

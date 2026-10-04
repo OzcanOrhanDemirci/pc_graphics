@@ -2,6 +2,7 @@
 #include "scenes/koy/koy_world.h"
 
 #include "scenes/koy/koy_amphora.h"
+#include "scenes/koy/koy_island.h"
 
 #include "stb_image.h"
 
@@ -406,7 +407,52 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
         M.lifeB = cfg.v3("life.coralline", make_float3(0.52f, 0.30f, 0.38f));  // Lithophyllum: pale pink-mauve
     };
     if (setCoat >= 0) coat(jarM, "amfora", 0.55f, 0.22f, make_float3(0.42f, 0.40f, 0.36f), 0.75f, 0.35f, 0.22f);
-    materials = {floorM, rockM, leafM, jarM};
+    // Ada: the island's rock, wet (algae turf on what looks up, concretion and sponges in patches) and dry (sunlit
+    // limestone, scrub on the gentle slopes); the pier's boards, its concrete wet and dry, the ladder's steel
+    auto plain = [](float3 albedo) {
+        KMaterial M{};
+        M.kind = KM_PLAIN;
+        M.texSet = -1;
+        M.albedo = albedo;
+        M.aoStrength = 1.0f;
+        M.detailSet = -1;
+        M.coatSet = -1;
+        return M;
+    };
+    KMaterial islandWet = plain(cfg.v3("island.wet_rgb", make_float3(0.30f, 0.29f, 0.25f)));
+    KMaterial islandDry = plain(cfg.v3("island.dry_rgb", make_float3(0.62f, 0.58f, 0.50f)));
+    if (setCoat >= 0) coat(islandWet, "island", 0.25f, 0.6f, make_float3(0.34f, 0.31f, 0.27f), 0.8f, 0.3f, 0.3f);
+    islandWet.sedimentColor = cfg.v3("island.algae_rgb", make_float3(0.11f, 0.12f, 0.05f));   // the turf: Padina, Dictyota, Cystoseira
+    islandWet.filmColor = cfg.v3("island.film_rgb", make_float3(0.80f, 0.92f, 0.70f));
+    islandDry.sediment = cfg.f("island.scrub", 0.6f);
+    islandDry.sedimentColor = cfg.v3("island.scrub_rgb", make_float3(0.16f, 0.19f, 0.09f));   // maquis: lentisk, juniper
+    islandDry.mottle = 0.2f;
+    KMaterial woodM = plain(cfg.v3("pier.wood_tint", make_float3(0.85f, 0.80f, 0.74f)));
+    if (setWood >= 0) {
+        woodM.kind = KM_MESH;
+        woodM.texSet = setWood;
+        woodM.normalStrength = 1.0f;
+    }
+    woodM.mottle = 0.15f;
+    KMaterial concDry = plain(cfg.v3("pier.concrete_tint", make_float3(0.72f, 0.72f, 0.70f)));
+    if (setConcrete >= 0) {
+        concDry.kind = KM_MESH;
+        concDry.texSet = setConcrete;
+        concDry.normalStrength = 1.0f;
+    } else {
+        concDry.albedo = make_float3(0.55f, 0.54f, 0.50f);
+    }
+    // the tide's dark band on the clean concrete above the crust: algae, barnacles, the wet
+    concDry.stainTop = cfg.f("pier.stain_top", 0.75f);
+    concDry.stainBand = 0.35f;
+    concDry.stainDark = cfg.f("pier.stain_dark", 0.3f);
+    KMaterial concWet = concDry;
+    concWet.stainDark = 0.0f;
+    if (setCoat >= 0) coat(concWet, "pile", 0.6f, 0.25f, make_float3(0.36f, 0.35f, 0.30f), 0.5f, 0.4f, 0.2f);
+    KMaterial steelM = plain(cfg.v3("pier.steel_rgb", make_float3(0.55f, 0.56f, 0.57f)));
+    KMaterial rustM = plain(cfg.v3("pier.rust_rgb", make_float3(0.30f, 0.13f, 0.05f)));
+    rustM.mottle = 0.4f;
+    materials = {floorM, rockM, leafM, jarM, islandWet, islandDry, woodM, concWet, concDry, steelM, rustM};
 
     meshes.push_back(buildFloor(cfg));
     rockCentre = cfg.v3("rock.centre", make_float3(-2.4f, 0.0f, -6.0f));
@@ -448,6 +494,23 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
                 instances.push_back(in);
             }
     }
+    // Ada: the island and the pier, one instance each
+    {
+        const KoyFloorShape fs = KoyFloorShape::from(cfg);
+        auto fy = [&](float x, float z) { return fs(x, z); };
+        std::string log;
+        const size_t first = meshes.size();
+        const KoyIslandShape isl = koyIslandShape(cfg, fy);
+        koyBuildIsland(isl, cfg.f("island.cell", 0.2f), 4, 5, 3, meshes, &log);
+        std::printf("koy %s; %zu kaya\n", log.c_str(), isl.boulders.size());
+        koyBuildPier(koyPierSpec(cfg), fy, 6, 7, 8, 9, 10, 4, meshes, &log);
+        std::printf("koy %s\n", log.c_str());
+        for (size_t k = first; k < meshes.size(); ++k) {
+            KInstanceCPU in;
+            in.mesh = int(k);
+            instances.push_back(in);
+        }
+    }
     grass.build(cfg);
     grass.toRibbons(ribbons, 2);
     applyTextureMode(cfg, cfg.i("tex.mode", 2));
@@ -482,6 +545,13 @@ void KoyWorld::applyTextureMode(const Config& cfg, int mode) {
     r.detailAlbedo = cfg.f("tex.rock_detail_albedo", 0.35f);
     // Amfora: the jars take the clay (8K in both high modes; 2.00 m pressed to a 1.64 m tile: 0.2 mm a texel, the clay's
     // grain 18 % finer than scanned)
+    for (size_t k = 4; k <= 5 && k < materials.size(); ++k) {   // Ada: the island's rock (wet, dry): the limestone detail scan
+        KMaterial& q = materials[k];
+        q.detailSet = rockDetail >= 0 ? rockDetail : setRockDetail;
+        q.detailTile = cfg.f("island.detail_tile", 2.4f);
+        q.detailNormal = cfg.f("island.detail_normal", 0.9f);
+        q.detailAlbedo = cfg.f("island.detail_albedo", 0.6f);
+    }
     if (materials.size() > 3) {
         KMaterial& j = materials[3];
         j.detailSet = high ? setClay : -1;
@@ -717,7 +787,7 @@ bool koyLoadTextureSet(const std::string& dir, const std::string& name, KoyTextu
 void KoyWorld::loadTextures(const Config& cfg, const std::string& dir) {
     const auto t0 = std::chrono::steady_clock::now();
     textureBytes = 0;
-    setSand = setRock = setSand4k = setRock8k = setRockDetail = setSand16k = setRockDetail16k = setClay = setCoat = -1;
+    setSand = setRock = setSand4k = setRock8k = setRockDetail = setSand16k = setRockDetail16k = setClay = setCoat = setWood = setConcrete = -1;
     if (cfg.f("tex.use", 1.0f) < 0.5f) return;
     struct Slot {
         std::vector<const char*> names;
@@ -728,10 +798,10 @@ void KoyWorld::loadTextures(const Config& cfg, const std::string& dir) {
         slots.push_back({{"kum_8k", "kum_4k"}, &setSand4k});
         slots.push_back({{"kaya_model_8k"}, &setRock8k});
         slots.push_back({{"kaya_ayrinti_8k", "kaya_ayrinti"}, &setRockDetail});
-        if (cfg.i("amfora.use", 0)) {   // the jars' clay and the sea's concretion (on the jars and the arch)
-            slots.push_back({{"amfora_kil_8k"}, &setClay});
-            slots.push_back({{"kabuk_8k"}, &setCoat});
-        }
+        if (cfg.i("amfora.use", 0)) slots.push_back({{"amfora_kil_8k"}, &setClay});   // the jars' clay
+        slots.push_back({{"kabuk_8k"}, &setCoat});      // the sea's concretion (jars, rock, piles, the wreck)
+        slots.push_back({{"ahsap_4k"}, &setWood});
+        slots.push_back({{"beton_4k"}, &setConcrete});
         if (cfg.i("tex.ultra", 1)) {   // the sand and the rock detail at 16K (panel "Ultra")
             slots.push_back({{"kum_16k"}, &setSand16k});
             slots.push_back({{"kaya_ayrinti_16k"}, &setRockDetail16k});

@@ -16,6 +16,7 @@
 //   options: --set key=value, --width W, --height H, --spp 1|4|8|16, --edge N, --filter 0..3
 #include "scenes/koy/koy_app.h"
 #include "core/gpu_stats.h"
+#include "scenes/koy/koy_island.h"
 
 #include <algorithm>
 #include <cstring>
@@ -130,6 +131,10 @@ void KoyApp::setup() {
     p.shaftStepGrow = cfg.f("shaft.grow", 0.06f);
     p.shaftMax = std::max(cfg.f("shaft.max", 70.0f), 1.0f);
     p.farDistance = cfg.f("view.far", 180.0f);
+    p.airGeometry = cfg.i("air.geometry", 1);
+    p.shadowSway = cfg.i("sun.sway", 1);
+    p.upwell = cfg.f("air.upwell", 0.06f);
+    p.chromaAdapt = cfg.f("display.chroma_adapt", 0.5f);
     // the world
     size_t freeBefore = 0, freeAfter = 0, totalMem = 0;
     cudaMemGetInfo(&freeBefore, &totalMem);
@@ -182,11 +187,19 @@ void KoyApp::setup() {
     stepWorld(0.0f);
     const double t0 = know();
     renderer.bakeAO();
-    const float3 bmin = cfg.v3("sunvis.min", make_float3(-14.0f, -9.5f, -16.0f));
-    const float3 bmax = cfg.v3("sunvis.max", make_float3(10.0f, -1.0f, 8.0f));
-    const float vs = cfg.f("sunvis.voxel", 0.1f);
-    renderer.bakeSunVisibility(bmin, bmax - bmin, make_int3(int((bmax.x - bmin.x) / vs), int((bmax.y - bmin.y) / vs), int((bmax.z - bmin.z) / vs)));
-    std::printf("koy firin: golgeleme ve gunes gorunurlugu %.2f s\n", know() - t0);
+    // the sun depth maps (the light shafts' shadows): sunmap.N = x0 z0 x1 z1 texel
+    renderer.params().sunMaps = 0;
+    renderer.params().swayMax = cfg.f("sun.sway_max", 8.0f);
+    size_t mapTexels = 0;
+    for (int k = 0; k < KOY_SUNMAPS; ++k) {
+        const std::vector<float> v = koyList(cfg, "sunmap." + std::to_string(k));
+        if (v.size() < 5) continue;
+        if (renderer.bakeSunMap(make_float2(v[0], v[1]), make_float2(v[2], v[3]), v[4])) {
+            const KSunMap& M = renderer.params().sunMap[renderer.params().sunMaps - 1];
+            mapTexels += size_t(M.w) * M.h;
+        }
+    }
+    std::printf("koy firin: golgeleme ve %d gunes derinlik haritasi (%.1f M tekstel) %.2f s\n", renderer.params().sunMaps, mapTexels / 1e6, know() - t0);
     // blue noise for the dither
     {
         int w = 0, h = 0;
@@ -370,6 +383,20 @@ void KoyApp::adaptExposure(float dt, bool instant) {
     renderer.params().exposure = std::pow(2.0f, evAdapt);
 }
 
+void KoyApp::calibrateEye() {
+    const Diver keep = diver;
+    restartDiver();
+    diver.yaw = cfg.f("display.calib_yaw_deg", 180.0f) * 3.14159265f / 180.0f;
+    diver.pitch = cfg.f("display.calib_pitch_deg", -8.0f) * 3.14159265f / 180.0f;
+    setCamera();
+    frame();
+    adaptExposure(0.0f, true);
+    diver = keep;
+    setCamera();
+    frame();
+    adaptExposure(1e6f, false);
+}
+
 void KoyApp::save(const std::string& prefix) {
     std::filesystem::create_directories(std::filesystem::path(prefix).parent_path());
     renderer.download(pixels);
@@ -503,8 +530,11 @@ int runKoyCli(int argc, char** argv) {
         };
         const float3 ic = app.cfg.v3("island.centre", make_float3(0.0f, 0.0f, 60.0f));
         disc(ic.x, ic.z, app.cfg.f("island.radius", 35.0f), 120, 100, 70, false);
-        const float3 pm = app.cfg.v3("pier.min", make_float3(-1.5f, 0.0f, 0.0f)), pM = app.cfg.v3("pier.max", make_float3(1.5f, 0.0f, 28.0f));
-        rect(pm.x, pm.z, pM.x, pM.z, 150, 110, 70);
+        for (const KoyPierSection& S : koyPierSpec(app.cfg).sections) {
+            rect(S.x0, S.z0, S.x1, S.z1, 150, 110, 70);
+            for (float px : S.pileX)
+                for (float pz : S.pileZ) disc(px, pz, 0.25f, 90, 90, 90, false);
+        }
         const float bh = app.cfg.f("buoy.half", 15.0f), bz0 = app.cfg.f("buoy.z0", 24.0f), bz1 = app.cfg.f("buoy.z1", -160.0f);
         for (float z = bz1; z <= bz0; z += 3.0f) {
             disc(-bh, z, 0.25f, 255, 210, 0, false);
@@ -587,11 +617,15 @@ int runKoyCli(int argc, char** argv) {
         // world time --t; <out>_NN.png
         const std::string o = out.empty() ? app.root + "/captures/koy/kareler" : out;
         std::filesystem::create_directories(std::filesystem::path(o).parent_path());
+        // the eye's reference as the live scene sets it: metered at the start (the ladder), then each view adapted only
+        // display.adapt of the way from there, settled (as after a few seconds of looking)
+        app.stepWorld(t0);
+        app.calibrateEye();
         for (size_t c = 0; c < cams.size(); ++c) {
             aim(c);
             app.stepWorld(t0);
             app.frame();
-            app.adaptExposure(0.0f, true);
+            app.adaptExposure(1e6f, false);
             app.frame();
             if (ref) app.renderer.renderReference(refN);
             char nm[16];

@@ -740,6 +740,10 @@ void KoyOptics::tables() {
                 R[PT_SKY0 + 2][q] += cm * n2 * rim[li] * T;
                 R[PT_SUN_AIR][q] += cm * sunPerp[li] * T;
                 for (int k = 0; k < 3; ++k) R[PT_TORCH0 + k][q] += cm * basis[k][li] / PI * torchS[li] * T;
+                for (int k = 0; k < 3; ++k) {
+                    R[PT_AIRSUN0 + k][q] += cm * basis[k][li] / PI * n2 * sunPerp[li] * T;
+                    R[PT_AIRSKY0 + k][q] += cm * basis[k][li] / PI * n2 * skyHoriz[li] * T;
+                }
             }
             grey += cmf[1][li] * sunWaterPerp[li] * T;
         }

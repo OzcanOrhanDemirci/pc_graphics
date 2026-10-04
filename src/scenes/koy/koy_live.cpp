@@ -103,8 +103,7 @@ public:
         default:
             cudaMallocHost(reinterpret_cast<void**>(&pinned_), size_t(k_.width) * k_.height * sizeof(uchar4));
             k_.stepWorld(0.0f);
-            k_.frame();
-            k_.adaptExposure(0.0f, true);
+            k_.calibrateEye();
             st.fraction = 1.0f;
             st.done = true;
             return;

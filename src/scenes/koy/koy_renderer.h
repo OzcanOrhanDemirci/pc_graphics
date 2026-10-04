@@ -48,7 +48,8 @@ public:
     float4* ribbonPoints() { return ribbonPts_; }
     float3* ribbonNormals() { return ribbonNrm_; }
     void bakeAO();                                                // every mesh's per-vertex occlusion (once, after upload)
-    void bakeSunVisibility(float3 boxMin, float3 boxSize, int3 dims);   // 3D sun visibility of a box (once)
+    // a sun depth map over the surface rectangle [min, max] (x, z), texel metres (once, after upload); false if full
+    bool bakeSunMap(float2 mn, float2 mx, float texel);
     void setSampling(int baseSpp, int edgeSpp, int filter, float radius, float edgeContrast);
     void updateMaterials(const std::vector<KMaterial>& materials);   // the same count as uploaded (texture choice)
     // distances to the static geometry from p in 26 directions (index = 9 (z+1) + 3 (y+1) + (x+1), the centre skipped)
