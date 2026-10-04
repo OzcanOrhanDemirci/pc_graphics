@@ -10,7 +10,7 @@ For each view and each pair of modes:
   fark   mean |difference| of the 8-bit pixels, and the share of pixels differing by more than 3 levels
   ince   the RMS (grey levels) of the finest screen octave, 0.25-0.5 cycles a pixel, in the centre crop: the detail the
          screen actually shows. Ultra above Yuksek means the 16K put detail on the screen.
-Also writes <x>_NN_kirp.png: the centre crops (standart | yuksek | ultra) at 2x, for a look.
+Also writes <x>_NN_kirp.png: the centre crops (dusuk | normal | yuksek) at 2x, for a look.
 """
 import argparse
 import glob
@@ -21,7 +21,7 @@ import re
 import numpy as np
 from PIL import Image
 
-MODES = ('standart', 'yuksek', 'ultra')
+MODES = ('dusuk', 'normal', 'yuksek')
 
 
 def load(path):
@@ -95,7 +95,7 @@ def main():
                 'fark_3ten_buyuk': round(float((d > 3).mean()), 4),
             }
         out['gorunumler'][f'{v:02d}'] = res
-        # the centre crops at 2x, standart | yuksek | ultra
+        # the centre crops at 2x, dusuk | normal | yuksek
         tiles = [np.kron(centre((imgs[m] * 255.0).astype(np.uint8), 512), np.ones((2, 2, 1), dtype=np.uint8)) for m in modes if m in imgs]
         Image.fromarray(np.concatenate(tiles, axis=1)).save(f'{a.onek}_{v:02d}_kirp.png')
         line = '  '.join(f"{k}: flip {c['flip']:.4f} (orta {c['flip_orta']:.4f}), fark {c['fark_ort']:.2f}, >3 %{100 * c['fark_3ten_buyuk']:.1f}"

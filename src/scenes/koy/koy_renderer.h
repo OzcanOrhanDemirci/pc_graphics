@@ -45,8 +45,10 @@ public:
     // the light under the pier: a box of cells, `dirs` directions each (after the sun maps: it reads them)
     bool bakeHall(float3 mn, float3 mx, float cell, int dirs, int bounces);
     float hallStats_[2] = {0.0f, 0.0f};   // the baked share's least and most
-    void setSampling(int baseSpp, int edgeSpp, int filter, float radius, float edgeContrast);
+    // returns the base samples it got: the most that fit in the GPU's memory, at most baseSpp
+    int setSampling(int baseSpp, int edgeSpp, int filter, float radius, float edgeContrast);
     void updateMaterials(const std::vector<KMaterial>& materials);   // the same count as uploaded (texture choice)
+    void updateTextureSets(const std::vector<KTextureSet>& sets);    // the same count as uploaded (another texture tier)
     // new object-to-world transforms for some of the world's instances (their indices as uploaded); refits the IAS
     void setTransforms(const std::vector<int>& idx, const std::vector<std::array<float, 12>>& m);
     // distances to the static geometry from p in 26 directions (index = 9 (z+1) + 3 (y+1) + (x+1), the centre skipped)
@@ -67,7 +69,7 @@ public:
 
 private:
     void launch(CUdeviceptr raygen, unsigned int w, unsigned int h, unsigned int d, float* ms);
-    void allocSamples();
+    bool allocSamples();   // false: the GPU's memory did not take it (nothing allocated)
 
     std::string root_, deviceName_;
     unsigned int width_ = 0, height_ = 0;

@@ -20,6 +20,11 @@ GpuStats gpuStatsRead() {
     nvmlDeviceGetTemperature(g_gpu, NVML_TEMPERATURE_GPU, &s.tempC);
     nvmlUtilization_t u{};
     if (nvmlDeviceGetUtilizationRates(g_gpu, &u) == NVML_SUCCESS) s.utilPct = u.gpu;
+    nvmlMemory_t m{};
+    if (nvmlDeviceGetMemoryInfo(g_gpu, &m) == NVML_SUCCESS) {
+        s.memUsedGB = float(double(m.used) / 1073741824.0);
+        s.memTotalGB = float(double(m.total) / 1073741824.0);
+    }
     return s;
 }
 

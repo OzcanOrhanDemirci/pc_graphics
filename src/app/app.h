@@ -68,6 +68,7 @@ private:
     void drawHud(double now, const Status& st);
     void drawHelp(double now);
     void drawToasts(double now);
+    void drawBusy(double now, const Status& st);
     void drawFailed(double now);
     void drawDetails(const ui::Rect& area, float alpha);
     float keyCaps(float x, float y, const std::string& keys, float height, float alpha = 1.0f, bool dark = false);
@@ -151,7 +152,9 @@ private:
     int fpsFrames_ = 0;
     float fps_ = 0.0f, frameMs_ = 0.0f;
     double lastStats_ = 0.0;
-    float gpuW_ = 0, gpuC_ = 0;
+    float gpuW_ = 0, gpuC_ = 0, gpuMemUsed_ = 0, gpuMemTotal_ = 0;
+    double busyT0_ = -1.0;   // when the scene's busy card came up (< 0: none)
+    float busyShown_ = 0.0f;  // its bar, eased
 
     // --autotest: a script of keys, waits and framebuffer captures
     struct Step {

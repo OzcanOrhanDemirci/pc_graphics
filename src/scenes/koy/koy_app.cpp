@@ -274,9 +274,22 @@ void KoyApp::setup() {
     setCamera();
 }
 
-void KoyApp::setTextureMode(int mode) {
-    world.applyTextureMode(cfg, mode);
+void KoyApp::beginTextureTier(int tier) {
+    cudaDeviceSynchronize();   // no frame still in flight reads the textures about to go
+    world.beginTextures(cfg, tier);
+}
+
+bool KoyApp::pollTextureTier(float* fraction, std::string* what) {
+    if (!world.texturesLoading()) return true;
+    if (!world.pollTextures(fraction, what)) return false;
+    renderer.updateTextureSets(world.textureSets());
     renderer.updateMaterials(world.materials);
+    return true;
+}
+
+void KoyApp::setTextureTier(int tier) {
+    beginTextureTier(tier);
+    while (!pollTextureTier()) std::this_thread::sleep_for(std::chrono::milliseconds(5));
 }
 
 void KoyApp::setRipples(bool on) {
@@ -291,7 +304,7 @@ void KoyApp::setRipples(bool on) {
 
 void KoyApp::applyQuality() {
     renderer.params().edgeIdShare = cfg.f("sample.edge_id_share", 0.25f);
-    renderer.setSampling(quality.base, quality.edge, quality.filter, quality.radius, quality.contrast);
+    quality.baseGot = renderer.setSampling(quality.base, quality.edge, quality.filter, quality.radius, quality.contrast);
 }
 
 void KoyApp::setCamera() {
@@ -881,24 +894,21 @@ int runKoyCli(int argc, char** argv) {
             std::printf("dalgacik kiyas %d: derinlik %.2f m -> %s_%02d_*.png\n", int(c), -app.diver.pos.y, o.c_str(), int(c));
         }
     } else if (mode == "tex") {
-        // the same moment in the three texture modes (the panel's "Doku"), one exposure for all three (metered on
-        // "Yüksek"): the pictures differ by the textures alone. python tools/doku_kiyas.py <out> measures them
+        // the same moment in the three texture tiers (the panel's "Doku"), one exposure for all three (metered on
+        // "Yüksek"): the pictures differ by the textures alone. python tools/doku_kiyas.py <out> measures them (each tier
+        // is loaded in the last one's place: Yüksek first, then down)
         const std::string o = out.empty() ? app.root + "/captures/koy/doku/kiyas" : out;
         std::filesystem::create_directories(std::filesystem::path(o).parent_path());
-        static const char* names[3] = {"standart", "yuksek", "ultra"};
+        static const char* names[3] = {"dusuk", "normal", "yuksek"};
         for (size_t c = 0; c < std::max<size_t>(1, cams.size()); ++c) {
             if (c < cams.size()) aim(c);
-            app.setTextureMode(1);
+            if (app.world.texMode != 2) app.setTextureTier(2);
             app.stepWorld(t0);
             app.frame();
             app.adaptExposure(0.0f, true);
             const float exposure = app.renderer.params().exposure;
-            for (int m = 0; m < 3; ++m) {
-                app.setTextureMode(m);
-                if (app.world.texMode != m) {
-                    std::printf("doku %s yuklu degil: atlandi\n", names[m]);
-                    continue;
-                }
+            for (int m = 2; m >= 0; --m) {
+                if (app.world.texMode != m) app.setTextureTier(m);
                 app.renderer.params().exposure = exposure;
                 app.frame();
                 char nm[48];

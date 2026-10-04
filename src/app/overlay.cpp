@@ -330,6 +330,50 @@ void App::drawLoading(double now) {
     ui::end();
 }
 
+// The scene stopped its picture on purpose (another texture tier loading): the last frame held and dimmed, a card in
+// the middle with what it does and a bar (the loading screen's: the scene's colour, a glint travelling along the filled
+// part), so a held picture reads as work, not as a hang
+void App::drawBusy(double now, const Status& st) {
+    const SceneInfo& si = infos_[sceneIndex_];
+    if (busyT0_ < 0.0) {
+        busyT0_ = now;
+        busyShown_ = 0.0f;
+    }
+    const float in = smooth(float((now - busyT0_) / 0.35));
+    ui::rect(view_, ui::hex(0x000000, 0.38f * in));
+    busyShown_ += (std::min(1.0f, std::max(0.0f, st.busy)) - busyShown_) * 0.15f;
+    const ui::TextStyle titleT = theme::caption(S_, ui::withAlpha(accentText(si), in));
+    const ui::TextStyle noteT = theme::small(S_, ui::withAlpha(theme::muted(), in));
+    const ui::TextStyle labelT = theme::small(S_, ui::withAlpha(theme::text(), 0.9f * in));
+    const ui::TextStyle pctT = theme::mono(S_, 15.0f, ui::withAlpha(theme::text(), 0.9f * in));
+    const std::string note = L("Görüntü bilerek durduruldu: eski dokular karttan silindi, yenileri yükleniyor",
+                               "The picture is held on purpose: the old textures left the card, the new ones are loading");
+    const float pad = S_(34), bw = std::max(S_(560), ui::measure(note, noteT));
+    const float h = pad + ui::lineHeight(titleT) + S_(12) + ui::lineHeight(noteT) + S_(30) + S_(4) + S_(18) + ui::lineHeight(labelT) + pad;
+    const ui::Rect P{view_.x + 0.5f * (view_.w - bw - 2 * pad), view_.y + 0.5f * (view_.h - h) + (1.0f - easeOut(in)) * S_(14), bw + 2 * pad, h};
+    ui::shadow(P, S_(18), S_(28), ui::hex(0x000000, 0.45f * in));
+    ui::panel(P, ui::withAlpha(theme::glass(), in), ui::withAlpha(theme::glassBorder(), in), S_(18), std::max(1.0f, S_(1)));
+    float y = P.y + pad;
+    ui::text(P.x + pad, y, st.busyTitle, titleT);
+    y += ui::lineHeight(titleT) + S_(12);
+    ui::text(P.x + pad, y, note, noteT);
+    y += ui::lineHeight(noteT) + S_(30);
+    const float x0 = P.x + pad, bh = S_(4);
+    ui::rect(ui::Rect{x0, y, bw, bh}, ui::hex(0xFFFFFF, 0.12f * in), bh * 0.5f);
+    ui::rect(ui::Rect{x0, y, std::max(bh, bw * busyShown_), bh}, accentOf(si, in), bh * 0.5f);
+    {   // a glint travelling along the filled part (kept inside it): moving, so the wait reads as work
+        const float fill = bw * busyShown_, g = float(std::fmod(now * 0.6, 1.0));
+        const float gx0 = std::max(x0, x0 + fill * g - S_(40)), gx1 = std::min(x0 + fill, x0 + fill * g + S_(40));
+        if (gx1 > gx0 + 1.0f) ui::rect(ui::Rect{gx0, y, gx1 - gx0, bh}, ui::hex(0xFFFFFF, 0.35f * in), bh * 0.5f);
+    }
+    y += bh + S_(18);
+    std::string label = st.busyLabel;
+    for (int k = 0; k < int(now * 2.5) % 4; ++k) label += ".";
+    ui::text(x0, y, label, labelT);
+    const std::string pct = std::to_string(int(std::lround(100.0f * busyShown_))) + " %";
+    ui::text(x0 + bw - ui::measure(pct, pctT), y + 0.5f * (ui::lineHeight(labelT) - ui::lineHeight(pctT)), pct, pctT);
+}
+
 void App::drawFailed(double now) {
     const float W = float(fbw_), H = float(fbh_);
     ui::begin(fbw_, fbh_);
@@ -556,6 +600,7 @@ void App::drawHud(double now, const Status& st) {
         float lw = 0.0f, vw = 0.0f;
         std::vector<Metric> rows = st.metrics;
         if (gpuW_ > 0.0f) rows.push_back({L("Ekran kartı", "GPU"), std::to_string(int(std::lround(gpuW_))) + " W · " + std::to_string(int(gpuC_)) + " °C"});
+        if (gpuMemTotal_ > 0.0f) rows.push_back({L("Kart belleği", "GPU memory"), theme::num(gpuMemUsed_, 1) + " / " + theme::num(gpuMemTotal_, 1) + " GB"});
         for (const Metric& r : rows) { lw = std::max(lw, ui::measure(r.label, lab)); vw = std::max(vw, ui::measure(r.value, val)); }
         const float rowH = S_(28);
         const float w = std::max(lw + S_(24) + vw, ui::measure(fpsS, big) + S_(70)) + 2 * S_(20);

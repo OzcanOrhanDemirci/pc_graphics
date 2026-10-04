@@ -13,7 +13,7 @@ namespace {
 
 using app::L;
 
-const int kBaseChoices[] = {1, 4, 8, 16};
+const int kBaseChoices[] = {1, 4, 8, 16, 32};
 const int kEdgeChoices[] = {4, 8, 12, 16, 32};
 
 class KoyLive : public app::Scene {
@@ -76,7 +76,7 @@ public:
                     {L("Sağ tık", "Right button"), L("Basılı tutup bak", "Hold to look")}}},
                   {L("Sahne", "Scene"),
                    {{"P", L("Zamanı durdur (durunca örnekler birikir)", "Pause time (still: samples accumulate)")},
-                    {"E", L("Kenar piksellerini göster", "Show the edge pixels")}, {"K", L("Kostik aç/kapa", "Caustics on/off")}, {"F", L("Fener aç/kapa", "Torch on/off")},
+                    {"E", L("Kenar piksellerini göster", "Show the edge pixels")}, {"K", L("Kostik aç/kapa", "Caustics on/off")},
                     {"↑|↓", L("Pozlama", "Exposure")}}}};
         i.reloadable = true;
         return i;
@@ -108,6 +108,14 @@ public:
             ++st.step;
             return;
         default:
+            // settled (Ozcan 2026-10-05: "şu ayarlar sabitlensin seçmeyelim"): beams for the caustics, Blackman-Harris, the
+            // ripples on, the frame rate free; no torch ("fener olmasın")
+            k_.ocean.cset.method = 1;
+            k_.quality.filter = 1;
+            k_.applyQuality();
+            k_.setRipples(true);
+            k_.torchOn = false;
+            k_.setCamera();
             cudaMallocHost(reinterpret_cast<void**>(&pinned_), size_t(k_.width) * k_.height * sizeof(uchar4));
             k_.stepWorld(0.0f);
             k_.calibrateEye();
@@ -120,53 +128,40 @@ public:
     void frame(app::Host& host, const app::Input& in) override {
         const float dt = float(std::min(0.1, in.dt));
         bool refresh = false;   // the world's light changed: recompute it even with time paused
+        if (loading_) {
+            // another texture tier on its way: the picture held on purpose (the old textures are gone from the card), the
+            // diver held too; the panel's bar and the card over the picture say how far (status)
+            if (k_.pollTextureTier(&loadFraction_, &loadWhat_)) {
+                loading_ = false;
+                host.toast(tierToast(k_.world.texMode));
+                refresh = true;
+                resetAccum();
+            } else {
+                return;
+            }
+        }
         for (const app::ControlEvent& e : in.events) {
             if (e.id == "ornek" && e.item >= 0) k_.quality.base = kBaseChoices[e.item];
             if (e.id == "kenar" && e.item >= 0) k_.quality.edge = kEdgeChoices[e.item];
-            if (e.id == "suzgec" && e.item >= 0) k_.quality.filter = e.item;
-            if (e.id == "doku" && e.item >= 0) {
-                k_.setTextureMode(e.item);
-                const int got = k_.world.texMode;   // the best that is loaded, at most the one asked for
-                if (got != e.item)
-                    host.toast(L("Bu doku yüklenmedi (dosya yok, GPU belleği yetmedi ya da ayarla kapalı; nedeni konsolda)",
-                                 "These textures did not load (no files, not enough GPU memory or turned off; the console says which)"));
-                else
-                    host.toast(got == 2   ? L("Doku: ultra (kum ve ayrıntı katmanı 16K, kaya 8K)", "Textures: ultra (sand and detail layer 16K, rock 8K)")
-                               : got == 1 ? L("Doku: yüksek (her şey 8K: kaya, kum, ayrıntı katmanı)", "Textures: high (everything 8K: rock, sand, detail layer)")
-                                          : L("Doku: standart (2K)", "Textures: standard (2K)"));
-            }
-            if (e.id == "fener" && e.item >= 0) {
-                k_.torchOn = e.item == 1;
-                k_.setCamera();
-                refresh = true;
-            }
-            if (e.id == "dalgacik" && e.item >= 0) {
-                k_.setRipples(e.item == 1);
-                if (e.item == 1 && !k_.ripplesOn)
-                    host.toast(L("Dalgacık katmanı yok (ayarla kapalı ya da kurulamadı)", "No ripple layer (turned off or it could not be built)"));
-                else
-                    host.toast(k_.ripplesOn ? L("Dalgacıklar açık: yüzeyin 2-35 cm'lik dalgaları (yukarı bak)", "Ripples on: the surface's 2-35 cm waves (look up)")
-                                            : L("Dalgacıklar kapalı: yalnız istatistiksel pürüzlülük", "Ripples off: statistical roughness only"));
-                refresh = true;
-            }
-            if (e.id == "kostik" && e.item >= 0) {
-                k_.ocean.cset.method = e.item == 0 ? 1 : 0;
-                refresh = true;
-                host.toast(e.item == 0 ? L("Kostik: hüzme (gürültüsüz)", "Caustics: beams (noise free)")
-                                       : L("Kostik: ışın sayma (eski yöntem, kaynar)", "Caustics: counted rays (the old method, it boils)"));
+            if (e.id == "doku" && e.item >= 0 && e.item != k_.world.texMode) {
+                k_.beginTextureTier(e.item);
+                loading_ = true;
+                loadFraction_ = 0.0f;
+                loadWhat_.clear();
+                return;   // from the next frame on: the bar
             }
             k_.applyQuality();
+            if (e.id == "ornek" && k_.quality.baseGot < k_.quality.base)
+                host.toast(L("Kart belleği " + std::to_string(k_.quality.base) + " örneğe yetmedi: " + std::to_string(k_.quality.baseGot) +
+                                 " kullanılıyor (dokuyu düşürünce yer açılır)",
+                             "Not enough GPU memory for " + std::to_string(k_.quality.base) + " samples: using " + std::to_string(k_.quality.baseGot) +
+                                 " (lower textures free room)"));
             resetAccum();
         }
-        if (!paced_) {   // the first running frame: the frame rate the plan asks for (41 fps, every 4th refresh at 165 Hz)
-            host.pace(pace41_ ? 41.0f : 0.0f);
+        if (!paced_) {   // the first running frame: free (Ozcan 2026-10-05: "kare serbest")
+            host.pace(0.0f);
             paced_ = true;
         }
-        for (const app::ControlEvent& e : in.events)
-            if (e.id == "kare" && e.item >= 0) {
-                pace41_ = e.item == 0;
-                host.pace(pace41_ ? 41.0f : 0.0f);
-            }
         if (in.pressed(GLFW_KEY_TAB)) {
             look_ = !look_;
             host.captureMouse(look_);
@@ -177,13 +172,6 @@ public:
             resetAccum();
         }
         if (in.pressed(GLFW_KEY_E)) k_.renderer.params().view = k_.renderer.params().view == 1 ? 0 : 1;
-        if (in.pressed(GLFW_KEY_F)) {
-            k_.torchOn = !k_.torchOn;
-            k_.setCamera();
-            host.toast(k_.torchOn ? L("Fener açık: yakında gerçek renkler (kırmızı birkaç metrede söner)", "Torch on: true colours close up (red dies within metres)")
-                                  : L("Fener kapalı", "Torch off"));
-            resetAccum();
-        }
         if (in.pressed(GLFW_KEY_K)) {
             k_.caustics = !k_.caustics;
             host.toast(k_.caustics ? L("Kostik açık", "Caustics on") : L("Kostik kapalı (düz güneş)", "Caustics off (flat sun)"));
@@ -232,6 +220,12 @@ public:
         if (paused_) s.chips.push_back({accum_ ? L("Durdu · birikiyor", "Paused · accumulating") : L("Zaman durdu", "Time paused"), true});
         if (look_) s.chips.push_back({L("Fareyle bakış", "Mouse look")});
         if (k_.renderer.params().view == 1) s.chips.push_back({L("Kenar pikselleri", "Edge pixels"), true});
+        if (loading_) {
+            s.chips.push_back({L("Doku yükleniyor", "Textures loading"), true});
+            s.busy = loadFraction_;
+            s.busyTitle = L("Doku değişiyor · ", "Textures changing · ") + tierName(k_.world.texMode);
+            s.busyLabel = loadWhat_.empty() ? L("Hazırlanıyor", "Getting ready") : roleName(loadWhat_) + L(" çözülüyor", " decoding");
+        }
         if (!k_.caustics) s.chips.push_back({L("Kostik kapalı", "Caustics off"), true});
         s.metrics.push_back({L("Derinlik", "Depth"), num(-k_.diver.pos.y, 1) + " m"});
         s.metrics.push_back({L("Basınç", "Pressure"), num(k_.pressureBar(), 2) + " bar"});
@@ -251,10 +245,11 @@ public:
             c.kind = app::Control::Kind::Choice;
             c.id = "ornek";
             c.title = L("Örnek", "Samples");
-            c.items = {"1", "4", "8", "16"};
-            for (int k = 0; k < 4; ++k)
-                if (kBaseChoices[k] == k_.quality.base) c.active = k;
-            c.detail = L("Piksel başına sabit örnek (her yerde)", "Fixed samples a pixel (everywhere)");
+            c.items = {"1", "4", "8", "16", "32"};
+            for (int k = 0; k < 5; ++k)
+                if (kBaseChoices[k] == k_.quality.baseGot) c.active = k;
+            c.detail = L("Piksel başına sabit örnek (her yerde); 32: tamponu 1,9 GB, saniyede bir iki kare",
+                         "Fixed samples a pixel (everywhere); 32: a 1.9 GB buffer, a frame or two a second");
             s.controls.push_back(c);
         }
         {
@@ -265,7 +260,7 @@ public:
             c.items = {"4", "8", "12", "16", "32"};
             for (int k = 0; k < 5; ++k)
                 if (kEdgeChoices[k] == k_.quality.edge) c.active = k;
-            c.detail = L("Kenardaki piksele toplam örnek", "Samples in all for a pixel on an edge");
+            c.detail = L("Kenardaki piksele toplam örnek (örnekten az olamaz)", "Samples in all for a pixel on an edge (never fewer than the samples)");
             s.controls.push_back(c);
         }
         {
@@ -273,69 +268,11 @@ public:
             c.kind = app::Control::Kind::Choice;
             c.id = "doku";
             c.title = L("Doku", "Textures");
-            c.items = {L("Standart", "Standard"), L("Yüksek", "High"), "Ultra"};
+            c.items = {L("Düşük", "Low"), L("Normal", "Normal"), L("Yüksek", "High")};
             c.active = k_.world.texMode;
-            c.detail = L("Standart 2K · Yüksek: her şey 8K · Ultra: kum ve ayrıntı katmanı 16K (kayanın kendi taraması 8K'da biter)",
-                         "Standard 2K · High: everything 8K · Ultra: sand and detail layer 16K (the rock's own scan ends at 8K)");
+            c.detail = L("Düşük 1K · Normal 2K · Yüksek 8K, kum ve ayrıntı katmanı 16K; yalnız seçilen kartta durur",
+                         "Low 1K · Normal 2K · High 8K, the sand and the detail layer 16K; only the one chosen stays on the card");
             c.section = true;
-            s.controls.push_back(c);
-        }
-        {
-            app::Control c;
-            c.kind = app::Control::Kind::Choice;
-            c.id = "dalgacik";
-            c.title = L("Dalgacık", "Ripples");
-            c.items = {L("Kapalı", "Off"), L("Açık", "On")};
-            c.active = k_.ripplesOn ? 1 : 0;
-            c.detail = L("Su yüzeyinin 2-35 cm'lik dalgaları; yalnız bakışta (Snell penceresi, ayna, pırıltı), kostik değişmez",
-                         "The surface's 2-35 cm waves; in the view alone (Snell's window, the mirror, the glints), the caustics unchanged");
-            s.controls.push_back(c);
-        }
-        {
-            app::Control c;
-            c.kind = app::Control::Kind::Choice;
-            c.id = "fener";
-            c.title = L("Fener", "Torch");
-            c.items = {L("Kapalı", "Off"), L("Açık", "On")};
-            c.active = k_.torchOn ? 1 : 0;
-            c.detail = L("Dalgıcın el feneri (beyaz LED, 1 m'de ~3000 lx): yakında amforanın kil rengi, süngerin turuncusu; ışığı suda "
-                         "gidip döner, kırmızı birkaç metrede söner",
-                         "The diver's torch (white LED, ~3000 lx at 1 m): close up the jars' clay, the sponges' orange; its light goes "
-                         "through the water and back, red dies within metres");
-            s.controls.push_back(c);
-        }
-        {
-            app::Control c;
-            c.kind = app::Control::Kind::Choice;
-            c.id = "kostik";
-            c.title = L("Kostik", "Caustics");
-            c.items = {L("Hüzme", "Beams"), L("Işın (eski)", "Rays (old)")};
-            c.active = k_.ocean.cset.method == 1 ? 0 : 1;
-            c.detail = L("Hüzme: yüzeyin her hücresi bir ışık hüzmesi, ışığı derinlikte kapladığı alana yayılır; sayma yok, gürültü yok. "
-                         "Işın: eski yöntem, dokuya düşen ışınları sayar (kaynar)",
-                         "Beams: every cell of the surface is a beam of light, spread over the area it covers at depth; nothing counted, no noise. "
-                         "Rays: the old method, counting the rays that land in each texel (it boils)");
-            s.controls.push_back(c);
-        }
-        {
-            app::Control c;
-            c.kind = app::Control::Kind::Choice;
-            c.id = "kare";
-            c.title = L("Kare", "Frames");
-            c.items = {L("41 sabit", "41 steady"), L("Serbest", "Free")};
-            c.active = pace41_ ? 0 : 1;
-            c.detail = L("41: ekranın her 4. tazelemesi, eşit aralık", "41: every 4th refresh of the screen, evenly spaced");
-            c.section = true;
-            s.controls.push_back(c);
-        }
-        {
-            app::Control c;
-            c.kind = app::Control::Kind::Choice;
-            c.id = "suzgec";
-            c.title = L("Süzgeç", "Filter");
-            c.items = {L("Kutu", "Box"), "Blackman-Harris", "Mitchell", "Gauss"};
-            c.active = k_.quality.filter;
-            c.detail = L("Örnekleri birleştiren yeniden kurma süzgeci", "The reconstruction filter that joins the samples");
             s.controls.push_back(c);
         }
     }
@@ -365,11 +302,34 @@ public:
 
 private:
     void resetAccum() { accum_ = 0; }
+    static std::string tierName(int t) { return t == 0 ? L("Düşük", "Low") : t == 1 ? L("Normal", "Normal") : L("Yüksek", "High"); }
+    static std::string tierToast(int t) {
+        return t == 0   ? L("Doku: düşük (her şey 1K, ayrıntı katmanı dahil)", "Textures: low (everything 1K, the detail layer too)")
+               : t == 1 ? L("Doku: normal (her şey 2K)", "Textures: normal (everything 2K)")
+                        : L("Doku: yüksek (taramalar 8K, kum ve ayrıntı katmanı 16K)", "Textures: high (the scans 8K, the sand and the detail layer 16K)");
+    }
+    // a set's folder (assets/koy/cc0) in words
+    static std::string roleName(const std::string& f) {
+        const bool k16 = f.find("16k") != std::string::npos, k8 = f.find("8k") != std::string::npos;
+        const std::string size = k16 ? " (16K)" : k8 ? " (8K)" : "";
+        if (f.rfind("kum2", 0) == 0) return L("İkinci kum", "The second sand") + size;
+        if (f.rfind("kum", 0) == 0) return L("Kum", "Sand") + size;
+        if (f.rfind("kaya_ayrinti", 0) == 0) return L("Kaya ayrıntısı (atlas)", "Rock detail (atlas)") + size;
+        if (f.rfind("kaya", 0) == 0) return L("Kaya", "Rock") + size;
+        if (f.rfind("amfora", 0) == 0) return L("Amfora kili", "The jars' clay") + size;
+        if (f.rfind("kabuk", 0) == 0) return L("Deniz kabuğu", "Sea crust") + size;
+        if (f.rfind("ahsap", 0) == 0) return L("Ahşap", "Wood") + size;
+        if (f.rfind("beton", 0) == 0) return L("Beton", "Concrete") + size;
+        return f;
+    }
     app::SceneInfo info_ = describe();
     KoyApp k_;
     uchar4* pinned_ = nullptr;
     double t_ = 0.0;
-    bool paused_ = false, look_ = false, paced_ = false, pace41_ = true;
+    bool paused_ = false, look_ = false, paced_ = false;
+    bool loading_ = false;          // another texture tier on its way: the picture held
+    float loadFraction_ = 0.0f;
+    std::string loadWhat_;
     int accum_ = 0;
 };
 

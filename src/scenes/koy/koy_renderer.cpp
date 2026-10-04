@@ -120,17 +120,33 @@ bool KoyRenderer::init(unsigned int width, unsigned int height, const std::strin
     return true;
 }
 
-void KoyRenderer::allocSamples() {
-    if (allocatedBase_ == params_.baseSpp && params_.samples) return;
+bool KoyRenderer::allocSamples() {
+    if (allocatedBase_ == params_.baseSpp && params_.samples) return true;
     if (params_.samples) cudaFree(params_.samples);
-    params_.samples = devAlloc<float4>(size_t(width_) * height_ * params_.baseSpp);
+    params_.samples = nullptr;
+    allocatedBase_ = 0;
+    // 32 a pixel at 2560 x 1440 is 1.9 GB: next to the 16K textures it may not fit (the caller takes fewer then). Windows
+    // does not refuse it: past the card's memory it pages to the system's (measured 2026-10-05: 16 a pixel next to the
+    // 16K textures and a browser, 0.44 -> 1.3 s a frame). So only what fits in what is free, with room to spare
+    void* p = nullptr;
+    const size_t bytes = size_t(width_) * height_ * params_.baseSpp * sizeof(float4);
+    size_t freeB = 0, totalB = 0;
+    const size_t spare = size_t(320) << 20;
+    if (params_.baseSpp > 1 && cudaMemGetInfo(&freeB, &totalB) == cudaSuccess && bytes + spare > freeB) return false;
+    if (cudaMalloc(&p, bytes) != cudaSuccess) {
+        cudaGetLastError();
+        return false;
+    }
+    params_.samples = static_cast<float4*>(p);
     allocatedBase_ = params_.baseSpp;
+    return true;
 }
 
-void KoyRenderer::setSampling(int baseSpp, int edgeSpp, int filter, float radius, float edgeContrast) {
-    baseSpp = baseSpp <= 1 ? 1 : baseSpp <= 4 ? 4 : baseSpp <= 8 ? 8 : 16;
+int KoyRenderer::setSampling(int baseSpp, int edgeSpp, int filter, float radius, float edgeContrast) {
+    baseSpp = baseSpp <= 1 ? 1 : baseSpp <= 4 ? 4 : baseSpp <= 8 ? 8 : baseSpp <= 16 ? 16 : 32;
     edgeSpp = std::min(std::max(edgeSpp, baseSpp), KOY_MAX_EDGE);
-    const std::vector<float2> base = koyBasePattern(baseSpp);
+    // 32: the 16's points, then the farthest from all the others (the edge pattern's way)
+    const std::vector<float2> base = baseSpp <= 16 ? koyBasePattern(baseSpp) : koyEdgePattern(koyBasePattern(16), 32);
     const std::vector<float2> edge = koyEdgePattern(base, KOY_MAX_EDGE);
     params_.baseSpp = baseSpp;
     params_.edgeSpp = edgeSpp;
@@ -151,7 +167,15 @@ void KoyRenderer::setSampling(int baseSpp, int edgeSpp, int filter, float radius
             params_.filterW[jy + 1][jx + 1] = wb / baseSpp;
             params_.filterWEdge[jy + 1][jx + 1] = we / std::max(edgeSpp, 1);
         }
-    allocSamples();
+    if (!allocSamples()) {
+        if (baseSpp <= 1) {
+            std::fprintf(stderr, "koy: ornek tamponuna GPU bellegi yetmedi\n");
+            std::exit(1);
+        }
+        std::printf("koy: %d ornege GPU bellegi yetmedi, daha azi deneniyor\n", baseSpp);
+        return setSampling(baseSpp >= 32 ? 16 : baseSpp >= 16 ? 8 : baseSpp >= 8 ? 4 : 1, edgeSpp, filter, radius, edgeContrast);
+    }
+    return baseSpp;
 }
 
 bool KoyRenderer::compileDevice(std::string& log) {
@@ -648,8 +672,10 @@ void KoyRenderer::renderReference(int n) {
     const int base0 = params_.baseSpp, edge0 = params_.edgeSpp, filter0 = params_.filter;
     const float radius0 = params_.filterRadius, contrast0 = params_.edgeContrast;
     float4* live = params_.samples;
-    if (!refSamples_) refSamples_ = devAlloc<float4>(size_t(width_) * height_ * 16);
-    params_.samples = refSamples_;
+    // the live buffer holds 16 a pixel already: used as it is (the next live frame writes it anew); smaller, a buffer of 16
+    const bool reuse = base0 >= 16;
+    if (!reuse && !refSamples_) refSamples_ = devAlloc<float4>(size_t(width_) * height_ * 16);
+    params_.samples = reuse ? live : refSamples_;
     allocatedBase_ = 16;
     setSampling(16, 16, filter0, radius0, contrast0);
     const size_t np = size_t(width_) * height_;
@@ -689,6 +715,11 @@ void KoyRenderer::setTransforms(const std::vector<int>& idx, const std::vector<s
     CUDA_CHECK(cudaMemcpyAsync(const_cast<KInstance*>(params_.instances), kinstHost_.data(), kinstHost_.size() * sizeof(KInstance),
                                cudaMemcpyHostToDevice, stream_));
     buildIAS(true);
+}
+
+void KoyRenderer::updateTextureSets(const std::vector<KTextureSet>& sets) {
+    if (!params_.texSets || sets.empty()) return;
+    CUDA_CHECK(cudaMemcpy(const_cast<KTextureSet*>(params_.texSets), sets.data(), sets.size() * sizeof(KTextureSet), cudaMemcpyHostToDevice));
 }
 
 void KoyRenderer::updateMaterials(const std::vector<KMaterial>& materials) {

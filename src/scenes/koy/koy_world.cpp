@@ -316,7 +316,8 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
     materials.clear();
     // textures (CC0 scans fetched by assets/koy/fetch.py; without them plain albedos)
     const std::string tdir = root + "/assets/koy/cc0";
-    loadTextures(cfg, tdir);
+    texDir = tdir;
+    loadTexturesNow(cfg, cfg.i("tex.mode", 2));
     const int sandSet = setSand, rockSet = setRock;
     KMaterial floorM{};
     floorM.kind = KM_TERRAIN;
@@ -729,7 +730,7 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
         }
     }
     if (cfg.i("scatter.tiles", 1)) tileScatter(cfg.f("scatter.tile", 30.0f));
-    applyTextureMode(cfg, cfg.i("tex.mode", 2));
+    applyTextureRecipe(cfg);
 }
 
 // Everything spread over the whole floor (the outcrops, the pebbles, shells, stars, sponges, the reef's fans) was one mesh
@@ -813,46 +814,32 @@ void KoyWorld::tileScatter(float tile) {
     std::printf("koy dagilim: %zu ag -> %zu karo (%.0f m)\n", scat.size(), tiles.size(), tile);
 }
 
-bool KoyWorld::hasMode(int mode) const {
-    if (mode >= 2) return setSand16k >= 0 && setRockDetail16k >= 0 && setRock8k >= 0;
-    if (mode == 1) return setSand4k >= 0 && setRock8k >= 0;
-    return true;
-}
-
-void KoyWorld::applyTextureMode(const Config& cfg, int mode) {
-    mode = std::min(std::max(mode, 0), 2);
-    while (mode > 0 && !hasMode(mode)) --mode;   // ultra without its 16K files falls to high, high without 8K to standard
-    texMode = mode;
+void KoyWorld::applyTextureRecipe(const Config& cfg) {
     KMaterial& f = materials[0];
     KMaterial& r = materials[1];
-    const bool high = mode >= 1;
-    // ultra is high with the 16K sand and the 16K rock detail: the same recipe, only the resolution differs
-    const int sandHigh = mode == 2 ? setSand16k : setSand4k;
-    const int rockDetail = mode == 2 ? setRockDetail16k : setRockDetail;
-    if (f.texSet >= 0) f.texSet = high ? sandHigh : setSand;
-    if (r.texSet >= 0) r.texSet = high ? setRock8k : setRock;
+    const int rockDetail = setRockDetail;
     // the detail layers: the sand's own grain at half its tile; the rock a weathered limestone scan, finer
-    f.detailSet = high && f.texSet >= 0 ? sandHigh : -1;
+    f.detailSet = f.texSet >= 0 ? setSand : -1;
     f.detailTile = cfg.f("tex.sand_detail_tile", 1.75f);
     f.detailNormal = cfg.f("tex.sand_detail_normal", 0.5f);
     f.detailAlbedo = cfg.f("tex.sand_detail_albedo", 0.25f);
-    r.detailSet = high && r.texSet >= 0 ? rockDetail : -1;
+    r.detailSet = r.texSet >= 0 ? rockDetail : -1;
     r.detailTile = cfg.f("tex.rock_detail_tile", 1.8f);
     r.detailNormal = cfg.f("tex.rock_detail_normal", 0.6f);
     r.detailAlbedo = cfg.f("tex.rock_detail_albedo", 0.35f);
-    // Amfora: the jars take the clay (8K in both high modes; 2.00 m pressed to a 1.64 m tile: 0.2 mm a texel, the clay's
-    // grain 18 % finer than scanned)
+    // Amfora: the jars take the clay (2.00 m pressed to a 1.64 m tile: at 8K 0.2 mm a texel, the clay's grain 18 % finer
+    // than scanned)
     for (size_t k : {size_t(4), size_t(5), size_t(25)}) {   // Ada: the island's rock (wet, dry), the reef's: the limestone detail scan
         if (k >= materials.size()) continue;
         KMaterial& q = materials[k];
-        q.detailSet = rockDetail >= 0 ? rockDetail : setRockDetail;
+        q.detailSet = rockDetail;
         q.detailTile = cfg.f("island.detail_tile", 2.4f);
         q.detailNormal = cfg.f("island.detail_normal", 0.9f);
         q.detailAlbedo = cfg.f("island.detail_albedo", 0.6f);
     }
     if (materials.size() > 3) {
         KMaterial& j = materials[3];
-        j.detailSet = high ? setClay : -1;
+        j.detailSet = setClay;
         j.detailTile = cfg.f("amfora.detail_tile", 1.64f);
         j.detailNormal = cfg.f("amfora.detail_normal", 0.8f);
         j.detailAlbedo = cfg.f("amfora.detail_albedo", 0.55f);
@@ -863,14 +850,14 @@ void KoyWorld::applyTextureMode(const Config& cfg, int mode) {
     if (materials.size() > 22) {
         for (size_t k : {size_t(7), size_t(8)}) {
             KMaterial& q = materials[k];
-            q.detailSet = high && setConcrete >= 0 && cfg.i("pier.concrete_detail", 1) ? setConcrete : -1;
+            q.detailSet = setConcrete >= 0 && cfg.i("pier.concrete_detail", 1) ? setConcrete : -1;
             q.detailTile = cfg.f("pier.concrete_detail_tile", 0.9f);
             q.detailNormal = cfg.f("pier.concrete_detail_normal", 0.5f);
             q.detailAlbedo = cfg.f("pier.concrete_detail_albedo", 0.3f);
         }
         for (size_t k : {size_t(15), size_t(16), size_t(22)}) {
             KMaterial& q = materials[k];
-            q.detailSet = high ? rockDetail : -1;
+            q.detailSet = rockDetail;
             q.detailTile = cfg.f("props.stone_detail_tile", 1.8f);
             q.detailNormal = cfg.f("props.stone_detail_normal", k == 22 ? 0.7f : 0.8f);
             q.detailAlbedo = cfg.f("props.stone_detail_albedo", k == 22 ? 0.4f : 0.5f);
@@ -891,6 +878,7 @@ void KoyWorld::release() {
         for (void* a : t.arrays) cudaFreeMipmappedArray(static_cast<cudaMipmappedArray_t>(a));
     }
     textures.clear();
+    textureBytes = 0;
 }
 
 std::string KoyWorld::summary() const {
@@ -979,8 +967,24 @@ void buildMips(HostTexture& t) {
     if (t.srgb) t.mean = make_float3(lut[px[0]], lut[px[1]], lut[px[2]]);
 }
 
-// <base>.jpg/.png/.jpeg decoded to RGBA8 and mipmapped; an empty texture if there is no such file
-HostTexture decodeImage(const std::string& base, bool srgb) {
+// only the levels up to `cap` texels across: level 0 becomes the first that fits (the rest of the chain as it was)
+void trimTo(HostTexture& t, int cap) {
+    int drop = 0;
+    while (drop + 1 < t.levels && std::max(t.w >> drop, t.h >> drop) > cap) ++drop;
+    if (drop == 0) return;
+    const std::vector<unsigned char>& top = t.mips[size_t(drop) - 1];
+    unsigned char* nb = static_cast<unsigned char*>(std::malloc(top.size()));
+    std::memcpy(nb, top.data(), top.size());
+    std::free(t.base);
+    t.base = nb;
+    t.mips.erase(t.mips.begin(), t.mips.begin() + drop);
+    t.w = std::max(1, t.w >> drop);
+    t.h = std::max(1, t.h >> drop);
+    t.levels -= drop;
+}
+
+// <base>.jpg/.png/.jpeg decoded to RGBA8 and mipmapped, at most cap texels across; an empty texture if there is no file
+HostTexture decodeImage(const std::string& base, bool srgb, int cap = 1 << 30) {
     HostTexture t;
     for (const char* ext : {".jpg", ".png", ".jpeg"}) {
         const std::string p = base + ext;
@@ -994,6 +998,7 @@ HostTexture decodeImage(const std::string& base, bool srgb) {
         }
         t.srgb = srgb;
         buildMips(t);
+        trimTo(t, cap);
         return t;
     }
     return t;
@@ -1047,14 +1052,6 @@ bool uploadTexture(const HostTexture& t, KoyTextureSet& out, unsigned long long&
     return true;
 }
 
-// a set's maps, decoding (each on its own thread) or decoded; `rest`: the slot's other folders, should this one fail
-struct PendingSet {
-    std::string name;
-    std::vector<std::string> rest;
-    int* index = nullptr;
-    std::future<HostTexture> albedo, normal, rough;
-};
-
 void releaseSet(KoyTextureSet& t) {
     for (auto o : t.textures) cudaDestroyTextureObject(cudaTextureObject_t(o));
     for (void* a : t.arrays) cudaFreeMipmappedArray(static_cast<cudaMipmappedArray_t>(a));
@@ -1084,6 +1081,15 @@ bool uploadSet(const std::string& name, HostTexture albedo, HostTexture normal, 
     std::printf("koy: malzeme %s %dx%d%s\n", name.c_str(), albedo.w, albedo.h, out.set.hasNormal ? " (normal haritali)" : "");
     return true;
 }
+int imageWidth(const std::string& base) {
+    for (const char* ext : {".jpg", ".png", ".jpeg"}) {
+        const std::string p = base + ext;
+        if (!std::filesystem::exists(p)) continue;
+        int w = 0, h = 0, n = 0;
+        return stbi_info(p.c_str(), &w, &h, &n) ? std::max(w, h) : 0;
+    }
+    return 0;
+}
 bool hasImage(const std::string& base) {
     for (const char* ext : {".jpg", ".png", ".jpeg"})
         if (std::filesystem::exists(base + ext)) return true;
@@ -1096,65 +1102,144 @@ bool koyLoadTextureSet(const std::string& dir, const std::string& name, KoyTextu
     return uploadSet(name, decodeImage(base + "albedo", true), decodeImage(base + "normal", false), decodeImage(base + "rough", false), out, nullptr);
 }
 
-// Every set's maps are decoded and mipmapped at once, each on its own thread (the 16K maps alone take seconds each on
-// one core); the uploads follow here, in order, on the CUDA thread, each as soon as its maps are ready. The slots name
-// their fallbacks: the first folder that has an albedo is loaded.
-void KoyWorld::loadTextures(const Config& cfg, const std::string& dir) {
-    const auto t0 = std::chrono::steady_clock::now();
-    textureBytes = 0;
-    setSand = setRock = setSand4k = setRock8k = setRockDetail = setSand16k = setRockDetail16k = setClay = setCoat = setWood = setConcrete = -1;
-    setFloor2 = -1;
-    if (cfg.f("tex.use", 1.0f) < 0.5f) return;
-    struct Slot {
-        std::vector<const char*> names;
-        int* index;
+// A tier on its way: every role's maps decoding at once, each on its own thread (a 16K map is seconds of work on one
+// core); the uploads follow on the CUDA thread, one set a call, each as soon as its maps are ready.
+struct KoyWorld::TexLoad {
+    struct Job {
+        int* index = nullptr;
+        int role = 0;
+        std::string name, smallest;   // the folder chosen; the role's smallest (should the GPU not take this one)
+        int cap = 0;
+        double weight = 0.0;          // the source's texels, all maps (the decode's work: an 8K source cut to 1K is still 8K)
+        double started = 0.0;         // seconds after t0
+        bool done = false;
+        std::future<HostTexture> albedo, normal, rough;
     };
-    std::vector<Slot> slots = {{{"kum"}, &setSand}, {{"kaya_model"}, &setRock}};
-    if (cfg.i("tex.high", 1)) {   // everything at 8K (panel "Yüksek")
-        slots.push_back({{"kum_8k", "kum_4k"}, &setSand4k});
-        slots.push_back({{"kaya_model_8k"}, &setRock8k});
-        slots.push_back({{"kaya_ayrinti_8k", "kaya_ayrinti"}, &setRockDetail});
-        if (cfg.i("amfora.use", 0)) slots.push_back({{"amfora_kil_8k"}, &setClay});   // the jars' clay
-        slots.push_back({{"kabuk_8k"}, &setCoat});      // the sea's concretion (jars, rock, piles, the wreck)
-        slots.push_back({{"ahsap_8k", "ahsap_4k"}, &setWood});      // the pier's and the wreck's boards
-        slots.push_back({{"beton_8k", "beton_4k"}, &setConcrete});  // the pier's concrete
-        slots.push_back({{"kum2_8k"}, &setFloor2});                 // the shell-strewn sand's patches
-        if (cfg.i("tex.ultra", 1)) {   // the sand and the rock detail at 16K (panel "Ultra")
-            slots.push_back({{"kum_16k"}, &setSand16k});
-            slots.push_back({{"kaya_ayrinti_16k"}, &setRockDetail16k});
-        }
+    std::vector<Job> jobs;
+    std::chrono::steady_clock::time_point t0;
+    double total = 0.0;
+    double rate = 0.0;                // texels a second one decoding thread managed (measured), 0 before the first
+    double seconds() const { return std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count(); }
+    void start(Job& j, const std::string& dir) {
+        const std::string base = dir + "/" + j.name + "/";
+        const int cap = j.cap;
+        j.started = seconds();
+        j.albedo = std::async(std::launch::async, [base, cap] { return decodeImage(base + "albedo", true, cap); });
+        j.normal = std::async(std::launch::async, [base, cap] { return decodeImage(base + "normal", false, cap); });
+        j.rough = std::async(std::launch::async, [base, cap] { return decodeImage(base + "rough", false, cap); });
     }
-    std::vector<PendingSet> pending;
-    for (const Slot& s : slots) {
-        std::vector<std::string> found;
-        for (const char* nm : s.names)
-            if (hasImage(dir + "/" + nm + "/albedo")) found.push_back(nm);
-        if (found.empty()) {
-            std::printf("koy: %s yok (python assets/koy/fetch.py)\n", s.names[0]);
+};
+
+void KoyWorld::beginTextures(const Config& cfg, int tier) {
+    release();   // the tier on screen leaves the GPU first: the next may need all of it
+    tier = std::min(std::max(tier, 0), 2);
+    texMode = tier;
+    textureBytes = 0;
+    texLoad.reset();
+    setSand = setRock = setRockDetail = setClay = setCoat = setWood = setConcrete = setFloor2 = -1;
+    if (cfg.f("tex.use", 1.0f) < 0.5f) return;
+    textures.assign(TR_COUNT, KoyTextureSet());
+    auto L = std::make_shared<TexLoad>();
+    L->t0 = std::chrono::steady_clock::now();
+    const int cap = tier == 0 ? cfg.i("tex.low_texels", 1024) : tier == 1 ? cfg.i("tex.normal_texels", 2048) : (1 << 30);
+    struct Role {
+        int role;
+        std::vector<const char*> names;   // the same scan at its sizes
+        int* index;
+        bool want;
+    };
+    const std::vector<Role> roles = {{TR_SAND, {"kum", "kum_4k", "kum_8k", "kum_16k"}, &setSand, true},   // ambientCG Ground054
+                                     {TR_ROCK, {"kaya_model", "kaya_model_8k"}, &setRock, true},          // boulder_01
+                                     {TR_ROCK_DETAIL, {"kaya_ayrinti", "kaya_ayrinti_8k", "kaya_ayrinti_16k"}, &setRockDetail, true},
+                                     {TR_CLAY, {"amfora_kil_8k"}, &setClay, cfg.i("amfora.use", 0) != 0},
+                                     {TR_COAT, {"kabuk_8k"}, &setCoat, true},
+                                     {TR_WOOD, {"ahsap_4k", "ahsap_8k"}, &setWood, true},
+                                     {TR_CONCRETE, {"beton_4k", "beton_8k"}, &setConcrete, true},
+                                     {TR_FLOOR2, {"kum2_8k"}, &setFloor2, true}};
+    for (const Role& r : roles) {
+        if (!r.want) continue;
+        // the smallest that is at least the cap (the least to decode); none that big: the biggest there is
+        std::string pick, smallest;
+        int pickW = 0, smallW = 0;
+        for (const char* nm : r.names) {
+            const int w = imageWidth(texDir + "/" + nm + "/albedo");
+            if (w <= 0) continue;
+            if (smallest.empty() || w < smallW) { smallest = nm; smallW = w; }
+            const bool better = pick.empty() || (pickW < cap ? w > pickW : (w >= cap && w < pickW));
+            if (better) { pick = nm; pickW = w; }
+        }
+        if (pick.empty()) {
+            std::printf("koy: %s yok (python assets/koy/fetch.py)\n", r.names[0]);
             continue;
         }
-        PendingSet p;
-        p.name = found[0];
-        p.rest.assign(found.begin() + 1, found.end());
-        p.index = s.index;
-        const std::string base = dir + "/" + p.name + "/";
-        p.albedo = std::async(std::launch::async, [base] { return decodeImage(base + "albedo", true); });
-        p.normal = std::async(std::launch::async, [base] { return decodeImage(base + "normal", false); });
-        p.rough = std::async(std::launch::async, [base] { return decodeImage(base + "rough", false); });
-        pending.push_back(std::move(p));
+        TexLoad::Job j;
+        j.index = r.index;
+        j.role = r.role;
+        j.name = pick;
+        j.smallest = smallest;
+        j.cap = cap;
+        j.weight = double(pickW) * pickW * (hasImage(texDir + "/" + pick + "/rough") ? 3.0 : 2.0);
+        L->total += j.weight;
+        *r.index = r.role;   // the slot is the role's (empty until its set is up)
+        L->start(j, texDir);
+        L->jobs.push_back(std::move(j));
     }
-    for (PendingSet& p : pending) {
+    texLoad = L;
+}
+
+bool KoyWorld::pollTextures(float* fraction, std::string* what) {
+    if (!texLoad) {
+        if (fraction) *fraction = 1.0f;
+        return true;
+    }
+    TexLoad& L = *texLoad;
+    auto ready = [](std::future<HostTexture>& f) { return !f.valid() || f.wait_for(std::chrono::seconds(0)) == std::future_status::ready; };
+    for (TexLoad::Job& j : L.jobs) {
+        if (j.done || !(ready(j.albedo) && ready(j.normal) && ready(j.rough))) continue;
+        const double took = std::max(L.seconds() - j.started, 1e-3);
+        L.rate = std::max(L.rate, j.weight / took);   // the fastest thread so far (the jobs share the cores)
         KoyTextureSet t;
-        bool ok = uploadSet(p.name, p.albedo.get(), p.normal.get(), p.rough.get(), t, &textureBytes);
-        for (size_t k = 0; !ok && k < p.rest.size(); ++k) {   // the slot's next folder, here and now (a failure path)
-            const std::string base = dir + "/" + p.rest[k] + "/";
-            ok = uploadSet(p.rest[k], decodeImage(base + "albedo", true), decodeImage(base + "normal", false), decodeImage(base + "rough", false), t,
-                           &textureBytes);
+        if (uploadSet(j.name, j.albedo.get(), j.normal.get(), j.rough.get(), t, &textureBytes)) {
+            textures[size_t(j.role)] = t;
+            j.done = true;
+        } else if (j.cap > 1024 || j.name != j.smallest) {   // the GPU did not take it: the smallest, at 1K, rather than none
+            std::printf("koy: %s yerine %s 1K deneniyor\n", j.name.c_str(), j.smallest.c_str());
+            j.name = j.smallest;
+            j.cap = 1024;
+            L.start(j, texDir);
+        } else {
+            *j.index = -1;
+            j.done = true;
         }
-        if (ok) {
-            textures.push_back(t);
-            *p.index = int(textures.size()) - 1;
+        break;   // one upload a call: the bar is drawn between them
+    }
+    double got = 0.0, biggest = 0.0;
+    const double now = L.seconds(), rate = L.rate > 0.0 ? L.rate : 2.5e7;   // before any is done: a guess (an 8K JPEG ~5 s)
+    bool all = true;
+    for (const TexLoad::Job& j : L.jobs) {
+        if (j.done) {
+            got += j.weight;
+            continue;
+        }
+        all = false;
+        got += j.weight * std::min(0.95, (now - j.started) * rate / j.weight);   // its decode, estimated from the time
+        if (j.weight > biggest && what) {
+            biggest = j.weight;
+            *what = j.name;
         }
     }
-    textureSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+    if (fraction) *fraction = L.total > 0.0 ? float(std::min(1.0, got / L.total)) : 1.0f;
+    if (!all) return false;
+    textureSeconds = now;
+    size_t freeB = 0, totalB = 0;
+    cudaMemGetInfo(&freeB, &totalB);
+    std::printf("koy dokular: %s, %.1f s, dizilerde %.2f GB; kartta %.2f / %.2f GB dolu\n", texMode == 0 ? "dusuk" : texMode == 1 ? "normal" : "yuksek",
+                textureSeconds, textureBytes / 1073741824.0, (totalB - freeB) / 1073741824.0, totalB / 1073741824.0);
+    texLoad.reset();
+    return true;
+}
+
+void KoyWorld::loadTexturesNow(const Config& cfg, int tier) {
+    beginTextures(cfg, tier);
+    while (!pollTextures()) std::this_thread::sleep_for(std::chrono::milliseconds(5));
 }

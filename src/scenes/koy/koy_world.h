@@ -10,6 +10,7 @@
 
 #include <cuda_runtime.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -52,20 +53,30 @@ struct KoyWorld {
     KoyBuoys buoys;                 // Ada: the buoy lines and the mooring buoy (moving instances)
     float3 rockCentre{};
     float rockRadius = 0.0f;
-    // the texture choice (the panel's "Doku"): 0 standard (2K scans), 1 high (everything 8K, detail layers), 2 ultra (the
-    // sand and the rock's detail layer at 16K; the boulder's own scan ends at 8K). All of them stay loaded: live switching
-    int texMode = 2;
-    int setSand = -1, setSand4k = -1, setRock = -1, setRock8k = -1, setRockDetail = -1;
-    int setSand16k = -1, setRockDetail16k = -1;
-    int setClay = -1, setCoat = -1;   // Amfora: the jars' clay (8K, a 1.64 m tile) and the concretion (8K, 1.36 m)
-    int setFloor2 = -1;                   // Ada enriched: the second sand (shell-strewn, 8K, 3 m)
+    // The textures (the panel's "Doku"): one set per role, each at its own fixed index (a material points at a role, not
+    // at a file), the same recipe in every tier; the tier says only how sharp: 0 Düşük (1K), 1 Normal (2K), 2 Yüksek (the
+    // scans' 8K, the sand and the rock's detail layer 16K). Only the tier on screen is on the GPU: another one is loaded in
+    // its place (Ozcan 2026-10-05: lowering it must free the memory; before, all of them stayed loaded)
+    enum TexRole { TR_SAND, TR_ROCK, TR_ROCK_DETAIL, TR_CLAY, TR_COAT, TR_WOOD, TR_CONCRETE, TR_FLOOR2, TR_COUNT };
+    int texMode = 2;                      // the tier loaded (or being loaded)
+    int setSand = -1, setRock = -1, setRockDetail = -1;   // the role's index, -1: its files are not there
+    int setClay = -1, setCoat = -1;   // Amfora: the jars' clay (a 1.64 m tile) and the concretion (1.36 m)
+    int setFloor2 = -1;                   // Ada enriched: the second sand (shell-strewn, 3 m)
     KoyFloorMask floorMask;               // where it lies, where silt and grit are (koy_reef.h)
-    int setWood = -1, setConcrete = -1;   // Ada: the pier's and the wreck's boards (4K, 0.5 m), the piles' concrete (4K, 2.7 m)
-    double textureSeconds = 0.0;    // decoding, mipmapping and uploading every set
+    int setWood = -1, setConcrete = -1;   // Ada: the pier's and the wreck's boards (0.5 m), the piles' concrete (2.7 m)
+    std::string texDir;             // assets/koy/cc0
+    double textureSeconds = 0.0;    // decoding, mipmapping and uploading the tier
     size_t textureBytes = 0;        // the sets' GPU arrays, all levels
-    bool hasMode(int mode) const;
-    void applyTextureMode(const Config& cfg, int mode);   // takes the best mode that is there, at most `mode`
-    void loadTextures(const Config& cfg, const std::string& dir);   // every set decoded in parallel, uploaded in order
+    struct TexLoad;                 // a tier on its way (koy_world.cpp)
+    std::shared_ptr<TexLoad> texLoad;
+    // the loaded tier leaves the GPU (its memory free at once), the next one's maps start decoding, each on its own thread
+    void beginTextures(const Config& cfg, int tier);
+    // on the CUDA thread: uploads one decoded set (the frame shows the bar between them); true once all are up.
+    // fraction: how far (decoding estimated from the time it takes), what: the biggest still on its way
+    bool pollTextures(float* fraction = nullptr, std::string* what = nullptr);
+    bool texturesLoading() const { return texLoad != nullptr; }
+    void loadTexturesNow(const Config& cfg, int tier);
+    void applyTextureRecipe(const Config& cfg);   // the materials' detail layers (the same in every tier)
     void build(const Config& cfg, const std::string& root);
     std::vector<KTextureSet> textureSets() const;
     void release();

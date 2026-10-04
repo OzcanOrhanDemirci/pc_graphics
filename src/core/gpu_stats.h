@@ -4,6 +4,7 @@
 struct GpuStats {
     float watts = 0, limitWatts = 0;
     unsigned int smClockMHz = 0, memClockMHz = 0, tempC = 0, utilPct = 0;
+    float memUsedGB = 0, memTotalGB = 0;   // the card's memory, every process
 };
 
 bool gpuStatsInit();

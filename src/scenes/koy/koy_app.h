@@ -38,6 +38,7 @@ struct Diver {
 
 struct KoyQuality {   // the panel's knobs (Durak 1)
     int base = 4, edge = 16, filter = 1;
+    int baseGot = 4;                 // what the GPU's memory took (fewer than base when 32 does not fit)
     float radius = 1.5f, contrast = 0.04f;
 };
 
@@ -78,7 +79,10 @@ struct KoyApp {
     bool compile();
     void setup();                          // optics, ocean, world, bakes (after compile)
     void applyQuality();
-    void setTextureMode(int mode);         // 0 standard, 1 high, 2 ultra (panel "Doku")
+    // the panel's "Doku": 0 Düşük (1K), 1 Normal (2K), 2 Yüksek (8K, 16K); the old tier leaves the GPU first
+    void beginTextureTier(int tier);
+    bool pollTextureTier(float* fraction = nullptr, std::string* what = nullptr);   // true once it is on screen
+    void setTextureTier(int tier);         // the whole load, waiting (the command line)
     void setRipples(bool on);              // stays off if there are none
     void setCamera();                      // the diver's eye, the mask, the field of view
     void stepDiver(float fwd, float right, float up, bool strong, float lookDX, float lookDY, float dt);

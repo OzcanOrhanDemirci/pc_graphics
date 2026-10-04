@@ -345,6 +345,8 @@ void App::frameRunning(double now, double dt) {
     panels_.clear();
     panelControls_ = st.controls;
     if (hud_) drawHud(now, st);
+    if (st.busy >= 0.0f) drawBusy(now, st);
+    else busyT0_ = -1.0;
     if (help_) drawHelp(now);
     drawToasts(now);
     ui::end();
@@ -371,7 +373,7 @@ void App::autotestStep(double now) {
         case 1: keyQueue_.push_back(s.key); break;
         case 2: pendingShot_ = s.name; return;   // taken after this frame is drawn
         case 5:
-            std::printf("autotest %s: %.1f fps, kare %.1f ms\n", s.name.c_str(), fps_, frameMs_);
+            std::printf("autotest %s: %.1f fps, kare %.1f ms, kart bellegi %.1f / %.1f GB\n", s.name.c_str(), fps_, frameMs_, gpuMemUsed_, gpuMemTotal_);
             if (scene_) {
                 Status st;
                 scene_->status(st);
@@ -611,13 +613,12 @@ int App::run(const Options& opt) {
                 right(false); wait(0.5); shot("koy_saga_bakti");
                 control("ornek", 3); wait(1.0); log("koy 16 ornek"); shot("koy_16_ornek");
                 control("ornek", 1); control("kenar", 4); wait(1.0); log("koy kenar 32"); shot("koy_kenar_32");
-                control("kenar", 2); control("suzgec", 0); wait(0.6); shot("koy_kutu_suzgec"); control("suzgec", 1);
-                control("doku", 0); wait(0.6); log("koy doku standart"); shot("koy_doku_standart");
-                control("doku", 1); wait(0.6); log("koy doku yuksek"); shot("koy_doku_yuksek");
-                control("doku", 2); wait(0.6); log("koy doku ultra"); shot("koy_doku_ultra");
-                control("dalgacik", 0); wait(0.6); log("koy dalgacik kapali"); shot("koy_dalgacik_kapali");
-                control("dalgacik", 1); wait(0.6); log("koy dalgacik acik"); shot("koy_dalgacik_acik");
-                control("kostik", 1); wait(1.0); log("koy kostik isin (eski)"); shot("koy_kostik_isin"); control("kostik", 0); wait(0.4);
+                control("kenar", 2); wait(0.6);
+                // the texture tiers (each in the last one's place: the card's memory follows), the bar while it loads
+                control("doku", 1); wait(0.8); shot("koy_doku_yukleniyor"); wait(6.0); log("koy doku normal"); shot("koy_doku_normal");
+                control("doku", 0); wait(6.0); log("koy doku dusuk"); shot("koy_doku_dusuk");
+                control("ornek", 4); wait(4.0); log("koy dusuk 32 ornek"); shot("koy_dusuk_32_ornek"); control("ornek", 1); wait(1.0);
+                control("doku", 2); wait(16.0); log("koy doku yuksek"); shot("koy_doku_yuksek");
                 key(GLFW_KEY_E); wait(0.6); shot("koy_kenar_pikselleri"); key(GLFW_KEY_E);
                 key(GLFW_KEY_P); wait(2.0); log("koy durdu"); shot("koy_durdu_birikti"); key(GLFW_KEY_P); wait(0.5);
             }
@@ -648,6 +649,8 @@ int App::run(const Options& opt) {
             const GpuStats g = gpuStatsRead();
             gpuW_ = g.watts;
             gpuC_ = float(g.tempC);
+            gpuMemUsed_ = g.memUsedGB;
+            gpuMemTotal_ = g.memTotalGB;
             lastStats_ = now;
         }
         const double f0 = nowSec();

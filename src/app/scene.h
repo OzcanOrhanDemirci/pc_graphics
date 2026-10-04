@@ -99,6 +99,10 @@ struct Status {
     std::string progressLabel;           // with progress >= 0: a bar
     float progress = -1.0f;
     bool progressEndless = false;        // the bar runs without an end (until stopped)
+    // the scene has stopped its picture on purpose while it works (another texture tier loading): the last frame held,
+    // a card with a bar over it, drawn with the interface hidden too (Ozcan 2026-10-05: "kitlenmiş değil, bilerek durmuş")
+    float busy = -1.0f;                  // >= 0: how far, 0..1
+    std::string busyTitle, busyLabel;    // what it does; what it is on now
 };
 
 // what the application offers a scene

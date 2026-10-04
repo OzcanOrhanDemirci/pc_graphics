@@ -3,7 +3,62 @@
 > Tek kaynak durum panosu. Son plan: **`docs/koy/PLAN_ADA.md`** (üçüncü bölüm "Ada", 🏁 bitti); önceki planlar
 > `PLAN.md`, `PLAN_AMFORA.md`. Veri: `docs/koy/VERI.md`. CC0 taramalar: `assets/koy/fetch.py`, `assets/koy/LICENSES.md`.
 
-## Şu an · 2026-10-05 gece · Özcan canlı baktı: iki revize (havadaki bitkiler, ufuk çizgisi)
+## Şu an · 2026-10-05 gece · panel sadeleşti, doku seviyeleri kartı gerçekten boşaltıyor
+
+**Özcan:** *"Fener olmasın, kaldıralım [...] Şu ayarlar sabitlensin seçmeyelim: Kostik yeni, backman harris olan, dalgacık
+açık, kare serbest. Örneklerde ikisi de 32 olsun sınır [...] Bir kere yüksekte başlayınca vrami salmıyor, düşük yapınca
+vram düşmüyor [...] Düşük 720P çok düşük olsun tüm dokular ve atlas. Normal 2K. Yüksek 8/16K olsun [...] yükleme
+gerekiyorsa ekranda temaya uygun bir dolma çubuğu ekle ve görüntüyü bilerek durdur"*.
+
+**Panel:**
+- **Kalkanlar:** Fener seçeneği ve F tuşu kalktı (kod duruyor, kapalı). Kostik (hüzme), Süzgeç (Blackman-Harris),
+  Dalgacık (açık) ve Kare (serbest) sabitlendi, panelde seçilmiyor.
+- **Örnek:** 1/4/8/16/32. 32'lik desen 16'nın noktalarına, kenar deseni gibi en uzak noktalar eklenerek kuruldu.
+- **Kenar:** 4/8/12/16/32 (zaten 32'ye kadardı).
+- **Kart belleği kontrolü:** örnek tamponu ayrılmadan önce kartta yer var mı bakılıyor; yoksa sığan en çok örneğe
+  iniliyor, uyarı çıkıyor ve panel gerçekte kullanılanı gösteriyor. Neden gerekli: Windows taşan belleği reddetmiyor,
+  sessizce sistem RAM'ine sayfalıyor. Yüksek dokular, 16 örnek ve açık bir tarayıcıyla kare 0,44 sn'den 1,3 sn'ye
+  çıkmıştı. Şimdi Yüksek'te 16 örnek istenince 8'e iniyor ve 19 fps'te akıyor.
+- **Referans kare:** durunca biriken referans kare, canlı tampon zaten 16 ya da daha fazlaysa onu kullanıyor (eskiden
+  her seferinde ayrı bir 0,9 GB tampon açıyordu).
+
+**Doku seviyeleri (`KoyWorld::beginTextures`):** dokular artık rol rol ve sabit sırada (kum, kaya, kaya ayrıntısı yani
+atlas, amfora kili, deniz kabuğu, ahşap, beton, ikinci kum). Malzeme dosyayı değil rolü gösteriyor; tarif her seviyede
+aynı (ayrıntı katmanları hep açık), yalnız çözünürlük değişiyor. Her rol, seviyenin sınırına en az eşit olan en küçük
+taramadan çözülüp sınıra kırpılıyor. Hepsi aynı taramanın farklı boyları, renkler değişmiyor (aynı karenin ortalaması
+72,50 / 72,53 / 72,62).
+
+| seviye | sınır | yükleme | doku dizileri | kart (uygulama, tarayıcı açık) |
+|---|---|---|---|---|
+| Düşük | 1K (atlas dahil) | 1,0-1,3 sn | 0,09 GB | 6,1 GB |
+| Normal | 2K | 1,2-1,4 sn | 0,35 GB | 6,4 GB |
+| Yüksek | 8K, kum ve atlas 16K | 6,6-8,1 sn | 9,33 GB | 15,4 GB |
+
+Eskiden açılışta 12 set birden yükleniyordu: 10,77 GB, 8 sn. Seçim yalnız hangisinin kullanılacağını değiştiriyordu,
+o yüzden düşüğe inince bellek boşalmıyordu. Ayrıca "Standart"ta bile ahşap, beton, kabuk ve ikinci kum 8K kalıyordu.
+Şimdi seviye değişince önce eskiler karttan siliniyor, sonra yenileri arka planda çözülüp her karede bir set yükleniyor.
+
+**Bekleme kartı (`Status::busy`, `App::drawBusy`):** yükleme sürerken görüntü bilerek donuyor ve kararıyor; dalgıç da
+duruyor. Ortada panelle aynı camdan bir kart var: "DOKU DEĞİŞİYOR · YÜKSEK", "Görüntü bilerek durduruldu: eski dokular
+karttan silindi, yenileri yükleniyor". Altında sahnenin renginde, üstünde parıltı gezen bir çubuk, yüzde, ve o an
+çözülen doku ("Kum (16K) çözülüyor"). Çözme ilerlemesi süreden tahmin ediliyor; yükleme ekranındaki çubukla aynı dil. H
+ile arayüz gizliyken de görünüyor.
+
+**Sağ üstte "Kart belleği":** kartın toplam doluluğu (NVML, bütün işlemler), bütün sahnelerde.
+
+**Ölçüler:** testler 13/13. Pencere testi (`--autotest-only koy`, Chrome ve Bambu Studio açıkken kartın 1,4 GB'ı
+onlarda):
+- **Açılış ve yüzme:** açılış 30,3 fps, yüzdü 27,9 fps.
+- **Örnek ve kenar:** Yüksek'te "16 örnek" 8'e indi, 19,4 fps. Kenar 32: 23,2 fps.
+- **Doku seviyeleri:** Normal 31,5 fps. Düşük 32,5 fps; Düşük'te 32 örnek 7,2 fps (Örnekler 114 ms). Yeniden Yüksek
+  31,8 fps.
+- Komut satırı karşılaştırması `--doku` üç seviyeyi sırayla yüklüyor (`tools/doku_kiyas.py` adları dusuk/normal/yuksek).
+
+**NE DOĞRULANMADI:** Özcan'ın elinde canlı denenmedi (pencere testi sanal tıklamayla); durunca biriken referans kare
+Yüksek'te ve 4 örnekte hâlâ ayrı 0,9 GB açıyor, kart doluyken sayfalayabilir (ölçülmedi); bekleme kartının yüzdesi
+çözmede tahmin, 16K kumda bir süre %90 civarında bekleyebilir.
+
+## 2026-10-05 gece · Özcan canlı baktı: iki revize (havadaki bitkiler, ufuk çizgisi)
 
 **Özcan:** *"Sahne çok güzel oldu. Hem eskitme hem son eklemeler hem de bu zemin güncellemesi gayet iyi. 2 revize lazım
 [...] 1) Deniz bitkileri var, geminin üzerinde ve başka yerde onlar havada duruyor"*, *"2) Çok derinde gemiden sonra ve

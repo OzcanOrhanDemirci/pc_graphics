@@ -19,7 +19,7 @@ typedef unsigned long long KTex;   // cudaTextureObject_t (NVRTC sees it as this
 #define KOY_MAX_MESHES 128
 #define KOY_BUBBLES 96
 #define KOY_FIELDS 8             // the light field for up to this many floor depths
-#define KOY_MAX_BASE 16          // base samples per pixel (1, 4, 8 or 16)
+#define KOY_MAX_BASE 32          // base samples per pixel (1, 4, 8, 16 or 32)
 #define KOY_MAX_EDGE 32          // samples of a pixel that sits on an edge, base included
 
 // ---- the baked tables (koy_optics.cpp builds them, koy.cu reads them)
