@@ -567,6 +567,13 @@ void KoyWorld::build(const Config& cfg, const std::string& root) {
             koyBuildFans(cfg, wp.growth, 23, 24, 9, fans, &flog);
             std::printf("koy %s\n", flog.c_str());
             for (KMeshCPU& m : fans) meshes.push_back(std::move(m));
+            if (cfg.i("debris.use", 1)) {   // the debris field: timbers, barrels, round shot, the ballast's mound
+                std::vector<KMeshCPU> deb;
+                std::string dlog;
+                koyWreckDebris(cfg, fy, wp.bow, wp.stern, {21, 22, 16}, 8, deb, &dlog);
+                std::printf("koy enkaz: %s\n", dlog.c_str());
+                for (KMeshCPU& m : deb) meshes.push_back(std::move(m));
+            }
             if (cfg.i("foul.use", 1)) {   // years under water: mussel clumps, sponges, sea squirts, crusts
                 std::vector<KMeshCPU> foul;
                 std::string olog;

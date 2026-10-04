@@ -70,3 +70,12 @@ void koyBuildSandLife(const Config& cfg, const std::function<float(float, float)
 // where sea fans stand on the outcrops: the tops and upper sides of the rock deeper than minDepth (gorgonians want the
 // current and less light), spread out (no two within `gap` metres)
 std::vector<std::pair<float3, float3>> koyReefFanSites(const std::vector<const KMeshCPU*>& rocks, float minDepth, int count, float gap, unsigned seed);
+
+// The wreck's debris field: what spilled from the fallen starboard side and the broken stern as the ship settled and the
+// years took it apart: timbers and planks half sunk, barrels (some whole, some burst into staves and hoops), round shot in
+// piles and loose, the ballast's stones in a low mound under the breach. bow/stern: the keel's ends (world).
+struct KoyDebrisMaterials {
+    unsigned int wood, iron, stone;
+};
+void koyWreckDebris(const Config& cfg, const std::function<float(float, float)>& floorY, float3 bow, float3 stern, const KoyDebrisMaterials& mat,
+                    unsigned int id, std::vector<KMeshCPU>& out, std::string* log = nullptr);

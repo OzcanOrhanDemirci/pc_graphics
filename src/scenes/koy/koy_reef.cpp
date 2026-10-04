@@ -703,3 +703,190 @@ std::vector<std::pair<float3, float3>> koyReefFanSites(const std::vector<const K
     }
     return out;
 }
+
+namespace {
+void addBoxW(KMeshCPU& m, float3 c, float3 ax, float3 ay, float3 az, float3 h) {   // a box, half sizes h along unit axes
+    const float3 X = ax * h.x, Y = ay * h.y, Z = az * h.z;
+    const float3 n6[6] = {ax, ax * -1.0f, ay, ay * -1.0f, az, az * -1.0f};
+    const float3 cs[6][4] = {{c + X - Y - Z, c + X + Y - Z, c + X + Y + Z, c + X - Y + Z}, {c - X - Y + Z, c - X + Y + Z, c - X + Y - Z, c - X - Y - Z},
+                             {c - X + Y - Z, c - X + Y + Z, c + X + Y + Z, c + X + Y - Z}, {c - X - Y + Z, c - X - Y - Z, c + X - Y - Z, c + X - Y + Z},
+                             {c + X - Y + Z, c + X + Y + Z, c - X + Y + Z, c - X - Y + Z}, {c - X - Y - Z, c - X + Y - Z, c + X + Y - Z, c + X - Y - Z}};
+    for (int f = 0; f < 6; ++f) {
+        const unsigned b0 = unsigned(m.pos.size());
+        for (int k = 0; k < 4; ++k) { m.pos.push_back(cs[f][k]); m.nrm.push_back(n6[f]); }
+        m.idx.push_back(make_uint3(b0, b0 + 1, b0 + 2));
+        m.idx.push_back(make_uint3(b0, b0 + 2, b0 + 3));
+    }
+}
+void addSphereW(KMeshCPU& m, float3 c, float r, float3 squash, unsigned seed, float lump) {
+    std::vector<float3> v;
+    std::vector<uint3> f;
+    ico1(v, f);
+    const unsigned b0 = unsigned(m.pos.size());
+    const float o = float(seed % 97) * 1.9f;
+    for (const float3& d : v) {
+        const float l = 1.0f + lump * kn::fbm3(d.x * 2.0f + o, d.y * 2.0f, d.z * 2.0f, 2);
+        m.pos.push_back(c + make_float3(d.x * squash.x, d.y * squash.y, d.z * squash.z) * (r * l));
+        m.nrm.push_back(normalize(make_float3(d.x / squash.x, d.y / squash.y, d.z / squash.z)));
+    }
+    for (const uint3& t : f) m.idx.push_back(make_uint3(b0 + t.x, b0 + t.y, b0 + t.z));
+}
+}   // namespace
+
+void koyWreckDebris(const Config& cfg, const std::function<float(float, float)>& floorY, float3 bow, float3 stern, const KoyDebrisMaterials& mat,
+                    unsigned int id, std::vector<KMeshCPU>& out, std::string* log) {
+    std::mt19937 rng(unsigned(cfg.i("debris.seed", 61)));
+    std::uniform_real_distribution<float> U(0.0f, 1.0f);
+    std::normal_distribution<float> G(0.0f, 1.0f);
+    KMeshCPU wood, iron, stone;
+    wood.name = "enkaz (ahsap)";
+    iron.name = "enkaz (demir)";
+    stone.name = "enkaz (safra)";
+    wood.material = mat.wood;
+    iron.material = mat.iron;
+    stone.material = mat.stone;
+    wood.id = iron.id = stone.id = id;
+    // the ship's frame on the sand: along the keel (bow-ward), across to starboard (the side that fell), the middle
+    float3 X = bow - stern;
+    X.y = 0.0f;
+    const float L = length(X);
+    X = X * (1.0f / std::max(L, 1e-3f));
+    const float3 S = make_float3(-X.z, 0.0f, X.x) * -1.0f;   // starboard: X cross up, sign checked against the list (port up)
+    const float3 mid = (bow + stern) * 0.5f;
+    auto onSand = [&](float a, float c) {   // a along the keel from the middle, c out to starboard (negative: port)
+        const float3 p = mid + X * a + S * c;
+        return make_float3(p.x, floorY(p.x, p.z), p.z);
+    };
+    // where debris lies: mostly to starboard (out from the hull, 5-16 m), a train behind the stern, a little to port
+    auto spot = [&](float& a, float& c) {
+        const float r = U(rng);
+        if (r < 0.62f) { a = (U(rng) - 0.5f) * L * 1.1f; c = 5.5f + 11.0f * std::pow(U(rng), 1.5f); }
+        else if (r < 0.85f) { a = -L * 0.5f - 2.0f - 12.0f * U(rng); c = (U(rng) - 0.3f) * 10.0f; }
+        else { a = (U(rng) - 0.5f) * L; c = -(5.5f + 6.0f * U(rng)); }
+    };
+    // timbers and planks: long, half sunk, tilted, some crossed
+    int nTimber = 0;
+    for (int k = 0; k < cfg.i("debris.timbers", 46); ++k) {
+        float a, c;
+        spot(a, c);
+        const float3 p = onSand(a, c);
+        const float len = 0.8f + 3.2f * U(rng) * U(rng);
+        const bool plank = U(rng) < 0.6f;
+        const float w = plank ? 0.22f + 0.1f * U(rng) : 0.18f + 0.12f * U(rng), t = plank ? 0.06f + 0.03f * U(rng) : w * (0.7f + 0.3f * U(rng));
+        const float yaw = U(rng) * 6.2831853f, tilt = (U(rng) - 0.5f) * 0.25f;
+        const float3 ax = normalize(make_float3(std::cos(yaw), tilt, std::sin(yaw)));
+        const float3 az0 = normalize(cross(ax, make_float3(0, 1, 0)));
+        const float roll = (U(rng) - 0.5f) * 0.6f;
+        const float3 ay0 = cross(az0, ax);
+        const float3 ay = ay0 * std::cos(roll) + az0 * std::sin(roll), az = az0 * std::cos(roll) - ay0 * std::sin(roll);
+        addBoxW(wood, p + make_float3(0.0f, t * (0.1f + 0.3f * U(rng)), 0.0f), ax, ay, az, make_float3(0.5f * len, 0.5f * t, 0.5f * w));
+        ++nTimber;
+    }
+    // barrels: a bulging stave cylinder with hoops; burst ones: their staves splayed about, a hoop or two lying flat
+    int nBarrel = 0;
+    for (int k = 0; k < cfg.i("debris.barrels", 12); ++k) {
+        float a, c;
+        spot(a, c);
+        const float3 p = onSand(a, c);
+        const float H = 0.75f + 0.25f * U(rng), R = 0.27f + 0.06f * U(rng);
+        if (U(rng) < 0.55f) {   // whole, on its side, a third sunk
+            const float yaw = U(rng) * 6.2831853f;
+            const float3 ax = make_float3(std::cos(yaw), 0.0f, std::sin(yaw)), up = make_float3(0, 1, 0), sd = cross(ax, up);
+            const float3 c0 = p + up * (R * 0.55f);
+            const int nu = 18, nv = 10;
+            const unsigned b0 = unsigned(wood.pos.size());
+            for (int j = 0; j <= nv; ++j) {
+                const float u = float(j) / nv - 0.5f;
+                const float rr = R * (0.86f + 0.14f * std::cos(u * 3.14159f));   // the bilge
+                for (int i = 0; i <= nu; ++i) {
+                    const float ph = 6.2831853f * float(i) / nu;
+                    const float3 rad = up * std::cos(ph) + sd * std::sin(ph);
+                    wood.pos.push_back(c0 + ax * (u * H) + rad * rr * (1.0f - 0.025f * float(i % 2)));   // the staves' seams
+                    wood.nrm.push_back(rad);
+                }
+            }
+            for (int j = 0; j < nv; ++j)
+                for (int i = 0; i < nu; ++i) {
+                    const unsigned q0 = b0 + unsigned(j * (nu + 1) + i), q1 = q0 + 1, q2 = q0 + unsigned(nu + 1), q3 = q2 + 1;
+                    wood.idx.push_back(make_uint3(q0, q2, q3));
+                    wood.idx.push_back(make_uint3(q0, q3, q1));
+                }
+            for (float hu : {-0.38f, -0.2f, 0.2f, 0.38f}) {   // the hoops: thin iron bands proud of the staves
+                const float rr = R * (0.86f + 0.14f * std::cos(hu * 3.14159f)) + 0.008f;
+                for (int i = 0; i < 16; ++i) {
+                    const float p0 = 6.2831853f * float(i) / 16.0f, p1 = 6.2831853f * float(i + 1) / 16.0f;
+                    const float3 r0 = up * std::cos(p0) + sd * std::sin(p0), r1 = up * std::cos(p1) + sd * std::sin(p1);
+                    const float3 m0 = c0 + ax * (hu * H) + (r0 + r1) * (0.5f * rr);
+                    addBoxW(iron, m0, normalize(r1 - r0), normalize(r0 + r1), ax, make_float3(0.5f * length(r1 - r0) * rr, 0.006f, 0.022f));
+                }
+            }
+        } else {   // burst: staves splayed, two hoops flat on the sand
+            const int nStave = 10 + int(U(rng) * 8.0f);
+            for (int q = 0; q < nStave; ++q) {
+                const float ang = U(rng) * 6.2831853f, rr = 0.2f + 1.0f * U(rng);
+                const float3 sp = onSand(a + std::cos(ang) * rr, c + std::sin(ang) * rr);
+                const float yaw = U(rng) * 6.2831853f;
+                const float3 ax = make_float3(std::cos(yaw), 0.05f * G(rng), std::sin(yaw));
+                const float3 az = normalize(cross(ax, make_float3(0, 1, 0))), ay = cross(az, normalize(ax));
+                addBoxW(wood, sp + make_float3(0, 0.012f, 0), normalize(ax), ay, az, make_float3(0.5f * H * (0.6f + 0.4f * U(rng)), 0.012f, 0.045f));
+            }
+            for (int hh = 0; hh < 2; ++hh) {
+                const float3 hc = onSand(a + G(rng) * 0.5f, c + G(rng) * 0.5f);
+                const float rr = R * (0.9f + 0.1f * U(rng));
+                for (int i = 0; i < 16; ++i) {
+                    const float p0 = 6.2831853f * float(i) / 16.0f, p1 = 6.2831853f * float(i + 1) / 16.0f;
+                    const float3 r0 = make_float3(std::cos(p0), 0, std::sin(p0)), r1 = make_float3(std::cos(p1), 0, std::sin(p1));
+                    addBoxW(iron, hc + (r0 + r1) * (0.5f * rr) + make_float3(0, 0.01f, 0), normalize(r1 - r0), make_float3(0, 1, 0), normalize(r0 + r1),
+                            make_float3(0.5f * length(r1 - r0) * rr, 0.008f, 0.02f));
+                }
+            }
+        }
+        ++nBarrel;
+    }
+    // round shot: piles (pyramids gone slumped) and strays, concreted (lumpy)
+    int nShot = 0;
+    for (int k = 0; k < cfg.i("debris.shot_piles", 7); ++k) {
+        float a, c;
+        spot(a, c);
+        const float3 p = onSand(a, c);
+        const float r = 0.06f + 0.015f * U(rng);
+        const int layers = 2 + int(U(rng) * 2.0f);
+        for (int l = 0; l < layers; ++l) {
+            const int n = (layers - l) * (layers - l) + 2;
+            for (int q = 0; q < n; ++q) {
+                const float ang = U(rng) * 6.2831853f, rr = r * 2.0f * float(layers - l) * std::sqrt(U(rng));
+                const float3 sp = p + make_float3(std::cos(ang) * rr, r * (0.6f + 1.6f * float(l)), std::sin(ang) * rr);
+                addSphereW(iron, sp, r, make_float3(1, 1, 1), unsigned(nShot * 7 + 1), 0.08f);
+                ++nShot;
+            }
+        }
+    }
+    for (int k = 0; k < cfg.i("debris.shot_loose", 70); ++k) {
+        float a, c;
+        spot(a, c);
+        const float3 p = onSand(a, c);
+        const float r = 0.06f + 0.015f * U(rng);
+        addSphereW(iron, p + make_float3(0, r * 0.45f, 0), r, make_float3(1, 1, 1), unsigned(nShot * 7 + 3), 0.1f);
+        ++nShot;
+    }
+    // the ballast: a low mound of river stones under the breach (starboard, amidships), thinning out
+    int nBallast = 0;
+    for (int k = 0; k < cfg.i("debris.ballast", 320); ++k) {
+        const float a = G(rng) * L * 0.18f, c = 4.5f + std::fabs(G(rng)) * 3.5f;
+        const float3 p = onSand(a, c);
+        const float r = 0.08f + 0.14f * U(rng) * U(rng);
+        const float heap = 0.35f * std::exp(-(a * a) / (2.0f * 16.0f)) * std::exp(-((c - 4.5f) * (c - 4.5f)) / (2.0f * 6.0f));
+        addSphereW(stone, p + make_float3(0, r * 0.3f + heap * U(rng), 0), r, make_float3(1.0f + 0.3f * U(rng), 0.6f + 0.2f * U(rng), 0.9f + 0.2f * U(rng)),
+                   unsigned(k * 13 + 5), 0.18f);
+        ++nBallast;
+    }
+    for (KMeshCPU* m : {&wood, &iron, &stone}) {
+        m->aoRange = 1.2f;
+        if (!m->idx.empty()) out.push_back(std::move(*m));
+    }
+    if (log) {
+        char buf[160];
+        std::snprintf(buf, sizeof(buf), "%d kalas, %d fici, %d gulle, %d safra tasi", nTimber, nBarrel, nShot, nBallast);
+        *log = buf;
+    }
+}
