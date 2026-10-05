@@ -217,7 +217,7 @@ void Scale::configure(const Config& cfg) {
     evV.clear();
     auto it = cfg.values.find("ev");
     const std::string curve = it != cfg.values.end() ? it->second
-        : "-35:0, 8.3:0, 9.5:6, 10.5:10, 11.5:14, 12.5:19, 13.5:23, 22.6:23, 24:28, 25:33.5, 26:40, 27.3:48";
+        : "-35:0, 8.3:0, 9.5:6, 10.5:10, 11.5:14, 12.5:19, 13.5:23, 22.6:23, 24:28, 25:33.5, 25.6:36, 27.3:36";
     std::stringstream ss(curve);
     std::string part;
     while (std::getline(ss, part, ',')) {
@@ -462,11 +462,11 @@ bool Scale::loadStars(const std::string& path, std::string& log) {
 // the survey's galaxies in, the placeholder's out where the survey reaches (it is flux-limited: thin far out, but real)
 void Scale::mergeSurvey() {
     if (surveyPos_.empty()) return;
-    const double reach = 200e6 * kPc;
+    // beyond the survey the volume web is the light (placeholder points kept only when it is missing: volumeWeb_)
     std::vector<V3> pos;
     std::vector<float4> flux;
     for (size_t i = 0; i < galPos_.size(); ++i)
-        if (length(galPos_[i] + lanFromSun_) > reach) {
+        if (!volumeWeb_ && length(galPos_[i] + lanFromSun_) > 200e6 * kPc) {
             pos.push_back(galPos_[i]);
             flux.push_back(galFlux_[i]);
         }
@@ -809,8 +809,12 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
             const V3 rel = base + galPos_[i];
             if (!inFront(rel)) continue;
             const double d2 = dot(rel, rel);
-            const float near = float(smoothstep(0.03, 0.25, std::sqrt(d2) / D));
+            float near = float(smoothstep(0.03, 0.25, std::sqrt(d2) / D));
             if (near <= 0.0f) continue;
+            // the same slice as the web's (webLight): sigma 20 Mpc about the focus, across the view
+            const double dz = (dot(rel, cam.fwd) - D) / (20e6 * kPc);
+            near *= float(std::exp(-0.5 * dz * dz));
+            if (near < 0.01f) continue;
             const float4 f = galFlux_[i];
             const double fl = double(f.w) * kLsun / (4.0 * kPi * d2) * k / omegaPx;
             if (fl < 2e-4) continue;
@@ -923,6 +927,50 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
         galBlob(kLMC, 1.5e3 * kPc, 1.5e9 * kLsun, 1.0);
         galBlob(kSMC, 0.9e3 * kPc, 4.6e8 * kLsun, 1.0);
     }
+    // the cosmic web as a volume (the field's handle is set by the app: v.web.field)
+    v.web = GWeb{};
+    if (s > 23.8) {
+        GWeb& w = v.web;
+        const V3 rel = tree.rel(cam.ref, kSun) - cam.pos;
+        w.on = 1;
+        w.c = toCamSpace(rel);
+        const double mpcM = 1e6 * kPc;
+        w.R = float(4.40e26 / D);
+        w.mpc = float(mpcM / D);
+        // the second lookup turned by a fixed odd rotation
+        const V3 ax = normalize(v3(0.62, -0.31, 0.72)), ay0 = normalize(cross(ax, v3(0.1, 0.9, 0.2)));
+        const V3 az = cross(ax, ay0);
+        w.bx = dirCam(ax);
+        w.by = dirCam(ay0);
+        w.bz = dirCam(az);
+        // 1e8 L_sun per Mpc^3 (luminosity density of galaxies, visual), isotropic: per camera unit of path
+        const double j = 1e8 * kLsun / (mpcM * mpcM * mpcM) / (4.0 * kPi);
+        w.j0 = blackbody(5600.0) * float(j * D * k * smoothstep(23.8, 24.6, s));
+        // (1 + z)^-4 against comoving distance: LambdaCDM (H0 70, Omega_m 0.3), D_C(z) by quadrature, inverted
+        {
+            const double H0 = 70.0, c = 299792.458, Om = 0.3, OL = 0.7;
+            std::vector<double> zs, dc;
+            double acc = 0.0, zprev = 0.0;
+            zs.push_back(0.0);
+            dc.push_back(0.0);
+            for (int i = 1; i <= 4000; ++i) {
+                const double z = std::pow(10.0, -3.0 + 6.0 * i / 4000.0) - 1e-3;   // to ~1000
+                const double zm = 0.5 * (z + zprev);
+                acc += (z - zprev) / std::sqrt(Om * std::pow(1.0 + zm, 3.0) + OL);
+                zs.push_back(z);
+                dc.push_back(acc * c / H0);   // Mpc
+                zprev = z;
+            }
+            for (int i = 0; i <= 32; ++i) {
+                const double r = 4.40e26 / mpcM * i / 32.0;
+                size_t a = 0;
+                while (a + 1 < dc.size() && dc[a + 1] < r) ++a;
+                const double z = a + 1 < dc.size() ? zs[a] + (zs[a + 1] - zs[a]) * (r - dc[a]) / std::max(dc[a + 1] - dc[a], 1e-9) : zs.back();
+                w.dim[i] = float(std::pow(1.0 + z, -4.0));
+            }
+        }
+    }
+
     // the edge of the observable universe: the first light (CMB), a thin glowing shell around us (Ö3)
     if (s > 26.4 && v.nBalls < kMaxBalls) {
         const V3 rel = tree.rel(cam.ref, kSun) - cam.pos;

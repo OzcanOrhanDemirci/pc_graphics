@@ -29,4 +29,15 @@ struct Field {
     void release();
 };
 
+// a periodic 3D float field with mips (tools/olcek_veri.py ag: "OLWB", size, box (Mpc), its largest value, the cells x
+// fastest), read with trilinear filtering, wrapping, at a level of detail (tex3DLod)
+struct Volume {
+    cudaMipmappedArray_t arr = nullptr;
+    cudaTextureObject_t tex = 0;
+    int size = 0, levels = 0;
+    float box = 1.0f;
+    bool load(const std::string& path, std::string& err);
+    void release();
+};
+
 }   // namespace olcek

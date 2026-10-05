@@ -15,6 +15,7 @@ dogu ve kuzey metre: sahnenin GGround eksenleriyle ayni.
   python tools/olcek_veri.py bulut     # bugunun gercek bulutlari: NASA GIBS (MODIS Terra ev cevresi, VIIRS dunya)
   python tools/olcek_veri.py yildiz    # yildizlar: HYG v4.1 (uzakligi bilinen her yildiz, gercek yeri, isigi, rengi)
   python tools/olcek_veri.py galaksi   # galaksiler: 2MASS Redshift Survey (44.600 galaksi, kirmiziya kaymadan uzaklik)
+  python tools/olcek_veri.py ag        # kozmik ag: Zel'dovich yaklasimiyla istatistiksel bir ornek (256^3, 600 Mpc)
   python tools/olcek_veri.py hepsi
 """
 import math
@@ -435,6 +436,70 @@ def galaksi(H0=70.0):
     print(f"  yazildi assets/olcek/galaksiler.bin: {len(pos)} galaksi (2MRS)")
 
 
+# ---------------------------------------------------------------------------------------------------------------------
+# The cosmic web beyond the survey: a statistical sample, not a map (PLAN §10). A Gaussian random field with a CDM-like
+# spectrum (BBKS transfer, Gamma = 0.2, n = 1) moved by the Zel'dovich approximation: particles from a grid displaced by
+# the field's gradient gather into walls, filaments and knots around voids, as in the real one. 256^3 cells over a
+# 600 Mpc periodic box (2.3 Mpc a cell); stored as the density over its mean, float32 ("OLWB", size, box in Mpc, the
+# largest value, then the cells with x fastest).
+def ag(N=256, L=600.0, seed=11, growth=1.25):
+    rng = np.random.default_rng(seed)
+    k1 = np.fft.fftfreq(N, d=L / N) * 2.0 * np.pi            # 1/Mpc
+    kz = np.fft.rfftfreq(N, d=L / N) * 2.0 * np.pi
+    kx, ky, kzz = np.meshgrid(k1, k1, kz, indexing="ij")
+    k2 = kx * kx + ky * ky + kzz * kzz
+    k = np.sqrt(k2)
+    k[0, 0, 0] = 1.0
+    q = k / (0.2 * 0.7)                                       # BBKS with Gamma = Omega_m h = 0.2 (k in h/Mpc)
+    T = np.log(1.0 + 2.34 * q) / (2.34 * q) * (1.0 + 3.89 * q + (16.1 * q) ** 2 + (5.46 * q) ** 3 + (6.71 * q) ** 4) ** -0.25
+    Pk = k * T * T
+    Pk[0, 0, 0] = 0.0
+    noise = rng.standard_normal((N, N, N)).astype(np.float32)
+    dk = np.fft.rfftn(noise) * np.sqrt(Pk)
+    # the linear field's rms at the cell scale sets how far the particles go: about a cell
+    delta = np.fft.irfftn(dk, s=(N, N, N)).astype(np.float32)
+    dk *= growth / float(delta.std())
+    del delta, noise
+    psi = []
+    for kk in (kx, ky, kzz):
+        psi.append(np.fft.irfftn(1j * kk / np.where(k2 > 0, k2, 1.0) * dk, s=(N, N, N)).astype(np.float32))
+    del dk, kx, ky, kzz, k2, k, q, T, Pk
+    cell = L / N
+    # displacements in cells; particles from the grid
+    g = np.arange(N, dtype=np.float32)
+    X, Y, Z = np.meshgrid(g, g, g, indexing="ij")
+    px = (X + psi[0] / cell) % N
+    py = (Y + psi[1] / cell) % N
+    pz = (Z + psi[2] / cell) % N
+    del X, Y, Z, psi
+    # cloud in cell
+    rho = np.zeros((N, N, N), np.float32)
+    ix, iy, iz = np.floor(px).astype(np.int32), np.floor(py).astype(np.int32), np.floor(pz).astype(np.int32)
+    fx, fy, fz = px - ix, py - iy, pz - iz
+    for dx in (0, 1):
+        wx = fx if dx else 1.0 - fx
+        for dy in (0, 1):
+            wy = fy if dy else 1.0 - fy
+            for dz in (0, 1):
+                wz = fz if dz else 1.0 - fz
+                np.add.at(rho, (((ix + dx) % N).ravel(), ((iy + dy) % N).ravel(), ((iz + dz) % N).ravel()), (wx * wy * wz).ravel())
+    rho /= rho.mean()
+    # the voids keep the particles' grid (a faint lattice): a Gaussian of 0.8 cells, periodic
+    from scipy import ndimage
+    rho = ndimage.gaussian_filter(rho, 0.8, mode="wrap")
+    rho /= rho.mean()
+    print(f"  ag: yogunluk en cok {rho.max():.0f} kat, bos hucre %{100 * (rho < 0.1).mean():.0f}")
+    with open(os.path.join(OUT, "ag.bin"), "wb") as f:
+        f.write(b"OLWB")
+        f.write(np.array([N], np.uint32).tobytes())
+        f.write(np.array([L, float(rho.max())], np.float32).tobytes())
+        f.write(np.ascontiguousarray(rho.transpose(2, 1, 0).astype(np.float32)).tobytes())   # x fastest, mean 1
+    from PIL import Image
+    v = np.log1p(rho)
+    Image.fromarray(np.clip(v[:, :, N // 2] / v.max() * 255, 0, 255).astype(np.uint8)).resize((768, 768)).save(os.path.join(OUT, "ag_kesit.png"))
+    print(f"  yazildi assets/olcek/ag.bin: {N}^3, {L:.0f} Mpc")
+
+
 if __name__ == "__main__":
     what = sys.argv[1] if len(sys.argv) > 1 else "hepsi"
     os.makedirs(OUT, exist_ok=True)
@@ -452,6 +517,8 @@ if __name__ == "__main__":
         yildiz()
     if what in ("galaksi", "hepsi"):
         galaksi()
+    if what in ("ag", "hepsi"):
+        ag()
     if what == "kusak":
         from PIL import Image
         Image.MAX_IMAGE_PIXELS = None

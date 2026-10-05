@@ -2,6 +2,24 @@
 
 > Tek kaynak durum panosu. Plan `docs/olcek/PLAN.md`. En yeni en üstte.
 
+## 2026-10-05 akşam · Kozmik ağ: hacim ve dilim
+
+- **Ağ** (`tools/olcek_veri.py ag`): CDM benzeri tayflı (BBKS, Γ = 0,2) Gauss rastgele alan, Zel'dovich yaklaşımıyla
+  taşınan parçacıklar → duvarlar, iplikler, düğümler, boşluklar; 256³ hücre, 600 Mpc'lik periyodik kutu (2,3 Mpc),
+  boşluklardaki ızgara izi 0,8 hücrelik Gauss'la silindi. Kart belleğinde mip'li 3B alan; iki okuma (600 ve 1530 Mpc,
+  döndürülmüş) kutunun tekrarını gizler. Gerçek bölgenin haritası değil, gerçek istatistiğin bir örneği (PLAN §10).
+- **Işık**: galaksilerin ortalama ışık yoğunluğu (10⁸ L_güneş/Mpc³) × alan^1,6 (galaksiler maddeden kümeli), kozmolojik
+  (1 + z)⁻⁴ sönümü (ΛCDM, H0 70, Ωm 0,3; z bizden uzaklıktan). 2MRS'nin ulaştığı yerde noktalar ışıktır; anket akıyla
+  sınırlı olduğundan kaçırdığı ışık uzaklıkla artar, ağ yalnız onu doldurur (1 - e^-(r/140 Mpc)²).
+- **Plandan ayrılış: dilim.** Gigaparseklerce derinlik üst üste binince ağ düz bir sise dönüşüyordu (iki deneme:
+  `captures/olcek/o3_f`, `o3_g`; Olbers paradoksunun kısa hâli; bu yüzden her anket ve simülasyon görseli bir dilimdir).
+  Bu ölçeğin gözü, odaktan geçen ve bakışa dik ~40 Mpc'lik bir dilimi görür (Gauss, σ 20 Mpc); galaksi noktaları da
+  aynı dilimle. Odak biz olunca bizim içinde durduğumuz dilim. "Işık olan yerde gerçek ışık" kuralından bilerek sapma;
+  gerekçe görünürlük: aksi hâlde 10^25-10^27'de yapı yok.
+- Sonuç (2560×1440): 10^25'te 2MRS'nin gerçek dilimi (büyük duvarlar, Samanyolu düzleminin gizlediği boş şerit),
+  10^25,5-10^26'da gerçek anket istatistiksel ağın içinde, 10^27'de kenarında ilk ışık kabuğuyla küre. Kare ≤ 5 ms.
+- Pozlama 10^25,6 üstünde sabit (EV +36): dilimin yüzey parlaklığı ölçekten bağımsız.
+
 ## 2026-10-05 akşamüstü (2) · Samanyolu, gerçek yıldızlar ve galaksiler, kumsal
 
 Planın sırası (Ö2 → Ö3) Özcan'ın *"harbiden Samanyolu gibi"* sözüyle karıştırıldı: önce en çok göze batan yer tutucular.

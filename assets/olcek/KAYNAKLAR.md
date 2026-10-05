@@ -15,6 +15,7 @@ Bu klasördeki dosyalar git'e girmez (yalnız bu liste girer). Hepsini `tools/ol
 | `bulut_dunya.tex` | NASA GIBS, VIIRS NOAA-20 Corrected Reflectance True Color, 2026-10-04 (5 Ekim'in günü tamamlanınca o) | Aynı | Dünyanın bulutları |
 | `yildizlar.bin` | HYG Database v4.1 (Hipparcos, Yale Bright Star, Gliese; astronexus, David Nash) | CC BY-SA 4.0 | Uzaklığı bilinen 109.400 yıldızın gerçek yeri, ışığı (mutlak kadirden), rengi (B-V'den, Ballesteros 2012) |
 | `galaksiler.bin` | 2MASS Redshift Survey (Huchra ve ark. 2012, ApJS 199, 26; VizieR J/ApJS/199/26) | Bilimsel katalog, atıfla serbest | 43.490 galaksinin gerçek yönü, kırmızıya kaymadan uzaklığı (H0 = 70), K bandından ışığı |
+| `ag.bin` | Bu projede üretildi: Gauss rastgele alan (BBKS tayfı) + Zel'dovich yaklaşımı, 256³, 600 Mpc | Kendi verimiz | Anketin ötesinde kozmik ağın istatistiksel bir örneği |
 | `ay.tex` | NASA SVS 4720 (CGI Moon Kit), LRO LROC WAC renk mozaiği `lroc_color_poles_8k.tif` | NASA, kamu malı | Ay'ın yüzü |
 
 Atıf metni (README ve galerinin "Ayrıntılar"ında): *Contains modified Copernicus Sentinel data 2025. Blue Marble: NASA Earth

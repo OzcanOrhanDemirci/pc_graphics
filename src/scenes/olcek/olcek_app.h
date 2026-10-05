@@ -31,6 +31,7 @@ struct OlcekApp {
     // the maps (Ö1; tools/olcek_veri.py): missing ones fall back to the placeholders
     olcek::Texture world, zonal, region, bay, moon, cloudWorld, cloudRegion;
     olcek::Field shore;
+    olcek::Volume web;
     std::string mapsLog;             // what was loaded (or not), for the loading screen and the console
     float frameMs = 0.0f;            // the GPU's part of the last frame
     double hostMs = 0.0;             // the host's (the tree, the bodies, the points)

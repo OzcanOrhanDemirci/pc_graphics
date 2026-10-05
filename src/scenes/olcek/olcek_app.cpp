@@ -56,6 +56,17 @@ void OlcekApp::loadMaps() {
     mapsLog.clear();
     const std::string dir = root + "/assets/olcek/";
     if (cfg.i("stars.real", 1)) sc.loadStars(dir + "yildizlar.bin", mapsLog);
+    {
+        std::string err;
+        if (cfg.i("web.volume", 1) && web.load(dir + "ag.bin", err)) {
+            sc.volumeWeb_ = true;
+            char b[160];
+            std::snprintf(b, sizeof(b), "  ag.bin: %d^3, %.0f Mpc, %d duzey%c", web.size, web.box, web.levels, 10);
+            mapsLog += b;
+        } else if (!err.empty()) {
+            mapsLog += "  " + err + std::string(1, char(10));
+        }
+    }
     if (cfg.i("galaxies.real", 1)) sc.loadGalaxies(dir + "galaksiler.bin", mapsLog);
     struct M { olcek::Texture* t; const char* file; bool wrap; };
     const M ms[] = {{&world, "bmng_dunya.tex", true}, {&zonal, "bmng_kusak.tex", false}, {&region, "bmng_ege.tex", false},
@@ -86,6 +97,7 @@ void OlcekApp::loadMaps() {
 
 void OlcekApp::release() {
     world.release();
+    web.release();
     cloudWorld.release();
     cloudRegion.release();
     shore.release();
@@ -114,6 +126,11 @@ void OlcekApp::render() {
     view.maps.region = region.tex;
     view.maps.bay = bay.tex;
     view.maps.moon = moon.tex;
+    view.web.field = web.tex;
+    if (!web.tex) view.web.on = 0;
+    view.web.boxA = web.box > 0.0f ? web.box : 600.0f;
+    view.web.boxB = view.web.boxA * 2.55f;
+    view.web.cell = view.web.boxA / float(web.size > 0 ? web.size : 256);
     view.maps.cloudWorld = cloudWorld.tex;
     view.maps.cloudRegion = cloudRegion.tex;
     view.maps.cloudGain = cfg.f("maps.gain.cloud", 1.0f);

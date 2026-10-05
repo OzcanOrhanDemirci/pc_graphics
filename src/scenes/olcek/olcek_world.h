@@ -148,6 +148,9 @@ private:
     std::vector<float4> surveyFlux_;
     V3 lanFromSun_;
     void mergeSurvey();
+public:
+    bool volumeWeb_ = false;      // the volume web is loaded: no placeholder points beyond the survey
+private:
     std::vector<float4> galFlux_;
     Kepler moonOrbit_, planetOrbit_[8];
     V3 earthPole_, earthBeach_, earthUp_, earthNorth_, earthEast_;   // today

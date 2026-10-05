@@ -655,6 +655,46 @@ __device__ float3 galaxyLight(const GGalaxy& g, float3 d, float tmax, float pixK
     return col * (1.0f / fmaxf(fabsf(dn), 0.08f));
 }
 
+// ---- the cosmic web (see GWeb). Seen through gigaparsecs its layers pile up into an even fog (the short form of
+// Olbers' paradox: every picture of it, from surveys or simulations, is a slice). So the eye of this scale sees a slice
+// through the focus, across the view, a few tens of Mpc thick (Gaussian, sigma 20 Mpc): through us when we are the
+// focus, the slice of the universe we stand in. The galaxies' light follows the matter with a bias (rho^1.6: they
+// gather more than it does). Steps across the slice, each reading the field prefiltered to the pixel's footprint.
+__device__ float3 webLight(const GWeb& w, float3 d, float tmax, float pixAngle) {
+    const float sigU = 20.0f * w.mpc;                    // the slice's sigma (camera units)
+    if (d.z <= 1e-4f) return make_float3(0, 0, 0);
+    const float t0 = fmaxf((1.0f - 3.0f * sigU) / d.z, 0.0f), t1 = fminf((1.0f + 3.0f * sigU) / d.z, tmax);
+    if (t1 <= t0) return make_float3(0, 0, 0);
+    const int N = 24;
+    const float dt = (t1 - t0) / N;
+    float3 L = make_float3(0, 0, 0);
+    const float invA = 1.0f / (w.boxA * w.mpc), invB = 1.0f / (w.boxB * w.mpc);
+    for (int i = 0; i < N; ++i) {
+        const float tm = t0 + (i + 0.5f) * dt;
+        const float3 p = d * tm - w.c;                      // from us
+        const float r = length(p);
+        if (r > w.R) continue;
+        const float rm = r / w.mpc;                          // Mpc
+        // the survey is flux-limited: the light it misses grows with distance (its luminosity-weighted completeness ~0.6 at
+        // 100 Mpc, ~0.15 at 200); the web fills in what it misses
+        const float inner = 1.0f - __expf(-sqr(rm / (0.7f * w.inner)));
+        if (inner <= 0.0f) continue;
+        const float slab = __expf(-0.5f * sqr((d.z * tm - 1.0f) / sigU));
+        const float lenMpc = tm * pixAngle / w.mpc;
+        const float lodA = log2f(fmaxf(lenMpc / w.cell, 1e-3f));
+        const float lodB = log2f(fmaxf(lenMpc / (w.cell * 2.55f), 1e-3f));
+        const float a = tex3DLod<float>(cudaTextureObject_t(w.field), p.x * invA, p.y * invA, p.z * invA, lodA);
+        const float3 q = make_float3(dot(p, w.bx), dot(p, w.by), dot(p, w.bz));
+        const float b = tex3DLod<float>(cudaTextureObject_t(w.field), q.x * invB + 0.37f, q.y * invB + 0.11f, q.z * invB + 0.73f, lodB);
+        const float rho = powf(fmaxf(a * (0.35f + 0.65f * b), 0.0f), 1.6f);
+        const float u = fminf(r / w.R, 1.0f) * 32.0f;
+        const int k = min(int(u), 31);
+        const float dim = lerpf(w.dim[k], w.dim[k + 1], u - float(k));
+        L += w.j0 * (rho * dim * inner * slab * dt);
+    }
+    return L;
+}
+
 // ---- the desert's haze and the foam: octaves on the focus plane (u in screen widths)
 __device__ float3 hazeLight(float3 d) {
     const GHaze& hz = cV.haze;
@@ -863,6 +903,7 @@ __global__ void kFrame(float4* accum, float* depthOut, int samples) {
     }
     float3 avg = sum * (1.0f / wsum);
     if (cV.galaxy.on) avg += galaxyLight(cV.galaxy, rayDir(x + 0.5f, y + 0.5f), dCentre, cV.pixAngle / cV.galaxy.kpc);
+    if (cV.web.on) avg += webLight(cV.web, rayDir(x + 0.5f, y + 0.5f), dCentre, cV.pixAngle);
     if (cV.atmo.on) {   // the air between the camera and what the pixel's centre sees (or space behind the limb)
         float3 T;
         const float3 La = airLight(cV.atmo, rayDir(x + 0.5f, y + 0.5f), dCentre, T);

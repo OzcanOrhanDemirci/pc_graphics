@@ -142,4 +142,88 @@ void Field::release() {
     size = 0;
 }
 
+bool Volume::load(const std::string& path, std::string& err) {
+    release();
+    FILE* f = std::fopen(path.c_str(), "rb");
+    if (!f) {
+        err = "yok: " + path;
+        return false;
+    }
+    char magic[4];
+    uint32_t n = 0;
+    float hdr[2];
+    if (std::fread(magic, 1, 4, f) != 4 || std::memcmp(magic, "OLWB", 4) != 0 || std::fread(&n, 4, 1, f) != 1 || std::fread(hdr, 4, 2, f) != 2) {
+        std::fclose(f);
+        err = "bicim: " + path;
+        return false;
+    }
+    size = int(n);
+    box = hdr[0];
+    std::vector<float> v(size_t(size) * size * size);
+    if (std::fread(v.data(), 4, v.size(), f) != v.size()) {
+        std::fclose(f);
+        err = "kisa: " + path;
+        return false;
+    }
+    std::fclose(f);
+    levels = 1;
+    for (int s = size; s > 1; s /= 2) ++levels;
+    const cudaChannelFormatDesc fmt = cudaCreateChannelDesc<float>();
+    if (cudaMallocMipmappedArray(&arr, &fmt, make_cudaExtent(size, size, size), levels) != cudaSuccess) {
+        err = "kart bellegi: " + path;
+        arr = nullptr;
+        return false;
+    }
+    // each level the mean of the eight cells below it (the light of a volume adds up linearly)
+    int s = size;
+    for (int l = 0; l < levels; ++l) {
+        cudaArray_t a;
+        cudaGetMipmappedArrayLevel(&a, arr, l);
+        cudaMemcpy3DParms cp{};
+        cp.srcPtr = make_cudaPitchedPtr(v.data(), size_t(s) * 4, s, s);
+        cp.dstArray = a;
+        cp.extent = make_cudaExtent(s, s, s);
+        cp.kind = cudaMemcpyHostToDevice;
+        cudaMemcpy3D(&cp);
+        if (s == 1) break;
+        const int h = s / 2;
+        std::vector<float> nv(size_t(h) * h * h);
+        for (int z = 0; z < h; ++z)
+            for (int y = 0; y < h; ++y)
+                for (int x = 0; x < h; ++x) {
+                    float acc = 0.0f;
+                    for (int dz = 0; dz < 2; ++dz)
+                        for (int dy = 0; dy < 2; ++dy)
+                            for (int dx = 0; dx < 2; ++dx) acc += v[(size_t(2 * z + dz) * s + (2 * y + dy)) * s + (2 * x + dx)];
+                    nv[(size_t(z) * h + y) * h + x] = acc * 0.125f;
+                }
+        v.swap(nv);
+        s = h;
+    }
+    cudaResourceDesc rd{};
+    rd.resType = cudaResourceTypeMipmappedArray;
+    rd.res.mipmap.mipmap = arr;
+    cudaTextureDesc td{};
+    td.addressMode[0] = td.addressMode[1] = td.addressMode[2] = cudaAddressModeWrap;
+    td.filterMode = cudaFilterModeLinear;
+    td.mipmapFilterMode = cudaFilterModeLinear;
+    td.readMode = cudaReadModeElementType;
+    td.normalizedCoords = 1;
+    td.maxMipmapLevelClamp = float(levels - 1);
+    if (cudaCreateTextureObject(&tex, &rd, &td, nullptr) != cudaSuccess) {
+        err = "doku nesnesi: " + path;
+        release();
+        return false;
+    }
+    return true;
+}
+
+void Volume::release() {
+    if (tex) cudaDestroyTextureObject(tex);
+    if (arr) cudaFreeMipmappedArray(arr);
+    tex = 0;
+    arr = nullptr;
+    size = levels = 0;
+}
+
 }   // namespace olcek

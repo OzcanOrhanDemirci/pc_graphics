@@ -68,6 +68,24 @@ struct GGalaxy {
     GArm arms[kMaxArms];
 };
 
+// The cosmic web beyond the survey (Ö3): a statistical sample (Zel'dovich, olcek_veri.py ag) filling the observable
+// universe around us, its light the mean luminosity density of galaxies times the field, dimmed by the cosmological
+// (1 + z)^-4 with z from the comoving distance (from us, the observer this universe is centred on). Two lookups at
+// different scales and orientations hide the box's period. Within the survey's reach (~200 Mpc) the points are the light.
+struct GWeb {
+    int on = 0;
+    unsigned long long field = 0;
+    float3 c{0, 0, 0};          // us (camera space)
+    float R = 1.0f;             // the observable universe's radius (camera units)
+    float mpc = 1.0f;           // camera units per Mpc
+    float boxA = 600.0f, boxB = 1530.0f;   // Mpc
+    float3 bx{1, 0, 0}, by{0, 1, 0}, bz{0, 0, 1};   // the second lookup's axes (camera space)
+    float3 j0{0, 0, 0};         // the mean emission per camera unit of path (display-referred)
+    float cell = 2.34f;         // Mpc
+    float inner = 200.0f;       // Mpc: the survey's reach (the web fades in beyond it)
+    float dim[33];              // (1 + z)^-4 at r = i/32 of R
+};
+
 // a point of light: its flux as the sum of its pixels (display-referred radiance x pixels); a Gaussian on the screen
 struct GSplat {
     float3 p;                   // position (camera space)
@@ -166,6 +184,7 @@ struct OlcekView {
     GMaps maps;
     GAtmo atmo;
     GGalaxy galaxy;
+    GWeb web;
 };
 
 }   // namespace olcek
