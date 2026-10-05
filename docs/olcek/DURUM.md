@@ -55,6 +55,13 @@ Akış önce, ayrıntı sonra (Özcan): 10⁻³'ten 10⁻³⁵'e her onlukta ger
   - dipte 3 kare (0,065): köpüğün gerçek hareketi.
 
   -9 ile -15 arası sıfır.
+- **Kristalin yoğunluk haritası artık sonsuz:** ilk hâlde yalnız ev atomunun komşuları gövde olarak vardı, harita bu
+  yüzden ancak -9,4'ten sonra devralabiliyordu. Aradaki AFM görüntüsü -8,5'te bulanıklaşıyordu. Şimdi ağın elektronları
+  GPU'da AFM'nin örgüsünden (`atomHeight` ile aynı yerler, aynı ısıl titreşim: tek kaynak) üretiliyor; ev silisyumu
+  gövde olarak kalıyor, çünkü çekirdeğin salınımını taşıyor. Devir -8,2 → -9,0. -8,8'de bal peteği gerçek bir
+  kristalografi haritası gibi: parlak çekirdekli silisyumlar, yumuşak oksijenler, altıgen boşluklar. 4,5 Å'dan uzak
+  atomlar atlanır (titreşimden önce kaba eleme). Ağ -11'in altında kapalı (payı 10⁻³). -9,5 ile -5 arası tarama:
+  sıçrama yok, en uzun kare 14,1 ms.
 - **Galaksi geçişi düzeldi:** s 23,36'daki sıçrama gerçek bir geçişti. Yakın bir galaksi çifti (büyük olasılıkla
   M81/M82) kamera odağa doğru ilerlerken adımda ~80 piksel kayıyordu. Yakınlık sönümü d/D 0,1-0,5'ten 0,3-1,0'a
   genişledi: 22-25 arasında sıçrama yok (`--set test.lo=22 --set test.hi=25`: tarama artık bir bölümle sınırlanabiliyor).
@@ -81,7 +88,6 @@ Akış önce, ayrıntı sonra (Özcan): 10⁻³'ten 10⁻³⁵'e her onlukta ger
   ölçülmedi.
 - Yoğunluk haritasının tonları ve atomun içindeki pozlama geçişi gözle ayarlandı; bir ölçüte bağlanmadı.
 - Galaksi geçişinin düzeltmesi yalnız 22-25 bölümünde tarandı (bütün yol değil).
-
 
 ## 2026-10-05 akşam · Kozmik ağ: hacim ve dilim
 

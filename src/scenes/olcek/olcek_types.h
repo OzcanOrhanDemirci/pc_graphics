@@ -101,6 +101,7 @@ struct GDensityBody {
 };
 struct GDensity {
     int on = 0, n = 0;
+    int lattice = 0;           // the silica net around the home atom, drawn from the AFM's lattice (the ground's frame)
     float weight = 1.0f;       // its share (comes in and goes out over a decade)
     float lo = -2.0f, hi = 3.0f;   // log10 of the density the fill's dark and light ends stand for (this frame's range)
     float relief = 0.01f;      // the hill-shading's height: screen widths per decade

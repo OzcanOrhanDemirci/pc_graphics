@@ -45,7 +45,7 @@ struct DensKey {
     double s, lo, hi;
 };
 constexpr DensKey kDensRange[] = {
-    {-9.0, -2.5, 1.5},   {-9.5, -2.5, 1.5},   {-10.0, -1.2, 2.8},  {-10.5, 0.6, 3.4},   {-11.0, 1.6, 4.2},
+    {-8.2, -2.5, 1.5},   {-9.5, -2.5, 1.5},   {-10.0, -1.2, 2.8},  {-10.5, 0.6, 3.4},   {-11.0, 1.6, 4.2},
     {-11.5, 2.6, 13.4},  {-13.5, 2.9, 13.6},  {-14.0, 11.0, 14.5}, {-14.5, 13.2, 16.5}, {-15.0, 13.6, 16.5},
     {-15.5, 14.6, 16.6}, {-16.0, 14.2, 19.0}, {-16.5, 14.0, 21.4}, {-17.5, 14.0, 25.6},
 };
@@ -1038,7 +1038,7 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
     // ---- the ground at the beach: the Earth's surface there as a plane, in metres from the beach point (PLAN §6, 1)
     GGround& gr = v.ground;
     gr = GGround{};
-    if (s < 8.5 && s > -10.6) {   // the axes: the plane below ~3 km, the local maps on the sphere above
+    if (s < 8.5 && s > -13.6) {   // the axes: the plane below ~3 km, the local maps on the sphere above, the atoms' net
         gr.frame = 1;
         gr.on = s < 3.5 ? 1 : 0;
         const V3 up = rotate(earthUp_, earthPole_, clk.spin), east = rotate(earthEast_, earthPole_, clk.spin);
@@ -1069,7 +1069,7 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
         gr.vibPhase = float(clk.vib[0]);
         // into the atom: the ground gives way to its clouds over a decade
         gr.fade = float(smoothstep(-10.5, -9.5, s));
-        if (gr.fade <= 0.0f) gr.on = gr.frame = 0;
+        if (gr.fade <= 0.0f) gr.on = 0;   // its frame stays: the density map's lattice is read in it
     }
     // the swash's clock (the beach's own)
     v.beachClock = float(clk.beach);
@@ -1079,10 +1079,10 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
     // the quark as a probe of the scale sees it: 0.07 fm down to the proton, then sharper by 1.6 decades a decade (no
     // size has been found down to ~10^-19 m), to a few pixels by 10^-19 (the field's picture takes it over on the way)
     const double sigQ = 0.07e-15 * (s > -15.5 ? 1.0 : std::pow(10.0, 1.6 * (s + 15.5)));
-    if (s < -8.9 && s > -17.3) {
+    if (s < -8.2 && s > -17.3) {
         GDensity& dn = v.dens;
         dn.on = 1;
-        dn.weight = float(smoothstep(-8.9, -9.9, s) * (1.0 - smoothstep(-16.3, -17.3, s)));
+        dn.weight = float(smoothstep(-8.2, -9.0, s) * (1.0 - smoothstep(-16.3, -17.3, s)));
         const double a0 = 0.529177e-10, fm = 1e-15;
         const V3 nuc = tree.rel(cam.ref, kNucleus) - cam.pos;     // the home silicon's nucleus
         const V3 east = earthEast_, north = earthNorth_, up = earthUp_;
@@ -1096,27 +1096,14 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
             b.a = a;
             b.amp = amp * float(std::pow(a0 / unit, 3.0));   // per its unit^3 -> per a0^3
         };
-        // the top layer of a silica bilayer (the face the camera comes down on): silicons on a honeycomb, Si-Si 3.06 A,
-        // a bridging oxygen halfway between each pair (a little raised), an apical oxygen under each silicon (towards the
-        // layer below); the home silicon at the beach point
+        // the top layer of a silica bilayer (the face the camera comes down on): silicons on a honeycomb, Si-Si 3.06 A, a
+        // bridging oxygen between each pair (a little raised), an apical oxygen under each silicon. The net is drawn on
+        // the GPU from the AFM's lattice (latticeDensity); the home silicon is a body here, at its nucleus (its swing)
         if (s > -13.5) {
-            const double ss = 3.06e-10, bo = 0.3e-10, apical = 1.61e-10;
-            const V3 home = tree.rel(cam.ref, kBeach) - cam.pos;  // the atom's mean place (the nucleus swings about it)
+            // the net only while it is on the screen: below 10^-11 its share at the home nucleus is ~10^-3 (O's tail at
+            // 1.6 A against the K shell), a hundredth of a line's width in log10
+            dn.lattice = s > -11.0 ? v.ground.frame : 0;
             add(nuc, 0, a0, 0, 0, 1);
-            add(home - up * apical, 1, a0, 0, 0, 1);
-            const double ang[3] = {90.0, 210.0, 330.0};
-            for (double g : ang) {
-                const V3 dir = east * std::cos(g * kPi / 180.0) + north * std::sin(g * kPi / 180.0);
-                add(home + dir * (0.5 * ss) + up * bo, 1, a0, 0, 0, 1);   // bridging O
-                const V3 si = home + dir * ss;
-                add(si, 0, a0, 0, 0, 1);                                    // neighbour Si
-                add(si - up * apical, 1, a0, 0, 0, 1);
-                // the neighbour's two other bridges (its other neighbours lie at g +- 60 degrees from it)
-                for (double h : {g + 60.0, g - 60.0}) {
-                    const V3 d2 = east * std::cos(h * kPi / 180.0) + north * std::sin(h * kPi / 180.0);
-                    add(si + d2 * (0.5 * ss) + up * bo, 1, a0, 0, 0, 1);
-                }
-            }
         }
         // the nucleus: silicon-28's 28 nucleons, the time average, Woods-Saxon (R = 3.07 fm, a = 0.52 fm, its charge's
         // fit) with rho0 = 28 / (4/3 pi R^3 (1 + pi^2 a^2 / R^2)) = 0.176 per fm^3

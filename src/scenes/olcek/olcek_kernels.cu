@@ -872,11 +872,48 @@ __device__ float mapShade(float x0, float gx, float gy, float lo, float hi, floa
     const float fill = (0.004f + 0.75f * t * t) * fmaxf(shade, 0.15f);
     return fill + (0.05f + 0.30f * t) * line;
 }
+// The silica net's electrons at p (camera space): the AFM's lattice (atomHeight: the same sites, the same thermal jitter),
+// each atom its Slater density, the apical oxygens under the silicons in 3D; atoms beyond 4.5 A left out (their tails
+// are 10^-9 of what is there). The home silicon is not here: it is a body, carrying the nucleus's swing.
+__device__ float latticeDensity(float3 p) {
+    const GGround& g = cV.ground;
+    const float3 rel = (p - g.o) * g.metres;
+    const float x = dot(rel, g.east), y = dot(rel, g.north), z = dot(rel, g.up);
+    const float ss = 3.06e-10f, a = ss * 1.7320508f, apical = 1.61e-10f, bo = 0.3e-10f, inva0 = 1.0f / 0.529177e-10f;
+    const float v = y / (a * 0.8660254f), u = x / a - 0.5f * v;
+    const int ci = int(floorf(u)), cj = int(floorf(v));
+    const float mxs[7] = {0.0f, 0.0f, 0.0f, -0.4330127f * ss, 0.4330127f * ss, 0.0f, 0.0f};
+    const float mys[7] = {0.0f, ss, 0.5f * ss, -0.25f * ss, -0.25f * ss, 0.0f, ss};
+    const float mzs[7] = {0.0f, 0.0f, bo, bo, bo, -apical, -apical};
+    const float cut2 = 4.5e-10f * 4.5e-10f, cutJ2 = sqr(4.5e-10f + 1.5f * g.jitter);
+    float rho = 0.0f;
+    for (int i = ci - 1; i <= ci + 1; ++i)
+        for (int j = cj - 1; j <= cj + 1; ++j) {
+            const float bx = (i + 0.5f * j) * a, by = j * a * 0.8660254f;
+            for (int m = 0; m < 7; ++m) {
+                if (i == 0 && j == 0 && m == 0) continue;
+                float dx = x - (bx + mxs[m]), dy = y - (by + mys[m]);
+                const float dz = z - mzs[m];
+                if (dx * dx + dy * dy + dz * dz > cutJ2) continue;   // out of reach even with its jitter
+                const int hm = m < 5 ? m : m + 5;   // the AFM's hashes for its five; the apical ones their own
+                const float p1 = 6.2831853f * hash1(i, j, hm, 211), p2 = 6.2831853f * hash1(i, j, hm + 5, 211);
+                dx -= g.jitter * __sinf(g.vibPhase + p1);
+                dy -= g.jitter * __sinf(g.vibPhase * 1.37f + p2);
+                const float d2 = dx * dx + dy * dy + dz * dz;
+                if (d2 > cut2) continue;
+                rho += olAtomDensity(m < 2 ? 0 : 1, sqrtf(d2) * inva0);
+            }
+        }
+    return rho;
+}
+__device__ __forceinline__ float densityAt(const GDensity& D, float3 p) {
+    return olDensity(D, p) + (D.lattice ? latticeDensity(p) : 0.0f);
+}
 __device__ float3 densitySlice(const GDensity& D, float px, float py) {
     const float3 d0 = rayDir(px, py), dx = rayDir(px + 1.0f, py), dy = rayDir(px, py + 1.0f);
     const float3 p0 = d0 * (1.0f / d0.z), p1 = dx * (1.0f / dx.z), p2 = dy * (1.0f / dy.z);
-    const float x0 = log10f(olDensity(D, p0));
-    const float gx = log10f(olDensity(D, p1)) - x0, gy = log10f(olDensity(D, p2)) - x0;   // decades per pixel
+    const float x0 = log10f(densityAt(D, p0));
+    const float gx = log10f(densityAt(D, p1)) - x0, gy = log10f(densityAt(D, p2)) - x0;   // decades per pixel
     const float v = D.weight * mapShade(x0, gx, gy, D.lo, D.hi, D.relief);
     return make_float3(v, v, v);
 }
