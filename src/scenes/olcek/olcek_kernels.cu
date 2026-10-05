@@ -531,6 +531,105 @@ __device__ float3 discLight(const GDisc& g, float3 d, float tmax) {
     return g.emit * (I / slant);
 }
 
+// ---- the Milky Way (see GGalaxy). R(beta) of an arm: Reid's kinked log-periodic spiral, ln(R/Rk) = -(beta - bk) tan(psi),
+// continued past its measured azimuths with a 12-degree pitch (the far side is not measured: a representation)
+__device__ float armRadius(const GArm& a, float beta) {
+    const float tanExt = 0.2126f;   // tan 12
+    const float b = fminf(fmaxf(beta, a.betaMin), a.betaMax);
+    const float t = b <= a.betaKink ? a.tanLo : a.tanHi;
+    float lnR = logf(a.Rkink) - (b - a.betaKink) * t;
+    lnR -= (beta - b) * tanExt;
+    return __expf(lnR);
+}
+// the arm's density at (R, beta): Gaussian across it, on every winding near the point; its distance (kpc, signed: < 0
+// inside, towards the centre) to the nearest winding through `side`
+__device__ float armDensity(const GArm& a, float R, float beta, float& side) {
+    float best = 0.0f;
+    side = 1e9f;
+    for (int k = -1; k <= 2; ++k) {
+        const float bb = beta + 6.2831853f * k;
+        // an arm lives from the bar's ends (~3.5 kpc) to the disc's edge, and only so far past its measured azimuths
+        const float span = fmaxf(a.betaMin - bb, bb - a.betaMax);
+        const float reach = 1.0f - smoothstepf(a.ext * 0.6f, a.ext, span);
+        if (reach <= 0.0f) continue;
+        const float Ra = armRadius(a, bb);
+        if (Ra < 3.3f || Ra > 16.5f) continue;   // one winding: from the bar's end to the disc's edge
+        const float w = fmaxf(a.width, 0.336f + 0.036f * (Ra - 8.15f)) * 0.7f;
+        const float dr = (R - Ra) * 0.97f;   // ~ across the arm (cos of the pitch)
+        const float v = __expf(-0.5f * dr * dr / (w * w)) * reach * smoothstepf(3.3f, 4.3f, Ra) * (1.0f - smoothstepf(12.5f, 16.5f, Ra));
+        if (v > best) best = v;
+        if (fabsf(dr / w) < fabsf(side)) side = dr / w;
+    }
+    return best * a.strength;
+}
+
+__device__ float3 galaxyLight(const GGalaxy& g, float3 d, float tmax, float pixKpc) {
+    const float dn = dot(d, g.n);
+    if (fabsf(dn) < 1e-6f) return make_float3(0, 0, 0);
+    const float t = dot(g.c, g.n) / dn;
+    if (t <= 0.0f || t >= tmax) return make_float3(0, 0, 0);
+    const float3 p = (d * t - g.c) * (1.0f / g.kpc);   // kpc, in the plane
+    const float x = dot(p, g.e0), y = dot(p, g.e1);
+    const float R = sqrtf(x * x + y * y);
+    if (R > 25.0f) return make_float3(0, 0, 0);
+    const float beta = atan2f(y, x);
+    const float fp = pixKpc * t / fabsf(dn) * 0.5f;    // a pixel's footprint there (kpc)
+    // the old disc: exponential, its edge softening beyond ~15 kpc
+    float3 col = g.disc * (__expf(-R / g.hDisc) * (1.0f - smoothstepf(13.0f, 20.0f, R)) * 0.55f);
+    // the bar and the bulge: an elongated exponential along the bar, a round core
+    const float ca = cosf(g.barAngle), sa = sinf(g.barAngle);
+    const float bx = x * ca + y * sa, by = -x * sa + y * ca;
+    const float bar = __expf(-sqrtf(sqr(bx / (g.barHalf * 0.33f)) + sqr(by / 0.55f)));
+    const float core = __expf(-R / 0.35f);
+    col += g.bulge * (0.6f * bar + 0.4f * core);
+    // the arms: young stars and nebulae in clumps; dust on their inner edges
+    float young = 0.0f, lane = 0.0f;
+    for (int i = 0; i < g.nArms; ++i) {
+        float side;
+        const float a = armDensity(g.arms[i], R, beta, side);
+        young += a;
+        lane += g.arms[i].strength * __expf(-0.5f * sqr((side + 0.9f) / 0.45f)) * smoothstepf(0.05f, 0.3f, a + 0.05f);
+    }
+    // clumps: noise in the plane, stretched along the rotation (star clouds sheared by it); octaves finer than ~2 pixels fade
+    float clump = 0.0f, amp = 0.5f, f = 1.6f, wsum = 0.0f;
+    const float ux = x * 0.9f + y * 0.43f, uy = -x * 0.43f + y * 0.9f;
+    for (int o = 0; o < 11; ++o) {
+        const float lim = saturate(1.0f - 2.0f * fp * f);
+        if (lim <= 0.0f) break;
+        clump += amp * lim * (gnoise3(ux * f, uy * f * 0.55f, 1.7f * o, 900 + o) - 0.5f);
+        wsum += amp;
+        f *= 2.1f;
+        amp *= 0.66f;
+    }
+    clump = 0.5f + clump / fmaxf(wsum, 1e-3f) * 1.6f;
+    const float knots = smoothstepf(0.55f, 0.9f, clump);
+    col += g.disc * (__expf(-R / g.hDisc) * 0.35f * fminf(young, 1.0f));   // the old stars crowd into the arms a little too
+    col += g.young * (young * (0.12f + 0.5f * clump + 1.1f * knots));   // a band of young light, clumpy, with brighter star clouds
+    col += g.nebula * (young * sqr(sqr(knots)) * 3.0f);              // Halpha in the brightest knots only
+    // dust: lanes plus a thin general layer, filaments from the same noise; the light passes a mixed layer: (1 - e^-tau)/tau
+    float filament = 0.0f;
+    {
+        float a2 = 0.5f, f2 = 1.2f, w2 = 0.0f;
+        for (int o = 0; o < 10; ++o) {
+            const float lim = saturate(1.0f - 2.0f * fp * f2);
+            if (lim <= 0.0f) break;
+            filament += a2 * lim * (gnoise3(ux * f2 * 1.3f, uy * f2 * 0.45f, 5.3f + o, 950 + o) - 0.5f);
+            w2 += a2;
+            f2 *= 2.2f;
+            a2 *= 0.62f;
+        }
+        filament = 0.5f + filament / fmaxf(w2, 1e-3f) * 1.6f;
+    }
+    const float tau = g.dust * (lane * (0.2f + 2.2f * smoothstepf(0.45f, 0.8f, filament)) + 0.35f * __expf(-R / 3.2f) * smoothstepf(0.3f, 0.7f, filament));
+    const float3 tauRGB = make_float3(tau * 0.75f, tau * 1.0f, tau * 1.3f);   // reddening
+    const float3 trans = make_float3(tauRGB.x > 1e-4f ? (1.0f - __expf(-tauRGB.x)) / tauRGB.x : 1.0f,
+                                     tauRGB.y > 1e-4f ? (1.0f - __expf(-tauRGB.y)) / tauRGB.y : 1.0f,
+                                     tauRGB.z > 1e-4f ? (1.0f - __expf(-tauRGB.z)) / tauRGB.z : 1.0f);
+    col = col * trans;
+    // seen at a slant the column is longer (a thin, optically thin layer), up to the disc's thickness
+    return col * (1.0f / fmaxf(fabsf(dn), 0.08f));
+}
+
 // ---- the desert's haze and the foam: octaves on the focus plane (u in screen widths)
 __device__ float3 hazeLight(float3 d) {
     const GHaze& hz = cV.haze;
@@ -685,9 +784,14 @@ __device__ float3 sampleAt(float px, float py, float& depth) {
         col = col * b.weight;
     }
     // (the air between the camera and the surface is added once a pixel, in kFrame: it is smooth, and dear)
-    // light in front of the surface: clouds, discs, shells, the haze
-    for (int i = 0; i < cV.nBlobs; ++i) col += blobLight(cV.blobs[i], d, tBest);
+    // light in front of the surface: clouds, discs, shells, the haze. A ground giving way (into the atom) hides what is
+    // behind it only as much as it is still there
+    for (int i = 0; i < cV.nBlobs; ++i) {
+        col += blobLight(cV.blobs[i], d, tBest);
+        if (groundHit && g.fade < 1.0f) col += (blobLight(cV.blobs[i], d, 1e30f) - blobLight(cV.blobs[i], d, tBest)) * (1.0f - g.fade);
+    }
     for (int i = 0; i < cV.nDiscs; ++i) col += discLight(cV.discs[i], d, tBest);
+    // (the Milky Way's light is added once a pixel, in kFrame: it is built of octaves no finer than two pixels)
     for (int i = 0; i < cV.nBalls; ++i) {
         const GBall& b = cV.balls[i];
         if (b.pattern >= 0) continue;
@@ -733,6 +837,7 @@ __global__ void kFrame(float4* accum, float* depthOut, int samples) {
         wsum += w;
     }
     float3 avg = sum * (1.0f / wsum);
+    if (cV.galaxy.on) avg += galaxyLight(cV.galaxy, rayDir(x + 0.5f, y + 0.5f), dCentre, cV.pixAngle / cV.galaxy.kpc);
     if (cV.atmo.on) {   // the air between the camera and what the pixel's centre sees (or space behind the limb)
         float3 T;
         const float3 La = airLight(cV.atmo, rayDir(x + 0.5f, y + 0.5f), dCentre, T);

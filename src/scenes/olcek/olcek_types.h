@@ -44,6 +44,30 @@ struct GDisc {
     float bulge = 0.0f;                                          // the bulge's share (a round glow at the centre)
 };
 
+// The Milky Way (Ö3's first piece): a face-on model built from measurements. Arms: the log-periodic spirals with kinks
+// of Reid et al. 2019 (ApJ 885, 131, Table 2: maser parallaxes of young massive stars), each continued beyond its measured
+// azimuths with a 12-degree pitch; the long bar after Wegg, Gerhard & Portail 2015 (half-length 5 kpc, 28 degrees from the
+// Sun-centre line); an exponential old disc (scale length 2.6 kpc); dust lanes on the arms' inner edges. Azimuth beta from
+// the centre-Sun line, growing with the rotation (clockwise seen from the north galactic pole). Lengths in kpc.
+constexpr int kMaxArms = 8;
+struct GArm {
+    float betaKink = 0, Rkink = 8, tanLo = 0.2f, tanHi = 0.2f;   // radians, kpc, tan of the pitch below / above the kink
+    float betaMin = -1, betaMax = 1;                             // the measured azimuths (radians)
+    float width = 0.3f, strength = 1.0f;                         // Gaussian sigma at the kink (kpc); its share
+    float ext = 0.5f;                                            // how far past the measured azimuths it goes (radians)
+};
+struct GGalaxy {
+    int on = 0;
+    float3 c{0, 0, 0}, n{0, 0, 1}, e0{1, 0, 0}, e1{0, 1, 0};   // centre, north pole, towards the Sun's place, the rotation
+    float kpc = 1.0f;                                           // camera units per kpc
+    float3 disc{0, 0, 0}, bulge{0, 0, 0}, young{0, 0, 0}, nebula{0, 0, 0};   // face-on central brightness of each (k)
+    float hDisc = 2.6f, barAngle = 0.4887f, barHalf = 5.0f;
+    float dust = 1.6f;                                          // the lanes' optical depth
+    float fade = 1.0f;
+    int nArms = 0;
+    GArm arms[kMaxArms];
+};
+
 // a point of light: its flux as the sum of its pixels (display-referred radiance x pixels); a Gaussian on the screen
 struct GSplat {
     float3 p;                   // position (camera space)
@@ -140,6 +164,7 @@ struct OlcekView {
     GHaze haze;
     GMaps maps;
     GAtmo atmo;
+    GGalaxy galaxy;
 };
 
 }   // namespace olcek

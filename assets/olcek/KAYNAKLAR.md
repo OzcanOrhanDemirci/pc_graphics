@@ -6,7 +6,7 @@ Bu klasördeki dosyalar git'e girmez (yalnız bu liste girer). Hepsini `tools/ol
 | Dosya | Kaynak | Lisans | Ne için |
 |---|---|---|---|
 | `olcek_bugun.h` (kaynak kodda) | JPL DE440s (astropy 7, `solar_system_ephemeris = de440s`), astropy'nin Galactic ve Galactocentric çerçeveleri | JPL efemerisi kamuya açık; astropy BSD-3 | 5 Ekim 2026 güneş öğlesinde gezegenler, Ay, Güneş, Samanyolu'nun merkezi ve kutbu, sahildeki noktanın başucu |
-| `s2_ev.tex` | Copernicus Sentinel-2 L2A, S2B 2025-09-23, karolar 35SMC ve 35SNC, gerçek renk (TCI); AWS Open Data `sentinel-cogs` (Element 84 Earth Search) | Copernicus Sentinel verisi: serbest, tam ve açık; atıf: "Contains modified Copernicus Sentinel data 2025" | Çandarlı ve çevresi, 10 m, 82 km kare (sahildeki noktanın çevresinde yerel ızgara); 2025-09-23, karolar STAC ile bulunur |
+| `s2_ev.tex` | Copernicus Sentinel-2 L2A, S2B 2025-09-23, karolar 35SMD, 35SMC, 35SNC, 35SND, gerçek renk (TCI); AWS Open Data `sentinel-cogs` (Element 84 Earth Search) | Copernicus Sentinel verisi: serbest, tam ve açık; atıf: "Contains modified Copernicus Sentinel data 2025" | Çandarlı ve çevresi, 10 m, 82 km kare (sahildeki noktanın çevresinde yerel ızgara); 2025-09-23, karolar STAC ile bulunur |
 | `bmng_dunya.tex` | NASA Earth Observatory, Blue Marble Next Generation (Stöckli ve ark. 2005), Ekim 2004, 21600×10800 | NASA görüntüsü, kamu malı | Dünya'nın bulutsuz yüzü |
 | `bmng_ege.tex` | Aynı, 500 m karo C1, yerel ızgaraya | Kamu malı | Ege, 500 m, 2048 km kare |
 | `bmng_kusak.tex` | Blue Marble'ın her enlemdeki ortalaması (doğrusal ışıkta) | Kamu malı | Hızla dönen Dünya'nın kuşakları |

@@ -93,8 +93,8 @@ const Seg kSegs[] = {
     {11.00, 11.90, kEarth, kSun},
     {20.20, 21.00, kSun, kGalCentre},
     {22.00, 23.00, kGalCentre, kLocalGroup},
-    {24.00, 24.90, kLocalGroup, kLaniakea},
-    {25.60, 26.30, kLaniakea, kSun},
+    {24.60, 25.40, kLocalGroup, kLaniakea},
+    {25.80, 26.40, kLaniakea, kSun},
 };
 
 // what is in the middle, by decades (PLAN §2's table)
@@ -737,10 +737,56 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
         g.phase = float(phase);
         g.bulge = bulge;
     };
+    v.galaxy = GGalaxy{};
     if (s > 18.5) {
         const double fade = smoothstep(18.8, 20.0, s);
-        const V3 ax = rotate(galX_, galNorth_, -clk.arms);
-        disc(kGalCentre, galNorth_, ax, 2.6e3 * kPc, 2.0e10 * kLsun, 0.45f, 0.0, 0.25f, fade);
+        // the Milky Way: today's arms (their pattern turns at its own speed: clk.arms)
+        GGalaxy& g = v.galaxy;
+        const V3 rel = tree.rel(cam.ref, kGalCentre) - cam.pos;
+        if (length(rel) < 1e9 * D) {
+            g.on = 1;
+            g.c = toCamSpace(rel);
+            g.n = dirCam(galNorth_);
+            const V3 e0 = rotate(-galX_, galNorth_, -clk.arms);           // the centre -> Sun line of today, turned with the arms
+            const V3 e1 = cross(e0, galNorth_);                           // the rotation's way (l = 90 degrees today)
+            g.e0 = dirCam(e0);
+            g.e1 = dirCam(e1);
+            g.kpc = float(1e3 * kPc / D);
+            // face-on surface brightness (W/m^2/sr at the centre), from luminosities: disc 3.5e10, bulge and bar 1.2e10,
+            // young stars in the arms 0.4e10 (L_sun); the nebulae's Halpha a colour of the arms
+            const double h = 2.6e3 * kPc;
+            const double Idisc = 3.5e10 * kLsun / (2.0 * kPi * h * h) / (4.0 * kPi);
+            g.disc = blackbody(4600.0) * float(Idisc * k * fade);
+            g.bulge = blackbody(3900.0) * float(Idisc * 9.0 * k * fade);
+            g.young = blackbody(11000.0) * float(Idisc * 0.9 * k * fade);
+            g.nebula = make_float3(1.0f, 0.36f, 0.52f) * float(Idisc * 0.35 * k * fade);
+            g.fade = float(fade);
+            const double d2r = kPi / 180.0;
+            struct A { double bk, Rk, lo, hi, b0, b1, w, st, ext; };
+            // Reid et al. 2019, Table 2 (beta range: where the parallaxes are). The four major arms go on round the far
+            // side, one winding from the bar to the edge (extension in degrees, a representation); the spurs stay short
+            const A arms[] = {
+                {15, 3.52, -4.2, -4.2, 15, 18, 0.18, 0.45, 40},      // 3-kpc (near)
+                {18, 4.46, -1.0, 19.5, 5, 54, 0.14, 0.9, 320},       // Norma (on into the Outer arm)
+                {23, 4.91, 14.1, 12.1, 0, 104, 0.23, 1.0, 320},      // Scutum-Centaurus (on into the outer Sct-Cen)
+                {24, 6.04, 17.1, 1.0, 2, 97, 0.27, 1.0, 320},        // Sagittarius-Carina
+                {9, 8.26, 11.4, 11.4, -8, 34, 0.31, 0.5, 30},        // Local (the Orion spur, the Sun's)
+                {40, 8.87, 10.3, 8.7, -23, 115, 0.35, 1.0, 320},     // Perseus
+                {18, 12.24, 3.0, 9.4, -16, 71, 0.65, 0.5, 60}};      // Outer
+            g.nArms = 0;
+            for (const A& a : arms) {
+                GArm& m = g.arms[g.nArms++];
+                m.betaKink = float(a.bk * d2r);
+                m.Rkink = float(a.Rk);
+                m.tanLo = float(std::tan(a.lo * d2r));
+                m.tanHi = float(std::tan(a.hi * d2r));
+                m.betaMin = float(a.b0 * d2r);
+                m.betaMax = float(a.b1 * d2r);
+                m.width = float(a.w);
+                m.strength = float(a.st);
+                m.ext = float(a.ext * d2r);
+            }
+        }
         const V3 m31n = normalize(v3(-0.29, 0.78, -0.55));   // placeholder orientations (Ö3)
         disc(kM31, m31n, normalize(cross(m31n, v3(0, 0, 1))), 5.3e3 * kPc, 2.5e10 * kLsun, 0.4f, 0.0, 0.3f, 1.0);
         const V3 m33n = normalize(v3(0.52, -0.31, 0.79));
@@ -770,7 +816,7 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
             const double col = lum / (2.0 * kPi * sigma * sigma) / (4.0 * kPi);
             blob(rel, sigma, blackbody(4500.0) * float(col * k * fade));
         };
-        galBlob(kGalCentre, 0.9e3 * kPc, 1.0e10 * kLsun, smoothstep(18.8, 20.0, s));
+        // (the Galaxy's bulge is in its model: v.galaxy)
         galBlob(kLMC, 1.5e3 * kPc, 1.5e9 * kLsun, 1.0);
         galBlob(kSMC, 0.9e3 * kPc, 4.6e8 * kLsun, 1.0);
     }
