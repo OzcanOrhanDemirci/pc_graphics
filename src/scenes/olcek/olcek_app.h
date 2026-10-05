@@ -62,14 +62,25 @@ struct OlcekApp {
     int proximaStar = -1;            // the catalogue's Proxima, moved to its Gaia DR3 place (the route's)
     std::string hizLog;
     void prepareHiz();               // after loadMaps: the route, Proxima's place, the blackbody table
-    // the rocket's eye: the stars where and how it sees them, on black (H0); sum: the sky's light
+    // the rocket's eye: the stars where and how it sees them, the Milky Way's diffuse light and the cosmic microwave
+    // background (H3); sum: the sky's light
     void renderEye(const olcek::hiz::Eye& e, olcek::hiz::EyeSum& sum);
+    olcek::hiz::SkyCoarse skyCoarse;  // the panorama, coarse (the exposure's sums); empty without the asset
+    float4* dSky = nullptr;          // the panorama on the GPU (assets/olcek/samanyolu_gok.bin)
+    int skyW = 0, skyH = 0;
+    float4* dBB = nullptr;           // the blackbody table on the GPU
+    double skyPanoWeight(const olcek::hiz::Eye& e) const;   // the panorama's share: the view from near the Sun
     // The designed exposures (PLAN §3.1: a known function of where and how fast, never read from the picture). The eye
     // adapts to the visible light in its field, as if the whole sky were like it (visibleView / viewShare), against the
     // night sky's at the Sun (nightSky, the Sun left out), part of the way (hiz.uyum); the side view takes the first
     // option's curve near the Sun, deep space's beyond.
     double nightSky = 1e-12;         // W/m^2 (visible, the Sun's spectrum's watts): set by prepareHiz
+    double nightSkyBol = 1e-12;      // ... in every band (the energy eye's)
     double eyeEv(double skyVisible) const;
+    double eyeEvEnergy(double skyBolometric) const;   // the energy eye: the same eye on every band's light
+    // how far into daylight the eye is in that light (0 dark-adapted .. 1 day): its summation over area fades with it
+    double eyeDay(double sky, bool energy) const;
+    int skyLod = 1;                  // the panorama's levels on the GPU
     double sideEv(double s, olcek::V3 rocket) const;
     olcek::hiz::Eye eyeAt(const olcek::hiz::Ship& s, double yaw, double pitch, double tanHalfX) const;   // the camera
 

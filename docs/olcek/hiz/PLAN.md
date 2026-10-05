@@ -143,9 +143,9 @@ Tab ile yandan bakışa geçilir.
   bandın dışına kayan ışık **görünmez olur** (dürüst: çok dokuzda pencere kararır).
 - **Gökyüzü katmanları:**
   1. *Yakın uzay (Güneş'ten ~100 ışık yılı içi):* gerçek tüm gökyüzü fotoğrafı (ESO, Serge Brunier'in Samanyolu
-     panoraması, CC BY 4.0; lisans H3'te doğrulanır) yaygın ışık için. Parlak yıldızlar fotoğraftan katalog konumlarıyla
-     silinir, yerlerine katalog yıldızları nokta olarak konur (roketin yerinden doğru açıyla, Proxima'da yakın yıldızlar
-     yer değiştirir, kuşak aynı kalır: gerçekte de öyle).
+     panoraması, CC BY 4.0, doğrulandı) yaygın ışık için. Fotoğrafın yıldızları silinir (H3: 9 piksellik medyan),
+     yerlerine katalog yıldızları nokta olarak konur (roketin yerinden doğru açıyla, Proxima'da yakın yıldızlar yer
+     değiştirir, kuşak aynı kalır: gerçekte de öyle).
   2. *Galaksiden çıkış (yüzlerce - binlerce ışık yılı):* fotoğraf geçerliliğini yitirir. Samanyolu'nun **hacimsel 3B
      modeli** (ince ve kalın disk, çubuk, şişkinlik, kollar, toz katmanı: Ölçek'in modelinin 3B'si) devralır; geçiş
      Güneş'ten uzaklıkla, fotoğrafla model aynı yerden bakınca örtüşecek biçimde ayarlanır.
@@ -155,8 +155,10 @@ Tab ile yandan bakışa geçilir.
   açıkça etiketli renklerle (radyo/mikrodalga, kızılötesi, görünür, morötesi, X, gama). Çok dokuzda gözle kararan evren
   onunla önde yanan bir noktaya döner. Açık başlar; kapatınca saf göz.
 - **Sanat yönetimi (10-06):** fizik bükülmez. Araçlar: pozlama ve göz uyumu, gözün optiği (parlak noktanın çevresinde
-  parlama ve kırınım halkaları), dürbün, kadraj, zamanlama. Aracın bir parçasının (pencere kenarı, burun) görünmesi H3'te
-  denenip seçilir.
+  parlama ve kırınım halkaları), dürbün, kadraj, zamanlama. Aracın bir parçası (pencere kenarı, burun) **görünmez**
+  (H3 kararı: öndeki tek ışığın çevresini kapatır, roket yandan görünüşte var).
+- **Göz uyumu (H3):** karanlıkta yarım uyum (parlak gök parlak görünür), gündüz düzeyinde tam uyum (Weber); yaygın
+  ışığın alan toplaması kazancı gündüzde söner. Önde doğan "güneş" φ 7'den 16'ya aynı parlaklıkta kalır.
 - **Pozlama:** tasarlanmış, görüntüden okunmaz (kıpraşma yok). Gökyüzünün toplam ışığı φ'nin ve yerin bilinen bir
   işlevi (fon ışımasının γ²'si, yıldızların toplamı): göz uyumu bu hesaptan, yumuşak. AgX ton eşleme.
 - **Kalite:** gren yok, kıpraşma yok; nokta kaynaklar ışığını koruyarak (Ölçek'in noktaları gibi), deterministik.
@@ -271,7 +273,7 @@ alanıyla ya da arayüzün OpenGL'inde gölgelendiriciyle) H1'in ilk işi.
   çerçevesi (ölçülen dünya sökülür), takip eden kamera, roket ve manken çizimi, motor ışığı, yıldızlararası ortam
   noktaları, tekerlek ve ölçek durakları, yol çizgisi, hız oku, durak işaretleri; kalkışta Dünya ve Ay.
 - **H3 · FPS gökyüzü:** göreli ışın izleme, ESO panoraması ve yıldız silme, kozmik fon ışıması, pozlama, enerji gözü,
-  gözün optiği.
+  gözün optiği. **Bitti (10-06 gecesi)**, ayrıntı DURUM'da.
 - **H4 · Galaksiler 3B:** Samanyolu'nun hacimsel modeli (içeriden ve dışarıdan, fotoğrafla örtüşen), M31, M33, 2MRS.
 - **H5 · Duraklar:** Dünya'nın yörüngesi, Proxima (yıldız, b, Alfa Erboğa, Güneş'imiz Kraliçe'de), Andromeda'ya varış,
   yörüngeye oturma, dönüş.

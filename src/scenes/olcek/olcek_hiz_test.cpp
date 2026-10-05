@@ -571,6 +571,82 @@ int runHizTests(OlcekApp& app) {
         check(worst < 1e-9 && cont < 1e-5, "onden gelen isima: yarikure integrali, gerilim-enerji tensorunun donusumuyle ayni");
     }
 
+    // ---- 8. the eye's sky (H3): the sums the exposure is made of, the eye's adaptation, the energy eye's colours
+    {
+        // the cosmic background alone through the renderer's own sums (skySums: the rest frame's grid, each cell's light
+        // D^2 times): its light at the rocket from every direction is 4 sigma T0^4 gamma^2 (1 + beta^2/3) (the dipole
+        // moves it by at most 0.25%); at speed nearly all of it within 5 degrees of the bow (the glare's source)
+        double worst = 0.0, fwdShare10 = 0.0;
+        const double s4 = hz::kStefan * std::pow(hz::kCmbToday, 4.0);
+        for (double phi : {0.0, 0.5, 2.0, 7.0, 10.0, 15.0, hz::phiCap()}) {
+            hz::Eye e;
+            e.phi = phi;
+            e.motion = V3{1.0, 0.0, 0.0};
+            e.fwd = V3{1.0, 0.0, 0.0};
+            e.right = V3{0.0, -1.0, 0.0};
+            e.up = V3{0.0, 0.0, 1.0};
+            hz::EyeSum sum;
+            hz::skySums(hz::SkyCoarse{}, app.bb, e, 0.0, V3{1.0, 0.0, 0.0}, V3{0.0, 1.0, 0.0}, V3{0.0, 0.0, 1.0}, sum);
+            const hz::Kin k = hz::kin(phi);
+            const double want = 4.0 * s4 * k.gamma * k.gamma * (1.0 + k.beta * k.beta / 3.0);
+            worst = std::max(worst, std::fabs(sum.bolometric / want - 1.0));
+            if (phi == 10.0) fwdShare10 = sum.fwdBolometric / sum.bolometric;
+            std::printf("    phi %6.3f: fon isimasi butun bantlarda %.6e W/m^2 (beklenen %.6e), gorunur %.3e, burnun 5 derecesinde %%%.2f\n", phi,
+                        sum.bolometric, want, sum.visible, 100.0 * sum.fwdBolometric / sum.bolometric);
+        }
+        check(worst < 5e-3, "goz: fon isimasi her hizda 4 sigma T0^4 gamma^2 (1 + beta^2/3) (gokyuzu toplamlari)");
+        check(fwdShare10 > 0.99, "goz: phi 10'da fon isimasinin %99'dan fazlasi burnun 5 derecesinde (parlamanin kaynagi)");
+
+        // the night sky at the Sun's place against the one measured: starlight alone ~1e-4 lux on a moonless night (on a
+        // plane: a quarter of the whole sky's light for an even sky), the Sun's spectrum's 93 lm/W
+        const double lux = app.nightSky * 93.0 / 4.0;
+        std::printf("    gece goku: gorunur %.3e W/m^2 (yildizlar + Samanyolu), bir duzleme ~%.1e lux; butun bantlar %.3e W/m^2 (fon %%%.0f)\n",
+                    app.nightSky, lux, app.nightSkyBol, 100.0 * 4.0 * s4 / app.nightSkyBol);
+        check(lux > 5e-5 && lux < 1e-3, "goz: gece goku yildiz isigi mertebesinde (~1e-4 lux, aysiz gece)");
+        if (app.skyCoarse.w == 0) std::printf("    (Samanyolu panoramasi yok: tools/olcek_veri.py samanyolu; panorama denetimleri atlandi)\n");
+        else {
+            // the panorama: its light at rest, all of it seen from the Sun, its colour temperatures those of starlight
+            hz::Eye e;
+            hz::EyeSum withPano, without;
+            const V3 gx = app.sc.galCentreDir(), gn = app.sc.galNorth(), gy = cross(gn, gx);
+            hz::skySums(app.skyCoarse, app.bb, e, 1.0, gx, gy, gn, withPano);
+            hz::skySums(hz::SkyCoarse{}, app.bb, e, 1.0, gx, gy, gn, without);
+            const double pano = withPano.visible - without.visible;
+            double tMin = 1e30, tMax = 0.0;
+            for (const float4& p : app.skyCoarse.px)
+                if (0.2126 * p.x + 0.7152 * p.y + 0.0722 * p.z > 0.0) {
+                    tMin = std::min(tMin, double(p.w) * 1e4);
+                    tMax = std::max(tMax, double(p.w) * 1e4);
+                }
+            std::printf("    Samanyolu panoramasi: gorunur %.3e W/m^2 (gece gokunun %%%.0f), renk sicakliklari %.0f .. %.0f K\n", pano,
+                        100.0 * pano / app.nightSky, tMin, tMax);
+            check(pano > 0.1 * app.nightSky && pano < 0.9 * app.nightSky && tMin > 1500.0 && tMax < 20000.0,
+                  "goz: panorama gece gokunun bir parcasi, renkleri yildiz isigi sicakliginda");
+        }
+
+        // the eye's adaptation: at rest hiz.ev; in the dark half an EV per doubling of the light, in daylight a whole one
+        const double base = app.cfg.f("hiz.ev", 17.5f), n0 = app.nightSky;
+        const double dark = (app.eyeEv(n0 * 32.0) - app.eyeEv(n0 * 8.0)) / 2.0, day = (app.eyeEv(n0 * std::exp2(32.0)) - app.eyeEv(n0 * std::exp2(30.0))) / 2.0;
+        std::printf("    gozun uyumu: durusta EV %.5f (hiz.ev %.2f); karanlikta %.3f, gunduzde %.3f EV / iki kat isik; gunduz payi %.4f .. %.4f\n",
+                    app.eyeEv(n0), base, dark, day, app.eyeDay(n0, false), app.eyeDay(n0 * std::exp2(30.0), false));
+        check(std::fabs(app.eyeEv(n0) - base) < 1e-4 && std::fabs(dark + 0.5) < 0.01 && std::fabs(day + 1.0) < 0.01 &&
+                  app.eyeDay(n0, false) < 1e-3 && app.eyeDay(n0 * std::exp2(30.0), false) > 0.999,
+              "goz: karanlikta yari uyum (parlak gok parlak gorunur), gunduzde tam uyum (Weber)");
+
+        // the energy eye's colours: luminance 1 all the way, no jump anywhere (the colour moves with the speed)
+        double lumErr = 0.0, jump = 0.0;
+        float3 last{};
+        for (int i = 0; i <= 13000; ++i) {
+            const float lt = -1.0f + 0.001f * float(i);
+            const float3 c = energyColour(lt, app.bb.colour(std::pow(10.0, std::clamp(double(lt), -1.0, 12.0))));
+            lumErr = std::max(lumErr, std::fabs(0.2126 * c.x + 0.7152 * c.y + 0.0722 * c.z - 1.0));
+            if (i > 0) jump = std::max({jump, double(std::fabs(c.x - last.x)), double(std::fabs(c.y - last.y)), double(std::fabs(c.z - last.z))});
+            last = c;
+        }
+        std::printf("    enerji gozunun renkleri: parlaklik 1'den en cok %.1e sapiyor, 0,001 onluk adimda en buyuk sicrama %.4f\n", lumErr, jump);
+        check(lumErr < 1e-3 && jump < 0.05, "goz: enerji gozunun renkleri parlaklik 1, sicramasiz");
+    }
+
     std::printf("hiz: %s (%d kalan)\n", fails == 0 ? "GECTI" : "KALDI", fails);
     return fails == 0 ? 0 : 1;
 }
@@ -592,18 +668,20 @@ int runHizFrames(OlcekApp& app, const std::vector<double>& phis, int leg, double
         const hz::Kin k = hz::kin(s.phi);
         if (sides.empty()) {
             hz::Eye e = app.eyeAt(s, yaw, pitch, std::tan(0.5 * fovDeg * kPi / 180.0));
+            e.energy = app.cfg.f("hiz.enerji", 1.0f) > 0.5f;
             hz::EyeSum sum;
             e.k = std::exp2(app.eyeEv(0.0)) * 3e-3;
             app.renderEye(e, sum);   // a dry run for the sky's light: the adapted exposure
-            const double ev = app.eyeEv(sum.visibleView / sum.viewShare);
+            const double ev = e.energy ? app.eyeEvEnergy(sum.bolometricView / sum.viewShare) : app.eyeEv(sum.visibleView / sum.viewShare);
             e.k = std::exp2(ev) * 3e-3;
             app.renderEye(e, sum);
             char name[96];
-            std::snprintf(name, sizeof(name), "goz_ayak%d_phi%06.3f_gorus%g", s.leg, s.phi, fovDeg);
+            std::snprintf(name, sizeof(name), "goz_ayak%d_phi%06.3f_gorus%g%s", s.leg, s.phi, fovDeg, e.energy ? "_enerji" : "");
             app.save(app.root + "/" + out + "/" + name);
-            std::printf("phi %7.3f (%5.2f dokuz, gamma %.3e)  EV %.2f  gokyuzu %.3e (Gunes %.2e)  gorus alaninda %d yildiz  D %.3e .. %.3e  "
-                        "kare %.2f ms (ana %.2f)\n",
-                        s.phi, k.nines, k.gamma, ev, sum.visible, sum.visibleSun, sum.inView, sum.minD, sum.maxD, app.frameMs, app.hostMs);
+            std::printf("phi %7.3f (%5.2f dokuz, gamma %.3e)  EV %.2f  gokyuzu %.3e (Gunes %.2e, butun bantlar %.3e)  gorus alaninda %d yildiz  "
+                        "D %.3e .. %.3e  gun %.2f  kare %.2f ms (ana %.2f)\n",
+                        s.phi, k.nines, k.gamma, ev, sum.visible, sum.visibleSun, sum.bolometric, sum.inView, sum.minD, sum.maxD,
+                        app.eyeDay((e.energy ? sum.bolometricView : sum.visibleView) / sum.viewShare, e.energy), app.frameMs, app.hostMs);
         } else {
             for (double sv : sides) {
                 Scale& sc = app.sc;

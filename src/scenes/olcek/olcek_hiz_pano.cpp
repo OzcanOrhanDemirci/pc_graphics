@@ -549,4 +549,91 @@ void drawPanels(const Pano& p, PanoState& st, const ui::Rect& view, float Sapp, 
     }
 }
 
+void drawEnergyKey(const ui::Rect& view, float Sapp, double phi, const Blackbody& bb, const std::vector<ui::Rect>& avoid) {
+    const float S = std::min(Sapp, view.h / 1440.0f);
+    // the bands by their peak's temperature (Wien: lambda = 2.898e-3 / T): microwaves (from 1 m), infrared (from 1 mm),
+    // visible (750 to 380 nm), ultraviolet (to 10 nm), X-rays (to 10 pm), gamma rays; each a sixth of the bar
+    const double edge[7] = {-2.5383, 0.4621, 3.5862, 3.8818, 5.4621, 8.4621, 13.0};
+    const char* tr[6] = {"mikrodalga", "kızılötesi", "görünür", "morötesi", "X ışını", "gama"};
+    const char* en[6] = {"microwaves", "infrared", "visible", "ultraviolet", "X-rays", "gamma rays"};
+    auto at = [&](double lt) {   // where log10 T sits along the bar (0 .. 1)
+        lt = std::clamp(lt, edge[0], edge[6]);
+        int i = 0;
+        while (i < 5 && lt > edge[i + 1]) ++i;
+        return (i + (lt - edge[i]) / (edge[i + 1] - edge[i])) / 6.0;
+    };
+    auto colourAt = [&](double lt) {   // the false colour there, its brightest channel 1, for the screen (sRGB)
+        float3 c = energyColour(float(lt), bb.colour(std::pow(10.0, std::clamp(lt, -1.0, 12.0))));
+        const float mx = std::max({c.x, c.y, c.z, 1e-6f});
+        auto enc = [](float v) { return std::pow(std::clamp(v, 0.0f, 1.0f), 1.0f / 2.2f); };
+        return ui::Color{enc(c.x / mx), enc(c.y / mx), enc(c.z / mx), 1.0f};
+    };
+    const float w = S * 640.0f, h = S * 128.0f, barW = S * 580.0f, barH = S * 7.0f;
+    float x = view.x + 0.5f * (view.w - w), y = view.y + S * 28.0f;
+    for (const ui::Rect& r : avoid)   // below an application panel it would cover
+        if (r.w > 0.0f && r.h > 0.0f && r.x < x + w && r.x + r.w > x && r.y < y + h && r.y + r.h > y) y = r.y + r.h + S * 16.0f;
+    const ui::Rect box{x, y, w, h};
+    ui::shadow(box, S * 18.0f, S * 24.0f, ui::hex(0x000000, 0.30f));
+    ui::panel(box, theme::glass(), theme::glassBorder(), S * 16.0f, std::max(1.0f, S));
+    const ui::TextStyle cap = theme::caption(theme::Scale{S}, theme::faint());
+    const ui::TextStyle sub = theme::small(theme::Scale{S}, white(0.62f));
+    const ui::TextStyle band = theme::mono(theme::Scale{S}, 12.0f, white(0.62f));
+    const ui::TextStyle mark = theme::mono(theme::Scale{S}, 12.5f, white(0.92f));
+    const std::string title = L("ENERJİ GÖZÜ", "ENERGY EYE");
+    const std::string what = L("bütün bantlar, sahte renkle", "every band, in false colour");
+    const float tw = ui::measure(title, cap), gw = S * 14.0f, sw = ui::measure(what, sub);
+    const float tx = x + 0.5f * (w - tw - gw - sw);
+    ui::text(tx, y + S * 16.0f, title, cap);
+    ui::text(tx + tw + gw, y + S * 12.0f, what, sub);
+    // the bar
+    const float bx = x + 0.5f * (w - barW), by = y + S * 78.0f;
+    const int n = std::max(24, int(barW / std::max(S * 2.0f, 1.0f)));
+    for (int i = 0; i < n; ++i) {
+        const double u = (i + 0.5) / n;
+        const int b = std::min(int(u * 6.0), 5);
+        const double lt = edge[b] + (u * 6.0 - b) * (edge[b + 1] - edge[b]);
+        ui::rect(ui::Rect{bx + barW * float(i) / n, by, barW / n + 0.5f, barH}, colourAt(lt));
+    }
+    for (int b = 1; b < 6; ++b)   // the bands' borders
+        ui::line(bx + barW * b / 6.0f, by - S * 2.0f, bx + barW * b / 6.0f, by + barH + S * 2.0f, std::max(1.0f, S), ui::hex(0x000000, 0.55f));
+    for (int b = 0; b < 6; ++b) {
+        const std::string t = L(tr[b], en[b]);
+        ui::text(bx + barW * (b + 0.5f) / 6.0f - 0.5f * ui::measure(t, band), by + barH + S * 8.0f, t, band);
+    }
+    // the light dead ahead: the cosmic background (T0 e^phi) and a Sun-like star (5,772 K e^phi), their peaks' bands
+    const double lD = phi / std::log(10.0);
+    const double ltC = std::log10(kCmbToday) + lD, ltS = std::log10(5772.0) + lD;
+    struct Mark {
+        double lt;
+        std::string name;
+        float x, tw;
+    };
+    Mark ms[2] = {{ltC, L("fon ışıması", "the background glow"), 0, 0}, {ltS, L("yıldız ışığı", "starlight"), 0, 0}};
+    for (Mark& m : ms) {
+        m.x = bx + barW * float(at(m.lt));
+        m.tw = ui::measure(m.name + (m.lt > edge[6] ? " →" : ""), mark);
+    }
+    // their names above, kept apart and inside the box
+    float l0 = ms[0].x - 0.5f * ms[0].tw, l1 = ms[1].x - 0.5f * ms[1].tw;
+    const float lo = x + S * 14.0f, hi = x + w - S * 14.0f;
+    l0 = std::clamp(l0, lo, hi - ms[0].tw);
+    l1 = std::clamp(l1, lo, hi - ms[1].tw);
+    if (l1 < l0 + ms[0].tw + S * 12.0f) {
+        const float over = l0 + ms[0].tw + S * 12.0f - l1;
+        l0 -= 0.5f * over;
+        l1 += 0.5f * over;
+        if (l0 < lo) { l1 += lo - l0; l0 = lo; }
+        if (l1 + ms[1].tw > hi) { l0 -= l1 + ms[1].tw - hi; l1 = hi - ms[1].tw; }
+    }
+    const float lx[2] = {l0, l1};
+    for (int i = 0; i < 2; ++i) {
+        const Mark& m = ms[i];
+        const ui::Color c = colourAt(m.lt);
+        const float tipY = by - S * 3.0f, baseY = by - S * 12.0f, hw = S * 5.5f;
+        const float tri[6] = {m.x, tipY, m.x - hw, baseY, m.x + hw, baseY};
+        ui::fill(tri, 3, c);
+        ui::text(lx[i], y + S * 40.0f, m.name + (m.lt > edge[6] ? " →" : ""), mark);
+    }
+}
+
 }   // namespace olcek::hiz

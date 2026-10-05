@@ -301,6 +301,54 @@ struct GAtmo {
     float fade = 1.0f;          // its share (it comes in with the scale)
 };
 
+// The second option's eye (PLAN §3.1): the sky's diffuse light by the pixel. Each pixel's direction is taken back to
+// the rest frame (aberration, tan(theta/2) = e^phi tan(theta'/2)) and its light shifted by D there: the Milky Way's
+// panorama (ESO; near the Sun: the view from here) and the cosmic microwave background (with the Sun's dipole). A
+// blackbody of T is seen as one of D T, its surface brightness D^4 times; the panorama keeps its own colour, turned by
+// the blackbody's at its colour temperature. The stars come as splats, built on the host the same way.
+struct GSky {
+    int on = 0;
+    int energy = 0;                    // the energy eye: every band's light, the band in false colour (energyColour)
+    double mx = 0.0, my = 0.0, mz = 1.0;            // the motion in camera space (unit)
+    double emp = 1.0, gamma = 1.0, beta = 0.0, eps = 1.0;   // e^-phi and the kinematics (eps = 1 - beta, exact)
+    double tanX = 0.36, tanY = 0.2;    // the field (in doubles: the binoculars reach 1e-11 rad)
+    float3 gal0{1, 0, 0}, gal1{0, 1, 0}, gal2{0, 0, 1};   // camera space to galactic: x to the centre, y to l 90, z north
+    const float4* pano = nullptr;      // the Milky Way: linear RGB (W/m^2/sr, the Sun's spectrum's watts) and T / 10^4 K;
+    int pw = 0, ph = 0;                // its smaller levels after it, each half the last (T weighted by the light)
+    int nLod = 1;
+    float pixAngle = 1e-3f;            // a pixel's angle at the middle of the field (radians): which level a pixel reads
+    float panoWeight = 1.0f;           // 1 near the Sun, fading away from it
+    const float4* bb = nullptr;        // blackbody table over log10 T: RGB (luminance 1), log10 visible share vs the Sun's
+    int bbN = 0;
+    float bbLogT0 = 1.0f, bbStep = 0.01f;
+    float cmbT0 = 2.72548f;            // K (Fixsen 2009)
+    float cmbDipole = 0.0012336f;      // the Sun's motion against it: 3.362 mK / T0 (Planck 2018)
+    float3 cmbDir{0, 0, 1};            // ... towards l 264.02, b 48.25 (galactic)
+    float k = 1.0f;                    // the exposure: display per W/m^2/sr (visible; bolometric in the energy eye)
+    float lk = 0.0f;                   // ... its log10 (the kernel sums the light in log10)
+    // the eye's own scatter (veiling glare, Stiles-Holladay: L = 10 E / theta^2, theta in degrees, ~13% of the light
+    // between 0.1 and 90 degrees): around the brightest sources, their light at the eye (display units x sr) and colour
+    int nGlare = 0;
+    float3 glareDir[8];               // camera space (unit)
+    float3 glareE[8];                 // E x k, coloured
+};
+
+// the energy eye's colours (PLAN §3.1, Özcan 2026-10-06): the band where a blackbody of T peaks (Wien), from radio to gamma
+// rays, at luminance 1: deep red for radio and microwaves, red-orange infrared, the visible band in its own colour (vis,
+// the blackbody's), blue ultraviolet, violet X-rays, white-violet gamma rays
+HD float3 energyColour(float logT, float3 vis) {
+    const float L[9] = {0.0f, 1.5f, 2.6f, 3.35f, 4.05f, 5.0f, 6.5f, 8.5f, 12.0f};
+    const float3 C[9] = {make_float3(0.42f, 0.07f, 0.04f), make_float3(0.62f, 0.12f, 0.06f), make_float3(0.95f, 0.38f, 0.12f), vis, vis,
+                         make_float3(0.36f, 0.55f, 1.00f), make_float3(0.50f, 0.36f, 1.00f), make_float3(0.78f, 0.55f, 1.00f),
+                         make_float3(0.96f, 0.92f, 1.00f)};
+    int i = 0;
+    while (i < 7 && logT > L[i + 1]) ++i;
+    const float t = fminf(fmaxf((logT - L[i]) / (L[i + 1] - L[i]), 0.0f), 1.0f);
+    float3 c = C[i] * (1.0f - t) + C[i + 1] * t;
+    const float lum = 0.2126f * c.x + 0.7152f * c.y + 0.0722f * c.z;
+    return c * (1.0f / fmaxf(lum, 1e-4f));
+}
+
 struct OlcekView {
     int width = 0, height = 0;
     float metres = 1.0f;                        // D: metres per camera-space unit (the maps' footprints)
@@ -308,9 +356,6 @@ struct OlcekView {
     float pixAngle = 0.0f;                      // 2 tanHalfX / width
     float filterRadius = 1.5f;
     float saturation = 1.0f;                    // colour ends below the light's wavelength (PLAN §5)
-    // The second option's side view is the world as the rocket measures it (PLAN §3.2): every distance along the motion
-    // (the screen's x) gamma times shorter about the rocket, which the camera sits straight across from. For what the
-    // rays draw that is the same as rays stretched gamma times across (points are contracted on the host). 1: none
     float3 background{0, 0, 0};
     int nBalls = 0, nBlobs = 0, nDiscs = 0;
     GBall balls[kMaxBalls];
@@ -324,6 +369,7 @@ struct OlcekView {
     GGalaxy galaxy[kMaxGalaxies];   // 0 the Milky Way, 1 M31, 2 M33
     GWeb web;
     GDensity dens;
+    GSky sky;                       // the second option's eye: its diffuse sky (off elsewhere)
 };
 
 }   // namespace olcek

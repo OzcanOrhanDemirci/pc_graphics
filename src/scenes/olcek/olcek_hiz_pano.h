@@ -74,4 +74,9 @@ struct PanoState {
 // `avoid`: the application's panels; each column keeps to the room between them, smaller if it must
 void drawPanels(const Pano& p, PanoState& state, const ui::Rect& view, float S, unsigned show, const std::vector<ui::Rect>& avoid = {});
 
+// the energy eye's key (top middle of the eye's view): its name, the bands in its false colours (each band as wide as
+// the next: microwaves to gamma rays) and where the light dead ahead peaks now (Wien), the cosmic background's and a
+// Sun-like star's: both move up the bands as the speed grows (D = e^phi)
+void drawEnergyKey(const ui::Rect& view, float S, double phi, const Blackbody& bb, const std::vector<ui::Rect>& avoid = {});
+
 }   // namespace olcek::hiz

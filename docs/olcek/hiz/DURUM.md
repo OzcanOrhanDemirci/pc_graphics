@@ -2,6 +2,102 @@
 
 > Tek kaynak durum panosu. Plan `docs/olcek/hiz/PLAN.md`. En yeni en üstte.
 
+## 2026-10-06 gecesi · H3: roketin gözünde gökyüzü
+
+**Özcan'ın bakacağı yer.** Hız → roketin gözü (açılış görüntüsü). **Enerji gözü açık başlar** (panelde Açık | Kapalı,
+ya da **E**; seçim kayıtta kalır). Üst ortada adı ve bantların renk şeridi. W ile hızlan: önce Samanyolu'nun kuşağı öne
+toplanır, %99 c'den sonra küçük bir yıldız yumağına döner. **~5 dokuzda (φ 6-7,5, yaklaşık 10 sn) evrenin ilk ışığı
+önde kırmızı bir güneş olarak doğar**, turuncuya, altına, beyaza döner. Sonra mavi; enerji gözünde mor, en sonda
+gama ışınının beyaz-moru.
+
+**Gökyüzü** (`eyeSky`, çekirdekte piksel başına; `skySums`, pozlama için durgun çerçevenin ızgarasında):
+- **Samanyolu'nun yaygın ışığı:** ESO/S. Brunier'in bütün gök panoraması (eso0932a, CC BY 4.0, künye
+  `assets/olcek/KAYNAKLAR.md`). `tools/olcek_veri.py samanyolu`:
+  - yıldızları 9 piksellik medyanla silindi (katalog onları nokta olarak çiziyor, iki kez sayılmasın);
+  - her piksele renginden bir renk sıcaklığı (McCamy);
+  - ölçek: en parlak birkaç derece (Yay bulutu) 20,5 V kadir/yay saniyesi²;
+  - galaktik eşdikdörtgen, 2048×1024, yarım duyarlıklı.
+  Ölçülen: panorama gece göğünün görünür ışığının %39'u. Yıldızlarla birlikte bir düzleme ~1,6 × 10⁻⁴ lux (aysız
+  gecenin yıldız ışığı ~10⁻⁴ lux).
+- **Hızda:** panoramanın her pikseli kendi sıcaklığındaki kara cisim gibi kayar. Rengi o kara cismin renginin döndüğü
+  kadar döner, parlaklığı D⁴ × görünür payın değişimi.
+- **Pırıltı yok:** panoramanın seviyeleri var (her biri yarısı). Pikselin durgun gökteki izi D kat büyüdüğünden (sapınç
+  şekli korur), her piksel izinin genişliğindeki seviyeyi okur. Hız arttıkça sıkışan gök kareden kareye kıpırdamaz.
+- **Kozmik fon ışıması:** T0 = 2,72548 K. Güneş'in ona göre hareketinden gelen dipol (Planck 2018: 3,362 mK, l 264,02°,
+  b 48,25°). Her pikselde T0 × D, parlaklık σT⁴/π. Duruşta görünmez; φ 6,25'te önde koyu kırmızı belirir.
+- **Örnekleme:** gökyüzü piksel başına dört örnek (kale deseni). Öndeki parlak başlık görme sınırında birkaç piksel.
+- **Hesap:** çift duyarlık yalnız sapınçta (başlık e^−φ genişliğinde). Işık log₁₀ uzayında tek duyarlıkla toplanır.
+  İlk sürüm her şeyi çift duyarlıkla yapıyordu: kare 15-25 ms. Şimdi **5-7 ms** (2560×1440, 109 bin yıldızla).
+  Canlıda gözde 86 fps (kare 9,2 ms; ana işlemcide yıldızların hazırlığı 3-4 ms), yandan 160 fps.
+
+**Göz** (sanat yönetimi fiziğin araçlarıyla):
+- **Uyum:** karanlıkta ışığın iki katına yarım EV (parlak gök parlak görünür). Gündüz düzeyinde tam uyum (Weber: göz
+  ışığı değil karşıtlığı tutar). Geçiş gece göğünün 2¹⁶ katında (`hiz.gun`), yumuşak.
+  - Önce: φ 9'da önde gökyüzü 108 W/m² (Güneş'in 1/13'ü) ve yarım uyumla bütün kare mavi-beyaz bir sise boğuluyordu.
+  - Şimdi: φ 7-16 arası aynı parlaklıkta bir güneş ve hâlesi.
+- **Yaygın ışık kazancı** (karanlığa uyumlu gözün alan toplaması, Riccò): ×16, gündüzde 1'e iner.
+- **Parlama** (gözün kendi saçılması, Stiles-Holladay: L = 10 E/θ², θ derece, 0,1°'den): öndeki parlak başlığın
+  çevresinde (burnun 5 derecesindeki yaygın ışıktan) ve en parlak yıldızlarda. Ölçülen: φ 10'da fon ışımasının
+  %99'dan fazlası o 5 derecede.
+
+**Enerji gözü** (Özcan 10-06: *"göremediğimizi mantıklı şekilde görünür kılıp bu da varmış bu hızda diye öğretici
+olur. Ama gerçek görüntüyü isteyen kapatır"*):
+- Görünür pay yerine **bütün bantların ışığı**: yıldızlar, panorama ve fon ışıması. Rengi o ışığın tepe yaptığı bant
+  (Wien):
+  - koyu kırmızı: mikrodalga;
+  - kırmızı-turuncu: kızılötesi;
+  - görünür bant: kendi rengi;
+  - mavi: morötesi;
+  - mor: X ışını;
+  - beyaz-mor: gama.
+- Göz bütün bu ışığa uyar. Duruşta gece göğünün ışığının **%60'ı fon ışıması**: enerji gözünde her yer hafif
+  kırmızı, Samanyolu gerçek gözdekinden 1,6 EV sönük (dürüst: evren mikrodalgada yıldızlardan parlak).
+- **φ 1,5'te** (β 0,905): önde kırmızı bir sis, içinde Samanyolu'nun kuşağı ve iki Macellan Bulutu. Fon ışıması önde
+  D⁴ = 403 kat parlak.
+- **Açıklama** (`drawEnergyKey`): üst ortada, arayüzle görünür. Altı bant eşit genişlikte. İki üçgen gösterir: öndeki
+  fon ışımasının ve Güneş gibi bir yıldızın ışığının o an tepe yaptığı bant. Duruşta mikrodalga ve görünür; 21 dokuzda
+  gama ve gamanın ötesi.
+
+**Ölçümler** (başsız kareler `--hiz --phi … --set hiz.enerji=0|1`, Proxima yolunun ortası, 75°):
+
+| φ | dokuz | göz EV | önde görünür (W/m²) | bütün bantlar (W/m²) | görüntü (gerçek göz) |
+|---|---|---|---|---|---|
+| 0 | 0 | 16,95 | 7,0 × 10⁻⁶ | 2,1 × 10⁻⁵ | Samanyolu, toz şeritleri |
+| 1,5 | 1,0 | 15,38 | 1,8 × 10⁻⁵ | 1,7 × 10⁻⁴ | kuşak parlıyor, öne toplanıyor |
+| 3 | 2,3 | 15,55 | 1,4 × 10⁻⁵ | 3,2 × 10⁻³ | kuşak ve yıldızlar ortada |
+| 6 | 4,9 | 16,65 | 3,0 × 10⁻⁶ | 1,3 | küçük beyaz yumak |
+| 6,5 | 5,3 | 11,64 | 3,0 × 10⁻³ | 3,5 | kırmızı güneş doğuyor |
+| 7 | 5,8 | 6,70 | 0,40 | 9,6 | turuncu güneş, hâle |
+| 9 | 7,5 | −1,28 | 108 | 523 | mavi-beyaz güneş |
+| 16 | 13,6 | 4,55 | 1,9 | 6,3 × 10⁸ | mavi, sönmeye başlıyor |
+| 24,52 | 21 | 12,70 | 7,1 × 10⁻⁴ | 1,6 × 10¹⁶ | küçük mavi nokta (ışık gamada) |
+
+**Sınamalar** (`--test olcek-hiz`, 5 yeni, hepsi GEÇTİ):
+- Fon ışımasının roketteki toplamı, gökyüzü toplamlarının kendi ızgarasıyla: 4σT0⁴γ²(1 + β²/3). Duruştan 21 dokuza
+  her hızda en çok 1,5 × 10⁻⁴ farklı (dipol ve ızgara).
+- φ 10'da fon ışımasının %99'dan fazlası burnun 5 derecesinde.
+- Gece göğü yıldız ışığı mertebesinde.
+- Panorama gece göğünün bir parçası; renk sıcaklıkları 2.000-15.000 K.
+- Göz: duruşta `hiz.ev`. Karanlıkta iki kat ışığa −0,500 EV, gündüzde −1,000 EV.
+- Enerji gözünün renkleri: parlaklık 1 (1,7 × 10⁻⁷), sıçramasız.
+
+**Benim seçimim (PLAN §3.1, Özcan bıraktı): gözde aracın parçası yok.** Pencere kenarı ya da burun, öndeki tek ışık
+noktasının çevresini kapatır ve görüş alanını daraltır. Roket yandan görünüşte zaten var. Göz serbest bir göz.
+
+### NE DOĞRULANMADI (H3)
+- **Özcan'ın gözü:** roketin gözünün hiçbir karesine bakmadı. Enerji gözünün renk dili ve duruştaki kırmızı ton onun
+  beğenisine kaldı.
+- **Hareketle:** kareler başsız ve sabit φ'lerde. Canlı yolculukta hızlanırken kıpırtı olmadığı (seviyeler, dört
+  örnek) yalnız tasarımdan; gözle izlenmedi.
+- **Panoramanın parlaklık ölçeği** (Yay bulutu 20,5 kadir/yay saniyesi²) yayımlanmış bir yüzey parlaklığına yaslanan
+  bir yaklaşık. Gece göğünün toplamı yalnız mertebe olarak sınandı.
+- **Parlamanın** 0,1°'lik çekirdeği ve kaynakları (5°'lik koni, en parlak 7 yıldız) tasarım. Stiles-Holladay 1°'nin
+  altında geçerli değil.
+- **Güneş'ten uzakta:** panorama 300 ışık yılından 3.000'e söner. Galaksiden çıkışın ışığı (Samanyolu'nun hacimsel
+  modeli) H4'te. Arada gözde yalnız katalog yıldızları ve fon ışıması var.
+- **Fon ışımasının anizotropileri** (Planck haritası) yok; yalnız dipol.
+- README ve galerinin "Ayrıntılar"ına ESO atfı H6'da girecek (künye şimdilik `KAYNAKLAR.md`'de).
+
 ## 2026-10-06 gecesi · H2 (1. kısım): yeni ivme ve yandan harita
 
 **Özcan'ın bakacağı yer.** Hız → **Tab** (yandan). Roket ortada, kamera onu izliyor. **1-6** ölçek durakları: roket ·

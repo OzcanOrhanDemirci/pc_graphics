@@ -959,6 +959,7 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
     // the Galaxy and its neighbours: discs of light (the unresolved stars), coming in where the stars blend (PLAN §7:
     // a decade of overlap)
     for (GGalaxy& g : v.galaxy) g = GGalaxy{};
+    v.sky = GSky{};   // (the second option's eye only)
     if (s > 18.5) {
         const double fade = smoothstep(18.8, 20.0, s);
         // the Milky Way: today's arms (their pattern turns at its own speed: clk.arms)

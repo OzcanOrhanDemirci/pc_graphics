@@ -54,6 +54,7 @@ struct Eye {
     double adaptDiag = 0.722;   // the eye adapts to the light within this angle of where it looks (radians): the unzoomed
                                 // field's half diagonal (75 x 42 degrees), so the binoculars change neither the points
                                 // nor the exposure
+    bool energy = false;        // the energy eye: every band's light (bolometric), the band in false colour
 };
 struct EyeSum {
     double visible = 0.0;       // the visible light from the whole sky at the rocket (W/m^2, the Sun's spectrum's units)
@@ -63,7 +64,19 @@ struct EyeSum {
     double visibleSun = 0.0;    // ... of it the Sun's
     int inView = 0;
     double maxD = 0.0, minD = 0.0;   // the largest and smallest Doppler factor among the stars
+    double bolometric = 0.0, bolometricView = 0.0;   // the same in every band (W/m^2): the energy eye's measure
+    double fwdVisible = 0.0, fwdBolometric = 0.0;     // the diffuse sky's light within 5 degrees of the motion (the glare
+    double fwdT = 0.0;                                // round the bright cap ahead), and its light-weighted temperature
 };
+// the diffuse sky's light (the Milky Way's panorama, the cosmic microwave background) at the rocket, added to the sums as
+// the stars' are: integrated over the rest frame's sphere on the panorama's coarse grid (each cell's light D^2 times, its
+// visible share at D T: the forward cap of the rocket's sky is the rest frame's whole forward hemisphere, so a coarse
+// grid there misses nothing at any speed)
+struct SkyCoarse {
+    std::vector<float4> px;     // linear RGB (W/m^2/sr, the Sun's spectrum's watts), T / 1e4 K; galactic, l 0 at the middle
+    int w = 0, h = 0;
+};
+void skySums(const SkyCoarse& sky, const Blackbody& bb, const Eye& e, double panoWeight, V3 galX, V3 galY, V3 galN, EyeSum& sum);
 // the stars as splats (camera space with z = 1: x and y are the tangents, so a 1e-11 rad field keeps its digits)
 void buildEye(const StarSet& st, const Blackbody& bb, const Eye& e, std::vector<GSplat>& out, EyeSum& sum);
 

@@ -139,6 +139,8 @@ public:
     const std::vector<V3>& stars() const { return starPos_; }
     const std::vector<float4>& starLight() const { return starFlux_; }
     const std::vector<float>& starTemp() const { return starTemp_; }
+    V3 galNorth() const { return galNorth_; }   // the Galaxy's north pole (unit, ICRS axes)
+    V3 galCentreDir() const { return galX_; }   // from the Sun towards the Galaxy's centre (unit)
     int nearestStar(V3 p) const;  // the index of the catalogue star nearest to p (from the Sun), -1 none
     void moveStar(int i, V3 p);   // a better measured place (Proxima: Gaia DR3)
 

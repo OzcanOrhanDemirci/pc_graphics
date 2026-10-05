@@ -347,6 +347,7 @@ public:
             L.dt = lastDtau_;
             hz::drawSide(L, side_, std::min(o.scale, o.view.h / 1440.0f));
         }
+        if (view_ == 0 && energy_ && o.hud) hz::drawEnergyKey(o.view, o.scale, a_.ship.phi, a_.bb, o.panels);
         if (!o.hud || !graphs_) return;
         const hz::Ship& s = a_.ship;
         hz::Pano p;
@@ -451,6 +452,9 @@ private:
         for (const app::ControlEvent& e : in.events)
             if (e.id == "grafik" && e.item >= 0) graphs_ = e.item == 0;
         if (in.pressed(GLFW_KEY_G)) graphs_ = !graphs_;
+        for (const app::ControlEvent& e : in.events)
+            if (e.id == "enerji" && e.item >= 0) energy_ = e.item == 0;
+        if (in.pressed(GLFW_KEY_E)) energy_ = !energy_;
         if (reset) {
             a_.ship = hz::depart(a_.route);
             pano_ = hz::PanoState{};
@@ -570,12 +574,14 @@ private:
         const hz::Kin k = hz::kin(s.phi);
         if (view_ == 0) {
             hz::Eye e = a_.eyeAt(s, yaw_, pitch_, std::pow(10.0, zoom_));
+            e.energy = energy_;
             for (int pass = 0; pass < 2; ++pass) {
                 e.k = std::exp2(eyeEv_) * 3.0e-3;
                 a_.renderEye(e, eyeSum_);
                 // the eye adapts to the light in its field, a known function of where, how fast and where it looks
-                // (never read from the picture), slowly (a second or so)
-                double target = a_.eyeEv(eyeSum_.visibleView / eyeSum_.viewShare);
+                // (never read from the picture), slowly (a second or so); the energy eye to every band's light
+                double target = energy_ ? a_.eyeEvEnergy(eyeSum_.bolometricView / eyeSum_.viewShare)
+                                        : a_.eyeEv(eyeSum_.visibleView / eyeSum_.viewShare);
                 if (!std::isfinite(target)) target = std::isfinite(eyeEv_) ? eyeEv_ : 17.5;   // (never a NaN kept)
                 if (!evInit_) {
                     eyeEv_ = target;
@@ -668,6 +674,16 @@ private:
         v.active = view_;
         v.detail = L("Tab", "Tab");
         st.controls.push_back(v);
+        if (view_ == 0) {
+            app::Control en;
+            en.kind = app::Control::Kind::Choice;
+            en.id = "enerji";
+            en.title = L("Enerji gözü", "Energy eye");
+            en.items = {L("Açık", "On"), L("Kapalı", "Off")};
+            en.active = energy_ ? 0 : 1;
+            en.detail = "E";
+            st.controls.push_back(en);
+        }
         app::Control a;
         a.kind = app::Control::Kind::Button;
         a.id = "oto";
@@ -695,8 +711,8 @@ private:
         out += hz::serialize(a_.ship);
         char b[256];
         if (!std::isfinite(a_.ship.phi) || !std::isfinite(a_.ship.x.hi) || !std::isfinite(a_.ship.t.hi)) return;   // never a NaN on disk
-        std::snprintf(b, sizeof(b), "hiz.goruntu = %d\nhiz.bakis = %.17g %.17g\nhiz.yakinlik = %.17g\nhiz.yan = %.17g\nhiz.grafik = %d\n", view_, yaw_,
-                      pitch_, zoom_, sideS_, graphs_ ? 1 : 0);
+        std::snprintf(b, sizeof(b), "hiz.goruntu = %d\nhiz.bakis = %.17g %.17g\nhiz.yakinlik = %.17g\nhiz.yan = %.17g\nhiz.grafik = %d\nhiz.enerji = %d\n",
+                      view_, yaw_, pitch_, zoom_, sideS_, graphs_ ? 1 : 0, energy_ ? 1 : 0);
         out += b;
         const std::string tmp = savePath_ + ".yeni";
         {
@@ -752,6 +768,7 @@ private:
         if (num("hiz.yakinlik", 1, v)) zoom_ = std::clamp(v[0], std::log10(std::tan(0.5e-11)), std::log10(std::tan(60.0 * kPi / 180.0)));
         if (num("hiz.yan", 1, v)) sideS_ = std::clamp(v[0], 1.0, 23.0);
         if (num("hiz.grafik", 1, v)) graphs_ = v[0] != 0.0;
+        if (num("hiz.enerji", 1, v)) energy_ = v[0] != 0.0;
         // (the scene always opens on its first option: the journey waits in the second, where it was left)
     }
 
@@ -776,6 +793,7 @@ private:
     bool lookAhead_ = false;            // R: the head turning back to the bow
     bool overshootShown_ = false;       // the "too fast to stop" notice given (once per such brake)
     bool graphs_ = true;                // the five panels of graphs (G)
+    bool energy_ = true;                // the energy eye (E): every band, in false colour (Özcan 2026-10-06: on at first)
     hz::PanoState pano_;
     hz::SideState side_;
     double lastDtau_ = 0.0;

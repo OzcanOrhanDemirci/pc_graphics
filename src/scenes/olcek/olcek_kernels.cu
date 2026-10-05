@@ -1242,6 +1242,153 @@ __device__ float3 sampleAt(float px, float py, float& depth) {
     return col;
 }
 
+// ---- the second option's eye: its diffuse sky (see GSky)
+// the blackbody table at log10 T: colour (luminance 1) and log10 of the visible share against the Sun's. Below the table
+// no light reaches the visible band; above it the Rayleigh-Jeans tail (share ~ T^-3), the colour the hottest one's
+__device__ void bbAt(const GSky& s, float lt, float3& rgb, float& logShare) {
+    const float u = (lt - s.bbLogT0) / s.bbStep;
+    if (u <= 0.0f) {
+        rgb = make_float3(s.bb[0].x, s.bb[0].y, s.bb[0].z);
+        logShare = -300.0f;
+        return;
+    }
+    const int last = s.bbN - 1;
+    if (u >= float(last)) {
+        const float4 e = s.bb[last];
+        rgb = make_float3(e.x, e.y, e.z);
+        logShare = e.w - 3.0f * (lt - (s.bbLogT0 + float(last) * s.bbStep));
+        return;
+    }
+    const int i = int(u);
+    const float f = u - float(i);
+    const float4 p = s.bb[i], q = s.bb[i + 1];
+    rgb = make_float3(p.x + (q.x - p.x) * f, p.y + (q.y - p.y) * f, p.z + (q.z - p.z) * f);
+    logShare = p.w + (q.w - p.w) * f;
+}
+
+__device__ __forceinline__ float4 mix4(float4 p, float4 q, float t) {
+    return make_float4(p.x + (q.x - p.x) * t, p.y + (q.y - p.y) * t, p.z + (q.z - p.z) * t, p.w + (q.w - p.w) * t);
+}
+
+// one level of the panorama at (u, v): bilinear, wrapping round in longitude
+__device__ float4 panoLevel(const GSky& s, int lev, float u, float v) {
+    size_t off = 0;
+    int w = s.pw, h = s.ph;
+    for (int i = 0; i < lev; ++i) {
+        off += size_t(w) * h;
+        w = max(w >> 1, 1);
+        h = max(h >> 1, 1);
+    }
+    const float fx = u * w - 0.5f, fy = v * h - 0.5f;
+    const int x0 = int(floorf(fx)), y0 = int(floorf(fy));
+    const float tx = fx - x0, ty = fy - y0;
+    auto at = [&](int x, int y) {
+        x = ((x % w) + w) % w;
+        y = min(max(y, 0), h - 1);
+        return s.pano[off + size_t(y) * w + x];
+    };
+    return mix4(mix4(at(x0, y0), at(x0 + 1, y0), tx), mix4(at(x0, y0 + 1), at(x0 + 1, y0 + 1), tx), ty);
+}
+
+// the panorama at galactic (l, b) (it grows to the left: l 0 at the middle), at the level whose texel is as wide as the
+// pixel's footprint there (lod: log2 of their ratio; between two levels, both)
+__device__ float4 panoAt(const GSky& s, float l, float b, float lod) {
+    float u = 0.5f - l * (0.5f / M_PIf);
+    u -= floorf(u);
+    const float v = fminf(fmaxf(0.5f - b / M_PIf, 0.0f), 1.0f);
+    lod = fminf(fmaxf(lod, 0.0f), float(s.nLod - 1));
+    const int l0 = int(lod);
+    const float f = lod - float(l0);
+    const float4 a = panoLevel(s, l0, u, v);
+    if (f <= 0.0f || l0 + 1 >= s.nLod) return a;
+    return mix4(a, panoLevel(s, l0 + 1, u, v), f);
+}
+
+__device__ float3 eyeSky(float px, float py) {
+    const GSky& s = cV.sky;
+    // the ray in camera space, in doubles (the binoculars reach 1e-11 rad, the bright cap ahead is e^-phi wide)
+    double dx = (double(px) / cV.width * 2.0 - 1.0) * s.tanX, dy = (1.0 - double(py) / cV.height * 2.0) * s.tanY, dz = 1.0;
+    const double inv = 1.0 / sqrt(dx * dx + dy * dy + 1.0);
+    dx *= inv;
+    dy *= inv;
+    dz *= inv;
+    // back to the rest frame: its half-angle tangent to the motion t' (each form where it does not cancel), t = e^phi t'
+    const double c = dx * s.mx + dy * s.my + dz * s.mz;
+    const double qx = dx - s.mx * c, qy = dy - s.my * c, qz = dz - s.mz * c;
+    const double sp = sqrt(qx * qx + qy * qy + qz * qz);
+    double rx, ry, rz, D;
+    if (sp < 1e-300) {
+        const double sg = c >= 0.0 ? 1.0 : -1.0;
+        rx = s.mx * sg;
+        ry = s.my * sg;
+        rz = s.mz * sg;
+        D = c >= 0.0 ? s.gamma * (s.eps + 2.0 * s.beta) : s.gamma * s.eps;
+    } else {
+        const double tp = c >= 0.0 ? sp / (1.0 + c) : (1.0 - c) / sp;
+        const double t = tp / s.emp;
+        const double q = 1.0 / (1.0 + t * t);
+        D = s.gamma * (s.eps + 2.0 * s.beta * q);
+        const double a = (1.0 - t * t) * q, b = 2.0 * t * q / sp;
+        rx = s.mx * a + qx * b;
+        ry = s.my * a + qy * b;
+        rz = s.mz * a + qz * b;
+    }
+    const float3 r = make_float3(float(rx), float(ry), float(rz));
+    const float3 g = make_float3(dot(s.gal0, r), dot(s.gal1, r), dot(s.gal2, r));
+    const float Df = float(D);               // e^-phi .. e^phi: within a float's range up to the top speed
+    const float lD = log10f(Df);
+    float3 out = make_float3(0, 0, 0);
+    // the cosmic microwave background: T0 (the Sun's dipole) times D; sigma T^4 / pi (W/m^2/sr)
+    {
+        const float lt = log10f(s.cmbT0 * (1.0f + s.cmbDipole * dot(g, s.cmbDir))) + lD;
+        float3 rgb;
+        float ls;
+        bbAt(s, lt, rgb, ls);
+        const float lbol = -7.743536f + 4.0f * lt;   // log10(sigma / pi) + 4 log10 T
+        if (s.energy) out += energyColour(lt, rgb) * exp10f(fminf(lbol + s.lk, 30.0f));
+        else if (ls > -200.0f) out += rgb * exp10f(fminf(lbol + ls + s.lk, 30.0f));
+    }
+    // the Milky Way's panorama (the view from near the Sun), its light shifted as a blackbody of its colour temperature
+    if (s.pano && s.panoWeight > 0.0f) {
+        // the pixel's footprint on the rest frame's sky: D times its own (aberration keeps shapes: the same each way)
+        const float foot = s.pixAngle * float(dz) * Df, texel = M_PIf / float(s.ph);
+        const float4 P = panoAt(s, atan2f(g.y, g.x), asinf(fminf(fmaxf(g.z, -1.0f), 1.0f)), log2f(fmaxf(foot / texel, 1e-30f)));
+        const float lumP = 0.2126f * P.x + 0.7152f * P.y + 0.0722f * P.z;
+        if (lumP > 0.0f) {
+            const float lt0 = log10f(fmaxf(P.w, 1e-6f)) + 4.0f, lt1 = lt0 + lD;   // (P.w is T / 10^4 K)
+            float3 c0, c1;
+            float l0, l1;
+            bbAt(s, lt0, c0, l0);
+            bbAt(s, lt1, c1, l1);
+            const float lw = log10f(lumP * s.panoWeight) + 4.0f * lD + s.lk;   // its radiance D^4 times, exposed
+            if (s.energy) out += energyColour(lt1, c1) * exp10f(fminf(lw - l0, 30.0f));   // its light in every band
+            else if (l1 > -200.0f) {
+                // its own colour, turned as the blackbody's turns (luminance 1), times its light
+                float3 col = make_float3(P.x * c1.x / fmaxf(c0.x, 1e-3f), P.y * c1.y / fmaxf(c0.y, 1e-3f), P.z * c1.z / fmaxf(c0.z, 1e-3f));
+                const float lc = 0.2126f * col.x + 0.7152f * col.y + 0.0722f * col.z;
+                out += col * (exp10f(fminf(lw + l1 - l0, 30.0f)) / fmaxf(lc, 1e-12f));
+            }
+        }
+    }
+    return out;
+}
+
+// the eye's glare round the brightest sources (its core: the source itself, inside 0.1 degrees)
+__device__ float3 eyeGlare(float px, float py) {
+    const GSky& s = cV.sky;
+    float3 out = make_float3(0, 0, 0);
+    if (s.nGlare == 0) return out;
+    const float3 dv = normalize(make_float3((px / cV.width * 2.0f - 1.0f) * float(s.tanX), (1.0f - py / cV.height * 2.0f) * float(s.tanY), 1.0f));
+    for (int i = 0; i < s.nGlare; ++i) {
+        const float3 a = s.glareDir[i];
+        const float cs = dot(dv, a);
+        const float sn = length(cross(dv, a));
+        const float deg = fmaxf(atan2f(sn, cs) * 57.29578f, 0.1f);
+        out += s.glareE[i] * (10.0f / (deg * deg));
+    }
+    return out;
+}
+
 __device__ __forceinline__ float blackmanHarris(float x) {
     const float u = 0.5f + 0.5f * saturate(x);
     const float a = 2.0f * M_PIf * u;
@@ -1269,6 +1416,12 @@ __global__ void kFrame(float4* accum, float* depthOut, int samples) {
         wsum += w;
     }
     float3 avg = sum * (1.0f / wsum);
+    if (cV.sky.on) {
+        // four samples a pixel (a rook's pattern): the bright cap ahead is a few pixels across at the edge of seeing
+        const float3 s0 = eyeSky(x + 0.375f, y + 0.125f), s1 = eyeSky(x + 0.875f, y + 0.375f);
+        const float3 s2 = eyeSky(x + 0.125f, y + 0.625f), s3 = eyeSky(x + 0.625f, y + 0.875f);
+        avg += (s0 + s1 + s2 + s3) * 0.25f + eyeGlare(x + 0.5f, y + 0.5f);
+    }
     for (int i = 0; i < kMaxGalaxies; ++i)
         if (cV.galaxy[i].on) avg += galaxyLight(cV.galaxy[i], rayDir(x + 0.5f, y + 0.5f), dCentre, cV.pixAngle / cV.galaxy[i].kpc);
     if (cV.web.on) avg += webLight(cV.web, rayDir(x + 0.5f, y + 0.5f), dCentre, cV.pixAngle);

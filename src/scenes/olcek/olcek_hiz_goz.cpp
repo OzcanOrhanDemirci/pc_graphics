@@ -202,8 +202,11 @@ void buildEye(const StarSet& st, const Blackbody& bb, const Eye& e, std::vector<
             // the visible flux: the rest frame's (L_V / 4 pi d^2, the Sun's spectrum's watts) x D^2 x the visible share
             // at D T against its own at T
             const double ls = i == n ? logShareSun : bb.logShare(T);
-            const double vis = LV * kLsun / (4.0 * kPi * d2) * D * D * std::pow(10.0, bb.logShare(Tp) - ls);
+            const double lsP = bb.logShare(Tp);
+            const double vis = LV * kLsun / (4.0 * kPi * d2) * D * D * std::pow(10.0, lsP - ls);
+            const double bol = LV * kLsun / (4.0 * kPi * d2) * D * D * std::pow(10.0, -ls);   // in every band
             S.visible += vis;
+            S.bolometric += bol;
             if (i == n) S.visibleSun = vis;
             S.maxD = std::max(S.maxD, D);
             S.minD = std::min(S.minD, D);
@@ -213,16 +216,19 @@ void buildEye(const StarSet& st, const Blackbody& bb, const Eye& e, std::vector<
                 const double off = std::atan2(std::sqrt(xr * xr + yu * yu), z);   // the angle off the eye's axis
                 if (off < aOut) {
                     const double u = std::clamp((aOut - off) / (aOut - aIn), 0.0, 1.0);
-                    S.visibleView += vis * u * u * (3.0 - 2.0 * u);
+                    const double w = u * u * (3.0 - 2.0 * u);
+                    S.visibleView += vis * w;
+                    S.bolometricView += bol * w;
                 }
             }
             if (z <= 0.0) continue;
             const double x = dot(np, e.right) / z, y = dot(np, e.up) / z;
             if (std::fabs(x) > mx || std::fabs(y) > my) continue;
-            const double f = vis * toDisplay;
+            const double f = (e.energy ? bol : vis) * toDisplay;
             if (!(f > 1e-6)) continue;
             ++S.inView;
-            P.push_back({make_float3(float(x), float(y), 1.0f), bb.colour(Tp) * float(f), 0.75f});
+            const float3 c = e.energy ? energyColour(float(std::log10(Tp)), bb.colour(Tp)) : bb.colour(Tp);
+            P.push_back({make_float3(float(x), float(y), 1.0f), c * float(f), 0.75f});
         }
     });
     sum.minD = 1e300;
@@ -231,11 +237,84 @@ void buildEye(const StarSet& st, const Blackbody& bb, const Eye& e, std::vector<
         out.insert(out.end(), part[size_t(w)].begin(), part[size_t(w)].end());
         sum.visible += sums[size_t(w)].visible;
         sum.visibleView += sums[size_t(w)].visibleView;
+        sum.bolometric += sums[size_t(w)].bolometric;
+        sum.bolometricView += sums[size_t(w)].bolometricView;
         sum.visibleSun += sums[size_t(w)].visibleSun;
         sum.inView += sums[size_t(w)].inView;
         sum.maxD = std::max(sum.maxD, sums[size_t(w)].maxD);
         sum.minD = std::min(sum.minD, sums[size_t(w)].minD);
     }
+}
+
+
+void skySums(const SkyCoarse& sky, const Blackbody& bb, const Eye& e, double panoWeight, V3 galX, V3 galY, V3 galN, EyeSum& sum) {
+    const Kin k = kin(e.phi);
+    const double emp = std::exp(-e.phi);
+    const double diag = std::clamp(e.adaptDiag, 1e-6, 1.4);
+    const double aIn = diag, aOut = std::min(1.1 * diag, 0.5 * kPi);
+    // the background's temperature with the Sun's dipole (Planck 2018: 3.362 mK towards l 264.02, b 48.25)
+    const double T0 = 2.72548, dip = 3.362e-3 / T0;
+    const double dl = 264.021 * kPi / 180.0, db = 48.253 * kPi / 180.0;
+    const V3 dipDir = galX * (std::cos(db) * std::cos(dl)) + galY * (std::cos(db) * std::sin(dl)) + galN * std::sin(db);
+    const int W = std::max(sky.w, 256), H = std::max(sky.h, 128);   // the grid (the panorama's when there is one)
+    const bool pano = sky.w > 0 && panoWeight > 0.0;
+    std::vector<double> vis(size_t(H), 0.0), visV(size_t(H), 0.0), bol(size_t(H), 0.0), bolV(size_t(H), 0.0);
+    std::vector<double> fV(size_t(H), 0.0), fB(size_t(H), 0.0), fT(size_t(H), 0.0);
+    const double cos5 = std::cos(5.0 * kPi / 180.0);
+    std::vector<int> rows(static_cast<size_t>(H));
+    std::iota(rows.begin(), rows.end(), 0);
+    std::for_each(std::execution::par, rows.begin(), rows.end(), [&](int r) {
+        const double b = 0.5 * kPi - (r + 0.5) * kPi / H;
+        const double dOmega = std::cos(b) * (2.0 * kPi / W) * (kPi / H);
+        for (int c = 0; c < W; ++c) {
+            const double l = (0.5 - (c + 0.5) / W) * 2.0 * kPi;   // the panorama's: l grows to the left, 0 at the middle
+            const V3 n = galX * (std::cos(b) * std::cos(l)) + galY * (std::cos(b) * std::sin(l)) + galN * std::sin(b);
+            double D = 1.0;
+            const V3 np = e.phi > 0.0 ? aberrateDirFast(n, e.motion, k, emp, D) : n;
+            // the CMB: its rest-frame light from this cell, D^2 at the rocket, the visible share at D T
+            const double Tc = T0 * (1.0 + dip * dot(n, dipDir)) * D;
+            const double cmbBol = kStefan / kPi * std::pow(T0 * (1.0 + dip * dot(n, dipDir)), 4.0) * D * D * dOmega;
+            double v = cmbBol * std::pow(10.0, bb.logShare(Tc)), bo = cmbBol;
+            if (pano) {
+                const float4 p = sky.px[size_t(r) * sky.w + size_t(c)];
+                const double lum = (0.2126 * p.x + 0.7152 * p.y + 0.0722 * p.z) * panoWeight;
+                if (lum > 0.0) {
+                    const double T = double(p.w) * 1e4;
+                    const double l0 = bb.logShare(T);
+                    v += lum * D * D * std::pow(10.0, bb.logShare(T * D) - l0) * dOmega;
+                    bo += lum * std::pow(10.0, -l0) * D * D * dOmega;
+                }
+            }
+            vis[size_t(r)] += v;
+            bol[size_t(r)] += bo;
+            if (dot(np, e.motion) > cos5) {
+                fV[size_t(r)] += v;
+                fB[size_t(r)] += bo;
+                fT[size_t(r)] += v * Tc;
+            }
+            const double z = dot(np, e.fwd);
+            if (z > 0.0) {
+                const double xr = dot(np, e.right), yu = dot(np, e.up);
+                const double off = std::atan2(std::sqrt(xr * xr + yu * yu), z);
+                if (off < aOut) {
+                    const double u = std::clamp((aOut - off) / (aOut - aIn), 0.0, 1.0);
+                    const double w = u * u * (3.0 - 2.0 * u);
+                    visV[size_t(r)] += v * w;
+                    bolV[size_t(r)] += bo * w;
+                }
+            }
+        }
+    });
+    for (int r = 0; r < H; ++r) {
+        sum.visible += vis[size_t(r)];
+        sum.visibleView += visV[size_t(r)];
+        sum.bolometric += bol[size_t(r)];
+        sum.bolometricView += bolV[size_t(r)];
+        sum.fwdVisible += fV[size_t(r)];
+        sum.fwdBolometric += fB[size_t(r)];
+        sum.fwdT += fT[size_t(r)];
+    }
+    sum.fwdT = sum.fwdVisible > 0.0 ? sum.fwdT / sum.fwdVisible : T0;
 }
 
 }   // namespace olcek::hiz

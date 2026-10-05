@@ -435,6 +435,74 @@ def cie():
 
 
 # ---------------------------------------------------------------------------------------------------------------------
+# The Milky Way's diffuse light for the second option's eye (PLAN §3.1): ESO/S. Brunier's whole-sky panorama (eso0932a,
+# CC BY 4.0; ESO's "large" JPEG, 6000 x 3000), equirectangular in galactic coordinates: the centre at the middle,
+# longitude growing to the left, latitude up. Its stars are taken out by a median 9 pixels wide (0.54 degrees: the
+# catalogue draws them as points, no doubles), the ground's sky glow by the floor at high latitudes; what is left is the
+# unresolved starlight and the nebulae. Its colour is kept, and beside it a colour temperature (McCamy, from the
+# chromaticity): the eye's Doppler shift scales the colour by the blackbody's at that temperature. Its scale: the
+# brightest few degrees (the Sagittarius star cloud) at 20.5 V mag per square arcsecond, in the eye's units (W/m^2/sr of
+# a Sun-like light: V = -26.74 is 1361 W/m^2). Written as "OLSK": width, height, then float16 RGBA per texel (linear RGB
+# in those units; A the temperature / 10^4 K), the top row first (galactic north).
+ESO_URL = "https://www.eso.org/public/archives/images/large/eso0932a.jpg"
+ESO_SHA256 = "60400c92c54b7c1bd12299c69e83b16e5b6256e7dabacc478c021758ecd28179"
+
+
+def samanyolu(W=2048, mu=20.5):
+    import hashlib
+    from PIL import Image
+    from scipy import ndimage
+    Image.MAX_IMAGE_PIXELS = None
+    path = fetch(ESO_URL, "eso0932a.jpg")
+    h = hashlib.sha256(open(path, "rb").read()).hexdigest()
+    if h != ESO_SHA256:
+        raise SystemExit(f"  ESO panoramasinin ozeti beklenen degil: {h}")
+    im = np.asarray(Image.open(path).convert("RGB"))
+    lin = srgb_to_lin(im)
+    print(f"  panorama {im.shape[1]}x{im.shape[0]}: yildizlar medyanla siliniyor")
+    med = np.stack([ndimage.median_filter(lin[..., c], size=9, mode="wrap") for c in range(3)], axis=2)
+    # what the median leaves of the brightest stars and the planet (their halos wider than it): clipped at three times the
+    # two-degree median of their surroundings (the Milky Way's own clouds seldom reach that)
+    wide = np.stack([ndimage.median_filter(med[::3, ::3, c], size=11, mode="wrap") for c in range(3)], axis=2)
+    wide = np.repeat(np.repeat(wide, 3, axis=0), 3, axis=1)[: med.shape[0], : med.shape[1]]
+    med = np.minimum(med, 3.0 * wide + 0.004)
+    H = med.shape[0]
+    b = 90.0 - (np.arange(H) + 0.5) * 180.0 / H
+    floor = np.percentile(med[np.abs(b) > 40.0].reshape(-1, 3), 20, axis=0)
+    med = np.clip(med - floor, 0.0, None)
+    print(f"  yer gok parlamasi tabani (R, G, B): {floor[0]:.4f} {floor[1]:.4f} {floor[2]:.4f}")
+    Hn = W // 2
+    out = np.zeros((Hn, W, 3), np.float32)
+    for c in range(3):
+        out[..., c] = np.asarray(Image.fromarray(med[..., c].astype(np.float32), mode="F").resize((W, Hn), Image.BOX))
+    R, G, B = out[..., 0], out[..., 1], out[..., 2]
+    X = 0.4124 * R + 0.3576 * G + 0.1805 * B
+    Y = 0.2126 * R + 0.7152 * G + 0.0722 * B
+    Z = 0.0193 * R + 0.1192 * G + 0.9505 * B
+    S = np.maximum(X + Y + Z, 1e-12)
+    x, y = X / S, Y / S
+    n = (x - 0.3320) / np.minimum(0.1858 - y, -1e-6)
+    cct = np.clip(449.0 * n ** 3 + 3525.0 * n ** 2 + 6823.3 * n + 5520.33, 2000.0, 15000.0)
+    cct = np.where(Y > 1e-6, cct, 4800.0)   # (the dark: an old stars' colour, its light nothing)
+    # the scale: the brightest few degrees at mu V mag / arcsec^2
+    blur = ndimage.gaussian_filter(Y, sigma=W / 360.0 * 1.5, mode="wrap")
+    peak = float(np.percentile(blur, 99.9))
+    target = 1361.0 * 10.0 ** (-0.4 * (mu + 26.74)) * 206264.806 ** 2
+    k = target / peak
+    out *= k
+    print(f"  olcek: en parlak birkac derece {target:.3e} W/m^2/sr ({mu} kadir/yay saniyesi^2); ortalama {float(np.mean(Y)) * k:.3e}")
+    rgba = np.concatenate([out, (cct / 1e4)[..., None]], axis=2).astype(np.float16)
+    dst = os.path.join(OUT, "samanyolu_gok.bin")
+    with open(dst, "wb") as f:
+        f.write(b"OLSK")
+        f.write(np.array([W, Hn], dtype=np.uint32).tobytes())
+        f.write(np.ascontiguousarray(rgba).tobytes())
+    prev = lin_to_srgb(np.clip(out / (target * 1.2), 0.0, 1.0))
+    Image.fromarray(prev).save(os.path.join(OUT, "samanyolu_gok_onizleme.png"))
+    print(f"  yazildi assets/olcek/samanyolu_gok.bin: {W}x{Hn}, {os.path.getsize(dst) / 1e6:.0f} MB (onizleme: samanyolu_gok_onizleme.png)")
+
+
+# ---------------------------------------------------------------------------------------------------------------------
 # Galaxies: the 2MASS Redshift Survey (Huchra et al. 2012, ApJS 199, 26; VizieR J/ApJS/199/26): 44,600 galaxies to
 # Ks = 11.75 over the whole sky but the Milky Way's plane. Distance from the redshift (H0 = 70; the nearest, whose own
 # motions swamp the expansion, no nearer than 2.5 Mpc: the Local Group's members are the scene's own), light from the
@@ -661,6 +729,8 @@ if __name__ == "__main__":
         asteroit()
     if what in ("cie", "hepsi"):
         cie()
+    if what in ("samanyolu", "hepsi"):
+        samanyolu()
     if what == "kusak":
         from PIL import Image
         Image.MAX_IMAGE_PIXELS = None

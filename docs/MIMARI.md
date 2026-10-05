@@ -33,8 +33,9 @@ src/
                 biriken yol izleme)
     olcek/      sahne 7 · Ölçek (62 onluk: çapa ağacı ve hassasiyet, katman saatleri, sabit örnekli CUDA çizici, "bugün"
                 olcek_bugun.h: tools/olcek_bugun.py'nin astropy + DE440s çıktısı); ikinci seçeneği Hız: olcek_hiz.* (özel
-                görelilik, rota, roket, kayıt), olcek_hiz_goz.* (roketin gözü, her sıcaklıkta kara cismin rengi),
-                olcek_hiz_pano.* (beş grafik panosu, arayüz takımıyla resmin üstüne), olcek_hiz_yan.* (yandan
+                görelilik, rota, roket, kayıt), olcek_hiz_goz.* (roketin gözü, her sıcaklıkta kara cismin rengi,
+                gökyüzünün pozlama toplamları; gökyüzünün kendisi çekirdekte: eyeSky/eyeGlare, panorama seviyeleriyle),
+                olcek_hiz_pano.* (beş grafik panosu ve enerji gözünün açıklaması, arayüz takımıyla resmin üstüne), olcek_hiz_yan.* (yandan
                 haritanın 2B katmanı: ortam noktaları, yol, roket, motor ışığı), olcek_hiz_test.cpp
                 (--test olcek-hiz, --hiz kareleri)
       particles.*       tanecik çözücüsü (PBF, XPBD bağlar, şekil eşleme, taneler)  surface.* sıvı yüzeyi

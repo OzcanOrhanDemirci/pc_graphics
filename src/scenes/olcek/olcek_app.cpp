@@ -23,7 +23,9 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <sstream>
 #include <unordered_map>
 
@@ -157,6 +159,10 @@ void OlcekApp::release() {
     region.release();
     bay.release();
     moon.release();
+    cudaFree(dSky);
+    cudaFree(dBB);
+    dSky = nullptr;
+    dBB = nullptr;
     cudaFree(accum);
     cudaFree(depth);
     cudaFree(output);
@@ -267,6 +273,114 @@ void OlcekApp::prepareHiz() {
         hizLog += "  Proxima katalogda bulunamadi (0,05 pc icinde yildiz yok)\n";
     }
     bb.build(root + "/assets/olcek/cie1931_2deg.csv");
+    {   // the blackbody table on the GPU: colour and visible share over log T (the eye's diffuse sky)
+        std::vector<float4> t(static_cast<size_t>(Blackbody::kN));
+        for (int i = 0; i < Blackbody::kN; ++i) {
+            const double T = std::pow(10.0, Blackbody::kLogT0 + (Blackbody::kLogT1 - Blackbody::kLogT0) * i / (Blackbody::kN - 1));
+            const float3 c = bb.colour(T);
+            t[size_t(i)] = make_float4(c.x, c.y, c.z, float(bb.logShare(T)));
+        }
+        cudaFree(dBB);
+        cudaMalloc(reinterpret_cast<void**>(&dBB), t.size() * sizeof(float4));
+        cudaMemcpy(dBB, t.data(), t.size() * sizeof(float4), cudaMemcpyHostToDevice);
+    }
+    {   // the Milky Way's panorama (tools/olcek_veri.py samanyolu: ESO/S. Brunier, stars taken out): float16 RGBA
+        std::ifstream f(root + "/assets/olcek/samanyolu_gok.bin", std::ios::binary);
+        char magic[4] = {};
+        uint32_t wh[2] = {};
+        if (f && f.read(magic, 4) && std::memcmp(magic, "OLSK", 4) == 0 && f.read(reinterpret_cast<char*>(wh), 8)) {
+            const int w = int(wh[0]), h = int(wh[1]);
+            std::vector<uint16_t> raw(size_t(w) * h * 4);
+            if (f.read(reinterpret_cast<char*>(raw.data()), std::streamsize(raw.size() * 2))) {
+                auto half = [](uint16_t v) {   // IEEE half to float
+                    const uint32_t s = uint32_t(v & 0x8000u) << 16, e = (v >> 10) & 0x1Fu, m = v & 0x3FFu;
+                    uint32_t bits;
+                    if (e == 0) {
+                        if (m == 0) bits = s;
+                        else {   // subnormal
+                            int ee = -1;
+                            uint32_t mm = m;
+                            do { ++ee; mm <<= 1; } while ((mm & 0x400u) == 0);
+                            bits = s | uint32_t(127 - 15 - ee) << 23 | (mm & 0x3FFu) << 13;
+                        }
+                    } else if (e == 31) bits = s | 0x7F800000u | m << 13;
+                    else bits = s | (e + 112u) << 23 | m << 13;
+                    float out;
+                    std::memcpy(&out, &bits, 4);
+                    return out;
+                };
+                std::vector<float4> px(size_t(w) * h);
+                for (size_t i = 0; i < px.size(); ++i) px[i] = make_float4(half(raw[4 * i]), half(raw[4 * i + 1]), half(raw[4 * i + 2]), half(raw[4 * i + 3]));
+                // its levels, each half the last (the light averaged, T weighted by it): where the sky crowds forward a
+                // pixel reads the level as wide as its footprint, so nothing shimmers as the speed grows
+                std::vector<float4> all = px;
+                {
+                    int lw = w, lh = h;
+                    size_t off = 0;
+                    skyLod = 1;
+                    while (lw > 1 && lh > 1 && skyLod < 14) {
+                        const int nw = lw / 2, nh = lh / 2;
+                        std::vector<float4> nx(size_t(nw) * nh);
+                        for (int y = 0; y < nh; ++y)
+                            for (int x = 0; x < nw; ++x) {
+                                double r = 0, g = 0, b = 0, tl = 0, lsum = 0;
+                                for (int j = 0; j < 2; ++j)
+                                    for (int i = 0; i < 2; ++i) {
+                                        const float4 p = all[off + size_t(2 * y + j) * lw + size_t(2 * x + i)];
+                                        const double l = 0.2126 * p.x + 0.7152 * p.y + 0.0722 * p.z;
+                                        r += p.x;
+                                        g += p.y;
+                                        b += p.z;
+                                        tl += p.w * l;
+                                        lsum += l;
+                                    }
+                                double T = 0.0;
+                                if (lsum > 0.0) T = tl / lsum;
+                                else
+                                    for (int j = 0; j < 2; ++j)
+                                        for (int i = 0; i < 2; ++i) T += 0.25 * all[off + size_t(2 * y + j) * lw + size_t(2 * x + i)].w;
+                                nx[size_t(y) * nw + size_t(x)] = make_float4(float(r / 4), float(g / 4), float(b / 4), float(T));
+                            }
+                        off += size_t(lw) * lh;
+                        all.insert(all.end(), nx.begin(), nx.end());
+                        lw = nw;
+                        lh = nh;
+                        ++skyLod;
+                    }
+                }
+                cudaFree(dSky);
+                cudaMalloc(reinterpret_cast<void**>(&dSky), all.size() * sizeof(float4));
+                cudaMemcpy(dSky, all.data(), all.size() * sizeof(float4), cudaMemcpyHostToDevice);
+                skyW = w;
+                skyH = h;
+                // the coarse copy (256 x 128): light averaged, the temperature weighted by it
+                const int cw = 256, ch = 128, fx = w / cw, fy = h / ch;
+                skyCoarse.w = cw;
+                skyCoarse.h = ch;
+                skyCoarse.px.assign(size_t(cw) * ch, make_float4(0, 0, 0, 0.48f));
+                for (int y = 0; y < ch; ++y)
+                    for (int x = 0; x < cw; ++x) {
+                        double r = 0, g = 0, b = 0, tl = 0, lw = 0;
+                        for (int j = 0; j < fy; ++j)
+                            for (int i = 0; i < fx; ++i) {
+                                const float4 p = px[size_t(y * fy + j) * w + size_t(x * fx + i)];
+                                const double l = 0.2126 * p.x + 0.7152 * p.y + 0.0722 * p.z;
+                                r += p.x;
+                                g += p.y;
+                                b += p.z;
+                                tl += p.w * l;
+                                lw += l;
+                            }
+                        const double n = double(fx * fy);
+                        skyCoarse.px[size_t(y) * cw + size_t(x)] = make_float4(float(r / n), float(g / n), float(b / n), float(lw > 0.0 ? tl / lw : 0.48));
+                    }
+                char b[160];
+                std::snprintf(b, sizeof(b), "  Samanyolu panoramasi: %dx%d (ESO/S. Brunier, yildizlari silinmis)\n", w, h);
+                hizLog += b;
+            }
+        }
+        if (skyW == 0) hizLog += "  Samanyolu panoramasi yok (tools/olcek_veri.py samanyolu): gokyuzu yalniz yildizlar ve fon isimasi\n";
+    }
     {   // the night sky at the Sun's place (the Sun sits at the eye there and is left out)
         hz::EyeSum sum;
         hz::Eye e;
@@ -278,7 +392,13 @@ void OlcekApp::prepareHiz() {
         st.temp = &sc.starTemp();
         std::vector<GSplat> sp;
         hz::buildEye(st, bb, e, sp, sum);
+        const V3 galY = cross(sc.galNorth(), sc.galCentreDir());
+        hz::skySums(skyCoarse, bb, e, 1.0, sc.galCentreDir(), galY, sc.galNorth(), sum);   // the Milky Way's diffuse light, the CMB
         nightSky = std::max(sum.visible - sum.visibleSun, 1e-12);
+        nightSkyBol = std::max(sum.bolometric, 1e-12);
+        char b[200];
+        std::snprintf(b, sizeof(b), "  gece goku (Gunes'te, Gunes haric): gorunur %.3e W/m^2, butun bantlar %.3e W/m^2\n", nightSky, nightSkyBol);
+        hizLog += b;
     }
     char b[256];
     std::snprintf(b, sizeof(b), "  renk tablosu: %s, %d dalga boyu\n  yol: %.4f isik yili, donus %.1f derece, %.4f milyon isik yili (Gunes'e en yakin %.2f isik yili)\n",
@@ -286,12 +406,47 @@ void OlcekApp::prepareHiz() {
     hizLog += b;
 }
 
+namespace {
+// the eye's adaptation (EV) to a sky 2^x times the night sky's light: part of it in the dark (hiz.uyum: a brighter sky
+// looks brighter), all of it in daylight (Weber: there the eye keeps the contrast, not the light), from hiz.gun EV above
+// the night sky on, smoothly; a dark sky opens it by at most 6 EV. day: how far into daylight (0 .. 1)
+double adaptEv(double x, double adapt, double dayEv, double* day = nullptr) {
+    const double w = 1.5, u = (x - dayEv) / w;
+    if (day) *day = 1.0 / (1.0 + std::exp(-std::clamp(u, -60.0, 60.0)));
+    const double sp = u > 30.0 ? x - dayEv : w * std::log1p(std::exp(u));
+    return std::clamp(adapt * x + (1.0 - adapt) * sp, -6.0, 120.0);
+}
+}   // namespace
+
 double OlcekApp::eyeEv(double skyVisible) const {
     // at rest far from the Sun: about the 7th magnitude at the edge of seeing (hiz.ev); a sky twice as bright closes the
-    // eye by hiz.uyum EV (a dark sky opens it by at most 6 EV, the Sun near closes it all the way to dazzling)
+    // eye by hiz.uyum EV in the dark, by a whole EV in daylight (the hot cap ahead is a small sun: the eye adapts to it)
     const double base = cfg.f("hiz.ev", 17.5f), adapt = cfg.f("hiz.uyum", 0.5f);
     if (!std::isfinite(skyVisible)) return base;
-    return base - std::clamp(adapt * std::log2(std::max(skyVisible, 1e-30) / nightSky), -6.0, 40.0);
+    return base - adaptEv(std::log2(std::max(skyVisible, 1e-30) / nightSky), adapt, cfg.f("hiz.gun", 16.0f));
+}
+
+double OlcekApp::eyeEvEnergy(double skyBol) const {
+    // the same eye on every band's light, adapting to all of it: at rest the night sky as bright as the visible eye's
+    // (base shifted by their ratio: the cosmic background's microwaves are some 60% of it, so the Milky Way is dimmer
+    // here), adapting the same way
+    const double base = cfg.f("hiz.ev", 17.5f) + std::log2(nightSky / nightSkyBol), adapt = cfg.f("hiz.uyum", 0.5f);
+    if (!std::isfinite(skyBol)) return base;
+    return base - adaptEv(std::log2(std::max(skyBol, 1e-30) / nightSkyBol), adapt, cfg.f("hiz.gun", 16.0f));
+}
+
+double OlcekApp::eyeDay(double sky, bool energy) const {
+    double day = 0.0;
+    if (!std::isfinite(sky)) return day;
+    adaptEv(std::log2(std::max(sky, 1e-30) / (energy ? nightSkyBol : nightSky)), cfg.f("hiz.uyum", 0.5f), cfg.f("hiz.gun", 16.0f), &day);
+    return day;
+}
+
+double OlcekApp::skyPanoWeight(const olcek::hiz::Eye& e) const {
+    // the panorama is the sky as seen from here: whole within ~300 light years of the Sun, gone by ~3,000
+    const double d = length(e.pos) / olcek::hiz::kLy;
+    const double u = std::clamp((d - 300.0) / 2700.0, 0.0, 1.0);
+    return 1.0 - u * u * (3.0 - 2.0 * u);
 }
 
 double OlcekApp::sideEv(double s, olcek::V3 rocket) const {
@@ -346,7 +501,9 @@ void OlcekApp::renderEye(const olcek::hiz::Eye& e, olcek::hiz::EyeSum& sum) {
     st.flux = &sc.starLight();
     st.temp = &sc.starTemp();
     olcek::hiz::buildEye(st, bb, e, splats, sum);
-    // nothing else in H0: black space and the points (the sky's light, the stops and the galaxies come in H3-H5)
+    const double panoW = skyPanoWeight(e);
+    const V3 galY = cross(sc.galNorth(), sc.galCentreDir());
+    olcek::hiz::skySums(skyCoarse, bb, e, panoW, sc.galCentreDir(), galY, sc.galNorth(), sum);
     view.width = sc.width;
     view.height = sc.height;
     view.tanHalfX = float(e.tanHalfX);
@@ -362,6 +519,74 @@ void OlcekApp::renderEye(const olcek::hiz::Eye& e, olcek::hiz::EyeSum& sum) {
     view.web = GWeb{};
     view.dens = GDensity{};
     for (GGalaxy& g : view.galaxy) g = GGalaxy{};
+    {   // the diffuse sky by the pixel (the kernel's eyeSky)
+        GSky& g = view.sky;
+        g = GSky{};
+        g.on = 1;
+        g.energy = e.energy ? 1 : 0;
+        g.mx = dot(e.motion, e.right);
+        g.my = dot(e.motion, e.up);
+        g.mz = dot(e.motion, e.fwd);
+        const olcek::hiz::Kin k = olcek::hiz::kin(e.phi);
+        g.emp = std::exp(-e.phi);
+        g.gamma = k.gamma;
+        g.beta = k.beta;
+        g.eps = k.eps;
+        g.tanX = e.tanHalfX;
+        g.tanY = e.tanHalfY;
+        auto row = [&](V3 a) { return make_float3(float(dot(a, e.right)), float(dot(a, e.up)), float(dot(a, e.fwd))); };
+        g.gal0 = row(sc.galCentreDir());
+        g.gal1 = row(galY);
+        g.gal2 = row(sc.galNorth());
+        g.pano = dSky;
+        g.pw = skyW;
+        g.ph = skyH;
+        g.nLod = skyLod;
+        g.pixAngle = float(2.0 * e.tanHalfX / sc.width);
+        g.panoWeight = float(panoW);
+        g.bb = dBB;
+        g.bbN = olcek::hiz::Blackbody::kN;
+        g.bbLogT0 = float(olcek::hiz::Blackbody::kLogT0);
+        g.bbStep = float((olcek::hiz::Blackbody::kLogT1 - olcek::hiz::Blackbody::kLogT0) / (olcek::hiz::Blackbody::kN - 1));
+        const double dl = 264.021 * 3.14159265358979323846 / 180.0, db = 48.253 * 3.14159265358979323846 / 180.0;
+        g.cmbDir = make_float3(float(std::cos(db) * std::cos(dl)), float(std::cos(db) * std::sin(dl)), float(std::sin(db)));
+        // the diffuse light seen with the dark-adapted eye's summation over area (Ricco): a designed gain on it (the
+        // display's pixel cannot sum; the points keep theirs), gone in daylight (the eye sums no more there)
+        const double sky = (e.energy ? sum.bolometricView : sum.visibleView) / std::max(sum.viewShare, 1e-12);
+        const double kd = e.k * std::pow(double(cfg.f("hiz.yaygin", 16.0f)), 1.0 - eyeDay(sky, e.energy));
+        g.k = float(kd);
+        g.lk = float(std::log10(std::max(kd, 1e-300)));
+        // the glare: round the bright cap ahead (the diffuse sky within 5 degrees of the motion) and the brightest points
+        {
+            auto add = [&](V3 dirRest, double E, float3 col) {
+                if (g.nGlare >= 8 || !(E > 0.0)) return;
+                g.glareDir[g.nGlare] = make_float3(float(dot(dirRest, e.right)), float(dot(dirRest, e.up)), float(dot(dirRest, e.fwd)));
+                g.glareE[g.nGlare] = col * float(E * e.k);
+                ++g.nGlare;
+            };
+            const double Ef = e.energy ? sum.fwdBolometric : sum.fwdVisible;
+            const float3 cf = e.energy ? energyColour(float(std::log10(std::max(sum.fwdT, 1.0))), bb.colour(sum.fwdT)) : bb.colour(sum.fwdT);
+            add(e.motion, Ef * cfg.f("hiz.parlama", 1.0f), cf);
+            // the brightest points (a display value above the glare's threshold): their light back from the splats
+            std::vector<std::pair<double, size_t>> bright;
+            for (size_t i = 0; i < splats.size(); ++i) {
+                const GSplat& p = splats[i];
+                const double f = double(p.flux.x + p.flux.y + p.flux.z) / 3.0;
+                if (f > 20.0) bright.push_back({f, i});
+            }
+            std::sort(bright.begin(), bright.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+            for (size_t j = 0; j < bright.size() && g.nGlare < 8; ++j) {
+                const GSplat& p = splats[bright[j].second];
+                const float3 d = make_float3(p.p.x, p.p.y, p.p.z);
+                const float len = std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z);
+                g.glareDir[g.nGlare] = make_float3(d.x / len, d.y / len, d.z / len);
+                // the splat's flux is display x pixel solid angle: its E x k is flux x omegaPx (the unzoomed pixel's)
+                g.glareE[g.nGlare] = p.flux * float(e.omegaPx * cfg.f("hiz.parlama", 1.0f));
+                ++g.nGlare;
+            }
+        }
+        if (!dBB) g.on = 0;
+    }
     sc.particles.clear();
     sc.particleTrack.clear();
     hostMs = (nowS() - h0) * 1000.0;
