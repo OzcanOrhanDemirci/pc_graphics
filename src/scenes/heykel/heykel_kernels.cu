@@ -76,6 +76,16 @@ __device__ float occlusion(const HeykelView& v, float3 p, float3 n, float scale)
     return saturate(1.0f - 12.0f * occ);
 }
 
+// the eye light's irradiance at p (see HeykelView)
+__device__ __forceinline__ float3 eyeLight(const HeykelView& v, float3 p, float3 n) {
+    if (v.eyeE <= 0.0f) return make_float3(0, 0, 0);
+    float3 L = v.eyePos - p;
+    const float r2 = dot(L, L);
+    L = L * rsqrtf(r2);
+    const float c2 = v.eyeC * v.eyeC;
+    return v.eyeColor * (v.eyeE * (v.eyeD * v.eyeD + c2) / (r2 + c2) * fmaxf(dot(n, L), 0.0f));
+}
+
 __device__ float3 shadePreview(const HeykelView& v, float3 p, float3 n, int id, float eps, float t) {
     const float3 alb = v.albedo[id < 0 ? 0 : id];
     float3 direct = make_float3(0, 0, 0);
@@ -90,33 +100,56 @@ __device__ float3 shadePreview(const HeykelView& v, float3 p, float3 n, int id, 
         const float spot = spotOf(l, -L);
         if (spot <= 0.0f) continue;
         const float E = l.le * M_PIf * (l.r * l.r) / (dist * dist) * cosT * spot;
-        // the key's shadow estimated; the camera's light casts almost none that the camera sees
-        const float sh = li == 0 ? softShadow(v, p + n * (eps * 2.0f), L, dist - l.r, eps, v.pixAngle * v.detail * 2.0f, dist / l.r) : 1.0f;
+        const float sh = softShadow(v, p + n * (eps * 2.0f), L, dist - l.r, eps, v.pixAngle * v.detail * 2.0f, dist / l.r);
         direct += l.color * (E * sh);
     }
+    direct += eyeLight(v, p, n);
     const float ao = occlusion(v, p, n, t * v.tanHalf);
-    const float fill = v.fillLe * M_PIf * (0.35f + 0.65f * saturate(n.y * 0.5f + 0.5f)) * ao;
-    return alb * INV_PIf * (direct + v.fillColor * fill);
+    // the room's light comes from high above: how open the point is upwards (a wide soft shadow towards the ceiling;
+    // deep in the lattice the arches above shut most of it out, as the path tracer finds)
+    const float3 upDir = normalize(make_float3(0.0f, 1.0f, 0.0f) + n * 0.35f);
+    const float sky = softShadow(v, p + n * (eps * 2.0f), upDir, 2.0f, eps, v.pixAngle * v.detail * 4.0f, 1.2f);
+    const float fill = v.fillLe * M_PIf * (0.35f + 0.65f * saturate(n.y * 0.5f + 0.5f)) * ao * (0.15f + 0.85f * sky);
+    // light bouncing between the white surfaces (the path tracer has it, the preview not): a measured gain
+    return alb * INV_PIf * (direct + v.fillColor * fill) * v.previewGain;
 }
 
+// The preview at half resolution, four rays a preview pixel (a rotated grid over its 2x2 screen pixels): as costly as
+// one ray a screen pixel, but filtered. Fine lace sparkles with one ray a pixel while it moves; this one is soft and
+// steady, and close in look to the accumulation it hands over to.
 __global__ void kPreview(HeykelView v, float4* out) {
+    const int pw = (v.width + 1) / 2, ph = (v.height + 1) / 2;
     const int x = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y;
-    if (x >= v.width || y >= v.height) return;
-    const float3 rd = rayDir(v, x + 0.5f, y + 0.5f);
+    if (x >= pw || y >= ph) return;
     const float slope = v.pixAngle * v.detail;
-    Hit h;
-    float3 c;
-    float tHit = 0.0f;
-    if (march(v.camPos, rd, v.tmax, 0.0f, slope, v.maxSteps, v.w.s.relax, v.w, h)) {
-        const float3 p = v.camPos + rd * h.t;
-        const float eps = slope * h.t;
-        const float3 n = normalAt(p, eps, v.w);
-        c = shadePreview(v, p, n, h.id, eps, h.t);
-        tHit = h.t;
-    } else {
-        c = env(v, rd);
+    const float2 grid[4] = {{0.625f, 0.125f}, {0.125f, 0.375f}, {0.875f, 0.625f}, {0.375f, 0.875f}};
+    float3 c = make_float3(0, 0, 0);
+    for (int s = 0; s < v.previewRays; ++s) {
+        const float3 rd = rayDir(v, 2.0f * (x + grid[s].x), 2.0f * (y + grid[s].y));
+        Hit h;
+        if (march(v.camPos, rd, v.tmax, 0.0f, slope, v.maxSteps, v.w.s.relax, v.w, h)) {
+            const float3 p = v.camPos + rd * h.t;
+            const float eps = slope * h.t;
+            const float3 n = normalAt(p, eps, v.w);
+            c += shadePreview(v, p, n, h.id, eps, h.t);
+        } else {
+            c += env(v, rd);
+        }
     }
-    out[y * v.width + x] = make_float4(c.x, c.y, c.z, tHit);
+    const float inv = 1.0f / float(v.previewRays);
+    out[y * pw + x] = make_float4(c.x * inv, c.y * inv, c.z * inv, 1.0f);
+}
+
+// the half-resolution preview at a screen pixel, bilinear
+__device__ __forceinline__ float3 previewAt(const HeykelView& v, const float4* preview, int x, int y) {
+    const int pw = (v.width + 1) / 2, ph = (v.height + 1) / 2;
+    const float fx = fminf(fmaxf((x + 0.5f) * 0.5f - 0.5f, 0.0f), float(pw - 1)), fy = fminf(fmaxf((y + 0.5f) * 0.5f - 0.5f, 0.0f), float(ph - 1));
+    const int x0 = int(fx), y0 = int(fy), x1 = min(x0 + 1, pw - 1), y1 = min(y0 + 1, ph - 1);
+    const float tx = fx - x0, ty = fy - y0;
+    const float4 a = preview[y0 * pw + x0], b = preview[y0 * pw + x1], c = preview[y1 * pw + x0], d = preview[y1 * pw + x1];
+    const float4 top = a * (1.0f - tx) + b * tx, bot = c * (1.0f - tx) + d * tx;
+    const float4 m = top * (1.0f - ty) + bot * ty;
+    return make_float3(m.x, m.y, m.z);
 }
 
 // a sphere light by sampling the cone it fills (uniform in solid angle), the spot by the leaving direction
@@ -160,7 +193,10 @@ __device__ float3 trace(const HeykelView& v, float3 ro, float3 rd, Rng& rng) {
         if (dot(n, rd) > 0.0f) n = normalize(n - rd * (2.0f * dot(n, rd)));
         const float3 alb = v.albedo[h.id < 0 ? 0 : h.id];
         const float sslope = v.pixAngle * v.detail * v.shadowSlope;
-        const float3 Ld = lightSample(v, v.light[0], p, n, eps, sslope, rng) + lightSample(v, v.light[1], p, n, eps, sslope, rng);
+        // the camera's fill only where the camera looks: its light carried by the bounces is a few percent of what they
+        // carry, its shadow rays a third of the cost (measured)
+        float3 Ld = lightSample(v, v.light[0], p, n, eps, sslope, rng);
+        if (b == 0) Ld += eyeLight(v, p, n);
         sum += thr * alb * INV_PIf * Ld;
         if (b == v.bounces) break;
         // cosine-weighted bounce
@@ -180,23 +216,36 @@ __device__ float3 trace(const HeykelView& v, float3 ro, float3 rd, Rng& rng) {
     return sum;
 }
 
-__global__ void kPath(HeykelView v, float4* accum, int samples, int stripe, int stripes) {
+__global__ void kPath(HeykelView v, float4* accum, float* accY2, int samples, int stripe, int stripes) {
     const int x = blockIdx.x * blockDim.x + threadIdx.x, y = stripe + (blockIdx.y * blockDim.y + threadIdx.y) * stripes;
     if (x >= v.width || y >= v.height) return;
     const unsigned int pix = unsigned(y * v.width + x);
+    // adaptive: a pixel whose mean is already known to a fraction of itself takes no more samples (the void, flat
+    // lit faces); the deep views' cost goes where the grain is
+    {
+        const float4 a = accum[pix];
+        if (a.w >= v.adaptMin) {
+            const float n = a.w, mean = luminance709(make_float3(a.x, a.y, a.z)) / n;
+            const float var = fmaxf(accY2[pix] / n - mean * mean, 0.0f);
+            if (sqrtf(var / n) < fmaxf(v.adaptRel * mean, v.adaptAbs)) return;
+        }
+    }
     // the sub-pixel positions: the R2 sequence shifted per pixel, mapped to a Gaussian around the pixel's centre
     // (sigma v.filterSigma pixels, cut at 3 sigma): a reconstruction a little wider than the pixel, no box edges
     const float g1 = 0.7548776662466927f, g2 = 0.5698402909980532f;
     const float ox = float(pcgHash(pix * 2u + 1u) >> 8) * (1.0f / 16777216.0f);
     const float oy = float(pcgHash(pix * 2u + 7919u) >> 8) * (1.0f / 16777216.0f);
     float3 c = make_float3(0, 0, 0);
+    float y2 = 0.0f;
     for (int s = 0; s < samples; ++s) {
         const int k = v.sample + s;
         Rng rng{pix, k, 0};
         const float u1 = fractf(ox + g1 * k), u2 = fractf(oy + g2 * k);
         const float cut = 1.0f - expf(-4.5f);   // 3 sigma
         const float r = v.filterSigma * sqrtf(-2.0f * logf(1.0f - u1 * cut)), ph = 2.0f * M_PIf * u2;
-        c += trace(v, v.camPos, rayDir(v, x + 0.5f + r * cosf(ph), y + 0.5f + r * sinf(ph)), rng);
+        const float3 cs = trace(v, v.camPos, rayDir(v, x + 0.5f + r * cosf(ph), y + 0.5f + r * sinf(ph)), rng);
+        c += cs;
+        y2 += luminance709(cs) * luminance709(cs);
     }
     float4 a = accum[pix];
     a.x += c.x;
@@ -204,11 +253,11 @@ __global__ void kPath(HeykelView v, float4* accum, int samples, int stripe, int 
     a.z += c.z;
     a.w += float(samples);
     accum[pix] = a;
+    accY2[pix] += y2;
 }
 
 __device__ __forceinline__ float3 blended(const HeykelView& v, const float4* preview, const float4* accum, int i) {
-    const float4 p = preview[i];
-    float3 c = make_float3(p.x, p.y, p.z);
+    float3 c = previewAt(v, preview, i % v.width, i / v.width);
     if (accum) {
         const float4 a = accum[i];
         if (a.w > 0.0f) {
@@ -248,12 +297,13 @@ dim3 grid(const HeykelView& v, dim3 b) { return dim3((v.width + b.x - 1) / b.x, 
 
 void heykelPreview(const HeykelView& v, float4* preview, cudaStream_t s) {
     const dim3 b(16, 8);
-    kPreview<<<grid(v, b), b, 0, s>>>(v, preview);
+    const int pw = (v.width + 1) / 2, ph = (v.height + 1) / 2;
+    kPreview<<<dim3((pw + b.x - 1) / b.x, (ph + b.y - 1) / b.y), b, 0, s>>>(v, preview);
 }
-void heykelPath(const HeykelView& v, float4* accum, int samples, int stripe, int stripes, cudaStream_t s) {
+void heykelPath(const HeykelView& v, float4* accum, float* accY2, int samples, int stripe, int stripes, cudaStream_t s) {
     const dim3 b(16, 8);
     const int rows = (v.height - stripe + stripes - 1) / stripes;
-    kPath<<<dim3((v.width + b.x - 1) / b.x, (rows + b.y - 1) / b.y), b, 0, s>>>(v, accum, samples, stripe, stripes);
+    kPath<<<dim3((v.width + b.x - 1) / b.x, (rows + b.y - 1) / b.y), b, 0, s>>>(v, accum, accY2, samples, stripe, stripes);
 }
 void heykelResolve(const HeykelView& v, const float4* preview, const float4* accum, uchar4* out, cudaStream_t s) {
     const dim3 b(16, 8);

@@ -1,6 +1,7 @@
-// Scene 6 "Heykel" inside the application (G0: the study). One sculpture on a plinth in a dark room; the wheel zooms
-// towards the cursor, the right button turns the view around what was zoomed at, a click points the light at a spot
-// and dragging with the left button swings it around that spot. Still, the picture accumulates.
+// Scene 6 "Heykel" inside the application: a white fractal cathedral on a plinth in a dark room, 10,000 times deep.
+// The wheel zooms towards the cursor, the right button turns the view around what was zoomed at, a click points the
+// light at a spot and dragging with the left button swings it around that spot; T runs the dive tour. Still, the
+// picture accumulates.
 #include "app/scene.h"
 #include "app/theme.h"
 #include "scenes/heykel/heykel_app.h"
@@ -17,6 +18,18 @@ namespace {
 
 using app::L;
 
+// The tour: four dives, each a world point the zoom closes in on in a straight line from the first view. Found by the
+// study's random dives (a pixel picked again all the way down, as a hand on the wheel would) and kept as the point
+// reached at 10,000 times: a pixel would lead elsewhere at another resolution (a finer threshold, another hole).
+// Chosen for frames that hold at every stop (DURUM; --hedef renders them as the tour sees them).
+const D3 kDives[] = {{-0.16122597601070529, 0.38169462667579562, 0.18263348231902773},
+                     {-0.017099008541529775, 0.014046505992941874, -0.12788962696837886},
+                     {0.018479176066056528, 0.026147856746997961, 0.1742891767649056},
+                     {-0.012766515728291123, 0.19496334254062009, -0.010087507275673497}};
+const int kDiveCount = 4;
+const float kStops[] = {10.0f, 100.0f, 1000.0f, 10000.0f};   // where a dive stops to let the picture settle
+const int kStopCount = 4;
+
 class HeykelLive : public app::Scene {
 public:
     static app::SceneInfo describe() {
@@ -24,35 +37,46 @@ public:
         i.id = "heykel";
         i.number = "06";
         i.title = L("Heykel", "The Sculpture");
-        i.subtitle = L("Taslak: beş aday", "Draft: five candidates");
-        i.description = L("Karanlık bir odada, bir kaidenin üstünde beyaz, mat bir heykel. Yaklaştıkça yüzeyinin içinden yeni bir mimari "
-                          "açılır. Işığı istediğin yere tıklayarak çevirirsin.",
-                          "A white, matte sculpture on a plinth in a dark room. Come closer and a new architecture opens inside its "
-                          "surface. A click turns the light wherever you want it.");
+        i.subtitle = L("Fraktal bir katedral, on bin kat yakına", "A fractal cathedral, ten thousand times closer");
+        i.description = L("Karanlık bir odada, bir kaidenin üstünde beyaz, mat bir heykel. Yaklaştıkça kemerlerinin içinden yeni kemerler "
+                          "açılır; on bin katta ekranın genişliği bir saç teli kadardır ve yapı orada da sürer.",
+                          "A white, matte sculpture on a plinth in a dark room. Come closer and new arches open inside its arches; at "
+                          "ten thousand times the screen is a hair's width across, and the structure goes on there too.");
         i.details = {
             {L("Geometri", "Geometry"),
-             L("Heykeller birer fraktal: biçim üçgenlerden değil bir formülden gelir, ışın yüzeye formülün söylediği uzaklıkla "
-               "adım adım yürür. Yüzeyin eşiği pikselin o uzaklıktaki izi kadar: pikselden ince olan çizilmez.",
-               "The sculptures are fractals: the form comes from a formula, not from triangles, and a ray walks to the surface "
-               "step by step by the distance the formula gives. The surface's threshold is a pixel's footprint at that distance: "
-               "what is thinner than a pixel is not drawn.")},
+             L("Heykel bir fraktal (sözde Klein, Knighty'nin kutu katlaması ve küre evirmesi), bir bloğa kesilmiş: biçim üçgenlerden "
+               "değil bir formülden gelir, ışın yüzeye formülün söylediği uzaklıkla adım adım yürür. Yüzeyin eşiği pikselin o "
+               "uzaklıktaki izi kadar; formülün tekrar sayısı da yakınlaşmayla artar: pikselden ince olan çizilmez, ayrıntı bitmez.",
+               "The sculpture is a fractal (pseudo-Kleinian: Knighty's box fold and sphere inversion) cut into a block: the form "
+               "comes from a formula, not from triangles, and a ray walks to the surface by the distance the formula gives. The "
+               "surface's threshold is a pixel's footprint there, and the formula's iterations grow with the zoom: nothing thinner "
+               "than a pixel is drawn, and the detail does not run out.")},
+            {L("On bin kat", "Ten thousand times"),
+             L("Ekran kartının sayıları orada bir pikseli ayırt edemez. Derin Mandelbrot yakınlaşmalarının yolu: bir çapa noktasının "
+               "yörüngesi ana işlemcide çift hassasiyetle hesaplanır, her piksel ondan küçük bir fark olarak izlenir. Ölçülen hata "
+               "on bin katta piksel başına binde üç.",
+               "There the graphics card's numbers cannot tell one pixel from the next. The deep Mandelbrot zooms' way: one anchor "
+               "point's orbit is computed in double precision on the processor, every pixel follows it as a small difference. The "
+               "measured error at ten thousand times: three thousandths of a pixel.")},
             {L("Işık", "Light"),
-             L("Tek bir spot ve çok hafif bir dolgu. Hareket sürerken doğrudan ışık ve tahmini gölge; durunca yol izleme birikir: "
-               "spotun gerçek yumuşak gölgesi ve oyuklara seke seke giren ışık.",
-               "One spot and a very faint fill. While anything moves: the direct light and an estimated shadow; when still, path "
-               "tracing accumulates: the spot's true soft shadow and light bouncing into the hollows.")}};
-        i.tags = {L("Geometri", "Geometry"), L("Fraktal", "Fractal"), L("Taslak", "Draft")};
+             L("Bir spot, kameranın arkasında hafif bir dolgu ve tavandan sönük bir ışık. Spot sen yaklaştıkça seninle yaklaşır, "
+               "yolu kapalıysa yakında açık bir açı arar. Hareket sürerken yumuşak bir önizleme; durunca yol izleme birikir: "
+               "spotun gerçek gölgesi, oyuklara seke seke giren ışık.",
+               "A spot, a faint fill behind the camera and a dim light from the ceiling. The spot comes closer as you do, and if "
+               "its way is blocked it looks for an open angle nearby. While anything moves, a soft preview; still, path tracing "
+               "accumulates: the spot's true shadow, light bouncing into the hollows.")}};
+        i.tags = {L("Geometri", "Geometry"), L("Fraktal", "Fractal"), L("10.000 kat", "10,000 times")};
         i.image = "assets/gallery/heykel.jpg";
         i.accent = 0x9D8CE0;
         i.keys = {{L("Bakış", "View"),
                    {{L("Tekerlek", "Wheel"), L("İmlecin gösterdiği yere yaklaş, uzaklaş", "Zoom towards the cursor, and out")},
                     {L("Sağ tık", "Right button"), L("Sürükle: heykeli çevir", "Drag: turn the sculpture")},
-                    {"R", L("İlk görünüm", "The first view")}}},
+                    {"R", L("İlk görünüm", "The first view")},
+                    {"T", L("Dalış turu (başlat / durdur)", "The dive tour (start / stop)")}}},
                   {L("Işık", "Light"),
                    {{L("Sol tık", "Left button"), L("Işığı tıklanan yere çevir", "Point the light at what is clicked")},
                     {L("Sol tık", "Left button"), L("Sürükle: ışığı o noktanın çevresinde döndür", "Drag: swing the light around that spot")},
-                    {"↑|↓", L("Pozlama", "Exposure")}}},
-                  {L("Aday", "Candidate"), {{"1-5", L("Aday seç", "Choose a candidate")}}}};
+                    {"↑|↓", L("Pozlama", "Exposure")}}}};
         i.reloadable = true;
         return i;
     }
@@ -62,7 +86,7 @@ public:
     void load(app::Host& host, app::LoadState& st) override {
         switch (st.step) {
         case 0:
-            st.label = L("Heykeller kaidelerine oturtuluyor", "Setting the sculptures on their plinths");
+            st.label = L("Heykel kaidesine oturtuluyor", "Setting the sculpture on its plinth");
             st.fraction = 0.1f;
             ++st.step;
             return;
@@ -72,7 +96,7 @@ public:
             h_.loadConfig();
             h_.buildCandidates();
             h_.init();
-            h_.setCandidate(0);
+            h_.setCandidate(cathedral());
             st.label = L("İlk kare", "The first frame");
             st.fraction = 0.8f;
             ++st.step;
@@ -94,16 +118,23 @@ public:
             host.pace(0.0f);
             paced_ = true;
         }
+        // the cursor in render pixels
+        const bool inView = in.view.w > 0.0f && in.view.contains(in.mouseX, in.mouseY);
+        const float rx = in.view.w > 0.0f ? (in.mouseX - in.view.x) / in.view.w * h_.width : 0.0f;
+        const float ry = in.view.h > 0.0f ? (in.mouseY - in.view.y) / in.view.h * h_.height : 0.0f;
+
+        // a hand on the scene stops the tour
+        const bool hand = (in.scroll != 0.0f && inView) || (in.leftDown && inView) || in.rightDown || in.pressed(GLFW_KEY_R);
+        bool toggle = in.pressed(GLFW_KEY_T);
         for (const app::ControlEvent& e : in.events)
-            if (e.id == "aday" && e.item >= 0 && e.item != h_.cand) {
-                choose(e.item);
-                changed = true;
-            }
-        for (int k = 0; k < int(h_.cands.size()) && k < 9; ++k)
-            if (in.pressed(GLFW_KEY_1 + k) && k != h_.cand) {
-                choose(k);
-                changed = true;
-            }
+            if (e.id == "tur") toggle = true;
+        if (tour_ && (hand || toggle)) {
+            tour_ = false;
+            toggle = false;
+            host.toast(L("Tur durdu", "The tour stopped"));
+        }
+        if (toggle) startTour(host);
+
         if (in.pressed(GLFW_KEY_R)) {
             h_.home();
             h_.defaultLight();
@@ -114,61 +145,61 @@ public:
         if (in.pressed(GLFW_KEY_UP)) { h_.ev += 0.25f; toneOnly = true; }
         if (in.pressed(GLFW_KEY_DOWN)) { h_.ev -= 0.25f; toneOnly = true; }
 
-        // the cursor in render pixels
-        const bool inView = in.view.w > 0.0f && in.view.contains(in.mouseX, in.mouseY);
-        const float rx = in.view.w > 0.0f ? (in.mouseX - in.view.x) / in.view.w * h_.width : 0.0f;
-        const float ry = in.view.h > 0.0f ? (in.mouseY - in.view.y) / in.view.h * h_.height : 0.0f;
-
-        // the wheel: what is under the cursor is the point the camera closes in on (it stays put on the screen)
-        if (in.scroll != 0.0f && inView) {
-            D3 q;
-            if (!h_.pick(rx, ry, q)) {   // nothing there: a point on the ray as far as the focus
-                float3 r, u, f;
-                h_.cameraBasis(r, u, f);
-                const float t = std::tan(0.5f * h_.fovDeg * 3.14159265f / 180.0f);
-                const float sx = (rx / h_.width * 2.0f - 1.0f) * t * float(h_.width) / h_.height, sy = (1.0f - ry / h_.height * 2.0f) * t;
-                q = h_.camPos + d3(normalize(f + r * sx + u * sy)) * length(h_.focus - h_.camPos);
+        if (tour_) {
+            changed = stepTour(dt) || changed;
+        } else {
+            // the wheel: what is under the cursor is the point the camera closes in on (it stays put on the screen)
+            if (in.scroll != 0.0f && inView) {
+                D3 q;
+                if (!h_.pick(rx, ry, q)) {   // nothing there: a point on the ray as far as the focus
+                    float3 r, u, f;
+                    h_.cameraBasis(r, u, f);
+                    const float t = std::tan(0.5f * h_.fovDeg * 3.14159265f / 180.0f);
+                    const float sx = (rx / h_.width * 2.0f - 1.0f) * t * float(h_.width) / h_.height, sy = (1.0f - ry / h_.height * 2.0f) * t;
+                    q = h_.camPos + d3(normalize(f + r * sx + u * sy)) * length(h_.focus - h_.camPos);
+                }
+                zoomQ_ = q;
+                pending_ += in.scroll * std::log(1.35f);
             }
-            zoomQ_ = q;
-            pending_ += in.scroll * std::log(1.35f);
-        }
-        if (std::fabs(pending_) > 1e-5f) {
-            float dz = pending_ * (1.0f - std::exp(-dt * 12.0f));
-            if (std::fabs(pending_) < 2e-3f) dz = pending_;
-            const float before = h_.level;
-            h_.zoomAbout(zoomQ_, dz);
-            pending_ -= dz;
-            if (h_.level == 1.0f && before != 1.0f && dz < 0.0f) pending_ = 0.0f;   // back at the first view
-            if (h_.level >= h_.zoomCapAt(zoomQ_) * 0.999f && dz > 0.0f) pending_ = 0.0f;
-            if (std::fabs(pending_) <= 1e-5f) {   // the zoom has stopped: the lamp settles onto what is being looked at
-                pending_ = 0.0f;
-                if (h_.level > 1.0f) h_.settleLight();
-            }
-            changed = true;
-        }
-        // the right button turns the view around the focus (the plinth turning)
-        if (in.rightDown && (in.mouseDX != 0.0f || in.mouseDY != 0.0f))
-            changed = h_.orbit(in.mouseDX * 0.0025f, -in.mouseDY * 0.0025f) || changed;
-        // the left button: a click points the light, a drag swings it
-        if (in.leftDown && !leftWas_) {
-            pressX_ = in.mouseX;
-            pressY_ = in.mouseY;
-            dragging_ = false;
-            pressInView_ = inView;
-        }
-        if (in.leftDown && pressInView_) {
-            if (!dragging_ && std::hypot(in.mouseX - pressX_, in.mouseY - pressY_) > 5.0f) dragging_ = true;
-            if (dragging_ && (in.mouseDX != 0.0f || in.mouseDY != 0.0f)) {
-                h_.turnLight(in.mouseDX * 0.003f, -in.mouseDY * 0.003f);
+            if (std::fabs(pending_) > 1e-5f) {
+                float dz = pending_ * (1.0f - std::exp(-dt * 12.0f));
+                if (std::fabs(pending_) < 2e-3f) dz = pending_;
+                const float before = h_.level;
+                h_.zoomAbout(zoomQ_, dz);
+                h_.keepLampClear();
+                pending_ -= dz;
+                if (h_.level == 1.0f && before != 1.0f && dz < 0.0f) pending_ = 0.0f;   // back at the first view
+                if (h_.level >= h_.zoomCapAt(zoomQ_) * 0.999f && dz > 0.0f) pending_ = 0.0f;
+                if (std::fabs(pending_) <= 1e-5f) {   // the zoom has stopped: the lamp settles onto what is looked at
+                    pending_ = 0.0f;
+                    if (h_.level > 1.0f) h_.settleLight();
+                }
                 changed = true;
             }
-        }
-        if (!in.leftDown && leftWas_ && pressInView_ && !dragging_) {
-            D3 q;
-            float3 n;
-            if (h_.pick(rx, ry, q, &n)) {
-                h_.aimLight(q, &n);
-                changed = true;
+            // the right button turns the view around the focus (the plinth turning)
+            if (in.rightDown && (in.mouseDX != 0.0f || in.mouseDY != 0.0f))
+                changed = h_.orbit(in.mouseDX * 0.0025f, -in.mouseDY * 0.0025f) || changed;
+            // the left button: a click points the light, a drag swings it
+            if (in.leftDown && !leftWas_) {
+                pressX_ = in.mouseX;
+                pressY_ = in.mouseY;
+                dragging_ = false;
+                pressInView_ = inView;
+            }
+            if (in.leftDown && pressInView_) {
+                if (!dragging_ && std::hypot(in.mouseX - pressX_, in.mouseY - pressY_) > 5.0f) dragging_ = true;
+                if (dragging_ && (in.mouseDX != 0.0f || in.mouseDY != 0.0f)) {
+                    h_.turnLight(in.mouseDX * 0.003f, -in.mouseDY * 0.003f);
+                    changed = true;
+                }
+            }
+            if (!in.leftDown && leftWas_ && pressInView_ && !dragging_) {
+                D3 q;
+                float3 n;
+                if (h_.pick(rx, ry, q, &n)) {
+                    h_.aimLight(q, &n);
+                    changed = true;
+                }
             }
         }
         leftWas_ = in.leftDown;
@@ -205,19 +236,31 @@ public:
 
     void status(app::Status& s) override {
         using theme::num;
-        s.chips.push_back({L("Taslak · G0", "Draft · G0"), true});
+        using theme::thousands;
+        if (tour_) s.chips.push_back({L("Tur · dalış ", "Tour · dive ") + std::to_string(dive_ + 1) + "/" + std::to_string(kDiveCount), true});
         if (h_.samples > 0 && h_.samples < maxSamples_) s.chips.push_back({L("Birikiyor", "Accumulating")});
-        s.metrics.push_back({L("Yakınlaşma", "Zoom"), "×" + num(h_.level, h_.level < 10.0f ? 1 : 0)});
+        const float lv = h_.level;
+        s.metrics.push_back({L("Yakınlaşma", "Zoom"), "×" + (lv < 10.0f ? num(lv, 1) : thousands(int(std::lround(lv))))});
+        // what the screen's width is at the focus: from 71 cm at the first view to a hair's width at 10,000 times
+        {
+            float3 r, u, f;
+            h_.cameraBasis(r, u, f);
+            const double t = std::tan(0.5 * h_.fovDeg * 3.14159265 / 180.0);
+            const double wm = 2.0 * t * double(h_.width) / h_.height * length(h_.focus - h_.camPos);
+            std::string w = wm >= 0.01 ? num(float(wm * 100.0), 1) + " cm" : wm >= 1e-5 ? num(float(wm * 1000.0), wm >= 1e-3 ? 1 : 2) + " mm"
+                                                                                       : num(float(wm * 1e6), 0) + " µm";
+            s.metrics.push_back({L("Ekranın genişliği", "The screen's width"), w});
+        }
         s.metrics.push_back({L("Örnek", "Samples"), std::to_string(h_.samples)});
         s.metrics.push_back({L("Önizleme", "Preview"), num(h_.previewMs, 1) + " ms"});
         s.metrics.push_back({L("Yol izleme", "Path tracing"), num(h_.pathMs, 1) + L(" ms/örnek", " ms/sample")});
         app::Control c;
-        c.kind = app::Control::Kind::Choice;
-        c.id = "aday";
-        c.title = L("Aday", "Candidate");
-        for (const HeykelCandidate& k : h_.cands) c.items.push_back(L(k.tr, k.en));
-        c.active = h_.cand;
-        c.detail = L("Taslak: biçim ve genel görünüm için; ayrıntı sonra", "A draft: for the form and the overall look; the detail later");
+        c.kind = app::Control::Kind::Button;
+        c.id = "tur";
+        c.text = tour_ ? L("Turu durdur", "Stop the tour") : L("Dalış turu", "The dive tour");
+        c.keys = "T";
+        c.strong = !tour_;
+        c.detail = L("Dört noktaya on bin kata kadar iner; her katta durup netleşir", "Four dives to ten thousand times; it stops to sharpen at every step");
         s.controls.push_back(c);
     }
 
@@ -227,10 +270,11 @@ public:
     }
 
     void reload(app::Host& host) override {
-        const int c = h_.cand;
         h_.loadConfig();
         h_.buildCandidates();
-        choose(c);
+        h_.setCandidate(cathedral());
+        pending_ = 0.0f;
+        tour_ = false;
         h_.renderPreview();
         h_.resolve();
         host.toast(L("Ayarlar yeniden yüklendi", "Settings reloaded"));
@@ -244,10 +288,65 @@ public:
     ~HeykelLive() override { unload(); }
 
 private:
-    void choose(int k) {
-        h_.setCandidate(k);
-        pending_ = 0.0f;
+    int cathedral() const {
+        for (int k = 0; k < int(h_.cands.size()); ++k)
+            if (h_.cands[k].id == "katedral") return k;
+        return 0;
     }
+
+    // the tour: home (settle), then to each stop of a dive (zooming, the point under the dive's pixel picked again
+    // every frame), a pause there while the picture accumulates, out again to the first view, the next dive
+    void startTour(app::Host& host) {
+        tour_ = true;
+        dive_ = 0;
+        beginDive();
+        host.toast(L("Dalış turu: dört nokta, on bin kata kadar. Bir tuş ya da fare durdurur", "The dive tour: four dives to ten thousand times. A key or the mouse stops it"));
+    }
+    void beginDive() {
+        h_.home();
+        h_.defaultLight();
+        h_.aimLight(h_.homeFocus);
+        stop_ = -1;   // at home
+        hold_ = 0.0f;
+        holding_ = true;
+        out_ = false;
+    }
+    bool stepTour(float dt) {
+        const D3 q = kDives[dive_];
+        if (holding_) {   // let the picture settle: a while, and enough samples
+            hold_ += dt;
+            const float minHold = stop_ < 0 ? 2.5f : 3.0f, maxHold = 7.0f;
+            if (hold_ < minHold || (hold_ < maxHold && h_.samples < 48)) return false;
+            holding_ = false;
+            if (stop_ == kStopCount - 1) {   // the bottom: back out
+                out_ = true;
+                return false;
+            }
+            ++stop_;
+            return false;
+        }
+        if (out_) {   // out to the first view in two seconds or so
+            h_.zoomAbout(h_.focus, -dt * 4.6f);
+            if (h_.level <= 1.0f) {
+                dive_ = (dive_ + 1) % kDiveCount;
+                beginDive();
+            }
+            return true;
+        }
+        // zooming to the next stop: ten times in ~2.5 s, straight at the dive's point
+        const float target = kStops[stop_];
+        const float step = std::min(dt * 0.92f, std::log(target / h_.level));
+        const float before = h_.level;
+        h_.zoomAbout(q, step);
+        h_.keepLampClear();
+        if (h_.level >= target * 0.999f || h_.level <= before) {
+            h_.settleLight();
+            holding_ = true;
+            hold_ = 0.0f;
+        }
+        return true;
+    }
+
     app::SceneInfo info_ = describe();
     HeykelApp h_;
     uchar4* pinned_ = nullptr;
@@ -258,6 +357,10 @@ private:
     float pressX_ = 0.0f, pressY_ = 0.0f;
     int maxSamples_ = 1024;
     int stripes_ = 4, phase_ = 0;    // a slow sample spread over frames: rows y = phase (mod stripes) this frame
+    // the tour
+    bool tour_ = false, holding_ = false, out_ = false;
+    int dive_ = 0, stop_ = -1;
+    float hold_ = 0.0f;
 };
 
 }   // namespace

@@ -75,8 +75,10 @@ struct HeykelApp {
     // GPU
     float4* preview = nullptr;
     float4* accum = nullptr;
+    float* accY2 = nullptr;          // the samples' squared luminance, summed (adaptive sampling)
     uchar4* output = nullptr;
     int samples = 0;                 // accumulated a pixel
+    int previewRays = 4;             // the preview's rays a preview pixel (renderPreview halves or doubles them by its time)
     float previewMs = 0.0f, pathMs = 0.0f;   // the last preview; a whole sample a pixel of the path tracer
 
     void loadConfig();
@@ -106,6 +108,7 @@ struct HeykelApp {
     bool lampClear(D3 target, float3 n, float3 dir, double dist) const;
     void clearLamp(const float3* normal);        // lampDir: lightDir if its line is clear, else the nearest clear one
     void settleLight();                          // the zoom stopped: the lamp onto the focus, a clear line
+    void keepLampClear();                        // while zooming: a ray a frame; blocked, the nearest clear direction
 
     void renderPreview();            // and resets the accumulation
     void accumulate(int spp);

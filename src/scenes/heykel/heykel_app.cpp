@@ -101,7 +101,7 @@ void HeykelApp::buildCandidates() {
         c.shape.b = 0.92784f;
         c.shape.cut = 2;
         c.shape.cutSize = make_float3(2.2f, 2.2f, 2.2f);
-        c.shape.relax = 0.8f;
+        c.shape.relax = 0.9f;   // 0.8 at first; 0.9: no holes, no specks at 10,000 times, 15% faster (measured)
         c.euler = make_float3(-90.0f, 0.0f, 0.0f);   // the structure's long axis (z) upright
         c.homeYaw = 30.0f;
         c.homePitch = -10.0f;
@@ -194,6 +194,8 @@ void HeykelApp::init() {
     const size_t n = size_t(width) * height;
     cudaMalloc(reinterpret_cast<void**>(&preview), n * sizeof(float4));
     cudaMalloc(reinterpret_cast<void**>(&accum), n * sizeof(float4));
+    cudaMalloc(reinterpret_cast<void**>(&accY2), n * sizeof(float));
+    cudaMemset(accY2, 0, n * sizeof(float));
     cudaMalloc(reinterpret_cast<void**>(&output), n * sizeof(uchar4));
     cudaMalloc(reinterpret_cast<void**>(&devSteps), sizeof(hk::KStep) * hk::kMaxSteps);
     cudaMemset(preview, 0, n * sizeof(float4));
@@ -203,6 +205,8 @@ void HeykelApp::init() {
 void HeykelApp::release() {
     if (preview) cudaFree(preview);
     if (accum) cudaFree(accum);
+    if (accY2) cudaFree(accY2);
+    accY2 = nullptr;
     if (output) cudaFree(output);
     if (devSteps) cudaFree(devSteps);
     devSteps = nullptr;
@@ -408,9 +412,9 @@ HeykelView HeykelApp::view() const {
     v.w = world;
     v.w.s.iters = itersNow();
     setAnchor(v.w, focus);
-    // perturbation only where floats fall short (it costs ~3 times the straight estimate): at 200 times the straight one
-    // errs by ~0.03 pixel (--test pert), the switch cannot be seen
-    if (level < cfg.f("pert.from", 200.0f)) v.w.pert = 0;
+    // perturbation only where floats fall short (it costs ~2-3 times the straight estimate): at 1,000 times the straight
+    // one errs by 0.02-0.05 of a pixel (--test pert), the switch cannot be seen
+    if (level < cfg.f("pert.from", 1000.0f)) v.w.pert = 0;
     if (v.w.pert && devSteps) {
         cudaMemcpy(devSteps, hostSteps, sizeof(hk::KStep) * v.w.n, cudaMemcpyHostToDevice);
         v.w.st = devSteps;
@@ -439,13 +443,16 @@ HeykelView HeykelApp::view() const {
         l.coneInner = std::cos(inner);
         l.color = cfg.v3("light.color", make_float3(1.0f, 0.93f, 0.84f));
     }
-    {   // the camera's fill: a little above the lens, its light on the focus a fraction of the key's
-        HeykelLight& l = v.light[1];
+    {   // the eye light: on the lens, a little above it; its light on the focus a fraction of the key's. The fall softened
+        // within ~eye.soft focus distances of the lens: what comes close is not burnt white (the study: a near arch
+        // clipped 4.6% of the picture with a plain square law)
         const float d = float(length(camPos - focus));
-        l.pos = v.camPos + v.camUp * (cfg.f("camfill.up", 0.08f) * d);
-        l.r = cfg.f("camfill.size", 0.04f) * d;
-        l.le = cfg.f("camfill", 0.12f) * cfg.f("light.e", 3.14159f) * d * d / (3.14159f * l.r * l.r);
-        l.color = cfg.v3("camfill.color", make_float3(0.92f, 0.96f, 1.0f));
+        v.eyePos = v.camPos + v.camUp * (cfg.f("eye.up", 0.05f) * d);
+        v.eyeD = d;
+        v.eyeC = cfg.f("eye.soft", 0.6f) * d;
+        v.eyeE = cfg.f("eye", 0.12f) * cfg.f("light.e", 3.14159f);
+        v.eyeColor = cfg.v3("eye.color", make_float3(0.92f, 0.96f, 1.0f));
+        v.light[1].le = 0.0f;
     }
     v.fillLe = cfg.f("fill", 0.03f);
     v.fillColor = cfg.v3("fill.color", make_float3(0.80f, 0.88f, 1.0f));
@@ -453,8 +460,15 @@ HeykelView HeykelApp::view() const {
     v.albedo[1] = cfg.v3("albedo.plinth", make_float3(0.16f, 0.16f, 0.16f));
     v.albedo[2] = cfg.v3("albedo.floor", make_float3(0.035f, 0.035f, 0.035f));
     v.exposure = std::exp2(ev + cfg.f("ev", 0.0f));
+    v.previewGain = cfg.f("preview.gain", 1.2f);
+    v.previewRays = previewRays;
     v.sample = samples;
-    v.bounces = cfg.i("bounces", 3);
+    // two bounces where the light travels between big white surfaces, one deep in the lattice where a bounce costs as
+    // much as the rest of the path and its light differs by little (measured: 32 -> 23 ms a sample at 10,000 times)
+    v.bounces = level < cfg.f("bounces.deep.from", 100.0f) ? cfg.i("bounces", 2) : cfg.i("bounces.deep", 1);
+    v.adaptMin = cfg.f("adapt.min", 32.0f);
+    v.adaptRel = cfg.f("adapt.rel", 0.012f);
+    v.adaptAbs = cfg.f("adapt.abs", 0.0015f);
     return v;
 }
 
@@ -576,6 +590,20 @@ void HeykelApp::settleLight() {
     aimLight(focus);
 }
 
+// While zooming: the lamp moves with the camera (zoomAbout), but deep in the lattice an arch comes between it and its
+// target. One ray a frame says so; then the nearest clear direction (otherwise only the flat light from the camera is
+// left and the preview turns into a grey haze of arches, as the study saw at 64 times).
+void HeykelApp::keepLampClear() {
+    if (level <= 1.0f) return;
+    const double e = std::max(double(lightDist) * 1e-3, 1e-12);
+    const D3 p = lightTarget;
+    const D3 g = d3(deHost(p + d3(e, 0, 0)) - deHost(p - d3(e, 0, 0)), deHost(p + d3(0, e, 0)) - deHost(p - d3(0, e, 0)),
+                    deHost(p + d3(0, 0, e)) - deHost(p - d3(0, 0, e)));
+    const double l = length(g);
+    const float3 n = l > 0.0 ? f3(g * (1.0 / l)) : make_float3(0, 1, 0);
+    if (!lampClear(lightTarget, n, lampDir, lightDist)) clearLamp(&n);
+}
+
 bool HeykelApp::orbit(float dyaw, float dpitch) {
     const D3 rel0 = camPos - focus;
     // yaw: the forward's horizontal part turns by dyaw, the offset with it
@@ -638,9 +666,13 @@ void HeykelApp::renderPreview() {
     cudaEventRecord(b);
     cudaEventSynchronize(b);
     cudaEventElapsedTime(&previewMs, a, b);
+    // fewer preview rays when it is slow (deep in the lattice), more again when there is time: ~40 ms at most
+    if (previewMs > 40.0f && previewRays > 1) previewRays /= 2;
+    else if (previewMs < 15.0f && previewRays < 4) previewRays *= 2;
     cudaEventDestroy(a);
     cudaEventDestroy(b);
     cudaMemset(accum, 0, size_t(width) * height * sizeof(float4));
+    cudaMemset(accY2, 0, size_t(width) * height * sizeof(float));
     samples = 0;
 }
 
@@ -656,7 +688,7 @@ void HeykelApp::pathPass(int spp, int stripe, int stripes) {
     cudaEventCreate(&a);
     cudaEventCreate(&b);
     cudaEventRecord(a);
-    heykelPath(v, accum, spp, stripe, stripes, 0);
+    heykelPath(v, accum, accY2, spp, stripe, stripes, 0);
     cudaEventRecord(b);
     cudaEventSynchronize(b);
     float ms = 0.0f;
@@ -752,6 +784,8 @@ int runHeykelCli(int argc, char** argv) {
     int w = 1280, h = 720;
     std::string test;
     int dives = 0;
+    D3 target;
+    bool hasTarget = false, moving = false;
     unsigned int seed = 1u;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
@@ -768,6 +802,13 @@ int runHeykelCli(int argc, char** argv) {
         else if (a == "--test") test = next();
         else if (a == "--dalis") dives = std::stoi(next());
         else if (a == "--seed") seed = unsigned(std::stoul(next()));
+        else if (a == "--hareket") moving = true;
+        else if (a == "--hedef") {   // a world point to zoom straight at (the tour's dives)
+            std::stringstream ss(next());
+            char c;
+            ss >> target.x >> c >> target.y >> c >> target.z;
+            hasTarget = true;
+        }
     }
     app.loadConfig();
     app.width = w;
@@ -812,7 +853,17 @@ int runHeykelCli(int argc, char** argv) {
             app.home();
             app.defaultLight();
             app.aimLight(app.homeFocus);
-            if (z > 1.0f) {   // as a hand on the wheel would: twice closer a step, picking again under the same pixel
+            if (z > 1.0f && hasTarget) {   // straight at a world point, as the tour does
+                if (moving) {   // the picture in the middle of the zoom: small steps, the lamp kept clear, not settled
+                    while (app.level < z * 0.999f) {
+                        app.zoomAbout(target, std::min(0.05f, std::log(z / app.level)));
+                        app.keepLampClear();
+                    }
+                } else {
+                    app.zoomAbout(target, std::log(z));
+                    app.settleLight();
+                }
+            } else if (z > 1.0f) {   // as a hand on the wheel would: twice closer a step, picking again under the same pixel
                 D3 q;
                 float3 n;
                 bool ok = true;
@@ -826,6 +877,8 @@ int runHeykelCli(int argc, char** argv) {
                     std::printf("  x%.0f: secilen noktada yuzey yok (x%.0f'de)\n", z, app.level);
                     continue;
                 }
+                // the point zoomed at, for the tour (resolution-free: a world point, not a pixel)
+                std::printf("  x%g odak %.17g, %.17g, %.17g\n", z, app.focus.x, app.focus.y, app.focus.z);
                 app.settleLight();
             }
             const double t0 = nowS();

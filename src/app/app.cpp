@@ -552,11 +552,13 @@ int App::run(const Options& opt) {
                 control("yapi", 0); wait(6.0);
             }
             if (infos_[s].id == "heykel") {
-                // the study: still (accumulating), the wheel towards the middle twice, the light by a click and a drag,
-                // the turn with the right button, back with R, then every candidate from the panel
+                // still (accumulating), the wheel towards the middle (10 and 1,000 times, then 10,000), the light by a
+                // click and a drag, the turn with the right button, back with R, then the tour from the panel to its
+                // first dive's bottom, stopped by a key
                 wait(3.0); log("heykel ilk"); shot("heykel_ilk");
-                mouse(0.50f, 0.45f); wait(0.2); wheel(4.0f); wait(2.0); log("heykel yakin"); shot("heykel_yakin");
-                wheel(4.0f); wait(4.0); log("heykel daha yakin"); shot("heykel_daha_yakin");
+                mouse(0.50f, 0.45f); wait(0.2); wheel(8.0f); wait(3.0); log("heykel yakin"); shot("heykel_yakin");
+                wheel(15.0f); wait(5.0); log("heykel 1000"); shot("heykel_1000");
+                wheel(8.0f); wait(6.0); log("heykel 10000"); shot("heykel_10000");
                 mouse(0.44f, 0.52f); wait(0.1); left(true); wait(0.1); left(false); wait(3.0); shot("heykel_isik");
                 left(true); wait(0.05);
                 for (int k = 1; k <= 12; ++k) { mouse(0.44f + 0.008f * k, 0.52f - 0.004f * k); wait(0.03); }
@@ -564,11 +566,13 @@ int App::run(const Options& opt) {
                 mouse(0.50f, 0.50f); right(true); wait(0.05);
                 for (int k = 1; k <= 12; ++k) { mouse(0.50f + 0.01f * k, 0.50f); wait(0.03); }
                 right(false); wait(3.0); log("heykel cevrildi"); shot("heykel_cevrildi");
-                key(GLFW_KEY_R); wait(1.0);
-                for (int c = 1; c < 5; ++c) {
-                    control("aday", c); wait(4.0); log("heykel aday " + std::to_string(c)); shot("heykel_aday_" + std::to_string(c));
-                }
-                control("aday", 0); wait(1.0);
+                key(GLFW_KEY_R); wait(2.0); mouse(0.95f, 0.10f);
+                control("tur", 0); wait(4.0); log("heykel tur ev"); shot("heykel_tur_ev");
+                wait(6.0); log("heykel tur 10"); shot("heykel_tur_10");
+                wait(10.0); log("heykel tur 100"); shot("heykel_tur_100");
+                wait(10.0); log("heykel tur 1000"); shot("heykel_tur_1000");
+                wait(10.0); log("heykel tur 10000"); shot("heykel_tur_10000");
+                key(GLFW_KEY_T); wait(0.5); key(GLFW_KEY_R); wait(1.0);
             }
             if (infos_[s].id == "laboratuvar") {
                 // every experiment: live, its trigger on the coarse world, the fine pass asked for, the recording as it
