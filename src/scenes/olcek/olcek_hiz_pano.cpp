@@ -549,6 +549,32 @@ void drawPanels(const Pano& p, PanoState& st, const ui::Rect& view, float Sapp, 
     }
 }
 
+void drawEyeLabels(const std::vector<EyeLabel>& labels, const ui::Rect& view, float Sapp, const std::vector<ui::Rect>& avoid) {
+    const float S = std::min(Sapp, view.h / 1440.0f);
+    const ui::TextStyle nameT = theme::small(theme::Scale{S}, white(0.88f));
+    const ui::TextStyle distT = theme::mono(theme::Scale{S}, 12.5f, white(0.62f));
+    std::vector<ui::Rect> taken = avoid;
+    for (const EyeLabel& l : labels) {
+        const float m = S * 24.0f;
+        if (l.x < view.x + m || l.x > view.x + view.w - m || l.y < view.y + m || l.y > view.y + view.h - m) continue;
+        const std::string d = distText(l.dist);
+        // up and to the right of its disc, a short line to it
+        const float off = std::max(l.r, S * 3.0f) * 0.7071f + S * 8.0f;
+        const float ax = l.x + off, ay = l.y - off, tx = ax + S * 14.0f, ty = ay - S * 14.0f;
+        const float w = std::max(ui::measure(l.name, nameT), ui::measure(d, distT)) + S * 8.0f, h = S * 40.0f;
+        const ui::Rect box{tx - S * 4.0f, ty - h + S * 2.0f, w, h};
+        bool clash = false;
+        for (const ui::Rect& r : taken)
+            if (r.w > 0.0f && box.x < r.x + r.w && box.x + box.w > r.x && box.y < r.y + r.h && box.y + box.h > r.y) clash = true;
+        if (clash) continue;
+        taken.push_back(box);
+        ui::line(l.x + (std::max(l.r, S * 3.0f) + S * 3.0f) * 0.7071f, l.y - (std::max(l.r, S * 3.0f) + S * 3.0f) * 0.7071f, tx - S * 2.0f,
+                 ty + S * 2.0f, std::max(1.0f, S), white(0.45f));
+        ui::text(tx, ty - S * 36.0f, l.name, nameT);
+        ui::text(tx, ty - S * 17.0f, d, distT);
+    }
+}
+
 void drawEnergyKey(const ui::Rect& view, float Sapp, double phi, const Blackbody& bb, const std::vector<ui::Rect>& avoid) {
     const float S = std::min(Sapp, view.h / 1440.0f);
     // the bands by their peak's temperature (Wien: lambda = 2.898e-3 / T): microwaves (from 1 m), infrared (from 1 mm),

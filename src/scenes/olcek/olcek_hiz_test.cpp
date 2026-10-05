@@ -700,6 +700,60 @@ int runHizTests(OlcekApp& app) {
               "goz: Andromeda varista gokyuzunun isigi, yakinda model, 21 dokuzda bir nokta");
     }
 
+    // ---- 10. the stops (H5): Alpha Centauri from Proxima, Proxima's disc and b from the stop, the Earth at the start
+    {
+        const hz::Route& R = app.route;
+        const V3 stop = R.target[0];
+        const double AU = 1.495978707e11;
+        // A and B at their measured places: 12,016 and 12,010 AU from Proxima, -6.8 and -5.5 there (PLAN §3.3)
+        bool ab = app.alphaCenStar[0] >= 0 && app.alphaCenStar[1] >= 0;
+        double dA = 0.0, dB = 0.0, mA = 0.0, mB = 0.0;
+        if (ab) {
+            auto mag = [&](int i, double& d) {
+                const V3 p = app.sc.stars()[size_t(i)];
+                d = length(p - R.proxima) / AU;
+                const double r = length(p - stop);
+                const double f = double(app.sc.starLight()[size_t(i)].w) * 3.828e26 / (4.0 * kPi * r * r);
+                return -26.74 - 2.5 * std::log10(f / 1361.0);
+            };
+            mA = mag(app.alphaCenStar[0], dA);
+            mB = mag(app.alphaCenStar[1], dB);
+        }
+        std::printf("    Alfa Erboga Proxima'dan: A %.0f AU, %.2f kadir; B %.0f AU, %.2f kadir\n", dA, mA, dB, mB);
+        check(ab && std::fabs(dA - 12016.0) < 30.0 && std::fabs(dB - 12010.0) < 30.0 && std::fabs(mA + 6.79) < 0.12 && std::fabs(mB + 5.47) < 0.12,
+              "duraklar: Alfa Erboga A ve B Proxima'dan 12.000 AU'da, -6,8 ve -5,5 kadir");
+        // Proxima from the stop (b's orbit): 1.69 degrees; b 60 degrees off it, 0.0486 AU away, at the automatic arrival
+        hz::Ship s = hz::depart(R);
+        s.x = hz::dd(0.0);
+        hz::Eye e = app.eyeAt(s, 0.0, 0.0, std::tan(37.5 * kPi / 180.0));
+        e.worldT = 2.0 * hz::driveEarthTime(hz::peakFrom(0.0, R.length[0]));
+        e.k = std::exp2(10.0) * 3e-3;
+        hz::EyeSum sum;
+        app.renderEye(e, sum);
+        const double dP = length(R.proxima - stop);
+        const double discDeg = 2.0 * std::asin(0.1542 * 6.957e8 / dP) * 180.0 / kPi;
+        const V3 bPos = app.sc.nodeFromSun(olcek::kProximaB);
+        const double bAng = std::acos(std::clamp(dot(normalize(bPos - stop), normalize(R.proxima - stop)), -1.0, 1.0)) * 180.0 / kPi;
+        const double bDist = length(bPos - stop) / AU;
+        std::printf("    duraktan Proxima %.3f derece; b Proxima'dan %.1f derece, %.4f AU uzakta; gozun olcusu %.3e (alanin ortalamasi %.3e)\n",
+                    discDeg, bAng, bDist, sum.adaptVisible, sum.visibleView / sum.viewShare);
+        check(std::fabs(discDeg - 1.69) < 0.02 && std::fabs(bAng - 60.0) < 1.0 && std::fabs(bDist - 0.0486) < 0.001,
+              "duraklar: duraktan Proxima 1,69 derece, b ondan 60 derece ve 0,049 AU otede");
+        check(sum.adaptVisible > 100.0 * sum.visibleView / sum.viewShare,
+              "duraklar: Proxima'ya bakan goz onun yuzune uyar (alanin ortalamasina degil)");
+        // the start: looking back, the Earth fills 17 degrees and the eye adapts to its sunlit face
+        hz::Ship s0 = hz::depart(R);
+        hz::Eye e0 = app.eyeAt(s0, kPi, 0.0, std::tan(37.5 * kPi / 180.0));
+        e0.k = std::exp2(10.0) * 3e-3;
+        hz::EyeSum sum0;
+        app.renderEye(e0, sum0);
+        bool earthBall = false;
+        for (int i = 0; i < app.view.nBalls; ++i) earthBall = earthBall || app.view.balls[i].pattern == 1;
+        const double ev0 = app.eyeEv(sum0.adaptVisible);
+        std::printf("    kalkista arkaya: Dunya top %d, goz EV %.2f (gece goku %.2f)\n", int(earthBall), ev0, app.eyeEv(app.nightSky));
+        check(earthBall && ev0 < 2.0, "duraklar: kalkista arkada Dunya (fotogercekci top), goz gunduze uyar");
+    }
+
     std::printf("hiz: %s (%d kalan)\n", fails == 0 ? "GECTI" : "KALDI", fails);
     return fails == 0 ? 0 : 1;
 }
@@ -724,10 +778,12 @@ int runHizFrames(OlcekApp& app, const std::vector<double>& phis, int leg, double
         if (sides.empty()) {
             hz::Eye e = app.eyeAt(s, yaw, pitch, std::tan(0.5 * fovDeg * kPi / 180.0));
             e.energy = app.cfg.f("hiz.enerji", 1.0f) > 0.5f;
+            // the world's clock: the automatic arrival's at Proxima (the leg's end), otherwise the start's
+            if (s.leg == 0 && frac >= 1.0) e.worldT = 2.0 * hz::driveEarthTime(hz::peakFrom(0.0, R.length[0]));
             hz::EyeSum sum;
             e.k = std::exp2(app.eyeEv(0.0)) * 3e-3;
             app.renderEye(e, sum);   // a dry run for the sky's light: the adapted exposure
-            const double ev = e.energy ? app.eyeEvEnergy(sum.energyView / sum.viewShare) : app.eyeEv(sum.visibleView / sum.viewShare);
+            const double ev = e.energy ? app.eyeEvEnergy(sum.adaptEnergy) : app.eyeEv(sum.adaptVisible);
             e.k = std::exp2(ev) * 3e-3;
             app.renderEye(e, sum);
             char name[96];
@@ -736,7 +792,7 @@ int runHizFrames(OlcekApp& app, const std::vector<double>& phis, int leg, double
             std::printf("phi %7.3f (%5.2f dokuz, gamma %.3e)  EV %.2f  gokyuzu %.3e (Gunes %.2e, butun bantlar %.3e)  gorus alaninda %d yildiz  "
                         "D %.3e .. %.3e  gun %.2f  kare %.2f ms (ana %.2f)\n",
                         s.phi, k.nines, k.gamma, ev, sum.visible, sum.visibleSun, sum.bolometric, sum.inView, sum.minD, sum.maxD,
-                        app.eyeDay((e.energy ? sum.energyView : sum.visibleView) / sum.viewShare, e.energy), app.frameMs, app.hostMs);
+                        app.eyeDay(e.energy ? sum.adaptEnergy : sum.adaptVisible, e.energy), app.frameMs, app.hostMs);
         } else {
             for (double sv : sides) {
                 Scale& sc = app.sc;

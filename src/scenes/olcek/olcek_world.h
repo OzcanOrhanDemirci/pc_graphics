@@ -59,6 +59,8 @@ enum Node : int {
     kMercury, kVenus, kMars, kJupiter, kSaturn, kUranus, kNeptune,
     kM31, kM33, kLMC, kSMC,
     kRocket,       // the second option "Hız": the rocket, hung on the Sun (its place from olcek_hiz.h's route)
+    kProxima,      // ... its far stop, Proxima Centauri (setProxima), hung on the Sun
+    kProximaB,     // ... and its planet b on its orbit
     kNodeCount
 };
 
@@ -155,6 +157,28 @@ public:
     const std::vector<V3>& galaxyPoints() const { return galPos_; }
     const std::vector<float4>& galaxyFlux() const { return galFlux_; }
     V3 laniakeaFromSun() const { return lanFromSun_; }
+    // the second option's far stop (H5): Proxima Centauri and its planet b as bodies (both views draw them). Proxima at
+    // the route's place (from the Sun, m); b on its orbit (Faria et al. 2022: a = 0.04857 AU, P = 11.1868 d), its plane
+    // and phase a representation: the plane through the Sun-Proxima line, b 60 degrees round from the near point (the
+    // rocket's stop) at the rest frame's time t0 (the automatic arrival's): 60 degrees off Proxima in the sky, a crescent
+    // of 4th magnitude (nearer to Proxima it is lost in its light: no eye adapted to it sees a planet beside it)
+    void setProxima(V3 fromSun, double t0, int catalogueIndex, float3 colour);   // colour: its light's (CIE, luminance 1)
+    struct BodyLight {
+        V3 pos;                 // from the Sun (m)
+        double flux = 0.0;      // its light at the eye (W/m^2, the Sun's spectrum's: the visible eye's unit)
+        double T = 5772.0;      // its light's colour temperature (K)
+        float weight = 1.0f;    // its point's share (the ball draws the rest)
+        float sigma = 0.75f;    // the point's radius (pixels)
+        bool star = false;      // a glowing body (the Sun, Proxima): the catalogue's star carries its light and point
+        int node = 0;
+        double angR = 0.0;      // its angular radius (rest frame, radians)
+        double peak = 0.0;      // its face's brightest radiance (W/m^2/sr): what the eye looking at it adapts to
+    };
+    // the bodies seen from the second option's eye (H5): balls in its camera space (unit metres per camera unit; the
+    // kernel meets them along the rest frame's ray) where wider than a pixel or two (doppler: D of a rest-frame
+    // direction, the aberration shrinking an angle 1/D times); each body's light at the eye
+    void eyeBodies(OlcekView& v, V3 eye, V3 right, V3 up, V3 fwd, double unit, double k, double pixAngle,
+                   const std::function<double(V3)>& doppler, std::vector<BodyLight>& out);
 
     void configure(const Config& cfg);
     void init();                  // the catalogue, the tree, today's orbits
@@ -222,7 +246,15 @@ private:
     // period as it runs at this scale (the Earth's year is held near home: longer, or infinite)
     V3 sunShift(int node, double tau) const;
     double runPeriod(int orbit) const;
-    void ballOrPoint(OlcekView& v, std::vector<GSplat>& splats, const Body& b, double k) const;
+    // wEye: the second option's eye (its ball's share given, no point: the eye draws the points; no orbit drawn along)
+    void ballOrPoint(OlcekView& v, std::vector<GSplat>& splats, const Body& b, double k, const float* wEye = nullptr) const;
+    bool proximaSet_ = false;
+    V3 proximaFromSun_, proximaU_{1, 0, 0}, proximaV_{0, 1, 0};
+    double proximaT0_ = 0.0, hizT_ = 0.0;
+    int proximaStar_ = -1;        // the catalogue's Proxima: the body draws it in the side view (not twice)
+    float3 proximaColour_{1.0f, 0.75f, 0.45f};
+    void addProxima();
+    void earthAir(GAtmo& a, double k, float fade) const;
     void buildInner(OlcekView& v);   // olcek_inner.cpp: the particles below the light
     double foamClock_ = 0.0;         // the Planck foam's bubbles: cycles of a Planck time, wrapped
 };

@@ -26,6 +26,10 @@ struct GBall {
     float3 ax{1, 0, 0}, ay{0, 1, 0}, az{0, 0, 1};   // its body axes (the pattern turns with it)
     float spinBlur = 0.0f;      // radians: how far it turns while the eye's shutter is open (the averaging of PLAN §4)
     float3 home{0, 0, 1};       // the Earth: the beach in its body axes (the placeholder's coast is drawn there)
+    float T = 0.0f;             // the second option's eye: its light's colour temperature (Doppler-shifted as a blackbody's)
+    float time = 0.0f;          // the rest frame's seconds (Proxima's flares)
+    float cap = 0.0f;           // the side view's map: its display's brightest channel held to this (its colour kept: a
+                                // red dwarf and its planet in deep space's exposure); 0 none
 };
 
 // a Gaussian cloud of light: the column through its middle is `emit` (a brightness, the same at every distance)

@@ -1092,8 +1092,21 @@ __device__ float3 fieldSlice(const GField& F, float px, float py) {
 }
 
 // One sample: the nearest surface (spheres, the ground), then the light of the clouds and discs in front of it
+// (the second option's eye: below, with its sky)
+__device__ void eyeRest(float px, float py, float3& r, double& D, double& dzOut);
+__device__ float3 eyeShift(float3 L, float T, double D);
+__device__ float3 dwarfSurface(const GBall& b, float3 q, float mu, float fpRad);
+
 __device__ float3 sampleAt(float px, float py, float& depth) {
-    const float3 d = rayDir(px, py);
+    // the second option's eye: the ray back in the rest frame (the aberration), and its Doppler factor
+    float3 d;
+    double Dp = 1.0;
+    if (cV.sky.on) {
+        double dzp;
+        eyeRest(px, py, d, Dp, dzp);
+    } else {
+        d = rayDir(px, py);
+    }
     float tBest = 1e30f;
     int which = -1;
     for (int i = 0; i < cV.nBalls; ++i) {
@@ -1148,7 +1161,12 @@ __device__ float3 sampleAt(float px, float py, float& depth) {
         const float3 n = normalize(p - b.c);
         if (b.emit.x + b.emit.y + b.emit.z > 0.0f) {
             const float mu = fmaxf(-dot(n, d), 0.0f);
-            col = b.emit * (0.4f + 0.6f * mu);   // limb darkening
+            if (b.pattern == 3) {   // a red dwarf's face
+                const float3 q = make_float3(dot(n, b.ax), dot(n, b.ay), dot(n, b.az));
+                col = dwarfSurface(b, q, mu, tBest * cV.pixAngle / fmaxf(b.r, 1e-30f));
+            } else {
+                col = b.emit * (0.4f + 0.6f * mu);   // limb darkening
+            }
         } else {
             float3 alb = b.albedo;
             const float3 q = make_float3(dot(n, b.ax), dot(n, b.ay), dot(n, b.az));
@@ -1213,6 +1231,11 @@ __device__ float3 sampleAt(float px, float py, float& depth) {
             } else {
                 col = alb * (b.lit * fmaxf(dot(n, b.toLight), 0.0f));
             }
+        }
+        if (cV.sky.on && b.T > 0.0f) col = eyeShift(col, b.T, Dp);   // the eye: its light Doppler-shifted
+        if (b.cap > 0.0f) {   // one factor for the whole face (its spots and limb kept): its brightest to the cap
+            const float3 top = b.emit.x + b.emit.y + b.emit.z > 0.0f ? b.emit : b.albedo * b.lit;
+            col = col * fminf(1.0f, b.cap / fmaxf(fmaxf(top.x, top.y), fmaxf(top.z, 1e-30f)));
         }
         col = col * b.weight;
     }
@@ -1376,37 +1399,71 @@ __device__ float3 eyeSky(float px, float py) {
             bbAt(s, lt0, c0, l0);
             bbAt(s, lt1, c1, l1);
             const float lw = log10f(lumP * s.panoWeight) + 4.0f * lD + s.lk;   // its radiance D^4 times, exposed
-            if (s.energy) out += energyColour(lt1, c1) * exp10f(fminf(lw - l0, 30.0f));   // its light in every band
-            else if (l1 > -200.0f) {
-                // its own colour, turned as the blackbody's turns (luminance 1), times its light
-                float3 col = make_float3(P.x * c1.x / fmaxf(c0.x, 1e-3f), P.y * c1.y / fmaxf(c0.y, 1e-3f), P.z * c1.z / fmaxf(c0.z, 1e-3f));
-                const float lc = 0.2126f * col.x + 0.7152f * col.y + 0.0722f * col.z;
-                out += col * (exp10f(fminf(lw + l1 - l0, 30.0f)) / fmaxf(lc, 1e-12f));
-            }
+            // its own colour, turned as the blackbody's turns (luminance 1), times its light
+            const float3 col = make_float3(P.x * c1.x / fmaxf(c0.x, 1e-3f), P.y * c1.y / fmaxf(c0.y, 1e-3f), P.z * c1.z / fmaxf(c0.z, 1e-3f));
+            const float lc = 0.2126f * col.x + 0.7152f * col.y + 0.0722f * col.z;
+            if (s.energy) out += energyColour(lt1, col * (1.0f / fmaxf(lc, 1e-12f))) * exp10f(fminf(lw - l0, 30.0f));   // every band
+            else if (l1 > -200.0f) out += col * (exp10f(fminf(lw + l1 - l0, 30.0f)) / fmaxf(lc, 1e-12f));
         }
     }
     return out;
 }
 
-// a galaxy's model seen by the eye: its rest-frame light along the pixel's rest-frame ray (the footprint D times the
-// pixel's), shifted as a blackbody of its colour temperature (D^4 and the visible share; in the energy eye every band)
-__device__ float3 eyeGalaxy(const GGalaxy& g, float3 r, double D, double dz) {
+// light of colour temperature T seen with Doppler factor D by the eye: shifted as a blackbody's (its own colour turned
+// as the blackbody's turns, D^4 and the visible share). In the energy eye every band: the false colour of the band its
+// peak is in, its own colour while that is the visible band
+__device__ float3 eyeShift(float3 L, float T, double D) {
     const GSky& s = cV.sky;
-    const float Df = float(D), lD = log10f(Df);
-    const float3 L = galaxyLight(g, r, 1e30f, s.pixAngle * float(dz) * Df / g.kpc);
     const float lum = 0.2126f * L.x + 0.7152f * L.y + 0.0722f * L.z;
     if (!(lum > 0.0f)) return make_float3(0, 0, 0);
-    const float lt0 = log10f(fmaxf(g.T, 100.0f)), lt1 = lt0 + lD;
+    const float lD = log10f(float(D)), lt0 = log10f(fmaxf(T, 100.0f)), lt1 = lt0 + lD;
     float3 c0, c1;
     float l0, l1;
     bbAt(s, lt0, c0, l0);
     bbAt(s, lt1, c1, l1);
     const float lw = log10f(lum) + 4.0f * lD;
-    if (s.energy) return energyColour(lt1, c1) * exp10f(fminf(lw - l0, 30.0f));
-    if (l1 < -200.0f) return make_float3(0, 0, 0);
     const float3 col = make_float3(L.x * c1.x / fmaxf(c0.x, 1e-3f), L.y * c1.y / fmaxf(c0.y, 1e-3f), L.z * c1.z / fmaxf(c0.z, 1e-3f));
     const float lc = 0.2126f * col.x + 0.7152f * col.y + 0.0722f * col.z;
+    if (s.energy) return energyColour(lt1, col * (1.0f / fmaxf(lc, 1e-30f))) * exp10f(fminf(lw - l0, 30.0f));
+    if (l1 < -200.0f) return make_float3(0, 0, 0);
     return col * (exp10f(fminf(lw + l1 - l0, 30.0f)) / fmaxf(lc, 1e-30f));
+}
+
+// a galaxy's model seen by the eye: its rest-frame light along the pixel's rest-frame ray (the footprint D times the
+// pixel's), shifted as a blackbody of its colour temperature
+__device__ float3 eyeGalaxy(const GGalaxy& g, float3 r, double D, double dz) {
+    const float3 L = galaxyLight(g, r, 1e30f, cV.sky.pixAngle * float(dz) * float(D) / g.kpc);
+    return eyeShift(L, g.T, D);
+}
+
+// a red dwarf's face (Proxima Centauri, H5): a cool star's stronger limb darkening, its large dark spots, a granulation
+// of cells a fiftieth of the radius fading below the pixel, and now and then a flare (a flare star: a small patch flashing
+// up in two seconds, bluish-white, fading over a minute). b.time: the rest frame's seconds; a flare every 70 s at a place
+// drawn from its number, on the face turned to the eye
+__device__ float3 dwarfSurface(const GBall& b, float3 q, float mu, float fpRad) {
+    float I = 0.25f + 0.75f * mu;
+    // spots: cool patches (~2,700 K against 3,042: 40% darker in the visible), a fifth of the face
+    const float sp = 0.6f * gnoise3(q.x * 2.2f + 3.0f, q.y * 2.2f, q.z * 2.2f, 3101) + 0.4f * gnoise3(q.x * 5.3f, q.y * 5.3f + 7.0f, q.z * 5.3f, 3102);
+    I *= 1.0f - 0.42f * smoothstepf(0.56f, 0.66f, sp);
+    const float lim = saturate(1.0f - 2.0f * fpRad * 50.0f);
+    if (lim > 0.0f) I *= 1.0f + 0.14f * lim * (gnoise3(q.x * 50.0f, q.y * 50.0f, q.z * 50.0f, 3103) - 0.5f);
+    float3 col = b.emit * I;
+    const float period = 70.0f;
+    const float n = floorf(b.time / period), t = b.time - n * period;
+    if (t < 45.0f) {
+        const float a = t < 2.0f ? t * 0.5f : __expf(-(t - 2.0f) / 9.0f);
+        float3 v0 = normalize(b.c * -1.0f);
+        v0 = make_float3(dot(v0, b.ax), dot(v0, b.ay), dot(v0, b.az));
+        const int ni = int(n);
+        const float3 jit = make_float3(hash1(ni, 3, 7, 3201) - 0.5f, hash1(ni, 5, 11, 3202) - 0.5f, hash1(ni, 13, 17, 3203) - 0.5f);
+        const float3 pf = normalize(v0 + jit * 1.2f);
+        const float3 dq = q - pf;
+        const float d2 = dot(dq, dq);
+        const float core = __expf(-0.5f * d2 / (0.045f * 0.045f)), halo = __expf(-0.5f * d2 / (0.14f * 0.14f));
+        const float lumE = 0.2126f * b.emit.x + 0.7152f * b.emit.y + 0.0722f * b.emit.z;
+        col += make_float3(0.85f, 0.93f, 1.15f) * (lumE * a * (5.0f * core + 0.6f * halo));
+    }
+    return col;
 }
 
 // the eye's glare round the brightest sources (its core: the source itself, inside 0.1 degrees)

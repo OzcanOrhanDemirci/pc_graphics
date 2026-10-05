@@ -79,4 +79,14 @@ void drawPanels(const Pano& p, PanoState& state, const ui::Rect& view, float S, 
 // Sun-like star's: both move up the bands as the speed grows (D = e^phi)
 void drawEnergyKey(const ui::Rect& view, float S, double phi, const Blackbody& bb, const std::vector<ui::Rect>& avoid = {});
 
+// the eye's labels (H5): a named thing where the eye sees it (window pixels, aberrated), its disc's radius there and its
+// distance; drawn in the given order (the first wins where two would meet), none over the application's panels
+struct EyeLabel {
+    std::string name;
+    float x = 0.0f, y = 0.0f;
+    float r = 0.0f;
+    double dist = 0.0;   // m
+};
+void drawEyeLabels(const std::vector<EyeLabel>& labels, const ui::Rect& view, float S, const std::vector<ui::Rect>& avoid = {});
+
 }   // namespace olcek::hiz

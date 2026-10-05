@@ -189,6 +189,7 @@ void buildEye(const StarSet& st, const Blackbody& bb, const Eye& e, std::vector<
                 p = V3{};
                 LV = 1.0;
                 T = kTsun;
+                weight = e.sunPoint;
             } else if (i > n) {
                 const Light& l = (*extra)[i - n - 1];
                 p = l.pos;
@@ -201,6 +202,7 @@ void buildEye(const StarSet& st, const Blackbody& bb, const Eye& e, std::vector<
                 p = (*st.pos)[i];
                 LV = (*st.flux)[i].w;
                 T = (*st.temp)[i];
+                if (long(i) == long(e.proximaStar)) weight = e.proximaPoint;
             }
             const V3 rel = p - e.pos;
             const double d2 = dot(rel, rel);

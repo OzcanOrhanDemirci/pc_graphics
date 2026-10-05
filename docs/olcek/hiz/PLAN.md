@@ -280,7 +280,9 @@ alanıyla ya da arayüzün OpenGL'inde gölgelendiriciyle) H1'in ilk işi.
   2MRS noktaları. Hacimsel Samanyolu yapılmadı (içinden görünüş "zemin" gibi; normal yolculukta 21 dokuzda geçilir).
   Enerji gözü fonun duruştaki parıltısını çıkarır (DURUM H4).
 - **H5 · Duraklar:** Dünya'nın yörüngesi, Proxima (yıldız, b, Alfa Erboğa, Güneş'imiz Kraliçe'de), Andromeda'ya varış,
-  yörüngeye oturma, dönüş.
+  yörüngeye oturma, dönüş. **Bitti (10-06 gecesi):** gözde gök cisimleri (Dünya, Ay, Güneş; Proxima'nın lekeli
+  yüzü ve parlamaları; b), Alfa Erboğa ölçülen yerlerinde, etiketler, bakılan yüze uyum, güneşlik. Yörüngede
+  dolanma yok (roket durur). Ayrıntı DURUM'da.
 - **H6 · Bütünleme:** bedel panosunun ince ayarı, galeri ve "Ayrıntılar", README (iki dil), GOSTERI/DEMO, autotest,
   tam yolculuk sınaması, performans.
 

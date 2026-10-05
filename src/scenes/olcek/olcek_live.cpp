@@ -348,6 +348,7 @@ public:
             hz::drawSide(L, side_, std::min(o.scale, o.view.h / 1440.0f));
         }
         if (view_ == 0 && energy_ && o.hud) hz::drawEnergyKey(o.view, o.scale, a_.ship.phi, a_.bb, o.panels);
+        if (view_ == 0 && o.hud) eyeLabels(o);
         if (!o.hud || !graphs_) return;
         const hz::Ship& s = a_.ship;
         hz::Pano p;
@@ -580,8 +581,7 @@ private:
                 a_.renderEye(e, eyeSum_);
                 // the eye adapts to the light in its field, a known function of where, how fast and where it looks
                 // (never read from the picture), slowly (a second or so); the energy eye to every band's light
-                double target = energy_ ? a_.eyeEvEnergy(eyeSum_.energyView / eyeSum_.viewShare)
-                                        : a_.eyeEv(eyeSum_.visibleView / eyeSum_.viewShare);
+                double target = energy_ ? a_.eyeEvEnergy(eyeSum_.adaptEnergy) : a_.eyeEv(eyeSum_.adaptVisible);
                 if (!std::isfinite(target)) target = std::isfinite(eyeEv_) ? eyeEv_ : 17.5;   // (never a NaN kept)
                 if (!evInit_) {
                     eyeEv_ = target;
@@ -702,6 +702,58 @@ private:
         r.text = L("Yolculuğu baştan başlat", "Start the journey over");
         r.detail = L("İki kez bas", "Press twice");
         st.controls.push_back(r);
+    }
+
+    // the eye's labels (H5): where the eye sees each named thing (aberrated as its light), the distance to it
+    void eyeLabels(const app::Overlay& o) {
+        const olcek::Scale& sc = a_.sc;
+        const hz::Eye e = a_.eyeAt(a_.ship, yaw_, pitch_, std::pow(10.0, zoom_));
+        const hz::Kin k = hz::kin(e.phi);
+        const double emp = std::exp(-e.phi);
+        std::vector<hz::EyeLabel> labels;
+        auto at = [&](const std::string& name, olcek::V3 p, double radius, hz::EyeLabel* out = nullptr) {
+            const olcek::V3 rel = p - e.pos;
+            const double d = olcek::length(rel);
+            if (!(d > radius)) return false;
+            double D = 1.0;
+            const olcek::V3 np = e.phi > 0.0 ? hz::aberrateDirFast(rel * (1.0 / d), e.motion, k, emp, D) : rel * (1.0 / d);
+            const double z = olcek::dot(np, e.fwd);
+            if (z <= 0.0) return false;
+            const double x = olcek::dot(np, e.right) / z / e.tanHalfX, y = olcek::dot(np, e.up) / z / e.tanHalfY;
+            if (std::fabs(x) > 1.0 || std::fabs(y) > 1.0) return false;
+            hz::EyeLabel l;
+            l.name = name;
+            l.x = o.view.x + float((x + 1.0) * 0.5) * o.view.w;
+            l.y = o.view.y + float((1.0 - y) * 0.5) * o.view.h;
+            l.r = float(std::asin(std::min(1.0, radius / d)) / std::max(D, 1e-300) / (2.0 * e.tanHalfX) * o.view.w);
+            l.dist = d;
+            if (out) *out = l;
+            else labels.push_back(l);
+            return true;
+        };
+        // the Sun: from Proxima's neighbourhood a star of Cassiopeia (the sky's other side from the Earth's Proxima)
+        const bool nearProxima = olcek::length(e.pos - a_.route.proxima) < 0.5 * hz::kLy;
+        at(nearProxima ? L("Güneş · Kraliçe takımyıldızında", "the Sun · in Cassiopeia") : L("Güneş", "the Sun"), olcek::V3{}, 6.957e8);
+        at(L("Dünya", "the Earth"), sc.nodeFromSun(olcek::kEarth), 6.371e6);
+        at(L("Ay", "the Moon"), sc.nodeFromSun(olcek::kMoon), 1.7374e6);
+        at("Proxima Centauri", a_.route.proxima, 1.0728e8);
+        at("Proxima b", sc.nodeFromSun(olcek::kProximaB), 6.5e6);
+        if (a_.alphaCenStar[0] >= 0 && a_.alphaCenStar[1] >= 0) {   // one label while the pair is one point
+            hz::EyeLabel A, B;
+            const bool a = at(L("Alfa Erboğa A", "Alpha Centauri A"), sc.stars()[size_t(a_.alphaCenStar[0])], 8.5e8, &A);
+            const bool b = at(L("Alfa Erboğa B", "Alpha Centauri B"), sc.stars()[size_t(a_.alphaCenStar[1])], 6.0e8, &B);
+            if (a && b && std::hypot(A.x - B.x, A.y - B.y) < 40.0f * o.scale) {
+                A.name = L("Alfa Erboğa A ve B", "Alpha Centauri A and B");
+                labels.push_back(A);
+            } else {
+                if (a) labels.push_back(A);
+                if (b) labels.push_back(B);
+            }
+        }
+        at("Andromeda (M31)", sc.nodeFromSun(olcek::kM31), 30e3 * hz::kPc);
+        at(L("Üçgen (M33)", "Triangulum (M33)"), sc.nodeFromSun(olcek::kM33), 8e3 * hz::kPc);
+        at(L("Samanyolu'nun merkezi", "the Galaxy's centre"), sc.nodeFromSun(olcek::kGalCentre), 1.0);
+        hz::drawEyeLabels(labels, o.view, std::min(o.scale, o.view.h / 1440.0f), o.panels);
     }
 
     // ---- the journey on disk: "key = value" lines next to the project (user.cfg's neighbour, not in git)

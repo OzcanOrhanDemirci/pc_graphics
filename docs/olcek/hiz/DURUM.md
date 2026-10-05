@@ -2,6 +2,81 @@
 
 > Tek kaynak durum panosu. Plan `docs/olcek/hiz/PLAN.md`. En yeni en üstte.
 
+## 2026-10-06 gecesi · H5: duraklar
+
+**Özcan'ın bakacağı yer.**
+- **Kalkış:** sürükleyip arkana bak. Dünya 17° geniş (yer eşzamanlı yörünge uzaklığı). Ölçek'in fotogerçekçi Dünya'sı,
+  üstünde bugünün bulutları ve havanın ince mavi kenarı; %74'ü aydınlık (Güneş burnun 61° yanında).
+- **Proxima:** önde 1,69°'lik turuncu bir disk. Üstünde büyük lekeler, kenarı kararıyor, 70 saniyede bir parlıyor
+  (bir parlama yıldızı). Bakışını çevir:
+  - Alfa Erboğa A ve B parlak bir çift yıldız (−6,8 ve −5,5 kadir);
+  - Proxima b solda, 60° ötede, dördüncü kadirden bir nokta (dürbünle 60° evrede bir disk);
+  - arkada Güneş: Kraliçe takımyıldızında bir yıldız.
+  Hepsinin üstünde adları ve uzaklıkları yazıyor.
+
+**Gözde gök cisimleri** (`Scale::eyeBodies`):
+- Ölçek'in toplarıyla çizilir: Güneş, gezegenler, Ay; yeni olarak Proxima ve b. Çekirdek topları pikselin durgun
+  çerçevedeki ışınıyla keser (sapınç) ve ışıklarını renk sıcaklıklarında kara cisim gibi kaydırır (Doppler).
+  Küçükken nokta olurlar.
+- Güneş ve Proxima'nın ışığını katalogdaki yıldızları taşır (pozlama toplamı ve nokta). Topları büyüdükçe noktaları
+  söner (iki kez sayılmaz).
+- Dünya'nın havası yandan görünüşün kodundan (`Scale::earthAir`, tek kaynak). Haritalar artık iki seçenekte de aynı
+  işlevle kuruluyor (`setMaps`); önce gözde yer tutucu kıtalar çıkıyordu.
+- **Proxima Centauri:** 0,1542 R☉ (Boyajian 2012), 3.042 K, görünür ışığı V 11,13'ten (M_V 15,56). Rengi gözün CIE
+  tablosundan (dünyanın üç dalga boylu kaba kara cismi turuncuyu vermiyordu).
+  - Yüzü (`dwarfSurface`): soğuk yıldızın güçlü kenar kararması, yüzün beşte biri kadar koyu leke (~2.700 K), piksel
+    altında sönen ince granülasyon.
+  - Her 70 saniyede bir parlama: iki saniyede yükselen mavi-beyaz küçük bir leke, bir dakikada söner. Yeri parlamanın
+    numarasından, göze dönük yüzde.
+- **Proxima b:** 1,07 M⊕, ~1,02 R⊕ kayalıksa; bir temsil (resmi yok). Proxima'nın ışığıyla aydınlanır. Yörüngesi
+  (a 0,04857 AU, P 11,1868 gün; Faria 2022) Güneş-Proxima çizgisinden geçen düzlemde. Otomatik varışın anında durağın
+  60° ötesinde.
+  - Neden 60°: daha yakında Proxima'nın ışığında kaybolur. Ona uymuş bir göz yanında gezegen görmez. Bakınca Proxima
+    uyum konisinin dışında kalır, b karanlık gökte bir nokta olur.
+- **Alfa Erboğa A ve B** ölçülen yerlerinde. J2000 konumları ve öz hareketleri (Kervella 2016), Akeson 2021
+  paralaksı (750,81 mas), dikine hızları, astropy ile 2026-10-05'e taşındı. HYG ikisini 1,3248 pc'de tutuyordu.
+- **Etiketler** (`drawEyeLabels`, arayüzle): Güneş (Proxima yakınında "Kraliçe takımyıldızında"), Dünya, Ay,
+  Proxima Centauri, Proxima b, Alfa Erboğa A ve B (tek nokta iken tek etiket), Andromeda, Üçgen, Samanyolu'nun
+  merkezi. Konumları ışıklarının sapınçlı yönü. Çakışan ve panellerin altında kalan atlanır.
+
+**Göz** (sanat yönetimi fiziğin araçlarıyla):
+- **Bakılan yüze uyum:** göz, bakışın ortasındaki bir cismin yüzüne uyar. Koşul: 0,2-1°'den geniş olması (dürbünde
+  büyütülmüş hâli). Yüzünün en parlak yeri ekranın ~0,5'ine gelir, rengi doygunluğunu korur.
+  - Sınırı 10⁵ W/m²/sr: bir lambanın yüzüne uyulur, Güneş'inkine (2 × 10⁷) uyulmaz, kamaştırır.
+  - Önce: göz alanın ortalamasına uyuyor, Dünya'nın bulutları bembeyaz patlıyordu, Proxima sönük kahverengi bir
+    diskti.
+- **Güneşlik:** parlama yalnız görüş alanındaki kaynaklardan (bir objektifin başlığı gibi). Kalkışta Güneş burnun
+  61° yanında. İnsan gözünün saçılmasıyla bütün göğü beyaz bir perdeyle örterdi.
+- **Dönüşten sonra** (153°, 8 sn) göz Proxima'dan karanlığa birkaç saniyede uyar. O arada gök siyah (otomatik testin
+  `olcek_hiz_donus` karesi o an).
+
+**Yandan harita:** Proxima ve b orada da cisim (katalogdaki Proxima yıldızı yandan çizilmez, iki kez olmasın).
+Derin uzayın pozlamasında (EV 23,5) beyaz bir leke olacaklardı. Ekrandaki en parlak yerleri bir tavana çekilir (tek
+çarpan: lekeler ve kenar kalır). Kızıl cüce haritada turuncu bir disk.
+
+**Ölçümler:**
+- Kalkışta arkaya bakınca göz EV −1,18 (gece göğünde 17,50). Bulutlar ~0,5.
+- Durakta Proxima 1,691°. Göz ona bakınca EV −7,9. Ölçü 7,7 × 10⁴, alanın ortalaması 238.
+- Alfa Erboğa Proxima'dan: A 12.016 AU, −6,79 kadir; B 12.010 AU, −5,43 (HYG'nin B parlaklığıyla).
+- b Proxima'dan 60,0°, duraktan 0,0486 AU.
+- Kare (2560×1440, başsız): görüş alanında top varken 10,7-11,5 ms (piksel başına dört örnek), yokken 6-7 ms.
+- Birinci seçenek: s 1,0 / 2,5 / 7,2 / 9,0 / 12,0 / 16,5'te H5 öncesinin kareleriyle **bit bit aynı** (önceki commit
+  stash ile derlenip karşılaştırıldı).
+
+**Sınamalar** (4 yeni, hepsi GEÇTİ): Alfa Erboğa'nın uzaklık ve kadirleri; Proxima'nın açısı ve b'nin yeri; Proxima'ya
+bakan gözün onun yüzüne uyması; kalkışta Dünya topu ve gündüze uyan göz.
+
+### NE DOĞRULANMADI (H5)
+- **Özcan'ın gözü:** hiçbir durak karesine bakmadı.
+- **Parlamalar** hiçbir karede yakalanmadı (zamanlamaları 70 sn). Biçimleri yalnız koddan.
+- **Etiketler** yalnız otomatik testin Proxima varışında görüldü (Proxima ve b). Kalkışta, Alfa Erboğa'da ve
+  Andromeda'da ekranda görülmedi.
+- **Canlı kare hızı** "yalnız alanda top varken dört örnek" değişikliğinden sonra ölçülmedi (önce Proxima'da 69 fps).
+- **Yörüngeye oturma:** roket iki durakta da durur. b'nin yörüngesinde dolanma gösterilmedi (11 günde bir tur:
+  dakikalarda fark edilmez).
+- Proxima b'nin görünüşü, yörünge düzlemi ve evresi temsil. Haritadaki tavan ve gözün "bakılan yüze uyum" eşikleri
+  tasarım.
+
 ## 2026-10-06 gecesi · H4: galaksiler roketin gözünde
 
 **Özcan'ın bakacağı yer.** Andromeda yolunun sonu. Frenin son ~6 dakikasında (φ 5'ten 0'a) Andromeda önce küçük, mavi-beyaz

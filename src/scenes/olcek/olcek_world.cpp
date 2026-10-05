@@ -228,8 +228,12 @@ struct Body {
     float3 albedo;
     double glow = 0.0;    // W/m^2/sr (the Sun)
     float3 glowColor{1, 1, 1};
-    int pattern = 0;
+    int pattern = 0;      // 0 plain, 1 the Earth, 2 the Moon, 3 a red dwarf's face (Proxima)
     int orbit = -1;       // its Kepler orbit: 0..7 a planet (today::kPlanets' order), 8 the Moon
+    int light = kSun;     // the star it is lit by, its visual luminosity (W, the Sun's spectrum's) and colour
+    double lightLV = kLsun;
+    float3 lightColour{1, 1, 1};
+    double T = 5772.0;    // its light's colour temperature (K: the second option's eye shifts it as a blackbody's)
 };
 
 void Scale::configure(const Config& cfg) {
@@ -318,6 +322,8 @@ void Scale::init() {
     tree.link(kLMC, kGalCentre);
     tree.link(kSMC, kGalCentre);
     tree.link(kRocket, kSun);
+    tree.link(kProxima, kSun);
+    tree.link(kProximaB, kProxima);
     tree.off[kLocalGroup] = lg - lan;
     tree.off[kGalCentre] = gc - lg;
     tree.off[kM31] = m31 - lg;
@@ -360,6 +366,7 @@ void Scale::init() {
     add(kSaturn, 5.8232e7, make_float3(0.55f, 0.48f, 0.33f), 5);
     add(kUranus, 2.5362e7, make_float3(0.45f, 0.60f, 0.64f), 6);
     add(kNeptune, 2.4622e7, make_float3(0.30f, 0.42f, 0.62f), 7);
+    if (proximaSet_) addProxima();
 
     // ---- the stars around the Sun: the placeholder field (some real neighbours and bright stars, then random ones); the
     // catalogue replaces it (loadStars), and keeps its place across init() (the random numbers still run: the galaxies
@@ -545,6 +552,126 @@ void Scale::hizClocks(double t) {
     clk.galaxy = 0.0;
     clk.arms = 0.0;
     clk.beach = wrapTo(t, 8000.0);
+    hizT_ = t;
+}
+
+void Scale::setProxima(V3 fromSun, double t0, int catalogueIndex, float3 colour) {
+    proximaSet_ = true;
+    proximaStar_ = catalogueIndex;
+    proximaColour_ = colour;
+    proximaFromSun_ = fromSun;
+    proximaT0_ = t0;
+    proximaU_ = normalize(fromSun) * -1.0;                    // from Proxima towards the Sun: the near point
+    proximaV_ = normalize(cross(galNorth_, proximaU_));       // the orbit's other axis (a representation)
+    if (!bodies_.empty()) addProxima();
+}
+
+void Scale::addProxima() {
+    for (size_t i = 0; i < bodies_.size();) {   // (set again: the old pair out)
+        if (bodies_[i]->node == kProxima || bodies_[i]->node == kProximaB) {
+            delete bodies_[i];
+            bodies_.erase(bodies_.begin() + std::ptrdiff_t(i));
+        } else {
+            ++i;
+        }
+    }
+    tree.off[kProxima] = proximaFromSun_;
+    // Proxima Centauri: 0.1542 solar radii (Boyajian et al. 2012), 3,042 K; its visual luminosity from V 11.13 at
+    // 1.3017 pc (M_V 15.56, in the Sun's spectrum's watts: the eye's unit), the disc's mean radiance from it
+    const double R = 0.1542 * kRsun, LV = std::pow(10.0, -0.4 * (15.56 - 4.83)) * kLsun;
+    Body* p = new Body{kProxima, R, make_float3(0, 0, 0)};
+    p->glow = LV / (4.0 * kPi * R * R) / kPi;
+    p->glowColor = proximaColour_;
+    p->pattern = 3;
+    p->T = 3042.0;
+    bodies_.push_back(p);
+    // b: 1.07 Earth masses, ~1.02 Earth radii if rocky (a representation: no picture of it exists), lit by Proxima
+    Body* b = new Body{kProximaB, 6.5e6, make_float3(0.34f, 0.31f, 0.29f)};
+    b->light = kProxima;
+    b->lightLV = LV;
+    b->lightColour = proximaColour_;
+    b->T = 3042.0;
+    bodies_.push_back(b);
+}
+
+// the Earth's air (both options): from the sphere through the beach point (the same as its ball), the Sun's direction
+// and light, in the camera's space
+void Scale::earthAir(GAtmo& a, double k, float fade) const {
+    const double D = cam.D;
+    auto toCamSpace = [&](V3 r) { return make_float3(float(dot(r, cam.right) / D), float(dot(r, cam.up) / D), float(dot(r, cam.fwd) / D)); };
+    auto dirCam = [&](V3 r) { return make_float3(float(dot(r, cam.right)), float(dot(r, cam.up)), float(dot(r, cam.fwd))); };
+    const double Re = 6.371e6;
+    const V3 up = rotate(earthUp_, earthPole_, clk.spin);
+    const V3 rel = tree.rel(cam.ref, kBeach) - up * Re - cam.pos;
+    const double dist = length(rel);
+    a.on = 1;
+    a.c = toCamSpace(rel);
+    a.r = float(Re / D);
+    a.h = float((dist - Re) / D);
+    a.top = float(100e3 / D);
+    const V3 toSun = tree.rel(kEarth, kSun);
+    const double ds = length(toSun);
+    a.sun = dirCam(toSun * (1.0 / ds));
+    a.E = make_float3(1.0f, 0.96f, 0.92f) * float(kLsun / (4.0 * kPi * ds * ds) * k);   // the Sun's colour above the air (about)
+    a.metres = float(D);
+    a.fade = fade;
+}
+
+void Scale::eyeBodies(OlcekView& v, V3 eye, V3 right, V3 up, V3 fwd, double unit, double k, double pixAngle,
+                      const std::function<double(V3)>& doppler, std::vector<BodyLight>& out) {
+    out.clear();
+    const Camera keepCam = cam;
+    const double keepShutter = shutter;
+    cam.ref = kSun;
+    cam.pos = eye;
+    cam.right = right;
+    cam.up = up;
+    cam.fwd = fwd;
+    cam.D = unit;
+    shutter = 0.0;   // the eye's own time: no orbit drawn along the shutter
+    std::vector<GSplat> none;
+    for (const Body* bp : bodies_) {
+        const Body& b = *bp;
+        const V3 at = b.pattern == 1 ? tree.rel(kSun, kBeach) - rotate(earthUp_, earthPole_, clk.spin) * b.radius : tree.rel(kSun, b.node);
+        const V3 rel = at - eye;
+        const double dist = length(rel);
+        if (dist <= b.radius) continue;
+        BodyLight L;
+        L.pos = at;
+        L.T = b.T;
+        L.node = b.node;
+        L.angR = std::asin(std::min(1.0, b.radius / dist));
+        L.star = b.glow > 0.0;
+        if (L.star) {   // (its glare: the catalogue's star carries its light in the sums)
+            L.flux = b.glow * kPi * b.radius * b.radius / (dist * dist);
+            L.peak = b.glow;   // (the disc's middle: the limb darkens)
+        } else {        // a Lambert sphere's phase law in its star's light
+            const V3 ts = tree.rel(b.node, b.light);
+            const double d = length(ts);
+            const double E = b.lightLV / (4.0 * kPi * d * d);
+            const double ph = std::acos(std::clamp(dot(ts * (1.0 / d), rel * (-1.0 / dist)), -1.0, 1.0));
+            const float3 a = b.albedo * b.lightColour;
+            L.flux = (2.0 / 3.0) * E * b.radius * b.radius * (std::sin(ph) + (kPi - ph) * std::cos(ph)) / kPi / (dist * dist) *
+                     (0.2126 * a.x + 0.7152 * a.y + 0.0722 * a.z);
+            // its brightest face: the Earth's clouds and ice (its maps' albedo ~0.85), the others their albedo's 1.5 times
+            const float3 lc = b.lightColour;
+            const double peakAlb = b.pattern == 1 ? 0.85 : 1.5 * (0.2126 * b.albedo.x + 0.7152 * b.albedo.y + 0.0722 * b.albedo.z);
+            L.peak = E / kPi * peakAlb * (0.2126 * lc.x + 0.7152 * lc.y + 0.0722 * lc.z);
+        }
+        const double D = doppler(rel * (1.0 / dist));
+        const double rpx = std::asin(std::min(1.0, b.radius / dist)) / std::max(D, 1e-300) / pixAngle;
+        const float w = float(smoothstep(1.0, 2.5, rpx));
+        L.weight = 1.0f - w;
+        const double rs = std::min(rpx, 3.0);
+        L.sigma = float(std::sqrt(0.5625 + 0.25 * rs * rs));
+        out.push_back(L);
+        if (w > 0.0f) ballOrPoint(v, none, b, k, &w);
+    }
+    // the Earth's air round it, near (its blue rim; seen from a rocket barely moving there)
+    v.atmo = GAtmo{};
+    if (length(tree.rel(kSun, kEarth) - eye) < 2e9) earthAir(v.atmo, k, 1.0f);
+    cam = keepCam;
+    shutter = keepShutter;
 }
 
 // the Galaxy and its neighbours as the kernel's models (see olcek_world.h)
@@ -788,6 +915,11 @@ void Scale::place() {
     tree.off[kProton] = protonOff_;
     tree.off[kQuark] = quarkOff_;
     tree.off[kRocket] = hiz.rocket;
+    if (proximaSet_) {   // b round Proxima (11.1868 days, 0.04857 AU), 60 degrees from the near point at t0
+        tree.off[kProxima] = proximaFromSun_;
+        const double th = 60.0 * kDeg + 2.0 * kPi * (hizT_ - proximaT0_) / (11.1868 * 86400.0);
+        tree.off[kProximaB] = (proximaU_ * std::cos(th) + proximaV_ * std::sin(th)) * (0.04857 * kAU);
+    }
 }
 
 double Scale::focusBlend(int& a, int& b) const {
@@ -881,7 +1013,7 @@ V3 Scale::sunShift(int node, double tau) const {
     }
 }
 
-void Scale::ballOrPoint(OlcekView& v, std::vector<GSplat>& splats, const Body& b, double k) const {
+void Scale::ballOrPoint(OlcekView& v, std::vector<GSplat>& splats, const Body& b, double k, const float* wEye) const {
     // The Earth: a sphere through the beach point, its centre below it along the local (geodetic) vertical. The true
     // centre is 21 km off that line (the ellipsoid) and the beach 1 km inside a mean-radius sphere about it: the camera
     // a kilometre up would be under the ground (DURUM, Ö0). The sphere's normal is the geodetic vertical everywhere
@@ -897,12 +1029,12 @@ void Scale::ballOrPoint(OlcekView& v, std::vector<GSplat>& splats, const Body& b
     V3 toSun{0, 0, 1};
     double E = 0.0;
     if (b.glow <= 0.0) {
-        const V3 ts = tree.rel(b.node, kSun);
+        const V3 ts = tree.rel(b.node, b.light);
         const double d = length(ts);
         toSun = ts * (1.0 / d);
-        E = kLsun / (4.0 * kPi * d * d);
+        E = b.lightLV / (4.0 * kPi * d * d);
     }
-    float wBall = float(smoothstep(1.0, 2.5, rpx));
+    float wBall = wEye ? *wEye : float(smoothstep(1.0, 2.5, rpx));
     // the shutter (PLAN §4): what moves faster than the eye is drawn along its way, weighted by the shutter; an orbit
     // run through several times in it is its ring (light spread by the time spent: slow at aphelion, bright there)
     int K = 1;
@@ -925,7 +1057,7 @@ void Scale::ballOrPoint(OlcekView& v, std::vector<GSplat>& splats, const Body& b
         }
     }
     // in front and on the screen (with its size, and the way it is drawn along, as the margin)
-    {
+    if (!wEye) {
         const double rr = b.radius + reach;
         const double tx = v.tanHalfX, ty = v.tanHalfY;
         const double x = dot(rel, cam.right), y = dot(rel, cam.up);
@@ -942,7 +1074,7 @@ void Scale::ballOrPoint(OlcekView& v, std::vector<GSplat>& splats, const Body& b
     } else {
         const double ph = std::acos(std::clamp(dot(toSun, toCam), -1.0, 1.0));
         const double f = (2.0 / 3.0) * E * b.radius * b.radius * (std::sin(ph) + (kPi - ph) * std::cos(ph)) / kPi / (dist * dist);
-        flux = b.albedo * float(f);
+        flux = b.albedo * b.lightColour * float(f);
     }
     const double D = cam.D;
     auto toCamSpace = [&](V3 r) { return make_float3(float(dot(r, cam.right) / D), float(dot(r, cam.up) / D), float(dot(r, cam.fwd) / D)); };
@@ -953,12 +1085,16 @@ void Scale::ballOrPoint(OlcekView& v, std::vector<GSplat>& splats, const Body& b
         g.r = float(b.radius / D);
         g.h = float((dist - b.radius) / D);
         g.toLight = dirCam(toSun);
-        g.albedo = b.albedo;
+        g.albedo = b.albedo * b.lightColour;
         g.lit = float(E / kPi * k);
         g.emit = b.glow > 0.0 ? b.glowColor * float(b.glow * k) : make_float3(0, 0, 0);
         g.weight = wBall;
         g.pattern = b.pattern;
         g.spinBlur = 0.0f;
+        g.T = float(b.T);
+        g.time = float(hizT_);
+        // the side view's map: Proxima and b in deep space's exposure, their colour kept (the eye has its own)
+        g.cap = !wEye && (b.node == kProxima || b.node == kProximaB) ? 1.2f : 0.0f;
         if (b.pattern == 1) {   // the Earth's body axes, turned by its clock; its turn while the shutter is open
             const V3 ax = rotate(v3(today::kEarthAxes[0][0], today::kEarthAxes[1][0], today::kEarthAxes[2][0]), earthPole_, clk.spin);
             const V3 ay = rotate(v3(today::kEarthAxes[0][1], today::kEarthAxes[1][1], today::kEarthAxes[2][1]), earthPole_, clk.spin);
@@ -977,11 +1113,20 @@ void Scale::ballOrPoint(OlcekView& v, std::vector<GSplat>& splats, const Body& b
             g.ax = dirCam(toE);
             g.ay = dirCam(ay);
             g.az = dirCam(nrm);
+        } else if (b.pattern == 3) {   // Proxima: fixed axes (it turns once in 83 days)
+            g.ax = dirCam(proximaU_);
+            g.ay = dirCam(proximaV_);
+            g.az = dirCam(cross(proximaU_, proximaV_));
         }
+        if (wEye) g.spinBlur = 0.0f;   // the eye: no shutter's turn
     }
-    if (wBall < 1.0f) {
+    if (wBall < 1.0f && !wEye) {
         const float scale = float(k / (v.pixAngle * v.pixAngle)) * (1.0f - wBall);
-        const float3 fl = flux * scale;
+        float3 fl = flux * scale;
+        if (b.node == kProxima || b.node == kProximaB) {   // (the map's: its colour kept, as its ball's)
+            const float mx = std::max({fl.x, fl.y, fl.z, 1e-30f});
+            fl = fl * std::min(1.0f, 4.0f / mx);
+        }
         const float sig = float(std::sqrt(0.75 * 0.75 + 0.25 * rpx * rpx));
         if (fl.x + fl.y + fl.z > 1e-5f) {
             if (K == 1) {
@@ -1036,6 +1181,7 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
     if (s > 1.9 || hiz.on) {
         for (const Body* b : bodies_) {
             if (b->node == kEarth && s < 2.0 && !hiz.on) continue;
+            if ((b->node == kProxima || b->node == kProximaB) && !hiz.on) continue;   // (the second option's)
             ballOrPoint(v, splats, *b, k);
         }
     }
@@ -1043,6 +1189,7 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
     if (s > 9.0 || hiz.on) {
         const V3 base = tree.rel(cam.ref, kSun) - cam.pos;
         for (size_t i = 0; i < starPos_.size(); ++i) {
+            if (hiz.on && proximaSet_ && long(i) == long(proximaStar_)) continue;   // (drawn as its body)
             const V3 rel = base + starPos_[i];
             if (!inFront(rel)) continue;
             const double d2 = dot(rel, rel);
@@ -1174,24 +1321,8 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
 
     // ---- the Earth's air: from the sphere through the beach point (the same as its ball), the Sun's direction and light
     v.atmo = GAtmo{};
-    if ((hiz.on ? length(tree.rel(cam.ref, kEarth) - cam.pos) < 2e9 : s > 1.5) && s < 9.5) {
-        GAtmo& a = v.atmo;
-        const double Re = 6.371e6;
-        const V3 up = rotate(earthUp_, earthPole_, clk.spin);
-        const V3 rel = tree.rel(cam.ref, kBeach) - up * Re - cam.pos;
-        const double dist = length(rel);
-        a.on = 1;
-        a.c = toCamSpace(rel);
-        a.r = float(Re / D);
-        a.h = float((dist - Re) / D);
-        a.top = float(100e3 / D);
-        const V3 toSun = tree.rel(kEarth, kSun);
-        const double ds = length(toSun);
-        a.sun = dirCam(toSun * (1.0 / ds));
-        a.E = make_float3(1.0f, 0.96f, 0.92f) * float(kLsun / (4.0 * kPi * ds * ds) * k);   // the Sun's colour above the air (about)
-        a.metres = float(D);
-        a.fade = hiz.on ? 1.0f : float(smoothstep(1.5, 2.5, s));
-    }
+    if ((hiz.on ? length(tree.rel(cam.ref, kEarth) - cam.pos) < 2e9 : s > 1.5) && s < 9.5)
+        earthAir(v.atmo, k, hiz.on ? 1.0f : float(smoothstep(1.5, 2.5, s)));
 
     // ---- the ground at the beach: the Earth's surface there as a plane, in metres from the beach point (PLAN §6, 1)
     GGround& gr = v.ground;

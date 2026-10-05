@@ -65,6 +65,8 @@ struct OlcekApp {
     // the rocket's eye: the stars where and how it sees them, the Milky Way's diffuse light and the cosmic microwave
     // background (H3); sum: the sky's light
     void renderEye(const olcek::hiz::Eye& e, olcek::hiz::EyeSum& sum);
+    void setMaps();                  // the maps on the view (the Earth's, the Moon's, the clouds'): both options
+    int alphaCenStar[2] = {-1, -1};  // Alpha Centauri A and B in the catalogue, moved to their measured places (H5)
     olcek::hiz::SkyCoarse skyCoarse;  // the panorama, coarse (the exposure's sums); empty without the asset
     // the eye's lights besides the stars: the Galaxy, M31 and M33 as wholes (0-2, set each frame), the survey's galaxies
     std::vector<olcek::hiz::Light> galLights;

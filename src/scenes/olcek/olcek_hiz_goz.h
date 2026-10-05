@@ -63,6 +63,10 @@ struct Eye {
                                 // field's half diagonal (75 x 42 degrees), so the binoculars change neither the points
                                 // nor the exposure
     bool energy = false;        // the energy eye: every band's light (bolometric), the band in false colour
+    double worldT = 0.0;        // the rest frame's time since the journey's first thrust (s): the world's clocks
+    // the catalogue's Sun and Proxima: their points' share (the rest drawn as their balls where they are wide)
+    float sunPoint = 1.0f, proximaPoint = 1.0f;
+    int proximaStar = -1;       // Proxima's index in the catalogue
 };
 struct EyeSum {
     double visible = 0.0;       // the visible light from the whole sky at the rocket (W/m^2, the Sun's spectrum's units)
@@ -79,6 +83,10 @@ struct EyeSum {
     // at the start, as an astronomer takes out the sky: what is left of it is what the motion adds ahead; behind, less
     // than nothing, is black). At rest the background is 60% of the night sky's energy and a red veil over everything
     double energy = 0.0, energyView = 0.0, fwdEnergy = 0.0;
+    // the exposure's measure (W/m^2 as a whole sky's): the field's light as if all the sky were like it, or where the
+    // eye looks at a body a degree or more wide, its face's (the eye adapts to what it looks at: a lamp's face, up to
+    // ~1e5 W/m^2/sr; the Sun's 2e7 dazzles)
+    double adaptVisible = 0.0, adaptEnergy = 0.0;
 };
 // the diffuse sky's light (the Milky Way's panorama, the cosmic microwave background) at the rocket, added to the sums as
 // the stars' are: integrated over the rest frame's sphere on the panorama's coarse grid (each cell's light D^2 times, its
