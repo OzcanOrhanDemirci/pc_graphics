@@ -328,18 +328,32 @@ def bulut(date="2026-10-05", world_date=None):
     Image.fromarray((a * 255).astype(np.uint8)).resize((1024, 1024), Image.BOX).save(os.path.join(OUT, "bulut_ege_alfa.png"))
     print(f"  ev cevresi bulut orani %{100 * a.mean():.1f}, sahildeki noktada {a[size // 2, size // 2]:.2f}")
     del c1
-    # ---- the world: VIIRS NOAA-20, 8192 x 4096
+    # ---- the world: VIIRS NOAA-20, 8192 x 4096. Its daily mosaic carries the sunglint of each swath (broad, smooth, grey
+    # bands over the tropical sea) that the difference against Blue Marble takes for cloud. So the cloud is also asked
+    # of a retrieval: VIIRS NOAA-20's cloud optical thickness, drawn only where its cloud mask found cloud (glint-free).
+    # The product comes ~2 days late: the most recent day that has both is used (re-running later moves it on).
+    import datetime
     wd = world_date or date
-    sat = gibs("VIIRS_NOAA20_CorrectedReflectance_TrueColor", wd, (-90, -180, 90, 180), 8192, 4096, f"viirs_{wd}_dunya.jpg")
-    nodata = (sat.max(axis=2) < 4).mean()
-    if nodata > 0.25 and world_date is None:
-        print(f"  {wd}: dunyanin %{100 * nodata:.0f}'i bos (gun tamamlanmadi), bir onceki gun")
-        import datetime
-        wd = (datetime.date.fromisoformat(date) - datetime.timedelta(days=1)).isoformat()
+    for back in range(5):
+        cot_url = (f"{GIBS}&LAYERS=VIIRS_NOAA20_Cloud_Optical_Thickness&BBOX=-90,-180,90,180&WIDTH=8192&HEIGHT=4096"
+                   f"&FORMAT=image/png&TRANSPARENT=TRUE&TIME={wd}")
+        cot = np.asarray(Image.open(fetch(cot_url, f"viirs_cot_{wd}_dunya.png")).convert("RGBA"))
         sat = gibs("VIIRS_NOAA20_CorrectedReflectance_TrueColor", wd, (-90, -180, 90, 180), 8192, 4096, f"viirs_{wd}_dunya.jpg")
+        nodata = (sat.max(axis=2) < 4).mean()
+        cover = (cot[..., 3] > 0).mean()
+        if world_date is not None or (nodata < 0.25 and cover > 0.2):
+            break
+        print(f"  {wd}: dunya %{100 * nodata:.0f} bos, bulut urunu %{100 * cover:.0f}: bir onceki gun")
+        # an unfinished day is not kept: a later run fetches it again
+        for name in (f"viirs_cot_{wd}_dunya.png", f"viirs_{wd}_dunya.jpg"):
+            if os.path.exists(os.path.join(DL, name)):
+                os.remove(os.path.join(DL, name))
+        wd = (datetime.date.fromisoformat(wd) - datetime.timedelta(days=1)).isoformat()
+    from scipy.ndimage import maximum_filter, uniform_filter
+    mask = uniform_filter(maximum_filter((cot[..., 3] > 0).astype(np.float32), size=3), size=3)   # a pixel's margin, soft
     world = np.asarray(Image.open(fetch(BMNG + "world.200410.3x21600x10800.jpg", "world.200410.3x21600x10800.jpg")).convert("RGB"))
     base = np.asarray(Image.fromarray(world).resize((8192, 4096), Image.BOX))
-    a = cloud_alpha(sat, base)
+    a = cloud_alpha(sat, base) * np.clip(mask * 1.5, 0.0, 1.0)
     rgba = np.concatenate([sat, np.round(a * 255).astype(np.uint8)[..., None]], axis=2)
     write_tex(os.path.join(OUT, "bulut_dunya.tex"), rgba)
     Image.fromarray((a * 255).astype(np.uint8)).resize((2048, 1024), Image.BOX).save(os.path.join(OUT, "bulut_dunya_alfa.png"))

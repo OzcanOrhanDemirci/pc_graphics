@@ -62,6 +62,16 @@ Akış önce, ayrıntı sonra (Özcan): 10⁻³'ten 10⁻³⁵'e her onlukta ger
   kristalografi haritası gibi: parlak çekirdekli silisyumlar, yumuşak oksijenler, altıgen boşluklar. 4,5 Å'dan uzak
   atomlar atlanır (titreşimden önce kaba eleme). Ağ -11'in altında kapalı (payı 10⁻³). -9,5 ile -5 arası tarama:
   sıçrama yok, en uzun kare 14,1 ms.
+- **Deniz parıltısı bulut değil:** s ≈ 7'de Sokotra'nın güneyinde yumuşak, gri bir bant vardı. Kaynağı VIIRS'in günlük
+  mozaiğindeki parıltı (sunglint) şeridi; Blue Marble'a göre fark onu bulut sayıyordu. Doygunlukla ayrılamadı (parıltı
+  0,08, bulut 0,03-0,07). Büyük pencerede alt yüzdelik ile "taban" denemesi de olmadı: Peru ve Namibya stratokümülüsünü de
+  siliyordu. Çözüm gerçek bir ürün: VIIRS NOAA-20 bulut optik kalınlığı, yalnız bulut maskesinin bulduğu yerde çizilir.
+  Dünya bulutları artık bu maskeyle çarpılıyor (bir piksel pay, yumuşak). Ürün ~2 gün gecikmeli; araç ikisinin birlikte
+  olduğu en yakın günü alıyor (bugün 3 Ekim) ve tamamlanmamış günleri önbelleğe yazmıyor, yeniden koşunca ilerler.
+  Ege'nin bölge bulutları (MODIS Terra, 5 Ekim) değişmedi.
+- **Bitiş işleri (Ö6'nın bir kısmı):** galeri resmi (Dünya, 1920×1080), README'lerde sahne 7 bölümü (iki dil, dokuz
+  kare), galerinin "Ayrıntılar"ı (Çandarlı, gerçek veri, ışığın altı, görüntü), GOSTERI ve DEMO'da "Dene" yolu, depo
+  düzeninde sahne 5-7 ve araçlar.
 - **Atomun kabukları:** atom tek başına gri bir parıltıydı. Şimdi elektron yoğunluğunun Laplasyeninin işareti
   görünüyor (Bader). -∇²ρ > 0 olan yerde yük toplanır, dolgu orada açılır: K çekirdeği parlak, ardından seyrekleşme
   kuşağı karanlık, L kabuğu parlak halka; ağda her silisyumun çevresinde değerlik (M) yoğunlaşması. Laplasyen Slater

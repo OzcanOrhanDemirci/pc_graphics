@@ -34,11 +34,13 @@ night. Scene 3 is a rigid-body and fracture solver of its own, drawn by a plain 
 particle solver (fluids, grains, breakable bonds) whose fast moments are recomputed finely in the background and
 kept as physics, not video. Scene 5 is under water: a deterministic spectral ray tracer whose light goes on through
 the air above the surface, along a lane from a small island's pier to a wreck and a rope into the blue. Scene 6 is
-geometry alone: a Menger sponge on a plinth, zoomed into ten thousand times.
+geometry alone: a Menger sponge on a plinth, zoomed into ten thousand times. Scene 7 is scale: from a beach at
+Çandarlı out to the edge of the universe with real data, and in, below the light, through the instrument's eye to the
+Planck length, 62 decades.
 
 ## The application
 
-The six scenes live in one program. It opens on a gallery; a scene loads behind a loading screen (its programs
+The seven scenes live in one program. It opens on a gallery; a scene loads behind a loading screen (its programs
 compile and its world is built on a worker thread, so the window stays alive) and then runs under an interface that is
 the same for all of them: who and what at the bottom left, timings at the top right, the way out at the bottom right,
 the keys on F1. The panel at the bottom left takes the mouse: a scene can put rows of choices, sliders and buttons there
@@ -54,7 +56,7 @@ speaks Turkish or English (TR | EN at the top right of the gallery, or L); the c
 
 The look is one family for everything, IBM Plex: Serif for names, Sans for words, Mono for numbers and keys. Dark glass
 panels over the pictures, and one accent colour per scene, taken from its light: warm gold, cold blue, safety orange,
-sea green, sea blue, lavender.
+sea green, sea blue, lavender, rose.
 A scene is a folder with its renderer, its settings and its OptiX programs, plus one line in the scene registry;
 [docs/MIMARI.md](docs/MIMARI.md) (Turkish) describes the contract and how to add one.
 
@@ -293,6 +295,50 @@ thousand times, where the screen is 0.15 mm across (about two hairs).
 
 The first version (a pseudo-Kleinian "cathedral", path traced) was replaced after Özcan's first look: grainy, flickering,
 and its surface was pixel-sized circles at every scale. Everything in `docs/heykel/DURUM.md` (Turkish).
+
+### 7 · Scale *(Ölçek)* · October 2026
+
+| ![The Earth from 10,000 km: the Mediterranean, North Africa, Arabia, a large storm over Russia; that day's real clouds](docs/images/olcek-dunya.jpg) | ![The Milky Way from above: its measured arms, the bar, dust lanes](docs/images/olcek-samanyolu.jpg) |
+|---|---|
+| ![The beach in front of the castle at Çandarlı: the swash's edge, wet and dry sand](docs/images/olcek-sahil.jpg) | ![Grains of sand: ellipsoidal quartz grains, dark gaps between them](docs/images/olcek-kum.jpg) |
+| ![The electron density map of quartz: bright-cored silicons, soft oxygens, hexagonal voids](docs/images/olcek-kristal.jpg) | ![A silicon atom and its shells: a bright K core, a dark band, a bright L ring](docs/images/olcek-atom.jpg) |
+| ![A proton and its three quarks, with a Y of gluon flux](docs/images/olcek-proton.jpg) | ![The desert: the quark's field, three-cornered rings](docs/images/olcek-col.jpg) |
+| ![The bottom: a vibrating string, its average a band with bright edges](docs/images/olcek-sicim.jpg) | |
+
+The scene of scale. You start at the beach in front of the castle at Çandarlı (Izmir, Dikili) and move out or in with
+the wheel alone: out to the edge of the universe, in to the Planck length. 62 decades, without a cut or a fade.
+Everything where and as large as it truly was at noon on 5 October 2026, and the empty stretches between at their true
+length.
+
+- **No absolute position:** everything hangs on a tree of anchors (Laniakea, the Local Group, the Galaxy's centre, the
+  Sun, the Earth, the beach point, an atom, its nucleus, a proton, a quark). The way between two neighbours is summed
+  only up to their common ancestor, and the camera is always kept against its focus. For the five decades on the
+  screen at once, floats are enough: 10⁻⁴ of a pixel at worst.
+- **Where there is light, real data:**
+  - the beach from Sentinel-2 (10 m), the shoreline a distance field from it;
+  - the Earth from Blue Marble, with those days' MODIS and VIIRS clouds on it. The satellite's glint on the sea was
+    sorted out with VIIRS's cloud optical thickness product;
+  - single-scattering air, the Moon from LRO;
+  - 109,400 stars from HYG; the Milky Way with its arms from measurements (Reid et al. 2019, the long bar Wegg et al.
+    2015); M31 and M33 by the same model in their true orientation;
+  - 43,490 galaxies from 2MRS. Beyond them a cosmic web from the true statistics, by the Zel'dovich approximation, seen
+    as a slice (gigaparsecs of depth piled up turn the web into fog, which is why every survey picture is a slice).
+- **Below the light, the instrument's eye:** colour fades at the light's wavelength (a representation only).
+  - Terraces as an electron microscope sees them, atoms as an atomic force microscope does.
+  - A crystallographer's density map: quartz's true electron density (Clementi-Raimondi Slater orbitals). The atom's
+    shells from the sign of the density's Laplacian (Bader), in closed form.
+  - The silicon-28 nucleus by Woods-Saxon; a proton and its three quarks, a deep inelastic scattering snapshot.
+  - Around the quark, its field averaged over time. The strong, weak and hypercharge couplings run with scale by the
+    Standard Model's one-loop numbers; the rings round out deeper down.
+  - At the bottom, spacetime foam and a closed string (theory).
+- **Time as if it flows:** every layer keeps its own clock, all by one rule (faster outwards, slower inwards). What
+  moves faster than the eye's shutter is averaged: an orbit becomes a ring, a vibrating string a band with bright edges.
+  None of it changes home: you always come down to the beach at the same noon, in the same light.
+- **No grain, no flicker:** every pixel takes the same four fixed samples every frame, and whatever shrinks below a
+  pixel turns into a point keeping its light. The exposure is a designed function of scale, never read from the
+  picture. Every frame of the way takes ≤ 16 ms; a test path sweeps it in steps of 0.01 decade and measures the jumps.
+
+Plan, decisions, departures from the plan and measurements in `docs/olcek/` (Turkish).
 
 ## What scene 1 computes
 
@@ -557,9 +603,13 @@ src/
     fener/            scene 2: world generation, real-time light pipeline, player; device/
     yikim/            scene 3: hulls, the GPU solver (phys.cu), the building, earthquakes, tests, denoising filter; device/
     laboratuvar/      scene 4: the particle solver, liquid surfaces, experiments, recordings, ballistics; device/
+    koy/              scene 5: deterministic spectral ray tracer, the island, under water, the wreck, amphorae; device/
+    heykel/           scene 6: the Menger sponge, ten thousand times closer by perturbation (CUDA)
+    olcek/            scene 7: tree of anchors, layer clocks, CUDA renderer, maps, density maps, the desert and the bottom
 scenes/               the scenes' settings (<scene>.cfg)
 assets/               fonts (IBM Plex), gallery pictures, blue-noise texture, earthquake records (ESM, AFAD TADAS)
-tools/                EXR statistics, FLIP and RMSE comparison, noise maps, contact sheets, prism planner, value studies
+tools/                EXR statistics, FLIP and RMSE comparison, noise maps, contact sheets, prism planner, value studies;
+                      Scale's data (olcek_bugun.py: today's sky, olcek_veri.py: maps, stars, galaxies, web; its output not committed)
 docs/                 working journal in Turkish: application status and architecture; one folder per scene (plan, status)
 third_party/fetch.sh  fetches the dependencies; the folder itself is not committed
 ```

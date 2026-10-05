@@ -138,7 +138,7 @@ birikir ve netleşir; sağ üstte yakınlaşma ve ekranın o an kaç milimetre g
 **Dene:** önce T ile turu izle. Sonra bir yıldızın kenarına tekerlekle in ve her onda bir katta dur; ışığı yatık açıya
 sürükle. Ayarlar `scenes/heykel.cfg` (F5 ile).
 
-## 07 · Ölçek — İzmir'de bir sahilden evrenin kenarına ve Planck uzunluğuna (yapım aşamasında)
+## 07 · Ölçek — İzmir'de bir sahilden evrenin kenarına ve Planck uzunluğuna
 Ölçeğin sahnesi: 62 onluk, yalnız tekerlekle, kesintisiz. Her şey 5 Ekim 2026 öğlesindeki gerçek yerinde ve gerçek
 boyunda; aradaki boşluklar da gerçek uzunluğunda. Zaman her ölçekte kendi hızıyla akar (dışarı hızlanır, içeri yavaşlar),
 ama hiçbir şeyi değiştirmez: sahile hep aynı öğlede dönülür. Sağ üstte bakılan cisim ve ekranın genişliği.
@@ -149,5 +149,13 @@ ama hiçbir şeyi değiştirmez: sahile hep aynı öğlede dönülür. Sağ üst
 | **R** | sahile dön |
 | **T** | tur: evrenin kenarına, geri sahile, Planck'a, geri sahile (saniyede yarım onluk; tekerlek ya da T durdurur) |
 
-**Dene:** tekerleği yavaş çevirip Dünya'dan Güneş'e geç (gezegenler halkaya döner); sonra hızlı çevir. Ö0: cisimler
-yer tutucu, görünüşleri sıradaki adımlarda (`docs/olcek/PLAN.md`). Ayarlar `scenes/olcek.cfg` (F5 ile).
+**Dene:**
+- Sahilden yavaşça uzaklaş. Kalenin önündeki kumsal (Sentinel-2), Çandarlı Körfezi, Ege, bugünün bulutlarıyla Dünya.
+- Dünya'dan Güneş'e geç: gezegenler halkaya döner. Samanyolu'nu tepeden gör, sonra Andromeda'yı. En dışta 2MRS'in gerçek
+  galaksileri ve kozmik ağ.
+- R ile sahile dön ve içeri in. Kum taneleri, kristal basamakları, atomların peteği. Sonra kristalografi haritası:
+  atomun kabukları, boş atomun ortasında nokta gibi çekirdek, proton ve üç kuarkı.
+- Daha da in. Çölde kuarkın alanı, halkaları derine indikçe yuvarlaklaşır (üç kuvvet yaklaşır). En dipte köpük ve
+  titreşen bir sicim.
+
+Plan ve durum `docs/olcek/`. Ayarlar `scenes/olcek.cfg` (F5 ile).

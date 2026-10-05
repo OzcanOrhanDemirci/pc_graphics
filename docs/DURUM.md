@@ -5,6 +5,12 @@
 > `docs/tanecik/` arşiv.
 
 ## Şu an
+- **2026-10-05 (gece) · Sahne 7 "Ölçek": bütün yol gerçek içerikle.** Dışarısı gerçek veriyle: Sentinel-2 Çandarlı,
+  Blue Marble ve o günlerin bulutları (deniz parıltısı VIIRS bulut ürünüyle ayıklandı), HYG yıldızları, Samanyolu
+  (Reid 2019), M31 ve M33, 2MRS, kozmik ağ dilimi. İçerisi o ölçeği gören aletin gözüyle: SEM terasları, AFM peteği,
+  kristalografi yoğunluk haritası (atomun kabukları Laplasyenden), Woods-Saxon çekirdek, proton ve kuarklar, çölde
+  kuarkın alanı (SM bağlaşımları), dipte köpük ve sicim. Bütün yolda kare ≤ 16 ms; autotest 81-162 fps, 4,3 GB.
+  README'de sahne 7 bölümü ve galeri resmi. Ayrıntı ve NE DOĞRULANMADI `docs/olcek/DURUM.md` başında.
 - **2026-10-05 (öğleden sonra) · Sahne 7 "Ölçek" Ö0 bitti: iskelet ve ölçek motoru.** Galeride **07 Ölçek** (gül
   `#E08BAE`). Planck'tan gözlemlenebilir evrene 62 onluk, yalnız tekerlekle; her cisim 5 Ekim 2026 öğlesindeki gerçek
   yerinde ve boyunda (astropy + JPL DE440s), şimdilik yer tutucu biçimlerle. Çapa ağacı ve hassasiyet (en kötü 1,1 × 10⁻⁴

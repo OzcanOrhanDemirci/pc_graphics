@@ -35,11 +35,12 @@ kendi yazdığımız bir katı cisim ve kırılma çözücüsü; sade bir günd�
 çözücüsü (sıvılar, taneler, kopabilen bağlar); hızlı anları arka planda ince hesaplanır ve video olarak değil, fizik
 olarak saklanır. Sahne 5 su altında: ışığı yüzeyin üstünde havada da süren deterministik, tayfsal bir ışın izleyici;
 küçük bir adanın iskelesinden bir batığa ve maviye inen bir halata uzanan bir yol. Sahne 6 yalnız geometri: bir
-kaidede duran, on bin kat yakınına inilen bir Menger süngeri.
+kaidede duran, on bin kat yakınına inilen bir Menger süngeri. Sahne 7 ölçek: Çandarlı'da bir kumsaldan, gerçek
+veriyle evrenin kenarına ve ışığın altında aletin gözüyle Planck uzunluğuna, 62 onluk.
 
 ## Uygulama
 
-Altı sahne tek bir programda yaşıyor. Program bir galeriyle açılır; sahne bir yükleme ekranının arkasında yüklenir
+Yedi sahne tek bir programda yaşıyor. Program bir galeriyle açılır; sahne bir yükleme ekranının arkasında yüklenir
 (programları derlenir, dünyası kurulur; bunlar ayrı bir iş parçacığında yapıldığı için pencere canlı kalır) ve sonra hepsi
 için aynı olan bir arayüzün altında çalışır: kim ve ne sol altta, süreler sağ üstte, çıkış yolu sağ altta, tuşlar F1'de.
 Sol alttaki panel fareyle kullanılır: sahne oraya seçenek sıraları, kaydırma çubukları ve düğmeler koyabilir (Yıkım'da
@@ -55,7 +56,7 @@ Esc her zaman geri götürür; kapanan sahne ekran kartını bütünüyle geri v
 
 Görünüm tek bir yazı ailesiyle kurulu, IBM Plex: adlar için Serif, sözcükler için Sans, sayılar ve tuşlar için Mono.
 Resimlerin üstünde koyu cam paneller ve her sahneye ışığından alınmış tek bir vurgu rengi: sıcak altın, soğuk mavi,
-güvenlik turuncusu, deniz yeşili, deniz mavisi, lavanta. Bir sahne; renderer'ı, ayarları ve OptiX programlarıyla bir klasör ve sahne kaydında tek bir
+güvenlik turuncusu, deniz yeşili, deniz mavisi, lavanta, gül. Bir sahne; renderer'ı, ayarları ve OptiX programlarıyla bir klasör ve sahne kaydında tek bir
 satırdır; sözleşme ve yeni sahne eklemek [docs/MIMARI.md](docs/MIMARI.md)'de.
 
 ## Sahneler
@@ -284,6 +285,48 @@ Orada ekranın genişliği 0,15 mm, iki saç teli kadardır.
 
 İlk hâli (yol izlenen sözde Klein bir "katedral") Özcan'ın ilk bakışından sonra değişti: grenliydi, titriyordu ve yüzeyi her
 ölçekte piksel boyu dairelerdi. Hepsi `docs/heykel/DURUM.md`'de.
+
+### 7 · Ölçek · Ekim 2026
+
+| ![Dünya 10 bin km'den: Akdeniz, Kuzey Afrika, Arabistan, Rusya'nın üstünde büyük bir fırtına; o günün gerçek bulutları](docs/images/olcek-dunya.jpg) | ![Samanyolu tepeden: ölçülmüş kollar, çubuk, toz şeritleri](docs/images/olcek-samanyolu.jpg) |
+|---|---|
+| ![Çandarlı'da kalenin önündeki kumsal: köpüğün ucu, ıslak ve kuru kum](docs/images/olcek-sahil.jpg) | ![Kum taneleri: elipsoit kuvars taneleri, arada koyu boşluklar](docs/images/olcek-kum.jpg) |
+| ![Kuvarsın elektron yoğunluğu haritası: parlak çekirdekli silisyumlar, yumuşak oksijenler, altıgen boşluklar](docs/images/olcek-kristal.jpg) | ![Bir silisyum atomu ve kabukları: parlak K çekirdeği, karanlık kuşak, parlak L halkası](docs/images/olcek-atom.jpg) |
+| ![Proton ve üç kuarkı, Y biçimli gluon akısıyla](docs/images/olcek-proton.jpg) | ![Çöl: kuarkın alanı, üç köşeli halkalar](docs/images/olcek-col.jpg) |
+| ![Dip: titreşen bir sicim, ortalaması kenarları parlak bir bant](docs/images/olcek-sicim.jpg) | |
+
+Ölçeğin sahnesi. Çandarlı'da (İzmir, Dikili) kalenin önündeki kumsaldan başlarsın, yalnız tekerlekle uzaklaşır ya da
+yaklaşırsın: dışarı evrenin kenarına, içeri Planck uzunluğuna. 62 onluk, kesintisiz, kesme ve solma yok. Her şey 5 Ekim
+2026 öğlesindeki gerçek yerinde ve gerçek boyunda, aradaki boşluklar da gerçek uzunluğunda.
+
+- **Mutlak konum yok:** her şey bir çapa ağacına asılı (Laniakea, Yerel Grup, Samanyolu'nun merkezi, Güneş, Dünya,
+  sahildeki nokta, atom, çekirdek, proton, kuark). İki komşunun arası yalnız ortak atalarına kadar toplanır, kamera hep
+  odağa göre tutulur. Ekranda aynı anda görünen beş onluk için float yetiyor: en kötü 10⁻⁴ piksel.
+- **Işık olan yerde gerçek veri:**
+  - Kumsal Sentinel-2'den (10 m), kıyı çizgisi oradan bir uzaklık alanı;
+  - Dünya Blue Marble, üstünde o günlerin MODIS ve VIIRS bulutları. Uydunun deniz parıltısı, VIIRS'in bulut optik
+    kalınlığı ürünüyle ayıklandı;
+  - tek saçılımlı hava, Ay LRO'dan;
+  - 109.400 yıldız HYG'den; Samanyolu kollarıyla ölçümlerden (Reid ve ark. 2019, uzun çubuk Wegg ve ark. 2015);
+    M31 ve M33 aynı modelle, gerçek yönelimleriyle;
+  - 43.490 galaksi 2MRS'ten. Ötesi Zel'dovich yaklaşımıyla gerçek istatistikten bir kozmik ağ, bir dilim olarak
+    (gigaparseklerce derinlik üst üste binince ağ sise dönüşür; her anket görseli bu yüzden bir dilimdir).
+- **Işığın altında aletin gözü:** renk ışığın dalga boyunda söner (yalnız temsil).
+  - Elektron mikroskobu gibi teraslar, atomik kuvvet mikroskobu gibi atomlar.
+  - Kristalografın yoğunluk haritası: kuvarsın gerçek elektron yoğunluğu (Clementi-Raimondi Slater yörüngeleri).
+    Atomun kabukları, yoğunluğun Laplasyeninin işaretinden (Bader), kapalı biçimde.
+  - Si-28 çekirdeği Woods-Saxon; proton ve üç kuarkı, derin esnek saçılmanın anlık görüntüsü.
+  - Kuarkın çevresinde alanının zaman ortalaması. Güçlü, zayıf ve hiperyük bağlaşımları Standart Model'in tek döngü
+    sayılarıyla ölçekle değişir; halkalar derine indikçe yuvarlaklaşır.
+  - En dipte uzay-zaman köpüğü ve kapalı bir sicim (kuram).
+- **Zaman akıyormuş gibi:** her katmanın kendi saati var, hepsi tek kuralla (dışarı hızlanır, içeri yavaşlar). Gözün
+  deklanşöründen hızlı olan ortalanır: yörünge halka olur, titreşen sicim kenarları parlak bir bant. Hiçbiri evi
+  değiştirmez: sahile hep aynı öğlede, aynı ışıkta inilir.
+- **Gren ve titreme yok:** her piksel her karede aynı dört sabit örneği alır. Pikselin altına inen her şey ışığını
+  koruyarak noktaya döner. Pozlama ölçeğin tasarlanmış bir işlevi, görüntüden okunmaz. Bütün yolda kare ≤ 16 ms; bir
+  sınama yolu 0,01 onluk adımla tarayıp sıçramaları ölçer.
+
+Plan, kararlar, plandan ayrılanlar ve ölçümler `docs/olcek/`'te.
 
 ## Sahne 1: neyi hesaplıyor
 
@@ -537,9 +580,13 @@ src/
     fener/            sahne 2: dünya üretimi, gerçek zamanlı ışık hattı, oyuncu; device/
     yikim/            sahne 3: kabuklar, ekran kartı çözücüsü (phys.cu), bina, depremler, testler, gürültü süzgeci; device/
     laboratuvar/      sahne 4: tanecik çözücüsü, sıvı yüzeyleri, deneyler, kayıtlar, balistik; device/
+    koy/              sahne 5: deterministik tayfsal ışın izleyici, ada, su altı, batık, amforalar; device/
+    heykel/           sahne 6: Menger süngeri, pertürbasyonla on bin kat yakınlaşma (CUDA)
+    olcek/            sahne 7: çapa ağacı, katman saatleri, CUDA çizici, haritalar, yoğunluk haritaları, çöl ve dip
 scenes/               sahnelerin ayarları (<sahne>.cfg)
 assets/               yazı tipleri (IBM Plex), galeri resimleri, mavi gürültü dokusu, deprem kayıtları (ESM, AFAD TADAS)
-tools/                EXR istatistikleri, FLIP ve RMSE karşılaştırması, gürültü haritaları, temas tabakaları, prizma planlayıcı, değer etütleri
+tools/                EXR istatistikleri, FLIP ve RMSE karşılaştırması, gürültü haritaları, temas tabakaları, prizma planlayıcı, değer etütleri;
+                      Ölçek'in verisi (olcek_bugun.py: bugünün gökyüzü, olcek_veri.py: haritalar, yıldızlar, galaksiler, ağ; çıktısı git dışı)
 docs/                 Türkçe çalışma günlüğü: uygulamanın durumu ve mimarisi; her sahneye bir klasör (plan, durum)
 third_party/fetch.sh  bağımlılıkları indirir; klasörün kendisi git'te değil
 ```

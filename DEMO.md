@@ -147,7 +147,7 @@ as nothing moves the picture accumulates and sharpens; top right, the zoom and h
 **Try:** watch the tour first (T). Then wheel into the edge of a star, stopping at every decade; drag the light to a
 raking angle. Settings `scenes/heykel.cfg` (F5).
 
-## 07 · Scale — from a beach in Izmir to the edge of the universe and to the Planck length (in progress)
+## 07 · Scale — from a beach in Izmir to the edge of the universe and to the Planck length
 The scene of scale: 62 decades, with the wheel alone, without a cut. Everything where and as large as it truly was at noon
 on 5 October 2026, and the empty stretches between at their true length. Time flows at its own pace at every scale (faster
 outwards, slower inwards) but changes nothing: the way home always ends at the same noon. Top right, what is looked at and
@@ -159,5 +159,14 @@ the screen's width.
 | **R** | back to the beach |
 | **T** | the tour: to the edge of the universe, back to the beach, to Planck, back (half a decade a second; the wheel or T stops it) |
 
-**Try:** turn the wheel slowly from the Earth to the Sun (the planets become rings); then spin it. Ö0: the bodies are
-placeholders, their looks come in the next steps (`docs/olcek/PLAN.md`). Settings `scenes/olcek.cfg` (F5).
+**Try:**
+- Move out from the beach slowly: the beach in front of the castle (Sentinel-2), the Bay of Çandarlı, the Aegean, the
+  Earth with today's clouds.
+- From the Earth to the Sun: the planets become rings. See the Milky Way from above, then Andromeda. Furthest out, 2MRS's
+  real galaxies and the cosmic web.
+- Back to the beach with R, and in: grains of sand, the crystal's steps, the atoms' honeycomb. Then a crystallographer's
+  map: the atom's shells, the nucleus a dot in the middle of the empty atom, a proton and its three quarks.
+- Further in. In the desert the quark's field, its rings rounding out deeper down (the three forces converge). At the
+  bottom foam and a vibrating string.
+
+Plan and status in `docs/olcek/` (Turkish). Settings `scenes/olcek.cfg` (F5).

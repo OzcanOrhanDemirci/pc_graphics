@@ -40,19 +40,39 @@ public:
                "two neighbours is summed only up to their common ancestor; for the five decades on the screen at once, double "
                "precision is plenty.")},
             {L("Bugün", "Today"),
-             L("5 Ekim 2026, İnciraltı'nda güneşin tam tepeden geçtiği an: gezegenler, Ay, Güneş ve Samanyolu'nun merkezi o anın "
-               "gerçek yerinde (JPL DE440). Zaman her ölçekte kendi hızıyla akar ama hiçbir şeyi değiştirmez: eve her dönüşte "
-               "aynı öğle.",
-               "5 October 2026, the moment the Sun crosses the meridian at İnciraltı: the planets, the Moon, the Sun and the "
-               "Galaxy's centre where they truly were then (JPL DE440). Time flows at its own pace at every scale but changes "
+             L("5 Ekim 2026, Çandarlı'da (Dikili) güneşin tam tepeden geçtiği an: gezegenler, Ay, Güneş ve Samanyolu'nun merkezi "
+               "o anın gerçek yerinde (JPL DE440). Zaman her ölçekte kendi hızıyla akar ama hiçbir şeyi değiştirmez: eve her "
+               "dönüşte aynı öğle.",
+               "5 October 2026, the moment the Sun crosses the meridian at Çandarlı (Dikili): the planets, the Moon, the Sun and "
+               "the Galaxy's centre where they truly were then (JPL DE440). Time flows at its own pace at every scale but changes "
                "nothing: every way home ends at the same noon.")},
+            {L("Işık olan yerde gerçek veri", "Where there is light, real data"),
+             L("Kalenin önündeki kumsal Sentinel-2'den (10 m), kıyı çizgisi oradan; Dünya Blue Marble, üstünde o günlerin "
+               "MODIS ve VIIRS bulutları (deniz parıltısı bulut ürünüyle ayıklanmış). Ay LRO'dan. 109.400 yıldız HYG'den, "
+               "Samanyolu'nun kolları ölçümlerden (Reid 2019), M31 ve M33 gerçek yönelimleriyle, 43.490 galaksi 2MRS'ten; "
+               "ötesi kozmik ağın gerçek istatistiği, bir dilim olarak.",
+               "The beach in front of the castle from Sentinel-2 (10 m), the shoreline from it; the Earth from Blue Marble, "
+               "with those days' MODIS and VIIRS clouds on it (the sea's glint sorted out by a cloud product). The Moon from "
+               "LRO. 109,400 stars from HYG, the Milky Way's arms from measurements (Reid 2019), M31 and M33 in their true "
+               "orientation, 43,490 galaxies from 2MRS; beyond them the cosmic web's true statistics, as a slice.")},
+            {L("Işığın altında", "Below the light"),
+             L("Renk ışığın dalga boyunda söner; altı o ölçeği gören aletin gözüyle çizilir. Elektron mikroskobu gibi "
+               "teraslar, atomik kuvvet mikroskobu gibi atomlar, sonra kristalografın yoğunluk haritası: silisyum ve "
+               "oksijenlerin gerçek elektron yoğunluğu, atomun kabukları (yoğunluğun Laplasyeni), Woods-Saxon çekirdek, "
+               "proton ve üç kuarkı. Kuarkın çevresinde üç kuvvet ölçekle değişen gerçek şiddetleriyle; en dipte "
+               "uzay-zaman köpüğü ve bir sicim (kuram).",
+               "Colour fades at the light's wavelength; below, the world is drawn as the instrument of each scale sees it. "
+               "Terraces as an electron microscope sees them, atoms as an atomic force microscope does, then a "
+               "crystallographer's density map: the true electron density of silicon and oxygen, the atom's shells (the "
+               "density's Laplacian), a Woods-Saxon nucleus, a proton and its three quarks. Around the quark the three forces "
+               "with their true strengths, running with scale; at the bottom spacetime foam and a string (theory).")},
             {L("Görüntü", "The picture"),
              L("Her piksel her karede aynı dört sabit örneği alır: gren yok, titreme yok. Pikselin altına inen bir cisim ışığını "
-               "koruyarak noktaya döner; gözün kapağından hızlı dönen bir yörünge halkaya. Bu ilk sürümde cisimler yer tutucu: "
-               "boyları ve yerleri gerçek, görünüşleri sıradaki adımlarda gelecek.",
+               "koruyarak noktaya döner; gözün kapağından hızlı dönen bir yörünge halkaya, hızlı titreşen bir sicim kenarları "
+               "parlak bir banda.",
                "Every pixel takes the same four fixed samples every frame: no grain, no flicker. A body that shrinks below a pixel "
-               "turns into a point and keeps its light; an orbit faster than the eye's shutter turns into a ring. In this first "
-               "version the bodies are placeholders: their sizes and places are true, their looks come in the next steps.")}};
+               "turns into a point and keeps its light; an orbit faster than the eye's shutter turns into a ring, a string "
+               "vibrating faster into a band with bright edges.")}};
         i.tags = {L("Ölçek", "Scale"), L("62 onluk", "62 decades"), L("Gerçek konumlar", "True positions")};
         i.image = "assets/gallery/olcek.jpg";
         i.accent = 0xE08BAE;
