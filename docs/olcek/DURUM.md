@@ -62,6 +62,14 @@ Akış önce, ayrıntı sonra (Özcan): 10⁻³'ten 10⁻³⁵'e her onlukta ger
   kristalografi haritası gibi: parlak çekirdekli silisyumlar, yumuşak oksijenler, altıgen boşluklar. 4,5 Å'dan uzak
   atomlar atlanır (titreşimden önce kaba eleme). Ağ -11'in altında kapalı (payı 10⁻³). -9,5 ile -5 arası tarama:
   sıçrama yok, en uzun kare 14,1 ms.
+- **Atomun kabukları:** atom tek başına gri bir parıltıydı. Şimdi elektron yoğunluğunun Laplasyeninin işareti
+  görünüyor (Bader). -∇²ρ > 0 olan yerde yük toplanır, dolgu orada açılır: K çekirdeği parlak, ardından seyrekleşme
+  kuşağı karanlık, L kabuğu parlak halka; ağda her silisyumun çevresinde değerlik (M) yoğunlaşması. Laplasyen Slater
+  terimleri için kapalı biçimde hesaplanıyor: c e^(-βr) (m(m+1) r^(m-2) - 2β(m+1) r^(m-1) + β² r^m). Sonlu farkla
+  değil, bu yüzden float duyarlılığından gren yok. Boyutsuz ölçü q = -(∇²ρ/ρ) / (|∇ ln ρ|² + 1/a0²). Bohr modeli değil;
+  kabuk yapısının kuantum mekaniğindeki gerçek izi. -8,6 ile -11,8 arasında görünür.
+- Yoğunluk haritası zemini tamamen örtünce (-9,0) zemin çizilmiyor: -9'un altında kare 9 ms'den 2,3 ms'ye indi.
+  -12,5 ile -7,5 arası tarama: sıçrama yok, en uzun kare 10,7 ms.
 - **M31 ve M33 yer tutucu değil:** Samanyolu'nun modeli üç galaksiye genellendi: "model kpc" = gerçek kpc / boy, çubuğun
   payı ayrı. Gerçek yönelimleriyle çiziliyorlar: eğim ve büyük eksenin konum açısı gökyüzünde, normal oradan (M31 i 77,5°,
   PA 38°; M33 i 55°, PA 22°). Boy ve ışık ölçümlerden (M31 h 5,3 kpc, 2,1·10¹⁰ L_güneş disk, belirgin şişkinlik;

@@ -110,6 +110,8 @@ struct GDensity {
     float weight = 1.0f;       // its share (comes in and goes out over a decade)
     float lo = -2.0f, hi = 3.0f;   // log10 of the density the fill's dark and light ends stand for (this frame's range)
     float relief = 0.01f;      // the hill-shading's height: screen widths per decade
+    float shells = 0.0f;       // the atoms' shells shown (0..1): where -Laplacian(rho) > 0 the fill is lighter (Bader)
+    float pxA0 = 1.0f;         // a pixel at the focus, in a0
     GDensityBody b[kMaxDensity];
 };
 
@@ -118,29 +120,45 @@ struct GDensity {
 // a nucleus's nucleons, partons. The same code gives the host its exposure and the GPU its map.
 HD float olP5(float t) { return t * t * t * t * t; }
 HD float olP7(float t) { return t * t * t * t * t * t * t; }
-HD float olAtomDensity(int type, float r) {
+// one Slater shell's density c r^m e^(-beta r) (m = 0, 2, 4) added to rho, and its Laplacian (1/r^2) d/dr (r^2 d/dr) to
+// lap: c e^(-beta r) (m(m+1) r^(m-2) - 2 beta (m+1) r^(m-1) + beta^2 r^m); r kept above 1e-4 a0 in it (the cusp at the
+// nucleus, far below any pixel there). The atoms' shells show in its sign (Bader): -lap > 0 where charge gathers.
+HD void olShell(float c, int m, float beta, float r, float& rho, float& lap) {
+    const float e = c * expf(-beta * r);
+    const float rr = fmaxf(r, 1e-4f);
+    const float rm = m == 0 ? 1.0f : (m == 2 ? r * r : r * r * r * r);
+    const float rm2 = m == 0 ? 1.0f / (rr * rr) : (m == 2 ? 1.0f : rr * rr);   // r^(m-2)
+    rho += e * rm;
+    lap += e * (float(m * (m + 1)) * rm2 - 2.0f * beta * float(m + 1) * rm2 * rr + beta * beta * rm);
+}
+HD float olAtomDensityLap(int type, float r, float& lap) {
     // Si: 1s2 (13.5745), 2s2 (4.9008), 2p6 (4.9725), 3s2 (1.6344), 3p2 (1.4284); O: 1s2 (7.6579), 2s2 (2.2458), 2p4 (2.2266)
-    float rho;
+    float rho = 0.0f, l = 0.0f;
     if (type == 0) {
         const float z1 = 13.5745f, z2 = 4.9008f, z2p = 4.9725f, z3 = 1.6344f, z3p = 1.4284f;
-        rho = 2.0f * (4.0f * z1 * z1 * z1) * expf(-2.0f * z1 * r);
-        const float r2 = r * r, r4 = r2 * r2;
-        rho += 2.0f * olP5(2.0f * z2) / 24.0f * r2 * expf(-2.0f * z2 * r);
-        rho += 6.0f * olP5(2.0f * z2p) / 24.0f * r2 * expf(-2.0f * z2p * r);
-        rho += 2.0f * olP7(2.0f * z3) / 720.0f * r4 * expf(-2.0f * z3 * r);
-        rho += 2.0f * olP7(2.0f * z3p) / 720.0f * r4 * expf(-2.0f * z3p * r);
+        olShell(2.0f * 4.0f * z1 * z1 * z1, 0, 2.0f * z1, r, rho, l);
+        olShell(2.0f * olP5(2.0f * z2) / 24.0f, 2, 2.0f * z2, r, rho, l);
+        olShell(6.0f * olP5(2.0f * z2p) / 24.0f, 2, 2.0f * z2p, r, rho, l);
+        olShell(2.0f * olP7(2.0f * z3) / 720.0f, 4, 2.0f * z3, r, rho, l);
+        olShell(2.0f * olP7(2.0f * z3p) / 720.0f, 4, 2.0f * z3p, r, rho, l);
     } else {
         const float z1 = 7.6579f, z2 = 2.2458f, z2p = 2.2266f;
-        rho = 2.0f * (4.0f * z1 * z1 * z1) * expf(-2.0f * z1 * r);
-        rho += 2.0f * olP5(2.0f * z2) / 24.0f * r * r * expf(-2.0f * z2 * r);
-        rho += 4.0f * olP5(2.0f * z2p) / 24.0f * r * r * expf(-2.0f * z2p * r);
+        olShell(2.0f * 4.0f * z1 * z1 * z1, 0, 2.0f * z1, r, rho, l);
+        olShell(2.0f * olP5(2.0f * z2) / 24.0f, 2, 2.0f * z2, r, rho, l);
+        olShell(4.0f * olP5(2.0f * z2p) / 24.0f, 2, 2.0f * z2p, r, rho, l);
     }
+    lap += l * 0.0795775f;
     return rho * 0.0795775f;   // 1 / 4 pi
 }
-HD float olBodyDensity(const GDensityBody& b, float3 p) {
+HD float olAtomDensity(int type, float r) {
+    float lap = 0.0f;
+    return olAtomDensityLap(type, r, lap);
+}
+// lap: the atoms' Laplacian (per a0^5); the other bodies add none (the shells are drawn only where atoms are the view)
+HD float olBodyDensity(const GDensityBody& b, float3 p, float& lap) {
     const float3 d = (p - b.c) * b.scale;
     const float dd = d.x * d.x + d.y * d.y + d.z * d.z;
-    if (b.type <= 1) return olAtomDensity(b.type, sqrtf(dd));
+    if (b.type <= 1) return olAtomDensityLap(b.type, sqrtf(dd), lap);
     if (b.type == 2) return b.amp / (1.0f + expf((sqrtf(dd) - b.r) / b.a));
     if (b.type == 3) return b.amp * expf(-0.5f * dd / (b.a * b.a));
     // a tube: the distance to the segment
@@ -151,10 +169,14 @@ HD float olBodyDensity(const GDensityBody& b, float3 p) {
     const float3 q = d - e * t;
     return b.amp * expf(-0.5f * (q.x * q.x + q.y * q.y + q.z * q.z) / (b.a * b.a));
 }
-HD float olDensity(const GDensity& D, float3 p) {
+HD float olDensity(const GDensity& D, float3 p, float& lap) {
     float rho = 1e-30f;
-    for (int k = 0; k < D.n; ++k) rho += olBodyDensity(D.b[k], p);
+    for (int k = 0; k < D.n; ++k) rho += olBodyDensity(D.b[k], p, lap);
     return rho;
+}
+HD float olDensity(const GDensity& D, float3 p) {
+    float lap = 0.0f;
+    return olDensity(D, p, lap);
 }
 
 // a point of light: its flux as the sum of its pixels (display-referred radiance x pixels); a Gaussian on the screen

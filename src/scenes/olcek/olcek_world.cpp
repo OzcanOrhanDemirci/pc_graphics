@@ -1110,7 +1110,9 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
         gr.vibPhase = float(clk.vib[0]);
         // into the atom: the ground gives way to its clouds over a decade
         gr.fade = float(smoothstep(-10.5, -9.5, s));
-        if (gr.fade <= 0.0f) gr.on = 0;   // its frame stays: the density map's lattice is read in it
+        // not drawn once the density map covers it (from -9.0) or it has given way; its frame stays: the map's lattice
+        // is read in it
+        if (gr.fade <= 0.0f || s < -9.0) gr.on = 0;
     }
     // the swash's clock (the beach's own)
     v.beachClock = float(clk.beach);
@@ -1175,6 +1177,9 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
         dn.lo = float(k[0].lo + (k[1].lo - k[0].lo) * u);
         dn.hi = float(k[0].hi + (k[1].hi - k[0].hi) * u);
         dn.relief = 0.01f;
+        // the shells (Laplacian) while atoms are the view: from the lattice down to where only the K shell is left
+        dn.shells = float(smoothstep(-8.6, -9.2, s) * (1.0 - smoothstep(-11.2, -11.8, s)));
+        dn.pxA0 = float(W / width / a0);
     }
 
     // ---- the inner world: designed light, seen by "the instrument of its scale" (PLAN §5)

@@ -861,7 +861,7 @@ __device__ float3 webLight(const GWeb& w, float3 d, float tmax, float pixAngle) 
 // the density over this frame's range, hill-shaded as if log10 of it were height. One evaluation and two neighbours.
 // a map's picture from log10 of its quantity at the pixel and its neighbours (x0, and the steps gx, gy): lines at the
 // powers of ten, the fill over [lo, hi], the hill-shading
-__device__ float mapShade(float x0, float gx, float gy, float lo, float hi, float relief) {
+__device__ float mapShade(float x0, float gx, float gy, float lo, float hi, float relief, float fillMul = 1.0f) {
     const float g = sqrtf(gx * gx + gy * gy);
     const float r = x0 - floorf(x0 + 0.5f);                   // from the nearest power of ten
     const float line = __expf(-sqr(r / fmaxf(g * 0.75f, 1e-6f))) * (1.0f - smoothstepf(0.2f, 0.5f, g));
@@ -869,13 +869,13 @@ __device__ float mapShade(float x0, float gx, float gy, float lo, float hi, floa
     const float k = relief * cV.width;                        // height per decade, in pixels
     const float3 n = normalize(make_float3(-gx * k, gy * k, 1.0f));   // screen y runs down
     const float shade = 0.55f + 0.45f * (n.x * -0.5f + n.y * 0.5f + n.z * 0.7071f) / 0.7071f;
-    const float fill = (0.004f + 0.75f * t * t) * fmaxf(shade, 0.15f);
+    const float fill = (0.004f + 0.75f * t * t) * fmaxf(shade, 0.15f) * fillMul;
     return fill + (0.05f + 0.30f * t) * line;
 }
 // The silica net's electrons at p (camera space): the AFM's lattice (atomHeight: the same sites, the same thermal jitter),
 // each atom its Slater density, the apical oxygens under the silicons in 3D; atoms beyond 4.5 A left out (their tails
 // are 10^-9 of what is there). The home silicon is not here: it is a body, carrying the nucleus's swing.
-__device__ float latticeDensity(float3 p) {
+__device__ float latticeDensity(float3 p, float& lap) {
     const GGround& g = cV.ground;
     const float3 rel = (p - g.o) * g.metres;
     const float x = dot(rel, g.east), y = dot(rel, g.north), z = dot(rel, g.up);
@@ -901,20 +901,34 @@ __device__ float latticeDensity(float3 p) {
                 dy -= g.jitter * __sinf(g.vibPhase * 1.37f + p2);
                 const float d2 = dx * dx + dy * dy + dz * dz;
                 if (d2 > cut2) continue;
-                rho += olAtomDensity(m < 2 ? 0 : 1, sqrtf(d2) * inva0);
+                rho += olAtomDensityLap(m < 2 ? 0 : 1, sqrtf(d2) * inva0, lap);
             }
         }
     return rho;
 }
+__device__ __forceinline__ float densityAt(const GDensity& D, float3 p, float& lap) {
+    return olDensity(D, p, lap) + (D.lattice ? latticeDensity(p, lap) : 0.0f);
+}
 __device__ __forceinline__ float densityAt(const GDensity& D, float3 p) {
-    return olDensity(D, p) + (D.lattice ? latticeDensity(p) : 0.0f);
+    float lap = 0.0f;
+    return densityAt(D, p, lap);
 }
 __device__ float3 densitySlice(const GDensity& D, float px, float py) {
     const float3 d0 = rayDir(px, py), dx = rayDir(px + 1.0f, py), dy = rayDir(px, py + 1.0f);
     const float3 p0 = d0 * (1.0f / d0.z), p1 = dx * (1.0f / dx.z), p2 = dy * (1.0f / dy.z);
-    const float x0 = log10f(densityAt(D, p0));
+    float lap = 0.0f;
+    const float rho = densityAt(D, p0, lap);
+    const float x0 = log10f(rho);
     const float gx = log10f(densityAt(D, p1)) - x0, gy = log10f(densityAt(D, p2)) - x0;   // decades per pixel
-    const float v = D.weight * mapShade(x0, gx, gy, D.lo, D.hi, D.relief);
+    // the shells: -Laplacian(rho) / rho against the slope's own scale |grad ln rho|^2 (+1 / a0^2), dimensionless;
+    // lighter where charge gathers (the K, L, M shells of each atom, as rings)
+    float fillMul = 1.0f;
+    if (D.shells > 0.0f) {
+        const float g2 = sqr(2.302585f / D.pxA0) * (gx * gx + gy * gy);
+        const float q = -(lap / rho) / (g2 + 1.0f);
+        fillMul = 1.0f + D.shells * (0.9f * smoothstepf(-0.15f, 0.35f, q) - 0.45f);
+    }
+    const float v = D.weight * mapShade(x0, gx, gy, D.lo, D.hi, D.relief, fillMul);
     return make_float3(v, v, v);
 }
 
