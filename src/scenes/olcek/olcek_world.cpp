@@ -853,30 +853,11 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
     }
     // the Galaxy and its neighbours: discs of light (the unresolved stars), coming in where the stars blend (PLAN §7:
     // a decade of overlap)
-    auto disc = [&](int node, V3 n, V3 ax, double h, double lum, float arms, double phase, float bulge, double fade) {
-        if (fade <= 0.0 || v.nDiscs >= kMaxDiscs) return;
-        const V3 rel = tree.rel(cam.ref, node) - cam.pos;
-        if (length(rel) > 1e9 * D) return;
-        GDisc& g = v.discs[v.nDiscs++];
-        g.c = toCamSpace(rel);
-        g.n = dirCam(n);
-        g.ax = dirCam(ax);
-        g.ay = dirCam(cross(n, ax));
-        g.h = float(h / D);
-        g.rmax = float(5.0 * h / D);
-        g.thick = float(0.12 * h / D);
-        const double I0 = lum / (2.0 * kPi * h * h) / (4.0 * kPi);   // W/m^2/sr face-on at the centre
-        g.emit = blackbody(4800.0) * float(I0 * k * fade);
-        g.arms = arms;
-        g.pitch = 0.22f;
-        g.phase = float(phase);
-        g.bulge = bulge;
-    };
-    v.galaxy = GGalaxy{};
+    for (GGalaxy& g : v.galaxy) g = GGalaxy{};
     if (s > 18.5) {
         const double fade = smoothstep(18.8, 20.0, s);
         // the Milky Way: today's arms (their pattern turns at its own speed: clk.arms)
-        GGalaxy& g = v.galaxy;
+        GGalaxy& g = v.galaxy[0];
         const V3 rel = tree.rel(cam.ref, kGalCentre) - cam.pos;
         if (length(rel) < 1e9 * D) {
             g.on = 1;
@@ -922,10 +903,70 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
                 m.ext = float(a.ext * d2r);
             }
         }
-        const V3 m31n = normalize(v3(-0.29, 0.78, -0.55));   // placeholder orientations (Ö3)
-        disc(kM31, m31n, normalize(cross(m31n, v3(0, 0, 1))), 5.3e3 * kPc, 2.5e10 * kLsun, 0.4f, 0.0, 0.3f, 1.0);
-        const V3 m33n = normalize(v3(0.52, -0.31, 0.79));
-        disc(kM33, m33n, normalize(cross(m33n, v3(1, 0, 0))), 1.4e3 * kPc, 3.0e9 * kLsun, 0.5f, 1.0, 0.05f, 1.0);
+        // M31 and M33 by the same model at their own size and in their measured orientation: the disc's normal from
+        // the inclination i and the major axis's position angle (north through east) on the sky; the near side towards
+        // the minor axis's NW end. Their arms are a representation (M31: the 10 kpc ring of star formation and two
+        // tightly wound arms, Gordon et al. 2006; M33: two open arms and its large HII regions); sizes and light measured
+        struct Other { int node, slot; double ra, dec, inc, pa, h, lDisc, bulge, young, nebula, size, barW, barHalf, dust; };
+        const Other others[] = {
+            {kM31, 1, 10.6847, 41.2690, 77.5, 38.0, 5.3, 2.1e10, 14.0, 0.45, 0.12, 2.0, 0.25, 2.0, 1.8},
+            {kM33, 2, 23.4621, 30.6599, 55.0, 22.0, 1.4, 2.8e9, 0.6, 1.6, 0.9, 0.55, 0.0, 0.5, 0.9}};
+        for (const Other& o : others) {
+            const V3 rel = tree.rel(cam.ref, o.node) - cam.pos;
+            if (length(rel) > 1e9 * D) continue;
+            GGalaxy& m = v.galaxy[o.slot];
+            const V3 los = icrs(o.ra, o.dec);
+            const V3 eN = normalize(icrs(o.ra, o.dec + 0.01) - los), eE = normalize(icrs(o.ra + 0.01, o.dec) - los);
+            const double pa = o.pa * kDeg, inc = o.inc * kDeg;
+            const V3 major = eN * std::cos(pa) + eE * std::sin(pa), minor = eN * -std::sin(pa) + eE * std::cos(pa);
+            const V3 n = normalize(los * -std::cos(inc) + minor * std::sin(inc));
+            const V3 e0 = normalize(major - n * dot(major, n)), e1 = cross(n, e0);
+            m.on = 1;
+            m.c = toCamSpace(rel);
+            m.n = dirCam(n);
+            m.e0 = dirCam(e0);
+            m.e1 = dirCam(e1);
+            m.kpc = float(1e3 * kPc / D);
+            m.size = float(o.size);
+            m.hDisc = float(o.h / o.size);
+            m.barW = float(o.barW);
+            m.barHalf = float(o.barHalf);
+            m.barAngle = 0.6f;
+            m.dust = float(o.dust);
+            const double h = o.h * 1e3 * kPc;
+            const double Id = o.lDisc * kLsun / (2.0 * kPi * h * h) / (4.0 * kPi);
+            m.disc = blackbody(o.node == kM31 ? 4300.0 : 5600.0) * float(Id * k * fade);
+            m.bulge = blackbody(3900.0) * float(Id * o.bulge * k * fade);
+            m.young = blackbody(11000.0) * float(Id * o.young * k * fade);
+            m.nebula = make_float3(1.0f, 0.36f, 0.52f) * float(Id * o.nebula * k * fade);
+            m.fade = float(fade);
+            // arms in model kpc: {betaKink, Rkink, tanLo, tanHi, betaMin, betaMax, width, strength, ext} (radians)
+            const double d2r = kPi / 180.0;
+            struct A { double bk, Rk, plo, phi, b0, b1, w, st, ext; };
+            const A m31Arms[] = {
+                {0, 5.0, 0.0, 0.0, -180, 180, 0.32, 1.0, 5},       // the ring (pitch 0: a circle at 10 kpc)
+                {0, 3.6, 7.0, 7.0, -40, 260, 0.22, 0.55, 30},      // two tightly wound arms inside and outside it
+                {180, 6.6, 7.0, 7.0, -60, 230, 0.26, 0.5, 30}};
+            const A m33Arms[] = {
+                {0, 4.0, 26.0, 26.0, -60, 300, 0.45, 1.0, 40},
+                {180, 4.0, 26.0, 26.0, -60, 280, 0.42, 0.9, 40}};
+            const A* arms = o.node == kM31 ? m31Arms : m33Arms;
+            const int nA = o.node == kM31 ? 3 : 2;
+            m.nArms = 0;
+            for (int i = 0; i < nA; ++i) {
+                const A& a = arms[i];
+                GArm& g2 = m.arms[m.nArms++];
+                g2.betaKink = float(a.bk * d2r);
+                g2.Rkink = float(a.Rk);
+                g2.tanLo = float(std::tan(a.plo * d2r));
+                g2.tanHi = float(std::tan(a.phi * d2r));
+                g2.betaMin = float(a.b0 * d2r);
+                g2.betaMax = float(a.b1 * d2r);
+                g2.width = float(a.w);
+                g2.strength = float(a.st);
+                g2.ext = float(a.ext * d2r);
+            }
+        }
     }
     auto blob = [&](V3 rel, double sigma, float3 emit) {
         if (v.nBlobs >= kMaxBlobs) return;

@@ -56,8 +56,13 @@ struct GArm {
     float width = 0.3f, strength = 1.0f;                         // Gaussian sigma at the kink (kpc); its share
     float ext = 0.5f;                                            // how far past the measured azimuths it goes (radians)
 };
+// a spiral galaxy: the Milky Way (its model from measurements) and, drawn by the same code at their own size, M31 and
+// M33 (lengths in "model kpc": real kpc / size, so that one set of shapes serves the three)
+constexpr int kMaxGalaxies = 3;
 struct GGalaxy {
     int on = 0;
+    float size = 1.0f;                                          // real kpc per model kpc
+    float barW = 0.6f;                                          // the bar's share of the bulge's light (the rest a round core)
     float3 c{0, 0, 0}, n{0, 0, 1}, e0{1, 0, 0}, e1{0, 1, 0};   // centre, north pole, towards the Sun's place, the rotation
     float kpc = 1.0f;                                           // camera units per kpc
     float3 disc{0, 0, 0}, bulge{0, 0, 0}, young{0, 0, 0}, nebula{0, 0, 0};   // face-on central brightness of each (k)
@@ -269,7 +274,7 @@ struct OlcekView {
     float beachClock = 0.0f;   // the swash, seconds (wraps)
     GMaps maps;
     GAtmo atmo;
-    GGalaxy galaxy;
+    GGalaxy galaxy[kMaxGalaxies];   // 0 the Milky Way, 1 M31, 2 M33
     GWeb web;
     GDensity dens;
 };

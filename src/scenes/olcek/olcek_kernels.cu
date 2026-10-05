@@ -753,12 +753,12 @@ __device__ float3 galaxyLight(const GGalaxy& g, float3 d, float tmax, float pixK
     if (fabsf(dn) < 1e-6f) return make_float3(0, 0, 0);
     const float t = dot(g.c, g.n) / dn;
     if (t <= 0.0f || t >= tmax) return make_float3(0, 0, 0);
-    const float3 p = (d * t - g.c) * (1.0f / g.kpc);   // kpc, in the plane
+    const float3 p = (d * t - g.c) * (1.0f / (g.kpc * g.size));   // model kpc, in the plane
     const float x = dot(p, g.e0), y = dot(p, g.e1);
     const float R = sqrtf(x * x + y * y);
     if (R > 25.0f) return make_float3(0, 0, 0);
     const float beta = atan2f(y, x);
-    const float fp = pixKpc * t / fabsf(dn) * 0.5f;    // a pixel's footprint there (kpc)
+    const float fp = pixKpc / g.size * t / fabsf(dn) * 0.5f;    // a pixel's footprint there (model kpc)
     // the old disc: exponential, its edge softening beyond ~15 kpc
     float3 col = g.disc * (__expf(-R / g.hDisc) * (1.0f - smoothstepf(13.0f, 20.0f, R)) * 0.55f);
     // the bar and the bulge: an elongated exponential along the bar, a round core
@@ -766,7 +766,7 @@ __device__ float3 galaxyLight(const GGalaxy& g, float3 d, float tmax, float pixK
     const float bx = x * ca + y * sa, by = -x * sa + y * ca;
     const float bar = __expf(-sqrtf(sqr(bx / (g.barHalf * 0.33f)) + sqr(by / 0.55f)));
     const float core = __expf(-R / 0.35f);
-    col += g.bulge * (0.6f * bar + 0.4f * core);
+    col += g.bulge * (g.barW * bar + (1.0f - g.barW) * core);
     // the arms: young stars and nebulae in clumps; dust on their inner edges
     float young = 0.0f, lane = 0.0f;
     for (int i = 0; i < g.nArms; ++i) {
@@ -1197,7 +1197,8 @@ __global__ void kFrame(float4* accum, float* depthOut, int samples) {
         wsum += w;
     }
     float3 avg = sum * (1.0f / wsum);
-    if (cV.galaxy.on) avg += galaxyLight(cV.galaxy, rayDir(x + 0.5f, y + 0.5f), dCentre, cV.pixAngle / cV.galaxy.kpc);
+    for (int i = 0; i < kMaxGalaxies; ++i)
+        if (cV.galaxy[i].on) avg += galaxyLight(cV.galaxy[i], rayDir(x + 0.5f, y + 0.5f), dCentre, cV.pixAngle / cV.galaxy[i].kpc);
     if (cV.web.on) avg += webLight(cV.web, rayDir(x + 0.5f, y + 0.5f), dCentre, cV.pixAngle);
     if (cV.dens.on) avg = avg * (1.0f - cV.dens.weight) + densitySlice(cV.dens, x + 0.5f, y + 0.5f);
     if (cV.field.on) avg = avg * (1.0f - cV.field.weight) + fieldSlice(cV.field, x + 0.5f, y + 0.5f);

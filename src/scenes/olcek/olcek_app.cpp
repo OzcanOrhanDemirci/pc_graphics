@@ -487,6 +487,14 @@ int runOlcekCli(int argc, char** argv) {
                     std::printf("    blob %d: c %.5g %.5g %.5g sigma %.5g emit %.4g\n", i, v.blobs[i].c.x, v.blobs[i].c.y, v.blobs[i].c.z, v.blobs[i].sigma,
                                 v.blobs[i].emit.x);
                 std::printf("    splats %zu, ground fade %.3f atoms %.3f surface %.3f\n", app.splats.size(), v.ground.fade, v.ground.atoms, v.ground.surface);
+                for (int i = 0; i < kMaxGalaxies; ++i) {   // the galaxies' centres on the screen (pixels) and size
+                    const GGalaxy& g = v.galaxy[i];
+                    if (!g.on) continue;
+                    const float sx = (g.c.x / g.c.z / v.tanHalfX * 0.5f + 0.5f) * v.width;
+                    const float sy = (0.5f - g.c.y / g.c.z / v.tanHalfY * 0.5f) * v.height;
+                    std::printf("    galaxy %d: screen %.0f %.0f, depth %.3g, 20 kpc = %.1f px, |n.z| %.2f\n", i, sx, sy, g.c.z,
+                                20.0f * g.kpc * g.size / g.c.z / v.pixAngle, std::fabs(g.n.z));
+                }
                 if (v.dens.on) {   // the density over a 33 x 19 grid on the screen, and at the focus (log10, per a0^3)
                     float lo = 1e30f, hi = -1e30f;
                     for (int j = 0; j <= 18; ++j)

@@ -62,6 +62,13 @@ Akış önce, ayrıntı sonra (Özcan): 10⁻³'ten 10⁻³⁵'e her onlukta ger
   kristalografi haritası gibi: parlak çekirdekli silisyumlar, yumuşak oksijenler, altıgen boşluklar. 4,5 Å'dan uzak
   atomlar atlanır (titreşimden önce kaba eleme). Ağ -11'in altında kapalı (payı 10⁻³). -9,5 ile -5 arası tarama:
   sıçrama yok, en uzun kare 14,1 ms.
+- **M31 ve M33 yer tutucu değil:** Samanyolu'nun modeli üç galaksiye genellendi: "model kpc" = gerçek kpc / boy, çubuğun
+  payı ayrı. Gerçek yönelimleriyle çiziliyorlar: eğim ve büyük eksenin konum açısı gökyüzünde, normal oradan (M31 i 77,5°,
+  PA 38°; M33 i 55°, PA 22°). Boy ve ışık ölçümlerden (M31 h 5,3 kpc, 2,1·10¹⁰ L_güneş disk, belirgin şişkinlik;
+  M33 h 1,4 kpc, genç ve HII ağırlıklı). Kollar temsil: M31'de 10 kpc yıldız oluşum halkası ve iki sıkı kol (Gordon
+  ve ark. 2006), M33'te iki açık kol. M31 s ≈ 22,8-23,3'te ekrana girer (20 kpc ≈ 30-60 piksel): eğik, sarı
+  şişkinlikli, mavi halkalı. M33 bu bakıştan neredeyse yandan görünür; kamera bizim bakış doğrultumuzda değil, doğrusu bu.
+  2MRS cz < 150 km/s'yi dışarıda bıraktığı için çift çizim yok.
 - **Galaksi geçişi düzeldi:** s 23,36'daki sıçrama gerçek bir geçişti. Yakın bir galaksi çifti (büyük olasılıkla
   M81/M82) kamera odağa doğru ilerlerken adımda ~80 piksel kayıyordu. Yakınlık sönümü d/D 0,1-0,5'ten 0,3-1,0'a
   genişledi: 22-25 arasında sıçrama yok (`--set test.lo=22 --set test.hi=25`: tarama artık bir bölümle sınırlanabiliyor).
@@ -140,7 +147,7 @@ Planın sırası (Ö2 → Ö3) Özcan'ın *"harbiden Samanyolu gibi"* sözüyle 
 ### NE DOĞRULANMADI (bu parça)
 - Sıçrama ölçüsü galaksi, gerçek yıldızlar ve 2MRS ile yeniden koşulmadı.
 - Samanyolu'nun ölçülmeyen yarısı ve kol uzantıları temsil; renkler ve parlaklıklar gözle ayarlandı, bir fotoğrafa karşı
-  ölçülmedi. M31 ve M33 hâlâ eski düz disk yer tutucuları.
+  ölçülmedi. (M31 ve M33 sonradan modelle çizildi: yukarıda.)
 - Canlıda elle hiçbir şeye bakılmadı (yalnız autotest'in sanal tekerleği).
 
 ## 2026-10-05 akşamüstü · Ö1 sürüyor: gerçek Dünya, Çandarlı, bugünün bulutları, hava
