@@ -486,6 +486,7 @@ int App::run(const Options& opt) {
         key(GLFW_KEY_A); wait(0.6); shot("galeri_ayrintilar_3");
         key(GLFW_KEY_1); wait(0.6); shot("galeri_ayrintilar_1");
         key(GLFW_KEY_2); wait(0.6); shot("galeri_ayrintilar_2");
+        key(GLFW_KEY_7); wait(0.6); shot("galeri_ayrintilar_7");   // the longest details so far (Ölçek)
         control("@ayrintilar", 0); wait(0.6); shot("galeri_ayrintilar_kapandi");
         // the other language and back (L)
         key(GLFW_KEY_L); wait(0.6); shot("galeri_dil"); key(GLFW_KEY_L); wait(0.4);
