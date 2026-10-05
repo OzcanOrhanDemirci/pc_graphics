@@ -44,15 +44,30 @@ oradan Andromeda'ya gerçekten gider. Özel göreliliğin söylediği her şey, 
 |---|---|
 | Yer | Ölçek sahnesinin ikinci seçeneği (panelde Ölçek \| Hız). Aynı evren, aynı veri, aynı motor |
 | Ekranın saati | **Roketin saati (B):** ekranın bir saniyesi yolcunun bir saniyesi. Dünya saati γ kat hızlı akar. (A, Dünya'nın saati, konuşuldu: ışık hızının yavaşlığı birebir yaşanır ama yolcunun saati donar; seçilmedi) |
-| Zaman | **Gerçek zaman.** Hızlandırma yok, zaman çarpanı yok: bir yolcu saniyesi bir ekran saniyesi |
+| Zaman | **Gerçek zaman.** Hızlandırma yok, zaman çarpanı yok: bir yolcu saniyesi bir ekran saniyesi. 10-06'da yeniden: *"Zaman hızlandırma olmasın. Bu tüm mantığımıza ters. Sürecin uzun sürmesi proxima ve bir galaksinin çok uzakta olmasıyla ilgili hissi verir."* |
 | Hız tavanı | **21 dokuz** (%99,9999999999999999999, γ ≈ 2,2 × 10¹⁰): Andromeda yolcunun saatiyle ~1 saat. 17 dokuz (4 gün) konuşuldu, Özcan 1 saati seçti |
 | Duraklar | **Üç:** kalkış Dünya'nın yörüngesi; ara durak Proxima Centauri (4,25 ışık yılı, yanında Proxima b); uzak durak Andromeda (diskinin 100 bin ışık yılı önü). Dar alan: uzaya ve üç durağa özen |
 | Rota | Dünya → Proxima → (153° dönüş) → Güneş sisteminin 1,9 ışık yılı yanından geri → Andromeda. Düz çizgiler, gerçek konumlar |
-| Kontrol | **W** itiş (sabit öz-ivme), **S** fren (aynı güç), **Space** otomatik varış (doğru anda frenleyip yörüngeye oturur). A, D, geri vites yok. Bırakınca o hızda süzülürsün |
-| Görüntüler | **Yandan 2,5B** (roket, manken, ölçülen dünya, grafikler) ve **FPS** (roketin gözü: 3B uzay, bütün optik etkiler). Roket ve manken yalnız 2,5B'de, okunur ve sade; özen uzaya |
+| Kontrol | **W** itiş, **S** fren (aynı güç), **Space** otomatik varış (doğru anda frenleyip yörüngeye oturur). A, D, geri vites yok. Bırakınca o hızda süzülürsün. **İvme 10-06'da değişti** (aşağıda): sabit değil, 1 g'den başlayıp hızla artan |
+| Görüntüler | **Yandan 2,5B** (roket, manken, grafikler) ve **FPS** (roketin gözü: 3B uzay, bütün optik etkiler). Roket ve manken yalnız 2,5B'de, okunur ve sade; özen uzaya. **10-06:** yandan görünüm **Dünya'nın çerçevesi** (evrenin haritası), roketin çerçevesi ("ölçülen dünya") söküldü; iki görüntü de kalır, FPS'e **enerji gözü** eklenir (aşağıda) |
 | İnsan | **Manken** (çöp adam değil), sahnelerin üslubuna uygun |
 | Grafikler | Ekran kadar önemli. Hız ölçeği, uzay-zaman dokusu, yol kısalması, saatler, **bedeller**; Özcan'ın görüntülerindeki dilde (ince çizgi, aralıklı başlık), kendi özenimizle |
 | Fizik | **Özel görelilik, tam formüllerle, her etki.** İdealize edilen yalnız roketin mühendisliği (enerji, ivme, radyasyon), bedel panosu bunu açıkça gösterir. "Bükülme" özel görelilikte düz uzay-zamanın dilimlenmesidir (Minkowski), kütleçekimi değil |
+
+### Kararlar (Özcan, 2026-10-05 gecesi ve 10-06, H1'e bakınca)
+H1'den sonra Özcan ilk kez baktı: *"şuan fizik olarak doğru, grafik olarak büyük oranda istediğim gibi ama görüntü olarak
+hiç aklımdakine uymayan bir durum var"*. Konuşarak şunlar kararlaştı:
+
+| Konu | Karar |
+|---|---|
+| **İvme** | *"Işık hızının %1 ine çıkmamız 1 dk falan sürsün. Sonra %10 civarına tekrar 1 dk. Kalan %90 ise 3-4 dk [...] %99 dan sonraki 9 larda ise birkaç dk içerisinde 21 dokuza ulaşırız [...] 7 8 dk falan [...] bu sayede hız, olayın sahnenin kendisi olur [...] 21 dokuz gibi absürt hızlar pratikte daha nadir ulaşılır. Hem %1 ışık hızı bile anca ulaşılan çok yüksek bir hız hissini korur."* İvme 1 g'den başlar, hep artar. Yolculukların uzaması bilerek kabul edildi (Proxima ~14 dk, Andromeda ~1 sa 12 dk tahmini; §2) |
+| **Hız hissi** | *"araba oyunlarında 300 km hızla gidersin ve çok hızlıyım dersin [...] O hissi sağlayacak bir şeyler. Gerçekçiliği bozmadan."* Kaynakları: yakın cisimler (kalkışta Dünya ve Ay), gökyüzünün kendisi (sapınç, Doppler, fon), yandan akan **yıldızlararası ortam noktaları (hep açık, ayrı düğme yok)**, motorun ışığı |
+| **Yandan görünüm** | *"Yalnız 1 olsun"*: **Dünya'nın çerçevesi** (evrenin haritası; `referans/kuasar-galaksi.png` gibi). Kamera roketi izler; tekerlek: yakın = hız, uzak = ölçek ve küçüklük. *"estetik, yüce ve kozmik olarak wow dedirtmesi lazım [...] uzayın büyüklüğündeki küçüklüğümüz ve yavaşlığımız hissi"* |
+| **İki görüntü** | FPS'i bırakmayı sordu, kaybı duyunca: *"FPS i bozmayalım. 2 görüntümüz de olsun. Motor ışığı ve diğer her türlü fizik detayı güzel olur [...] %1 den ışık hızına iyice yaklaştığımız süreç ve ışık hızına neredeyse ulaşma seviyesinde o uzayı fizikle ve estetik şekilde görmek istiyorum. Planı kaybedeceğimiz şeyler olduğu için küçültmeyelim."* |
+| **Sanat yönetimi** | *"gerçeklik kadar estetik yani gerçek estetiğe önem veriyorum. Altın saati ders olarak yazmıştık, gerçekti ama estetik değildi."* İlke: **fizik bükülmez; sanat yönetimi fiziğin kendi araçlarıyla** (pozlama ve göz uyumu, gözün optiği: parlama ve kırınım, dürbün, kadraj, zamanlama) |
+| **Enerji gözü** | FPS'te görünmeyen ışığı (morötesi, X, gama) açıkça etiketli renklerle gösteren dedektör. *"fizik açısından daha doğru [...] öğretici olur. Ama gerçek görüntüyü isteyen kapatır."* Açık başlar |
+| **Grafikler** | H1 revizesi: UZAY-ZAMAN sade (eksenler ve katlanan ızgara), HIZ'da dokuz merdiveni yok. *"grafikler istediğim gibi olmuş"* |
+| **Yetki** | *"Tam otonom şekilde bitirene kadar devam et"* (10-06 ~00:07). Taşların sırası ve FPS'te aracın bir parçasının görünmesi Claude'un kararı |
 
 ## 2 · Fizik: özel görelilik, eksiksiz
 
@@ -62,26 +77,30 @@ Güneş-Proxima-Andromeda, aralarındaki yüzlerce km/s yok sayılabilir; belged
 
 - **Hız açısı üzerinden:** β = tanh φ, γ = cosh φ, γβ = sinh φ. **1 − β = 2 / (e^(2φ) + 1)** doğrudan: 21 dokuzda
   bile basamak kaybı yok (0,999...9'u double saklayamaz, 1'e yuvarlar). Sayılar yazılırken de 1 − β'dan.
-- **İtiş:** W basılıyken öz-ivme a = 0,4 c/s (φ̇ = 0,4 /s; ~1,2 × 10⁷ g). Sabit öz-ivmede kapalı biçimler (her karede
-  tam, adım hatası yok): dt = cosh φ dτ, dx = c sinh φ dτ ⇒ bir adımda φ₀ → φ₁: Δt = (c/a)(sinh φ₁ − sinh φ₀),
-  Δx = (c²/a)(cosh φ₁ − cosh φ₀). Süzülürken (itiş yok) Δt = cosh φ Δτ, Δx = c sinh φ Δτ.
+- **İtiş (10-06'dan):** öz-ivme hızın bir işlevi, a(φ): 1 g'den başlar, hep artar, tepede milyonlarca g. Hedef takvim
+  (duruştan W basılı): **%1 c ~1 dk, %10 c ~2 dk, %99 c ~5,5 dk, 21 dokuz ~8 dk.** a(φ) ince dilimlerde sabittir (komşu
+  dilimler %1'den az farklı: hissedilmez); her dilimde sabit öz-ivmenin kapalı biçimleri geçerli, böylece fizik yine her
+  karede tam: dτ = c dφ/a, Δt = (c/a)(sinh φ₁ − sinh φ₀), Δx = (c²/a)(cosh φ₁ − cosh φ₀). Süzülürken Δt = cosh φ Δτ,
+  Δx = c sinh φ Δτ. (H0'daki sabit 0,4 c/s'nin yerini aldı: Özcan'a *"hızlanmıyoruz, direk ışık hızına yaklaşıyoruz"*.)
 - **Fren:** S aynı güçte, φ azalır. Sabit ivme olduğu için dokuzlar doğrusal düşer, γ katlanarak (Özcan'ın "katlanarak
   yavaşlama" isteği fizikte kendiliğinden böyle).
-- **Tavan:** φ_max = arcosh(γ_max) = 24,5237 (21 dokuz; "24,52"ye yuvarlanmış hâli 20 dokuz verir): W ile **61,3 saniye**.
-  Bu arada 1.771 ışık yılı yol alınır.
+- **Tavan:** φ_max = arcosh(γ_max) = 24,5237 (21 dokuz; "24,52"ye yuvarlanmış hâli 20 dokuz verir): yeni ivmeyle
+  W ile ~8 dk (H0'da 61,3 s).
 - **Konum kesinliği:** ayağın başından uzaklık Andromeda ayağında 2,3 × 10²² m'ye çıkar; metre ölçeğinde yakınlaşırken
   roketin yanındaki tanecikler için çift-double (Ölçek'teki DD) ya da roketin kendi çapası (ağaçta bir düğüm, konumu
   ayağın başından DD). Kamera hep rokete göre.
-- **Otomatik varış (Space):** durma mesafesi d_dur = (2c²/a) sinh²(φ/2) (durgun çerçevede; (c²/a)(cosh φ − 1)'in
-  basamak kaybetmeyen biçimi). Space bulunduğun her durumdan **en kısa yoldan** götürür (H0'da değişti, gerekçe DURUM'da):
-  durabileceği en yüksek hız (φ*, sinh²(φ*/2) = a r/(4c²) + sinh²(φ/2)/2) daha yukarıdaysa hızlanır, tavanda süzülür,
+- **Otomatik varış (Space):** durma mesafesi d_dur(φ) = D(φ), duruştan φ'ye itişte alınan yol (yasa yalnız φ'ye bağlı
+  olduğu için fren itişin aynası: aynı yol, aynı süre; sabit ivmede (2c²/a) sinh²(φ/2)). Space bulunduğun her durumdan
+  **en kısa yoldan** götürür (H0'da değişti, gerekçe DURUM'da): durabileceği en yüksek hız φ* (D(φ*) = (r + D(φ))/2)
+  daha yukarıdaysa hızlanır, tavanda süzülür,
   kalan yol d_dur'a inince aynı güçle frenler, hedefte durur. Zaten o kadar hızlıysan yalnız süzülür ve doğru anda
   frenler. **W ya da S'ye basmak** kumandayı geri alır; elle hedefin binde biri kadar yakınında durursan son kısmı otomatik
   varış uçar (ışınlanma yok). Hedefte **yörüngeye** oturma H5'in işi (Proxima'da Proxima b'nin yörüngesi, 0,0486 AU,
   ~47 km/s; Andromeda'da galaksiye göre durgun); H0'da roket hedefte durgun çerçevede durur. Panelde **d_dur** ve **kalan**
   canlı: kendin de frenleyebilirsin. Geçersen durduktan sonra W hedefe geri götürür (roket döner; geri vites değil, yön).
 - **Dönüş:** bir ayaktan ötekine geçerken roket yeni yöne döner (Proxima'da 153°), FPS'de gökyüzü yavaşça döner (~8 s).
-- **Yolculuk** (roketin saatiyle, kusursuz sürüşte):
+- **Yolculuk** (roketin saatiyle, kusursuz sürüşte; **H0'ın sabit ivmesiyle**, yeni ivmenin ölçümleri DURUM'da: tahmin
+  Proxima ~14 dk ve en çok ~14 dokuz, Andromeda ~1 sa 12 dk):
 
 | Ayak | Roketin saati | Dünya'da geçen | En yüksek hız |
 |---|---|---|---|
@@ -132,22 +151,32 @@ Tab ile yandan bakışa geçilir.
      Güneş'ten uzaklıkla, fotoğrafla model aynı yerden bakınca örtüşecek biçimde ayarlanır.
   3. *Galaksiler arası:* arkada Samanyolu (dışarıdan), önde Andromeda ve Üçgen (M33) hacimsel modelleri, uzakta 2MRS
      galaksileri, her yerde kozmik fon ışıması (isteğe bağlı Planck haritasının anizotropileri).
+- **Enerji gözü (10-06):** görünmeyen ışığı da sayan dedektör: her yönden gelen enerji (bolometrik), bandına göre
+  açıkça etiketli renklerle (radyo/mikrodalga, kızılötesi, görünür, morötesi, X, gama). Çok dokuzda gözle kararan evren
+  onunla önde yanan bir noktaya döner. Açık başlar; kapatınca saf göz.
+- **Sanat yönetimi (10-06):** fizik bükülmez. Araçlar: pozlama ve göz uyumu, gözün optiği (parlak noktanın çevresinde
+  parlama ve kırınım halkaları), dürbün, kadraj, zamanlama. Aracın bir parçasının (pencere kenarı, burun) görünmesi H3'te
+  denenip seçilir.
 - **Pozlama:** tasarlanmış, görüntüden okunmaz (kıpraşma yok). Gökyüzünün toplam ışığı φ'nin ve yerin bilinen bir
   işlevi (fon ışımasının γ²'si, yıldızların toplamı): göz uyumu bu hesaptan, yumuşak. AgX ton eşleme.
 - **Kalite:** gren yok, kıpraşma yok; nokta kaynaklar ışığını koruyarak (Ölçek'in noktaları gibi), deterministik.
 
-### 3.2 Yandan 2,5B: ölçülen dünya ve hikâye
+### 3.2 Yandan 2,5B: evrenin haritası ve hikâye
 
-- **Ölçülen dünya, roketin çerçevesinde:** roketin "şimdi"sinde cetvelle ölçülen konumlar. Evren gidiş yönünde γ kat
-  basıklaşır, roket durur, evren akar. Yıldızlar, Proxima, Andromeda basık; çok dokuzda yol üstündeki yıldızlar roketin
-  önünde ince bir tabakaya sıkışır. Optik değil (göz bunu görmez), **ölçümdür**: grafiklerdeki dil.
+- **Dünya'nın çerçevesi (10-06, Özcan: "Yalnız 1 olsun"):** evren kendi durgun çerçevesinde, galaksiler gerçek şekilleri
+  ve uzaklıklarıyla (`referans/kuasar-galaksi.png` gibi). Kamera roketi izler; ekranın saati yine roketin saati. Yakından
+  çevre akar (hız), uzaktan roket zor kıpırdar (ölçek, küçüklük). Bir **harita**dır, fotoğraf değil: tutarlı olmak için
+  roket de Dünya'nın ölçtüğü gibi çizilir, hareket yönünde γ kat kısa (%90'da yarı, %99'da 1/7, ötesi ince bir disk).
+  (Planın ilk hâlindeki "ölçülen dünya", roketin çerçevesi, H0'da yapılmıştı; H2'de söküldü.)
 - **Roket ve manken:** sade, temiz, okunur 2B çizim (vektör üslubu, hafif ışık). Roket bir foton roketi: itişte arkasında
   ince bir ışık huzmesi. Mankenin yüzü yok, oturuyor.
 - **Hız hissi:** yıldızlararası ortamın tanecikleri (gaz ve toz; yoğunluk temsili, hız gerçek) roketin yanından geçer.
   Gözün kapağı bir kare (1/60 s): %99,9'da bir karede 5.000 km. 10 m'den bakınca çizgi yağmuru, Dünya boyunda kısa
   çizgiler, AU'da nokta, ışık yılında donmuş. Ölçek motorunun tekerleği aynen: 10 m'den 10²³ m'ye.
 - **Hız oku:** roketle akan ince ok, üstünde v (m/s) ve β (Özcan'ın son görüntüsündeki gibi). Durak işaretleri: ad ve
-  uzaklık (iki çerçevede).
+  uzaklık. Yol, iki durak arasında ince ışıklı bir çizgi (referanstaki gibi).
+- **Ölçek durakları (10-06):** tekerleğin yanında yumuşak geçişli hazır ölçekler: Roket · Dünya ve Ay · Güneş Sistemi ·
+  Yakın yıldızlar · Samanyolu · Yerel Grup (Samanyolu ve Andromeda birlikte: referans görüntü).
 
 ### 3.3 Duraklar
 
@@ -238,9 +267,11 @@ alanıyla ya da arayüzün OpenGL'inde gölgelendiriciyle) H1'in ilk işi.
   sınamaları, paneldeki sayılar. Görüntü en basit hâliyle: FPS'de katalog yıldızları sapınç ve Doppler'le (CIE tablosu
   dahil), yandan bir nokta.
 - **H1 · Grafikler:** çizgi altyapısı, beş pano, canlı. Özcan'ın gözüne erken gösterilir.
-- **H2 · Yandan 2,5B:** roket ve manken çizimi, ölçülen dünya (kısalma), yıldızlararası ortamın çizgileri, tekerlek, hız
-  oku, durak işaretleri.
-- **H3 · FPS gökyüzü:** göreli ışın izleme, ESO panoraması ve yıldız silme, kozmik fon ışıması, pozlama.
+- **H2 · İvme ve yandan harita (10-06'da genişledi):** yeni ivme yasası (fizik, sınamalar, kâhin); yandan Dünya'nın
+  çerçevesi (ölçülen dünya sökülür), takip eden kamera, roket ve manken çizimi, motor ışığı, yıldızlararası ortam
+  noktaları, tekerlek ve ölçek durakları, yol çizgisi, hız oku, durak işaretleri; kalkışta Dünya ve Ay.
+- **H3 · FPS gökyüzü:** göreli ışın izleme, ESO panoraması ve yıldız silme, kozmik fon ışıması, pozlama, enerji gözü,
+  gözün optiği.
 - **H4 · Galaksiler 3B:** Samanyolu'nun hacimsel modeli (içeriden ve dışarıdan, fotoğrafla örtüşen), M31, M33, 2MRS.
 - **H5 · Duraklar:** Dünya'nın yörüngesi, Proxima (yıldız, b, Alfa Erboğa, Güneş'imiz Kraliçe'de), Andromeda'ya varış,
   yörüngeye oturma, dönüş.
