@@ -2,6 +2,11 @@
 
 > Tek kaynak durum panosu. Plan `docs/heykel/PLAN.md`. En yeni en üstte.
 
+## 🏁 Sahne kapandı (2026-10-05 gece)
+
+**Özcan:** *"Sorun çözüldü sahne tamamlandı."* Dört revizeyle kapandı (Yıldız ve deterministik çizici · her kare aynı ·
+kamera modele çarpar · kamera heykelin yanında kalır). Dersler hafızada (`gpu-ve-grafik` §28).
+
 ## 🔁 Revize 4 · Kamera heykelin yanında kalır (2026-10-05 gece)
 
 **Özcan:** *"eğer en başta bir anda yakınlaşırsak kamera modelden ayrı bir yere ışınlanıyor ve model yok oluyor [...]

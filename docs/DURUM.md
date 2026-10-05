@@ -5,6 +5,9 @@
 > `docs/tanecik/` arşiv.
 
 ## Şu an
+- **2026-10-05 (gece) · Sahne 6 "Heykel" kapandı.** Özcan: *"Sorun çözüldü sahne tamamlandı."* Son revize (4): kamera
+  heykelin yanında kalır (tekerlek yalnız heykele, tasma, ilk görünüme sıçramasız dönüş, arkası duvarsa geldiği yoldan
+  geri sarma). Revize 1-4 ve ölçümler `docs/heykel/DURUM.md` başında. Sıradaki: sahne 7 konuşuluyor.
 - **2026-10-05 (öğleden sonra) · Heykel revize 2: her kare aynı.** Özcan: hareket ederken ve dururken iki ayrı dünya gibi
   (*"ışık oradadır"*). Birikim kalktı (4 sabit örnek, durunca değişmez), lamba atlamaz (hedefi yumuşakça kayar), çapa hesabı
   yalnız gereken düzeylerde (derinde 2 kat hızlı). Kare 13-36 ms. `docs/heykel/DURUM.md` başında.
