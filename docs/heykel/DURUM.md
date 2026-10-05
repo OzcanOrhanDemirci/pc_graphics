@@ -23,7 +23,8 @@ Seçimim **Katedral** (sözde Klein): ilk görünümü gerçek bir müze fotoğr
   (makro / hepsi net) · **↑ / ↓:** pozlama · **H:** arayüzü gizle.
 
 **Ölçümler (2560×1440, RTX 4080):**
-- **Akıcılık** (`--autotest-only heykel`): uygulama 28-44 fps; hareket ederken önizleme 5-33 ms (derinde ışın sayısı
+- **Uygulama** (`--autotest`, altı sahne birden: hepsi yüklendi, çıkış 0, her sahne kapanınca boş kart belleği aynı
+  düzeye döndü, 14,8-15,0 GB). **Akıcılık** (`--autotest-only heykel`): 28-44 fps; hareket ederken önizleme 5-33 ms (derinde ışın sayısı
   kendini düşürür). Kart belleği 2,0 GB.
 - **Durunca netleşme** (komut satırı, 2560×1440, iki dalış; yüzde: 1.024 örnekli referanstan 8 gri seviyesinden fazla
   ayrılan piksel):
@@ -93,7 +94,6 @@ Seçimim **Katedral** (sözde Klein): ilk görünümü gerçek bir müze fotoğr
 - **10.000 katın ötesi:** yakınlaşma orada durur; ötesi denenmedi.
 - **Çok yoğun kafes bakışları:** kameranın hemen önünde ince bir dantel tabakası varken görüntü gri bir örtüye döner
   (gerçek geometri, cepheden gelen göz ışığıyla düz); turun durakları bunlardan kaçınıyor, serbest gezintide çıkabilir.
-- **Bütün galeri otomatik sınaması** (`--autotest`, bütün sahneler) koşmadı; yalnız `--autotest-only heykel`.
 
 ## G0 · Etüt taslağı (2026-10-05 gecesi; Özcan bakmadan seçimi bana bıraktı, aşağıdaki görev)
 
