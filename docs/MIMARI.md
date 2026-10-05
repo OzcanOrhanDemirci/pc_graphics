@@ -138,7 +138,8 @@ değişince uygulama bütün sahnelerin `info()`'sunu yeniden ister. Komut satı
 - **Hareket:** ekranlar 0,5-0,7 sn'de belirir; galeri seçimi kayarak geçer, resimler çapraz geçişle değişir; ayrıntılar
   paneli resmin üstüne 0,3 sn'de iner, resmin kendi yazıları o sırada çekilir; bildirimler 3 sn sonra söner.
 - **Galeride iki ses:** resmin altında ne olduğu (kısa açıklama), "Ayrıntılar"da nasıl yapıldığı (teknik). Stil ya da
-  esin adı açıklamada değil, gerekirse ayrıntılarda.
+  esin adı açıklamada değil, gerekirse ayrıntılarda. Ayrıntılar iki sütuna yükseklikle dengelenir; sığmayan metinde
+  gövde yazısı %85'e kadar küçülür (hiçbir başlık kesilmez), yine sığmazsa metin kısaltılır.
 - **Yazı atlası:** IBM Plex'ten ASCII, Latin-1, Latin Genişletilmiş-A (Türkçe), Yunan harfleri (β, γ, φ, τ), tireler ve
   tırnaklar, oklar, eksi, ≈, ∞ ve üst/alt simgeler (10⁻³⁵ gibi, U+2070-209F) pişirilir (`src/ui/ui.cpp`, `kRanges`).
   Başka bir simge önce oraya eklenir; yoksa ekranda "?" çıkar. Yunan harfleri Plex Mono'da ve Serif'te yok: bir yüzün

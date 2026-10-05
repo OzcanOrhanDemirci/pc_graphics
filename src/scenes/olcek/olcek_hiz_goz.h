@@ -59,9 +59,10 @@ struct Eye {
     double k = 1.0;             // the exposure: display radiance per W/m^2/sr
     double omegaPx = 1e-6;      // the solid angle a point's light is spread over (the unzoomed pixel's: the field of
                                 // view narrowed by the wheel does not brighten the points)
-    double adaptDiag = 0.722;   // the eye adapts to the light within this angle of where it looks (radians): the unzoomed
-                                // field's half diagonal (75 x 42 degrees), so the binoculars change neither the points
-                                // nor the exposure
+    // the eye adapts to the light in the unzoomed window (75 x 42 degrees: its half tangents), so the binoculars change
+    // neither the points nor the exposure; a source just outside the window neither dims the eye nor is seen (H6: the
+    // Sun, aberrated forward at half light's speed, sat outside the screen and darkened it)
+    double adaptX = 0.7673, adaptY = 0.4316;
     bool energy = false;        // the energy eye: every band's light (bolometric), the band in false colour
     double worldT = 0.0;        // the rest frame's time since the journey's first thrust (s): the world's clocks
     // the catalogue's Sun and Proxima: their points' share (the rest drawn as their balls where they are wide)
@@ -71,7 +72,7 @@ struct Eye {
 struct EyeSum {
     double visible = 0.0;       // the visible light from the whole sky at the rocket (W/m^2, the Sun's spectrum's units)
     double visibleView = 0.0;   // ... of it what falls in the eye's field (a soft cone: the eye adapts to what it sees)
-    double viewShare = 1.0;     // the cone's share of the whole sky (its solid angle / 4 pi): visibleView / viewShare is
+    double viewShare = 1.0;     // the window's share of the whole sky (its solid angle / 4 pi): visibleView / viewShare is
                                 // the whole sky's light if it were all like the field (the exposure's measure)
     double visibleSun = 0.0;    // ... of it the Sun's
     int inView = 0;

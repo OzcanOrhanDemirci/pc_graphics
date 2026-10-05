@@ -152,6 +152,24 @@ double Blackbody::chromaticity(double T, double& y) const {
 // ---------------------------------------------------------------------------------------------------------------------
 // The eye
 
+// the window the eye adapts to (Eye::adaptX, adaptY), its edges soft over 3% of it: a direction's weight in it
+double fieldWeight(const Eye& e, V3 n) {
+    const double z = dot(n, e.fwd);
+    if (z <= 0.0) return 0.0;
+    const double x = std::fabs(dot(n, e.right)) / z / e.adaptX, y = std::fabs(dot(n, e.up)) / z / e.adaptY;
+    auto edge = [](double u) {
+        const double t = std::clamp((1.03 - u) / 0.06, 0.0, 1.0);
+        return t * t * (3.0 - 2.0 * t);
+    };
+    return edge(x) * edge(y);
+}
+
+// ... its solid angle over 4 pi (a pinhole's rectangle: 4 asin(tx ty / sqrt((1 + tx^2)(1 + ty^2))))
+double fieldShare(const Eye& e) {
+    const double tx = e.adaptX, ty = e.adaptY;
+    return std::max(4.0 * std::asin(tx * ty / std::sqrt((1.0 + tx * tx) * (1.0 + ty * ty))) / (4.0 * kPi), 1e-300);
+}
+
 void buildEye(const StarSet& st, const Blackbody& bb, const Eye& e, std::vector<GSplat>& out, EyeSum& sum, const std::vector<Light>* extra) {
     out.clear();
     sum = EyeSum{};
@@ -160,13 +178,8 @@ void buildEye(const StarSet& st, const Blackbody& bb, const Eye& e, std::vector<
     const double toDisplay = e.k / e.omegaPx;
     const double mx = e.tanHalfX * (1.0 + 8.0 / e.width), my = e.tanHalfY * (1.0 + 8.0 / e.height);
     const double logShareSun = bb.logShare(kTsun);
-    // the field's soft cone: full inside the screen's half diagonal, gone a tenth beyond it (the eye adapts to what it
-    // sees; the Sun 61 degrees off the bow at the start, just outside the window, does not dim the stars in it). Angles
-    // off the axis from tangents and sines (a cosine of 1e-11 rad is 1 in a double: the deepest binoculars)
-    const double diag = std::clamp(e.adaptDiag, 1e-6, 1.4);
-    const double aIn = diag, aOut = std::min(1.1 * diag, 0.5 * kPi);
-    const double sh = std::sin(0.525 * std::min(diag, kPi / 1.05));
-    const double viewShare = std::max(sh * sh, 1e-300);   // 0.5 (1 - cos(1.05 diag)) without the cancellation
+    // the window the eye adapts to (the Sun 61 degrees off the bow at the start, outside it, does not dim the stars)
+    const double viewShare = fieldShare(e);
     const size_t n = st.pos ? st.pos->size() : 0;
     // one more "star": the Sun, at the origin (the catalogue has no Sun); then the other lights
     const size_t m = extra ? extra->size() : 0;
@@ -224,16 +237,10 @@ void buildEye(const StarSet& st, const Blackbody& bb, const Eye& e, std::vector<
             S.maxD = std::max(S.maxD, D);
             S.minD = std::min(S.minD, D);
             const double z = dot(np, e.fwd);
-            if (z > 0.0) {
-                const double xr = dot(np, e.right), yu = dot(np, e.up);
-                const double off = std::atan2(std::sqrt(xr * xr + yu * yu), z);   // the angle off the eye's axis
-                if (off < aOut) {
-                    const double u = std::clamp((aOut - off) / (aOut - aIn), 0.0, 1.0);
-                    const double w = u * u * (3.0 - 2.0 * u);
-                    S.visibleView += vis * w;
-                    S.bolometricView += bol * w;
-                    S.energyView += bol * w;
-                }
+            if (const double w = fieldWeight(e, np); w > 0.0) {
+                S.visibleView += vis * w;
+                S.bolometricView += bol * w;
+                S.energyView += bol * w;
             }
             if (z <= 0.0) continue;
             const double x = dot(np, e.right) / z, y = dot(np, e.up) / z;
@@ -266,8 +273,6 @@ void buildEye(const StarSet& st, const Blackbody& bb, const Eye& e, std::vector<
 void skySums(const SkyCoarse& sky, const Blackbody& bb, const Eye& e, double panoWeight, V3 galX, V3 galY, V3 galN, EyeSum& sum) {
     const Kin k = kin(e.phi);
     const double emp = std::exp(-e.phi);
-    const double diag = std::clamp(e.adaptDiag, 1e-6, 1.4);
-    const double aIn = diag, aOut = std::min(1.1 * diag, 0.5 * kPi);
     // the background's temperature with the Sun's dipole (Planck 2018: 3.362 mK towards l 264.02, b 48.25)
     const double T0 = 2.72548, dip = 3.362e-3 / T0;
     const double dl = 264.021 * kPi / 180.0, db = 48.253 * kPi / 180.0;
@@ -317,17 +322,10 @@ void skySums(const SkyCoarse& sky, const Blackbody& bb, const Eye& e, double pan
                 fE[size_t(r)] += ex;
                 fT[size_t(r)] += v * Tc;
             }
-            const double z = dot(np, e.fwd);
-            if (z > 0.0) {
-                const double xr = dot(np, e.right), yu = dot(np, e.up);
-                const double off = std::atan2(std::sqrt(xr * xr + yu * yu), z);
-                if (off < aOut) {
-                    const double u = std::clamp((aOut - off) / (aOut - aIn), 0.0, 1.0);
-                    const double w = u * u * (3.0 - 2.0 * u);
-                    visV[size_t(r)] += v * w;
-                    bolV[size_t(r)] += bo * w;
-                    enV[size_t(r)] += ex * w;
-                }
+            if (const double w = fieldWeight(e, np); w > 0.0) {
+                visV[size_t(r)] += v * w;
+                bolV[size_t(r)] += bo * w;
+                enV[size_t(r)] += ex * w;
             }
         }
     });

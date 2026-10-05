@@ -170,4 +170,31 @@ the screen's width.
 - Further in: virtual pairs' loops at every scale about the quark (the colour mix follows the forces' strengths). At
   the bottom foam bubbles and a golden string.
 
-Plan and status in `docs/olcek/` (Turkish). Settings `scenes/olcek.cfg` (F5).
+### The second option: Speed
+**Option: Speed** in the panel. By rocket from the Earth to Proxima, and on to Andromeda: special relativity complete,
+nothing teleported, time always real. Proxima is 15 minutes on your clock (4.25 years on the Earth's), Andromeda 72
+minutes (2.4 million years).
+
+| Key | What it does |
+|---|---|
+| **W** | thrust: from 1 g, rising with the speed (1% c in a minute, 21 nines in eight) |
+| **S** | brake |
+| **Space** | the automatic arrival: brakes at the right moment and stops at the target |
+| **Tab** | the rocket's eye ↔ from the side |
+| **Drag** | turn your head (the rocket's eye) · **R** look ahead |
+| **Wheel** | binoculars (eye), scale (side) · **1-6** the side view's scales |
+| **E** | the energy eye (on at first) · **G** the graphs |
+
+**Try:**
+- At the start drag to look back: the Earth with today's clouds. Then Space, and watch; no hurry, the journey's length
+  is the distance itself.
+- As the speed grows the sky crowds ahead. Past half light's speed the Sun you left behind comes round to the front by
+  aberration, a dazzling blue-white star. At about five nines a red sun rises ahead: the universe's first light, the
+  cosmic background. Toggle the energy eye with E: when the light leaves the visible band the real eye goes dark, the
+  energy eye shows it.
+- Tab to the side view and 1-6 for the scale: the rocket, the Earth and Moon, the Solar System, the nearby stars, the
+  Milky Way, the Local Group.
+- At Proxima look around: the spotted red dwarf, Alpha Centauri A and B, b, and behind you the Sun in Cassiopeia. Braking
+  into Andromeda, look ahead.
+
+Plan and status in `docs/olcek/`, Speed's in `docs/olcek/hiz/` (Turkish). Settings `scenes/olcek.cfg` (F5).

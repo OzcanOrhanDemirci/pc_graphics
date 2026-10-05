@@ -348,6 +348,47 @@ length.
 
 Plan, decisions, departures from the plan and measurements in `docs/olcek/` (Turkish).
 
+#### The second option: Speed *(Hız)*
+
+| ![The energy eye at 90% of light's speed: the cosmic background ahead heated into a red glow, the Milky Way's band and the Magellanic Clouds crowding forward](docs/images/olcek-hiz-enerji.jpg) | ![At five nines the universe's first light rises ahead as an orange sun: the cosmic background shifted into the visible](docs/images/olcek-hiz-ilk-isik.jpg) |
+|---|---|
+| ![Braking into Andromeda at 76% of light's speed: the galaxy blue-shifted and bent by aberration, Triangulum below](docs/images/olcek-hiz-andromeda.jpg) | ![Proxima Centauri through binoculars from its planet's orbit: a spotted orange red dwarf](docs/images/olcek-hiz-proxima.jpg) |
+| ![The rocket from the side under thrust: the photon rocket's light behind, the passenger under the glass dome](docs/images/olcek-hiz-roket.jpg) | ![The map at the Milky Way's scale: the rocket on its way](docs/images/olcek-hiz-samanyolu.jpg) |
+
+By rocket from the Earth to Proxima Centauri, and on to Andromeda: special relativity complete, nothing teleported, time
+always real (no speeding up: the length of the journey is the distance).
+
+- **The journey:** W thrust, S brake, Space the automatic arrival. Proxima, 4.25 light years: 15.2 minutes on your
+  clock, 4.25 years on the Earth's. Andromeda, 2.4 million light years: 72 minutes, 2.4 million years.
+- **The drive:** 1 g at rest and always rising: 1% of light's speed in a minute, 10% in two, 99% in five and a half,
+  21 nines (1 − β = 10⁻²¹) in eight, at 11 million g. Held constant in 1,638 slices with the closed forms of constant
+  acceleration in each, by rapidity (1 − β keeps its digits); an independent oracle (mpmath, 50 digits) agrees to
+  1.5 × 10⁻¹⁵.
+- **The rocket's eye:** every pixel's ray turned back to the rest frame (aberration), its light Doppler-shifted as a
+  blackbody's through the CIE 1931 tables:
+  - 109,400 stars; the Milky Way's diffuse light (ESO/S. Brunier's panorama, its stars taken out, at mip levels as wide
+    as a pixel's footprint);
+  - the cosmic microwave background with the Sun's dipole (Planck 2018);
+  - the galaxies (the Milky Way from outside, M31, M33, 2MRS);
+  - the Sun, the Earth with today's clouds, the Moon;
+  - Proxima and its b, Alpha Centauri A and B at their measured places (Gaia DR3, Akeson et al. 2021).
+
+  As the speed grows the sky crowds ahead; past half light's speed the Sun left behind comes round to the front by
+  aberration, blue-white. At about five nines the cosmic background rises ahead as a red sun, then orange, white and
+  blue; beyond, its light leaves the visible band. The eye adapts as an eye does (half in the dark,
+  wholly in daylight, to the face it looks at) and has its own glare.
+- **The energy eye** (on at first; E): every band's light, in false colour by the band its peak is in (microwaves to
+  gamma rays). Zeroed at the start: the background's glow at rest is taken out, the motion's gain shows. A key shows
+  where the light dead ahead peaks.
+- **From the side:** a map in the Earth's frame. The camera follows the 14 m rocket (γ times shorter), the interstellar
+  medium's points stream past as light streaks, keys 1-6 jump between the scale's stops.
+- **The stops:** the Earth from the geostationary radius; Proxima's spotted, flaring face 1.69° wide, its planet b,
+  Alpha Centauri A and B (−6.8 and −5.5) and our Sun in Cassiopeia; Andromeda 70° wide from 100,000 light years.
+- **Five graphs:** speed and γ; spacetime (the rocket's grid folding towards the light line); the way (two rulers);
+  the clocks (yours, the Earth's, the Earth as seen); the cost (energy, a photon rocket's fuel, the light from ahead).
+
+Plan and measurements in `docs/olcek/hiz/` (Turkish).
+
 ## What scene 1 computes
 
 | | |

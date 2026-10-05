@@ -759,6 +759,105 @@ int runHizTests(OlcekApp& app) {
 }
 
 // the headless frames of the second option
+// the whole journey through the eye (H6): the automatic arrival to Proxima and on to Andromeda, the physics frame by
+// frame (60 a second); the eye drawn every 10 s of the passenger's clock, twice a frame apart (a flicker would show
+// between them), with its exposure adapted as the scene adapts it (1.2 s): no pixel not finite, the light's change
+// between two frames, the frame's time. Every 60 s the side view too
+int runHizJourney(OlcekApp& app) {
+    const hz::Route& R = app.route;
+    hz::Ship s = hz::depart(R);
+    hz::Command go;
+    go.toggleAuto = true;
+    hz::step(s, R, 0.0, go);
+    const double dt = 1.0 / 60.0;
+    double ev = app.eyeEv(app.nightSky), nextEye = 0.0, nextSide = 0.0;
+    int frames = 0, bad = 0, sideFrames = 0;
+    double worstJump = 0.0, worstJumpAt = 0.0, maxMs = 0.0, sumMs = 0.0, maxSideMs = 0.0;
+    std::vector<float> lum;
+    hz::EyeSum sum;
+    auto eyeFrame = [&](bool adapt, double& meanOut) {
+        hz::Eye e = app.eyeAt(s, 0.0, 0.0, std::tan(37.5 * kPi / 180.0));
+        e.energy = app.cfg.f("hiz.enerji", 1.0f) > 0.5f;
+        e.k = std::exp2(ev) * 3e-3;
+        app.renderEye(e, sum);
+        if (adapt) {   // the scene's: towards the measure, a second or so
+            const double target = e.energy ? app.eyeEvEnergy(sum.adaptEnergy) : app.eyeEv(sum.adaptVisible);
+            if (std::isfinite(target)) ev += (target - ev) * (1.0 - std::exp(-dt / 1.2));
+        }
+        app.luminanceQuarter(lum);
+        double m = 0.0;
+        bool finite = std::isfinite(ev);
+        for (float v : lum) {
+            finite = finite && std::isfinite(v);
+            m += v;
+        }
+        meanOut = m / std::max<size_t>(lum.size(), 1);
+        maxMs = std::max(maxMs, app.frameMs + app.hostMs);
+        sumMs += app.frameMs + app.hostMs;
+        ++frames;
+        if (!finite) ++bad;
+    };
+    std::printf("tam yolculuk: otomatik varisla Proxima'ya ve Andromeda'ya, goz her 10 sn'de (bir kare arayla iki kez)\n");
+    while (s.leg < hz::kLegDone && s.tau < 6.0 * 3600.0) {
+        // the eye's exposure follows every frame (its measure from the last drawn frame)
+        const hz::Events evs = hz::step(s, R, dt, hz::Command{});
+        if (evs.arrived && s.leg == hz::kLegAndromeda) hz::step(s, R, 0.0, go);   // on to Andromeda
+        if (s.tau >= nextEye) {
+            nextEye += 10.0;
+            // settle the eye on this place (the scene's eye has been adapting all the way: a few seconds of it)
+            double m0 = 0.0, m1 = 0.0;
+            for (int i = 0; i < 300; ++i) {
+                const double target = (sum.adaptVisible > 0.0 || sum.adaptEnergy > 0.0)
+                                          ? ((app.cfg.f("hiz.enerji", 1.0f) > 0.5f) ? app.eyeEvEnergy(sum.adaptEnergy) : app.eyeEv(sum.adaptVisible))
+                                          : ev;
+                if (std::isfinite(target)) ev += (target - ev) * (1.0 - std::exp(-dt / 1.2));
+                if (i % 60 == 0) eyeFrame(false, m0);
+            }
+            eyeFrame(true, m0);
+            hz::step(s, R, dt, hz::Command{});   // a frame on
+            eyeFrame(true, m1);
+            bad += app.nonFinite() > 0 ? 1 : 0;   // the frame before the tone curve
+            const double jump = std::fabs(m1 - m0) / std::max(0.5 * (m0 + m1), 1e-3);
+            if (jump > worstJump) {
+                worstJump = jump;
+                worstJumpAt = s.tau;
+            }
+            const hz::Kin k = hz::kin(s.phi);
+            if (int(s.tau) % 60 < 10 || frames < 4)
+                std::printf("  %7.1f s  yol %d  %5.2f dokuz  EV %6.2f  ortalama isik %.4f  iki kare farki %%%.2f  kare %.1f ms\n", s.tau, s.leg,
+                            k.nines, ev, m1, 100.0 * jump, app.frameMs + app.hostMs);
+        }
+        if (s.tau >= nextSide) {   // the side view: the map at the rocket and at the stops' scales
+            nextSide += 60.0;
+            for (double sv : {1.75, 13.08, 21.2}) {
+                Scale& sc = app.sc;
+                sc.hiz.on = true;
+                sc.hiz.rocket = hz::position(s, R);
+                sc.hiz.motion = s.heading;
+                const hz::Kin k = hz::kin(s.phi);
+                sc.hiz.rate = k.gamma;
+                sc.hiz.shutterMove = hz::kC * k.gb * hz::kEyeShutter;
+                sc.hiz.focus = V3{};
+                sc.hiz.ev = app.sideEv(sv, sc.hiz.rocket);
+                sc.s = sv;
+                sc.hizClocks(s.departT.hi < 0.0 ? 0.0 : hz::add(s.t, hz::neg(s.departT)).value());
+                app.render();
+                if (app.nonFinite() > 0) ++bad;
+                maxSideMs = std::max(maxSideMs, app.frameMs + app.hostMs);
+                ++sideFrames;
+            }
+        }
+    }
+    const bool arrived = s.leg == hz::kLegDone;
+    std::printf("tam yolculuk: %s, yolcunun saati %.1f dk, Dunya'da %.4g yil; goz %d kare (en uzun %.1f ms, ortalama %.1f), yandan %d kare "
+                "(en uzun %.1f ms); sonlu olmayan kare %d; iki kare arasinda isik en cok %%%.2f (%.0f. saniyede)\n",
+                arrived ? "Andromeda'ya varildi" : "VARILMADI", s.tau / 60.0, s.t.value() / hz::kYear, frames, maxMs, sumMs / std::max(frames, 1),
+                sideFrames, maxSideMs, bad, 100.0 * worstJump, worstJumpAt);
+    const bool ok = arrived && bad == 0 && worstJump < 0.05;
+    std::printf("tam yolculuk: %s\n", ok ? "GECTI" : "KALDI");
+    return ok ? 0 : 1;
+}
+
 int runHizFrames(OlcekApp& app, const std::vector<double>& phis, int leg, double frac, double fovDeg, double yaw, double pitch,
                  const std::vector<double>& sides, const std::string& out) {
     std::filesystem::create_directories(std::filesystem::path(app.root) / out);
@@ -771,6 +870,8 @@ int runHizFrames(OlcekApp& app, const std::vector<double>& phis, int leg, double
         s.phi = std::clamp(phi, 0.0, hz::phiCap());
         // (--set hiz.test.fren=1) on the stopping curve: as far from the target as it takes to stop from that speed
         if (app.cfg.f("hiz.test.fren", 0.0f) > 0.5f) s.x = hz::dd(-std::min(hz::stopDistance(s.phi), R.length[s.leg]));
+        // (--set hiz.test.itis=1) on the thrust from the leg's start: as far as it takes to reach that speed
+        if (app.cfg.f("hiz.test.itis", 0.0f) > 0.5f) s.x = hz::dd(-R.length[s.leg] + std::min(hz::stopDistance(s.phi), R.length[s.leg]));
         s.sense = 1;
         s.heading = R.dir[s.leg];
         const V3 pos = hz::position(s, R);

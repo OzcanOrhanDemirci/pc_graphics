@@ -284,14 +284,20 @@ alanıyla ya da arayüzün OpenGL'inde gölgelendiriciyle) H1'in ilk işi.
   yüzü ve parlamaları; b), Alfa Erboğa ölçülen yerlerinde, etiketler, bakılan yüze uyum, güneşlik. Yörüngede
   dolanma yok (roket durur). Ayrıntı DURUM'da.
 - **H6 · Bütünleme:** bedel panosunun ince ayarı, galeri ve "Ayrıntılar", README (iki dil), GOSTERI/DEMO, autotest,
-  tam yolculuk sınaması, performans.
+  tam yolculuk sınaması, performans. **Bitti (10-06 gecesi):** Ayrıntılar'a Hız başlığı ve kaynaklar, README'ye Hız
+  bölümü ve altı resim, GOSTERI/DEMO'ya tuşlar ve "Dene", F1'e E, otomatik teste gerçek göz karesi, tam yolculuk
+  sınaması (`--test olcek-hiz-yolculuk`). Bedel panosu değişmedi (ince ayar gerekmedi).
 
 ## 8 · Riskler ve dürüst sınırlar
 
 - **Galaksinin içeriden ve dışarıdan gerçekçiliği** en büyük iş. Fotoğrafla modelin örtüşmesi, H4'te ölçülerek.
+  *H4 sonucu:* dışarıdan ince düzlem modeli iyi (M31'e varış, Samanyolu'nun 100.000 ışık yılından görünüşü). İçeriden
+  (Güneş'ten 3.000-20.000 ışık yılı) disk bir "zemin" gibi; hacimsel model yapılmadı. Normal yolculukta orası 21
+  dokuzda geçilir.
 - **Panodan yıldız silmek:** parlak yıldızlar silinmezse katalogla çift görünür. Silme izi kalmamalı.
 - **Dinamik aralık:** önde parlaklık D² ile 2 × 10²¹'e çıkar (D⁴ 4 × 10⁴²: float taşar, çift hassasiyette ya da
-  logaritmada hesaplanır); tasarlanmış pozlama ve AgX ile.
+  logaritmada hesaplanır); tasarlanmış pozlama ve AgX ile. *H3 sonucu:* ışık log₁₀ uzayında toplanır; göz gündüz
+  düzeyinde tam uyum sağlar, öndeki "güneş" φ 7-16 arası aynı parlaklıkta.
 - **Temsiller açıkça yazılır:**
   - yıldızlararası ortamın yoğunluğu (çizgiler için);
   - Proxima b'nin görünüşü;

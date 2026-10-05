@@ -54,6 +54,7 @@ struct OlcekApp {
     void save(const std::string& path);
     // the picture's luminance at a quarter of the resolution (the jump test's), into lum (w/4 x h/4)
     void luminanceQuarter(std::vector<float>& lum);
+    size_t nonFinite();               // the frame's pixels not finite before the tone curve (the tests')
 
     // ---- the second option "Hız" (docs/olcek/hiz/PLAN.md): the route, the rocket, the colour of light
     olcek::hiz::Route route;
@@ -96,5 +97,6 @@ private:
 int runOlcekCli(int argc, char** argv);
 // the second option's (olcek_hiz_test.cpp)
 int runHizTests(OlcekApp& app);
+int runHizJourney(OlcekApp& app);   // the whole journey through the eye (--test olcek-hiz-yolculuk)
 int runHizFrames(OlcekApp& app, const std::vector<double>& phis, int leg, double frac, double fovDeg, double yaw, double pitch,
                  const std::vector<double>& sides, const std::string& out);

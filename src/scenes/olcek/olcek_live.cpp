@@ -62,6 +62,7 @@ public:
                           "Start at the sand at your feet and move out or in with the wheel alone: out to the Earth, the Sun, the Milky "
                           "Way, the cosmic web; in to a grain of sand, an atom, its nucleus, a proton, a quark and the Planck length. "
                           "Everything at its true place and size, and the empty stretches between them at their true length too.");
+        i.description += L(" İkinci seçenek: roketle Andromeda'ya.", " The second option: by rocket to Andromeda.");
         i.details = {
             {L("Altmış iki onluk", "Sixty-two decades"),
              L("Ekranın genişliği 10⁻³⁵ metreden 10²⁷ metreye iner çıkar. Mutlak bir konum yok: her şey bir çapa ağacına asılı "
@@ -106,8 +107,19 @@ public:
                "parlak bir banda.",
                "Every pixel takes the same four fixed samples every frame: no grain, no flicker. A body that shrinks below a pixel "
                "turns into a point and keeps its light; an orbit faster than the eye's shutter turns into a ring, a string "
-               "vibrating faster into a band with bright edges.")}};
-        i.tags = {L("Ölçek", "Scale"), L("62 onluk", "62 decades"), L("Gerçek konumlar", "True positions")};
+               "vibrating faster into a band with bright edges.")},
+            {L("İkinci seçenek: Hız", "The second option: Speed"),
+             L("Roketle Proxima'ya (senin saatinle 15 dk, Dünya'da 4,25 yıl) ve Andromeda'ya (72 dk, 2,4 milyon yıl); zaman hep "
+               "gerçek. Gözde her ışın durgun çerçeveye çevrilir, ışık Doppler'le kayar: yıldızlar, Samanyolu (ESO/S. Brunier, "
+               "CC BY 4.0), kozmik fon (Planck), galaksiler, Proxima, Alfa Erboğa (Gaia DR3, Akeson 2021). Beş dokuzda önde "
+               "kırmızı bir güneş doğar; enerji gözü (E) bütün bantları gösterir. Yandan bir harita ve beş grafik.",
+               "By rocket to Proxima (15 min on your clock, 4.25 years on the Earth's) and to Andromeda (72 min, 2.4 million "
+               "years); time always real. In the eye every ray is turned back to the rest frame and its light Doppler-shifted: the "
+               "stars, the Milky Way (ESO/S. Brunier, CC BY 4.0), the cosmic background (Planck), the galaxies, Proxima, Alpha "
+               "Centauri (Gaia DR3, Akeson 2021). At five nines a red sun rises ahead; the energy eye (E) shows every band. "
+               "From the side a map, and five graphs.")}};
+        i.tags = {L("Ölçek", "Scale"), L("62 onluk", "62 decades"), L("Gerçek konumlar", "True positions"),
+                  L("Özel görelilik", "Special relativity")};
         i.image = "assets/gallery/olcek.jpg";
         i.accent = 0xE08BAE;
         i.keys = {{L("Ölçek", "Scale"),
@@ -121,6 +133,7 @@ public:
                     {L("Boşluk", "Space"), L("Otomatik varış: doğru anda frenleyip durur", "Automatic arrival: brakes at the right moment")},
                     {"Tab", L("Roketin gözü ↔ yandan", "The rocket's eye ↔ from the side")},
                     {"G", L("Grafikler: aç, kapat", "The graphs: on, off")},
+                    {"E", L("Enerji gözü: bütün bantlar, sahte renkle (açık başlar)", "The energy eye: every band, in false colour (on at first)")},
                     {L("Sürükle", "Drag"), L("Başını çevir (roketin gözü)", "Turn your head (the rocket's eye)")},
                     {L("Tekerlek", "Wheel"), L("Dürbün (göz), ölçek (yandan)", "Binoculars (eye), scale (side)")},
                     {"1-6", L("Yandan ölçek durakları: roket, Dünya ve Ay, Güneş Sistemi, yakın yıldızlar, Samanyolu, Yerel Grup",

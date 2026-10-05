@@ -625,6 +625,7 @@ int App::run(const Options& opt) {
                 // stopping curve: the arrival, the turn, both views there.
                 control("secenek", 1); wait(0.15); click(); wait(1.35); log("olcek hiz (cift tik: yolculuk baslamaz, Hiz 0)"); shot("olcek_hiz_kalkis");
                 if (part != "hizvaris" && part != "hizyuksek") {
+                    key(GLFW_KEY_E); wait(1.5); log("olcek hiz gercek goz (E)"); shot("olcek_hiz_gercek_goz"); key(GLFW_KEY_E); wait(1.5);
                     key(GLFW_KEY_TAB); wait(1.5); shot("olcek_hiz_yandan");
                     hold(GLFW_KEY_W, true); wait(5.0); log("olcek hiz W 5 sn (yandan, motor isigi)"); shot("olcek_hiz_yandan_itis");
                     key(GLFW_KEY_2); wait(5.0); log("olcek hiz W 10 sn (Dunya ve Ay)"); shot("olcek_hiz_yandan_dunya_ay");

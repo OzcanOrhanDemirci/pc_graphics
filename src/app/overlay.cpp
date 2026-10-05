@@ -248,19 +248,28 @@ void App::drawDetails(const ui::Rect& area, float a) {
     y += S_(30);
     const float gapC = S_(60), colW = (P.w - 2 * pad - gapC) * 0.5f;
     const ui::TextStyle head = {ui::Font::SansSemiBold, S_(23.0f), ui::withAlpha(theme::text(), a), 0.0f, false};
-    const ui::TextStyle body = {ui::Font::Sans, S_(20.5f), ui::withAlpha(theme::muted(), a), 0.0f, false};
-    const float spacing = 1.5f, headGap = S_(12), after = S_(40);
+    ui::TextStyle body = {ui::Font::Sans, S_(20.5f), ui::withAlpha(theme::muted(), a), 0.0f, false};
+    const float spacing = 1.5f, headGap = S_(12);
+    float after = S_(40);
     std::vector<float> hs;
     float total = 0.0f;
-    for (const Detail& d : si.details) {
-        hs.push_back(ui::lineHeight(head) + headGap + ui::measureWrapped(colW, d.text, body, spacing) + after);
-        total += hs.back();
-    }
     int split = 0;   // the first `split` sections go left: the taller column as short as the order allows
-    float best = 1e30f, left = 0.0f;
-    for (int i = 0; i <= int(hs.size()); ++i) {
-        if (std::max(left, total - left) < best) { best = std::max(left, total - left); split = i; }
-        if (i < int(hs.size())) left += hs[i];
+    // a long text's body a little smaller where it would not fit (never below 85%): no section cut off
+    for (float k = 1.0f; k >= 0.849f; k -= 0.03f) {
+        body.size = S_(20.5f * k);
+        after = S_(40.0f * k);
+        hs.clear();
+        total = 0.0f;
+        for (const Detail& d : si.details) {
+            hs.push_back(ui::lineHeight(head) + headGap + ui::measureWrapped(colW, d.text, body, spacing) + after);
+            total += hs.back();
+        }
+        float best = 1e30f, left = 0.0f;
+        for (int i = 0; i <= int(hs.size()); ++i) {
+            if (std::max(left, total - left) < best) { best = std::max(left, total - left); split = i; }
+            if (i < int(hs.size())) left += hs[i];
+        }
+        if (best - after <= P.y + P.h - S_(40) - y) break;
     }
     {   // the columns sit in the middle of the room below the rule (a little high)
         float tall = 0.0f, l = 0.0f;

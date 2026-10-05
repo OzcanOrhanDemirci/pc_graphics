@@ -546,7 +546,8 @@ olcek::hiz::Eye OlcekApp::eyeAt(const olcek::hiz::Ship& s, double yaw, double pi
     e.omegaPx = pa0 * pa0;
     e.worldT = s.departT.hi < 0.0 ? 0.0 : hz::add(s.t, hz::neg(s.departT)).value();
     const double t0 = std::tan(37.5 * 3.14159265358979323846 / 180.0), t0y = t0 * sc.height / sc.width;
-    e.adaptDiag = std::atan(std::sqrt(t0 * t0 + t0y * t0y));
+    e.adaptX = t0;
+    e.adaptY = t0y;
     return e;
 }
 
@@ -750,10 +751,9 @@ void OlcekApp::renderEye(const olcek::hiz::Eye& eIn, olcek::hiz::EyeSum& sum) {
         // the glowing balls. A sunshade: only from what is in the field (the Sun 61 degrees off the bow at the start
         // would otherwise veil the whole sky white; a hood over the eye's window, as a camera's over its lens)
         {
-            const double limit = std::min(1.1 * e.adaptDiag, 0.5 * 3.14159265358979323846);
-            auto inField = [&](float3 c) {
-                const double z = c.z, xy = std::sqrt(double(c.x) * c.x + double(c.y) * c.y);
-                return std::atan2(xy, z) < limit;
+            auto inField = [&](float3 c) {   // on the screen (its edge's few pixels too)
+                const double z = c.z;
+                return z > 0.0 && std::fabs(c.x / z) < e.tanHalfX * 1.01 && std::fabs(c.y / z) < e.tanHalfY * 1.01;
             };
             auto add = [&](float3 dirCam, float3 E) {
                 if (g.nGlare >= 8 || !(E.x + E.y + E.z > 0.0f) || !inField(dirCam)) return;
@@ -814,6 +814,14 @@ void OlcekApp::save(const std::string& path) {
     std::vector<unsigned char> px(size_t(sc.width) * sc.height * 4);
     cudaMemcpy(px.data(), output, px.size(), cudaMemcpyDeviceToHost);
     writePNG(path + ".png", sc.width, sc.height, px.data());
+}
+
+size_t OlcekApp::nonFinite() {
+    std::vector<float4> px(size_t(sc.width) * sc.height);
+    cudaMemcpy(px.data(), accum, px.size() * sizeof(float4), cudaMemcpyDeviceToHost);
+    size_t n = 0;
+    for (const float4& p : px) n += std::isfinite(p.x) && std::isfinite(p.y) && std::isfinite(p.z) ? 0 : 1;
+    return n;
 }
 
 void OlcekApp::luminanceQuarter(std::vector<float>& lum) {
@@ -1148,7 +1156,7 @@ int runOlcekCli(int argc, char** argv) {
         app.loadMaps();
         std::printf("haritalar:\n%s", app.mapsLog.c_str());
     }
-    if (test == "olcek-hiz" || hizFrames) {
+    if (test == "olcek-hiz" || test == "olcek-hiz-yolculuk" || hizFrames) {
         app.prepareHiz();
         std::printf("hiz:\n%s", app.hizLog.c_str());
     }
@@ -1157,6 +1165,7 @@ int runOlcekCli(int argc, char** argv) {
     else if (test == "olcek-sure") rc = testContinuity(app, step);
     else if (test == "olcek-zaman") rc = testTime(app);
     else if (test == "olcek-hiz") rc = runHizTests(app);
+    else if (test == "olcek-hiz-yolculuk") rc = runHizJourney(app);
     else if (hizFrames) {
         if (phis.empty()) phis = {0.0};
         rc = runHizFrames(app, phis, leg, frac, fov, look.size() > 0 ? look[0] : 0.0, look.size() > 1 ? look[1] : 0.0, sides,

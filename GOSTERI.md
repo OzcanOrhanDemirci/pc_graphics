@@ -158,4 +158,29 @@ ama hiçbir şeyi değiştirmez: sahile hep aynı öğlede dönülür. Sağ üst
 - Daha da in. Kuarkın çevresinde her ölçekte sanal çift halkaları (renk karışımı kuvvetlerin şiddetini izler). En
   dipte köpük baloncukları ve altın renkli bir sicim.
 
-Plan ve durum `docs/olcek/`. Ayarlar `scenes/olcek.cfg` (F5 ile).
+### İkinci seçenek: Hız
+Panelde **Seçenek: Hız**. Bir roketle Dünya'dan Proxima'ya, oradan Andromeda'ya; özel görelilik eksiksiz, ışınlanma
+yok, zaman hep gerçek. Proxima senin saatinle 15 dakika (Dünya'da 4,25 yıl), Andromeda 72 dakika (2,4 milyon yıl).
+
+| Tuş | Ne yapar |
+|---|---|
+| **W** | itiş: 1 g'den başlar, hızlandıkça artar (%1 c bir dakikada, 21 dokuz sekizde) |
+| **S** | fren |
+| **Boşluk** | otomatik varış: doğru anda frenleyip hedefte durur |
+| **Tab** | roketin gözü ↔ yandan |
+| **Sürükle** | başını çevir (roketin gözü) · **R** ileri bak |
+| **Tekerlek** | dürbün (göz), ölçek (yandan) · **1-6** yandan ölçek durakları |
+| **E** | enerji gözü (açık başlar) · **G** grafikler |
+
+**Dene:**
+- Kalkışta sürükleyip arkana bak: Dünya bugünün bulutlarıyla. Sonra Boşluk ve izle; acele etme, yolculuğun uzunluğu
+  uzaklığın kendisi.
+- Hızlandıkça gök öne toplanır. Işık hızının yarısını geçince arkada bıraktığın Güneş sapınçla öne gelir: mavi-beyaz,
+  göz kamaştıran bir yıldız. Beş dokuz civarında önde kırmızı bir güneş doğar: evrenin ilk ışığı, kozmik fon.
+  Enerji gözünü E ile kapatıp aç: ışık görünür banttan çıkınca gerçek göz kararır, enerji gözü onu gösterir.
+- Tab ile yandan bak, 1-6 ile ölçeği değiştir: roket, Dünya ve Ay, Güneş Sistemi, yakın yıldızlar, Samanyolu, Yerel
+  Grup.
+- Proxima'da etrafına bak: lekeli kızıl cüce, Alfa Erboğa A ve B, b ve arkada Kraliçe'deki Güneş. Andromeda'ya frenle
+  yaklaşırken öne bak.
+
+Plan ve durum `docs/olcek/`, Hız'ınki `docs/olcek/hiz/`. Ayarlar `scenes/olcek.cfg` (F5 ile).

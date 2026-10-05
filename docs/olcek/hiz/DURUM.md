@@ -2,6 +2,56 @@
 
 > Tek kaynak durum panosu. Plan `docs/olcek/hiz/PLAN.md`. En yeni en üstte.
 
+## 🏁 Özet (10-06 sabaha karşı): H0-H6 bitti, otonom gece
+
+**Özcan'ın bakacağı yer:** uygulamayı aç, Ölçek, panelde **Seçenek: Hız**, ardından **Boşluk** (otomatik varış).
+Yolculuk gerçek zamanda geçer: Proxima 15 dk, Andromeda 72 dk. Ne zaman neye bakılacağı aşağıda.
+
+| An | Roketin gözünde | Yandan |
+|---|---|---|
+| Kalkış | önde Samanyolu; arkada (sürükle) Dünya, bugünün bulutları | roket, Dünya ve Ay (2) |
+| %1-60 c (1-4 dk) | gök öne toplanır, Macellan Bulutları görüş alanına girer | ortam noktaları çizgi olur |
+| %60 c'den sonra | **arkadaki Güneş öne gelir**: mavi-beyaz, göz kamaştırır | Güneş Sistemi (3) |
+| ~5 dokuz | **önde kırmızı bir güneş doğar**: kozmik fon, sonra turuncu, beyaz, mavi | yakın yıldızlar (4) |
+| Proxima | lekeli turuncu disk, b, Alfa Erboğa A/B, Kraliçe'de Güneş (etiketli) | Proxima diski |
+| 21 dokuz | önde tek nokta (enerji gözünde mor-beyaz gama) | Samanyolu (5), Yerel Grup (6) |
+| Fren | Andromeda küçük mavi elipsten 70°'lik altın sarmala | iki galaksi arasında roket |
+
+**E** enerji gözünü kapatıp açar. Kapalıyken gerçek göz kalır: ışık görünür banttan çıkınca kararır.
+
+**Kararlar** (Özcan bıraktı, benim seçimim): gözde aracın parçası yok. Enerji gözü fonun duruştaki parıltısını
+çıkarır. Göz bakılan yüze uyar, Güneş'e uyamaz. Güneşlik: parlama yalnız görüş alanından. Proxima b 60° ötede. Yandan
+haritada Proxima'nın rengi tavanla korunur.
+
+## 2026-10-06 sabaha karşı · H6: bütünleme
+
+- **Ayrıntılar** (galeri): Hız için bir başlık, kaynaklarıyla (ESO atfı dahil). Etiketlere "Özel görelilik". F1
+  yardımına **E**. İlk denemede üç başlık sayfaya sığmadı, birinci seçeneğin başlıkları kesildi. Hız tek başlıkta
+  toplandı. Uygulamaya bir güvence eklendi: sığmayan metinde gövde yazısı %85'e kadar küçülür, hiçbir sahnede başlık
+  kesilmez. Otomatik testin `galeri_ayrintilar_7` karesinde altı başlık iki sütunda tam.
+- **README:** "The second option: Speed" bölümü, altı resim (`docs/images/olcek-hiz-*.jpg`: enerji gözü, ilk ışık,
+  Andromeda'ya fren, Proxima, roket, Samanyolu haritası).
+- **GOSTERI / DEMO:** Hız'ın tuşları ve "Dene" (iki dil).
+- **Otomatik test:** `olcek/hiz` kalkışta E ile gerçek gözün karesini de alır (`olcek_hiz_gercek_goz`).
+- **Tam yolculuk sınaması** (`--test olcek-hiz-yolculuk`, başsız):
+  - otomatik varışla Proxima'ya, dönüp Andromeda'ya; fizik kare kare (60/sn);
+  - göz her 10 saniyede, bir kare arayla iki kez, pozlaması sahnedeki gibi uyumlu; her 60 saniyede yandan üç ölçek.
+  - Sonuç: **GEÇTİ**. Yolcunun saati 87,6 dk, Dünya'da 2,395 milyon yıl. Göz 3.682 kare: ortalama 11,0 ms, en uzun
+    21,8 ms (2560×1440). Yandan 264 kare, en uzun 4,4 ms. Sonlu olmayan piksel yok (ton eğrisinden önceki HDR
+    arabellek). İki ardışık kare arasında ışık en çok %1,02 değişiyor (Andromeda freninin başında): titreme yok.
+- **Bulunan ve düzeltilen (bu sınamayla):** %60 c'de sapınç Güneş'i görüş alanının hemen dışına (39°) taşıyordu. Göz
+  daha geniş bir koniye uyduğundan görünmeyen Güneş'e uyuyor, kare kapkara oluyordu. Parlaması da kenardan sızıyordu.
+  Şimdi göz görüş alanının dikdörtgenine uyar (dürbünsüz hâli), parlama ekranda görünenden gelir. Güneş kareye girene
+  kadar yıldızlar görünür. Girince mavi-beyaz bir yıldız olarak merkeze kayar.
+- **Bedel panosu** değişmedi (ince ayar gerekmedi).
+
+### NE DOĞRULANMADI (H6)
+- **Özcan'ın gözü:** hiçbiri. Kendisi uyurken yapıldı.
+- **Canlı uygulamada tam yolculuk:** başsız sınama fizik ve çizimi kare kare koştu. Gerçek pencerede, gerçek zamanda
+  baştan sona bir yolculuk izlenmedi. Otomatik test kalkışı, bir dakikayı, Proxima varışını ve 21 dokuzu kapsıyor.
+- **Canlı kare hızı:** başsız ortalama 11 ms. Pencerede arayüzle ölçüm yalnız otomatik testin anlarında.
+- **İngilizce Ayrıntılar** sayfası ve README'nin GitHub'daki görünüşü gözle görülmedi.
+
 ## 2026-10-06 gecesi · H5: duraklar
 
 **Özcan'ın bakacağı yer.**
