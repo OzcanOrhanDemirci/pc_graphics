@@ -568,12 +568,12 @@ HeykelView HeykelApp::view() const {
     // perturbation only where floats fall short (it costs ~2-3 times the straight estimate): at 1,000 times the straight
     // one errs by 0.02-0.05 of a pixel (--test pert), the switch cannot be seen
     if (level < cfg.f("pert.from", 1000.0f)) v.w.pert = 0;
-    if (v.w.pert && v.w.s.fractal == hk::kCrystal && devMSteps) {
-        cudaMemcpy(devMSteps, hostMSteps, sizeof(hk::MStep) * v.w.n, cudaMemcpyHostToDevice);
-        v.w.mst = devMSteps;
-    } else if (v.w.pert && devSteps) {
-        cudaMemcpy(devSteps, hostSteps, sizeof(hk::KStep) * v.w.n, cudaMemcpyHostToDevice);
-        v.w.st = devSteps;
+    if (v.w.pert && v.w.s.fractal == hk::kCrystal) {
+        heykelSetOrbits(hostMSteps, nullptr, v.w.n);
+        v.w.mst = nullptr;   // the kernels read the constant copy
+    } else if (v.w.pert) {
+        heykelSetOrbits(nullptr, hostSteps, v.w.n);
+        v.w.st = nullptr;
     }
     v.width = width;
     v.height = height;
@@ -586,6 +586,7 @@ HeykelView HeykelApp::view() const {
     v.maxSteps2 = cfg.i("steps2", 200);
     v.shadowSlope = cfg.f("shadow.slope", 2.0f);
     v.softKey = cfg.i("shadow.soft", 1);
+    v.shadowSteps = cfg.i("shadow.steps", 160);
     v.shadowReach = cfg.f("shadow.reach", 100.0f) * float(length(camPos - focus));
     v.normalScale = cfg.f("normal.scale", 1.0f);
     v.filterRadius = cfg.f("filter.radius", 1.5f);
@@ -686,7 +687,7 @@ void HeykelApp::zoomAbout(D3 q, float logAmount) {
     const double s = std::exp(-double(logAmount));
     camPos = q + (camPos - q) * s;
     // the lamp goes with the camera, as a macro photographer's does: scaled about the same point (its light on what
-    // is seen stays the same while zooming; settleLight finds it a clear line when the zoom stops)
+    // is seen stays the same while zooming; keepLampClear keeps its line clear, turning it smoothly)
     lightTarget = q + (lightTarget - q) * s;
     lightDist *= float(s);
     lightRadius *= float(s);
@@ -721,23 +722,35 @@ void HeykelApp::clearLamp(const float3* normal) {
         const double l = length(g);
         if (l > 0.0) n = f3(g * (1.0 / l));
     }
-    lampDir = lightDir;
-    if (dot(lampDir, n) < 0.2f) lampDir = normalize(lampDir + n * (0.2f - dot(lampDir, n)) * 1.5f);
-    if (lampClear(lightTarget, n, lampDir, lightDist)) return;
+    float3 from = lightDir;
+    if (dot(from, n) < 0.2f) from = normalize(from + n * (0.2f - dot(from, n)) * 1.5f);
+    lampGoal = from;
+    if (lampClear(lightTarget, n, from, lightDist)) return;
     float3 t, b;
-    makeBasis(lampDir, t, b);
+    makeBasis(from, t, b);
     for (int ring = 1; ring <= 4; ++ring) {
         const float a = ring * 15.0f * kDeg;
         for (int k = 0; k < 8; ++k) {
             const float ph = (k + 0.5f * ring) * (6.2831853f / 8.0f);
-            const float3 d = normalize(lampDir * std::cos(a) + (t * std::cos(ph) + b * std::sin(ph)) * std::sin(a));
+            const float3 d = normalize(from * std::cos(a) + (t * std::cos(ph) + b * std::sin(ph)) * std::sin(a));
             if (dot(d, n) < 0.15f) continue;
             if (lampClear(lightTarget, n, d, lightDist)) {
-                lampDir = d;
+                lampGoal = d;
                 return;
             }
         }
     }
+}
+
+// The lamp's direction turns towards its goal at ~a third of the way a tenth of a second: a blocked line gives way to a
+// clear one as a hand would move the lamp, never in one frame (Ozcan: the light "kipir kipir olup duzeliyor")
+bool HeykelApp::turnLampTowardsGoal(float dt) {
+    const float c = dot(lampDir, lampGoal);
+    if (c > 0.99999f) return false;
+    const float k = 1.0f - std::exp(-dt * cfg.f("light.follow", 4.0f));
+    lampDir = normalize(lampDir + (lampGoal - lampDir) * k);
+    if (dot(lampDir, lampGoal) > 0.99999f) lampDir = lampGoal;
+    return true;
 }
 
 void HeykelApp::settleLight() {
@@ -756,7 +769,23 @@ void HeykelApp::keepLampClear() {
                     deHost(p + d3(0, 0, e)) - deHost(p - d3(0, 0, e)));
     const double l = length(g);
     const float3 n = l > 0.0 ? f3(g * (1.0 / l)) : make_float3(0, 1, 0);
-    if (!lampClear(lightTarget, n, lampDir, lightDist)) clearLamp(&n);
+    if (!lampClear(lightTarget, n, lampGoal, lightDist)) clearLamp(&n);
+}
+
+// Every frame of a zoom: the lamp's target glides onto the point zoomed at (a surface: deep in the lattice a target
+// left hanging in the air lit nothing, and the views went flat grey), its distance, size and pool follow the view, its
+// line is kept clear. Nothing jumps: the target and the direction ease (light.follow), the rest scales continuously.
+void HeykelApp::followLight(float dt) {
+    const double k = 1.0 - std::exp(-double(dt) * cfg.f("light.follow", 4.0f));
+    lightTarget = lightTarget + (focus - lightTarget) * k;
+    const float d = float(length(camPos - lightTarget));
+    lightDist = cfg.f("light.dist", 1.4f) * d;
+    lightRadius = cfg.f("light.size", 0.035f) * lightDist;
+    const float tanHalf = std::tan(0.5f * fovDeg * kDeg);
+    const float ramp = std::clamp(std::log10(std::max(level, 1.0f)), 0.0f, 1.0f);
+    const float spot = cfg.f("light.spot.first", 0.55f) + (cfg.f("light.spot", 0.9f) - cfg.f("light.spot.first", 0.55f)) * ramp;
+    litRadius = spot * (2.0f * tanHalf * d);
+    keepLampClear();
 }
 
 bool HeykelApp::orbit(float dyaw, float dpitch) {
@@ -784,7 +813,7 @@ void HeykelApp::defaultLight() {
     cameraBasis(r, u, f);
     const float3 rel = cfg.v3("light.rel", make_float3(-0.78f, 0.55f, 0.30f));
     lightDir = normalize(r * rel.x + u * rel.y - f * rel.z);
-    lampDir = lightDir;
+    lampDir = lampGoal = lightDir;
 }
 
 void HeykelApp::aimLight(D3 target, const float3* normal) {
@@ -799,6 +828,7 @@ void HeykelApp::aimLight(D3 target, const float3* normal) {
     const float spot = cfg.f("light.spot.first", 0.55f) + (cfg.f("light.spot", 0.9f) - cfg.f("light.spot.first", 0.55f)) * ramp;
     litRadius = spot * (2.0f * tanHalf * d);
     clearLamp(normal);
+    lampDir = lampGoal;   // a click: the lamp is put there at once
 }
 
 void HeykelApp::turnLight(float dAzimuth, float dElevation) {
@@ -812,7 +842,7 @@ void HeykelApp::turnLight(float dAzimuth, float dElevation) {
         if (std::fabs(d2.y) < 0.985f) d = d2;
     }
     lightDir = normalize(d);
-    lampDir = lightDir;   // the hand on it decides: no search while dragging
+    lampDir = lampGoal = lightDir;   // the hand on it decides: no search while dragging
 }
 
 void HeykelApp::resetSamples() {
@@ -836,6 +866,22 @@ void HeykelApp::addSamples(int count, int stripe, int stripes) {
     cudaEventDestroy(a);
     cudaEventDestroy(b);
     if (stripe == stripes - 1) samples += count;   // a sample counts when its last rows are in
+}
+
+void HeykelApp::renderFrame() {
+    const HeykelView v = view();
+    const int base = cfg.i("frame.base", 4), edge = cfg.i("frame.edge", 8);
+    cudaEvent_t a, b;
+    cudaEventCreate(&a);
+    cudaEventCreate(&b);
+    cudaEventRecord(a);
+    heykelFrame(v, accum, base, edge, cfg.f("frame.contrast", 0.08f), 0);
+    cudaEventRecord(b);
+    cudaEventSynchronize(b);
+    cudaEventElapsedTime(&frameMs, a, b);
+    cudaEventDestroy(a);
+    cudaEventDestroy(b);
+    samples = base;
 }
 
 void HeykelApp::resolve() { heykelResolve(view(), accum, output, 0); }
@@ -883,10 +929,8 @@ int stabilityFrames(HeykelApp& app, int cand, const std::string& mode, D3 target
             if (mode == "zoom") app.zoomAbout(target, std::log(to / from) / (frames - 1));
             else app.turnLight(0.017f, 0.004f);
         }
-        app.resetSamples();
-        app.addSamples(1);
-        const int n = std::clamp(int(25.0f / std::max(app.sampleMs, 0.1f)), 1, 4);   // as the live scene does
-        if (n > 1) app.addSamples(n - 1);
+        app.renderFrame();   // as the window draws it
+        const int n = app.samples;
         app.resolve();
         char name[512];
         std::snprintf(name, sizeof(name), "%s/%s/live_%04d", app.root.c_str(), out.c_str(), f);
@@ -896,7 +940,7 @@ int stabilityFrames(HeykelApp& app, int cand, const std::string& mode, D3 target
         app.resolve();
         std::snprintf(name, sizeof(name), "%s/%s/ref_%04d", app.root.c_str(), out.c_str(), f);
         app.save(name);
-        std::printf("  kare %d: x%.0f, canli %d ornek (%.1f ms/ornek)\n", f, app.level, n, app.sampleMs);
+        std::printf("  kare %d: x%.0f, canli %d ornek + kenar, kare %.1f ms\n", f, app.level, n, app.frameMs);
     }
     return 0;
 }
@@ -1080,12 +1124,16 @@ int runHeykelCli(int argc, char** argv) {
                 app.settleLight();
             }
             const double t0 = nowS();
-            app.resetSamples();
-            int left = std::max(spp, 1);
-            while (left > 0) {
-                const int b = std::min(left, 8);
-                app.addSamples(b);
-                left -= b;
+            if (spp <= 0) {   // --spp 0: the window's frame (renderFrame), its time
+                app.renderFrame();
+            } else {
+                app.resetSamples();
+                int left = spp;
+                while (left > 0) {
+                    const int b = std::min(left, 8);
+                    app.addSamples(b);
+                    left -= b;
+                }
             }
             app.resolve();
             cudaDeviceSynchronize();
@@ -1094,8 +1142,11 @@ int runHeykelCli(int argc, char** argv) {
             std::snprintf(name, sizeof(name), "%s/%s_x%g", out.c_str(), job.label.c_str(), z);
             app.save(app.root + "/" + name);
             const cudaError_t e = cudaGetLastError();
-            std::printf("  x%-6g %.1f ms/ornek, %d ornek %.1f sn%s -> %s.png\n", z, app.sampleMs, std::max(spp, 1), t1 - t0,
-                        e != cudaSuccess ? cudaGetErrorString(e) : "", name);
+            if (spp <= 0)
+                std::printf("  x%-6g kare %.1f ms%s -> %s.png\n", z, app.frameMs, e != cudaSuccess ? cudaGetErrorString(e) : "", name);
+            else
+                std::printf("  x%-6g %.1f ms/ornek, %d ornek %.1f sn%s -> %s.png\n", z, app.sampleMs, spp, t1 - t0,
+                            e != cudaSuccess ? cudaGetErrorString(e) : "", name);
         }
     }
     app.release();

@@ -2,7 +2,37 @@
 
 > Tek kaynak durum panosu. Plan `docs/heykel/PLAN.md`. En yeni en üstte.
 
-## 🔁 Revize 1 · Yıldız, deterministik çizici (2026-10-05 öğlen) · Özcan'ın bakacağı yer
+## 🔁 Revize 2 · Tek dünya: her kare aynı (2026-10-05 öğleden sonra) · Özcan'ın bakacağı yer
+
+**Özcan:** *"netlik oldu gerçekten. Şuan tek sorun ışığın hesaplanırken kıpraşması [...] rtxin olayı nedir, ışık oradadır
+[...] Şuanki hissiyat sen yakınlaştın ben bi ayarlıyım kendimi dur diyormuş gibi [...] Yakınlaştırıp uzaklaştırırken
+kötü, sabit durunca güzel."*
+
+**Sebep (üç parça):** (1) hareket ederken kare başına 1-4 örnek, durunca 128'e kadar birikim: görüntü durduktan sonra
+"kendini ayarlıyordu"; (2) yakınlaşma bitince lamba yeniden hedefleniyordu, yakınlaşırken yolu kapanınca bir karede başka
+yöne atlıyordu (kıpırtı); (3) hareket ederken her kare ağır, durunca iş bitince kart boşta: fps iniş çıkışı.
+
+**Yapılanlar:**
+- **Her kare aynı:** `heykelFrame`: piksel başına 4 sabit örnek (`frame.base`), birikim yok; durunca görüntü değişmez,
+  kart yalnız bir şey değiştiğinde çizer. Kenara aynı karede ek örnek (`frame.edge`) denendi: Menger'de neredeyse her yer
+  kenar, kareyi 2-3 kat uzatıyor (warp'ta farklı sayıda örnek de verimsiz): kapalı.
+- **Işık atlamaz:** yakınlaşırken lambanın hedefi yaklaştığın noktaya yumuşakça kayar (`followLight`, `light.follow` 4/sn),
+  uzaklığı, boyu ve ışık havuzu bakışla birlikte; yolu kapanınca yeni yön aranır ama lamba oraya bir karede değil yumuşakça
+  döner (`turnLampTowardsGoal`). Yakınlaşma sonundaki yeniden hedefleme kalktı. (Bu olmadan hedef havada kalıyordu, derin
+  görünümler düz gri oldu: autotest karesinde görüldü, düzeltildi.)
+- **Hız:** çapa hesabı yalnız gereken düzeylerde: son 10 düzey düz float (`deMengerPert`); derinde örnek 13,2 → 6,5 ms,
+  hata 10.000 katta 0,017 piksel (`--test pert`). Yörüngeler sabit bellekte (az kazanç). Aşırı gevşetilmiş yürüyüş
+  (Keinert) denendi: kazanç yok, geri alındı.
+
+**Ölçümler (2560×1440):** kare 13-36 ms (yüzeyde ~15, derinde 20-36; tek tük bakışta 50), yani hareket ederken 28-65 fps.
+Kıpırtı (`--kararlilik`, canlı kare = pencerenin karesi): yakınlaşma 0,0137 / %99 0,11, ışık sürükleme **0,0017** / 0,03.
+Durunca değişen bir şey yok (birikim yok), dolayısıyla "ayarlanma" yok.
+
+**NE DOĞRULANMADI:** canlı bakışın; lambanın yumuşak dönüşünün hızı (4/sn) gözde doğru mu; 4 sabit örnekle kenar
+kalitesinin dururken eski 128 örnekli görüntüden ne kadar geride kaldığı (FLIP 0,036). 50 ms'ye çıkan bakışlar (uzun
+galeriler boyunca) 20 fps.
+
+## 🔁 Revize 1 · Yıldız, deterministik çizici (2026-10-05 öğlen)
 
 **Özcan'ın ilk canlı bakışı (Katedral):** *"genel görüntü kalitesi çok kötü. Işık hareket edince pır pır titriyor,
 yakınlaşınca görüntü çok tanecikli ve bulanık [...] Ada da 1 er örnekle bile bunu başarmıştın"*; sonra *"dokunun kendisi

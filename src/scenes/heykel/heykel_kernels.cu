@@ -40,7 +40,7 @@ __device__ __forceinline__ float spotOf(const HeykelLight& l, float3 fromLight) 
 // for the room's faint light from above (wide, soft); the lamp's shadow is traced.
 __device__ float softShadow(const HeykelView& v, float3 ro, float3 rd, float tmax, float eps0, float slope, float k) {
     float res = 1.0f, t = eps0 * 2.0f, ph = 1e20f;
-    for (int i = 0; i < 160; ++i) {
+    for (int i = 0; i < v.shadowSteps; ++i) {
         const float h = deScene(ro + rd * t, v.w);
         if (h < eps0 + slope * t) return 0.0f;
         const float y = h * h / (2.0f * ph);
@@ -124,45 +124,79 @@ __device__ __forceinline__ float blackmanHarris(float x) {
     return 0.35875f - 0.48829f * cosf(a) + 0.14128f * cosf(2.0f * a) - 0.01168f * cosf(3.0f * a);
 }
 
+// one sample s of the fixed pattern at pixel (x, y): its colour and its reconstruction weight
+__device__ float3 sampleAt(const HeykelView& v, int x, int y, int s, float& w) {
+    const float slope = v.pixAngle * v.detail;
+    // the sub-pixel position: the centre first, then uniform over a disc of filterRadius pixels, weighted
+    float ox = 0.0f, oy = 0.0f;
+    w = 1.0f;
+    if (s > 0) {
+        const float r = v.filterRadius * sqrtf(r4(s, 0)), ph = 6.2831853f * r4(s, 1);
+        ox = r * cosf(ph);
+        oy = r * sinf(ph);
+        w = blackmanHarris(r / v.filterRadius);
+    }
+    float3 ro = v.camPos, rd = rayDir(v, x + 0.5f + ox, y + 0.5f + oy);
+    if (v.aperture > 0.0f && s > 0) {   // a thin lens focused on the plane through the zoom's point
+        const float3 fp = ro + rd * (v.focusDist / dot(rd, v.camFwd));
+        const float lr = v.aperture * sqrtf(r4(s, 3)), la = 6.2831853f * r4(s, 2) + 1.3f;
+        ro = ro + v.camRight * (lr * cosf(la)) + v.camUp * (lr * sinf(la));
+        rd = normalize(fp - ro);
+    }
+    Hit h;
+    if (march(ro, rd, v.tmax, 0.0f, slope, v.maxSteps, v.w.s.relax, v.w, h)) {
+        const float3 p = ro + rd * h.t;
+        const float eps = slope * h.t;
+        float3 n = normalAt(p, eps * v.normalScale, v.w);
+        if (dot(n, rd) > 0.0f) n = normalize(n - rd * (2.0f * dot(n, rd)));
+        return shade(v, p, n, h.id, eps, h.t, s);
+    }
+    return env(v, rd);
+}
+
 __global__ void kSamples(HeykelView v, float4* accum, int first, int count, int stripe, int stripes) {
     const int x = blockIdx.x * blockDim.x + threadIdx.x, y = stripe + (blockIdx.y * blockDim.y + threadIdx.y) * stripes;
     if (x >= v.width || y >= v.height) return;
     const int pix = y * v.width + x;
-    const float slope = v.pixAngle * v.detail;
     float4 a = accum[pix];
     for (int s = first; s < first + count; ++s) {
-        // the sub-pixel position: the centre first, then uniform over a disc of filterRadius pixels, weighted
-        float ox = 0.0f, oy = 0.0f, w = 1.0f;
-        if (s > 0) {
-            const float r = v.filterRadius * sqrtf(r4(s, 0)), ph = 6.2831853f * r4(s, 1);
-            ox = r * cosf(ph);
-            oy = r * sinf(ph);
-            w = blackmanHarris(r / v.filterRadius);
-        }
-        float3 ro = v.camPos, rd = rayDir(v, x + 0.5f + ox, y + 0.5f + oy);
-        if (v.aperture > 0.0f && s > 0) {   // a thin lens focused on the plane through the zoom's point
-            const float3 fp = ro + rd * (v.focusDist / dot(rd, v.camFwd));
-            const float lr = v.aperture * sqrtf(r4(s, 3)), la = 6.2831853f * r4(s, 2) + 1.3f;
-            ro = ro + v.camRight * (lr * cosf(la)) + v.camUp * (lr * sinf(la));
-            rd = normalize(fp - ro);
-        }
-        Hit h;
-        float3 c;
-        if (march(ro, rd, v.tmax, 0.0f, slope, v.maxSteps, v.w.s.relax, v.w, h)) {
-            const float3 p = ro + rd * h.t;
-            const float eps = slope * h.t;
-            float3 n = normalAt(p, eps * v.normalScale, v.w);
-            if (dot(n, rd) > 0.0f) n = normalize(n - rd * (2.0f * dot(n, rd)));
-            c = shade(v, p, n, h.id, eps, h.t, s);
-        } else {
-            c = env(v, rd);
-        }
+        float w;
+        const float3 c = sampleAt(v, x, y, s, w);
         a.x += c.x * w;
         a.y += c.y * w;
         a.z += c.z * w;
         a.w += w;
     }
     accum[pix] = a;
+}
+
+// One whole frame, the same whether anything moves or not (Ozcan 2026-10-05: "RTX'in olayi [...] isik oradadir"; the
+// picture that settled after every move felt like two worlds): `base` samples of the fixed pattern for every pixel,
+// and where they disagree (an edge, a hole's rim, a shadow's edge) `edge` more in the same frame. No history: a still
+// view is this frame, unchanged.
+__global__ void kFrame(HeykelView v, float4* out, int base, int edge, float contrast) {
+    const int x = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y;
+    if (x >= v.width || y >= v.height) return;
+    float3 sum = make_float3(0, 0, 0);
+    float wsum = 0.0f, lmin = 1e30f, lmax = 0.0f;
+    for (int s = 0; s < base; ++s) {
+        float w;
+        const float3 c = sampleAt(v, x, y, s, w);
+        sum += c * w;
+        wsum += w;
+        const float l = luminance709(c);
+        lmin = fminf(lmin, l);
+        lmax = fmaxf(lmax, l);
+    }
+    if (edge > 0 && lmax - lmin > contrast * (lmax + lmin + 0.02f)) {
+        for (int s = base; s < base + edge; ++s) {
+            float w;
+            const float3 c = sampleAt(v, x, y, s, w);
+            sum += c * w;
+            wsum += w;
+        }
+    }
+    out[y * v.width + x] = make_float4(sum.x, sum.y, sum.z, wsum);
 }
 
 __global__ void kResolve(HeykelView v, const float4* accum, uchar4* out) {
@@ -188,7 +222,17 @@ void heykelSamples(const HeykelView& v, float4* accum, int first, int count, int
     const int rows = (v.height - stripe + stripes - 1) / stripes;
     kSamples<<<dim3((v.width + b.x - 1) / b.x, (rows + b.y - 1) / b.y), b, 0, s>>>(v, accum, first, count, stripe, stripes);
 }
+void heykelFrame(const HeykelView& v, float4* out, int base, int edge, float contrast, cudaStream_t s) {
+    const dim3 b(16, 8);
+    kFrame<<<dim3((v.width + b.x - 1) / b.x, (v.height + b.y - 1) / b.y), b, 0, s>>>(v, out, base, edge, contrast);
+}
 void heykelResolve(const HeykelView& v, const float4* accum, uchar4* out, cudaStream_t s) {
     const dim3 b(16, 8);
     kResolve<<<dim3((v.width + b.x - 1) / b.x, (v.height + b.y - 1) / b.y), b, 0, s>>>(v, accum, out);
 }
+void heykelSetOrbits(const hk::MStep* m, const hk::KStep* k, int n) {
+    if (n <= 0) return;
+    if (m) cudaMemcpyToSymbol(hk::cMSteps, m, sizeof(hk::MStep) * n);
+    if (k) cudaMemcpyToSymbol(hk::cKSteps, k, sizeof(hk::KStep) * n);
+}
+

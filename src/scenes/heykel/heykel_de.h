@@ -97,6 +97,30 @@ HD float itersAt(float3 o, const World& w, int most) {
     return clampf(w.lodBase + w.lodK * log10f(w.lodRef / r), w.lodMin, float(most) - 1.001f);
 }
 
+// The orbits on the GPU live in constant memory: every thread of a warp reads the same step at the same time, which
+// the constant cache serves in one broadcast (from global memory the deep zoom's samples were 3-10 times the cost of
+// the straight ones). The host's own estimates read the World's pointers.
+#if defined(__CUDACC__)
+__constant__ MStep cMSteps[kMaxSteps];
+__constant__ KStep cKSteps[kMaxSteps];
+#endif
+HD const MStep& mstep(const World& w, int i) {
+#if defined(__CUDA_ARCH__)
+    (void)w;
+    return cMSteps[i];
+#else
+    return w.mst[i];
+#endif
+}
+HD const KStep& kstep(const World& w, int i) {
+#if defined(__CUDA_ARCH__)
+    (void)w;
+    return cKSteps[i];
+#else
+    return w.st[i];
+#endif
+}
+
 HD float fractf(float x) { return x - floorf(x); }
 HD float sdBox(float3 p, float3 h) {
     const float3 q = make_float3(fabsf(p.x) - h.x, fabsf(p.y) - h.y, fabsf(p.z) - h.z);
@@ -271,9 +295,14 @@ HD float absDelta(float d, float a, bool negA) {
 // the Menger by perturbation around the anchor (fractal units), stopped after mf iterations (as deMengerLod)
 HD float deMengerPert(float3 d, const World& w, float mf) {
     const int m0 = int(mf);
+    // Only the first levels need the difference: after j of them the point's local coordinates are O(1) and the finest
+    // structure drawn here (lod.pixels at level mf) is still ~3^-(mf - j) / 2 of the local cube, ~8e-6 for mf - j = 10:
+    // over a hundred float steps. From there the plain folds on z = A_j + d (a third of the cost). Measured (--test
+    // pert): 0.017 pixel at 10,000 times, a sample 13.2 -> 6.5 ms (8 plain levels: 0.0024, 8.0 ms)
+    const int j = m0 - 10 > 0 ? m0 - 10 : 0;
     float sc = 1.0f;
-    for (int i = 0; i < m0; ++i) {
-        const MStep& k = w.mst[i];
+    for (int i = 0; i < j; ++i) {
+        const MStep& k = mstep(w, i);
         d = make_float3(absDelta(d.x, k.A.x, k.flags & 1), absDelta(d.y, k.A.y, k.flags & 2), absDelta(d.z, k.A.z, k.flags & 4));
         swapDelta(d.x, d.y, k.D1, k.flags & 8);
         swapDelta(d.x, d.z, k.D2, k.flags & 16);
@@ -284,7 +313,17 @@ HD float deMengerPert(float3 d, const World& w, float mf) {
         else if (stepP && !stepA) d.z += 2.0f;
         sc *= 3.0f;
     }
-    return mengerCarve(w.mst[m0].A + d, mf - float(m0)) / sc;
+    float3 z = mstep(w, j).A + d;
+    for (int i = j; i < m0; ++i) {
+        z = make_float3(fabsf(z.x), fabsf(z.y), fabsf(z.z));
+        if (z.x < z.y) { const float t = z.x; z.x = z.y; z.y = t; }
+        if (z.x < z.z) { const float t = z.x; z.x = z.z; z.z = t; }
+        if (z.y < z.z) { const float t = z.y; z.y = z.z; z.z = t; }
+        z = z * 3.0f - make_float3(2, 2, 2);
+        if (z.z < -1.0f) z.z += 2.0f;
+        sc *= 3.0f;
+    }
+    return mengerCarve(z, mf - float(m0)) / sc;
 }
 
 // Sierpinski tetrahedron as a kaleidoscopic folding system (Knighty) with a turn before and after the folds:
@@ -356,8 +395,8 @@ HD float deKleinianPert(float3 d, const World& w, float mf) {
     const float f = mf - float(m0);
     float df = 1.0f, d0 = 0.0f;
     for (int i = 0; i <= m0; ++i) {
-        const KStep& k = w.st[i];
-        if (i == m0) d0 = kleinianEnd((i == 0 ? w.A0 : w.st[i - 1].An) + d, df, s);
+        const KStep& k = kstep(w, i);
+        if (i == m0) d0 = kleinianEnd((i == 0 ? w.A0 : kstep(w, i - 1).An) + d, df, s);
         d = make_float3(foldDelta(d.x, k.toPos.x, k.toNeg.x, k.bx), foldDelta(d.y, k.toPos.y, k.toNeg.y, k.by),
                         foldDelta(d.z, k.toPos.z, k.toNeg.z, k.bz));
         const float ad = 2.0f * dot(k.Af, d) + dot(d, d);   // |z|² - |Af|²
@@ -371,7 +410,7 @@ HD float deKleinianPert(float3 d, const World& w, float mf) {
         d = d * kz + k.Af * dk;
         df *= kz;
     }
-    return d0 + (kleinianEnd(w.st[m0].An + d, df, s) - d0) * f;
+    return d0 + (kleinianEnd(kstep(w, m0).An + d, df, s) - d0) * f;
 }
 
 // the sculpture: o is an offset from the frame's anchor (metres); outside its bounding sphere the sphere is the
@@ -439,6 +478,7 @@ struct Hit {
     int id = -1;
     int steps = 0;
 };
+// (Over-relaxed stepping, Keinert et al. 2014, was tried: no gain here, the steps are spent near surfaces.)
 HD bool march(float3 ro, float3 rd, float tmax, float eps0, float slope, int maxSteps, float relax, const World& w, Hit& h) {
     float t = 0.0f;
     for (int i = 0; i < maxSteps; ++i) {

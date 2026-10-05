@@ -65,7 +65,8 @@ struct HeykelApp {
     // the light: pointed at a target from a direction (world), at a distance that follows the view
     D3 lightTarget{0, 0, 0};
     float3 lightDir{-0.6f, 0.6f, 0.5f};   // where it was put (the first light, a drag)
-    float3 lampDir{-0.6f, 0.6f, 0.5f};    // where it is: lightDir, or the nearest direction with a clear line
+    float3 lampDir{-0.6f, 0.6f, 0.5f};    // where it is: turning towards lampGoal (turnLampTowardsGoal)
+    float3 lampGoal{-0.6f, 0.6f, 0.5f};   // lightDir, or the nearest direction with a clear line
     float lightDist = 1.5f, lightRadius = 0.06f, litRadius = 0.35f;
     float ev = 0.0f;
 
@@ -80,6 +81,7 @@ struct HeykelApp {
     int samples = 0;                 // the pattern's samples in accum
     bool dof = false;                // the macro lens's depth of field (off: Özcan wants it sharp)
     float sampleMs = 0.0f;           // one sample over the whole picture, measured
+    float frameMs = 0.0f;            // the last whole frame (renderFrame), measured
 
     void loadConfig();
     void buildCandidates();
@@ -111,8 +113,11 @@ struct HeykelApp {
     bool lampClear(D3 target, float3 n, float3 dir, double dist) const;
     void clearLamp(const float3* normal);        // lampDir: lightDir if its line is clear, else the nearest clear one
     void settleLight();                          // the zoom stopped: the lamp onto the focus, a clear line
+    bool turnLampTowardsGoal(float dt);          // a frame's step of the lamp's turn; false: it is there
+    void followLight(float dt);                  // a zoom's frame: the target eases onto the focus, the lamp follows the view
     void keepLampClear();                        // while zooming: a ray a frame; blocked, the nearest clear direction
 
+    void renderFrame();              // the window's frame: frame.base samples, frame.edge more on edges (heykelFrame)
     void resetSamples();             // something changed: the picture starts again from sample 0
     void addSamples(int count, int stripe = 0, int stripes = 1);   // the next samples (rows y = stripe mod stripes)
     void resolve();

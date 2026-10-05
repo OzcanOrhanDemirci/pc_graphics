@@ -269,9 +269,10 @@ Orada ekranın genişliği 0,15 mm, iki saç teli kadardır.
 - **Vektör çizim kadar keskin:** her noktada yalnız en az dört piksel büyüklüğündeki delikler çizilir (daha küçükleri
   yalnız gren olurdu); yaklaştıkça bir sonraki düzeyin delikleri gerçek kare tüneller olarak merkezlerinden genişleyerek
   açılır: her ara biçim yine bir Menger süngeridir, hiçbir şey birden belirmez.
-- **Rastgele sayı yok** (5. sahnenin yolu): her piksel her karede aynı sabit alt piksel örneklerini ve spotun diskinde aynı
-  noktaları alır; durunca aynı desenden yenileri eklenir (kenarlar, yarı gölge), hiç gren olmaz. Işık sürüklenirken
-  yakınsamış referansa karşı kıpırtı 0,0027 (sahnenin yol izlemeli ilk hâli: 0,0125).
+- **Hareket ederken de dururken de tek dünya** (5. sahnenin yolu): rastgele sayı yok, birikim yok. Her piksel her karede aynı
+  dört sabit alt piksel örneğini alır; durunca kare olduğu gibi kalır, sonradan "ayarlanma" olmaz; lamba hiç atlamaz
+  (hedefi yaklaştığın yere kayar, kapanan hat yerine açık olana yumuşakça döner). Işık sürüklenirken yakınsamış referansa
+  karşı kıpırtı 0,0017 (sahnenin yol izlemeli ilk hâli: 0,0125).
 - **On bin kat, float'la, pertürbasyonla:** orada bir piksel konumun birkaç float basamağıdır. Bir çapa noktasının
   yörüngesi ana işlemcide çift hassasiyetle katlamalardan geçer, her piksel onu float'ta küçük bir fark olarak izler;
   katlamalar parça parça doğrusal, her dalın kesin bir fark formülü var, dal kararları çift hassasiyetten. Düz çift

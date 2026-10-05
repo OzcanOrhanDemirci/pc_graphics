@@ -278,9 +278,10 @@ thousand times, where the screen is 0.15 mm across (about two hairs).
 - **As sharp as a vector drawing:** at every point only holes at least four pixels wide are drawn (smaller ones would
   only be grain); as you come closer the next level's holes open as true square tunnels widening from their centres, so
   every in-between shape is still a Menger sponge and nothing pops in.
-- **No random numbers** (scene 5's way): every pixel takes the same fixed sub-pixel samples and the same points of the
-  lamp's disc every frame; still, more of the same pattern are added (the edges, the penumbra), never grain. Measured
-  against a converged reference while dragging the light: 0.0027 (the first, path-traced version of the scene: 0.0125).
+- **One world, moving or still** (scene 5's way): no random numbers and no accumulation. Every pixel takes the same four
+  fixed sub-pixel samples every frame; a still view keeps the frame it was drawn with, so nothing settles afterwards, and
+  the lamp never jumps (its target glides onto what you zoom at, a blocked line gives way to a clear one smoothly).
+  Measured against a converged reference while dragging the light: 0.0017 (the first, path-traced version: 0.0125).
 - **Ten thousand times in floats, by perturbation:** there a pixel is a few float steps of the position. One anchor's
   orbit goes through the folds in doubles on the processor and every pixel follows it as a small difference in floats;
   the folds are piecewise linear, so every branch has an exact difference formula, decided by differences kept from the

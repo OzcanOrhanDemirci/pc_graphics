@@ -5,6 +5,9 @@
 > `docs/tanecik/` arşiv.
 
 ## Şu an
+- **2026-10-05 (öğleden sonra) · Heykel revize 2: her kare aynı.** Özcan: hareket ederken ve dururken iki ayrı dünya gibi
+  (*"ışık oradadır"*). Birikim kalktı (4 sabit örnek, durunca değişmez), lamba atlamaz (hedefi yumuşakça kayar), çapa hesabı
+  yalnız gereken düzeylerde (derinde 2 kat hızlı). Kare 13-36 ms. `docs/heykel/DURUM.md` başında.
 - **2026-10-05 (öğlen) · Heykel revize 1: Yıldız ve deterministik çizici.** Özcan'ın ilk canlı bakışı: grenli, titreyen,
   noktacıklı (*"vektörde olduğu gibi aşırı net bir şey beklemiştim"*). Yol izleme kalktı (rastgele sayı yok, sabit örnek
   deseni, Ada'nın yolu); heykel artık köşegeninden kesilmiş bir Menger süngeri (madalyon), her noktada en az 4 piksellik

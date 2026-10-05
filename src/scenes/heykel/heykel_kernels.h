@@ -28,6 +28,7 @@ struct HeykelView {   // one frame's world, camera and light, by value to the ke
     int maxSteps2 = 200;          // the shadow rays (out of steps near something: a hit, dark)
     float shadowSlope = 2.0f;     // their threshold, times the camera's
     float shadowReach = 1e30f;    // how far the lamp's shadow ray looks for an occluder (m; the view scales it)
+    int shadowSteps = 160;        // the soft shadow's march, at most
     int softKey = 1;              // the lamp's shadow: 1 estimated (smooth as it moves), 0 traced from the disc's points
     float normalScale = 1.0f;     // the normal's differences, times the surface threshold (wider: calmer shading)
     float filterRadius = 1.5f;    // the reconstruction: Blackman-Harris over this many pixels (scene 5's)
@@ -50,5 +51,11 @@ struct HeykelView {   // one frame's world, camera and light, by value to the ke
 // adds samples s = first .. first+count-1 (the fixed pattern) to accum (rgb weighted, w the weights), on the rows
 // y = stripe (mod stripes) only (a sample too slow for one frame is spread over several)
 void heykelSamples(const HeykelView& v, float4* accum, int first, int count, int stripe, int stripes, cudaStream_t s);
+// one whole frame into out (rgb weighted, w the weights): `base` samples a pixel, `edge` more where they disagree by
+// more than `contrast` (Michelson, on luminance). The same every frame: the window draws only this
+void heykelFrame(const HeykelView& v, float4* out, int base, int edge, float contrast, cudaStream_t s);
 // the picture: accum's weighted mean, exposure, AgX, sRGB, a fixed dither
 void heykelResolve(const HeykelView& v, const float4* accum, uchar4* out, cudaStream_t s);
+// the anchor's orbit into the kernels' constant memory (n steps; null: that one unchanged)
+void heykelSetOrbits(const hk::MStep* m, const hk::KStep* k, int n);
+

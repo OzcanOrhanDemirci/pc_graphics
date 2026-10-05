@@ -105,8 +105,7 @@ public:
             return;
         default:
             cudaMallocHost(reinterpret_cast<void**>(&pinned_), size_t(h_.width) * h_.height * sizeof(uchar4));
-            h_.resetSamples();
-            h_.addSamples(1);
+            h_.renderFrame();
             h_.resolve();
             st.fraction = 1.0f;
             st.done = true;
@@ -178,14 +177,11 @@ public:
                 if (std::fabs(pending_) < 2e-3f) dz = pending_;
                 const float before = h_.level;
                 h_.zoomAbout(zoomQ_, dz);
-                h_.keepLampClear();
+                h_.followLight(dt);
                 pending_ -= dz;
                 if (h_.level == 1.0f && before != 1.0f && dz < 0.0f) pending_ = 0.0f;   // back at the first view
                 if (h_.level >= h_.zoomCapAt(zoomQ_) * 0.999f && dz > 0.0f) pending_ = 0.0f;
-                if (std::fabs(pending_) <= 1e-5f) {   // the zoom has stopped: the lamp settles onto what is looked at
-                    pending_ = 0.0f;
-                    if (h_.level > 1.0f) h_.settleLight();
-                }
+                if (std::fabs(pending_) <= 1e-5f) pending_ = 0.0f;   // the lamp came along: nothing to re-aim
                 changed = true;
             }
             // the right button turns the view around the focus (the plinth turning)
@@ -216,24 +212,13 @@ public:
         }
         leftWas_ = in.leftDown;
 
+        // The lamp turns smoothly towards a clear line (a frame's step, never a jump)
+        if (h_.turnLampTowardsGoal(dt)) changed = true;
+        // One frame, the same whether anything moves or not (Ozcan 2026-10-05: "RTX'in olayi nedir, isik oradadir [...]
+        // simdiki hissiyat sen yakinlastin ben bi ayarliyim kendimi dur diyormus gibi"): no accumulation that settles
+        // afterwards; a still view keeps the frame it was drawn with
         if (changed) {
-            // the picture again from sample 0, as many of the fixed pattern's samples as fit in ~25 ms (at least one,
-            // the whole picture: a moving view never shows a half-made frame)
-            h_.resetSamples();
-            const int n = h_.sampleMs > 0.0f ? std::clamp(int(25.0f / h_.sampleMs), 1, 4) : 1;
-            h_.addSamples(n);
-            h_.resolve();
-            phase_ = 0;
-        } else if (h_.samples < maxSamples_) {
-            // still: as many samples as fit in ~35 ms; a sample slower than that is spread over several frames by rows
-            if (phase_ == 0) stripes_ = h_.sampleMs > 0.0f ? std::clamp(int(std::ceil(h_.sampleMs / 35.0f)), 1, 24) : 1;
-            if (stripes_ == 1) {
-                const int spp = std::clamp(int(35.0f / std::max(h_.sampleMs, 0.1f)), 1, 16);
-                h_.addSamples(std::min(spp, maxSamples_ - h_.samples));
-            } else {
-                h_.addSamples(1, phase_, stripes_);
-                if (++phase_ == stripes_) phase_ = 0;
-            }
+            h_.renderFrame();
             h_.resolve();
         } else if (toneOnly) {
             h_.resolve();
@@ -251,7 +236,6 @@ public:
         using theme::num;
         using theme::thousands;
         if (tour_) s.chips.push_back({L("Tur · dalış ", "Tour · dive ") + std::to_string(dive_ + 1) + "/" + std::to_string(kDiveCount), true});
-        if (h_.samples > 0 && h_.samples < maxSamples_) s.chips.push_back({L("Birikiyor", "Accumulating")});
         const float lv = h_.level;
         s.metrics.push_back({L("Yakınlaşma", "Zoom"), "×" + (lv < 10.0f ? num(lv, 1) : thousands(int(std::lround(lv))))});
         // what the screen's width is at the focus: about 1.5 m at the first view, 0.15 mm (two hairs) at 10,000 times
@@ -265,7 +249,7 @@ public:
             s.metrics.push_back({L("Ekranın genişliği", "The screen's width"), w});
         }
         s.metrics.push_back({L("Örnek", "Samples"), std::to_string(h_.samples)});
-        s.metrics.push_back({L("Bir örnek", "One sample"), num(h_.sampleMs, 1) + " ms"});
+        s.metrics.push_back({L("Kare", "Frame"), num(h_.frameMs, 1) + " ms"});
         app::Control c;
         c.kind = app::Control::Kind::Button;
         c.id = "tur";
@@ -296,8 +280,7 @@ public:
         h_.setCandidate(sculptureIndex());
         pending_ = 0.0f;
         tour_ = false;
-        h_.resetSamples();
-        h_.addSamples(1);
+        h_.renderFrame();
         h_.resolve();
         host.toast(L("Ayarlar yeniden yüklendi", "Settings reloaded"));
     }
@@ -318,12 +301,12 @@ private:
         tour_ = true;
         dive_ = 0;
         beginDive();
+        h_.defaultLight();
+        h_.aimLight(h_.homeFocus);
         host.toast(L("Dalış turu: dört nokta, on bin kata kadar. Bir tuş ya da fare durdurur", "The dive tour: four dives to ten thousand times. A key or the mouse stops it"));
     }
     void beginDive() {
-        h_.home();
-        h_.defaultLight();
-        h_.aimLight(h_.homeFocus);
+        h_.home();   // the lamp keeps where it is (out of the last dive it came back to the first view's scale)
         stop_ = -1;   // at home
         hold_ = 0.0f;
         holding_ = true;
@@ -331,13 +314,9 @@ private:
     }
     bool stepTour(float dt) {
         const D3 q = kDives[dive_];
-        if (holding_) {   // let the picture settle: a while, and enough samples
+        if (holding_) {   // a pause to look (nothing settles: the frame is the same moving or still)
             hold_ += dt;
-            // deterministic: no grain to wait out, only the edges and the penumbra to settle (64 of the fixed samples;
-            // at 10,000 times ~45 ms each at 2560x1440)
-            const float maxHolds[] = {2.5f, 3.0f, 3.5f, 4.5f, 4.5f};   // home, 10, 100, 1,000, 10,000 times
-            const float minHold = 2.5f, maxHold = maxHolds[stop_ + 1];
-            if (hold_ < minHold || (hold_ < maxHold && h_.samples < 64)) return false;
+            if (hold_ < 2.5f) return false;
             holding_ = false;
             if (stop_ == kStopCount - 1) {   // the bottom: back out
                 out_ = true;
@@ -359,9 +338,8 @@ private:
         const float step = std::min(dt * 0.92f, std::log(target / h_.level));
         const float before = h_.level;
         h_.zoomAbout(q, step);
-        h_.keepLampClear();
+        h_.followLight(dt);
         if (h_.level >= target * 0.999f || h_.level <= before) {
-            h_.settleLight();
             holding_ = true;
             hold_ = 0.0f;
         }
@@ -376,8 +354,6 @@ private:
     D3 zoomQ_{0, 0, 0};
     bool leftWas_ = false, dragging_ = false, pressInView_ = false;
     float pressX_ = 0.0f, pressY_ = 0.0f;
-    int maxSamples_ = 128;          // the fixed pattern: edges and the lamp's penumbra are smooth by then
-    int stripes_ = 4, phase_ = 0;    // a slow sample spread over frames: rows y = phase (mod stripes) this frame
     // the tour
     bool tour_ = false, holding_ = false, out_ = false;
     int dive_ = 0, stop_ = -1;
