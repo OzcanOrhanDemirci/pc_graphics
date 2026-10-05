@@ -121,6 +121,8 @@ private:
     std::vector<ui::Rect> panels_;
     std::vector<Control> panelControls_;
     int hotHit_ = -1;                     // the control under the mouse
+    std::string hotKey_;                  // which one (id and item), to see a new one arrive under a still cursor
+    double hotArmedAt_ = 0.0;             // when it may take a click (a control that slid under a still cursor waits)
     int dragControl_ = -1;                // a slider being dragged (index into panelControls_)
     std::string dragId_;
     ui::Rect dragTrack_;

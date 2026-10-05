@@ -9,6 +9,7 @@
 #include "app/theme.h"
 #include "scenes/olcek/olcek_app.h"
 #include "scenes/olcek/olcek_bugun.h"
+#include "scenes/olcek/olcek_hiz_pano.h"
 
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
@@ -30,98 +31,15 @@ namespace hz = olcek::hiz;
 
 constexpr double kPi = 3.14159265358979323846;
 
-// ---- numbers for the panel (the language's separators; Mono has no Greek, so the Greek letters go in the labels)
-const char* kSupDigits[10] = {"⁰", "¹", "²", "³", "⁴", "⁵", "⁶", "⁷", "⁸", "⁹"};
-std::string supInt(int e) {
-    std::string out = e < 0 ? "⁻" : "";
-    for (char c : std::to_string(std::abs(e))) out += kSupDigits[c - '0'];
-    return out;
-}
-// v as m x 10^e with `digits` decimals (m in [1, 10))
-std::string sci(double v, int digits) {
-    if (v == 0.0 || !std::isfinite(v)) return "0";
-    int e = int(std::floor(std::log10(std::fabs(v))));
-    const double p = std::pow(10.0, digits);
-    double m = std::round(v / std::pow(10.0, e) * p) / p;   // rounded first: 9,9996 at 2 digits carries to 1,00 x 10^(e+1)
-    if (std::fabs(m) >= 10.0) {
-        m /= 10.0;
-        ++e;
-    }
-    return theme::num(m, digits) + " × 10" + supInt(e);
-}
-std::string sig3(double v) {
-    if (v >= 1e6) return sci(v, 2);
-    if (v >= 100.0) return theme::thousands((unsigned long long)std::llround(v));
-    if (v >= 10.0) return theme::num(v, 1);
-    return theme::num(v, 2);
-}
-std::string distText(double m) {
-    const double ly = m / hz::kLy;
-    if (m < 1e3) return sig3(m) + " m";
-    if (m < 1e9) return sig3(m * 1e-3) + " km";
-    if (m < 1e12) return sig3(m * 1e-9) + L(" milyon km", " million km");
-    if (ly < 0.05) return sig3(m / hz::kAU) + " AU";
-    if (ly < 1e3) return sig3(ly) + L(" ışık yılı", " light years");
-    if (ly < 1e6) return sig3(ly * 1e-3) + L(" bin ışık yılı", " thousand light years");
-    return theme::num(ly * 1e-6, 3) + L(" milyon ışık yılı", " million light years");
-}
-// the passenger's clock: m:ss, h:mm:ss
-std::string clockText(double s) {
-    const long long t = (long long)std::floor(std::max(s, 0.0));
-    char b[64];
-    if (t < 3600) std::snprintf(b, sizeof(b), "%lld:%02lld", t / 60, t % 60);
-    else std::snprintf(b, sizeof(b), "%lld:%02lld:%02lld", t / 3600, (t / 60) % 60, t % 60);
-    return b;
-}
-// the Earth's: from seconds to millions of years
-std::string spanText(double s) {
-    const double y = s / hz::kYear;
-    if (s < 3600.0) return clockText(s);
-    if (s < 86400.0 * 2.0) return theme::num(s / 3600.0, 1) + L(" saat", " hours");
-    if (y < 1.0) return theme::num(s / 86400.0, 1) + L(" gün", " days");
-    if (y < 1e4) return theme::num(y, 2) + L(" yıl", " years");
-    if (y < 1e6) return theme::num(y * 1e-3, 2) + L(" bin yıl", " thousand years");
-    return theme::num(y * 1e-6, 3) + L(" milyon yıl", " million years");
-}
-// a date on the Earth: "today" (2026-10-05 10:00 UTC) + t, while it is a calendar date worth reading
-std::string dateText(double t) {
-    const double jd = 2461318.9169918294 + t / 86400.0 + 0.5;   // (TDB ~ UTC: a minute is nothing here)
-    const long long Z = (long long)std::floor(jd);
-    const long long A0 = (long long)std::floor((Z - 1867216.25) / 36524.25);
-    const long long A = Z + 1 + A0 - A0 / 4, B = A + 1524;
-    const long long C = (long long)std::floor((B - 122.1) / 365.25), D = (long long)std::floor(365.25 * C);
-    const long long E = (long long)std::floor((B - D) / 30.6001);
-    const int day = int(B - D - (long long)std::floor(30.6001 * E));
-    const int month = int(E < 14 ? E - 1 : E - 13);
-    const long long year = month > 2 ? C - 4716 : C - 4715;
-    static const char* trM[12] = {"Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"};
-    static const char* enM[12] = {"January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"};
-    const std::string y = year >= 10000 ? theme::thousands((unsigned long long)year) : std::to_string(year);
-    return std::to_string(day) + " " + L(trM[month - 1], enM[month - 1]) + " " + y;
-}
-// beta with every nine: 0,999 999 9xx (from 1 - beta, never from beta)
-std::string betaText(const hz::Kin& k) {
-    if (k.phi <= 0.0) return "0";
-    if (k.nines < 3.0) return theme::num(k.beta, 6);
-    const int n = int(std::floor(k.nines));
-    const double r = 1.0 - std::pow(10.0, double(n)) * k.eps;   // the digits after the n nines, as 0.xyz
-    std::string digits(size_t(n), '9');
-    char b[16];
-    std::snprintf(b, sizeof(b), "%03d", std::clamp(int(std::floor(r * 1000.0)), 0, 999));
-    digits += b;
-    std::string out = app::lang() == app::Lang::TR ? "0," : "0.";
-    for (size_t i = 0; i < digits.size(); ++i) {
-        if (i && i % 3 == 0) out += ' ';
-        out += digits[i];
-    }
-    return out;
-}
-std::string speedText(const hz::Kin& k) {
-    const double v = hz::kC * k.beta;
-    if (k.eps > 1e-6) return theme::thousands((unsigned long long)std::llround(v)) + " m/s";
-    return "c − " + sci(hz::kC * k.eps, 2) + " m/s";   // the shortfall from c: the only digits that still move
-}
-std::string gammaText(double g) { return g < 1e4 ? theme::num(g, g < 10.0 ? 4 : 1) : sci(g, 3); }
+// ---- numbers for the panel: one source, olcek_hiz_pano.cpp
+using hz::betaText;
+using hz::clockText;
+using hz::dateText;
+using hz::distText;
+using hz::gammaText;
+using hz::spanText;
+using hz::speedText;
+std::string sci(double v, int digits) { return hz::sciText(v, digits); }
 std::string fovText(double tanHalf) {
     const double fov = 2.0 * std::atan(tanHalf), deg = fov * 180.0 / kPi;
     if (deg >= 1.0) return theme::num(deg, 1) + "°";
@@ -200,6 +118,7 @@ public:
                     {"S", L("Fren (aynı güçle; geri vites yok)", "Brake (the same power; no reverse)")},
                     {L("Boşluk", "Space"), L("Otomatik varış: doğru anda frenleyip durur", "Automatic arrival: brakes at the right moment")},
                     {"Tab", L("Roketin gözü ↔ yandan", "The rocket's eye ↔ from the side")},
+                    {"G", L("Grafikler: aç, kapat", "The graphs: on, off")},
                     {L("Sürükle", "Drag"), L("Başını çevir (roketin gözü)", "Turn your head (the rocket's eye)")},
                     {L("Tekerlek", "Wheel"), L("Dürbün (göz), ölçek (yandan)", "Binoculars (eye), scale (side)")},
                     {"R", L("İleri bak / rokete dön", "Look ahead / back to the rocket")}}}};
@@ -404,7 +323,50 @@ public:
     }
     ~OlcekLive() override { unload(); }
 
+    // the second option's graphs over the picture (both views), under the application's panels
+    void overlay(const app::Overlay& o) override {
+        if (mode_ != 1 || !graphs_) return;
+        const hz::Ship& s = a_.ship;
+        hz::Pano p;
+        p.ship = &s;
+        p.route = &a_.route;
+        p.bb = &a_.bb;
+        p.trace = &trace_;
+        p.k = hz::kin(s.phi);
+        const PanoNow pn = panoNow();
+        p.xFromStart = pn.x;
+        p.ctSinceDepart = pn.ct;
+        // the Earth: "now" in the rocket's frame (its simultaneity), and the Earth seen (its light, delayed, Doppler-shifted)
+        const olcek::V3 pos = hz::position(s, a_.route);
+        const olcek::V3 rel = pos - a_.route.earth;
+        const double d = olcek::length(rel);
+        const double t = s.t.value();
+        const olcek::V3 m = hz::motionDir(s, a_.route);
+        p.earthDist = d;
+        p.earthNow = s.phi > 0.0 ? t - p.k.beta * olcek::dot(rel, m) / hz::kC : t;
+        p.earthSeen = t - d / hz::kC;
+        double D = 1.0;
+        if (s.phi > 0.0 && d > 0.0) hz::aberrateDirFast(rel * (-1.0 / d), m, p.k, std::exp(-s.phi), D);
+        p.earthSeenRate = D;
+        p.dt = lastDtau_;
+        p.now = o.now;
+        hz::drawPanels(p, pano_, o.view, o.scale, hz::kPanoAll, o.panels);
+    }
+
 private:
+    // where the rocket is in its leg's plane: x from the leg's start, ct since its first thrust (< 0: not yet)
+    struct PanoNow {
+        double x = 0.0, ct = -1.0;
+    };
+    PanoNow panoNow() const {
+        const hz::Ship& s = a_.ship;
+        PanoNow pn;
+        const int L = std::min(s.leg, 1);
+        pn.x = a_.route.length[L] + s.x.value();
+        if (s.legTau >= 0.0) pn.ct = hz::kC * hz::add(s.t, hz::neg(s.legT)).value();
+        return pn;
+    }
+
     // ---- the second option: Hız ---------------------------------------------------------------------------------------
 
     void enterHiz() {
@@ -454,8 +416,13 @@ private:
             view_ ^= 1;
             evInit_ = false;   // the eye adapted at once when it comes back (no fade from a stale exposure)
         }
+        for (const app::ControlEvent& e : in.events)
+            if (e.id == "grafik" && e.item >= 0) graphs_ = e.item == 0;
+        if (in.pressed(GLFW_KEY_G)) graphs_ = !graphs_;
         if (reset) {
             a_.ship = hz::depart(a_.route);
+            trace_.clear();
+            pano_ = hz::PanoState{};
             resetArmed_ = -1.0;
             yaw_ = pitch_ = 0.0;
             evInit_ = false;
@@ -464,6 +431,15 @@ private:
         const int legBefore = a_.ship.leg;
         const hz::Events ev = hz::step(a_.ship, a_.route, dtau, cmd);
         notices(host, ev, legBefore);
+        if (a_.ship.leg != legBefore) {   // a new leg: its own world line, its own diagram
+            trace_.clear();
+            pano_ = hz::PanoState{};
+        }
+        lastDtau_ = dtau;
+        {   // the world line in the leg's plane (the Minkowski diagram), from the leg's first thrust
+            const PanoNow pn = panoNow();
+            if (pn.ct >= 0.0) trace_.add(pn.x, pn.ct);
+        }
 
         // the view's own input
         const bool inView = in.view.w > 0.0f && in.view.contains(in.mouseX, in.mouseY);
@@ -602,6 +578,12 @@ private:
                                      L("Andromeda'dasın", "At Andromeda")};
         st.metrics.push_back({L("Yol", "Leg"), legs[std::clamp(s.leg, 0, 2)]});
         st.metrics.push_back({L("Hız", "Speed"), speedText(k)});
+        if (graphs_) {   // the graphs carry the rest; the numbers they do not show
+            st.metrics.push_back({L("β (ışık hızına oranı)", "β (of light's speed)"), betaText(k)});
+            if (view_ == 0) st.metrics.push_back({L("Görüş açısı", "Field of view"), fovText(std::pow(10.0, zoom_))});
+            else st.metrics.push_back({L("Ekranın genişliği", "The screen's width"), a_.sc.widthText()});
+            st.metrics.push_back({L("Kare", "Frame"), num(a_.frameMs + float(a_.hostMs), 1) + " ms"});
+        } else {
         st.metrics.push_back({L("β (ışık hızına oranı)", "β (of light's speed)"), betaText(k)});
         st.metrics.push_back({L("Dokuz", "Nines"), num(k.nines, 2)});
         st.metrics.push_back({L("γ (zaman genişlemesi)", "γ (time dilation)"), gammaText(k.gamma)});
@@ -619,7 +601,16 @@ private:
         if (view_ == 0) st.metrics.push_back({L("Görüş açısı", "Field of view"), fovText(std::pow(10.0, zoom_))});
         else st.metrics.push_back({L("Ekranın genişliği", "The screen's width"), a_.sc.widthText()});
         st.metrics.push_back({L("Kare", "Frame"), num(a_.frameMs + float(a_.hostMs), 1) + " ms"});
+        }
 
+        app::Control gr;
+        gr.kind = app::Control::Kind::Choice;
+        gr.id = "grafik";
+        gr.title = L("Grafikler", "Graphs");
+        gr.items = {L("Açık", "On"), L("Kapalı", "Off")};
+        gr.active = graphs_ ? 0 : 1;
+        gr.detail = "G";
+        st.controls.push_back(gr);
         app::Control v;
         v.kind = app::Control::Kind::Choice;
         v.id = "goruntu";
@@ -655,8 +646,8 @@ private:
         out += hz::serialize(a_.ship);
         char b[256];
         if (!std::isfinite(a_.ship.phi) || !std::isfinite(a_.ship.x.hi) || !std::isfinite(a_.ship.t.hi)) return;   // never a NaN on disk
-        std::snprintf(b, sizeof(b), "hiz.goruntu = %d\nhiz.bakis = %.17g %.17g\nhiz.yakinlik = %.17g\nhiz.yan = %.17g\n", view_, yaw_, pitch_,
-                      zoom_, sideS_);
+        std::snprintf(b, sizeof(b), "hiz.goruntu = %d\nhiz.bakis = %.17g %.17g\nhiz.yakinlik = %.17g\nhiz.yan = %.17g\nhiz.grafik = %d\n", view_, yaw_,
+                      pitch_, zoom_, sideS_, graphs_ ? 1 : 0);
         out += b;
         const std::string tmp = savePath_ + ".yeni";
         {
@@ -711,6 +702,7 @@ private:
         }
         if (num("hiz.yakinlik", 1, v)) zoom_ = std::clamp(v[0], std::log10(std::tan(0.5e-11)), std::log10(std::tan(60.0 * kPi / 180.0)));
         if (num("hiz.yan", 1, v)) sideS_ = std::clamp(v[0], 1.0, 23.0);
+        if (num("hiz.grafik", 1, v)) graphs_ = v[0] != 0.0;
         // (the scene always opens on its first option: the journey waits in the second, where it was left)
     }
 
@@ -734,6 +726,10 @@ private:
     double yaw_ = 0.0, pitch_ = 0.0;    // the head (radians; the sky follows a drag)
     bool lookAhead_ = false;            // R: the head turning back to the bow
     bool overshootShown_ = false;       // the "too fast to stop" notice given (once per such brake)
+    bool graphs_ = true;                // the five panels of graphs (G)
+    hz::Trace trace_;                   // the leg's world line (the Minkowski diagram)
+    hz::PanoState pano_;
+    double lastDtau_ = 0.0;
     double zoom_ = std::log10(std::tan(37.5 * kPi / 180.0));   // log10 tan(fov/2): 75 degrees across
     double zoomPending_ = 0.0;
     double sideS_ = 1.3, sidePending_ = 0.0;   // the side view's screen width (log10 m)

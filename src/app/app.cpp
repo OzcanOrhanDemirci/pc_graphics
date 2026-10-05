@@ -77,8 +77,21 @@ std::vector<ControlEvent> App::panelInput(bool& clickTaken, bool& pressTaken) {
         }
         for (const ui::Rect& r : panels_) overPanel = overPanel || r.contains(mx, my);
     }
+    // a control that slides under a still cursor (the panel changed shape: a choice switched its rows, the panel grew
+    // upwards) takes no click for half a second, or until the mouse moves: a double click on "Hız" in Ölçek switched to
+    // the second option and pressed "Otomatik varış", which had taken its place, starting the journey
+    {
+        std::string key;
+        if (hotHit_ >= 0) key = panelControls_[panelHits_[hotHit_].control].id + "#" + std::to_string(panelHits_[hotHit_].item);
+        const bool still = mx == float(prevMouseX_) && my == float(prevMouseY_);
+        if (key != hotKey_) {
+            hotArmedAt_ = still ? nowSec() + 0.5 : 0.0;
+            hotKey_ = key;
+        }
+        if (!still) hotArmedAt_ = 0.0;
+    }
     if (leftClick_ && live) {
-        if (hotHit_ >= 0) {
+        if (hotHit_ >= 0 && nowSec() >= hotArmedAt_) {
             const PanelHit& h = panelHits_[hotHit_];
             const Control& c = panelControls_[h.control];
             if (c.kind == Control::Kind::Slider) {
@@ -337,6 +350,14 @@ void App::frameRunning(double now, double dt) {
         const float s = std::min(float(fbw_) / frame_.w, float(fbh_) / frame_.h);
         view_ = ui::Rect{0.5f * (fbw_ - frame_.w * s), 0.5f * (fbh_ - frame_.h * s), frame_.w * s, frame_.h * s};
         ui::image(frame_, view_);
+        if (hud_) {   // the scene's own graphs over its picture, under the panels (and the fade-in over both)
+            Overlay o;
+            o.view = view_;
+            o.scale = S_.s;
+            o.now = now - sceneT0_;
+            o.panels = panels_;   // (last frame's: drawn after this, in the same places)
+            scene_->overlay(o);
+        }
     }
     // the first second: the picture rises out of black, the panel slides in
     const float fade = float(std::min(1.0, (now - modeT0_) / 0.6));
@@ -598,7 +619,7 @@ int App::run(const Options& opt) {
                 // the second option, Hız (a test run starts the journey afresh and leaves the user's own alone): the eye at
                 // rest beside the Earth, W for 5 and 10 s (rapidity 2 and 4), the side view and its wheel, the head turned
                 // by a drag and back with R, Space (the quickest arrival); "olcek/hiz": on to Proxima (~89 s from rest)
-                control("secenek", 1); wait(1.5); log("olcek hiz"); shot("olcek_hiz_kalkis");
+                control("secenek", 1); wait(0.15); click(); wait(1.35); log("olcek hiz (cift tik: yolculuk baslamaz, Hiz 0)"); shot("olcek_hiz_kalkis");
                 hold(GLFW_KEY_W, true); wait(5.0); hold(GLFW_KEY_W, false); wait(0.5); log("olcek hiz W 5 sn"); shot("olcek_hiz_itis_5sn");
                 hold(GLFW_KEY_W, true); wait(5.0); hold(GLFW_KEY_W, false); wait(0.5); log("olcek hiz W 10 sn"); shot("olcek_hiz_itis_10sn");
                 key(GLFW_KEY_TAB); wait(1.0); shot("olcek_hiz_yandan");

@@ -2,6 +2,104 @@
 
 > Tek kaynak durum panosu. Plan `docs/olcek/hiz/PLAN.md`. En yeni en üstte.
 
+## 2026-10-05 gece · H1: grafikler
+
+**Özcan'ın bakacağı yer.** Hız'da beş grafik panosu resmin üstünde, iki görüntüde de. Panelde **Grafikler: Açık |
+Kapalı** (ya da **G**).
+- Sol üstte HIZ ve YOL, sağda UZAY-ZAMAN ve SAATLER, altta BEDEL.
+- Panolar uygulamanın panelleri arasındaki boşluğa yerleşir: sağ üstte ölçümler, sol altta sahne paneli, sağ altta
+  tuşlar. Sığmazlarsa birlikte küçülürler. 2560×1440 için çizildiler.
+
+**Panolar** (`src/scenes/olcek/olcek_hiz_pano.h/.cpp`):
+1. **HIZ:**
+   - Dokuz merdiveni (0-22, tavan 21'de altın basamak).
+   - Işık duvarına dayanan hız çubuğu.
+   - γ(β) eğrisi ve üstünde nokta (logaritmik; ekseni kendini büyütür).
+2. **UZAY-ZAMAN:** ayağın Minkowski diyagramı.
+   - Dünya'nın ızgarası.
+   - Başlangıcın (kırmızı) ve hedefin (kesik) dünya çizgileri.
+   - Roketin ızgarası: 1/γ sıkışır, ışık çizgisine katlanır.
+   - Işık konisi, t′ ve x′ eksenleri, roketin dünya çizgisi.
+   - "Şimdi"nin başlangıcı kestiği yer (kırmızı nokta: eşzamanlılık) ve şimdi gelen ışığın oradan çıktığı an (altın).
+   - Birim kendiliğinden seçilir: ışık saniyesinden milyon ışık yılına.
+3. **YOL:**
+   - İki cetvel: Dünya'nın ölçtüğü ve senin ölçtüğün (γ kat kısa).
+   - Durma mesafesi: altın köşeli çizgi ve yazı.
+   - Sıkışan uzay ızgarası.
+4. **SAATLER:**
+   - İki kadran. Dünya'nınki γ kat hızlı; ibreleri gözün kapağı açıkken taradığı yelpaze, bir tam turda disk.
+   - "Dünya'da şimdi (senin için)": t − β(r·m)/c.
+   - "Gördüğün Dünya": t − d/c, Doppler çarpanıyla.
+5. **BEDEL** (1 tonluk roket):
+   - Hareket enerjisi.
+   - Foton roketinin yaktığı, "durmak için de yakarsa" ve kütle oranı (durmakla).
+   - İvme.
+   - Önden gelen ışıma: öne bakan kara plakaya düşen fon ışıması (kapalı biçim).
+   - Öndeki fon ışımasının sıcaklığı, rengi ve bandı.
+   - Her hidrojen atomunun enerjisi.
+   - Dipnot: düşünce deneyi.
+
+**Altyapı:**
+- **Sahne sözleşmesine `overlay()`.** Sahne resmin üstüne arayüz takımıyla çizer: uygulamanın panellerinin altında, H ile
+  gizlenir. Uygulamanın panel kutuları da (`o.panels`) gelir; grafikler onlardan uzak durur.
+- **Yazı yedeği.** Mono'da ve Serif'te olmayan harf (γ, β), aynı kalınlıktaki Sans'tan çizilir. Ekranda "?" çıkmıyor.
+- **Kayan denetim tıklama almaz (çift tıklama tuzağı).**
+  - Ölçek'te "Hız"a çift tıklama, yerine gelen "Otomatik varış"a basıp yolculuğu başlatıyordu.
+  - 2560×1440'ta Ölçek'teki "Hız"ın ortası (244, 1226), Hız'daki "Otomatik varış"ın (161-385 × 1210-1263) içinde.
+  - Duran imlecin altına kendiliğinden gelen denetim, yarım saniye geçene ya da fare kıpırdayana kadar tıklama almıyor.
+    Bütün sahneler için geçerli. Otomatik test artık "Hız"a çift tıklıyor.
+  - Bulunuşu: tam ekran otomatik testin birinde roket kalkış karesinde itiyordu, yani otomatik varış Boşluk'tan önce
+    açıktı. Sonra Boşluk onu kapattı; Proxima'ya varılmadı.
+  - İkinci tıklamanın kaynağı bulunamadı. Otomatik test o koşuda tek tıklama yaptı; en olası açıklama, bilgisayarın
+    başında yapılmış gerçek bir tıklama.
+- **Sayı yazımı tek kaynak:** panelin ve panoların sayıları `olcek_hiz_pano.cpp`'den.
+  - 1'in altı üç anlamlı basamak.
+  - 0,01'in altı 10'un kuvveti.
+  - Tam sıfır "0".
+
+### Ölçümler
+- **`--test olcek-hiz`, hepsi GEÇTİ.** Yeni üç sınama var.
+  - BEDEL, 21 dokuzda plandaki sayılar:
+    - hareket enerjisi Güneş'in 1,458 saati;
+    - foton roketi 2,917 saat, durmakla 14,88 milyon yıl;
+    - kütle oranı 4,472 × 10¹⁰ (durmakla 2,000 × 10²¹);
+    - ivme 12,23 milyon g;
+    - H atomu 2,10 × 10¹⁹ eV;
+    - önde fon 1,22 × 10¹¹ K.
+  - Önden gelen ışıma Güneş ışığının 17 dokuzda 6,13 × 10⁸ katı, 21 dokuzda 6,13 × 10¹² katı (plan: 6 × 10⁸ ve
+    6 × 10¹²).
+  - Plaka formülü başka bir yoldan sınandı. Ön yarıküre eksi arka yarıküre, izotrop ışımanın gerilim-enerji tensörünün
+    dönüşümüne eşit olmalı: (16/3)γ²βσT₀⁴.
+    - En büyük fark 1,7 × 10⁻¹¹.
+    - Seriden kapalı biçime geçişteki sıçrama 8,3 × 10⁻⁶.
+- **Canlı, tam ekran 2560×1440** (`--autotest-only olcek/hiz`):
+  - 160-162 fps (ekran 165 Hz), kare 5,7-6,4 ms;
+  - çift tıklamadan sonra Hız 0 m/s;
+  - Proxima'ya "senin saatinle 1:39, Dünya'da 4,25 yıl";
+  - 153° dönüş.
+- **Panoların değerleri elle hesapla tuttu:**
+  - γ 33'te önden gelen ışıma 1,34 × 10⁻⁵ (ekranda 1,33 × 10⁻⁵); fon 180 K, Wien tepesi 16 µm, kızılötesi.
+  - γ 111'de durma mesafesi 82,5 milyon km (ekranda 82,6).
+  - Proxima'da Dünya'da şimdi 3 Ocak 2031. Görülen Dünya kalkış günü, çünkü ışık 4,25 yıl gecikmeli.
+- Kareler: `captures/arayuz/olcek_hiz_*.png` (git dışı).
+
+### NE DOĞRULANMADI
+- **Özcan'ın gözü:** panolar onun gönderdiği görüntülerin diliyle yan yana konmadı. Renk, yoğunluk ve yerleşim onayını
+  bekliyor.
+- **Küçük pencere:** 1280×720'de panolar sığmak için küçülüyor; yazılar ~5 piksel, okunmuyor. Küçük pencerede pano
+  azaltmak ya da büyütmek düşünülmedi.
+- **Çift tıklama düzeltmesinin testi** kırmızıya döndürülerek sınanmadı: düzeltme kapatılıp test koşulmadı. Kanıt,
+  hatanın görüldüğü koşu ve düğmelerin ölçülen yerleri.
+- **Öteki sahneler:** yazı yedeği ve tıklama koruması bütün sahneleri etkiliyor, ama onların otomatik testleri yeniden
+  koşulmadı. Yazıda yalnız eksik harfler değişir (önceden "?"). Tıklamada yalnız duran imlecin altına kayan denetim
+  bekler.
+- **Minkowski diyagramı:** çok dokuzda roketin ızgarası neredeyse görünmüyor; sıkıştıkça seyreltiliyor. Bu doğru mu,
+  yoksa daha görünür mü olmalı: Özcan'ın gözü karar verecek.
+- **Bildirimler** (alt orta), sahne paneli genişlediğinde BEDEL'in sağ ucuna kısa bir süre değebiliyor.
+- **Fon ışımasının renk lekesi:** 600 K'nin altında saydam (görünür ışık yok). Üstünde en parlak kanala göre
+  normalleşiyor, bu yüzden 606 K'de koyu kırmızı değil parlak kırmızı. Leke parlaklığı değil yalnız renk tonunu
+  gösteriyor.
+
 ## 2026-10-05 gece · H0: fizik ve iskelet
 
 **Özcan'ın bakacağı yer.** Galeride 07 Ölçek → panelde **Seçenek: Ölçek | Hız** → Hız. Sahne her zaman Ölçek'te açılır;

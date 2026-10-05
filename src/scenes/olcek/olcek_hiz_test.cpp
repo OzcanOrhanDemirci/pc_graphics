@@ -7,6 +7,7 @@
 //       fraction of the leg behind it), at rest when phi = 0
 #include "scenes/olcek/olcek_app.h"
 #include "scenes/olcek/olcek_bugun.h"
+#include "scenes/olcek/olcek_hiz_pano.h"
 
 #include <algorithm>
 #include <cmath>
@@ -471,6 +472,41 @@ int runHizTests(OlcekApp& app) {
             still = s.phi == b.phi && s.x.hi == b.x.hi && s.x.lo == b.x.lo && s.t.hi == b.t.hi;
         }
         check(same && still, "kayit dosyasi: yolculuk bit bit geri gelir ve ayni surer");
+    }
+
+    {   // BEDEL: the plan's numbers (PLAN §4), and the plate's light against the boosted stress-energy tensor
+        const hz::Cost c = hz::costOf(hz::phiCap());
+        const double sunS = 1.0 / hz::kSunLuminosity;
+        const double h = c.kinetic * sunS / 3600.0, ph = c.photon * sunS / 3600.0, pst = c.photonStop * sunS / hz::kYear * 1e-6;
+        std::printf("    21 dokuzda: hareket enerjisi Gunes'in %.3f saati, foton roketi %.3f saat, durmakla %.2f milyon yil\n", h, ph, pst);
+        std::printf("    kutle orani %.3e (durmakla %.3e), ivme %.2f milyon g, H atomu %.3e eV, onde fon %.3e K\n", c.massRatio, c.massRatioStop,
+                    c.gees * 1e-6, c.hydrogen, c.cmbAhead);
+        check(std::fabs(h - 1.46) < 0.01 && std::fabs(ph - 2.9) < 0.05 && std::fabs(pst - 15.0) < 0.5,
+              "BEDEL, 21 dokuz: Gunes'in 1,46 saati; foton roketi 2,9 saat, durmakla 15 milyon yil (PLAN §4)");
+        check(std::fabs(c.massRatio / 4.5e10 - 1.0) < 0.01 && std::fabs(c.massRatioStop / 2e21 - 1.0) < 0.05 && std::fabs(c.gees * 1e-6 - 12.2) < 0.05 &&
+                  std::fabs(c.hydrogen / 2e19 - 1.0) < 0.1,
+              "BEDEL, 21 dokuz: kutle orani 4,5e10 (durmakla 2e21), 12 milyon g, H atomu 2e19 eV (PLAN §4)");
+        const double p17 = hz::costOf(0.5 * std::log(2.0 / 1e-17 - 1.0)).plate / hz::kSolarConstant;   // (1 - beta = 1e-17)
+        const double p21 = c.plate / hz::kSolarConstant;
+        std::printf("    onden gelen isima: 17 dokuzda Gunes isiginin %.3e, 21 dokuzda %.3e kati\n", p17, p21);
+        check(std::fabs(p17 / 6e8 - 1.0) < 0.05 && std::fabs(p21 / 6e12 - 1.0) < 0.05, "onden gelen isima: 17 dokuzda 6e8, 21 dokuzda 6e12 Gunes isigi (PLAN §4)");
+        // the plate takes the forward hemisphere; its back would take the rear one. Their difference is the net flux of
+        // the isotropic field seen moving, T'^{0z} = (4/3) gamma^2 beta u c = (16/3) gamma^2 beta sigma T0^4: a check
+        // from another route (the tensor's boost, not the hemisphere's integral)
+        double worst = 0.0;
+        const double s4 = hz::kStefan * std::pow(hz::kCmbToday, 4.0);
+        for (double phi : {0.01, 0.1, 0.5, 1.0, 3.0, 8.0, 15.0, hz::phiCap()}) {
+            const hz::Kin k = hz::kin(phi);
+            const double front = hz::cmbOnPlate(k);
+            const double ep = 1.0 + k.beta;   // the rear hemisphere: beta -> -beta
+            const double back = 2.0 * s4 / (std::pow(k.gamma, 4.0) * k.beta * k.beta) * (1.0 / 6.0 + 1.0 / (3.0 * ep * ep * ep) - 1.0 / (2.0 * ep * ep));
+            const double net = 16.0 / 3.0 * k.gamma * k.gamma * k.beta * s4;
+            worst = std::max(worst, std::fabs((front - back) / net - 1.0));
+        }
+        // the series near rest meets the closed form where they hand over (beta = 1e-3)
+        const double cont = std::fabs(hz::cmbOnPlate(hz::kin(std::atanh(1.001e-3))) / hz::cmbOnPlate(hz::kin(std::atanh(0.999e-3))) - 1.0);
+        std::printf("    plaka: on - arka yarikure = (16/3) gamma^2 beta sigma T0^4, en buyuk fark %.1e; seriden kapali bicime gecis %.1e\n", worst, cont);
+        check(worst < 1e-9 && cont < 1e-5, "onden gelen isima: yarikure integrali, gerilim-enerji tensorunun donusumuyle ayni");
     }
 
     std::printf("hiz: %s (%d kalan)\n", fails == 0 ? "GECTI" : "KALDI", fails);

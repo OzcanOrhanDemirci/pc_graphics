@@ -569,9 +569,35 @@ float ascent(const TextStyle& s) {
     return b ? b->ascent : s.size;
 }
 
+// the face a letter comes from when this one lacks it: IBM Plex Mono and Serif have no Greek, the Sans of the same weight
+// has (a missing letter was a '?' before: "γ 28,4" in Mono read "? 28,4")
+static int fallbackOf(Font f) {
+    switch (f) {
+    case Font::Mono:
+    case Font::Serif: return int(Font::Sans);
+    case Font::MonoMedium:
+    case Font::SerifMedium: return int(Font::SansMedium);
+    default: return -1;
+    }
+}
+
 static float layout(const std::vector<int>& cps, const TextStyle& s, const Baked* b, float x, float y, bool draw) {
     float pen = 0.0f;
     const float baseline = y + std::round(b->ascent);
+    // the fallback face, baked before any drawing begins (a texture cannot be made between glBegin and glEnd); its letters
+    // are drawn after this face's, in a second batch on the same baseline
+    const Baked* fb = nullptr;
+    if (fallbackOf(s.font) >= 0)
+        for (int cp : cps)
+            if (cp != 0x207B && b->glyphs.find(cp) == b->glyphs.end()) {
+                fb = bake(Font(fallbackOf(s.font)), s.size);
+                break;
+            }
+    struct Borrowed {
+        float pen;
+        const stbtt_packedchar* pc;
+    };
+    std::vector<Borrowed> borrowed;
     if (draw) {
         glEnable(GL_TEXTURE_2D);
         glBindTexture(GL_TEXTURE_2D, b->tex);
@@ -606,6 +632,14 @@ static float layout(const std::vector<int>& cps, const TextStyle& s, const Baked
                 continue;
             }
         }
+        if (it == b->glyphs.end() && fb) {
+            const auto fi = fb->glyphs.find(cp);
+            if (fi != fb->glyphs.end()) {
+                if (draw) borrowed.push_back({pen, &fi->second});
+                pen += fi->second.xadvance + s.tracking;
+                continue;
+            }
+        }
         if (it == b->glyphs.end()) { cp = '?'; it = b->glyphs.find(cp); if (it == b->glyphs.end()) continue; }
         if (draw) {
             float qx = std::round(x) + pen, qy = baseline;
@@ -621,6 +655,20 @@ static float layout(const std::vector<int>& cps, const TextStyle& s, const Baked
     }
     if (draw) {
         glEnd();
+        if (!borrowed.empty()) {
+            glBindTexture(GL_TEXTURE_2D, fb->tex);
+            glBegin(GL_QUADS);
+            for (const Borrowed& g : borrowed) {
+                float qx = std::round(x) + g.pen, qy = baseline;
+                stbtt_aligned_quad q;
+                stbtt_GetPackedQuad(g.pc, fb->aw, fb->ah, 0, &qx, &qy, &q, 0);
+                gl::MultiTexCoord4f(gl::TEXTURE0, 0, 0, q.s0, q.t0); glVertex2f(q.x0, q.y0);
+                gl::MultiTexCoord4f(gl::TEXTURE0, 0, 0, q.s1, q.t0); glVertex2f(q.x1, q.y0);
+                gl::MultiTexCoord4f(gl::TEXTURE0, 0, 0, q.s1, q.t1); glVertex2f(q.x1, q.y1);
+                gl::MultiTexCoord4f(gl::TEXTURE0, 0, 0, q.s0, q.t1); glVertex2f(q.x0, q.y1);
+            }
+            glEnd();
+        }
         glDisable(GL_TEXTURE_2D);
     }
     return cps.empty() ? 0.0f : pen - s.tracking;

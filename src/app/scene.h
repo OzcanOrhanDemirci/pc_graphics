@@ -121,6 +121,15 @@ public:
     virtual bool testing() const { return false; }
 };
 
+// what a scene may draw over its own picture with the interface kit (graphs, diagrams), after the picture and under
+// the application's panels; hidden with the interface (H) like them
+struct Overlay {
+    ui::Rect view;                       // where the picture is (window pixels)
+    float scale = 1.0f;                  // the layout's scale: sizes are for 2560x1440, times this
+    double now = 0.0;                    // seconds since the scene started
+    std::vector<ui::Rect> panels;        // the application's panels where it drew them last frame: room to keep clear of
+};
+
 struct LoadState {
     int step = 0;                        // the scene's own counter
     float fraction = 0.0f;
@@ -140,6 +149,7 @@ public:
     virtual void status(Status& s) = 0;
     virtual void screenshot(Host& host) = 0;
     virtual void reload(Host&) {}
+    virtual void overlay(const Overlay&) {}   // optional: drawn over the picture (see Overlay)
     virtual void unload() = 0;           // its GPU resources freed (the application resets the device afterwards anyway)
 };
 
