@@ -575,7 +575,7 @@ int App::run(const Options& opt) {
                 wait(10.0); log("heykel tur 10000"); shot("heykel_tur_10000");
                 key(GLFW_KEY_T); wait(0.5); key(GLFW_KEY_R); wait(1.0);
             }
-            if (infos_[s].id == "olcek") {
+            if (infos_[s].id == "olcek" && part != "hiz") {
                 // the beach, the wheel out (a notch is x1.5: ~5.7 a decade) to the Earth, the Solar System, the Galaxy and
                 // the edge, R home, in to the grain, the atom, the nucleus and the desert, then the tour from the panel
                 wait(2.0); log("olcek sahil"); shot("olcek_sahil");
@@ -593,6 +593,28 @@ int App::run(const Options& opt) {
                 key(GLFW_KEY_R); wait(7.0);
                 control("tur", 0); wait(10.0); log("olcek tur 10 sn"); shot("olcek_tur");
                 key(GLFW_KEY_T); wait(0.5); key(GLFW_KEY_R); wait(4.0);
+            }
+            if (infos_[s].id == "olcek") {
+                // the second option, Hız (a test run starts the journey afresh and leaves the user's own alone): the eye at
+                // rest beside the Earth, W for 5 and 10 s (rapidity 2 and 4), the side view and its wheel, the head turned
+                // by a drag and back with R, Space (the quickest arrival); "olcek/hiz": on to Proxima (~89 s from rest)
+                control("secenek", 1); wait(1.5); log("olcek hiz"); shot("olcek_hiz_kalkis");
+                hold(GLFW_KEY_W, true); wait(5.0); hold(GLFW_KEY_W, false); wait(0.5); log("olcek hiz W 5 sn"); shot("olcek_hiz_itis_5sn");
+                hold(GLFW_KEY_W, true); wait(5.0); hold(GLFW_KEY_W, false); wait(0.5); log("olcek hiz W 10 sn"); shot("olcek_hiz_itis_10sn");
+                key(GLFW_KEY_TAB); wait(1.0); shot("olcek_hiz_yandan");
+                mouse(0.50f, 0.50f); wheel(-40.0f); wait(2.0); shot("olcek_hiz_yandan_uzak");
+                key(GLFW_KEY_R); wait(2.0); key(GLFW_KEY_TAB); wait(1.0);
+                mouse(0.50f, 0.50f); left(true); wait(0.1);
+                for (int k = 1; k <= 12; ++k) { mouse(0.50f + 0.02f * k, 0.50f - 0.008f * k); wait(0.03); }
+                left(false); wait(0.3); shot("olcek_hiz_bakis");
+                key(GLFW_KEY_R); wait(1.5);
+                key(GLFW_KEY_SPACE); wait(3.0); log("olcek hiz otomatik"); shot("olcek_hiz_otomatik");
+                if (part == "hiz") {
+                    wait(85.0); log("olcek hiz proxima"); shot("olcek_hiz_proxima");
+                    wait(10.0); shot("olcek_hiz_donus");
+                    key(GLFW_KEY_TAB); wait(1.0); shot("olcek_hiz_proxima_yandan"); key(GLFW_KEY_TAB);
+                }
+                control("secenek", 0); wait(1.5); shot("olcek_hiz_geri");
             }
             if (infos_[s].id == "laboratuvar") {
                 // every experiment: live, its trigger on the coarse world, the fine pass asked for, the recording as it

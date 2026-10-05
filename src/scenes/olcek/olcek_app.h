@@ -2,6 +2,8 @@
 // (olcek_live.cpp) and the command-line tools (olcek_app.cpp).
 #pragma once
 #include "core/config.h"
+#include "scenes/olcek/olcek_hiz.h"
+#include "scenes/olcek/olcek_hiz_goz.h"
 #include "scenes/olcek/olcek_kernels.h"
 #include "scenes/olcek/olcek_tex.h"
 #include "scenes/olcek/olcek_world.h"
@@ -52,6 +54,31 @@ struct OlcekApp {
     void save(const std::string& path);
     // the picture's luminance at a quarter of the resolution (the jump test's), into lum (w/4 x h/4)
     void luminanceQuarter(std::vector<float>& lum);
+
+    // ---- the second option "Hız" (docs/olcek/hiz/PLAN.md): the route, the rocket, the colour of light
+    olcek::hiz::Route route;
+    olcek::hiz::Ship ship;
+    olcek::hiz::Blackbody bb;
+    int proximaStar = -1;            // the catalogue's Proxima, moved to its Gaia DR3 place (the route's)
+    std::string hizLog;
+    void prepareHiz();               // after loadMaps: the route, Proxima's place, the blackbody table
+    // the rocket's eye: the stars where and how it sees them, on black (H0); sum: the sky's light
+    void renderEye(const olcek::hiz::Eye& e, olcek::hiz::EyeSum& sum);
+    // The designed exposures (PLAN §3.1: a known function of where and how fast, never read from the picture). The eye
+    // adapts to the visible light in its field, as if the whole sky were like it (visibleView / viewShare), against the
+    // night sky's at the Sun (nightSky, the Sun left out), part of the way (hiz.uyum); the side view takes the first
+    // option's curve near the Sun, deep space's beyond.
+    double nightSky = 1e-12;         // W/m^2 (visible, the Sun's spectrum's watts): set by prepareHiz
+    double eyeEv(double skyVisible) const;
+    double sideEv(double s, olcek::V3 rocket) const;
+    olcek::hiz::Eye eyeAt(const olcek::hiz::Ship& s, double yaw, double pitch, double tanHalfX) const;   // the camera
+
+private:
+    void draw(int samplesThis);      // the GPU half of a frame: view, splats, particles -> output
 };
 
 int runOlcekCli(int argc, char** argv);
+// the second option's (olcek_hiz_test.cpp)
+int runHizTests(OlcekApp& app);
+int runHizFrames(OlcekApp& app, const std::vector<double>& phis, int leg, double frac, double fovDeg, double yaw, double pitch,
+                 const std::vector<double>& sides, const std::string& out);

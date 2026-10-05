@@ -32,7 +32,9 @@ src/
     heykel/     sahne 6 · Heykel (geometri: fraktal mesafe kestirimi, 10.000 kat için pertürbasyon, CUDA önizleme + durunca
                 biriken yol izleme)
     olcek/      sahne 7 · Ölçek (62 onluk: çapa ağacı ve hassasiyet, katman saatleri, sabit örnekli CUDA çizici, "bugün"
-                olcek_bugun.h: tools/olcek_bugun.py'nin astropy + DE440s çıktısı)
+                olcek_bugun.h: tools/olcek_bugun.py'nin astropy + DE440s çıktısı); ikinci seçeneği Hız: olcek_hiz.* (özel
+                görelilik, rota, roket, kayıt), olcek_hiz_goz.* (roketin gözü, her sıcaklıkta kara cismin rengi),
+                olcek_hiz_test.cpp (--test olcek-hiz, --hiz kareleri)
       particles.*       tanecik çözücüsü (PBF, XPBD bağlar, şekil eşleme, taneler)  surface.* sıvı yüzeyi
       lab_world.*       beş deneyin kurulumu ve adımı (kaba ya da ince)  lab_record.* ince kayıt, işçi iş parçacığı
       lab_kernels.cu    çözücü, kayıt ve çizici arası küçük çekirdekler  weapons.* gerçek yükler, balistik
@@ -127,5 +129,6 @@ değişince uygulama bütün sahnelerin `info()`'sunu yeniden ister. Komut satı
   paneli resmin üstüne 0,3 sn'de iner, resmin kendi yazıları o sırada çekilir; bildirimler 3 sn sonra söner.
 - **Galeride iki ses:** resmin altında ne olduğu (kısa açıklama), "Ayrıntılar"da nasıl yapıldığı (teknik). Stil ya da
   esin adı açıklamada değil, gerekirse ayrıntılarda.
-- **Yazı atlası:** IBM Plex'ten ASCII, Latin-1, Latin Genişletilmiş-A (Türkçe), tireler ve tırnaklar, oklar, eksi, ∞ ve
+- **Yazı atlası:** IBM Plex'ten ASCII, Latin-1, Latin Genişletilmiş-A (Türkçe), Yunan harfleri (β, γ, φ, τ: yalnız Plex
+  Sans'ta var, Mono'da ve Serif'te yok; sayıların değil etiketlerin harfi), tireler ve tırnaklar, oklar, eksi, ≈, ∞ ve
   üst/alt simgeler (10⁻³⁵ gibi, U+2070-209F) pişirilir (`src/ui/ui.cpp`, `kRanges`). Başka bir simge önce oraya eklenir; yoksa ekranda "?" çıkar.

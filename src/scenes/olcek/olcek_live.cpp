@@ -1,8 +1,14 @@
 // Scene 7 "Ölçek" inside the application: from a beach in Izmir out to the edge of the observable universe and in to
 // the Planck length, 62 decades, with the wheel only. R goes back to the beach, T runs the tour.
+//
+// Its second option "Hız" (docs/olcek/hiz/PLAN.md): a rocket from the Earth's orbit to Proxima Centauri and on to
+// Andromeda, special relativity with its full formulas, the passenger's clock as the screen's. W thrusts, S brakes,
+// Space arrives by itself; Tab switches between the rocket's eye and the view from its side. The journey is kept on
+// disk: it goes on where it was left (the time the scene is closed does not count).
 #include "app/scene.h"
 #include "app/theme.h"
 #include "scenes/olcek/olcek_app.h"
+#include "scenes/olcek/olcek_bugun.h"
 
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
@@ -11,10 +17,113 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <filesystem>
+#include <fstream>
+#include <map>
+#include <sstream>
 
 namespace {
 
 using app::L;
+namespace hz = olcek::hiz;
+
+constexpr double kPi = 3.14159265358979323846;
+
+// ---- numbers for the panel (the language's separators; Mono has no Greek, so the Greek letters go in the labels)
+const char* kSupDigits[10] = {"⁰", "¹", "²", "³", "⁴", "⁵", "⁶", "⁷", "⁸", "⁹"};
+std::string supInt(int e) {
+    std::string out = e < 0 ? "⁻" : "";
+    for (char c : std::to_string(std::abs(e))) out += kSupDigits[c - '0'];
+    return out;
+}
+// v as m x 10^e with `digits` decimals (m in [1, 10))
+std::string sci(double v, int digits) {
+    if (v == 0.0) return "0";
+    const int e = int(std::floor(std::log10(std::fabs(v))));
+    double m = v / std::pow(10.0, e);
+    if (std::fabs(m) >= 9.9999999) { m /= 10.0; return theme::num(m, digits) + " × 10" + supInt(e + 1); }
+    return theme::num(m, digits) + " × 10" + supInt(e);
+}
+std::string sig3(double v) {
+    if (v >= 1e6) return sci(v, 2);
+    if (v >= 100.0) return theme::thousands((unsigned long long)std::llround(v));
+    if (v >= 10.0) return theme::num(v, 1);
+    return theme::num(v, 2);
+}
+std::string distText(double m) {
+    const double ly = m / hz::kLy;
+    if (m < 1e3) return sig3(m) + " m";
+    if (m < 1e9) return sig3(m * 1e-3) + " km";
+    if (m < 1e12) return sig3(m * 1e-9) + L(" milyon km", " million km");
+    if (ly < 0.05) return sig3(m / hz::kAU) + " AU";
+    if (ly < 1e3) return sig3(ly) + L(" ışık yılı", " light years");
+    if (ly < 1e6) return sig3(ly * 1e-3) + L(" bin ışık yılı", " thousand light years");
+    return theme::num(ly * 1e-6, 3) + L(" milyon ışık yılı", " million light years");
+}
+// the passenger's clock: m:ss, h:mm:ss
+std::string clockText(double s) {
+    const long long t = (long long)std::floor(std::max(s, 0.0));
+    char b[64];
+    if (t < 3600) std::snprintf(b, sizeof(b), "%lld:%02lld", t / 60, t % 60);
+    else std::snprintf(b, sizeof(b), "%lld:%02lld:%02lld", t / 3600, (t / 60) % 60, t % 60);
+    return b;
+}
+// the Earth's: from seconds to millions of years
+std::string spanText(double s) {
+    const double y = s / hz::kYear;
+    if (s < 3600.0) return clockText(s);
+    if (s < 86400.0 * 2.0) return theme::num(s / 3600.0, 1) + L(" saat", " hours");
+    if (y < 1.0) return theme::num(s / 86400.0, 1) + L(" gün", " days");
+    if (y < 1e4) return theme::num(y, 2) + L(" yıl", " years");
+    if (y < 1e6) return theme::num(y * 1e-3, 2) + L(" bin yıl", " thousand years");
+    return theme::num(y * 1e-6, 3) + L(" milyon yıl", " million years");
+}
+// a date on the Earth: "today" (2026-10-05 10:00 UTC) + t, while it is a calendar date worth reading
+std::string dateText(double t) {
+    const double jd = 2461318.9169918294 + t / 86400.0 + 0.5;   // (TDB ~ UTC: a minute is nothing here)
+    const long long Z = (long long)std::floor(jd);
+    const long long A0 = (long long)std::floor((Z - 1867216.25) / 36524.25);
+    const long long A = Z + 1 + A0 - A0 / 4, B = A + 1524;
+    const long long C = (long long)std::floor((B - 122.1) / 365.25), D = (long long)std::floor(365.25 * C);
+    const long long E = (long long)std::floor((B - D) / 30.6001);
+    const int day = int(B - D - (long long)std::floor(30.6001 * E));
+    const int month = int(E < 14 ? E - 1 : E - 13);
+    const long long year = month > 2 ? C - 4716 : C - 4715;
+    static const char* trM[12] = {"Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"};
+    static const char* enM[12] = {"January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"};
+    const std::string y = year >= 10000 ? theme::thousands((unsigned long long)year) : std::to_string(year);
+    return std::to_string(day) + " " + L(trM[month - 1], enM[month - 1]) + " " + y;
+}
+// beta with every nine: 0,999 999 9xx (from 1 - beta, never from beta)
+std::string betaText(const hz::Kin& k) {
+    if (k.phi <= 0.0) return "0";
+    if (k.nines < 3.0) return theme::num(k.beta, 6);
+    const int n = int(std::floor(k.nines));
+    const double r = 1.0 - std::pow(10.0, double(n)) * k.eps;   // the digits after the n nines, as 0.xyz
+    std::string digits(size_t(n), '9');
+    char b[16];
+    std::snprintf(b, sizeof(b), "%03d", std::clamp(int(std::floor(r * 1000.0)), 0, 999));
+    digits += b;
+    std::string out = app::lang() == app::Lang::TR ? "0," : "0.";
+    for (size_t i = 0; i < digits.size(); ++i) {
+        if (i && i % 3 == 0) out += ' ';
+        out += digits[i];
+    }
+    return out;
+}
+std::string speedText(const hz::Kin& k) {
+    const double v = hz::kC * k.beta;
+    if (k.eps > 1e-6) return theme::thousands((unsigned long long)std::llround(v)) + " m/s";
+    return "c − " + sci(hz::kC * k.eps, 2) + " m/s";   // the shortfall from c: the only digits that still move
+}
+std::string gammaText(double g) { return g < 1e4 ? theme::num(g, g < 10.0 ? 4 : 1) : sci(g, 3); }
+std::string fovText(double tanHalf) {
+    const double fov = 2.0 * std::atan(tanHalf), deg = fov * 180.0 / kPi;
+    if (deg >= 1.0) return theme::num(deg, 1) + "°";
+    if (deg * 3600.0 >= 1.0) return theme::num(deg * 3600.0, 2) + L(" yay saniyesi", " arcsec");
+    return sci(fov, 2) + " rad";
+}
 
 class OlcekLive : public app::Scene {
 public:
@@ -81,7 +190,15 @@ public:
         i.keys = {{L("Ölçek", "Scale"),
                    {{L("Tekerlek", "Wheel"), L("Uzaklaş, yaklaş", "Move out, move in")},
                     {"R", L("Sahile dön", "Back to the beach")},
-                    {"T", L("Tur: evrenin kenarına, geri, Planck'a, geri", "The tour: to the edge of the universe, back, to Planck, back")}}}};
+                    {"T", L("Tur: evrenin kenarına, geri, Planck'a, geri", "The tour: to the edge of the universe, back, to Planck, back")}}},
+                  {L("Hız", "Speed"),
+                   {{"W", L("İtiş (0,4 c/s: 12 milyon g)", "Thrust (0.4 c/s: 12 million g)")},
+                    {"S", L("Fren (aynı güçle; geri vites yok)", "Brake (the same power; no reverse)")},
+                    {L("Boşluk", "Space"), L("Otomatik varış: doğru anda frenleyip durur", "Automatic arrival: brakes at the right moment")},
+                    {"Tab", L("Roketin gözü ↔ yandan", "The rocket's eye ↔ from the side")},
+                    {L("Sürükle", "Drag"), L("Başını çevir (roketin gözü)", "Turn your head (the rocket's eye)")},
+                    {L("Tekerlek", "Wheel"), L("Dürbün (göz), ölçek (yandan)", "Binoculars (eye), scale (side)")},
+                    {"R", L("İleri bak / rokete dön", "Look ahead / back to the rocket")}}}};
         i.reloadable = true;
         return i;
     }
@@ -106,13 +223,22 @@ public:
             return;
         case 2:
             a_.loadMaps();
+            st.label = L("Roketin yolu ve ışığın renkleri", "The rocket's way and the colours of light");
+            st.fraction = 0.8f;
+            ++st.step;
+            return;
+        case 3:
+            a_.prepareHiz();
+            savePath_ = host.testing() ? std::string() : a_.root + "/hiz_yolculuk.txt";   // (a test run leaves it alone)
+            restore();
             st.label = L("İlk kare", "The first frame");
             st.fraction = 0.9f;
             ++st.step;
             return;
         default:
             cudaMallocHost(reinterpret_cast<void**>(&pinned_), size_t(a_.sc.width) * a_.sc.height * sizeof(uchar4));
-            a_.render();
+            if (mode_ == 1) hizRender(0.0);
+            else a_.render();
             st.fraction = 1.0f;
             st.done = true;
             return;
@@ -123,6 +249,17 @@ public:
         if (!paced_) {
             host.pace(0.0f);
             paced_ = true;
+        }
+        for (const app::ControlEvent& e : in.events)
+            if (e.id == "secenek" && e.item >= 0 && e.item != mode_) {
+                if (e.item == 1) enterHiz();
+                else leaveHiz();
+                host.toast(mode_ == 1 ? L("Hız: W itiş, S fren, Boşluk otomatik varış, Tab görüntü", "Speed: W thrust, S brake, Space automatic arrival, Tab view")
+                                      : L("Ölçek: tekerlekle uzaklaş, yaklaş", "Scale: move out and in with the wheel"));
+            }
+        if (mode_ == 1) {
+            hizFrame(host, in);
+            return;
         }
         const double dt = std::min(0.1, in.dt);
         olcek::Scale& sc = a_.sc;
@@ -208,6 +345,19 @@ public:
 
     void status(app::Status& s) override {
         using theme::num;
+        {
+            app::Control c;
+            c.kind = app::Control::Kind::Choice;
+            c.id = "secenek";
+            c.title = L("Seçenek", "Option");
+            c.items = {L("Ölçek", "Scale"), L("Hız", "Speed")};
+            c.active = mode_;
+            s.controls.push_back(c);
+        }
+        if (mode_ == 1) {
+            hizStatus(s);
+            return;
+        }
         if (tour_) s.chips.push_back({L("Tur", "Tour"), true});
         s.metrics.push_back({L("Bakılan", "Looking at"), a_.sc.lookingAt()});
         s.metrics.push_back({L("Ekranın genişliği", "The screen's width"), a_.sc.widthText()});
@@ -218,6 +368,7 @@ public:
         c.text = tour_ ? L("Turu durdur", "Stop the tour") : L("Tur", "The tour");
         c.keys = "T";
         c.strong = !tour_;
+        c.section = true;
         c.detail = L("Evrenin kenarına, geri sahile, Planck'a, geri sahile", "To the edge of the universe, back to the beach, to Planck, back");
         s.controls.push_back(c);
     }
@@ -230,15 +381,19 @@ public:
     void reload(app::Host& host) override {
         const double s = a_.sc.s;
         const olcek::Clocks c = a_.sc.clk;
+        const olcek::Scale::Hiz hz = a_.sc.hiz;
         a_.loadConfig();
         a_.sc.init();
         a_.sc.s = std::clamp(s, a_.sc.sMin, a_.sc.sMax);
         a_.sc.clk = c;
-        a_.render();
+        a_.sc.hiz = hz;
+        if (mode_ == 1) hizRender(0.0);
+        else a_.render();
         host.toast(L("Ayarlar yeniden yüklendi", "Settings reloaded"));
     }
 
     void unload() override {
+        if (loaded_) persist();
         a_.release();
         if (pinned_) cudaFreeHost(pinned_);
         pinned_ = nullptr;
@@ -246,6 +401,312 @@ public:
     ~OlcekLive() override { unload(); }
 
 private:
+    // ---- the second option: Hız ---------------------------------------------------------------------------------------
+
+    void enterHiz() {
+        olcekClk_ = a_.sc.clk;
+        olcekS_ = a_.sc.s;
+        mode_ = 1;
+        a_.sc.hiz.on = true;
+        lastNow_ = -1.0;
+        evInit_ = false;
+        persist();
+    }
+    void leaveHiz() {
+        mode_ = 0;
+        persist();
+        a_.sc.hizOff();
+        a_.sc.clk = olcekClk_;
+        a_.sc.s = olcekS_;
+    }
+
+    void hizFrame(app::Host& host, const app::Input& in) {
+        // the passenger's clock is the screen's: the scene's own time, not the application's per-frame clamp (a hitch
+        // still counts, up to two seconds; closed, nothing counts)
+        const double dtau = lastNow_ < 0.0 ? 0.0 : std::clamp(in.now - lastNow_, 0.0, 2.0);
+        lastNow_ = in.now;
+        hz::Command cmd;
+        cmd.thrust = in.isDown(GLFW_KEY_W);
+        cmd.brake = in.isDown(GLFW_KEY_S);
+        cmd.thrustPressed = in.pressed(GLFW_KEY_W);
+        cmd.brakePressed = in.pressed(GLFW_KEY_S);
+        cmd.toggleAuto = in.pressed(GLFW_KEY_SPACE);
+        bool reset = false;
+        for (const app::ControlEvent& e : in.events) {
+            if (e.id == "oto") cmd.toggleAuto = true;
+            if (e.id == "goruntu" && e.item >= 0 && e.item != view_) {
+                view_ = e.item;
+                evInit_ = false;
+            }
+            if (e.id == "sifirla") {
+                if (in.now < resetArmed_) reset = true;
+                else {
+                    resetArmed_ = in.now + 4.0;
+                    host.toast(L("Yolculuk baştan başlasın mı? Onaylamak için bir daha bas", "Start the journey over? Press again to confirm"));
+                }
+            }
+        }
+        if (in.pressed(GLFW_KEY_TAB)) {
+            view_ ^= 1;
+            evInit_ = false;   // the eye adapted at once when it comes back (no fade from a stale exposure)
+        }
+        if (reset) {
+            a_.ship = hz::depart(a_.route);
+            resetArmed_ = -1.0;
+            yaw_ = pitch_ = 0.0;
+            evInit_ = false;
+            host.toast(L("Yolculuk baştan: Dünya'nın yanındasın", "The journey starts over: you are beside the Earth"));
+        }
+        const int legBefore = a_.ship.leg;
+        const hz::Events ev = hz::step(a_.ship, a_.route, dtau, cmd);
+        notices(host, ev, legBefore);
+
+        // the view's own input
+        const bool inView = in.view.w > 0.0f && in.view.contains(in.mouseX, in.mouseY);
+        const double wheelStep = std::log10(double(a_.cfg.f("wheel", 1.5f)));
+        if (view_ == 0) {
+            if (in.scroll != 0.0f && inView) zoomPending_ -= in.scroll * wheelStep;
+            if (in.leftDown && inView && in.view.w > 0.0f) {
+                // the sky follows the cursor
+                const double perPx = 2.0 * std::pow(10.0, zoom_) / in.view.w;
+                yaw_ += in.mouseDX * perPx;
+                pitch_ = std::clamp(pitch_ + in.mouseDY * perPx, -1.55, 1.55);
+                lookAhead_ = false;
+            }
+            if (in.pressed(GLFW_KEY_R)) lookAhead_ = true;
+        } else {
+            if (in.scroll != 0.0f && inView) sidePending_ -= in.scroll * wheelStep;
+            if (in.pressed(GLFW_KEY_R)) sidePending_ = sideDefault() - sideS_;
+        }
+        hizRender(dtau);
+        cudaMemcpy(pinned_, a_.output, size_t(a_.sc.width) * a_.sc.height * sizeof(uchar4), cudaMemcpyDeviceToHost);
+        if (in.now >= saveAt_ || ev.arrived) {
+            persist();
+            saveAt_ = in.now + 2.0;
+        }
+    }
+
+    static double sideDefault() { return 1.3; }
+
+    void notices(app::Host& host, const hz::Events& ev, int legBefore) {
+        const hz::Ship& s = a_.ship;
+        if (ev.autoOn)
+            host.toast(L("Otomatik varış: en kısa yoldan (gerekirse hızlanır), doğru anda frenleyip tam hedefte durur",
+                         "Automatic arrival: the quickest way (speeding up if it helps), braking at the right moment, stopping right at the target"));
+        if (ev.captured)
+            host.toast(L("Hedefin yakınında durdun: son kısmı otomatik varış uçuyor", "You stopped near the target: the automatic arrival flies the last stretch"));
+        (void)s;
+        if (ev.autoOff) host.toast(L("Otomatik varış kapandı", "Automatic arrival off"));
+        if (ev.autoCancelled) host.toast(L("Otomatik varış kapandı: kumanda sende", "Automatic arrival off: you are flying"));
+        if (ev.overshoot) host.toast(L("Bu hızla durulamaz: geçip duracak, dönüp gelecek", "Too fast to stop: it will pass, stop and come back"));
+        if (ev.capReached)
+            host.toast(L("Hız tavanı: 21 dokuz. Işık hızına bundan fazla yaklaşmıyoruz (tasarım kararı)",
+                         "The speed cap: 21 nines. We go no closer to the speed of light (a design choice)"));
+        if (ev.arrived) {
+            const std::string where = ev.arrivedLeg == hz::kLegProxima ? L("Proxima Centauri'ye vardın", "You have reached Proxima Centauri")
+                                                                       : L("Andromeda'ya vardın", "You have reached Andromeda");
+            host.toast(where + L(": senin saatinle ", ": by your clock ") + clockText(ev.legTau) + L(", Dünya'da ", ", on the Earth ") +
+                       spanText(ev.legEarth) + L(" geçti", " passed"));
+            if (s.leg == hz::kLegAndromeda && legBefore == hz::kLegProxima)
+                host.toast(L("Roket Andromeda'ya dönüyor (", "The rocket turns towards Andromeda (") + theme::num(a_.route.turnDeg, 0) + "°)");
+        }
+    }
+
+    // a frame of the second option (dtau: the passenger's seconds since the last one)
+    void hizRender(double dtau) {
+        hz::Ship& s = a_.ship;
+        // the eye's zoom and head, the side's scale: eased like the first option's wheel
+        const double zMin = std::log10(std::tan(0.5e-11)), zMax = std::log10(std::tan(60.0 * kPi / 180.0));
+        const double ease = 1.0 - std::exp(-std::max(dtau, 1.0 / 240.0) * 12.0);
+        if (zoomPending_ != 0.0) {
+            double d = std::fabs(zoomPending_) < 2e-4 ? zoomPending_ : zoomPending_ * ease;
+            const double before = zoom_;
+            zoom_ = std::clamp(zoom_ + d, zMin, zMax);
+            zoomPending_ = zoom_ == before ? 0.0 : zoomPending_ - d;
+            if (std::fabs(zoomPending_) < 1e-6) zoomPending_ = 0.0;
+        }
+        if (sidePending_ != 0.0) {
+            double d = std::fabs(sidePending_) < 2e-4 ? sidePending_ : sidePending_ * ease;
+            const double before = sideS_;
+            sideS_ = std::clamp(sideS_ + d, 1.0, 23.0);
+            sidePending_ = sideS_ == before ? 0.0 : sidePending_ - d;
+            if (std::fabs(sidePending_) < 1e-6) sidePending_ = 0.0;
+        }
+        if (lookAhead_) {
+            const double k = std::exp(-std::max(dtau, 1.0 / 240.0) * 8.0);
+            yaw_ *= k;
+            pitch_ *= k;
+            if (std::fabs(yaw_) + std::fabs(pitch_) < 1e-5) {
+                yaw_ = pitch_ = 0.0;
+                lookAhead_ = false;
+            }
+        }
+        const olcek::V3 pos = hz::position(s, a_.route);
+        const hz::Kin k = hz::kin(s.phi);
+        if (view_ == 0) {
+            hz::Eye e = a_.eyeAt(s, yaw_, pitch_, std::pow(10.0, zoom_));
+            for (int pass = 0; pass < 2; ++pass) {
+                e.k = std::exp2(eyeEv_) * 3.0e-3;
+                a_.renderEye(e, eyeSum_);
+                // the eye adapts to the light in its field, a known function of where, how fast and where it looks
+                // (never read from the picture), slowly (a second or so)
+                const double target = a_.eyeEv(eyeSum_.visibleView / eyeSum_.viewShare);
+                if (!evInit_) {
+                    eyeEv_ = target;
+                    evInit_ = true;
+                    continue;   // once more at the adapted exposure
+                }
+                eyeEv_ += (target - eyeEv_) * (1.0 - std::exp(-dtau / 1.2));
+                break;
+            }
+        } else {
+            olcek::Scale& sc = a_.sc;
+            sc.hiz.on = true;
+            sc.hiz.rocket = pos;
+            sc.hiz.motion = s.heading;
+            sc.hiz.rate = k.gamma;
+            sc.hiz.gamma = k.gamma;
+            sc.hiz.ev = a_.sideEv(sideS_, pos);
+            sc.hiz.mark = make_float3(1.0f, 0.93f, 0.86f) * 30.0f;
+            sc.s = sideS_;
+            // the world from "today" at the first thrust (waiting beside the Earth, the rocket goes round with it)
+            sc.hizClocks(s.departT.hi < 0.0 ? 0.0 : hz::add(s.t, hz::neg(s.departT)).value());
+            a_.render();
+        }
+    }
+
+    void hizStatus(app::Status& st) {
+        using theme::num;
+        const hz::Ship& s = a_.ship;
+        const hz::Kin k = hz::kin(s.phi);
+        // what it does
+        std::string drive;
+        switch (s.drive) {
+        case hz::Drive::Thrust: drive = L("İtiş", "Thrust"); break;
+        case hz::Drive::Brake: drive = L("Fren", "Braking"); break;
+        case hz::Drive::Coast: drive = L("Süzülüyor", "Coasting"); break;
+        case hz::Drive::Turn: drive = L("Dönüyor", "Turning"); break;
+        case hz::Drive::Done: drive = L("Vardın", "Arrived"); break;
+        default: drive = s.leg == hz::kLegProxima && s.legTau < 0.0 ? L("Kalkışta", "Ready") : L("Duruyor", "At rest"); break;
+        }
+        st.chips.push_back({drive, s.drive == hz::Drive::Thrust || s.drive == hz::Drive::Brake});
+        if (s.autopilot) st.chips.push_back({L("Otomatik varış", "Automatic arrival"), true});
+        const std::string legs[3] = {L("Dünya → Proxima", "Earth → Proxima"), L("Proxima → Andromeda", "Proxima → Andromeda"),
+                                     L("Andromeda'dasın", "At Andromeda")};
+        st.metrics.push_back({L("Yol", "Leg"), legs[std::clamp(s.leg, 0, 2)]});
+        st.metrics.push_back({L("Hız", "Speed"), speedText(k)});
+        st.metrics.push_back({L("β (ışık hızına oranı)", "β (of light's speed)"), betaText(k)});
+        st.metrics.push_back({L("Dokuz", "Nines"), num(std::max(k.nines, 0.0), 2)});   // (at rest -log10(1) is -0)
+        st.metrics.push_back({L("γ (zaman genişlemesi)", "γ (time dilation)"), gammaText(k.gamma)});
+        st.metrics.push_back({L("Hız açısı φ", "Rapidity φ"), num(s.phi, 3)});
+        st.metrics.push_back({L("Senin saatin", "Your clock"), clockText(s.tau)});
+        const double t = s.t.value();
+        st.metrics.push_back({L("Dünya'da geçen", "Passed on the Earth"), spanText(t)});
+        if (t < 1e4 * hz::kYear) st.metrics.push_back({L("Dünya'da tarih", "The date on the Earth"), dateText(t)});
+        if (s.leg < hz::kLegDone) {
+            const double rem = hz::remaining(s);
+            st.metrics.push_back({L("Kalan (Dünya'nın ölçtüğü)", "Left (as the Earth measures)"), distText(rem)});
+            st.metrics.push_back({L("Kalan (senin ölçtüğün)", "Left (as you measure)"), distText(rem / k.gamma)});
+            st.metrics.push_back({L("Durma mesafesi", "Stopping distance"), distText(hz::stopDistance(s.phi))});
+        }
+        if (view_ == 0) st.metrics.push_back({L("Görüş açısı", "Field of view"), fovText(std::pow(10.0, zoom_))});
+        else st.metrics.push_back({L("Ekranın genişliği", "The screen's width"), a_.sc.widthText()});
+        st.metrics.push_back({L("Kare", "Frame"), num(a_.frameMs + float(a_.hostMs), 1) + " ms"});
+
+        app::Control v;
+        v.kind = app::Control::Kind::Choice;
+        v.id = "goruntu";
+        v.title = L("Görüntü", "View");
+        v.items = {L("Roketin gözü", "The rocket's eye"), L("Yandan", "From the side")};
+        v.active = view_;
+        v.detail = L("Tab", "Tab");
+        st.controls.push_back(v);
+        app::Control a;
+        a.kind = app::Control::Kind::Button;
+        a.id = "oto";
+        a.section = true;
+        a.text = s.autopilot ? L("Otomatik varışı kapat", "Automatic arrival off") : L("Otomatik varış", "Automatic arrival");
+        a.keys = L("Boşluk", "Space");
+        a.strong = !s.autopilot && s.leg < hz::kLegDone;
+        a.enabled = s.leg < hz::kLegDone;
+        a.detail = s.leg == hz::kLegProxima ? L("Proxima Centauri: 4,25 ışık yılı", "Proxima Centauri: 4.25 light years")
+                 : s.leg == hz::kLegAndromeda ? L("Andromeda: 2,4 milyon ışık yılı", "Andromeda: 2.4 million light years")
+                                              : L("Yolculuk tamamlandı", "The journey is complete");
+        st.controls.push_back(a);
+        app::Control r;
+        r.kind = app::Control::Kind::Button;
+        r.id = "sifirla";
+        r.text = L("Yolculuğu baştan başlat", "Start the journey over");
+        r.detail = L("İki kez bas", "Press twice");
+        st.controls.push_back(r);
+    }
+
+    // ---- the journey on disk: "key = value" lines next to the project (user.cfg's neighbour, not in git)
+    void persist() {
+        if (savePath_.empty()) return;
+        std::string out = "# pc_graphics · Ölçek / Hız: yolculuğun durumu (sahne kapanırken ve birkaç saniyede bir yazılır)\n";
+        out += hz::serialize(a_.ship);
+        char b[256];
+        if (!std::isfinite(a_.ship.phi) || !std::isfinite(a_.ship.x.hi) || !std::isfinite(a_.ship.t.hi)) return;   // never a NaN on disk
+        std::snprintf(b, sizeof(b), "hiz.goruntu = %d\nhiz.bakis = %.17g %.17g\nhiz.yakinlik = %.17g\nhiz.yan = %.17g\n", view_, yaw_, pitch_,
+                      zoom_, sideS_);
+        out += b;
+        const std::string tmp = savePath_ + ".yeni";
+        {
+            std::ofstream f(tmp, std::ios::binary | std::ios::trunc);
+            if (!f) return;
+            f << out;
+            if (!f) return;
+        }
+        std::error_code ec;
+        std::filesystem::rename(tmp, savePath_, ec);
+        if (ec) {
+            std::filesystem::remove(savePath_, ec);
+            std::filesystem::rename(tmp, savePath_, ec);
+        }
+    }
+    void restore() {
+        loaded_ = true;
+        if (savePath_.empty()) return;
+        std::ifstream f(savePath_);
+        if (!f) return;
+        {   // the last good journey kept aside once a session (a bad write can never lose it)
+            std::error_code ec;
+            std::filesystem::copy_file(savePath_, savePath_ + ".yedek", std::filesystem::copy_options::overwrite_existing, ec);
+        }
+        std::map<std::string, std::string> kv;
+        std::string line;
+        while (std::getline(f, line)) {
+            if (line.empty() || line[0] == '#') continue;
+            const size_t eq = line.find('=');
+            if (eq == std::string::npos) continue;
+            auto trim = [](std::string x) {
+                const size_t a = x.find_first_not_of(" \t\r"), b = x.find_last_not_of(" \t\r");
+                return a == std::string::npos ? std::string() : x.substr(a, b - a + 1);
+            };
+            kv[trim(line.substr(0, eq))] = trim(line.substr(eq + 1));
+        }
+        hz::Ship s;
+        if (hz::parse(s, kv)) a_.ship = s;
+        auto num = [&](const char* key, int n, double* v) {
+            const auto it = kv.find(key);
+            if (it == kv.end()) return false;
+            std::istringstream ss(it->second);
+            for (int i = 0; i < n; ++i)
+                if (!(ss >> v[i]) || !std::isfinite(v[i])) return false;
+            return true;
+        };
+        double v[2];
+        if (num("hiz.goruntu", 1, v)) view_ = std::clamp(int(v[0]), 0, 1);
+        if (num("hiz.bakis", 2, v)) {
+            yaw_ = v[0];
+            pitch_ = std::clamp(v[1], -1.55, 1.55);
+        }
+        if (num("hiz.yakinlik", 1, v)) zoom_ = std::clamp(v[0], std::log10(std::tan(0.5e-11)), std::log10(std::tan(60.0 * kPi / 180.0)));
+        if (num("hiz.yan", 1, v)) sideS_ = std::clamp(v[0], 1.0, 23.0);
+        // (the scene always opens on its first option: the journey waits in the second, where it was left)
+    }
+
     app::SceneInfo info_ = describe();
     OlcekApp a_;
     uchar4* pinned_ = nullptr;
@@ -255,6 +716,24 @@ private:
     bool tour_ = false;
     int leg_ = 0;
     double hold_ = 0.0;
+    // the second option
+    int mode_ = 0;                      // 0 Ölçek (the address), 1 Hız
+    int view_ = 0;                      // 0 the rocket's eye, 1 from the side
+    bool loaded_ = false;
+    std::string savePath_;
+    double lastNow_ = -1.0;             // the scene's clock at the last frame of the journey
+    double saveAt_ = 0.0;
+    double resetArmed_ = -1.0;          // "start over" pressed once: until when a second press confirms
+    double yaw_ = 0.0, pitch_ = 0.0;    // the head (radians; the sky follows a drag)
+    bool lookAhead_ = false;            // R: the head turning back to the bow
+    double zoom_ = std::log10(std::tan(37.5 * kPi / 180.0));   // log10 tan(fov/2): 75 degrees across
+    double zoomPending_ = 0.0;
+    double sideS_ = 1.3, sidePending_ = 0.0;   // the side view's screen width (log10 m)
+    double eyeEv_ = 17.5;
+    bool evInit_ = false;
+    hz::EyeSum eyeSum_;
+    olcek::Clocks olcekClk_;            // the first option's own clocks and scale while the second runs
+    double olcekS_ = 0.0;
 };
 
 }   // namespace

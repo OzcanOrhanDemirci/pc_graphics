@@ -368,7 +368,7 @@ bool Scale::loadBelts(const std::string& path, std::string& log) {
 void Scale::buildInner(OlcekView& v) {
     particles.clear();
     particleTrack.clear();
-    const bool belts = s > 10.2 && s < 15.6;
+    const bool belts = s > 10.2 && s < 15.6 && (!hiz.on || (hiz.gamma <= 1.0 && length(hiz.rocket) < 3e13));
     if (s > -8.6 && !belts) return;
     Canvas cv;
     cv.tx = v.tanHalfX;

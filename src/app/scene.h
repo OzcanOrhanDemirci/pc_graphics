@@ -117,6 +117,8 @@ public:
     // Present every n-th refresh, n chosen so the rate is nearest fps (165 Hz, 41 -> every 4th: 41.25 fps, even frame
     // times); 0: as fast as the scene draws (the default). Reset to the gallery's when the scene closes.
     virtual void pace(float fps) { (void)fps; }
+    // a test run (--autotest): the user's own saved state is neither read nor written
+    virtual bool testing() const { return false; }
 };
 
 struct LoadState {

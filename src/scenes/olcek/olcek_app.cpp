@@ -11,8 +11,12 @@
 //                                                                  or vanishing that the zoom does not explain)
 //   pc_graphics.exe --scene olcek --test olcek-zaman               the clocks: home always at today's noon, however
 //                                                                  long out there and however fast back
+//   pc_graphics.exe --scene olcek --test olcek-hiz                 the second option's physics (olcek_hiz_test.cpp)
+//   pc_graphics.exe --scene olcek --headless --hiz --phi 0,3 [--ayak 0 --yer 0.5 --gorus 75 --bakis yaw,pitch --yan 1.3,9]
+//                                                                  the rocket's eye (or the side view) at those states
 #include "scenes/olcek/olcek_app.h"
 #include "core/image_io.h"
+#include "scenes/olcek/olcek_bugun.h"
 
 #include <algorithm>
 #include <chrono>
@@ -198,6 +202,12 @@ void OlcekApp::render() {
     view.maps.moonGain = cfg.f("maps.gain.moon", 0.6f);
     if (world.width) view.maps.worldTexels = float(world.width);
     if (moon.width) view.maps.moonTexels = float(moon.width);
+    hostMs = (nowS() - h0) * 1000.0;
+    draw(samples);
+}
+
+void OlcekApp::draw(int samplesThis) {
+    const double h0 = nowS();
     binParticles();
     if (int(sc.particles.size()) > partCap) {
         cudaFree(dParts);
@@ -214,14 +224,14 @@ void OlcekApp::render() {
         splatCap = int(splats.size()) * 2;
         cudaMalloc(reinterpret_cast<void**>(&dSplats), size_t(splatCap) * sizeof(GSplat));
     }
-    hostMs = (nowS() - h0) * 1000.0;
+    hostMs += (nowS() - h0) * 1000.0;
     cudaEvent_t a, b;
     cudaEventCreate(&a);
     cudaEventCreate(&b);
     cudaEventRecord(a);
     setView(view);
     if (!splats.empty()) cudaMemcpyAsync(dSplats, splats.data(), splats.size() * sizeof(GSplat), cudaMemcpyHostToDevice, 0);
-    renderFrame(accum, depth, sc.width, sc.height, samples, 0);
+    renderFrame(accum, depth, sc.width, sc.height, samplesThis, 0);
     splatPoints(dSplats, int(splats.size()), accum, depth, sc.width, sc.height, 0);
     if (!sc.particles.empty()) {
         cudaMemcpyAsync(dParts, sc.particles.data(), sc.particles.size() * sizeof(GParticle), cudaMemcpyHostToDevice, 0);
@@ -235,6 +245,118 @@ void OlcekApp::render() {
     cudaEventElapsedTime(&frameMs, a, b);
     cudaEventDestroy(a);
     cudaEventDestroy(b);
+}
+
+void OlcekApp::prepareHiz() {
+    namespace hz = olcek::hiz;
+    using namespace olcek::hiz;
+    route = makeRoute();
+    ship = depart(route);
+    hizLog.clear();
+    // the catalogue's Proxima to Gaia DR3's place (HYG has it ~1,300 AU off): the star the rocket stops by is the one it sees
+    proximaStar = -1;
+    const int i = sc.nearestStar(route.proxima);
+    if (i >= 0 && length(sc.stars()[size_t(i)] - route.proxima) < 0.05 * kPc) {
+        char b[200];
+        std::snprintf(b, sizeof(b), "  Proxima: katalogda %.4f pc, Gaia DR3 %.6f pc (%.0f AU tasindi)\n", length(sc.stars()[size_t(i)]) / kPc,
+                      length(route.proxima) / kPc, length(sc.stars()[size_t(i)] - route.proxima) / kAU);
+        hizLog += b;
+        sc.moveStar(i, route.proxima);
+        proximaStar = i;
+    } else {
+        hizLog += "  Proxima katalogda bulunamadi (0,05 pc icinde yildiz yok)\n";
+    }
+    bb.build(root + "/assets/olcek/cie1931_2deg.csv");
+    {   // the night sky at the Sun's place (the Sun sits at the eye there and is left out)
+        hz::EyeSum sum;
+        hz::Eye e;
+        e.width = sc.width;
+        e.height = sc.height;
+        hz::StarSet st;
+        st.pos = &sc.stars();
+        st.flux = &sc.starLight();
+        st.temp = &sc.starTemp();
+        std::vector<GSplat> sp;
+        hz::buildEye(st, bb, e, sp, sum);
+        nightSky = std::max(sum.visible - sum.visibleSun, 1e-12);
+    }
+    char b[256];
+    std::snprintf(b, sizeof(b), "  renk tablosu: %s, %d dalga boyu\n  yol: %.4f isik yili, donus %.1f derece, %.4f milyon isik yili (Gunes'e en yakin %.2f isik yili)\n",
+                  bb.source.c_str(), bb.samples, route.length[0] / kLy, route.turnDeg, route.length[1] / kLy * 1e-6, route.sunPass / kLy);
+    hizLog += b;
+}
+
+double OlcekApp::eyeEv(double skyVisible) const {
+    // at rest far from the Sun: about the 7th magnitude at the edge of seeing (hiz.ev); a sky twice as bright closes the
+    // eye by hiz.uyum EV (a dark sky opens it by at most 6 EV, the Sun near closes it all the way to dazzling)
+    const double base = cfg.f("hiz.ev", 17.5f), adapt = cfg.f("hiz.uyum", 0.5f);
+    return base - std::clamp(adapt * std::log2(std::max(skyVisible, 1e-30) / nightSky), -6.0, 40.0);
+}
+
+double OlcekApp::sideEv(double s, olcek::V3 rocket) const {
+    // near the Sun the first option's curve (the sunlit Earth, the planets' rings), from ~30 AU to ~3,000 AU over to
+    // deep space's (the stars, the first option's own space exposure)
+    const double space = cfg.f("hiz.yan.ev", 23.5f);
+    const double u = std::clamp((std::log10(std::max(length(rocket), 1.0)) - std::log10(30.0 * olcek::hiz::kAU)) / 2.0, 0.0, 1.0);
+    const double uu = u * u * (3.0 - 2.0 * u);
+    return std::max(sc.ev(s), sc.ev(s) * (1.0 - uu) + space * uu);
+}
+
+olcek::hiz::Eye OlcekApp::eyeAt(const olcek::hiz::Ship& s, double yaw, double pitch, double tanHalfX) const {
+    namespace hz = olcek::hiz;
+    // the rocket's frame: the nose ahead, the Galaxy's north up across it; the head turned by yaw (about up) and pitch
+    const V3 f0 = s.heading;
+    V3 up0 = v3(olcek::today::kGalNorth);
+    up0 = up0 - f0 * dot(up0, f0);
+    if (length(up0) < 1e-6) up0 = v3(0.0, 0.0, 1.0) - f0 * f0.z;
+    up0 = normalize(up0);
+    const V3 f1 = rotate(f0, up0, yaw);
+    const V3 r1 = normalize(cross(f1, up0));
+    hz::Eye e;
+    e.pos = hz::position(s, route);
+    e.motion = s.phi > 0.0 ? hz::motionDir(s, route) : s.heading;
+    e.phi = s.phi;
+    e.fwd = rotate(f1, r1, pitch);
+    e.up = rotate(up0, r1, pitch);
+    e.right = r1;
+    e.width = sc.width;
+    e.height = sc.height;
+    e.tanHalfX = tanHalfX;
+    e.tanHalfY = tanHalfX * sc.height / sc.width;
+    // a point's light spread over the first option's pixel (fov 40): the same star looks the same in both, and the
+    // binoculars do not brighten it
+    const double pa0 = 2.0 * std::tan(20.0 * 3.14159265358979323846 / 180.0) / sc.width;
+    e.omegaPx = pa0 * pa0;
+    return e;
+}
+
+void OlcekApp::renderEye(const olcek::hiz::Eye& e, olcek::hiz::EyeSum& sum) {
+    const double h0 = nowS();
+    olcek::hiz::StarSet st;
+    st.pos = &sc.stars();
+    st.flux = &sc.starLight();
+    st.temp = &sc.starTemp();
+    olcek::hiz::buildEye(st, bb, e, splats, sum);
+    // nothing else in H0: black space and the points (the sky's light, the stops and the galaxies come in H3-H5)
+    view.width = sc.width;
+    view.height = sc.height;
+    view.tanHalfX = float(e.tanHalfX);
+    view.tanHalfY = float(e.tanHalfY);
+    view.pixAngle = float(2.0 * e.tanHalfX / sc.width);
+    view.filterRadius = cfg.f("filter", 1.5f);
+    view.saturation = 1.0f;
+    view.background = make_float3(0, 0, 0);
+    view.nBalls = view.nBlobs = view.nDiscs = 0;
+    view.ground = GGround{};
+    view.field = GField{};
+    view.atmo = GAtmo{};
+    view.web = GWeb{};
+    view.dens = GDensity{};
+    for (GGalaxy& g : view.galaxy) g = GGalaxy{};
+    sc.particles.clear();
+    sc.particleTrack.clear();
+    hostMs = (nowS() - h0) * 1000.0;
+    draw(1);
 }
 
 void OlcekApp::save(const std::string& path) {
@@ -541,17 +663,17 @@ int testTime(OlcekApp& app) {
 
 int runOlcekCli(int argc, char** argv) {
     OlcekApp app;
-    std::vector<double> ss;
+    std::vector<double> ss, phis, sides, look;
     std::string out = "captures/olcek", test;
-    double t = 0.0, step = 0.01;
-    bool decades = false;
-    int w = 0, h = 0;
+    double t = 0.0, step = 0.01, frac = 0.5, fov = 75.0;
+    bool decades = false, hizFrames = false, outSet = false;
+    int w = 0, h = 0, leg = 0;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         auto next = [&]() { return i + 1 < argc ? std::string(argv[++i]) : std::string(); };
         if (a == "--s") ss = doubles(next());
         else if (a == "--t") t = std::stod(next());
-        else if (a == "--out") out = next();
+        else if (a == "--out") { out = next(); outSet = true; }
         else if (a == "--w") w = std::stoi(next());
         else if (a == "--h") h = std::stoi(next());
         else if (a == "--set") app.overrides.push_back(next());
@@ -559,6 +681,13 @@ int runOlcekCli(int argc, char** argv) {
         else if (a == "--test") test = next();
         else if (a == "--step") step = std::stod(next());
         else if (a == "--decades") decades = true;
+        else if (a == "--hiz") hizFrames = true;
+        else if (a == "--phi") phis = doubles(next());
+        else if (a == "--ayak") leg = std::stoi(next());
+        else if (a == "--yer") frac = std::stod(next());
+        else if (a == "--gorus") fov = std::stod(next());
+        else if (a == "--bakis") look = doubles(next());
+        else if (a == "--yan") sides = doubles(next());
     }
     if (w > 0) app.overrides.push_back("width=" + std::to_string(w));
     if (h > 0) app.overrides.push_back("height=" + std::to_string(h));
@@ -568,11 +697,20 @@ int runOlcekCli(int argc, char** argv) {
         app.loadMaps();
         std::printf("haritalar:\n%s", app.mapsLog.c_str());
     }
+    if (test == "olcek-hiz" || hizFrames) {
+        app.prepareHiz();
+        std::printf("hiz:\n%s", app.hizLog.c_str());
+    }
     int rc = 0;
     if (test == "olcek-hassasiyet") rc = testPrecision(app);
     else if (test == "olcek-sure") rc = testContinuity(app, step);
     else if (test == "olcek-zaman") rc = testTime(app);
-    else {
+    else if (test == "olcek-hiz") rc = runHizTests(app);
+    else if (hizFrames) {
+        if (phis.empty()) phis = {0.0};
+        rc = runHizFrames(app, phis, leg, frac, fov, look.size() > 0 ? look[0] : 0.0, look.size() > 1 ? look[1] : 0.0, sides,
+                          outSet ? out : std::string("captures/olcek_hiz"));
+    } else {
         if (decades) {
             ss.clear();
             ss.push_back(app.sc.sMin);

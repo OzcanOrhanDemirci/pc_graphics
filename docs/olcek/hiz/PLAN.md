@@ -67,21 +67,26 @@ Güneş-Proxima-Andromeda, aralarındaki yüzlerce km/s yok sayılabilir; belged
   Δx = (c²/a)(cosh φ₁ − cosh φ₀). Süzülürken (itiş yok) Δt = cosh φ Δτ, Δx = c sinh φ Δτ.
 - **Fren:** S aynı güçte, φ azalır. Sabit ivme olduğu için dokuzlar doğrusal düşer, γ katlanarak (Özcan'ın "katlanarak
   yavaşlama" isteği fizikte kendiliğinden böyle).
-- **Tavan:** φ_max = arcosh(γ_max) = 24,52 (21 dokuz): W ile **61 saniye**. Bu arada 1.771 ışık yılı yol alınır.
+- **Tavan:** φ_max = arcosh(γ_max) = 24,5237 (21 dokuz; "24,52"ye yuvarlanmış hâli 20 dokuz verir): W ile **61,3 saniye**.
+  Bu arada 1.771 ışık yılı yol alınır.
 - **Konum kesinliği:** ayağın başından uzaklık Andromeda ayağında 2,3 × 10²² m'ye çıkar; metre ölçeğinde yakınlaşırken
   roketin yanındaki tanecikler için çift-double (Ölçek'teki DD) ya da roketin kendi çapası (ağaçta bir düğüm, konumu
   ayağın başından DD). Kamera hep rokete göre.
-- **Otomatik varış (Space):** durma mesafesi d_dur = (c²/a)(cosh φ − 1) (durgun çerçevede). Space basılınca roket kalan
-  yol d_dur'a inene kadar süzülür, sonra aynı güçle frenler, hedefte **yörüngeye** oturur (Proxima'da Proxima b'nin
-  yörüngesi, 0,0486 AU, ~47 km/s; Andromeda'da galaksiye göre durgun). Panelde **d_dur** ve **kalan** canlı: kendin de
-  frenleyebilirsin. Geçersen durduktan sonra W hedefe geri götürür (roket döner; geri vites değil, yön).
+- **Otomatik varış (Space):** durma mesafesi d_dur = (2c²/a) sinh²(φ/2) (durgun çerçevede; (c²/a)(cosh φ − 1)'in
+  basamak kaybetmeyen biçimi). Space bulunduğun her durumdan **en kısa yoldan** götürür (H0'da değişti, gerekçe DURUM'da):
+  durabileceği en yüksek hız (φ*, sinh²(φ*/2) = a r/(4c²) + sinh²(φ/2)/2) daha yukarıdaysa hızlanır, tavanda süzülür,
+  kalan yol d_dur'a inince aynı güçle frenler, hedefte durur. Zaten o kadar hızlıysan yalnız süzülür ve doğru anda
+  frenler. **W ya da S'ye basmak** kumandayı geri alır; elle hedefin binde biri kadar yakınında durursan son kısmı otomatik
+  varış uçar (ışınlanma yok). Hedefte **yörüngeye** oturma H5'in işi (Proxima'da Proxima b'nin yörüngesi, 0,0486 AU,
+  ~47 km/s; Andromeda'da galaksiye göre durgun); H0'da roket hedefte durgun çerçevede durur. Panelde **d_dur** ve **kalan**
+  canlı: kendin de frenleyebilirsin. Geçersen durduktan sonra W hedefe geri götürür (roket döner; geri vites değil, yön).
 - **Dönüş:** bir ayaktan ötekine geçerken roket yeni yöne döner (Proxima'da 153°), FPS'de gökyüzü yavaşça döner (~8 s).
 - **Yolculuk** (roketin saatiyle, kusursuz sürüşte):
 
 | Ayak | Roketin saati | Dünya'da geçen | En yüksek hız |
 |---|---|---|---|
-| Dünya → Proxima (4,2465 ışık yılı, Gaia) | **89 s** (44,5 W + 44,5 fren) | 4,25 yıl | rapidite 17,8 (γ 2,7 × 10⁷, ~15 dokuz) |
-| Proxima → Andromeda (2,395 milyon ışık yılı) | **58,3 dk** (1 dk itiş, 56,3 dk seyir, 1 dk fren) | 2,395 milyon yıl | 21 dokuz |
+| Dünya → Proxima (4,2457 ışık yılı, Gaia DR3 bugüne taşınmış) | **89,0 s** (44,49 W + 44,49 fren) | 4,25 yıl | rapidite 17,8 (γ 2,7 × 10⁷, ~15 dokuz) |
+| Proxima → Andromeda (2,3951 milyon ışık yılı) | **58,3 dk** (61,3 s itiş, 56,25 dk seyir, 61,3 s fren) | 2,395 milyon yıl | 21 dokuz |
 
 - **Etkiler** (hepsi):
   1. **Zaman genişlemesi:** iki saat.
@@ -89,14 +94,19 @@ Güneş-Proxima-Andromeda, aralarındaki yüzlerce km/s yok sayılabilir; belged
   3. **Eşzamanlılığın göreliliği:** uzay-zaman diyagramında roketin "şimdi" çizgisi eğilir. Dünya'da "şu an"ın ne
      olduğu hıza göre değişir.
   4. **Sapınç:** tan(θ′/2) = e^(−φ) tan(θ/2) (her φ'de kararlı biçim). Gökyüzü öne toplanır.
-  5. **Doppler:** D = 1 / (γ(1 − β cos θ)) (ileri yönde e^φ'ye kadar). Kara cisim T sıcaklıkta görünürse D·T
-     sıcaklığında kara cisim olarak görünür: yıldızlar, güneşler, kozmik fon ışıması kesin.
+  5. **Doppler:** D = γ(1 + β cos θ) (θ durgun çerçevede, kaynağa doğru) = 1 / (γ(1 − β cos θ′)) (θ′ roketin
+     gördüğü açı); ileri yönde e^φ'ye kadar. (Planın ilk hâli ikinci biçimi durgun çerçevenin θ'sıyla yazıyordu: 90°'de γ
+     yerine 1/γ verir. Kâhin buldu, H0.) Kara cisim T sıcaklıkta görünürse D·T sıcaklığında kara cisim olarak görünür:
+     yıldızlar, güneşler, kozmik fon ışıması kesin.
   6. **Parlaklık:** yüzey parlaklığı (özgül şiddet, bolometrik) D⁴, nokta kaynağın akısı D² (I_ν/ν³ değişmez, katı açı
      D⁻²). İkisi de birim sınamayla doğrulanacak: hareket eden gözlemcide eşyönlü bir kara cismin enerji yoğunluğu
      γ²(1 + β²/3)u çıkmalı.
   7. **Terrell dönmesi** ve görülen biçimler: FPS'nin göreli ışın izlemesinden kendiliğinden (aşağıda).
-  8. **Kozmik fon ışıması:** önde T′ = D · 2,725 K. ~γ 500-1000'de önde **görünür bir disk** olur, sonra morötesine, X ve
-     gama ışınına geçer. Güneş'in fona göre 370 km/s'lik dipolü (3,4 mK) dahil.
+  8. **Kozmik fon ışıması:** önde T′ = D · 2,725 K. Önü γ ≈ 150'de kızarmaya başlar (798 K), γ ≈ 370'te 2.000 K,
+     γ ≈ 550'de 3.000 K; sonra morötesine, X ve gama ışınına geçer. **Büyük bir disk değil, küçük bir nokta:** T_f'den sıcak
+     bölgenin açısal yarıçapı en çok asin(T0/T_f) (1.000 K için 0,16°), en büyüğüne γ = T_f/T0'da varır, sonra
+     √(2T0/(γT_f)) ile küçülür: gittikçe ısınan ve küçülen bir nokta (planın ilk hâli "γ 500-1000'de görünür bir disk"
+     diyordu; kâhinin hesabı, H0). Güneş'in fona göre 370 km/s'lik dipolü (3,36 mK, Planck 2018) dahil.
   9. **Işığın gecikmesi:** Dünya'nın saatinin iki yüzü (§4): "şu an" (eşzamanlılık) ve "görülen" (gecikmeli, Doppler'li).
 
 ## 3 · Görüntüler
@@ -147,9 +157,12 @@ Tab ile yandan bakışa geçilir.
    - Kızıl cüce (3.042 K, 0,154 R☉), Proxima b'nin yörüngesinden **1,69°** (Güneş'in Dünya'dan görünüşünün 3,2 katı).
      Yüzeyinde ışık-gölge (granülasyon, lekeler) ve parlamalar: o bir parlama yıldızı.
    - Proxima b (1,07 M⊕, gelgit kilitli olabilir) temsil: görüntüsü yok.
-   - Gökyüzünde Alfa Erboğa A ve B (13.000 AU, **−6,6 ve −5,3 kadir**: Venüs'ten parlak).
+   - Gökyüzünde Alfa Erboğa A ve B (**12.060 AU**, **−6,8 ve −5,5 kadir**: Venüs'ten parlak; Akeson 2021 paralaksı +
+     Gaia DR3 Proxima. Planın ilk hâlindeki 13.000 AU, −6,6/−5,3 eski paralaksla. HYG ikisini 1,3248 pc'ye koyuyor:
+     11.360 AU; H5'te gerçek uzaklıklarına taşınır).
    - **Güneş'imiz Kraliçe (Cassiopeia) takımyıldızında 0,4 kadirlik bir yıldız.**
-3. **Andromeda:** diskinin 100 bin ışık yılı önünde, galaksiye göre durgun. Disk gökyüzünde **~70°**; arkada Samanyolu
+3. **Andromeda:** diskinin 100 bin ışık yılı önünde, galaksiye göre durgun. Disk gökyüzünde **~70°** (büyük eksen 71°;
+   77,5° eğik diski bu uzaklıktan perspektifle görmek: küçük eksen 33°, yakın kenar 27°, uzak kenar 5°); arkada Samanyolu
    soluk bir sarmal. Dünya saati: 2,4 milyon yıl.
 
 ## 4 · Grafikler: ekran kadar önemli
@@ -176,7 +189,9 @@ canlanma. Yolcunun saati **beyaz**, Dünya'nınki **kırmızı** (görüntülerd
    - Dünya'nınki γ kat hızlı: çok dokuzda ibreleri bir diske bulanır (gözün kapağı), tarih sayacı yıllar, milyon yıllar.
    - İkinci yüz: "görülen Dünya saati", gecikmeli ve Doppler'li. Uzaklaşırken yavaş görünür.
 5. **BEDEL:**
-   - Harcanan enerji (1 tonluk roket için "Güneş'in X saniyesi"; 21 dokuzda **Güneş'in 1,5 saati**).
+   - Harcanan enerji (1 tonluk roket için "Güneş'in X saniyesi"; 21 dokuzda kinetik enerji **Güneş'in 1,46 saati**;
+     foton roketinin bunun için yaktığı (e^φ − 1)mc² **2,9 saat**, durmak için de yakarsa **Güneş'in 15 milyon yılı**:
+     hangisi gösterildiği yazılır).
    - Foton roketi kütle oranı (hızlanmak için e^φ: 21 dokuzda **4,5 × 10¹⁰**, durmakla 2 × 10²¹).
    - Çekilen ivme (**12 milyon g**).
    - Önden gelen radyasyon ("Güneş ışığının X katı": 17 dokuzda 6 × 10⁸, 21 dokuzda **6 × 10¹²**), öndeki fon
@@ -195,7 +210,8 @@ alanıyla ya da arayüzün OpenGL'inde gölgelendiriciyle) H1'in ilk işi.
   yörüngesi, φ = 0, τ = t = 0, "bugün" (2026-10-05 10:00 UTC).
 - **Veri:**
   - Var olan: HYG (yıldızlar), 2MRS, Samanyolu, M31, M33 modelleri, Dünya, Ay haritaları.
-  - Yeni: ESO panoraması; Proxima'nın Gaia konumu (4,2465 ışık yılı); Alfa Erboğa A/B (HYG'de var); CIE 1931 tabloları;
+  - Yeni: ESO panoraması; Proxima'nın Gaia konumu (bugüne taşınmış, 4,2457 ışık yılı; H0'da var); Alfa Erboğa A/B
+    (HYG'de var, uzaklıkları Akeson 2021'e taşınacak); CIE 1931 tabloları (H0'da var, `tools/olcek_veri.py cie`);
     isteğe bağlı Planck fon haritası.
 - **Kalıcılık:** yolculuk durumu çıkışta kaydedilir (τ, t, φ, ayak, konum). Açınca kaldığı yerden sürer, kapalıyken
   geçen zaman sayılmaz.
@@ -209,7 +225,7 @@ alanıyla ya da arayüzün OpenGL'inde gölgelendiriciyle) H1'in ilk işi.
   - Proxima kusursuz sürüşte 89,0 s / 4,25 yıl, Andromeda 58,3 dk / 2,395 milyon yıl;
   - sapınç ve Doppler özdeşlikleri (ters dönüşüm, D(θ)·D′(θ′) = 1);
   - eşyönlü kara cismin enerji yoğunluğu γ²(1 + β²/3)u.
-- **Renk:** 5.778 K'lik bir yıldız D = 2'de 11.556 K'lik kara cisim gibi görünür; fon ışıması önde görünür banda
+- **Renk:** 5.772 K'lik bir yıldız D = 2'de 11.544 K'lik kara cisim gibi görünür; fon ışıması önde görünür banda
   girdiği γ'da disk olur.
 - **Süreklilik:** Ölçek'in `olcek-sure`'si gibi bir tarama: hızlanma ve tekerlek boyunca sıçrama yok (parçacık ölçüsü
   dahil). Kare ≤ 16 ms (2560×1440).
@@ -235,7 +251,8 @@ alanıyla ya da arayüzün OpenGL'inde gölgelendiriciyle) H1'in ilk işi.
 
 - **Galaksinin içeriden ve dışarıdan gerçekçiliği** en büyük iş. Fotoğrafla modelin örtüşmesi, H4'te ölçülerek.
 - **Panodan yıldız silmek:** parlak yıldızlar silinmezse katalogla çift görünür. Silme izi kalmamalı.
-- **Dinamik aralık:** önde parlaklık D² ile 10²⁰'ye çıkar; tasarlanmış pozlama ve AgX ile.
+- **Dinamik aralık:** önde parlaklık D² ile 2 × 10²¹'e çıkar (D⁴ 4 × 10⁴²: float taşar, çift hassasiyette ya da
+  logaritmada hesaplanır); tasarlanmış pozlama ve AgX ile.
 - **Temsiller açıkça yazılır:**
   - yıldızlararası ortamın yoğunluğu (çizgiler için);
   - Proxima b'nin görünüşü;

@@ -40,6 +40,7 @@ public:
     const std::string& root() const override { return opt_.root; }
     std::string capturePath() override;
     const std::vector<std::string>& overrides() const override { return opt_.overrides; }
+    bool testing() const override { return opt_.autotest; }
 
     // called from the GLFW callbacks
     void onKey(int key, int action, int mods);

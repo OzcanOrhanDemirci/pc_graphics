@@ -118,7 +118,8 @@ Face g_faces[int(Font::Count)];
 
 // the letters baked: ASCII, Latin-1, Latin Extended-A (Turkish), dashes and quotes, arrows, minus and infinity
 struct Range { int first, count; };
-const Range kRanges[] = {{32, 95}, {160, 96}, {256, 128}, {0x2010, 0x28}, {0x2190, 4}, {0x2022, 1}, {0x2026, 1}, {0x2212, 1}, {0x221E, 1}, {0x2070, 0x30}};
+const Range kRanges[] = {{32, 95}, {160, 96}, {256, 128}, {0x0391, 0x39}, {0x2010, 0x28}, {0x2190, 4}, {0x2022, 1}, {0x2026, 1}, {0x2212, 1},
+                          {0x221E, 1}, {0x2248, 1}, {0x2070, 0x30}};
 
 struct Baked {
     GLuint tex = 0;
@@ -151,7 +152,7 @@ const Baked* bake(Font f, float size) {
     // atlas size from the glyph count and size; oversampled small text stays crisp
     const int over = px < 40 ? 2 : 1;
     int side = 256;
-    while (side < 4096 && side * side < int(px * px * over * 500)) side *= 2;   // 500: room for the superscripts too
+    while (side < 4096 && side * side < int(px * px * over * 600)) side *= 2;   // 600: room for the superscripts and Greek too
     std::vector<unsigned char> pixels(size_t(side) * side, 0);
     stbtt_pack_context pc;
     stbtt_PackBegin(&pc, pixels.data(), side, side, 0, 1, nullptr);

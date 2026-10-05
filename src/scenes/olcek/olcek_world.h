@@ -57,6 +57,7 @@ enum Node : int {
     kMoon,
     kMercury, kVenus, kMars, kJupiter, kSaturn, kUranus, kNeptune,
     kM31, kM33, kLMC, kSMC,
+    kRocket,       // the second option "Hız": the rocket, hung on the Sun (its place from olcek_hiz.h's route)
     kNodeCount
 };
 
@@ -116,6 +117,27 @@ public:
     Tree tree;
     Camera cam;
 
+    // The second option "Hız" (docs/olcek/hiz/PLAN.md, olcek_hiz.h): the side view follows the rocket. The camera looks at
+    // it from its side (the motion is the screen's right), the wheel is the same, the world's clocks are the rest frame's
+    // time (the scene sets them: hizClocks), the exposure is the scene's, the beach and the home are off.
+    struct Hiz {
+        bool on = false;
+        V3 rocket;                // from the Sun (m)
+        V3 motion{1, 0, 0};       // unit: the screen's right
+        double rate = 1.0;        // the world's seconds per screen second (gamma): what the shutter averages
+        double gamma = 1.0;       // the measured world: lengths along the motion gamma times shorter about the rocket
+        double ev = 23.5;         // the exposure (EV against the sunlit world's)
+        float3 mark{0, 0, 0};     // the rocket's point (display-referred light, after the exposure); 0: none
+    } hiz;
+    void hizClocks(double t);     // every clock at the rest frame's time t (s since today): planets, Moon, spin, Galaxy
+    void hizOff();                // back to the first option: the fixed camera, today's clocks
+    // the catalogue's stars (from the Sun), their luminosity and colour, their temperature
+    const std::vector<V3>& stars() const { return starPos_; }
+    const std::vector<float4>& starLight() const { return starFlux_; }
+    const std::vector<float>& starTemp() const { return starTemp_; }
+    int nearestStar(V3 p) const;  // the index of the catalogue star nearest to p (from the Sun), -1 none
+    void moveStar(int i, V3 p);   // a better measured place (Proxima: Gaia DR3)
+
     void configure(const Config& cfg);
     void init();                  // the catalogue, the tree, today's orbits
     // the real stars (tools/olcek_veri.py yildiz: HYG v4.1) in place of the placeholder field; false: kept the field
@@ -160,6 +182,7 @@ private:
     std::vector<V3> starPos_;     // the stars' field around the Sun (from the Sun, metres)
     bool realStars_ = false;      // the catalogue is in starPos_ (loadStars)
     std::vector<float4> starFlux_;   // luminosity (W) and colour
+    std::vector<float> starTemp_;    // temperature (K): the eye's Doppler shifts it (olcek_hiz_goz.h)
     std::vector<V3> galPos_;      // galaxies (from the Laniakea centre)
     std::vector<V3> surveyPos_;   // the survey's (from the Sun), kept across init(); the placeholder web stays beyond it
     std::vector<float4> surveyFlux_;
@@ -176,6 +199,14 @@ private:
     V3 vibAmp_[3];
     double vibOmega_[3] = {};
     double focusBlend(int& a, int& b) const;   // the centre's way: the anchors between which it is, and how far
+    double worldRate() const { return hiz.on ? hiz.rate : rate(s); }   // the world's seconds per screen second
+    // the second option's side view: rel (from the camera) where the rocket measures it, contracted along the motion
+    // about the rocket (the camera is straight across from it: the same as about the camera); others: rel
+    V3 measured(V3 rel) const {
+        if (!hiz.on || hiz.gamma <= 1.0) return rel;
+        const double a = dot(rel, cam.right);
+        return rel + cam.right * (a / hiz.gamma - a);
+    }
     // how far a body moves against the Sun if its clocks ran tau seconds more (the shutter's samples), and its orbit's
     // period as it runs at this scale (the Earth's year is held near home: longer, or infinite)
     V3 sunShift(int node, double tau) const;

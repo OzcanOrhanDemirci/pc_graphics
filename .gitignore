@@ -8,8 +8,9 @@ tools/smoke/out/
 *.exr
 __pycache__/
 captures/
-# This computer's choices (the language: src/app/lang.h)
+# This computer's choices (the language: src/app/lang.h) and the journey of scene 7's second option (Hız)
 user.cfg
+hiz_yolculuk.txt*
 
 # Koy: CC0 scans fetched by assets/koy/fetch.py, not committed
 assets/koy/cc0/

@@ -81,6 +81,9 @@ add_library(pc_core OBJECT
     src/scenes/olcek/olcek_tex.cpp
     src/scenes/olcek/olcek_app.cpp
     src/scenes/olcek/olcek_live.cpp
+    src/scenes/olcek/olcek_hiz.cpp
+    src/scenes/olcek/olcek_hiz_goz.cpp
+    src/scenes/olcek/olcek_hiz_test.cpp
     src/scenes/olcek/olcek_kernels.cu
     ${TP}/tinyexr/miniz.c)
 add_executable(pc_graphics src/app/main.cpp $<TARGET_OBJECTS:pc_core>)

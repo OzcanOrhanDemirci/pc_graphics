@@ -16,6 +16,7 @@ dogu ve kuzey metre: sahnenin GGround eksenleriyle ayni.
   python tools/olcek_veri.py yildiz    # yildizlar: HYG v4.1 (uzakligi bilinen her yildiz, gercek yeri, isigi, rengi)
   python tools/olcek_veri.py galaksi   # galaksiler: 2MASS Redshift Survey (44.600 galaksi, kirmiziya kaymadan uzaklik)
   python tools/olcek_veri.py ag        # kozmik ag: Zel'dovich yaklasimiyla istatistiksel bir ornek (256^3, 600 Mpc)
+  python tools/olcek_veri.py cie       # CIE 1931 2 derece renk eslestirme fonksiyonlari (Hiz: isigin her hizdaki rengi)
   python tools/olcek_veri.py hepsi
 """
 import math
@@ -363,7 +364,9 @@ def bulut(date="2026-10-05", world_date=None):
 # ---------------------------------------------------------------------------------------------------------------------
 # Stars: the HYG database v4.1 (Hipparcos, Yale Bright Star, Gliese; astronexus, CC BY-SA 4.0): every star with a
 # distance, its place from the Sun (ICRS, pc -> m), its luminosity (L_sun, visual) and its colour from B-V. Written as
-# "OLST", count, then per star x, y, z (float64, m) and luminosity, r, g, b (float32).
+# "OLS2", count, then per star x, y, z (float64, m) and luminosity, r, g, b, temperature (float32; the temperature: the
+# second option "Hiz" shifts it by the Doppler factor, docs/olcek/hiz/PLAN.md). The scene still reads the older "OLST"
+# (no temperature: it is then recovered from the colour).
 def yildiz():
     import csv
     path = fetch("https://raw.githubusercontent.com/astronexus/HYG-Database/main/hyg/CURRENT/hygdata_v41.csv", "hygdata_v41.csv")
@@ -400,14 +403,35 @@ def yildiz():
         return [v / y for v in out]
 
     pos = np.array([[r[0], r[1], r[2]] for r in rows], np.float64)
-    att = np.array([[r[3]] + bb(r[4]) for r in rows], np.float32)
+    att = np.array([[r[3]] + bb(r[4]) + [r[4]] for r in rows], np.float32)
     with open(os.path.join(OUT, "yildizlar.bin"), "wb") as f:
-        f.write(b"OLST")
+        f.write(b"OLS2")
         f.write(np.array([n], np.uint32).tobytes())
         f.write(pos.tobytes())
         f.write(att.tobytes())
     near = sum(1 for r in rows if (r[0] ** 2 + r[1] ** 2 + r[2] ** 2) ** 0.5 < 10 * pc)
     print(f"  yazildi assets/olcek/yildizlar.bin: {n} yildiz ({near} tanesi 10 pc icinde)")
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# The CIE 1931 2-degree colour matching functions (CIE 018:2019 Table 6; DOI 10.25039/CIE.DS.xvudnb9b; CC BY-SA 4.0):
+# 360-830 nm at 1 nm, "lambda,xbar,ybar,zbar" per line, no header. The second option "Hiz" builds the colour and the
+# visible share of a blackbody at any temperature from it (src/scenes/olcek/olcek_hiz_goz.cpp), so the Doppler-shifted
+# light of every star is exact. Copied unmodified, its checksum pinned.
+CIE_URL = "https://files.cie.co.at/Publications-datasets/CIE_xyz_1931_2deg.csv"
+CIE_SHA256 = "fa663e3535a7e0763a745993a1f0a192eb0275ac46ad2d1befd7626841e713c1"
+
+
+def cie():
+    import hashlib
+    import shutil
+    path = fetch(CIE_URL, "CIE_xyz_1931_2deg.csv")
+    h = hashlib.sha256(open(path, "rb").read()).hexdigest()
+    if h != CIE_SHA256:
+        raise SystemExit(f"  CIE tablosunun ozeti beklenen degil: {h}")
+    shutil.copyfile(path, os.path.join(OUT, "cie1931_2deg.csv"))
+    rows = sum(1 for line in open(path) if line.strip())
+    print(f"  yazildi assets/olcek/cie1931_2deg.csv: {rows} satir (360-830 nm), sha256 dogrulandi")
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -635,6 +659,8 @@ if __name__ == "__main__":
         ag()
     if what in ("asteroit", "hepsi"):
         asteroit()
+    if what in ("cie", "hepsi"):
+        cie()
     if what == "kusak":
         from PIL import Image
         Image.MAX_IMAGE_PIXELS = None
