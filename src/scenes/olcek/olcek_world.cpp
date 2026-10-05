@@ -35,6 +35,7 @@ constexpr double kLoop = 0.32 * kPlanckLength;
 constexpr int kModes = 4;
 constexpr double kModeAmp[kModes] = {0.16, 0.10, 0.07, 0.05};
 constexpr double kFoamAmp = 0.4;
+constexpr double kFoamCell = 0.5;   // a Planck-sized cell's own shift, in Planck lengths
 
 // the density map's fill: log10 of the density (particles per a0^3) at its dark and light ends, by scale (decreasing s).
 // Set from what the screen holds (OLCEK_DEBUG): between the atoms -2.3, the atom's edge -0.9 at -10, its L shell 1.0
@@ -1224,6 +1225,18 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
                 ++F.octaves;
             }
         }
+        // the foam's cells: Planck-sized, living a Planck time (on the screen: t_P / R), averaged away when faster
+        {
+            const double life = kPlanckLength / kC / R;
+            const double kept = std::exp(-2.0 * kPi * kPi * shutter * shutter / (life * life));
+            const double amp = kFoamCell * kPlanckLength / W * kept;
+            if (amp > 1e-4 && W / kPlanckLength < 400.0) {
+                F.cellFreq = float(W / kPlanckLength);
+                F.cellAmp = float(amp);
+                const int jP = int(std::floor(-std::log2(kPlanckLength)));
+                F.cellPhase = float(clk.foam[std::clamp(jP - 40, 0, 127)]);
+            }
+        }
         // the string: once it is more than a twentieth of the point's smearing
         const double loopR = kLoop / W;
         if (loopR > 0.05 * F.sigma) {
@@ -1235,6 +1248,8 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
                 blur2 += sqr(kModeAmp[n] * loopR) * (1.0 - kept * kept) * 0.5;
             }
             F.loopBlur = float(std::sqrt(blur2));
+            F.line = float(smoothstep(0.5, 3.0, loopR / F.sigma));   // drawn once it is wider than the smear
+            F.lineW = 0.0006f;
             for (int k = 0; k < kLoopPoints; ++k) {
                 const double ph = 2.0 * kPi * k / kLoopPoints;
                 double m = 1.0;

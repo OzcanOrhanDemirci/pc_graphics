@@ -895,8 +895,51 @@ __device__ float fieldCoupling(float log10r, float theta, float lobes) {
     const float c1 = __expf(k * __cosf(theta + 0.523599f));
     return (a1 * c1 + a2 * c2 + a3 * c3) / (c1 + c2 + c3);
 }
-__device__ float fieldLog(const GField& F, float x, float y) {
-    float dx = 0.0f, dy = 0.0f;
+// the foam's cells: Voronoi cells, their walls bent by a warp (bubbles, not plates), whose points and shifts wander
+// with their clock; the shift of the nearest, blended to the pair's mean across a thin wall (the distances jump there:
+// the rings crack). wall: how near the wall (0..1). Returns the shift in screen widths.
+__device__ float2 foamCells(const GField& F, float x, float y, float& wall) {
+    float cx = x * F.cellFreq, cy = y * F.cellFreq;
+    cx += 0.7f * (gnoise3(cx * 0.8f, cy * 0.8f, F.cellPhase, 1305, 256) - 0.5f);
+    cy += 0.7f * (gnoise3(cx * 0.8f + 5.3f, cy * 0.8f, F.cellPhase, 1306, 256) - 0.5f);
+    const int ix = int(floorf(cx)), iy = int(floorf(cy));
+    float d1 = 1e9f, d2 = 1e9f;
+    int b1x = 0, b1y = 0, b2x = 0, b2y = 0;
+    for (int j = -1; j <= 1; ++j)
+        for (int i = -1; i <= 1; ++i) {
+            const int gx = ix + i, gy = iy + j;
+            const float px = gx + 0.5f + 0.8f * (gnoise3(gx * 1.37f, gy * 2.11f, F.cellPhase, 1301, 256) - 0.5f);
+            const float py = gy + 0.5f + 0.8f * (gnoise3(gx * 1.37f, gy * 2.11f, F.cellPhase, 1302, 256) - 0.5f);
+            const float d = sqrtf(sqr(cx - px) + sqr(cy - py));
+            if (d < d1) { d2 = d1; b2x = b1x; b2y = b1y; d1 = d; b1x = gx; b1y = gy; }
+            else if (d < d2) { d2 = d; b2x = gx; b2y = gy; }
+        }
+    auto shift = [&](int gx, int gy) {
+        return make_float2(gnoise3(gx * 0.91f, gy * 1.73f, F.cellPhase, 1303, 256) - 0.5f,
+                           gnoise3(gx * 0.91f, gy * 1.73f, F.cellPhase, 1304, 256) - 0.5f);
+    };
+    const float2 s1 = shift(b1x, b1y), s2 = shift(b2x, b2y);
+    const float e = d2 - d1;   // ~ twice the distance to the wall (cells)
+    const float px = 2.0f * F.cellFreq / cV.width;           // e across one pixel
+    const float k = smoothstepf(0.0f, fminf(8.0f * px, 0.06f), e);
+    wall = __expf(-sqr(e / (1.5f * px)));
+    return make_float2((s1.x * (1.0f + k) + s2.x * (1.0f - k)) * F.cellAmp, (s1.y * (1.0f + k) + s2.y * (1.0f - k)) * F.cellAmp);
+}
+__device__ float loopDist2(const GField& F, float x, float y) {   // the squared distance to the string's loop
+    float m = 1e30f;
+    float2 a = F.pts[kLoopPoints - 1];
+    for (int k = 0; k < kLoopPoints; ++k) {
+        const float2 b = F.pts[k];
+        const float ex = b.x - a.x, ey = b.y - a.y, px = x - a.x, py = y - a.y;
+        const float t = saturate((px * ex + py * ey) / fmaxf(ex * ex + ey * ey, 1e-20f));
+        m = fminf(m, sqr(px - ex * t) + sqr(py - ey * t));
+        a = b;
+    }
+    return m;
+}
+// cell: the foam cells' shift (found once a pixel: its neighbours, for the slope, take the same)
+__device__ float fieldLog(const GField& F, float x, float y, float2 cell, float* toLoop = nullptr) {
+    float dx = cell.x, dy = cell.y;
     for (int i = 0; i < F.octaves; ++i) {   // the foam: every distance uncertain by ~ the Planck length
         const float f = F.freq[i];
         dx += F.amp[i] * (gnoise3(x * f, y * f, F.phase[i], 800 + (F.index[i] & 255), 256) - 0.5f);
@@ -904,19 +947,8 @@ __device__ float fieldLog(const GField& F, float x, float y) {
     }
     x += dx;
     y += dy;
-    float d2 = x * x + y * y;
-    if (F.loop) {   // the distance to the string's loop
-        float m = 1e30f;
-        float2 a = F.pts[kLoopPoints - 1];
-        for (int k = 0; k < kLoopPoints; ++k) {
-            const float2 b = F.pts[k];
-            const float ex = b.x - a.x, ey = b.y - a.y, px = x - a.x, py = y - a.y;
-            const float t = saturate((px * ex + py * ey) / fmaxf(ex * ex + ey * ey, 1e-20f));
-            m = fminf(m, sqr(px - ex * t) + sqr(py - ey * t));
-            a = b;
-        }
-        d2 = m;
-    }
+    const float d2 = F.loop ? loopDist2(F, x, y) : x * x + y * y;
+    if (toLoop) *toLoop = sqrtf(d2);
     const float s2 = F.sigma * F.sigma + F.loopBlur * F.loopBlur;
     const float lobes = smoothstepf(0.0f, 3.0f * F.sigma, sqrtf(x * x + y * y));
     const float A = fieldCoupling(0.5f * log10f(fmaxf(d2, s2)) + F.logW, atan2f(y, x), lobes);
@@ -925,9 +957,28 @@ __device__ float fieldLog(const GField& F, float x, float y) {
 __device__ float3 fieldSlice(const GField& F, float px, float py) {
     const float3 d0 = rayDir(px, py), dx = rayDir(px + 1.0f, py), dy = rayDir(px, py + 1.0f);
     const float sc = 1.0f / (2.0f * cV.tanHalfX);   // camera units on the focus plane -> screen widths
-    const float x0 = fieldLog(F, d0.x / d0.z * sc, d0.y / d0.z * sc);
-    const float gx = fieldLog(F, dx.x / dx.z * sc, dx.y / dx.z * sc) - x0, gy = fieldLog(F, dy.x / dy.z * sc, dy.y / dy.z * sc) - x0;
-    const float v = F.weight * mapShade(x0, gx, gy, F.lo, F.hi, F.relief);
+    float wall = 0.0f, toLoop = 0.0f;
+    const float ux = d0.x / d0.z * sc, uy = d0.y / d0.z * sc;
+    const float2 cell = F.cellAmp > 0.0f ? foamCells(F, ux, uy, wall) : make_float2(0.0f, 0.0f);
+    const float x0 = fieldLog(F, ux, uy, cell, &toLoop);
+    const float gx = fieldLog(F, dx.x / dx.z * sc, dx.y / dx.z * sc, cell) - x0;
+    const float gy = fieldLog(F, dy.x / dy.z * sc, dy.y / dy.z * sc, cell) - x0;
+    float v = mapShade(x0, gx, gy, F.lo, F.hi, F.relief);
+    // the foam's walls, as bright as the cells' shift is strong
+    v += 0.15f * wall * saturate(F.cellAmp * 8.0f);
+    // the string: where the shutter finds it. Its swing's average across the loop is the arcsine law of a sine's
+    // positions (bright at the turning points), widened by its own width as a Lorentzian: (1/pi) Re 1/sqrt(A^2 - z^2)
+    // at z = delta + i gamma. Normalised so that a still string is 1 at its middle.
+    if (F.line > 0.0f) {
+        const float A = 1.41421f * F.loopBlur, g = F.lineW;
+        const float zr = toLoop, zi = g;
+        const float wr = A * A - (zr * zr - zi * zi), wi = -2.0f * zr * zi;   // A^2 - z^2
+        const float mod = sqrtf(wr * wr + wi * wi);
+        const float sr = sqrtf(fmaxf(0.5f * (mod + wr), 0.0f)), si = copysignf(sqrtf(fmaxf(0.5f * (mod - wr), 0.0f)), wi);
+        const float p = sr / fmaxf(sr * sr + si * si, 1e-20f);                // Re 1 / sqrt(w)
+        v += F.line * 1.6f * g * p;
+    }
+    v *= F.weight;
     return make_float3(v, v, v);
 }
 

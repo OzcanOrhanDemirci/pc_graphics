@@ -58,9 +58,20 @@ Akış önce, ayrıntı sonra (Özcan): 10⁻³'ten 10⁻³⁵'e her onlukta ger
 - `olcek-hassasiyet`: en kötü 9,5e-5 piksel, GEÇTİ. `olcek-zaman`: GEÇTİ.
 - Sıçrama raporu artık onluk başına sayı ve en büyük değeri basıyor (eskiden yalnız en büyük 40 sıçrama).
 
+- **Dibin cilası (aynı gece):**
+  - *Sicim artık kendisi çiziliyor.* Deklanşörün ortaladığı salınım, bir sinüsün konumlarının arksinüs dağılımı:
+    dönüş noktalarında parlak, ortası sönük. Kendi genişliğiyle Lorentz eğrisi olarak genişletildi; kapalı biçimi
+    (1/π) Re 1/√(A² - (δ + iγ)²). Durgun sicim ince bir çizgi, hızlısı kenarları parlak bir bant (uzun pozlamada
+    titreşen tel gibi).
+  - *Köpüğün hücreleri.* Planck boyunda Voronoi hücreleri, duvarları bir bükülmeyle eğri (köpük, tabak değil);
+    duvarlar üçlü noktalarda buluşuyor. Her hücre uzaklıkları kendi kaymasıyla kaydırır, halkalar duvarda kırılır.
+    Hücreler bir Planck zamanı yaşar, deklanşörden hızlıyken ortalamada söner: yalnız son ~0,3 onlukta görünür.
+  - İlk denemede duvarlar düz ve merkezden kesilmiş pasta dilimleri gibiydi (`captures/olcek/o5_d`); bükülme ve
+    piksel başına bir kez hücre araması (komşular aynı kaymayı alır) ile hem doğal hem 8 ms'den 5 ms'ye.
+
 ### NE DOĞRULANMADI
 - Canlıda (tekerlekle) hiçbir şeye bakılmadı; yalnız kareler ve tarama.
-- Dip yumuşak: sicim bulanık bir bant gibi, köpükte hücre yok. Cila listesinde.
+- Köpüğün hücreleri ekranda ancak 2-4 tane (dipte ekran 1 Planck uzunluğu); hareketleri canlıda görülmedi.
 - Bağlaşımlar M_Z'nin altında da tek döngü SM b'leriyle (2 GeV'de α3 ≈ 0,24, gerçeği ~0,30); temsil için yeterli,
   ölçülmedi.
 - Yoğunluk haritasının tonları ve atomun içindeki pozlama geçişi gözle ayarlandı; bir ölçüte bağlanmadı.

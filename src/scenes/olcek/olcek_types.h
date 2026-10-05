@@ -202,8 +202,14 @@ struct GField {
     float amp[kMaxOctaves];         // displacement (screen widths), after the shutter's averaging
     float phase[kMaxOctaves];       // its clock (wraps at 256)
     int loop = 0;                   // the string drawn as a loop (else a point: it is far below the pixel)
-    float loopBlur = 0.0f;          // the width its averaged swing adds (screen widths)
-    float2 pts[kLoopPoints];        // the loop (screen widths from the focus)
+    float loopBlur = 0.0f;          // the width its averaged swing adds (screen widths; its rms)
+    float2 pts[kLoopPoints];        // the loop as the shutter keeps it sharp (screen widths from the focus)
+    float line = 0.0f;              // the string itself, drawn: its brightness (0 while it is a point in the quark's smear)
+    float lineW = 0.0006f;          // its own width (screen widths)
+    // the foam's cells at the Planck length: each its own shift of the distances, the walls where they meet
+    float cellFreq = 0.0f;          // cells per screen width
+    float cellAmp = 0.0f;           // a cell's shift (screen widths), after the shutter
+    float cellPhase = 0.0f;         // their clock (wraps at 256)
 };
 
 // the maps (Ö1): texture objects and where they lie. Local maps are squares centred on the beach point, in its east and
