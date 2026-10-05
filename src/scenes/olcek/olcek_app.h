@@ -66,6 +66,8 @@ struct OlcekApp {
     // background (H3); sum: the sky's light
     void renderEye(const olcek::hiz::Eye& e, olcek::hiz::EyeSum& sum);
     olcek::hiz::SkyCoarse skyCoarse;  // the panorama, coarse (the exposure's sums); empty without the asset
+    // the eye's lights besides the stars: the Galaxy, M31 and M33 as wholes (0-2, set each frame), the survey's galaxies
+    std::vector<olcek::hiz::Light> galLights;
     float4* dSky = nullptr;          // the panorama on the GPU (assets/olcek/samanyolu_gok.bin)
     int skyW = 0, skyH = 0;
     float4* dBB = nullptr;           // the blackbody table on the GPU
@@ -75,7 +77,8 @@ struct OlcekApp {
     // night sky's at the Sun (nightSky, the Sun left out), part of the way (hiz.uyum); the side view takes the first
     // option's curve near the Sun, deep space's beyond.
     double nightSky = 1e-12;         // W/m^2 (visible, the Sun's spectrum's watts): set by prepareHiz
-    double nightSkyBol = 1e-12;      // ... in every band (the energy eye's)
+    double nightSkyBol = 1e-12;      // ... in every band
+    double nightSkyEnergy = 1e-12;   // ... the energy eye's (every band, the background's glow at rest taken out)
     double eyeEv(double skyVisible) const;
     double eyeEvEnergy(double skyBolometric) const;   // the energy eye: the same eye on every band's light
     // how far into daylight the eye is in that light (0 dark-adapted .. 1 day): its summation over area fades with it

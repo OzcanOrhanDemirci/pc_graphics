@@ -39,6 +39,14 @@ struct StarSet {
     const std::vector<float4>* flux = nullptr;   // .w: visual luminosity (L_sun)
     const std::vector<float>* temp = nullptr;    // K
 };
+// a light besides the catalogue's stars (the galaxies: the survey's points; the Galaxy, M31 and M33 as wholes)
+struct Light {
+    V3 pos;                  // from the Sun (m)
+    double LV = 0.0;         // visual luminosity (L_sun)
+    double T = 5772.0;       // its colour temperature (K)
+    float weight = 1.0f;     // the share drawn as a point (all of it counts in the sums: the models draw the rest)
+    float sigma = 0.75f;     // the point's radius (pixels)
+};
 
 // one frame of the rocket's eye
 struct Eye {
@@ -67,6 +75,10 @@ struct EyeSum {
     double bolometric = 0.0, bolometricView = 0.0;   // the same in every band (W/m^2): the energy eye's measure
     double fwdVisible = 0.0, fwdBolometric = 0.0;     // the diffuse sky's light within 5 degrees of the motion (the glare
     double fwdT = 0.0;                                // round the bright cap ahead), and its light-weighted temperature
+    // the energy eye's own measure: every band, with the cosmic background's glow at rest taken out (a detector zeroed
+    // at the start, as an astronomer takes out the sky: what is left of it is what the motion adds ahead; behind, less
+    // than nothing, is black). At rest the background is 60% of the night sky's energy and a red veil over everything
+    double energy = 0.0, energyView = 0.0, fwdEnergy = 0.0;
 };
 // the diffuse sky's light (the Milky Way's panorama, the cosmic microwave background) at the rocket, added to the sums as
 // the stars' are: integrated over the rest frame's sphere on the panorama's coarse grid (each cell's light D^2 times, its
@@ -78,6 +90,7 @@ struct SkyCoarse {
 };
 void skySums(const SkyCoarse& sky, const Blackbody& bb, const Eye& e, double panoWeight, V3 galX, V3 galY, V3 galN, EyeSum& sum);
 // the stars as splats (camera space with z = 1: x and y are the tangents, so a 1e-11 rad field keeps its digits)
-void buildEye(const StarSet& st, const Blackbody& bb, const Eye& e, std::vector<GSplat>& out, EyeSum& sum);
+void buildEye(const StarSet& st, const Blackbody& bb, const Eye& e, std::vector<GSplat>& out, EyeSum& sum,
+              const std::vector<Light>* extra = nullptr);
 
 }   // namespace olcek::hiz

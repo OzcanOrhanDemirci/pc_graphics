@@ -152,7 +152,7 @@ double Blackbody::chromaticity(double T, double& y) const {
 // ---------------------------------------------------------------------------------------------------------------------
 // The eye
 
-void buildEye(const StarSet& st, const Blackbody& bb, const Eye& e, std::vector<GSplat>& out, EyeSum& sum) {
+void buildEye(const StarSet& st, const Blackbody& bb, const Eye& e, std::vector<GSplat>& out, EyeSum& sum, const std::vector<Light>* extra) {
     out.clear();
     sum = EyeSum{};
     const Kin k = kin(e.phi);
@@ -168,8 +168,9 @@ void buildEye(const StarSet& st, const Blackbody& bb, const Eye& e, std::vector<
     const double sh = std::sin(0.525 * std::min(diag, kPi / 1.05));
     const double viewShare = std::max(sh * sh, 1e-300);   // 0.5 (1 - cos(1.05 diag)) without the cancellation
     const size_t n = st.pos ? st.pos->size() : 0;
-    // one more "star": the Sun, at the origin (the catalogue has no Sun)
-    const size_t total = n + 1;
+    // one more "star": the Sun, at the origin (the catalogue has no Sun); then the other lights
+    const size_t m = extra ? extra->size() : 0;
+    const size_t total = n + 1 + m;
     constexpr int kChunks = 64;
     std::vector<std::vector<GSplat>> part(kChunks);
     std::vector<EyeSum> sums(kChunks);
@@ -183,10 +184,19 @@ void buildEye(const StarSet& st, const Blackbody& bb, const Eye& e, std::vector<
         for (size_t i = a; i < b; ++i) {
             V3 p;
             double LV, T;
+            float weight = 1.0f, sigma = 0.75f;
             if (i == n) {
                 p = V3{};
                 LV = 1.0;
                 T = kTsun;
+            } else if (i > n) {
+                const Light& l = (*extra)[i - n - 1];
+                p = l.pos;
+                LV = l.LV;
+                T = l.T;
+                weight = l.weight;
+                sigma = l.sigma;
+                if (!(LV > 0.0)) continue;
             } else {
                 p = (*st.pos)[i];
                 LV = (*st.flux)[i].w;
@@ -207,6 +217,7 @@ void buildEye(const StarSet& st, const Blackbody& bb, const Eye& e, std::vector<
             const double bol = LV * kLsun / (4.0 * kPi * d2) * D * D * std::pow(10.0, -ls);   // in every band
             S.visible += vis;
             S.bolometric += bol;
+            S.energy += bol;
             if (i == n) S.visibleSun = vis;
             S.maxD = std::max(S.maxD, D);
             S.minD = std::min(S.minD, D);
@@ -219,16 +230,17 @@ void buildEye(const StarSet& st, const Blackbody& bb, const Eye& e, std::vector<
                     const double w = u * u * (3.0 - 2.0 * u);
                     S.visibleView += vis * w;
                     S.bolometricView += bol * w;
+                    S.energyView += bol * w;
                 }
             }
             if (z <= 0.0) continue;
             const double x = dot(np, e.right) / z, y = dot(np, e.up) / z;
             if (std::fabs(x) > mx || std::fabs(y) > my) continue;
-            const double f = (e.energy ? bol : vis) * toDisplay;
+            const double f = (e.energy ? bol : vis) * toDisplay * weight;
             if (!(f > 1e-6)) continue;
             ++S.inView;
             const float3 c = e.energy ? energyColour(float(std::log10(Tp)), bb.colour(Tp)) : bb.colour(Tp);
-            P.push_back({make_float3(float(x), float(y), 1.0f), c * float(f), 0.75f});
+            P.push_back({make_float3(float(x), float(y), 1.0f), c * float(f), sigma});
         }
     });
     sum.minD = 1e300;
@@ -239,6 +251,8 @@ void buildEye(const StarSet& st, const Blackbody& bb, const Eye& e, std::vector<
         sum.visibleView += sums[size_t(w)].visibleView;
         sum.bolometric += sums[size_t(w)].bolometric;
         sum.bolometricView += sums[size_t(w)].bolometricView;
+        sum.energy += sums[size_t(w)].energy;
+        sum.energyView += sums[size_t(w)].energyView;
         sum.visibleSun += sums[size_t(w)].visibleSun;
         sum.inView += sums[size_t(w)].inView;
         sum.maxD = std::max(sum.maxD, sums[size_t(w)].maxD);
@@ -260,6 +274,8 @@ void skySums(const SkyCoarse& sky, const Blackbody& bb, const Eye& e, double pan
     const bool pano = sky.w > 0 && panoWeight > 0.0;
     std::vector<double> vis(size_t(H), 0.0), visV(size_t(H), 0.0), bol(size_t(H), 0.0), bolV(size_t(H), 0.0);
     std::vector<double> fV(size_t(H), 0.0), fB(size_t(H), 0.0), fT(size_t(H), 0.0);
+    std::vector<double> en(size_t(H), 0.0), enV(size_t(H), 0.0), fE(size_t(H), 0.0);
+    const double cmbRest = kStefan / kPi * T0 * T0 * T0 * T0;   // its radiance at rest (W/m^2/sr), the energy eye's zero
     const double cos5 = std::cos(5.0 * kPi / 180.0);
     std::vector<int> rows(static_cast<size_t>(H));
     std::iota(rows.begin(), rows.end(), 0);
@@ -275,6 +291,10 @@ void skySums(const SkyCoarse& sky, const Blackbody& bb, const Eye& e, double pan
             const double Tc = T0 * (1.0 + dip * dot(n, dipDir)) * D;
             const double cmbBol = kStefan / kPi * std::pow(T0 * (1.0 + dip * dot(n, dipDir)), 4.0) * D * D * dOmega;
             double v = cmbBol * std::pow(10.0, bb.logShare(Tc)), bo = cmbBol;
+            // the energy eye: the cell's radiance in the rocket's sky over the rest glow (none where it is less), over
+            // its solid angle there (dOmega / D^2)
+            const double q4 = std::pow(1.0 + dip * dot(n, dipDir), 4.0) * D * D * D * D;
+            double ex = q4 > 1.0 ? cmbRest * (q4 - 1.0) * dOmega / (D * D) : 0.0;
             if (pano) {
                 const float4 p = sky.px[size_t(r) * sky.w + size_t(c)];
                 const double lum = (0.2126 * p.x + 0.7152 * p.y + 0.0722 * p.z) * panoWeight;
@@ -283,13 +303,16 @@ void skySums(const SkyCoarse& sky, const Blackbody& bb, const Eye& e, double pan
                     const double l0 = bb.logShare(T);
                     v += lum * D * D * std::pow(10.0, bb.logShare(T * D) - l0) * dOmega;
                     bo += lum * std::pow(10.0, -l0) * D * D * dOmega;
+                    ex += lum * std::pow(10.0, -l0) * D * D * dOmega;
                 }
             }
             vis[size_t(r)] += v;
             bol[size_t(r)] += bo;
+            en[size_t(r)] += ex;
             if (dot(np, e.motion) > cos5) {
                 fV[size_t(r)] += v;
                 fB[size_t(r)] += bo;
+                fE[size_t(r)] += ex;
                 fT[size_t(r)] += v * Tc;
             }
             const double z = dot(np, e.fwd);
@@ -301,6 +324,7 @@ void skySums(const SkyCoarse& sky, const Blackbody& bb, const Eye& e, double pan
                     const double w = u * u * (3.0 - 2.0 * u);
                     visV[size_t(r)] += v * w;
                     bolV[size_t(r)] += bo * w;
+                    enV[size_t(r)] += ex * w;
                 }
             }
         }
@@ -312,6 +336,9 @@ void skySums(const SkyCoarse& sky, const Blackbody& bb, const Eye& e, double pan
         sum.bolometricView += bolV[size_t(r)];
         sum.fwdVisible += fV[size_t(r)];
         sum.fwdBolometric += fB[size_t(r)];
+        sum.energy += en[size_t(r)];
+        sum.energyView += enV[size_t(r)];
+        sum.fwdEnergy += fE[size_t(r)];
         sum.fwdT += fT[size_t(r)];
     }
     sum.fwdT = sum.fwdVisible > 0.0 ? sum.fwdT / sum.fwdVisible : T0;

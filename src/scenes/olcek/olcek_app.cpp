@@ -396,8 +396,10 @@ void OlcekApp::prepareHiz() {
         hz::skySums(skyCoarse, bb, e, 1.0, sc.galCentreDir(), galY, sc.galNorth(), sum);   // the Milky Way's diffuse light, the CMB
         nightSky = std::max(sum.visible - sum.visibleSun, 1e-12);
         nightSkyBol = std::max(sum.bolometric, 1e-12);
-        char b[200];
-        std::snprintf(b, sizeof(b), "  gece goku (Gunes'te, Gunes haric): gorunur %.3e W/m^2, butun bantlar %.3e W/m^2\n", nightSky, nightSkyBol);
+        nightSkyEnergy = std::max(sum.energy, 1e-12);
+        char b[240];
+        std::snprintf(b, sizeof(b), "  gece goku (Gunes'te, Gunes haric): gorunur %.3e W/m^2, butun bantlar %.3e W/m^2 (fon isimasi cikinca %.3e)\n",
+                      nightSky, nightSkyBol, nightSkyEnergy);
         hizLog += b;
     }
     char b[256];
@@ -427,18 +429,17 @@ double OlcekApp::eyeEv(double skyVisible) const {
 }
 
 double OlcekApp::eyeEvEnergy(double skyBol) const {
-    // the same eye on every band's light, adapting to all of it: at rest the night sky as bright as the visible eye's
-    // (base shifted by their ratio: the cosmic background's microwaves are some 60% of it, so the Milky Way is dimmer
-    // here), adapting the same way
-    const double base = cfg.f("hiz.ev", 17.5f) + std::log2(nightSky / nightSkyBol), adapt = cfg.f("hiz.uyum", 0.5f);
+    // the same eye on every band's light (the background's glow at rest taken out: EyeSum::energy), adapting to all of
+    // it: at rest the night sky as bright as the visible eye's (base shifted by their ratio), adapting the same way
+    const double base = cfg.f("hiz.ev", 17.5f) + std::log2(nightSky / nightSkyEnergy), adapt = cfg.f("hiz.uyum", 0.5f);
     if (!std::isfinite(skyBol)) return base;
-    return base - adaptEv(std::log2(std::max(skyBol, 1e-30) / nightSkyBol), adapt, cfg.f("hiz.gun", 16.0f));
+    return base - adaptEv(std::log2(std::max(skyBol, 1e-30) / nightSkyEnergy), adapt, cfg.f("hiz.gun", 16.0f));
 }
 
 double OlcekApp::eyeDay(double sky, bool energy) const {
     double day = 0.0;
     if (!std::isfinite(sky)) return day;
-    adaptEv(std::log2(std::max(sky, 1e-30) / (energy ? nightSkyBol : nightSky)), cfg.f("hiz.uyum", 0.5f), cfg.f("hiz.gun", 16.0f), &day);
+    adaptEv(std::log2(std::max(sky, 1e-30) / (energy ? nightSkyEnergy : nightSky)), cfg.f("hiz.uyum", 0.5f), cfg.f("hiz.gun", 16.0f), &day);
     return day;
 }
 
@@ -496,14 +497,69 @@ olcek::hiz::Eye OlcekApp::eyeAt(const olcek::hiz::Ship& s, double yaw, double pi
 
 void OlcekApp::renderEye(const olcek::hiz::Eye& e, olcek::hiz::EyeSum& sum) {
     const double h0 = nowS();
-    olcek::hiz::StarSet st;
+    namespace hz = olcek::hiz;
+    hz::StarSet st;
     st.pos = &sc.stars();
     st.flux = &sc.starLight();
     st.temp = &sc.starTemp();
-    olcek::hiz::buildEye(st, bb, e, splats, sum);
     const double panoW = skyPanoWeight(e);
+    // the galaxies (H4): the Galaxy (where the panorama no longer is), M31 and M33 as the scene's models where they are
+    // wider than a few pixels on the screen, their light as points below that; in the exposure's sums always (as points)
+    GGalaxy gal[3];
+    double modelW[3] = {0.0, 0.0, 0.0};
+    {
+        const size_t want = 3 + sc.galaxyPoints().size();
+        if (galLights.size() != want) {   // the survey's galaxies (from the Laniakea centre to from the Sun), once
+            galLights.assign(3, hz::Light{});
+            const V3 lan = sc.laniakeaFromSun();
+            const std::vector<V3>& gp = sc.galaxyPoints();
+            const std::vector<float4>& gf = sc.galaxyFlux();
+            for (size_t i = 0; i < gp.size(); ++i) {
+                hz::Light l;
+                l.pos = gp[i] + lan;
+                l.LV = gf[i].w;
+                l.T = 5500.0;
+                galLights.push_back(l);
+            }
+        }
+        const double kpcM = 1e3 * hz::kPc, pixAngle = 2.0 * e.tanHalfX / sc.width;
+        sc.galaxyModels(gal, [&](int node) { return sc.nodeFromSun(node) - e.pos; }, e.right, e.up, e.fwd, kpcM, 1.0, 1.0);
+        const int nodes[3] = {olcek::kGalCentre, olcek::kM31, olcek::kM33};
+        // visual luminosities (L_sun): the Galaxy the model's own (disc 3.5e10, bulge and bar 1.2e10, young stars
+        // 0.4e10), M31 M_V -21.5 and M33 M_V -18.8; colour temperatures of their light; visible radii (15 kpc times the
+        // model's size)
+        const double LV[3] = {5.1e10, 3.4e10, 2.8e9}, TG[3] = {4800.0, 4500.0, 5800.0}, R[3] = {15.0, 30.0, 8.25};
+        const hz::Kin kn = hz::kin(e.phi);
+        const double emp = std::exp(-e.phi);
+        for (int i = 0; i < 3; ++i) {
+            const V3 at = sc.nodeFromSun(nodes[i]), rel = at - e.pos;
+            const double d = std::max(length(rel), 1.0);
+            const double present = i == 0 ? 1.0 - panoW : 1.0;   // the Galaxy near the Sun: the panorama and the stars
+            double D = 1.0;
+            if (e.phi > 0.0) hz::aberrateDirFast(rel * (1.0 / d), e.motion, kn, emp, D);
+            // its radius on the screen: the rest frame's angle, 1/D of it in the rocket's (aberration near a direction)
+            const double rpx = std::atan(R[i] * kpcM / d) / std::max(D, 1e-300) / pixAngle;
+            const double u = std::clamp((rpx - 1.5) / 2.5, 0.0, 1.0);
+            const double w = d < 2.0 * R[i] * kpcM ? 1.0 : u * u * (3.0 - 2.0 * u);
+            modelW[i] = present * w;
+            hz::Light& l = galLights[size_t(i)];
+            l.pos = at;
+            l.LV = LV[i] * present;
+            l.T = TG[i];
+            l.weight = float(1.0 - w);
+            const double rs = std::min(rpx, 6.0);
+            l.sigma = float(std::sqrt(0.5625 + 0.25 * rs * rs));
+            gal[i].T = float(TG[i]);
+            gal[i].blobScale = 0.35f;   // HII regions some 16 pc, clusters 7 pc and less (sigma)
+        }
+    }
+    hz::buildEye(st, bb, e, splats, sum, &galLights);
     const V3 galY = cross(sc.galNorth(), sc.galCentreDir());
-    olcek::hiz::skySums(skyCoarse, bb, e, panoW, sc.galCentreDir(), galY, sc.galNorth(), sum);
+    hz::skySums(skyCoarse, bb, e, panoW, sc.galCentreDir(), galY, sc.galNorth(), sum);
+    // the diffuse light seen with the dark-adapted eye's summation over area (Ricco): a designed gain on it (the display's
+    // pixel cannot sum; the points keep theirs), gone in daylight (the eye sums no more there)
+    const double skyNow = (e.energy ? sum.energyView : sum.visibleView) / std::max(sum.viewShare, 1e-12);
+    const double kd = e.k * std::pow(double(cfg.f("hiz.yaygin", 16.0f)), 1.0 - eyeDay(skyNow, e.energy));
     view.width = sc.width;
     view.height = sc.height;
     view.tanHalfX = float(e.tanHalfX);
@@ -518,7 +574,18 @@ void OlcekApp::renderEye(const olcek::hiz::Eye& e, olcek::hiz::EyeSum& sum) {
     view.atmo = GAtmo{};
     view.web = GWeb{};
     view.dens = GDensity{};
-    for (GGalaxy& g : view.galaxy) g = GGalaxy{};
+    for (int i = 0; i < kMaxGalaxies; ++i) {
+        GGalaxy& g = view.galaxy[i];
+        g = GGalaxy{};
+        if (i < 3 && gal[i].on && modelW[i] > 0.0) {   // the models' light: the diffuse exposure, each its weight
+            g = gal[i];
+            const float f = float(kd * modelW[i]);
+            g.disc = g.disc * f;
+            g.bulge = g.bulge * f;
+            g.young = g.young * f;
+            g.nebula = g.nebula * f;
+        }
+    }
     {   // the diffuse sky by the pixel (the kernel's eyeSky)
         GSky& g = view.sky;
         g = GSky{};
@@ -550,10 +617,6 @@ void OlcekApp::renderEye(const olcek::hiz::Eye& e, olcek::hiz::EyeSum& sum) {
         g.bbStep = float((olcek::hiz::Blackbody::kLogT1 - olcek::hiz::Blackbody::kLogT0) / (olcek::hiz::Blackbody::kN - 1));
         const double dl = 264.021 * 3.14159265358979323846 / 180.0, db = 48.253 * 3.14159265358979323846 / 180.0;
         g.cmbDir = make_float3(float(std::cos(db) * std::cos(dl)), float(std::cos(db) * std::sin(dl)), float(std::sin(db)));
-        // the diffuse light seen with the dark-adapted eye's summation over area (Ricco): a designed gain on it (the
-        // display's pixel cannot sum; the points keep theirs), gone in daylight (the eye sums no more there)
-        const double sky = (e.energy ? sum.bolometricView : sum.visibleView) / std::max(sum.viewShare, 1e-12);
-        const double kd = e.k * std::pow(double(cfg.f("hiz.yaygin", 16.0f)), 1.0 - eyeDay(sky, e.energy));
         g.k = float(kd);
         g.lk = float(std::log10(std::max(kd, 1e-300)));
         // the glare: round the bright cap ahead (the diffuse sky within 5 degrees of the motion) and the brightest points
@@ -564,7 +627,7 @@ void OlcekApp::renderEye(const olcek::hiz::Eye& e, olcek::hiz::EyeSum& sum) {
                 g.glareE[g.nGlare] = col * float(E * e.k);
                 ++g.nGlare;
             };
-            const double Ef = e.energy ? sum.fwdBolometric : sum.fwdVisible;
+            const double Ef = e.energy ? sum.fwdEnergy : sum.fwdVisible;
             const float3 cf = e.energy ? energyColour(float(std::log10(std::max(sum.fwdT, 1.0))), bb.colour(sum.fwdT)) : bb.colour(sum.fwdT);
             add(e.motion, Ef * cfg.f("hiz.parlama", 1.0f), cf);
             // the brightest points (a display value above the glare's threshold): their light back from the splats

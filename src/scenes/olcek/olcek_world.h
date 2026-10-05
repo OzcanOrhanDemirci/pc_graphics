@@ -20,6 +20,7 @@
 
 #include <cmath>
 #include <string>
+#include <functional>
 #include <vector>
 
 namespace olcek {
@@ -143,6 +144,17 @@ public:
     V3 galCentreDir() const { return galX_; }   // from the Sun towards the Galaxy's centre (unit)
     int nearestStar(V3 p) const;  // the index of the catalogue star nearest to p (from the Sun), -1 none
     void moveStar(int i, V3 p);   // a better measured place (Proxima: Gaia DR3)
+    // the Galaxy, M31 and M33 as the kernel's models (galaxyLight): relOf(node) a centre from the eye (m), the eye's
+    // camera axes, `unit` metres per camera unit; their light W/m^2/sr times k and fade (the first option: its camera
+    // and fade-in; the second option's eye: its own)
+    void galaxyModels(GGalaxy out[3], const std::function<V3(int)>& relOf, V3 right, V3 up, V3 fwd, double unit, double k,
+                      double fade) const;
+    V3 nodeFromSun(int node) const { return tree.rel(kSun, node); }
+    // the survey's galaxies (2MRS beyond 2.5 Mpc; the placeholder web beyond 200 Mpc): from the Laniakea centre, their
+    // colour and visual luminosity (L_sun, .w)
+    const std::vector<V3>& galaxyPoints() const { return galPos_; }
+    const std::vector<float4>& galaxyFlux() const { return galFlux_; }
+    V3 laniakeaFromSun() const { return lanFromSun_; }
 
     void configure(const Config& cfg);
     void init();                  // the catalogue, the tree, today's orbits

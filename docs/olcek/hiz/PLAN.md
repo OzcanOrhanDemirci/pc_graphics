@@ -153,7 +153,8 @@ Tab ile yandan bakışa geçilir.
      galaksileri, her yerde kozmik fon ışıması (isteğe bağlı Planck haritasının anizotropileri).
 - **Enerji gözü (10-06):** görünmeyen ışığı da sayan dedektör: her yönden gelen enerji (bolometrik), bandına göre
   açıkça etiketli renklerle (radyo/mikrodalga, kızılötesi, görünür, morötesi, X, gama). Çok dokuzda gözle kararan evren
-  onunla önde yanan bir noktaya döner. Açık başlar; kapatınca saf göz.
+  onunla önde yanan bir noktaya döner. Açık başlar; kapatınca saf göz. **H4:** yolculuğun başında sıfırlanmış: fon
+  ışımasının duruştaki eşit parıltısı çıkarılır, hareketin kattığı görünür (yoksa her yer kırmızı bir perde).
 - **Sanat yönetimi (10-06):** fizik bükülmez. Araçlar: pozlama ve göz uyumu, gözün optiği (parlak noktanın çevresinde
   parlama ve kırınım halkaları), dürbün, kadraj, zamanlama. Aracın bir parçası (pencere kenarı, burun) **görünmez**
   (H3 kararı: öndeki tek ışığın çevresini kapatır, roket yandan görünüşte var).
@@ -275,6 +276,9 @@ alanıyla ya da arayüzün OpenGL'inde gölgelendiriciyle) H1'in ilk işi.
 - **H3 · FPS gökyüzü:** göreli ışın izleme, ESO panoraması ve yıldız silme, kozmik fon ışıması, pozlama, enerji gözü,
   gözün optiği. **Bitti (10-06 gecesi)**, ayrıntı DURUM'da.
 - **H4 · Galaksiler 3B:** Samanyolu'nun hacimsel modeli (içeriden ve dışarıdan, fotoğrafla örtüşen), M31, M33, 2MRS.
+  **Bitti (10-06 gecesi), bir sınırla:** Ölçek'in ince düzlem modelleri gözde (sapınç ve Doppler'le), küçükken nokta;
+  2MRS noktaları. Hacimsel Samanyolu yapılmadı (içinden görünüş "zemin" gibi; normal yolculukta 21 dokuzda geçilir).
+  Enerji gözü fonun duruştaki parıltısını çıkarır (DURUM H4).
 - **H5 · Duraklar:** Dünya'nın yörüngesi, Proxima (yıldız, b, Alfa Erboğa, Güneş'imiz Kraliçe'de), Andromeda'ya varış,
   yörüngeye oturma, dönüş.
 - **H6 · Bütünleme:** bedel panosunun ince ayarı, galeri ve "Ayrıntılar", README (iki dil), GOSTERI/DEMO, autotest,

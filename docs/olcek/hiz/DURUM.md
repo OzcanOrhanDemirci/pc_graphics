@@ -2,6 +2,67 @@
 
 > Tek kaynak durum panosu. Plan `docs/olcek/hiz/PLAN.md`. En yeni en üstte.
 
+## 2026-10-06 gecesi · H4: galaksiler roketin gözünde
+
+**Özcan'ın bakacağı yer.** Andromeda yolunun sonu. Frenin son ~6 dakikasında (φ 5'ten 0'a) Andromeda önce küçük, mavi-beyaz
+bir elips olarak belirir (önde sıkışmış, D⁴ ile parlamış). Hız düştükçe büyür, sapınçla bükülür, rengi kendi altınına
+döner. Varışta (merkezin 100.000 ışık yılı önü) gökyüzünün ~70°'sini kaplar, solunda Üçgen (M33).
+
+**Ne yapıldı:**
+- Ölçek'in galaksi modelleri (Samanyolu, M31, M33; ince düzlem: kollar, çubuk, toz, kümeler, HII bölgeleri) tek işleve
+  taşındı (`Scale::galaxyModels`). Birinci seçenek ve göz aynı kaynaktan.
+  - Birinci seçenek değişmedi: dört ölçekte kareler öncesiyle karşılaştırıldı. İkisi bit bit aynı, ikisinde 1 ve 8
+    pikselde 1/255. Aynı kare iki koşuda da 1/255 oynuyor.
+- **Gözde:** her piksel için durgun çerçevedeki yön (sapınç), model o yönde değerlendirilir. Pikselin izi D kat büyük.
+  Işığı galaksinin renk sıcaklığındaki kara cisim gibi kayar: Samanyolu 4.800 K, M31 4.500 K, M33 5.800 K.
+- **Küçükken nokta:** galaksinin ekrandaki yarıçapı (durgun açısı / D) 1,5-4 pikselin altına inince model söner, ışığı
+  nokta olur. Büyük galaksiler pozlama toplamına hep nokta olarak girer.
+  - Görünür parlaklıklar: Samanyolu modelin kendi 5,1 × 10¹⁰ L☉'si, M31 M_V −21,5 (3,4 × 10¹⁰), M33 M_V −18,8
+    (2,8 × 10⁹).
+- **2MRS'in 43 bin galaksisi** gözde nokta (2,5 Mpc'nin ötesi; Yerel Grup sahnenin kendi modelleri, iki kez sayılmaz).
+- **Samanyolu:** panorama 300 ışık yılından 3.000'e söner, model onun yerini alır. Modelin kümeleri ve HII bölgeleri
+  gözde 0,35 kat küçük (ışıkları korunarak). Uzaktan bakış için kuruldular; birkaç bin ışık yılından derecelerce
+  geniş pembe lekeler oluyorlardı. Birinci seçenekte 1 kalır.
+- **Enerji gözü değişti: fonun duruştaki parıltısı çıkarılıyor.** Göz yolculuğun başında sıfırlanmış bir dedektör:
+  her yöndeki fon ışıması σT0⁴/π sıfır sayılır (gökbilimcinin gök çıkarması). Kalan, hareketin önde kattığı. Arkada
+  sıfırın altı siyah.
+  - Neden: varışta fon, Andromeda'nın bütün ışığının 10 katı. Enerji gözünün (açık başlar) finali bordo bir perdenin
+    arkasında soluk bir galaksiydi. Duruşta da her yeri kırmızıya boyuyordu.
+  - Şimdi: duruşta enerji gözü gerçek göğe yakın (yıldızların kızılötesi ve morötesi eklenir; Proxima kırmızı bir
+    nokta). φ 1,5'teki kırmızı sis ve doğan güneşler aynı. Açıklamanın alt yazısı: *"fonun duruştaki parıltısı
+    çıkarılmış"*.
+
+**Ölçümler** (gerçek göz, duruşta, 75°):
+
+| Yer | gökyüzü (görünür, W/m²) | göz EV | görüntü |
+|---|---|---|---|
+| Güneş'in yanında | 7,0 × 10⁻⁶ | 16,95 | Samanyolu |
+| Güneş'ten 3.000 ışık yılı, arkaya | 2,2 × 10⁻⁵ | 18,47 | diskin altı: kollar, kümeler |
+| 30.000 ışık yılı, arkaya | 7,4 × 10⁻⁶ | 16,01 | Samanyolu'nun yarısı, çubuk |
+| 100.000 ışık yılı, arkaya | 1,3 × 10⁻⁶ | 17,26 | bütün sarmal, alttan |
+| yolun ortası (1,2 milyon ışık yılı) | 2,6 × 10⁻⁸ | 20,92 | önde M31 (~9°) ve M33; arkada Samanyolu |
+| varış | 1,17 × 10⁻⁶ | 17,35 | M31 ~70° |
+
+- Fren eğrisinde (`--set hiz.test.fren=1`): φ 5'te M31 0,6° (EV 18,05), φ 2'de büyük mavi-beyaz kubbe (16,18), φ 0,5'te
+  kendi renginde (16,42).
+- Kare 6-7 ms (2560×1440).
+
+**Sınamalar** (2 yeni, hepsi GEÇTİ):
+- Enerji gözünde fon: duruşta yalnız dipolün izi (1,5 × 10⁻⁸ W/m²). Hızda bütün göğün kazancı
+  4σT0⁴(γ²(1 + β²/3) − 1) kadar ya da biraz fazlası (arkadaki eksik sıfırda kesildiği için).
+- Varışta göğün ışığı M31'in L/4πd²'si (%1 içinde). Model varışta ve yolun ortasında açık, 21 dokuzda bir nokta.
+
+### NE DOĞRULANMADI (H4)
+- **Özcan'ın gözü** ve **hareketle izleme:** kareler başsız, sabit φ'lerde.
+- **Galaksinin içinden görünüş:** ince düzlem modeli 3.000-20.000 ışık yılında diskin altını bir "zemin" gibi
+  gösteriyor. PLAN'ın hacimsel Samanyolu'su yapılmadı. Normal yolculukta bu bölge 21 dokuzda geçilir (gözde yalnız
+  önde bir nokta); yalnız orada durulursa görünür.
+- **Panoramayla modelin örtüşmesi** (1.000 ışık yılında %16 model) ayarlanmadı: modelin ufuk çizgisi kuşağın altında
+  ince bir çizgi olarak görünüyor.
+- **Galaksilerin parlaklıkları** yayımlanmış mutlak kadirlerden. Renk sıcaklıkları seçildi. Doppler kayması her
+  galaksiye tek sıcaklıkla; bileşenlerin (yaşlı disk, genç kollar) ayrı kayması yok.
+- M31'in uyduları (M32, M110), Macellan Bulutları dışarıdan görünüşte yok.
+
 ## 2026-10-06 gecesi · H3: roketin gözünde gökyüzü
 
 **Özcan'ın bakacağı yer.** Hız → roketin gözü (açılış görüntüsü). **Enerji gözü açık başlar** (panelde Açık | Kapalı,
@@ -50,8 +111,8 @@ olur. Ama gerçek görüntüyü isteyen kapatır"*):
   - mavi: morötesi;
   - mor: X ışını;
   - beyaz-mor: gama.
-- Göz bütün bu ışığa uyar. Duruşta gece göğünün ışığının **%60'ı fon ışıması**: enerji gözünde her yer hafif
-  kırmızı, Samanyolu gerçek gözdekinden 1,6 EV sönük (dürüst: evren mikrodalgada yıldızlardan parlak).
+- ~~Göz bütün bu ışığa uyar. Duruşta gece göğünün ışığının %60'ı fon ışıması: enerji gözünde her yer hafif kırmızı,
+  Samanyolu gerçek gözdekinden 1,6 EV sönük.~~ *(H4'te değişti: fonun duruştaki parıltısı çıkarılıyor, yukarıda.)*
 - **φ 1,5'te** (β 0,905): önde kırmızı bir sis, içinde Samanyolu'nun kuşağı ve iki Macellan Bulutu. Fon ışıması önde
   D⁴ = 403 kat parlak.
 - **Açıklama** (`drawEnergyKey`): üst ortada, arayüzle görünür. Altı bant eşit genişlikte. İki üçgen gösterir: öndeki

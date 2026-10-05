@@ -802,7 +802,7 @@ __device__ float3 galaxyLight(const GGalaxy& g, float3 d, float tmax, float pixK
         if (vis <= 0.0f) continue;
         const float cx = x / cell, cy = y / cell;
         const int ix = int(floorf(cx)), iy = int(floorf(cy));
-        const float sig = neb ? 0.11f : 0.065f;                // cell units
+        const float sig = (neb ? 0.11f : 0.065f) * g.blobScale;   // cell units
         float acc = 0.0f;
         for (int j = -1; j <= 1; ++j)
             for (int i = -1; i <= 1; ++i) {
@@ -814,7 +814,7 @@ __device__ float3 galaxyLight(const GGalaxy& g, float3 d, float tmax, float pixK
                 const float prob = neb ? saturate(1.4f * gas + 0.3f * young) * 0.55f : saturate(1.3f * young) * 0.8f;
                 if (h2 > prob) continue;
                 const float d2 = sqr(cx - px) + sqr(cy - py);
-                const float b = 0.25f + 2.5f * h3 * h3 * h3;   // a few bright, many faint
+                const float b = (0.25f + 2.5f * h3 * h3 * h3) / (g.blobScale * g.blobScale);   // a few bright, many faint
                 // the nebulae in sizes (the bright ones larger)
                 const float sP = neb ? sig * (0.6f + 0.9f * h3) : sig;
                 const float sPE = fmaxf(sP, 0.7f * pix / cell);
@@ -1304,7 +1304,8 @@ __device__ float4 panoAt(const GSky& s, float l, float b, float lod) {
     return mix4(a, panoLevel(s, l0 + 1, u, v), f);
 }
 
-__device__ float3 eyeSky(float px, float py) {
+// a pixel's ray back in the rest frame (camera space, unit), its Doppler factor, its cosine to the eye's axis
+__device__ void eyeRest(float px, float py, float3& r, double& D, double& dzOut) {
     const GSky& s = cV.sky;
     // the ray in camera space, in doubles (the binoculars reach 1e-11 rad, the bright cap ahead is e^-phi wide)
     double dx = (double(px) / cV.width * 2.0 - 1.0) * s.tanX, dy = (1.0 - double(py) / cV.height * 2.0) * s.tanY, dz = 1.0;
@@ -1312,11 +1313,12 @@ __device__ float3 eyeSky(float px, float py) {
     dx *= inv;
     dy *= inv;
     dz *= inv;
+    dzOut = dz;
     // back to the rest frame: its half-angle tangent to the motion t' (each form where it does not cancel), t = e^phi t'
     const double c = dx * s.mx + dy * s.my + dz * s.mz;
     const double qx = dx - s.mx * c, qy = dy - s.my * c, qz = dz - s.mz * c;
     const double sp = sqrt(qx * qx + qy * qy + qz * qz);
-    double rx, ry, rz, D;
+    double rx, ry, rz;
     if (sp < 1e-300) {
         const double sg = c >= 0.0 ? 1.0 : -1.0;
         rx = s.mx * sg;
@@ -1333,7 +1335,14 @@ __device__ float3 eyeSky(float px, float py) {
         ry = s.my * a + qy * b;
         rz = s.mz * a + qz * b;
     }
-    const float3 r = make_float3(float(rx), float(ry), float(rz));
+    r = make_float3(float(rx), float(ry), float(rz));
+}
+
+__device__ float3 eyeSky(float px, float py) {
+    const GSky& s = cV.sky;
+    float3 r;
+    double D, dz;
+    eyeRest(px, py, r, D, dz);
     const float3 g = make_float3(dot(s.gal0, r), dot(s.gal1, r), dot(s.gal2, r));
     const float Df = float(D);               // e^-phi .. e^phi: within a float's range up to the top speed
     const float lD = log10f(Df);
@@ -1345,8 +1354,14 @@ __device__ float3 eyeSky(float px, float py) {
         float ls;
         bbAt(s, lt, rgb, ls);
         const float lbol = -7.743536f + 4.0f * lt;   // log10(sigma / pi) + 4 log10 T
-        if (s.energy) out += energyColour(lt, rgb) * exp10f(fminf(lbol + s.lk, 30.0f));
-        else if (ls > -200.0f) out += rgb * exp10f(fminf(lbol + ls + s.lk, 30.0f));
+        if (s.energy) {
+            // the energy eye takes out the glow at rest (sigma T0^4 / pi everywhere): what the motion adds, ahead
+            const float lrest = -7.743536f + 4.0f * log10f(s.cmbT0);
+            if (lbol > lrest) {
+                const float lex = lbol + log10f(fmaxf(1.0f - exp10f(lrest - lbol), 1e-30f));
+                out += energyColour(lt, rgb) * exp10f(fminf(lex + s.lk, 30.0f));
+            }
+        } else if (ls > -200.0f) out += rgb * exp10f(fminf(lbol + ls + s.lk, 30.0f));
     }
     // the Milky Way's panorama (the view from near the Sun), its light shifted as a blackbody of its colour temperature
     if (s.pano && s.panoWeight > 0.0f) {
@@ -1371,6 +1386,27 @@ __device__ float3 eyeSky(float px, float py) {
         }
     }
     return out;
+}
+
+// a galaxy's model seen by the eye: its rest-frame light along the pixel's rest-frame ray (the footprint D times the
+// pixel's), shifted as a blackbody of its colour temperature (D^4 and the visible share; in the energy eye every band)
+__device__ float3 eyeGalaxy(const GGalaxy& g, float3 r, double D, double dz) {
+    const GSky& s = cV.sky;
+    const float Df = float(D), lD = log10f(Df);
+    const float3 L = galaxyLight(g, r, 1e30f, s.pixAngle * float(dz) * Df / g.kpc);
+    const float lum = 0.2126f * L.x + 0.7152f * L.y + 0.0722f * L.z;
+    if (!(lum > 0.0f)) return make_float3(0, 0, 0);
+    const float lt0 = log10f(fmaxf(g.T, 100.0f)), lt1 = lt0 + lD;
+    float3 c0, c1;
+    float l0, l1;
+    bbAt(s, lt0, c0, l0);
+    bbAt(s, lt1, c1, l1);
+    const float lw = log10f(lum) + 4.0f * lD;
+    if (s.energy) return energyColour(lt1, c1) * exp10f(fminf(lw - l0, 30.0f));
+    if (l1 < -200.0f) return make_float3(0, 0, 0);
+    const float3 col = make_float3(L.x * c1.x / fmaxf(c0.x, 1e-3f), L.y * c1.y / fmaxf(c0.y, 1e-3f), L.z * c1.z / fmaxf(c0.z, 1e-3f));
+    const float lc = 0.2126f * col.x + 0.7152f * col.y + 0.0722f * col.z;
+    return col * (exp10f(fminf(lw + l1 - l0, 30.0f)) / fmaxf(lc, 1e-30f));
 }
 
 // the eye's glare round the brightest sources (its core: the source itself, inside 0.1 degrees)
@@ -1421,9 +1457,18 @@ __global__ void kFrame(float4* accum, float* depthOut, int samples) {
         const float3 s0 = eyeSky(x + 0.375f, y + 0.125f), s1 = eyeSky(x + 0.875f, y + 0.375f);
         const float3 s2 = eyeSky(x + 0.125f, y + 0.625f), s3 = eyeSky(x + 0.625f, y + 0.875f);
         avg += (s0 + s1 + s2 + s3) * 0.25f + eyeGlare(x + 0.5f, y + 0.5f);
+        // the galaxies through the eye (the pixel's centre: their models fade their detail below a pixel themselves)
+        if (cV.galaxy[0].on || cV.galaxy[1].on || cV.galaxy[2].on) {
+            float3 r;
+            double D, dz;
+            eyeRest(x + 0.5f, y + 0.5f, r, D, dz);
+            for (int i = 0; i < kMaxGalaxies; ++i)
+                if (cV.galaxy[i].on) avg += eyeGalaxy(cV.galaxy[i], r, D, dz);
+        }
+    } else {
+        for (int i = 0; i < kMaxGalaxies; ++i)
+            if (cV.galaxy[i].on) avg += galaxyLight(cV.galaxy[i], rayDir(x + 0.5f, y + 0.5f), dCentre, cV.pixAngle / cV.galaxy[i].kpc);
     }
-    for (int i = 0; i < kMaxGalaxies; ++i)
-        if (cV.galaxy[i].on) avg += galaxyLight(cV.galaxy[i], rayDir(x + 0.5f, y + 0.5f), dCentre, cV.pixAngle / cV.galaxy[i].kpc);
     if (cV.web.on) avg += webLight(cV.web, rayDir(x + 0.5f, y + 0.5f), dCentre, cV.pixAngle);
     if (cV.dens.on) avg = avg * (1.0f - cV.dens.weight) + densitySlice(cV.dens, x + 0.5f, y + 0.5f);
     if (cV.field.on) avg = avg * (1.0f - cV.field.weight) + fieldSlice(cV.field, x + 0.5f, y + 0.5f);

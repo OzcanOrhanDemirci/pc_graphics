@@ -580,7 +580,7 @@ private:
                 a_.renderEye(e, eyeSum_);
                 // the eye adapts to the light in its field, a known function of where, how fast and where it looks
                 // (never read from the picture), slowly (a second or so); the energy eye to every band's light
-                double target = energy_ ? a_.eyeEvEnergy(eyeSum_.bolometricView / eyeSum_.viewShare)
+                double target = energy_ ? a_.eyeEvEnergy(eyeSum_.energyView / eyeSum_.viewShare)
                                         : a_.eyeEv(eyeSum_.visibleView / eyeSum_.viewShare);
                 if (!std::isfinite(target)) target = std::isfinite(eyeEv_) ? eyeEv_ : 17.5;   // (never a NaN kept)
                 if (!evInit_) {

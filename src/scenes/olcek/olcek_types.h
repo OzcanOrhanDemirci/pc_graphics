@@ -72,6 +72,10 @@ struct GGalaxy {
     float fade = 1.0f;
     int nArms = 0;
     GArm arms[kMaxArms];
+    float T = 0.0f;   // the second option's eye: its light's colour temperature (shifted as a blackbody's); 0 the first's
+    // the clusters' and nebulae's size (their light kept): the first option sees them from afar (1); the eye can stop a
+    // few thousand light years from them, where the far view's blobs would be degrees wide
+    float blobScale = 1.0f;
 };
 
 // The cosmic web beyond the survey (Ö3): a statistical sample (Zel'dovich, olcek_veri.py ag) filling the observable

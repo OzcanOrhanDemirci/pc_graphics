@@ -595,6 +595,26 @@ int runHizTests(OlcekApp& app) {
                         sum.bolometric, want, sum.visible, 100.0 * sum.fwdBolometric / sum.bolometric);
         }
         check(worst < 5e-3, "goz: fon isimasi her hizda 4 sigma T0^4 gamma^2 (1 + beta^2/3) (gokyuzu toplamlari)");
+        {   // the energy eye's zero: the glow at rest taken out (none left at rest but the dipole's; at speed the sky's sum
+            // over it, no less than the whole sky's gain 4 sigma T0^4 (gamma^2 (1 + beta^2/3) - 1), no more than all of it)
+            bool ok = true;
+            for (double phi : {0.0, 0.5, 2.0, 10.0}) {
+                hz::Eye e;
+                e.phi = phi;
+                e.motion = V3{1.0, 0.0, 0.0};
+                e.fwd = V3{1.0, 0.0, 0.0};
+                e.right = V3{0.0, -1.0, 0.0};
+                e.up = V3{0.0, 0.0, 1.0};
+                hz::EyeSum sum;
+                hz::skySums(hz::SkyCoarse{}, app.bb, e, 0.0, V3{1.0, 0.0, 0.0}, V3{0.0, 1.0, 0.0}, V3{0.0, 0.0, 1.0}, sum);
+                const hz::Kin k = hz::kin(phi);
+                const double gain = 4.0 * s4 * (k.gamma * k.gamma * (1.0 + k.beta * k.beta / 3.0) - 1.0);
+                std::printf("    phi %6.3f: enerji gozunde fon %.4e W/m^2 (butun gokun kazanci %.4e, butunu %.4e)\n", phi, sum.energy, gain, sum.bolometric);
+                if (phi == 0.0) ok = ok && sum.energy < 3e-3 * 4.0 * s4;
+                else ok = ok && sum.energy >= gain * (1.0 - 5e-3) && sum.energy <= sum.bolometric;
+            }
+            check(ok, "goz: enerji gozunde fonun durustaki isimasi sifir (durusta yalniz dipol), hizda kazanci gorunur");
+        }
         check(fwdShare10 > 0.99, "goz: phi 10'da fon isimasinin %99'dan fazlasi burnun 5 derecesinde (parlamanin kaynagi)");
 
         // the night sky at the Sun's place against the one measured: starlight alone ~1e-4 lux on a moonless night (on a
@@ -647,6 +667,39 @@ int runHizTests(OlcekApp& app) {
         check(lumErr < 1e-3 && jump < 0.05, "goz: enerji gozunun renkleri parlaklik 1, sicramasiz");
     }
 
+    // ---- 9. the galaxies in the eye (H4): the models where they are wide, points where they are small, in the sums
+    {
+        const hz::Route& R = app.route;
+        auto eyeAt = [&](double frac, double phi, hz::EyeSum& sum) {
+            hz::Ship s = hz::depart(R);
+            s.leg = 1;
+            s.x = hz::dd(-R.length[1] * (1.0 - frac));
+            s.phi = phi;
+            s.sense = 1;
+            s.heading = R.dir[1];
+            hz::Eye e = app.eyeAt(s, 0.0, 0.0, std::tan(37.5 * kPi / 180.0));
+            e.k = std::exp2(17.0) * 3e-3;
+            app.renderEye(e, sum);
+            return hz::position(s, R);
+        };
+        // at the arrival (100,000 ly before Andromeda's centre): its light is the sky's, L / 4 pi d^2 (M_V -21.5)
+        hz::EyeSum a;
+        const V3 pa = eyeAt(1.0, 0.0, a);
+        const double dM = length(app.sc.nodeFromSun(olcek::kM31) - pa);
+        const double want = 3.4e10 * 3.828e26 / (4.0 * kPi * dM * dM);
+        const bool modelArr = app.view.galaxy[1].on != 0;
+        // half way: Andromeda a model at rest; at 21 nines a point ahead (smaller than a pixel: 1 / D of its angle)
+        hz::EyeSum m0, m21;
+        eyeAt(0.5, 0.0, m0);
+        const bool modelMid = app.view.galaxy[1].on != 0;
+        eyeAt(0.5, hz::phiCap(), m21);
+        const bool pointFast = app.view.galaxy[1].on == 0;
+        std::printf("    varista Andromeda %.0f ly uzakta: gokyuzu %.4e W/m^2, L/4 pi d^2 %.4e; model: varista %d, yolun ortasinda %d, "
+                    "21 dokuzda %d\n", dM / hz::kLy, a.visible, want, int(modelArr), int(modelMid), int(!pointFast));
+        check(a.visible > want && a.visible < 1.1 * want && modelArr && modelMid && pointFast,
+              "goz: Andromeda varista gokyuzunun isigi, yakinda model, 21 dokuzda bir nokta");
+    }
+
     std::printf("hiz: %s (%d kalan)\n", fails == 0 ? "GECTI" : "KALDI", fails);
     return fails == 0 ? 0 : 1;
 }
@@ -662,6 +715,8 @@ int runHizFrames(OlcekApp& app, const std::vector<double>& phis, int leg, double
         s.leg = std::clamp(leg, 0, 1);
         s.x = hz::dd(-R.length[s.leg] * (1.0 - frac));
         s.phi = std::clamp(phi, 0.0, hz::phiCap());
+        // (--set hiz.test.fren=1) on the stopping curve: as far from the target as it takes to stop from that speed
+        if (app.cfg.f("hiz.test.fren", 0.0f) > 0.5f) s.x = hz::dd(-std::min(hz::stopDistance(s.phi), R.length[s.leg]));
         s.sense = 1;
         s.heading = R.dir[s.leg];
         const V3 pos = hz::position(s, R);
@@ -672,7 +727,7 @@ int runHizFrames(OlcekApp& app, const std::vector<double>& phis, int leg, double
             hz::EyeSum sum;
             e.k = std::exp2(app.eyeEv(0.0)) * 3e-3;
             app.renderEye(e, sum);   // a dry run for the sky's light: the adapted exposure
-            const double ev = e.energy ? app.eyeEvEnergy(sum.bolometricView / sum.viewShare) : app.eyeEv(sum.visibleView / sum.viewShare);
+            const double ev = e.energy ? app.eyeEvEnergy(sum.energyView / sum.viewShare) : app.eyeEv(sum.visibleView / sum.viewShare);
             e.k = std::exp2(ev) * 3e-3;
             app.renderEye(e, sum);
             char name[96];
@@ -681,7 +736,7 @@ int runHizFrames(OlcekApp& app, const std::vector<double>& phis, int leg, double
             std::printf("phi %7.3f (%5.2f dokuz, gamma %.3e)  EV %.2f  gokyuzu %.3e (Gunes %.2e, butun bantlar %.3e)  gorus alaninda %d yildiz  "
                         "D %.3e .. %.3e  gun %.2f  kare %.2f ms (ana %.2f)\n",
                         s.phi, k.nines, k.gamma, ev, sum.visible, sum.visibleSun, sum.bolometric, sum.inView, sum.minD, sum.maxD,
-                        app.eyeDay((e.energy ? sum.bolometricView : sum.visibleView) / sum.viewShare, e.energy), app.frameMs, app.hostMs);
+                        app.eyeDay((e.energy ? sum.energyView : sum.visibleView) / sum.viewShare, e.energy), app.frameMs, app.hostMs);
         } else {
             for (double sv : sides) {
                 Scale& sc = app.sc;

@@ -580,7 +580,8 @@ void drawEnergyKey(const ui::Rect& view, float Sapp, double phi, const Blackbody
     const ui::TextStyle band = theme::mono(theme::Scale{S}, 12.0f, white(0.62f));
     const ui::TextStyle mark = theme::mono(theme::Scale{S}, 12.5f, white(0.92f));
     const std::string title = L("ENERJİ GÖZÜ", "ENERGY EYE");
-    const std::string what = L("bütün bantlar, sahte renkle", "every band, in false colour");
+    const std::string what = L("bütün bantlar, sahte renkle · fonun duruştaki parıltısı çıkarılmış",
+                               "every band, in false colour · the background's glow at rest taken out");
     const float tw = ui::measure(title, cap), gw = S * 14.0f, sw = ui::measure(what, sub);
     const float tx = x + 0.5f * (w - tw - gw - sw);
     ui::text(tx, y + S * 16.0f, title, cap);

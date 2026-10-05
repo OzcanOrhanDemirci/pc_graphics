@@ -547,6 +547,128 @@ void Scale::hizClocks(double t) {
     clk.beach = wrapTo(t, 8000.0);
 }
 
+// the Galaxy and its neighbours as the kernel's models (see olcek_world.h)
+void Scale::galaxyModels(GGalaxy out[3], const std::function<V3(int)>& relOf, V3 right, V3 up, V3 fwd, double unit, double k,
+                         double fade) const {
+    auto toCamSpace = [&](V3 r) { return make_float3(float(dot(r, right) / unit), float(dot(r, up) / unit), float(dot(r, fwd) / unit)); };
+    auto dirCam = [&](V3 r) { return make_float3(float(dot(r, right)), float(dot(r, up)), float(dot(r, fwd))); };
+    // the Milky Way: today's arms (their pattern turns at its own speed: clk.arms)
+    GGalaxy& g = out[0];
+    const V3 rel = relOf(kGalCentre);
+    if (length(rel) < 1e9 * unit) {
+        g.on = 1;
+        g.c = toCamSpace(rel);
+        g.n = dirCam(galNorth_);
+        const V3 e0 = rotate(-galX_, galNorth_, -clk.arms);           // the centre -> Sun line of today, turned with the arms
+        const V3 e1 = cross(e0, galNorth_);                           // the rotation's way (l = 90 degrees today)
+        g.e0 = dirCam(e0);
+        g.e1 = dirCam(e1);
+        g.kpc = float(1e3 * kPc / unit);
+        // face-on surface brightness (W/m^2/sr at the centre), from luminosities: disc 3.5e10, bulge and bar 1.2e10,
+        // young stars in the arms 0.4e10 (L_sun); the nebulae's Halpha a colour of the arms
+        const double h = 2.6e3 * kPc;
+        const double Idisc = 3.5e10 * kLsun / (2.0 * kPi * h * h) / (4.0 * kPi);
+        g.disc = blackbody(4600.0) * float(Idisc * k * fade);
+        g.bulge = blackbody(3900.0) * float(Idisc * 9.0 * k * fade);
+        g.young = blackbody(11000.0) * float(Idisc * 0.9 * k * fade);
+        g.nebula = make_float3(1.0f, 0.36f, 0.52f) * float(Idisc * 0.35 * k * fade);
+        g.fade = float(fade);
+        const double d2r = kPi / 180.0;
+        struct A { double bk, Rk, lo, hi, b0, b1, w, st, ext, gas; };
+        // Reid et al. 2019, Table 2 (beta range: where the parallaxes are). The four major arms go on round the far
+        // side, one winding from the bar to the edge (extension in degrees, a representation); the spurs stay short.
+        // As in the familiar picture (Churchwell et al. 2009, R. Hurt's drawing for NASA/JPL-Caltech): two arms of
+        // stars from the bar's ends (Scutum-Centaurus, Perseus), two of gas (Norma, Sagittarius-Carina)
+        const A arms[] = {
+            {15, 3.52, -4.2, -4.2, 15, 18, 0.18, 0.35, 40, 0.5},      // 3-kpc (near)
+            {18, 4.46, -1.0, 19.5, 5, 54, 0.16, 0.5, 170, 0.8},       // Norma (on into the Outer arm)
+            {23, 4.91, 14.1, 12.1, 0, 104, 0.34, 1.0, 230, 0.2},      // Scutum-Centaurus (on into the outer Sct-Cen)
+            {24, 6.04, 17.1, 1.0, 2, 97, 0.22, 0.5, 150, 0.8},        // Sagittarius-Carina
+            {9, 8.26, 11.4, 11.4, -8, 34, 0.28, 0.4, 30, 0.45},       // Local (the Orion spur, the Sun's)
+            {40, 8.87, 10.3, 8.7, -23, 115, 0.42, 1.0, 230, 0.2},     // Perseus
+            {18, 12.24, 3.0, 9.4, -16, 71, 0.6, 0.4, 60, 0.6}};       // Outer
+        g.nArms = 0;
+        for (const A& a : arms) {
+            GArm& m = g.arms[g.nArms++];
+            m.betaKink = float(a.bk * d2r);
+            m.Rkink = float(a.Rk);
+            m.tanLo = float(std::tan(a.lo * d2r));
+            m.tanHi = float(std::tan(a.hi * d2r));
+            m.betaMin = float(a.b0 * d2r);
+            m.betaMax = float(a.b1 * d2r);
+            m.width = float(a.w);
+            m.strength = float(a.st);
+            m.ext = float(a.ext * d2r);
+            m.gas = float(a.gas);
+        }
+    }
+    // M31 and M33 by the same model at their own size and in their measured orientation: the disc's normal from
+    // the inclination i and the major axis's position angle (north through east) on the sky; the near side towards
+    // the minor axis's NW end. Their arms are a representation (M31: the 10 kpc ring of star formation and two
+    // tightly wound arms, Gordon et al. 2006; M33: two open arms and its large HII regions); sizes and light measured
+    struct Other { int node, slot; double ra, dec, inc, pa, h, lDisc, bulge, young, nebula, size, barW, barHalf, dust; };
+    const Other others[] = {
+        {kM31, 1, 10.6847, 41.2690, 77.5, 38.0, 5.3, 2.1e10, 14.0, 0.45, 0.12, 2.0, 0.25, 2.0, 1.8},
+        {kM33, 2, 23.4621, 30.6599, 55.0, 22.0, 1.4, 2.8e9, 0.6, 1.6, 0.9, 0.55, 0.0, 0.5, 0.9}};
+    for (const Other& o : others) {
+        const V3 rel = relOf(o.node);
+        if (length(rel) > 1e9 * unit) continue;
+        GGalaxy& m = out[o.slot];
+        const V3 los = icrs(o.ra, o.dec);
+        const V3 eN = normalize(icrs(o.ra, o.dec + 0.01) - los), eE = normalize(icrs(o.ra + 0.01, o.dec) - los);
+        const double pa = o.pa * kDeg, inc = o.inc * kDeg;
+        const V3 major = eN * std::cos(pa) + eE * std::sin(pa), minor = eN * -std::sin(pa) + eE * std::cos(pa);
+        const V3 n = normalize(los * -std::cos(inc) + minor * std::sin(inc));
+        const V3 e0 = normalize(major - n * dot(major, n)), e1 = cross(n, e0);
+        m.on = 1;
+        m.c = toCamSpace(rel);
+        m.n = dirCam(n);
+        m.e0 = dirCam(e0);
+        m.e1 = dirCam(e1);
+        m.kpc = float(1e3 * kPc / unit);
+        m.size = float(o.size);
+        m.hDisc = float(o.h / o.size);
+        m.barW = float(o.barW);
+        m.barHalf = float(o.barHalf);
+        m.barAngle = 0.6f;
+        m.dust = float(o.dust);
+        const double h = o.h * 1e3 * kPc;
+        const double Id = o.lDisc * kLsun / (2.0 * kPi * h * h) / (4.0 * kPi);
+        m.disc = blackbody(o.node == kM31 ? 4300.0 : 5600.0) * float(Id * k * fade);
+        m.bulge = blackbody(3900.0) * float(Id * o.bulge * k * fade);
+        m.young = blackbody(11000.0) * float(Id * o.young * k * fade);
+        m.nebula = make_float3(1.0f, 0.36f, 0.52f) * float(Id * o.nebula * k * fade);
+        m.fade = float(fade);
+        // arms in model kpc: {betaKink, Rkink, tanLo, tanHi, betaMin, betaMax, width, strength, ext} (radians)
+        const double d2r = kPi / 180.0;
+        struct A { double bk, Rk, plo, phi, b0, b1, w, st, ext, gas; };
+        const A m31Arms[] = {
+            {0, 5.0, 0.0, 0.0, -180, 180, 0.32, 1.0, 5, 0.55},       // the ring (pitch 0: a circle at 10 kpc)
+            {0, 3.6, 7.0, 7.0, -40, 260, 0.22, 0.55, 30, 0.4},       // two tightly wound arms inside and outside it
+            {180, 6.6, 7.0, 7.0, -60, 230, 0.26, 0.5, 30, 0.4}};
+        const A m33Arms[] = {
+            {0, 4.0, 26.0, 26.0, -60, 300, 0.45, 1.0, 40, 0.5},
+            {180, 4.0, 26.0, 26.0, -60, 280, 0.42, 0.9, 40, 0.5}};
+        const A* arms = o.node == kM31 ? m31Arms : m33Arms;
+        const int nA = o.node == kM31 ? 3 : 2;
+        m.nArms = 0;
+        for (int i = 0; i < nA; ++i) {
+            const A& a = arms[i];
+            GArm& g2 = m.arms[m.nArms++];
+            g2.betaKink = float(a.bk * d2r);
+            g2.Rkink = float(a.Rk);
+            g2.tanLo = float(std::tan(a.plo * d2r));
+            g2.tanHi = float(std::tan(a.phi * d2r));
+            g2.betaMin = float(a.b0 * d2r);
+            g2.betaMax = float(a.b1 * d2r);
+            g2.width = float(a.w);
+            g2.strength = float(a.st);
+            g2.ext = float(a.ext * d2r);
+            g2.gas = float(a.gas);
+        }
+    }
+}
+
 void Scale::hizOff() {   // (the scene puts the first option's clocks back: they were its own)
     hiz.on = false;
     cam.fwd = -earthUp_;
@@ -960,124 +1082,9 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
     // a decade of overlap)
     for (GGalaxy& g : v.galaxy) g = GGalaxy{};
     v.sky = GSky{};   // (the second option's eye only)
-    if (s > 18.5) {
-        const double fade = smoothstep(18.8, 20.0, s);
-        // the Milky Way: today's arms (their pattern turns at its own speed: clk.arms)
-        GGalaxy& g = v.galaxy[0];
-        const V3 rel = tree.rel(cam.ref, kGalCentre) - cam.pos;
-        if (length(rel) < 1e9 * D) {
-            g.on = 1;
-            g.c = toCamSpace(rel);
-            g.n = dirCam(galNorth_);
-            const V3 e0 = rotate(-galX_, galNorth_, -clk.arms);           // the centre -> Sun line of today, turned with the arms
-            const V3 e1 = cross(e0, galNorth_);                           // the rotation's way (l = 90 degrees today)
-            g.e0 = dirCam(e0);
-            g.e1 = dirCam(e1);
-            g.kpc = float(1e3 * kPc / D);
-            // face-on surface brightness (W/m^2/sr at the centre), from luminosities: disc 3.5e10, bulge and bar 1.2e10,
-            // young stars in the arms 0.4e10 (L_sun); the nebulae's Halpha a colour of the arms
-            const double h = 2.6e3 * kPc;
-            const double Idisc = 3.5e10 * kLsun / (2.0 * kPi * h * h) / (4.0 * kPi);
-            g.disc = blackbody(4600.0) * float(Idisc * k * fade);
-            g.bulge = blackbody(3900.0) * float(Idisc * 9.0 * k * fade);
-            g.young = blackbody(11000.0) * float(Idisc * 0.9 * k * fade);
-            g.nebula = make_float3(1.0f, 0.36f, 0.52f) * float(Idisc * 0.35 * k * fade);
-            g.fade = float(fade);
-            const double d2r = kPi / 180.0;
-            struct A { double bk, Rk, lo, hi, b0, b1, w, st, ext, gas; };
-            // Reid et al. 2019, Table 2 (beta range: where the parallaxes are). The four major arms go on round the far
-            // side, one winding from the bar to the edge (extension in degrees, a representation); the spurs stay short.
-            // As in the familiar picture (Churchwell et al. 2009, R. Hurt's drawing for NASA/JPL-Caltech): two arms of
-            // stars from the bar's ends (Scutum-Centaurus, Perseus), two of gas (Norma, Sagittarius-Carina)
-            const A arms[] = {
-                {15, 3.52, -4.2, -4.2, 15, 18, 0.18, 0.35, 40, 0.5},      // 3-kpc (near)
-                {18, 4.46, -1.0, 19.5, 5, 54, 0.16, 0.5, 170, 0.8},       // Norma (on into the Outer arm)
-                {23, 4.91, 14.1, 12.1, 0, 104, 0.34, 1.0, 230, 0.2},      // Scutum-Centaurus (on into the outer Sct-Cen)
-                {24, 6.04, 17.1, 1.0, 2, 97, 0.22, 0.5, 150, 0.8},        // Sagittarius-Carina
-                {9, 8.26, 11.4, 11.4, -8, 34, 0.28, 0.4, 30, 0.45},       // Local (the Orion spur, the Sun's)
-                {40, 8.87, 10.3, 8.7, -23, 115, 0.42, 1.0, 230, 0.2},     // Perseus
-                {18, 12.24, 3.0, 9.4, -16, 71, 0.6, 0.4, 60, 0.6}};       // Outer
-            g.nArms = 0;
-            for (const A& a : arms) {
-                GArm& m = g.arms[g.nArms++];
-                m.betaKink = float(a.bk * d2r);
-                m.Rkink = float(a.Rk);
-                m.tanLo = float(std::tan(a.lo * d2r));
-                m.tanHi = float(std::tan(a.hi * d2r));
-                m.betaMin = float(a.b0 * d2r);
-                m.betaMax = float(a.b1 * d2r);
-                m.width = float(a.w);
-                m.strength = float(a.st);
-                m.ext = float(a.ext * d2r);
-                m.gas = float(a.gas);
-            }
-        }
-        // M31 and M33 by the same model at their own size and in their measured orientation: the disc's normal from
-        // the inclination i and the major axis's position angle (north through east) on the sky; the near side towards
-        // the minor axis's NW end. Their arms are a representation (M31: the 10 kpc ring of star formation and two
-        // tightly wound arms, Gordon et al. 2006; M33: two open arms and its large HII regions); sizes and light measured
-        struct Other { int node, slot; double ra, dec, inc, pa, h, lDisc, bulge, young, nebula, size, barW, barHalf, dust; };
-        const Other others[] = {
-            {kM31, 1, 10.6847, 41.2690, 77.5, 38.0, 5.3, 2.1e10, 14.0, 0.45, 0.12, 2.0, 0.25, 2.0, 1.8},
-            {kM33, 2, 23.4621, 30.6599, 55.0, 22.0, 1.4, 2.8e9, 0.6, 1.6, 0.9, 0.55, 0.0, 0.5, 0.9}};
-        for (const Other& o : others) {
-            const V3 rel = tree.rel(cam.ref, o.node) - cam.pos;
-            if (length(rel) > 1e9 * D) continue;
-            GGalaxy& m = v.galaxy[o.slot];
-            const V3 los = icrs(o.ra, o.dec);
-            const V3 eN = normalize(icrs(o.ra, o.dec + 0.01) - los), eE = normalize(icrs(o.ra + 0.01, o.dec) - los);
-            const double pa = o.pa * kDeg, inc = o.inc * kDeg;
-            const V3 major = eN * std::cos(pa) + eE * std::sin(pa), minor = eN * -std::sin(pa) + eE * std::cos(pa);
-            const V3 n = normalize(los * -std::cos(inc) + minor * std::sin(inc));
-            const V3 e0 = normalize(major - n * dot(major, n)), e1 = cross(n, e0);
-            m.on = 1;
-            m.c = toCamSpace(rel);
-            m.n = dirCam(n);
-            m.e0 = dirCam(e0);
-            m.e1 = dirCam(e1);
-            m.kpc = float(1e3 * kPc / D);
-            m.size = float(o.size);
-            m.hDisc = float(o.h / o.size);
-            m.barW = float(o.barW);
-            m.barHalf = float(o.barHalf);
-            m.barAngle = 0.6f;
-            m.dust = float(o.dust);
-            const double h = o.h * 1e3 * kPc;
-            const double Id = o.lDisc * kLsun / (2.0 * kPi * h * h) / (4.0 * kPi);
-            m.disc = blackbody(o.node == kM31 ? 4300.0 : 5600.0) * float(Id * k * fade);
-            m.bulge = blackbody(3900.0) * float(Id * o.bulge * k * fade);
-            m.young = blackbody(11000.0) * float(Id * o.young * k * fade);
-            m.nebula = make_float3(1.0f, 0.36f, 0.52f) * float(Id * o.nebula * k * fade);
-            m.fade = float(fade);
-            // arms in model kpc: {betaKink, Rkink, tanLo, tanHi, betaMin, betaMax, width, strength, ext} (radians)
-            const double d2r = kPi / 180.0;
-            struct A { double bk, Rk, plo, phi, b0, b1, w, st, ext, gas; };
-            const A m31Arms[] = {
-                {0, 5.0, 0.0, 0.0, -180, 180, 0.32, 1.0, 5, 0.55},       // the ring (pitch 0: a circle at 10 kpc)
-                {0, 3.6, 7.0, 7.0, -40, 260, 0.22, 0.55, 30, 0.4},       // two tightly wound arms inside and outside it
-                {180, 6.6, 7.0, 7.0, -60, 230, 0.26, 0.5, 30, 0.4}};
-            const A m33Arms[] = {
-                {0, 4.0, 26.0, 26.0, -60, 300, 0.45, 1.0, 40, 0.5},
-                {180, 4.0, 26.0, 26.0, -60, 280, 0.42, 0.9, 40, 0.5}};
-            const A* arms = o.node == kM31 ? m31Arms : m33Arms;
-            const int nA = o.node == kM31 ? 3 : 2;
-            m.nArms = 0;
-            for (int i = 0; i < nA; ++i) {
-                const A& a = arms[i];
-                GArm& g2 = m.arms[m.nArms++];
-                g2.betaKink = float(a.bk * d2r);
-                g2.Rkink = float(a.Rk);
-                g2.tanLo = float(std::tan(a.plo * d2r));
-                g2.tanHi = float(std::tan(a.phi * d2r));
-                g2.betaMin = float(a.b0 * d2r);
-                g2.betaMax = float(a.b1 * d2r);
-                g2.width = float(a.w);
-                g2.strength = float(a.st);
-                g2.ext = float(a.ext * d2r);
-                g2.gas = float(a.gas);
-            }
-        }
-    }
+    if (s > 18.5)
+        galaxyModels(v.galaxy, [&](int node) { return tree.rel(cam.ref, node) - cam.pos; }, cam.right, cam.up, cam.fwd, D, k,
+                     smoothstep(18.8, 20.0, s));
     auto blob = [&](V3 rel, double sigma, float3 emit) {
         if (v.nBlobs >= kMaxBlobs) return;
         if (emit.x + emit.y + emit.z <= 0.0f) return;
