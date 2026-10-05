@@ -334,7 +334,15 @@ void Scale::init() {
     add(kUranus, 2.5362e7, make_float3(0.45f, 0.60f, 0.64f), 6);
     add(kNeptune, 2.4622e7, make_float3(0.30f, 0.42f, 0.62f), 7);
 
-    // ---- the stars around the Sun (Ö2 replaces these with the catalogue): some real neighbours and bright stars
+    // ---- the stars around the Sun: the placeholder field (some real neighbours and bright stars, then random ones); the
+    // catalogue replaces it (loadStars), and keeps its place across init() (the random numbers still run: the galaxies
+    // below draw from the same stream)
+    std::vector<V3> keepPos;
+    std::vector<float4> keepFlux;
+    if (realStars_) {
+        keepPos.swap(starPos_);
+        keepFlux.swap(starFlux_);
+    }
     starPos_.clear();
     starFlux_.clear();
     struct Star { double ra, dec, pc, lum, T; };
@@ -370,6 +378,10 @@ void Scale::init() {
         const float3 c = blackbody(lum > 1000.0 && rng.u() < 0.5 ? 3800.0 : 7000.0 + 9000.0 * rng.u());
         starPos_.push_back(galX_ * (r * std::cos(a)) + galY * (r * std::sin(a)) + galNorth_ * z);
         starFlux_.push_back(make_float4(c.x, c.y, c.z, float(lum)));
+    }
+    if (realStars_) {
+        starPos_.swap(keepPos);
+        starFlux_.swap(keepFlux);
     }
 
     // ---- galaxies (Ö3 replaces these): a web of nodes and filaments through the observable universe
@@ -409,6 +421,40 @@ void Scale::init() {
 
     clk = Clocks{};
     place();
+}
+
+bool Scale::loadStars(const std::string& path, std::string& log) {
+    FILE* f = std::fopen(path.c_str(), "rb");
+    if (!f) {
+        log += "  yok: " + path + std::string(1, char(10));
+        return false;
+    }
+    char magic[4];
+    unsigned int n = 0;
+    if (std::fread(magic, 1, 4, f) != 4 || std::memcmp(magic, "OLST", 4) != 0 || std::fread(&n, 4, 1, f) != 1) {
+        std::fclose(f);
+        log += "  bicim: " + path + std::string(1, char(10));
+        return false;
+    }
+    std::vector<double> pos(size_t(n) * 3);
+    std::vector<float> att(size_t(n) * 4);
+    const bool ok = std::fread(pos.data(), 8, pos.size(), f) == pos.size() && std::fread(att.data(), 4, att.size(), f) == att.size();
+    std::fclose(f);
+    if (!ok) {
+        log += "  kisa: " + path + std::string(1, char(10));
+        return false;
+    }
+    starPos_.resize(n);
+    starFlux_.resize(n);
+    realStars_ = true;
+    for (unsigned int i = 0; i < n; ++i) {
+        starPos_[i] = v3(pos[3 * i], pos[3 * i + 1], pos[3 * i + 2]);
+        starFlux_[i] = make_float4(att[4 * i + 1], att[4 * i + 2], att[4 * i + 3], att[4 * i]);
+    }
+    char b[128];
+    std::snprintf(b, sizeof(b), "  yildizlar.bin: %u yildiz (HYG v4.1)%c", n, 10);
+    log += b;
+    return true;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

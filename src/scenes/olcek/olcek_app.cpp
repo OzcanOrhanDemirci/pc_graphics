@@ -55,6 +55,7 @@ void OlcekApp::init() {
 void OlcekApp::loadMaps() {
     mapsLog.clear();
     const std::string dir = root + "/assets/olcek/";
+    if (cfg.i("stars.real", 1)) sc.loadStars(dir + "yildizlar.bin", mapsLog);
     struct M { olcek::Texture* t; const char* file; bool wrap; };
     const M ms[] = {{&world, "bmng_dunya.tex", true}, {&zonal, "bmng_kusak.tex", false}, {&region, "bmng_ege.tex", false},
                     {&bay, "s2_ev.tex", false}, {&moon, "ay.tex", true}, {&cloudWorld, "bulut_dunya.tex", true},

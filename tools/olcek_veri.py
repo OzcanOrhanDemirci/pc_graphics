@@ -13,6 +13,7 @@ dogu ve kuzey metre: sahnenin GGround eksenleriyle ayni.
   python tools/olcek_veri.py ay        # Ay: LRO renk (CGI Moon Kit)
   python tools/olcek_veri.py kiyi      # sahildeki noktanin kiyisi: Sentinel-2 su maskesinden isaretli uzaklik
   python tools/olcek_veri.py bulut     # bugunun gercek bulutlari: NASA GIBS (MODIS Terra ev cevresi, VIIRS dunya)
+  python tools/olcek_veri.py yildiz    # yildizlar: HYG v4.1 (uzakligi bilinen her yildiz, gercek yeri, isigi, rengi)
   python tools/olcek_veri.py hepsi
 """
 import math
@@ -343,6 +344,56 @@ def bulut(date="2026-10-05", world_date=None):
     print(f"  dunya ({wd}) bulut orani %{100 * a.mean():.1f}")
 
 
+# ---------------------------------------------------------------------------------------------------------------------
+# Stars: the HYG database v4.1 (Hipparcos, Yale Bright Star, Gliese; astronexus, CC BY-SA 4.0): every star with a
+# distance, its place from the Sun (ICRS, pc -> m), its luminosity (L_sun, visual) and its colour from B-V. Written as
+# "OLST", count, then per star x, y, z (float64, m) and luminosity, r, g, b (float32).
+def yildiz():
+    import csv
+    path = fetch("https://raw.githubusercontent.com/astronexus/HYG-Database/main/hyg/CURRENT/hygdata_v41.csv", "hygdata_v41.csv")
+    pc = 3.0856775814913673e16
+    rows = []
+    with open(path, encoding="utf-8") as f:
+        for r in csv.DictReader(f):
+            try:
+                d = float(r["dist"])
+                if d <= 0.0 or d >= 99999.0:
+                    continue
+                x, y, z = float(r["x"]), float(r["y"]), float(r["z"])
+                absmag = float(r["absmag"])
+            except (ValueError, KeyError):
+                continue
+            ci = r.get("ci", "")
+            try:
+                bv = float(ci)
+            except ValueError:
+                bv = 0.65
+            bv = min(max(bv, -0.4), 2.0)
+            T = 4600.0 * (1.0 / (0.92 * bv + 1.7) + 1.0 / (0.92 * bv + 0.62))   # Ballesteros 2012
+            lum = 10.0 ** (-0.4 * (absmag - 4.83))
+            rows.append((x * pc, y * pc, z * pc, lum, T))
+    rows.sort(key=lambda t: -t[3])
+    n = len(rows)
+
+    def bb(T):
+        out = []
+        for nm in (610.0, 550.0, 465.0):
+            l = nm * 1e-9
+            out.append(1.0 / (l ** 5 * (math.exp(1.4387769e-2 / (l * T)) - 1.0)))
+        y = 0.2126 * out[0] + 0.7152 * out[1] + 0.0722 * out[2]
+        return [v / y for v in out]
+
+    pos = np.array([[r[0], r[1], r[2]] for r in rows], np.float64)
+    att = np.array([[r[3]] + bb(r[4]) for r in rows], np.float32)
+    with open(os.path.join(OUT, "yildizlar.bin"), "wb") as f:
+        f.write(b"OLST")
+        f.write(np.array([n], np.uint32).tobytes())
+        f.write(pos.tobytes())
+        f.write(att.tobytes())
+    near = sum(1 for r in rows if (r[0] ** 2 + r[1] ** 2 + r[2] ** 2) ** 0.5 < 10 * pc)
+    print(f"  yazildi assets/olcek/yildizlar.bin: {n} yildiz ({near} tanesi 10 pc icinde)")
+
+
 if __name__ == "__main__":
     what = sys.argv[1] if len(sys.argv) > 1 else "hepsi"
     os.makedirs(OUT, exist_ok=True)
@@ -356,6 +407,8 @@ if __name__ == "__main__":
         kiyi()
     if what in ("bulut", "hepsi"):
         bulut()
+    if what in ("yildiz", "hepsi"):
+        yildiz()
     if what == "kusak":
         from PIL import Image
         Image.MAX_IMAGE_PIXELS = None

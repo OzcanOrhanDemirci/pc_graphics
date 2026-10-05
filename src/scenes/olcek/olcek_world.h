@@ -116,6 +116,8 @@ public:
 
     void configure(const Config& cfg);
     void init();                  // the catalogue, the tree, today's orbits
+    // the real stars (tools/olcek_veri.py yildiz: HYG v4.1) in place of the placeholder field; false: kept the field
+    bool loadStars(const std::string& path, std::string& log);
     // time: dt seconds of screen time at scale s (sPrev: where the last frame was; zooming in pulls the home back)
     void advance(double dt, double sPrev);
     void place();                 // the tree's offsets from the clocks
@@ -137,6 +139,7 @@ public:
 private:
     std::vector<Body*> bodies_;
     std::vector<V3> starPos_;     // the stars' field around the Sun (from the Sun, metres)
+    bool realStars_ = false;      // the catalogue is in starPos_ (loadStars)
     std::vector<float4> starFlux_;   // luminosity (W) and colour
     std::vector<V3> galPos_;      // galaxies (from the Laniakea centre)
     std::vector<float4> galFlux_;
