@@ -118,7 +118,7 @@ Face g_faces[int(Font::Count)];
 
 // the letters baked: ASCII, Latin-1, Latin Extended-A (Turkish), dashes and quotes, arrows, minus and infinity
 struct Range { int first, count; };
-const Range kRanges[] = {{32, 95}, {160, 96}, {256, 128}, {0x2010, 0x28}, {0x2190, 4}, {0x2022, 1}, {0x2026, 1}, {0x2212, 1}, {0x221E, 1}};
+const Range kRanges[] = {{32, 95}, {160, 96}, {256, 128}, {0x2010, 0x28}, {0x2190, 4}, {0x2022, 1}, {0x2026, 1}, {0x2212, 1}, {0x221E, 1}, {0x2070, 0x30}};
 
 struct Baked {
     GLuint tex = 0;
@@ -151,7 +151,7 @@ const Baked* bake(Font f, float size) {
     // atlas size from the glyph count and size; oversampled small text stays crisp
     const int over = px < 40 ? 2 : 1;
     int side = 256;
-    while (side < 4096 && side * side < int(px * px * over * 420)) side *= 2;
+    while (side < 4096 && side * side < int(px * px * over * 500)) side *= 2;   // 500: room for the superscripts too
     std::vector<unsigned char> pixels(size_t(side) * side, 0);
     stbtt_pack_context pc;
     stbtt_PackBegin(&pc, pixels.data(), side, side, 0, 1, nullptr);
@@ -515,6 +515,30 @@ static float layout(const std::vector<int>& cps, const TextStyle& s, const Baked
     for (size_t i = 0; i < cps.size(); ++i) {
         int cp = cps[i];
         auto it = b->glyphs.find(cp);
+        // the superscript minus (10⁻³⁵): IBM Plex has the superscript digits but not it; drawn as the minus sign at the
+        // superscript digits' size and height
+        if (it == b->glyphs.end() && cp == 0x207B) {
+            const auto mi = b->glyphs.find(0x2212), di = b->glyphs.find(0x2074);
+            if (mi != b->glyphs.end() && di != b->glyphs.end()) {
+                const float k = 0.62f;
+                if (draw) {
+                    float mx = std::round(x) + pen, my = baseline, dx = mx, dy = baseline;
+                    stbtt_aligned_quad q, d;
+                    stbtt_GetPackedQuad(&mi->second, b->aw, b->ah, 0, &mx, &my, &q, 0);
+                    stbtt_GetPackedQuad(&di->second, b->aw, b->ah, 0, &dx, &dy, &d, 0);
+                    const float cx = 0.5f * (q.x0 + q.x1), cy = 0.5f * (q.y0 + q.y1), ty = 0.5f * (d.y0 + d.y1);
+                    const float x0 = cx + (q.x0 - cx) * k, x1 = cx + (q.x1 - cx) * k;
+                    const float y0 = ty + (q.y0 - cy) * k, y1 = ty + (q.y1 - cy) * k;
+                    const float sh = -(1.0f - k) * 0.5f * mi->second.xadvance;   // keep it at the start of its narrower advance
+                    gl::MultiTexCoord4f(gl::TEXTURE0, 0, 0, q.s0, q.t0); glVertex2f(x0 + sh, y0);
+                    gl::MultiTexCoord4f(gl::TEXTURE0, 0, 0, q.s1, q.t0); glVertex2f(x1 + sh, y0);
+                    gl::MultiTexCoord4f(gl::TEXTURE0, 0, 0, q.s1, q.t1); glVertex2f(x1 + sh, y1);
+                    gl::MultiTexCoord4f(gl::TEXTURE0, 0, 0, q.s0, q.t1); glVertex2f(x0 + sh, y1);
+                }
+                pen += mi->second.xadvance * k + s.tracking;
+                continue;
+            }
+        }
         if (it == b->glyphs.end()) { cp = '?'; it = b->glyphs.find(cp); if (it == b->glyphs.end()) continue; }
         if (draw) {
             float qx = std::round(x) + pen, qy = baseline;

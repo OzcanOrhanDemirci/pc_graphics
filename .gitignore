@@ -14,3 +14,7 @@ user.cfg
 # Koy: CC0 scans fetched by assets/koy/fetch.py, not committed
 assets/koy/cc0/
 assets/koy/_dl/
+
+# Ölçek: data fetched and prepared by tools/olcek_veri.py, not committed (the sources: assets/olcek/KAYNAKLAR.md)
+assets/olcek/*
+!assets/olcek/KAYNAKLAR.md

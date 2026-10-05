@@ -1,10 +1,16 @@
 # DURUM · pc_graphics uygulaması
 
 > Uygulamanın tek kaynak durum panosu. Mimari ve yeni sahne ekleme: `docs/MIMARI.md`. Sahnelerin kendi panoları:
-> `docs/altinsaat/`, `docs/fener/`, `docs/yikim/`, `docs/laboratuvar/`, `docs/koy/`, `docs/heykel/` (PLAN.md ve DURUM.md);
+> `docs/altinsaat/`, `docs/fener/`, `docs/yikim/`, `docs/laboratuvar/`, `docs/koy/`, `docs/heykel/`, `docs/olcek/` (PLAN.md ve DURUM.md);
 > `docs/tanecik/` arşiv.
 
 ## Şu an
+- **2026-10-05 (öğleden sonra) · Sahne 7 "Ölçek" Ö0 bitti: iskelet ve ölçek motoru.** Galeride **07 Ölçek** (gül
+  `#E08BAE`). Planck'tan gözlemlenebilir evrene 62 onluk, yalnız tekerlekle; her cisim 5 Ekim 2026 öğlesindeki gerçek
+  yerinde ve boyunda (astropy + JPL DE440s), şimdilik yer tutucu biçimlerle. Çapa ağacı ve hassasiyet (en kötü 1,1 × 10⁻⁴
+  piksel), katman saatleri ve eve dönüş (her seferinde bugünkü öğle), sabit örnekli CUDA çizici (≤ 6,5 ms; Dünya'nın
+  yer tutucu deseninde 24 ms). Ayrıntı, ölçümler ve NE DOĞRULANMADI `docs/olcek/DURUM.md`'de. Uygulamaya genel ek: yazı
+  atlasında üst simgeler (U+2070-209F), üst simge eksi IBM Plex'te olmadığından eksi işaretinden çiziliyor.
 - **2026-10-05 (gece) · Sahne 6 "Heykel" kapandı.** Özcan: *"Sorun çözüldü sahne tamamlandı."* Son revize (4): kamera
   heykelin yanında kalır (tekerlek yalnız heykele, tasma, ilk görünüme sıçramasız dönüş, arkası duvarsa geldiği yoldan
   geri sarma). Revize 1-4 ve ölçümler `docs/heykel/DURUM.md` başında. Sıradaki: sahne 7 konuşuluyor.

@@ -574,6 +574,25 @@ int App::run(const Options& opt) {
                 wait(10.0); log("heykel tur 10000"); shot("heykel_tur_10000");
                 key(GLFW_KEY_T); wait(0.5); key(GLFW_KEY_R); wait(1.0);
             }
+            if (infos_[s].id == "olcek") {
+                // the beach, the wheel out (a notch is x1.5: ~5.7 a decade) to the Earth, the Solar System, the Galaxy and
+                // the edge, R home, in to the grain, the atom, the nucleus and the desert, then the tour from the panel
+                wait(2.0); log("olcek sahil"); shot("olcek_sahil");
+                mouse(0.50f, 0.50f); wheel(-17.0f); wait(2.0); log("olcek 1 km"); shot("olcek_+3");
+                wheel(-23.0f); wait(2.0); log("olcek dunya"); shot("olcek_+7");
+                wheel(-28.0f); wait(2.0); log("olcek gunes sistemi"); shot("olcek_+12");
+                wheel(-51.0f); wait(2.0); log("olcek samanyolu"); shot("olcek_+21");
+                wheel(-40.0f); wait(2.5); log("olcek evrenin kenari"); shot("olcek_+27");
+                key(GLFW_KEY_R); wait(7.0); log("olcek eve donus"); shot("olcek_eve_donus");
+                wheel(17.0f); wait(2.0); log("olcek kum tanesi"); shot("olcek_-3");
+                wheel(40.0f); wait(2.0); log("olcek atom"); shot("olcek_-10");
+                wheel(23.0f); wait(2.0); log("olcek cekirdek"); shot("olcek_-14");
+                wheel(57.0f); wait(2.0); log("olcek col"); shot("olcek_-24");
+                wheel(80.0f); wait(2.5); log("olcek planck"); shot("olcek_planck");
+                key(GLFW_KEY_R); wait(7.0);
+                control("tur", 0); wait(10.0); log("olcek tur 10 sn"); shot("olcek_tur");
+                key(GLFW_KEY_T); wait(0.5); key(GLFW_KEY_R); wait(4.0);
+            }
             if (infos_[s].id == "laboratuvar") {
                 // every experiment: live, its trigger on the coarse world, the fine pass asked for, the recording as it
                 // computes and when it plays; the panel by mouse (the time bar, the speed); slow motion on a resting

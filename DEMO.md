@@ -146,3 +146,18 @@ as nothing moves the picture accumulates and sharpens; top right, the zoom and h
 
 **Try:** watch the tour first (T). Then wheel into the edge of a star, stopping at every decade; drag the light to a
 raking angle. Settings `scenes/heykel.cfg` (F5).
+
+## 07 · Scale — from a beach in Izmir to the edge of the universe and to the Planck length (in progress)
+The scene of scale: 62 decades, with the wheel alone, without a cut. Everything where and as large as it truly was at noon
+on 5 October 2026, and the empty stretches between at their true length. Time flows at its own pace at every scale (faster
+outwards, slower inwards) but changes nothing: the way home always ends at the same noon. Top right, what is looked at and
+the screen's width.
+
+| Key | What it does |
+|---|---|
+| **Wheel** | move out, move in (a notch is x1.5; spun fast, up to 20 decades a second) |
+| **R** | back to the beach |
+| **T** | the tour: to the edge of the universe, back to the beach, to Planck, back (half a decade a second; the wheel or T stops it) |
+
+**Try:** turn the wheel slowly from the Earth to the Sun (the planets become rings); then spin it. Ö0: the bodies are
+placeholders, their looks come in the next steps (`docs/olcek/PLAN.md`). Settings `scenes/olcek.cfg` (F5).

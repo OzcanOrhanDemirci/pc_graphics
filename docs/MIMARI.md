@@ -31,6 +31,8 @@ src/
     koy/        sahne 5 · Koy (su altı: sabit örnekli süper örnekleme, tayf tabloları, FFT yüzey, kostik hacmi)
     heykel/     sahne 6 · Heykel (geometri: fraktal mesafe kestirimi, 10.000 kat için pertürbasyon, CUDA önizleme + durunca
                 biriken yol izleme)
+    olcek/      sahne 7 · Ölçek (62 onluk: çapa ağacı ve hassasiyet, katman saatleri, sabit örnekli CUDA çizici, "bugün"
+                olcek_bugun.h: tools/olcek_bugun.py'nin astropy + DE440s çıktısı)
       particles.*       tanecik çözücüsü (PBF, XPBD bağlar, şekil eşleme, taneler)  surface.* sıvı yüzeyi
       lab_world.*       beş deneyin kurulumu ve adımı (kaba ya da ince)  lab_record.* ince kayıt, işçi iş parçacığı
       lab_kernels.cu    çözücü, kayıt ve çizici arası küçük çekirdekler  weapons.* gerçek yükler, balistik
@@ -114,7 +116,7 @@ değişince uygulama bütün sahnelerin `info()`'sunu yeniden ister. Komut satı
 ## Tasarım dili
 
 - **Koyu, sessiz bir çerçeve, parlak resimler.** Arayüz nötr gri tonlarda; her sahne tek bir vurgu rengi getirir:
-  01 altın (`#E6B566`), 02 soğuk mavi (`#86B3DA`), 03 güvenlik turuncusu (`#E5764A`), 04 deniz yeşili (`#6FC2B4`), 05 deniz mavisi (`#4FB8C8`), 06 lavanta (`#9D8CE0`). Galeri düğmesi, seçili öğe,
+  01 altın (`#E6B566`), 02 soğuk mavi (`#86B3DA`), 03 güvenlik turuncusu (`#E5764A`), 04 deniz yeşili (`#6FC2B4`), 05 deniz mavisi (`#4FB8C8`), 06 lavanta (`#9D8CE0`), 07 gül (`#E08BAE`). Galeri düğmesi, seçili öğe,
   seçici ve ilerleme çubukları o rengi alır.
 - **Tek yazı ailesi, üç ses:** IBM Plex Serif adlar ve başlıklar, Plex Sans metin, Plex Mono sayılar ve tuş kapakları.
   Küçük başlıklar büyük harf ve harf aralıklı (Türkçe büyük harf: i → İ).
@@ -125,5 +127,5 @@ değişince uygulama bütün sahnelerin `info()`'sunu yeniden ister. Komut satı
   paneli resmin üstüne 0,3 sn'de iner, resmin kendi yazıları o sırada çekilir; bildirimler 3 sn sonra söner.
 - **Galeride iki ses:** resmin altında ne olduğu (kısa açıklama), "Ayrıntılar"da nasıl yapıldığı (teknik). Stil ya da
   esin adı açıklamada değil, gerekirse ayrıntılarda.
-- **Yazı atlası:** IBM Plex'ten ASCII, Latin-1, Latin Genişletilmiş-A (Türkçe), tireler ve tırnaklar, oklar, eksi ve ∞
-  pişirilir (`src/ui/ui.cpp`, `kRanges`). Başka bir simge önce oraya eklenir; yoksa ekranda "?" çıkar.
+- **Yazı atlası:** IBM Plex'ten ASCII, Latin-1, Latin Genişletilmiş-A (Türkçe), tireler ve tırnaklar, oklar, eksi, ∞ ve
+  üst/alt simgeler (10⁻³⁵ gibi, U+2070-209F) pişirilir (`src/ui/ui.cpp`, `kRanges`). Başka bir simge önce oraya eklenir; yoksa ekranda "?" çıkar.

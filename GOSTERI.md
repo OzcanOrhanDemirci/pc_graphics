@@ -137,3 +137,17 @@ birikir ve netleşir; sağ üstte yakınlaşma ve ekranın o an kaç milimetre g
 
 **Dene:** önce T ile turu izle. Sonra bir yıldızın kenarına tekerlekle in ve her onda bir katta dur; ışığı yatık açıya
 sürükle. Ayarlar `scenes/heykel.cfg` (F5 ile).
+
+## 07 · Ölçek — İzmir'de bir sahilden evrenin kenarına ve Planck uzunluğuna (yapım aşamasında)
+Ölçeğin sahnesi: 62 onluk, yalnız tekerlekle, kesintisiz. Her şey 5 Ekim 2026 öğlesindeki gerçek yerinde ve gerçek
+boyunda; aradaki boşluklar da gerçek uzunluğunda. Zaman her ölçekte kendi hızıyla akar (dışarı hızlanır, içeri yavaşlar),
+ama hiçbir şeyi değiştirmez: sahile hep aynı öğlede dönülür. Sağ üstte bakılan cisim ve ekranın genişliği.
+
+| Tuş | Ne yapar |
+|---|---|
+| **Tekerlek** | uzaklaş, yaklaş (bir tık ×1,5; hızlı çevirince saniyede 20 onluğa kadar) |
+| **R** | sahile dön |
+| **T** | tur: evrenin kenarına, geri sahile, Planck'a, geri sahile (saniyede yarım onluk; tekerlek ya da T durdurur) |
+
+**Dene:** tekerleği yavaş çevirip Dünya'dan Güneş'e geç (gezegenler halkaya döner); sonra hızlı çevir. Ö0: cisimler
+yer tutucu, görünüşleri sıradaki adımlarda (`docs/olcek/PLAN.md`). Ayarlar `scenes/olcek.cfg` (F5 ile).
