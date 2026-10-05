@@ -243,7 +243,7 @@ void Scale::configure(const Config& cfg) {
     evV.clear();
     auto it = cfg.values.find("ev");
     const std::string curve = it != cfg.values.end() ? it->second
-        : "-35:0, 8.3:0, 9.5:6, 10.5:10, 11.5:14, 12.5:19, 13.5:23, 22.6:23, 24:28, 25:33.5, 25.6:36, 27.3:36";
+        : "-35:0, 8.3:0, 9.5:6, 10.5:11, 11.5:16, 12.5:21, 13.5:23.5, 22.6:23.5, 24:28, 25:33.5, 25.6:36, 27.3:36";
     std::stringstream ss(curve);
     std::string part;
     while (std::getline(ss, part, ',')) {
@@ -573,6 +573,7 @@ void Scale::advance(double dt, double sPrev) {
         clk.foam[i] = wrapTo(clk.foam[i] + std::fmod(T * kC * std::ldexp(1.0, j), 256.0), 256.0);
     }
     for (int n = 0; n < kModes; ++n) clk.string[n] = wrapTo(clk.string[n] + std::fmod(T * (n + 2) * kC / kLoop, 2.0 * kPi), 2.0 * kPi);
+    foamClock_ = wrapTo(foamClock_ + std::fmod(T * kC / kPlanckLength, 4096.0), 4096.0);
     clk.beach = wrapTo(clk.beach + T, 8000.0);
 }
 
@@ -702,7 +703,7 @@ void Scale::ballOrPoint(OlcekView& v, std::vector<GSplat>& splats, const Body& b
             const double circPx = 2.0 * kPi * o.a / dist / v.pixAngle;
             ring = 6.0 * sigL >= 4.0 * P;
             const double pathPx = ring ? circPx : std::max(circPx * 6.0 * sigL / P, 6.0 * blurPx);
-            K = int(std::clamp(pathPx / 0.4, 4.0, 2048.0));
+            K = int(std::clamp(pathPx / 0.4, 4.0, 8192.0));
             wBall *= float(1.0 - smoothstep(0.3, 1.0, blurPx / std::max(rpx, 0.5)));
             reach = ring ? o.a * (1.0 + o.e) : std::min(o.a * (1.0 + o.e), kPi * o.a * 6.0 * sigL / P + 3.0 * length(dp));
         }
@@ -777,8 +778,12 @@ void Scale::ballOrPoint(OlcekView& v, std::vector<GSplat>& splats, const Body& b
                     w[i] = ring ? 1.0 : std::exp(-0.5 * (tau[i] / sigL) * (tau[i] / sigL));
                     ws += w[i];
                 }
+                // the flash at the end of the exposure (a representation, the light kept): a third of it where the
+                // body is now, so a planet reads as a point on its ring; the rest along its way
+                const float flash = 0.35f;
+                splats.push_back({toCamSpace(rel), fl * flash, sig});
                 for (int i = 0; i < K; ++i)
-                    splats.push_back({toCamSpace(rel + sunShift(b.node, tau[i])), fl * float(w[i] / ws), sig});
+                    splats.push_back({toCamSpace(rel + sunShift(b.node, tau[i])), fl * float((1.0 - flash) * w[i] / ws), sig});
             }
         }
     }
@@ -794,7 +799,9 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
     v.pixAngle = 2.0f * v.tanHalfX / float(width);
     v.nBalls = v.nBlobs = v.nDiscs = 0;
     v.background = make_float3(0, 0, 0);
-    v.saturation = float(smoothstep(-7.0, -6.0, s));
+    // colour ends below the light's wavelength (the instruments' grey: the microscopes' pictures), and comes back as a
+    // representation from the atom down (Özcan's revision: the particles' palette)
+    v.saturation = float(std::max(smoothstep(-7.0, -6.0, s), smoothstep(-8.4, -9.2, s)));
     v.metres = float(cam.D);
     const double k = std::exp2(ev(s)) * 3.0e-3;   // 3e-3: sunlit sand (~130 W/m^2/sr) at ~0.4 on the display
     const double D = cam.D, W = cam.W;
@@ -878,17 +885,19 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
             g.nebula = make_float3(1.0f, 0.36f, 0.52f) * float(Idisc * 0.35 * k * fade);
             g.fade = float(fade);
             const double d2r = kPi / 180.0;
-            struct A { double bk, Rk, lo, hi, b0, b1, w, st, ext; };
+            struct A { double bk, Rk, lo, hi, b0, b1, w, st, ext, gas; };
             // Reid et al. 2019, Table 2 (beta range: where the parallaxes are). The four major arms go on round the far
-            // side, one winding from the bar to the edge (extension in degrees, a representation); the spurs stay short
+            // side, one winding from the bar to the edge (extension in degrees, a representation); the spurs stay short.
+            // As in the familiar picture (Churchwell et al. 2009, R. Hurt's drawing for NASA/JPL-Caltech): two arms of
+            // stars from the bar's ends (Scutum-Centaurus, Perseus), two of gas (Norma, Sagittarius-Carina)
             const A arms[] = {
-                {15, 3.52, -4.2, -4.2, 15, 18, 0.18, 0.45, 40},      // 3-kpc (near)
-                {18, 4.46, -1.0, 19.5, 5, 54, 0.14, 0.9, 320},       // Norma (on into the Outer arm)
-                {23, 4.91, 14.1, 12.1, 0, 104, 0.23, 1.0, 320},      // Scutum-Centaurus (on into the outer Sct-Cen)
-                {24, 6.04, 17.1, 1.0, 2, 97, 0.27, 1.0, 320},        // Sagittarius-Carina
-                {9, 8.26, 11.4, 11.4, -8, 34, 0.31, 0.5, 30},        // Local (the Orion spur, the Sun's)
-                {40, 8.87, 10.3, 8.7, -23, 115, 0.35, 1.0, 320},     // Perseus
-                {18, 12.24, 3.0, 9.4, -16, 71, 0.65, 0.5, 60}};      // Outer
+                {15, 3.52, -4.2, -4.2, 15, 18, 0.18, 0.35, 40, 0.5},      // 3-kpc (near)
+                {18, 4.46, -1.0, 19.5, 5, 54, 0.16, 0.5, 170, 0.8},       // Norma (on into the Outer arm)
+                {23, 4.91, 14.1, 12.1, 0, 104, 0.34, 1.0, 230, 0.2},      // Scutum-Centaurus (on into the outer Sct-Cen)
+                {24, 6.04, 17.1, 1.0, 2, 97, 0.22, 0.5, 150, 0.8},        // Sagittarius-Carina
+                {9, 8.26, 11.4, 11.4, -8, 34, 0.28, 0.4, 30, 0.45},       // Local (the Orion spur, the Sun's)
+                {40, 8.87, 10.3, 8.7, -23, 115, 0.42, 1.0, 230, 0.2},     // Perseus
+                {18, 12.24, 3.0, 9.4, -16, 71, 0.6, 0.4, 60, 0.6}};       // Outer
             g.nArms = 0;
             for (const A& a : arms) {
                 GArm& m = g.arms[g.nArms++];
@@ -901,6 +910,7 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
                 m.width = float(a.w);
                 m.strength = float(a.st);
                 m.ext = float(a.ext * d2r);
+                m.gas = float(a.gas);
             }
         }
         // M31 and M33 by the same model at their own size and in their measured orientation: the disc's normal from
@@ -942,14 +952,14 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
             m.fade = float(fade);
             // arms in model kpc: {betaKink, Rkink, tanLo, tanHi, betaMin, betaMax, width, strength, ext} (radians)
             const double d2r = kPi / 180.0;
-            struct A { double bk, Rk, plo, phi, b0, b1, w, st, ext; };
+            struct A { double bk, Rk, plo, phi, b0, b1, w, st, ext, gas; };
             const A m31Arms[] = {
-                {0, 5.0, 0.0, 0.0, -180, 180, 0.32, 1.0, 5},       // the ring (pitch 0: a circle at 10 kpc)
-                {0, 3.6, 7.0, 7.0, -40, 260, 0.22, 0.55, 30},      // two tightly wound arms inside and outside it
-                {180, 6.6, 7.0, 7.0, -60, 230, 0.26, 0.5, 30}};
+                {0, 5.0, 0.0, 0.0, -180, 180, 0.32, 1.0, 5, 0.55},       // the ring (pitch 0: a circle at 10 kpc)
+                {0, 3.6, 7.0, 7.0, -40, 260, 0.22, 0.55, 30, 0.4},       // two tightly wound arms inside and outside it
+                {180, 6.6, 7.0, 7.0, -60, 230, 0.26, 0.5, 30, 0.4}};
             const A m33Arms[] = {
-                {0, 4.0, 26.0, 26.0, -60, 300, 0.45, 1.0, 40},
-                {180, 4.0, 26.0, 26.0, -60, 280, 0.42, 0.9, 40}};
+                {0, 4.0, 26.0, 26.0, -60, 300, 0.45, 1.0, 40, 0.5},
+                {180, 4.0, 26.0, 26.0, -60, 280, 0.42, 0.9, 40, 0.5}};
             const A* arms = o.node == kM31 ? m31Arms : m33Arms;
             const int nA = o.node == kM31 ? 3 : 2;
             m.nArms = 0;
@@ -965,6 +975,7 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
                 g2.width = float(a.w);
                 g2.strength = float(a.st);
                 g2.ext = float(a.ext * d2r);
+                g2.gas = float(a.gas);
             }
         }
     }
@@ -1122,10 +1133,11 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
     // the quark as a probe of the scale sees it: 0.07 fm down to the proton, then sharper by 1.6 decades a decade (no
     // size has been found down to ~10^-19 m), to a few pixels by 10^-19 (the field's picture takes it over on the way)
     const double sigQ = 0.07e-15 * (s > -15.5 ? 1.0 : std::pow(10.0, 1.6 * (s + 15.5)));
-    if (s < -8.2 && s > -17.3) {
+    if (s < -8.2 && s > -10.1) {
         GDensity& dn = v.dens;
         dn.on = 1;
-        dn.weight = float(smoothstep(-8.2, -9.0, s) * (1.0 - smoothstep(-16.3, -17.3, s)));
+        // the crystal's map, giving way to the atom's particles (olcek_inner.cpp) over -9.3 .. -10.1
+        dn.weight = float(smoothstep(-8.2, -9.0, s) * (1.0 - smoothstep(-9.3, -10.1, s)));
         const double a0 = 0.529177e-10, fm = 1e-15;
         const V3 nuc = tree.rel(cam.ref, kNucleus) - cam.pos;     // the home silicon's nucleus
         const V3 east = earthEast_, north = earthNorth_, up = earthUp_;
@@ -1239,6 +1251,7 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
         F.lo = float(A - 2.0 * std::log10(0.55 * 0.55 + sg2));
         F.hi = float(A - 2.0 * std::log10(0.004 * 0.004 + sg2));
         F.relief = 0.01f;
+        F.fillGain = 0.07f;   // a dark ground: the vacuum's loops and the quark are the picture (olcek_inner.cpp)
         // the foam: octaves from the screen's width down to the string's size, each displacing by ~ the Planck length
         const double R = rate(s);
         if (kPlanckLength / W > 2e-5) {
@@ -1291,6 +1304,7 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
             }
         }
     }
+    buildInner(v);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

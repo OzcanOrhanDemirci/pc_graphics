@@ -21,6 +21,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <sstream>
+#include <unordered_map>
 
 using namespace olcek;
 
@@ -51,12 +52,58 @@ void OlcekApp::init() {
     cudaMalloc(reinterpret_cast<void**>(&output), n * sizeof(uchar4));
     splatCap = 1 << 18;
     cudaMalloc(reinterpret_cast<void**>(&dSplats), size_t(splatCap) * sizeof(GSplat));
+    partCap = 1 << 15;
+    tileIdxCap = 1 << 20;
+    cudaMalloc(reinterpret_cast<void**>(&dParts), size_t(partCap) * sizeof(GParticle));
+    cudaMalloc(reinterpret_cast<void**>(&dTileIdx), size_t(tileIdxCap) * sizeof(int));
+    const int tiles = ((sc.width + kTile - 1) / kTile) * ((sc.height + kTile - 1) / kTile);
+    cudaMalloc(reinterpret_cast<void**>(&dTileStart), size_t(tiles + 1) * sizeof(int));
+}
+
+// the particles into 16-pixel tiles, each tile's list in the list's order (the world sorts it far to near)
+void OlcekApp::binParticles() {
+    const std::vector<GParticle>& P = sc.particles;
+    const int tx = (sc.width + kTile - 1) / kTile, ty = (sc.height + kTile - 1) / kTile;
+    tileStart.assign(size_t(tx * ty + 1), 0);
+    auto box = [&](const GParticle& p, int& x0, int& x1, int& y0, int& y1) {
+        float r, cx = p.c.x, cy = p.c.y, hx = 0.0f, hy = 0.0f;
+        if (p.kind == kPartGlow) r = 3.5f * p.r;
+        else if (p.kind == kPartSphere) r = p.r + 1.0f;
+        else if (p.kind == kPartRing) r = p.r + 3.5f * p.w;
+        else {
+            r = 3.5f * p.w;
+            cx += 0.5f * p.ax.x;
+            cy += 0.5f * p.ax.y;
+            hx = 0.5f * std::fabs(p.ax.x);
+            hy = 0.5f * std::fabs(p.ax.y);
+        }
+        x0 = std::max(int(std::floor((cx - hx - r) / kTile)), 0);
+        x1 = std::min(int(std::floor((cx + hx + r) / kTile)), tx - 1);
+        y0 = std::max(int(std::floor((cy - hy - r) / kTile)), 0);
+        y1 = std::min(int(std::floor((cy + hy + r) / kTile)), ty - 1);
+    };
+    for (const GParticle& p : P) {
+        int x0, x1, y0, y1;
+        box(p, x0, x1, y0, y1);
+        for (int y = y0; y <= y1; ++y)
+            for (int x = x0; x <= x1; ++x) ++tileStart[size_t(y * tx + x + 1)];
+    }
+    for (size_t i = 1; i < tileStart.size(); ++i) tileStart[i] += tileStart[i - 1];
+    tileIdx.resize(size_t(tileStart.back()));
+    std::vector<int> fill(tileStart.begin(), tileStart.end() - 1);
+    for (int i = 0; i < int(P.size()); ++i) {
+        int x0, x1, y0, y1;
+        box(P[size_t(i)], x0, x1, y0, y1);
+        for (int y = y0; y <= y1; ++y)
+            for (int x = x0; x <= x1; ++x) tileIdx[size_t(fill[size_t(y * tx + x)]++)] = i;
+    }
 }
 
 void OlcekApp::loadMaps() {
     mapsLog.clear();
     const std::string dir = root + "/assets/olcek/";
     if (cfg.i("stars.real", 1)) sc.loadStars(dir + "yildizlar.bin", mapsLog);
+    sc.loadBelts(dir + "kusaklar.txt", mapsLog);
     {
         std::string err;
         if (cfg.i("web.volume", 1) && web.load(dir + "ag.bin", err)) {
@@ -110,6 +157,9 @@ void OlcekApp::release() {
     cudaFree(depth);
     cudaFree(output);
     cudaFree(dSplats);
+    cudaFree(dParts);
+    cudaFree(dTileStart);
+    cudaFree(dTileIdx);
     accum = nullptr;
     depth = nullptr;
     output = nullptr;
@@ -148,6 +198,17 @@ void OlcekApp::render() {
     view.maps.moonGain = cfg.f("maps.gain.moon", 0.6f);
     if (world.width) view.maps.worldTexels = float(world.width);
     if (moon.width) view.maps.moonTexels = float(moon.width);
+    binParticles();
+    if (int(sc.particles.size()) > partCap) {
+        cudaFree(dParts);
+        partCap = int(sc.particles.size()) * 2;
+        cudaMalloc(reinterpret_cast<void**>(&dParts), size_t(partCap) * sizeof(GParticle));
+    }
+    if (int(tileIdx.size()) > tileIdxCap) {
+        cudaFree(dTileIdx);
+        tileIdxCap = int(tileIdx.size()) * 2;
+        cudaMalloc(reinterpret_cast<void**>(&dTileIdx), size_t(tileIdxCap) * sizeof(int));
+    }
     if (int(splats.size()) > splatCap) {
         cudaFree(dSplats);
         splatCap = int(splats.size()) * 2;
@@ -162,6 +223,12 @@ void OlcekApp::render() {
     if (!splats.empty()) cudaMemcpyAsync(dSplats, splats.data(), splats.size() * sizeof(GSplat), cudaMemcpyHostToDevice, 0);
     renderFrame(accum, depth, sc.width, sc.height, samples, 0);
     splatPoints(dSplats, int(splats.size()), accum, depth, sc.width, sc.height, 0);
+    if (!sc.particles.empty()) {
+        cudaMemcpyAsync(dParts, sc.particles.data(), sc.particles.size() * sizeof(GParticle), cudaMemcpyHostToDevice, 0);
+        cudaMemcpyAsync(dTileStart, tileStart.data(), tileStart.size() * sizeof(int), cudaMemcpyHostToDevice, 0);
+        cudaMemcpyAsync(dTileIdx, tileIdx.data(), tileIdx.size() * sizeof(int), cudaMemcpyHostToDevice, 0);
+        drawParticles(dParts, dTileStart, dTileIdx, accum, sc.width, sc.height, 0);
+    }
     resolve(accum, output, sc.width, sc.height, view.saturation, 0);
     cudaEventRecord(b);
     cudaEventSynchronize(b);
@@ -266,6 +333,11 @@ int testContinuity(OlcekApp& app, double step) {
     // --set test.lo=.. test.hi=..: a part of the way only (looking into one place)
     const double lo = std::max(double(sc.sMin), double(app.cfg.f("test.lo", float(sc.sMin))));
     const double hi = std::min(double(sc.sMax), double(app.cfg.f("test.hi", float(sc.sMax))));
+    // the particles below the light: one that appears or vanishes in a step well inside the screen is a jump, whatever
+    // the picture's blocks say (thin rings sliding by their own width fill those with honest motion)
+    std::unordered_map<uint64_t, Scale::PartTrack> prevParts;
+    double popWorst[80] = {};
+    double popWorstS[80] = {};
     std::vector<double> path;
     for (double s = hi; s > lo; s -= step) path.push_back(s);
     path.push_back(lo);
@@ -328,6 +400,39 @@ int testContinuity(OlcekApp& app, double step) {
                 }
             if (worst > threshold) flags.push_back({sc.s, worst, wbx, wby});
         }
+        {
+            std::unordered_map<uint64_t, Scale::PartTrack> now;
+            for (const Scale::PartTrack& t : sc.particleTrack) now[t.id] = t;
+            const float mx = 0.08f * sc.width, my = 0.08f * sc.height;
+            auto inside = [&](const Scale::PartTrack& t) { return t.x > mx && t.x < sc.width - mx && t.y > my && t.y < sc.height - my; };
+            const int dec = std::clamp(int(std::floor(sc.s)) + 40, 0, 79);
+            double worst = 0.0;
+            static int shown = 0;
+            const bool dbg = std::getenv("OLCEK_POPS") != nullptr;
+            for (const auto& [id, t] : now) {
+                const auto it = prevParts.find(id);
+                const double d = it == prevParts.end() ? (inside(t) ? t.light : 0.0) : std::fabs(t.light - it->second.light);
+                worst = std::max(worst, d);
+                if (dbg && frames > 0 && d > 0.15 && shown < 30) {
+                    ++shown;
+                    std::printf("    pop s=%.3f id=%llx light %.3f -> %.3f at %.0f,%.0f (prev %s)\n", sc.s, (unsigned long long)id,
+                                it == prevParts.end() ? 0.0 : it->second.light, t.light, t.x, t.y, it == prevParts.end() ? "yok" : "var");
+                }
+            }
+            for (const auto& [id, t] : prevParts)
+                if (!now.count(id) && inside(t)) {
+                    worst = std::max(worst, double(t.light));
+                    if (dbg && t.light > 0.15 && shown < 30) {
+                        ++shown;
+                        std::printf("    gone s=%.3f id=%llx light %.3f at %.0f,%.0f\n", sc.s, (unsigned long long)id, t.light, t.x, t.y);
+                    }
+                }
+            if (frames > 0 && worst > popWorst[dec]) {
+                popWorst[dec] = worst;
+                popWorstS[dec] = sc.s;
+            }
+            prevParts.swap(now);
+        }
         prev.swap(cur);
         prevW = sc.cam.W;
         prevF = F;
@@ -356,6 +461,11 @@ int testContinuity(OlcekApp& app, double step) {
         std::printf("   onluk: sayi / en buyuk\n");
         for (int d = 0; d < 80; ++d)
             if (nFlag[d]) std::printf("    %4d: %4d / %.3f\n", d - 40, nFlag[d], wFlag[d]);
+    }
+    {   // the particles: the largest change of one's light in a step (appearing or vanishing inside the screen counts whole)
+        std::printf("  parcaciklar (bir adimda isigin en buyuk degisimi; 0,15 ustu sicrama):\n");
+        for (int d = 0; d < 80; ++d)
+            if (popWorst[d] > 0.0) std::printf("    %4d: %.3f (s = %.3f)%s\n", d - 40, popWorst[d], popWorstS[d], popWorst[d] > 0.15 ? "  SICRAMA" : "");
     }
     std::sort(flags.begin(), flags.end(), [](const Flag& a, const Flag& b) { return a.v > b.v; });
     for (size_t i = 0; i < std::min<size_t>(flags.size(), 40); ++i)
@@ -486,7 +596,8 @@ int runOlcekCli(int argc, char** argv) {
                 for (int i = 0; i < std::min(v.nBlobs, 6); ++i)
                     std::printf("    blob %d: c %.5g %.5g %.5g sigma %.5g emit %.4g\n", i, v.blobs[i].c.x, v.blobs[i].c.y, v.blobs[i].c.z, v.blobs[i].sigma,
                                 v.blobs[i].emit.x);
-                std::printf("    splats %zu, ground fade %.3f atoms %.3f surface %.3f\n", app.splats.size(), v.ground.fade, v.ground.atoms, v.ground.surface);
+                std::printf("    splats %zu, particles %zu, ground fade %.3f atoms %.3f surface %.3f\n", app.splats.size(), app.sc.particles.size(),
+                            v.ground.fade, v.ground.atoms, v.ground.surface);
                 for (int i = 0; i < kMaxGalaxies; ++i) {   // the galaxies' centres on the screen (pixels) and size
                     const GGalaxy& g = v.galaxy[i];
                     if (!g.on) continue;

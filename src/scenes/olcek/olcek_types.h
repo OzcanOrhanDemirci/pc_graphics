@@ -55,6 +55,7 @@ struct GArm {
     float betaMin = -1, betaMax = 1;                             // the measured azimuths (radians)
     float width = 0.3f, strength = 1.0f;                         // Gaussian sigma at the kink (kpc); its share
     float ext = 0.5f;                                            // how far past the measured azimuths it goes (radians)
+    float gas = 0.3f;                                            // its light's share in nebulae (the minor arms: mostly gas)
 };
 // a spiral galaxy: the Milky Way (its model from measurements) and, drawn by the same code at their own size, M31 and
 // M33 (lengths in "model kpc": real kpc / size, so that one set of shapes serves the three)
@@ -179,6 +180,26 @@ HD float olDensity(const GDensity& D, float3 p) {
     return olDensity(D, p, lap);
 }
 
+// Below the light (Ö4-Ö5, Özcan's revision: art and representation, representational colour): particles drawn on the
+// screen in the order of their depth, far first, binned into 16-pixel tiles on the host. Kinds: a glow (a Gaussian: the
+// exact projection of a 3D Gaussian cloud), a soft lit sphere (it covers what is behind it), a ring (a circle in 3D: an
+// ellipse on the screen, its colour turning around it), a segment (a glowing capsule, its colour along it). Screen
+// coordinates in pixels; colours display-referred like the rest.
+enum { kPartGlow = 0, kPartSphere = 1, kPartRing = 2, kPartSegment = 3 };
+constexpr int kTile = 16;
+struct GParticle {
+    float2 c{0, 0};            // centre (pixels; a segment's first end)
+    float r = 1.0f;            // glow: sigma; sphere: radius; ring: radius along its major axis
+    int kind = kPartGlow;
+    float3 col{1, 1, 1};       // glow / ring peak, sphere's lit colour, segment's colour at its first end
+    float alpha = 1.0f;        // sphere: coverage; the others: a factor on their light
+    float3 col2{1, 1, 1};      // ring: its other side; segment: its far end; sphere: its rim's light
+    float w = 1.0f;            // ring and segment: their width (sigma, pixels)
+    float2 ax{1, 0};           // ring: its major axis (unit); segment: to its far end (pixels)
+    float q = 1.0f;            // ring: minor / major
+    float phase = 0.0f;        // ring: the angle its colour is col at
+};
+
 // a point of light: its flux as the sum of its pixels (display-referred radiance x pixels); a Gaussian on the screen
 struct GSplat {
     float3 p;                   // position (camera space)
@@ -224,6 +245,7 @@ struct GField {
     float sigma = 0.0012f;          // the point's smearing (screen widths): the probe's resolution, a few pixels
     float lo = 0.0f, hi = 10.0f;    // log10 u at the fill's dark and light ends
     float relief = 0.01f;           // the hill-shading's height: screen widths per decade
+    float fillGain = 1.0f;          // the fill's share (the lines stay): low where the particles are the picture
     int octaves = 0;                // the foam
     int index[kMaxOctaves];         // the octave's own number (its wavelength 2^-index m)
     float freq[kMaxOctaves];        // cycles per screen width

@@ -28,6 +28,13 @@ struct OlcekApp {
     uchar4* output = nullptr;
     olcek::GSplat* dSplats = nullptr;
     int splatCap = 0;
+    // the particles below the light: the list, its tiles (host, rebuilt every frame), and their GPU copies
+    std::vector<int> tileStart, tileIdx;
+    olcek::GParticle* dParts = nullptr;
+    int* dTileStart = nullptr;
+    int* dTileIdx = nullptr;
+    int partCap = 0, tileIdxCap = 0;
+    void binParticles();
     // the maps (Ö1; tools/olcek_veri.py): missing ones fall back to the placeholders
     olcek::Texture world, zonal, region, bay, moon, cloudWorld, cloudRegion;
     olcek::Field shore;

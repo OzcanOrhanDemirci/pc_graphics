@@ -514,6 +514,106 @@ def ag(N=256, L=600.0, seed=11, growth=1.25):
     print(f"  yazildi assets/olcek/ag.bin: {N}^3, {L:.0f} Mpc")
 
 
+# ---------------------------------------------------------------------------------------------------------------------
+# The belts (the Minor Planet Center's MPCORB, today's edition): every orbit sampled along its mean anomaly (its time
+# average: at the scales where the belts show, an asteroid goes round faster than the eye's shutter), the heliocentric
+# distance and the height over the ecliptic binned. The main belt and the Kuiper belt as rings (their surface density
+# and thickness by distance), Jupiter's Trojans as their two swarms (count, spread in longitude and distance from
+# Jupiter's L4 and L5). Written as JSON (assets/olcek/kusaklar.json).
+def asteroit(samples=12):
+    import gzip
+    import json
+    path = fetch("https://minorplanetcenter.net/iau/MPCORB/MPCORB.DAT.gz", "MPCORB.DAT.gz")
+    a_l, e_l, i_l, w_l, O_l, M_l, ep_l = [], [], [], [], [], [], []
+    started = False
+
+    def unpack_epoch(t):
+        # packed date: century letter (I=18, J=19, K=20), two digits of year, month and day as 1-9A-V
+        cen = {"I": 1800, "J": 1900, "K": 2000}[t[0]]
+        yr = cen + int(t[1:3])
+        code = "123456789ABCDEFGHIJKLMNOPQRSTUV"
+        mo, dy = code.index(t[3]) + 1, code.index(t[4]) + 1
+        import datetime
+        return (datetime.date(yr, mo, dy) - datetime.date(2000, 1, 1)).days + 0.5   # days from J2000.0 (noon)
+
+    with gzip.open(path, "rt", encoding="latin-1") as f:
+        for line in f:
+            if not started:
+                if line.startswith("-----"):
+                    started = True
+                continue
+            if len(line) < 103:
+                continue
+            try:
+                a = float(line[92:103]); e = float(line[70:79]); inc = float(line[59:68])
+                w = float(line[37:46]); O = float(line[48:57]); M = float(line[26:35])
+                ep = unpack_epoch(line[20:25])
+            except (ValueError, KeyError, IndexError):
+                continue
+            if not (0.5 < a < 200.0) or not (0.0 <= e < 0.99):
+                continue
+            a_l.append(a); e_l.append(e); i_l.append(inc); w_l.append(w); O_l.append(O); M_l.append(M); ep_l.append(ep)
+    a = np.array(a_l); e = np.array(e_l); inc = np.radians(i_l); w = np.radians(w_l); O = np.radians(O_l)
+    M0 = np.radians(M_l); ep = np.array(ep_l)
+    print(f"  MPCORB: {len(a)} yorunge")
+    # today (the scene's moment), days from J2000
+    t_today = 9774.0 + 0.4162   # 2026-10-05 09:59 UTC
+    nmot = 0.01720209895 / a ** 1.5   # rad/day
+    out = {}
+    # ---- the rings: r and z over the orbits (samples along M)
+    def rings(sel, r0, r1, dr):
+        aa, ee, ii, ww = a[sel], e[sel], inc[sel], w[sel]
+        nb = int(round((r1 - r0) / dr))
+        cnt = np.zeros(nb); z2 = np.zeros(nb)
+        for k in range(samples):
+            Mk = 2.0 * np.pi * (k + 0.5) / samples
+            E = Mk + ee * np.sin(Mk)
+            for _ in range(6):
+                E = E - (E - ee * np.sin(E) - Mk) / (1.0 - ee * np.cos(E))
+            r = aa * (1.0 - ee * np.cos(E))
+            nu = 2.0 * np.arctan2(np.sqrt(1 + ee) * np.sin(E / 2), np.sqrt(1 - ee) * np.cos(E / 2))
+            z = r * np.sin(ii) * np.sin(ww + nu)
+            b = np.floor((r - r0) / dr).astype(int)
+            ok = (b >= 0) & (b < nb)
+            np.add.at(cnt, b[ok], 1.0 / samples)
+            np.add.at(z2, b[ok], z[ok] ** 2 / samples)
+        zrms = np.sqrt(z2 / np.maximum(cnt, 1e-9))
+        rc = r0 + dr * (np.arange(nb) + 0.5)
+        return {"r0": r0, "dr": dr, "n": [round(float(x), 2) for x in cnt], "zrms": [round(float(x), 4) for x in zrms],
+                "sigma": [float(x) for x in cnt / (2 * np.pi * rc * dr)]}
+    trojan = (a > 5.05) & (a < 5.35) & (e < 0.25)
+    main = (a < 5.0) & ~trojan
+    kuiper = (a > 29.0) & (a < 60.0)
+    out["main"] = rings(main, 1.0, 5.6, 0.02)
+    out["kuiper"] = rings(kuiper, 25.0, 70.0, 0.25)
+    # ---- the Trojans: their mean longitude from Jupiter's today (mean elements, J2000: L 34.396 deg, n 0.0830853 deg/day)
+    lamJ = np.radians(34.39644 + 0.08308530 * t_today)
+    lam = O[trojan] + w[trojan] + M0[trojan] + nmot[trojan] * (t_today - ep[trojan])
+    d = (lam - lamJ + np.pi) % (2.0 * np.pi) - np.pi
+    L4 = d > 0
+    def swarm(m, sign):
+        dd = np.degrees(d[m]) - sign * 60.0
+        return {"n": int(m.sum()), "lon": float(np.mean(dd) + sign * 60.0), "sigLon": float(np.std(dd)),
+                "sigR": float(np.std(a[trojan][m] * (1 - e[trojan][m] ** 2) ** 0.5))}
+    out["trojans"] = {"L4": swarm(L4, 1.0), "L5": swarm(~L4, -1.0)}
+    out["counts"] = {"main": int(main.sum()), "trojans": int(trojan.sum()), "kuiper": int(kuiper.sum()), "all": int(len(a))}
+    with open(os.path.join(OUT, "kusaklar.json"), "w", encoding="utf-8") as f:
+        json.dump(out, f)
+    # the program's table: "ring <name> r0 dr bins", then per bin "surface density (per AU^2) z_rms (AU)"; "trojan
+    # <L4|L5> count lon sigLon" (degrees from Jupiter)
+    with open(os.path.join(OUT, "kusaklar.txt"), "w", encoding="utf-8") as f:
+        for name in ("main", "kuiper"):
+            g = out[name]
+            f.write(f"ring {name} {g['r0']} {g['dr']} {len(g['n'])}\n")
+            for sg, z in zip(g["sigma"], g["zrms"]):
+                f.write(f"{sg:.3f} {z:.4f}\n")
+        for k in ("L4", "L5"):
+            t = out["trojans"][k]
+            f.write(f"trojan {k} {t['n']} {t['lon']:.3f} {t['sigLon']:.3f}\n")
+    print(f"  ana kusak {out['counts']['main']}, Truvalilar {out['counts']['trojans']} (L4 {out['trojans']['L4']['n']}, "
+          f"L5 {out['trojans']['L5']['n']}), Kuiper {out['counts']['kuiper']}")
+
+
 if __name__ == "__main__":
     what = sys.argv[1] if len(sys.argv) > 1 else "hepsi"
     os.makedirs(OUT, exist_ok=True)
@@ -533,6 +633,8 @@ if __name__ == "__main__":
         galaksi()
     if what in ("ag", "hepsi"):
         ag()
+    if what in ("asteroit", "hepsi"):
+        asteroit()
     if what == "kusak":
         from PIL import Image
         Image.MAX_IMAGE_PIXELS = None

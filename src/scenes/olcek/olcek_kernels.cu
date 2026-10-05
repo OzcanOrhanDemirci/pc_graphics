@@ -760,22 +760,25 @@ __device__ float3 galaxyLight(const GGalaxy& g, float3 d, float tmax, float pixK
     const float beta = atan2f(y, x);
     const float fp = pixKpc / g.size * t / fabsf(dn) * 0.5f;    // a pixel's footprint there (model kpc)
     // the old disc: exponential, its edge softening beyond ~15 kpc
-    float3 col = g.disc * (__expf(-R / g.hDisc) * (1.0f - smoothstepf(13.0f, 20.0f, R)) * 0.55f);
+    float3 col = g.disc * (__expf(-R / g.hDisc) * (1.0f - smoothstepf(13.0f, 20.0f, R)) * 0.7f);
     // the bar and the bulge: an elongated exponential along the bar, a round core
     const float ca = cosf(g.barAngle), sa = sinf(g.barAngle);
     const float bx = x * ca + y * sa, by = -x * sa + y * ca;
     const float bar = __expf(-sqrtf(sqr(bx / (g.barHalf * 0.33f)) + sqr(by / 0.55f)));
     const float core = __expf(-R / 0.35f);
     col += g.bulge * (g.barW * bar + (1.0f - g.barW) * core);
-    // the arms: young stars and nebulae in clumps; dust on their inner edges
-    float young = 0.0f, lane = 0.0f;
+    // the arms: their stars (the two major arms, Scutum-Centaurus and Perseus) and their gas (the minor ones, Norma and
+    // Sagittarius-Carina: mostly nebulae); dust on their inner edges
+    float young = 0.0f, gas = 0.0f, lane = 0.0f;
     for (int i = 0; i < g.nArms; ++i) {
         float side;
         const float a = armDensity(g.arms[i], R, beta, side);
-        young += a;
+        young += a * (1.0f - g.arms[i].gas);
+        gas += a * g.arms[i].gas;
         lane += g.arms[i].strength * __expf(-0.5f * sqr((side + 0.9f) / 0.45f)) * smoothstepf(0.05f, 0.3f, a + 0.05f);
     }
-    // clumps: noise in the plane, stretched along the rotation (star clouds sheared by it); octaves finer than ~2 pixels fade
+    const float arm = fminf(young + gas, 1.5f);
+    // star clouds: noise in the plane, stretched along the rotation (sheared by it); octaves finer than ~2 pixels fade
     float clump = 0.0f, amp = 0.5f, f = 1.6f, wsum = 0.0f;
     const float ux = x * 0.9f + y * 0.43f, uy = -x * 0.43f + y * 0.9f;
     for (int o = 0; o < 11; ++o) {
@@ -787,11 +790,45 @@ __device__ float3 galaxyLight(const GGalaxy& g, float3 d, float tmax, float pixK
         amp *= 0.66f;
     }
     clump = 0.5f + clump / fmaxf(wsum, 1e-3f) * 1.6f;
-    const float knots = smoothstepf(0.55f, 0.9f, clump);
-    col += g.disc * (__expf(-R / g.hDisc) * 0.35f * fminf(young, 1.0f));   // the old stars crowd into the arms a little too
-    col += g.young * (young * (0.12f + 0.5f * clump + 1.1f * knots));   // a band of young light, clumpy, with brighter star clouds
-    col += g.nebula * (young * sqr(sqr(knots)) * 3.0f);              // Halpha in the brightest knots only
-    // dust: lanes plus a thin general layer, filaments from the same noise; the light passes a mixed layer: (1 - e^-tau)/tau
+    const float knots = smoothstepf(0.5f, 0.85f, clump);
+    // clusters and HII regions: points in cells (three sizes for the clusters, one for the nebulae), kept where the arms
+    // are, each a Gaussian of a fraction of its cell; below a pixel they keep their light (0.7 px at the least)
+    const float pix = 2.0f * fp;   // a pixel, model kpc
+    float clusters = 0.0f, hii = 0.0f;
+    for (int o = 0; o < 4; ++o) {
+        const bool neb = o == 3;
+        const float cell = neb ? 0.42f : 0.32f / float(1 << o);
+        const float vis = smoothstepf(2.5f, 6.0f, cell / pix);
+        if (vis <= 0.0f) continue;
+        const float cx = x / cell, cy = y / cell;
+        const int ix = int(floorf(cx)), iy = int(floorf(cy));
+        const float sig = neb ? 0.11f : 0.065f;                // cell units
+        float acc = 0.0f;
+        for (int j = -1; j <= 1; ++j)
+            for (int i = -1; i <= 1; ++i) {
+                const int gx = ix + i, gy = iy + j;
+                const float h0 = hash1(gx, gy, o, 1201), h1 = hash1(gx, gy, o, 1202), h2 = hash1(gx, gy, o, 1203);
+                const float h3 = hash1(gx, gy, o, 1204);
+                const float px = gx + 0.15f + 0.7f * h0, py = gy + 0.15f + 0.7f * h1;
+                // kept with the arm's density at the cell (the nebulae: its gas, plus a little of its stars)
+                const float prob = neb ? saturate(1.4f * gas + 0.3f * young) * 0.55f : saturate(1.3f * young) * 0.8f;
+                if (h2 > prob) continue;
+                const float d2 = sqr(cx - px) + sqr(cy - py);
+                const float b = 0.25f + 2.5f * h3 * h3 * h3;   // a few bright, many faint
+                // the nebulae in sizes (the bright ones larger)
+                const float sP = neb ? sig * (0.6f + 0.9f * h3) : sig;
+                const float sPE = fmaxf(sP, 0.7f * pix / cell);
+                acc += b * __expf(-0.5f * d2 / (sPE * sPE)) * (sP / sPE) * (sP / sPE);
+            }
+        if (neb) hii += vis * acc;
+        else clusters += vis * acc * (o == 0 ? 0.3f : o == 1 ? 0.55f : 1.0f);
+    }
+    col += g.disc * (__expf(-R / g.hDisc) * 0.30f * fminf(arm, 1.0f));     // the old stars crowd into the arms a little too
+    col += g.young * (young * (0.015f + 0.10f * clump * clump + 0.75f * knots));   // star clouds along the arms, mottled
+    col += g.young * (clusters * 0.9f);                                     // young clusters
+    col += g.nebula * (gas * (0.06f + 0.35f * knots) + hii * 1.1f);       // Halpha: the gas arms, the HII regions
+    // dust: lanes on the arms' inner edges, filaments from the same kind of noise, the bar's two straight lanes on its
+    // leading edges, a thin general layer; the light passes a mixed layer: (1 - e^-tau) / tau
     float filament = 0.0f;
     {
         float a2 = 0.5f, f2 = 1.2f, w2 = 0.0f;
@@ -805,7 +842,11 @@ __device__ float3 galaxyLight(const GGalaxy& g, float3 d, float tmax, float pixK
         }
         filament = 0.5f + filament / fmaxf(w2, 1e-3f) * 1.6f;
     }
-    const float tau = g.dust * (lane * (0.2f + 2.2f * smoothstepf(0.45f, 0.8f, filament)) + 0.35f * __expf(-R / 3.2f) * smoothstepf(0.3f, 0.7f, filament));
+    const float side = bx > 0.0f ? 1.0f : -1.0f;
+    const float barLane = __expf(-0.5f * sqr((by - side * 0.62f) / 0.16f)) * (1.0f - smoothstepf(0.6f * g.barHalf, g.barHalf, fabsf(bx))) *
+                          smoothstepf(0.4f, 1.2f, fabsf(bx));
+    const float tau = g.dust * (lane * (0.3f + 2.6f * smoothstepf(0.4f, 0.8f, filament)) + 0.35f * __expf(-R / 3.2f) * smoothstepf(0.3f, 0.7f, filament) +
+                                1.4f * barLane * (0.6f + 0.8f * filament));
     const float3 tauRGB = make_float3(tau * 0.75f, tau * 1.0f, tau * 1.3f);   // reddening
     const float3 trans = make_float3(tauRGB.x > 1e-4f ? (1.0f - __expf(-tauRGB.x)) / tauRGB.x : 1.0f,
                                      tauRGB.y > 1e-4f ? (1.0f - __expf(-tauRGB.y)) / tauRGB.y : 1.0f,
@@ -875,7 +916,7 @@ __device__ float mapShade(float x0, float gx, float gy, float lo, float hi, floa
 // The silica net's electrons at p (camera space): the AFM's lattice (atomHeight: the same sites, the same thermal jitter),
 // each atom its Slater density, the apical oxygens under the silicons in 3D; atoms beyond 4.5 A left out (their tails
 // are 10^-9 of what is there). The home silicon is not here: it is a body, carrying the nucleus's swing.
-__device__ float latticeDensity(float3 p, float& lap) {
+__device__ float latticeDensity(float3 p, float& lap, float& rhoO) {
     const GGround& g = cV.ground;
     const float3 rel = (p - g.o) * g.metres;
     const float x = dot(rel, g.east), y = dot(rel, g.north), z = dot(rel, g.up);
@@ -901,23 +942,32 @@ __device__ float latticeDensity(float3 p, float& lap) {
                 dy -= g.jitter * __sinf(g.vibPhase * 1.37f + p2);
                 const float d2 = dx * dx + dy * dy + dz * dz;
                 if (d2 > cut2) continue;
-                rho += olAtomDensityLap(m < 2 ? 0 : 1, sqrtf(d2) * inva0, lap);
+                const float e = olAtomDensityLap(m < 2 ? 0 : 1, sqrtf(d2) * inva0, lap);
+                rho += e;
+                if (m >= 2) rhoO += e;
             }
         }
     return rho;
 }
-__device__ __forceinline__ float densityAt(const GDensity& D, float3 p, float& lap) {
-    return olDensity(D, p, lap) + (D.lattice ? latticeDensity(p, lap) : 0.0f);
+// the density, its Laplacian and the oxygens' share of it (the map's colour: silicon gold, oxygen red, as chemists draw them)
+__device__ __forceinline__ float densityAt(const GDensity& D, float3 p, float& lap, float& rhoO) {
+    float rho = 1e-30f;
+    for (int k = 0; k < D.n; ++k) {
+        const float e = olBodyDensity(D.b[k], p, lap);
+        rho += e;
+        if (D.b[k].type == 1) rhoO += e;
+    }
+    return rho + (D.lattice ? latticeDensity(p, lap, rhoO) : 0.0f);
 }
 __device__ __forceinline__ float densityAt(const GDensity& D, float3 p) {
-    float lap = 0.0f;
-    return densityAt(D, p, lap);
+    float lap = 0.0f, rhoO = 0.0f;
+    return densityAt(D, p, lap, rhoO);
 }
 __device__ float3 densitySlice(const GDensity& D, float px, float py) {
     const float3 d0 = rayDir(px, py), dx = rayDir(px + 1.0f, py), dy = rayDir(px, py + 1.0f);
     const float3 p0 = d0 * (1.0f / d0.z), p1 = dx * (1.0f / dx.z), p2 = dy * (1.0f / dy.z);
-    float lap = 0.0f;
-    const float rho = densityAt(D, p0, lap);
+    float lap = 0.0f, rhoO = 0.0f;
+    const float rho = densityAt(D, p0, lap, rhoO);
     const float x0 = log10f(rho);
     const float gx = log10f(densityAt(D, p1)) - x0, gy = log10f(densityAt(D, p2)) - x0;   // decades per pixel
     // the shells: -Laplacian(rho) / rho against the slope's own scale |grad ln rho|^2 (+1 / a0^2), dimensionless;
@@ -929,7 +979,9 @@ __device__ float3 densitySlice(const GDensity& D, float px, float py) {
         fillMul = 1.0f + D.shells * (0.9f * smoothstepf(-0.15f, 0.35f, q) - 0.45f);
     }
     const float v = D.weight * mapShade(x0, gx, gy, D.lo, D.hi, D.relief, fillMul);
-    return make_float3(v, v, v);
+    const float o = saturate(rhoO / rho);
+    const float3 tint = lerp3(make_float3(1.08f, 0.94f, 0.70f), make_float3(1.12f, 0.62f, 0.56f), o);   // Si gold, O red
+    return tint * v;
 }
 
 // ---- the desert and the bottom (see GField)
@@ -1014,12 +1066,13 @@ __device__ float3 fieldSlice(const GField& F, float px, float py) {
     const float x0 = fieldLog(F, ux, uy, cell, &toLoop);
     const float gx = fieldLog(F, dx.x / dx.z * sc, dx.y / dx.z * sc, cell) - x0;
     const float gy = fieldLog(F, dy.x / dy.z * sc, dy.y / dy.z * sc, cell) - x0;
-    float v = mapShade(x0, gx, gy, F.lo, F.hi, F.relief);
+    float v = mapShade(x0, gx, gy, F.lo, F.hi, F.relief, F.fillGain);
     // the foam's walls, as bright as the cells' shift is strong
     v += 0.15f * wall * saturate(F.cellAmp * 8.0f);
     // the string: where the shutter finds it. Its swing's average across the loop is the arcsine law of a sine's
     // positions (bright at the turning points), widened by its own width as a Lorentzian: (1/pi) Re 1/sqrt(A^2 - z^2)
     // at z = delta + i gamma. Normalised so that a still string is 1 at its middle.
+    float str = 0.0f;
     if (F.line > 0.0f) {
         const float A = 1.41421f * F.loopBlur, g = F.lineW;
         const float zr = toLoop, zi = g;
@@ -1027,10 +1080,15 @@ __device__ float3 fieldSlice(const GField& F, float px, float py) {
         const float mod = sqrtf(wr * wr + wi * wi);
         const float sr = sqrtf(fmaxf(0.5f * (mod + wr), 0.0f)), si = copysignf(sqrtf(fmaxf(0.5f * (mod - wr), 0.0f)), wi);
         const float p = sr / fmaxf(sr * sr + si * si, 1e-20f);                // Re 1 / sqrt(w)
-        v += F.line * 1.6f * g * p;
+        str = F.line * 1.6f * g * p;
     }
-    v *= F.weight;
-    return make_float3(v, v, v);
+    // the lobes' tint: which force's coupling the field is there (strong rose, weak violet, electromagnetic cream; the
+    // loops' colours); the string warm
+    const float th = atan2f(uy, ux);
+    const float c3 = __expf(3.0f * __cosf(th - 1.570796f)), c2 = __expf(3.0f * __cosf(th - 3.665191f)), c1 = __expf(3.0f * __cosf(th + 0.523599f));
+    const float3 tint = (make_float3(1.10f, 0.55f, 0.50f) * c3 + make_float3(0.72f, 0.58f, 1.15f) * c2 + make_float3(1.05f, 0.92f, 0.66f) * c1) /
+                        (c1 + c2 + c3);
+    return (tint * v + make_float3(1.0f, 0.80f, 0.48f) * (str * 1.3f)) * F.weight;
 }
 
 // One sample: the nearest surface (spheres, the ground), then the light of the clouds and discs in front of it
@@ -1251,6 +1309,58 @@ __global__ void kSplat(const GSplat* sp, int count, float4* accum, const float* 
         }
 }
 
+// the particles (see GParticle): per pixel, its tile's list, far to near
+__global__ void kParticles(const GParticle* parts, const int* tileStart, const int* tileIdx, float4* accum, int width, int height) {
+    const int x = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y;
+    if (x >= width || y >= height) return;
+    const int tilesX = (width + kTile - 1) / kTile;
+    const int t = (y / kTile) * tilesX + x / kTile;
+    const int a = tileStart[t], b = tileStart[t + 1];
+    if (a == b) return;
+    const int pix = y * width + x;
+    float3 c = make_float3(accum[pix].x, accum[pix].y, accum[pix].z);
+    const float px = x + 0.5f, py = y + 0.5f;
+    const float3 L = normalize(make_float3(-0.45f, 0.55f, 0.70f));   // the spheres' light: upper left, towards the eye
+    for (int k = a; k < b; ++k) {
+        const GParticle P = parts[tileIdx[k]];
+        const float dx = px - P.c.x, dy = py - P.c.y;
+        if (P.kind == kPartGlow) {
+            const float e = __expf(-(dx * dx + dy * dy) / (2.0f * P.r * P.r));
+            c += P.col * (e * P.alpha);
+        } else if (P.kind == kPartSphere) {
+            const float rr = sqrtf(dx * dx + dy * dy) / P.r;
+            if (rr >= 1.0f) continue;
+            const float edge = fminf(1.5f / P.r, 0.5f);
+            const float cover = (1.0f - smoothstepf(1.0f - edge, 1.0f, rr)) * P.alpha;
+            const float nz = sqrtf(fmaxf(1.0f - rr * rr, 0.0f));
+            const float3 n = make_float3(dx / P.r, -dy / P.r, nz);
+            const float lit = 0.32f + 0.68f * fmaxf(dot(n, L), 0.0f);
+            const float rim = (1.0f - nz) * (1.0f - nz);
+            const float3 col = P.col * lit + P.col2 * rim;
+            c = c * (1.0f - cover) + col * cover;
+        } else if (P.kind == kPartRing) {
+            const float u = dx * P.ax.x + dy * P.ax.y, v = -dx * P.ax.y + dy * P.ax.x;
+            const float vq = v / fmaxf(P.q, 0.03f);
+            const float rho = sqrtf(u * u + vq * vq);
+            // the distance to the ellipse, roughly: its radial gap shrunk where the ellipse is thin
+            const float k = rho > 1e-4f ? sqrtf(u * u + v * v) / rho : 1.0f;
+            const float dist = (rho - P.r) * k;
+            const float e = __expf(-dist * dist / (2.0f * P.w * P.w));
+            if (e < 1e-4f) continue;
+            const float th = atan2f(vq, u);
+            const float m = 0.5f + 0.5f * __cosf(th - P.phase);
+            c += lerp3(P.col2, P.col, m) * (e * P.alpha);
+        } else {   // a segment
+            const float l2 = P.ax.x * P.ax.x + P.ax.y * P.ax.y;
+            const float tt = saturate((dx * P.ax.x + dy * P.ax.y) / fmaxf(l2, 1e-6f));
+            const float ex = dx - P.ax.x * tt, ey = dy - P.ax.y * tt;
+            const float e = __expf(-(ex * ex + ey * ey) / (2.0f * P.w * P.w));
+            c += lerp3(P.col, P.col2, tt) * (e * P.alpha);
+        }
+    }
+    accum[pix] = make_float4(c.x, c.y, c.z, 1.0f);
+}
+
 __global__ void kResolve(const float4* accum, uchar4* out, int width, int height, float sat) {
     const int x = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y;
     if (x >= width || y >= height) return;
@@ -1297,6 +1407,11 @@ void splatPoints(const GSplat* splats, int count, float4* accum, const float* de
     if (count <= 0) return;
     kSplat<<<(count + 127) / 128, 128, 0, s>>>(splats, count, accum, depth, width, height);
 }
+void drawParticles(const GParticle* parts, const int* tileStart, const int* tileIdx, float4* accum, int width, int height, cudaStream_t s) {
+    const dim3 bs(16, 16), gs((width + 15) / 16, (height + 15) / 16);
+    kParticles<<<gs, bs, 0, s>>>(parts, tileStart, tileIdx, accum, width, height);
+}
+
 void resolve(const float4* accum, uchar4* out, int width, int height, float saturation, cudaStream_t s) {
     const dim3 b(16, 8);
     kResolve<<<dim3((width + b.x - 1) / b.x, (height + b.y - 1) / b.y), b, 0, s>>>(accum, out, width, height, saturation);

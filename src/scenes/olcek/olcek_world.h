@@ -14,6 +14,7 @@
 // blur), smoothly. Going home, the Earth's turn and its place on its orbit are drawn back to "today" while zooming in,
 // so the beach is always reached at the same noon.
 #pragma once
+#include <cstdint>
 #include "core/config.h"
 #include "scenes/olcek/olcek_types.h"
 
@@ -121,11 +122,26 @@ public:
     bool loadStars(const std::string& path, std::string& log);
     // the real galaxies (tools/olcek_veri.py galaksi: 2MRS) in place of the placeholder web where the survey reaches
     bool loadGalaxies(const std::string& path, std::string& log);
+    // the belts (tools/olcek_veri.py asteroit: MPCORB): the main and Kuiper belts as rings, Jupiter's Trojan swarms
+    bool loadBelts(const std::string& path, std::string& log);
+    struct BeltRing {
+        double r0 = 0.0, dr = 0.0;            // AU
+        std::vector<float> sigma, zrms;       // per AU^2; AU
+    };
+    BeltRing beltMain, beltKuiper;
+    double trojanN[2] = {}, trojanLon[2] = {}, trojanSig[2] = {};   // L4, L5: count, degrees from Jupiter
     // time: dt seconds of screen time at scale s (sPrev: where the last frame was; zooming in pulls the home back)
     void advance(double dt, double sPrev);
     void place();                 // the tree's offsets from the clocks
     void camera();                // the camera at s (the focus's way between the anchors)
     void build(OlcekView& v, std::vector<GSplat>& splats);   // the frame's primitives
+    std::vector<GParticle> particles;   // below the light: the frame's particles (build fills them, far to near)
+    // the test's hold on them (olcek-sure): each tracked particle's identity, its light, its place (pixels)
+    struct PartTrack {
+        uint64_t id;
+        float light, x, y;
+    };
+    std::vector<PartTrack> particleTrack;
 
     // what is in the middle (the panel), its name in the language in use; the screen's width in words
     std::string lookingAt() const;
@@ -165,6 +181,8 @@ private:
     V3 sunShift(int node, double tau) const;
     double runPeriod(int orbit) const;
     void ballOrPoint(OlcekView& v, std::vector<GSplat>& splats, const Body& b, double k) const;
+    void buildInner(OlcekView& v);   // olcek_inner.cpp: the particles below the light
+    double foamClock_ = 0.0;         // the Planck foam's bubbles: cycles of a Planck time, wrapped
 };
 
 }   // namespace olcek

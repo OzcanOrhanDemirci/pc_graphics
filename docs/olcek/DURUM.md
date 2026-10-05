@@ -2,6 +2,102 @@
 
 > Tek kaynak durum panosu. Plan `docs/olcek/PLAN.md`. En yeni en üstte.
 
+## 2026-10-05 akşam · Özcan'ın ilk canlı bakışı ve revize: atom altı, Samanyolu, Güneş sistemi
+
+Özcan: *"Kesintisizlik mükemmel olmuş. Mouse hızlı kaydırınca çok güzel oldu."* Dünya *"harbiden photorealistic"*, uzay
+(yıldızların geçip gitmesi, kozmik ağ) beğenildi. İki revize:
+1. Atom altı *"estetik olarak boş"*: elektronlar görünmüyor, protondan sonra *"sadece beyazlık"*, köpük boşluk. Sanat ve
+   temsil istendi. **Karar (Özcan): temsili renk.** PLAN §5'in "ışığın altında renk yok" kuralını ezer.
+2. Güneş sistemi boş; Samanyolu *"galaksi olmuş"*. **Karar (Özcan): NASA'nın dışarıdan çizimi** (R. Hurt).
+
+**Parçacık çizici (yeni).** Işığın altındaki her şey ekranda parçacık: ışıltı (bir 3B Gauss bulutunun izdüşümü),
+yumuşak ışıklı küre, halka (3B'de çember, ekranda elips, rengi çevresinde döner), parça (ışıyan kapsül). Ana işlemcide
+derinliğe göre sıralanır, 16 piksellik karolara bölünür; her piksel kendi karosunun listesini uzaktan yakına işler.
+Tohumlu: her kare aynı. Ekranı dolduracak kadar büyüyen her şey kendiliğinden söner, yoksa yine beyaz bir yıkanma olurdu.
+Renk -7 ile -8,4 arasında (mikroskopların gri resimleri) yok, -9,2'den aşağı temsili renk.
+
+**Atom altı, ölçek ölçek** (`olcek_inner.cpp`, sayılar gerçek):
+- *Kristal* (-8,2..-9,6): yoğunluk haritası kimyacıların renginde (silisyum altın, oksijen kırmızı; payları
+  yoğunluktan).
+- *Atom* (-9..-12,6):
+  - elektronlar, kabuklarının radyal dağılımından örneklenmiş noktalar (r^2n e^(-2ζr), Clementi-Raimondi ζ; K 260,
+    L 900, M 900 nokta, oksijenlerinkiyle ~6.600);
+  - değerlik elektronları dört bağ boyunca (sp³: üç köprü oksijeni, alttaki tepe oksijeni);
+  - yörüngeler soluk bulutlar.
+
+  İçeri girerken noktalar yıldızlar gibi kameranın yanından geçer (uzayda beğenilen his). Tam tepeden bakıldığı için
+  1,6 Å altındaki tepe oksijeni silisyumun arkasından pembe bir bulut olarak görünür; doğru.
+- *Çekirdek* (-11,2..-15): 28 nükleon (14 proton sıcak, 14 nötron soğuk), 3,0 fm içinde, merkezler en az 1,7 fm
+  aralıklı, yarıçap 0,84 fm. Kameranın girdiği proton gerçek yerinde. Nükleonların içinde renk yükleriyle üç kuark.
+  Anlık görüntü: nükleonlar onu 10⁻²³ sn'de geçer.
+- *Proton* (-13,7..-16,9):
+  - u, u, d değerlik kuarkları kırmızı, yeşil, mavi; Y biçimli gluon akısı;
+  - deniz: 70 gluon halkası, 30 kuark-antikuark çifti (anti-renkler).
+
+  Değerlik kuarkları da deniz de sondanın çözünürlüğüyle keskinleşir. Hiçbirinin ölçülmüş bir boyutu yok: yaklaştıkça
+  nokta kalırlar, ekranı bulanık lekeyle doldurmazlar.
+- *Kuark ve çöl* (-15..dip): kuark merkezde bir nokta. Çevresinde her ölçekte sanal çift halkaları: kuarka bağlı oktavlı
+  bir Poisson alanı, hacim başına kendi boyunun küpü kadar (her ölçekte aynı resim). Halkanın türü o boydaki
+  bağlaşımlara göre seçilir: güçlü (kırmızı/yeşil/maviden ikisi), zayıf (mor ve kehribar), elektromanyetik (sıcak
+  beyaz). Bu yüzden derine inildikçe renk karışımı dengelenir. Alanın üç loplu çizgileri koyu zeminde kuvvetlerin
+  renginde.
+- *Dip* (-33,9..-34,8):
+  - Planck boyunda köpük baloncukları, ince film renklerinde. Planck zamanı kadar yaşarlar, ancak dipte kaynarlar; daha
+    önce sondanın anlık görüntüsüyle dururlar;
+  - 3B'de ekrandaki sayıları (W/L_P)³ ile büyür (yarım onluk yukarıda yüzlerce), bu yüzden odak çevresinde bir katman;
+  - sicim altın renginde.
+
+**Samanyolu** (R. Hurt'ün çizimine doğru; kollar yine Reid 2019):
+- iki yıldız kolu çubuğun uçlarından (Scutum-Centaurus, Perseus), iki gaz kolu (Norma, Sagittarius-Carina: çoğu
+  bulutsu); kol uzantıları 320°'den 150-230°'ye indi ("plak" görüntüsü buradandı);
+- kollar boru değil, yıldız bulutları zinciri: benekli, kontrastlı;
+- üç boyda yıldız kümesi ve pembe HII bölgeleri: hücrelerde noktalar, piksele kadar keskin, piksel altında ışığını
+  korur;
+- çubuğun öndeki iki toz şeridi.
+
+**Güneş sistemi:**
+- *Kuşaklar gerçek katalogdan.* Minor Planet Center'ın bugünkü MPCORB'u (1.570.259 yörünge): her yörünge ortalama
+  anomalisi boyunca örneklendi, uzaklık ve yükseklik dağılımı çıkarıldı. Bu ölçeklerde asteroitler gözün kapağından
+  hızlı döndüğü için ana kuşak (1,55 milyon) ve Kuiper kuşağı (6.092) zaman ortalaması olarak halka. Jüpiter'in
+  Truvalıları iki küme: L4 10.157, L5 5.928, +63° ve -62°, boylamda 12° yayılım (oran bilinenle uyumlu).
+  `tools/olcek_veri.py asteroit`.
+- *Pozlamanın sonundaki flaş* (temsil, ışık korunur): gezegenin ışığının üçte biri şimdiki yerinde nokta, gerisi
+  halkası. Gezegenler yörüngelerinin üstünde okunur.
+- Pozlama 11-13 arasında 2 durak açıldı (yörünge halkaları görünür). Yörünge örnekleri 2048'den 8192'ye çıktı (Dünya
+  yörüngesi noktalı görünüyordu).
+- Güneş'e gözün parlaması: üç genişlikte sönük bir hale.
+
+**Yeni sınama: parçacıkların sürekliliği.** Çöldeki ince, parlak halkalar her adımda kendi genişliklerinden fazla
+kayıyor. Blok ölçüsü bunu sıçrama sayıyordu (her kare). Artık her parçacığın bir kimliği var: bir adımda ekranın içinde
+beliren ya da kaybolan, ya da ışığı birden değişen parçacık gerçek sıçramadır, onluk başına raporlanır (eşik 0,15).
+`OLCEK_POPS=1` ilk 30'unu yazar.
+
+Bulduğu gerçek sıçramalar:
+- *Ölçü hatası:* bazı parçacıklar kimliksizdi ve öncekinin kimliğini taşıyordu (kuarkın noktası, bağ bulutları,
+  çekirdeğin noktası). Artık her çağrı grubunda kendi sırasını alıyor; çizilmese de sayılıyor, sıra kaymıyor.
+- *Halkalar bantlarının yakın kenarında 90-170 pikselken kayboluyordu:* artık 85 pikselde sönmüş oluyorlar.
+- *En kaba ve en ince oktav birden düşüyordu:* artık iki uçta da yavaşça giriyor ve çıkıyor.
+- *En sinsisi:* derinlik bandının uzak kenarı 4D'de ve D yaklaştıkça kameradan dört kat hızlı geliyor; o kenardaki
+  ~40 piksellik halkalar bir adımda kesiliyordu. Uzak kenara yaklaşırken sönüyorlar.
+
+Sonuç -34,8 ile -14,5 arasında her onlukta en büyük değişim 0,04-0,114 (önce 0,55-1,6). Yoğunluk da yarıdan aza
+indi: her karede ~1.500 halka.
+
+**Ölçümler (bütün yol, adım 0,01):**
+- En uzun kare 15,7 ms (-1'de, kum taneleri; değişmeyen yer): bütçe GEÇTİ.
+- Parçacıklar her onlukta ≤ 0,115: sıçrama yok.
+- Blok ölçüsü çölde her kareyi işaretliyor: halkaların dürüst hareketi, parçacık ölçüsü ayırıyor.
+- Dışarısı önceki gibi: 6-7 köşeler, 16-18 yakın yıldızlar.
+- Kuşaklar 0,001.
+
+### NE DOĞRULANMADI (revize)
+- Canlıda bakılmadı. Halkaların akışı, sicim ve köpüğün kaynaması, gezegen flaşlarının hızlı ölçeklerde nasıl göründüğü
+  (yörüngede ~25 piksel/kare atlayan bir nokta) Özcan'ın gözünü bekliyor.
+- Renkler, parlaklıklar ve yoğunluklar gözle ayarlandı; Samanyolu R. Hurt'ün çizimine bakılarak değil, hatırlanan
+  özelliklerinden kuruldu.
+- Kuşakların ışığı tasarlanmış (gerçekte çok sönük); yer ve dağılım ölçülmüş.
+- Elektron noktalarının sayısı bir seçim; hepsi bir anlık konum değil, bir olasılık bulutunun örneği (temsil).
+
 ## 2026-10-05 gece · Ö4 ve Ö5'in ilk hâli: kum tanesinden Planck'a bütün iç yol
 
 Akış önce, ayrıntı sonra (Özcan): 10⁻³'ten 10⁻³⁵'e her onlukta gerçek ölçülerle bir resim var, kesintisiz. Cila sırada.
