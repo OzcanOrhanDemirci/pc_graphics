@@ -27,6 +27,28 @@ constexpr double kMuEarthMoon = 3.986004418e14 + 4.9028e12;
 constexpr double kOmegaSun = 230e3 / 2.5061873317e20;   // rad/s: a flat rotation curve, 230 km/s at R0
 constexpr double kOmegaArms = 25e3 / kPc * 1e-3 / 1.0;   // the arms' pattern: 25 km/s/kpc
 
+// the bottom (Ö5): the Planck length; the string, a loop of radius ~ it (theory gives an order, not a number: chosen so
+// the bottom of the zoom frames it), its modes n = 2..5 (fractions of its radius; a closed string's n-th mode turns at
+// n c / r); the foam's displacement per octave, in Planck lengths (Wheeler: every length uncertain by ~ it)
+constexpr double kPlanckLength = 1.616255e-35;
+constexpr double kLoop = 0.32 * kPlanckLength;
+constexpr int kModes = 4;
+constexpr double kModeAmp[kModes] = {0.16, 0.10, 0.07, 0.05};
+constexpr double kFoamAmp = 0.4;
+
+// the density map's fill: log10 of the density (particles per a0^3) at its dark and light ends, by scale (decreasing s).
+// Set from what the screen holds (OLCEK_DEBUG): between the atoms -2.3, the atom's edge -0.9 at -10, its L shell 1.0
+// at -10.5, the K shell 2.0-3.2 from -11 to -13; the nucleus 13.4; the proton on it 14.0; a quark 16.4. Into the atom
+// the light end leaves the electrons for the nucleus over half a decade (the eye's adapting): the cloud goes dim.
+struct DensKey {
+    double s, lo, hi;
+};
+constexpr DensKey kDensRange[] = {
+    {-9.0, -2.5, 1.5},   {-9.5, -2.5, 1.5},   {-10.0, -1.2, 2.8},  {-10.5, 0.6, 3.4},   {-11.0, 1.6, 4.2},
+    {-11.5, 2.6, 13.4},  {-13.5, 2.9, 13.6},  {-14.0, 11.0, 14.5}, {-14.5, 13.2, 16.5}, {-15.0, 13.6, 16.5},
+    {-15.5, 14.6, 16.6}, {-16.0, 14.2, 19.0}, {-16.5, 14.0, 21.4}, {-17.5, 14.0, 25.6},
+};
+
 // where the camera leaves the Earth's turn (DURUM Ö1: at the plan's pace the globe turns ~1-3 times a second at 10^7-10^8
 // and the shutter averaged it into bands like Jupiter's)
 constexpr double kSpinLo = 7.0, kSpinHi = 8.6;
@@ -104,7 +126,10 @@ struct Name {
 };
 const Name kNames[] = {
     {-99.0, "Planck uzunluğu", "The Planck length"},
-    {-32.5, "Yukarı kuark", "An up quark"},
+    {-34.0, "Köpük ve sicim (kuram)", "Foam and a string (theory)"},
+    {-31.5, "Çöl: üç kuvvet yaklaşıyor", "The desert: three forces converge"},
+    {-18.5, "Yukarı kuarkın alanı", "The up quark's field"},
+    {-16.5, "Yukarı kuark", "An up quark"},
     {-15.5, "Proton", "A proton"},
     {-14.5, "Silisyum-28 çekirdeği", "A silicon-28 nucleus"},
     {-13.5, "Atomun içi", "Inside the atom"},
@@ -230,7 +255,7 @@ void Scale::configure(const Config& cfg) {
     const double tx = std::tan(0.5 * fovX * kDeg), ty = tx * height / width;
     const double D = 4.40e26 / std::sin(0.9 * std::atan(ty));
     sMax = std::log10(2.0 * D * tx);
-    sMin = std::log10(1.616255e-35);
+    sMin = std::log10(kPlanckLength);
 }
 
 double Scale::ev(double s) const {
@@ -541,11 +566,12 @@ void Scale::advance(double dt, double sPrev) {
     clk.galaxy = wrapTo(clk.galaxy + kOmegaSun * T, 2.0 * kPi);
     clk.arms = wrapTo(clk.arms + kOmegaArms * T, 2.0 * kPi);
     for (int k = 0; k < 3; ++k) clk.vib[k] = wrapTo(clk.vib[k] + vibOmega_[k] * T, 2.0 * kPi);
-    // the desert's octaves: an octave of wavelength 2^-j m lives ~ its light-crossing time
+    // the foam's octaves: an octave of wavelength 2^-j m lives ~ its light-crossing time; the string's modes
     for (int i = 0; i < 128; ++i) {
         const int j = 40 + i;
-        clk.haze[i] = wrapTo(clk.haze[i] + std::fmod(T * kC * std::ldexp(1.0, j), 256.0), 256.0);
+        clk.foam[i] = wrapTo(clk.foam[i] + std::fmod(T * kC * std::ldexp(1.0, j), 256.0), 256.0);
     }
+    for (int n = 0; n < kModes; ++n) clk.string[n] = wrapTo(clk.string[n] + std::fmod(T * (n + 2) * kC / kLoop, 2.0 * kPi), 2.0 * kPi);
     clk.beach = wrapTo(clk.beach + T, 8000.0);
 }
 
@@ -758,6 +784,7 @@ void Scale::ballOrPoint(OlcekView& v, std::vector<GSplat>& splats, const Body& b
 }
 
 void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
+    const bool densityMap = true;   // the inner world drawn as density maps (Ö4-Ö5); false: the Ö0 placeholders
     splats.clear();
     v.width = width;
     v.height = height;
@@ -809,7 +836,7 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
             const V3 rel = base + galPos_[i];
             if (!inFront(rel)) continue;
             const double d2 = dot(rel, rel);
-            float near = float(smoothstep(0.03, 0.25, std::sqrt(d2) / D));
+            float near = float(smoothstep(0.1, 0.5, std::sqrt(d2) / D));   // wide: nearby galaxies stream past softly
             if (near <= 0.0f) continue;
             // the same slice as the web's (webLight): sigma 20 Mpc about the focus, across the view
             const double dz = (dot(rel, cam.fwd) - D) / (20e6 * kPc);
@@ -1025,8 +1052,9 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
         gr.grains = float(smoothstep(4.0, 8.0, grainPx));
         gr.grainR = 2.5e-4f;
         gr.surface = float(smoothstep(-2.8, -3.8, s));
+        gr.steps = float(smoothstep(-6.3, -7.3, s));   // below the light's wavelength: the microscope's eye, over a decade
         const double latPx = 4.9e-10 / W * width;
-        gr.atoms = float(smoothstep(3.0, 6.0, latPx));
+        gr.atoms = float(smoothstep(10.0, 30.0, latPx));   // the atoms once they are well apart (the terraces before)
         const V3 toSun = normalize(tree.rel(kBeach, kSun));
         gr.sunDir = dirCam(toSun);
         gr.sunLit = float(kLsun / (4.0 * kPi * kAU * kAU) * 0.75 / kPi * k);   // 0.75: the air's transmission at noon
@@ -1043,12 +1071,86 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
         if (gr.fade <= 0.0f) gr.on = gr.frame = 0;
     }
     // the swash's clock (the beach's own)
-    v.haze = GHaze{};
-    v.haze.phase[0] = float(clk.beach);
+    v.beachClock = float(clk.beach);
+
+    // ---- the inner world as density maps (Ö4-Ö5): the silica net's electrons, the nucleus, the proton
+    v.dens = GDensity{};
+    // the quark as a probe of the scale sees it: 0.07 fm down to the proton, then sharper by 1.6 decades a decade (no
+    // size has been found down to ~10^-19 m), to a few pixels by 10^-19 (the field's picture takes it over on the way)
+    const double sigQ = 0.07e-15 * (s > -15.5 ? 1.0 : std::pow(10.0, 1.6 * (s + 15.5)));
+    if (s < -8.9 && s > -17.3) {
+        GDensity& dn = v.dens;
+        dn.on = 1;
+        dn.weight = float(smoothstep(-8.9, -9.9, s) * (1.0 - smoothstep(-16.3, -17.3, s)));
+        const double a0 = 0.529177e-10, fm = 1e-15;
+        const V3 nuc = tree.rel(cam.ref, kNucleus) - cam.pos;     // the home silicon's nucleus
+        const V3 east = earthEast_, north = earthNorth_, up = earthUp_;
+        auto add = [&](V3 rel, int type, double unit, float r, float a, float amp) {
+            if (dn.n >= kMaxDensity) return;
+            GDensityBody& b = dn.b[dn.n++];
+            b.c = toCamSpace(rel);
+            b.type = type;
+            b.scale = float(D / unit);
+            b.r = r;
+            b.a = a;
+            b.amp = amp * float(std::pow(a0 / unit, 3.0));   // per its unit^3 -> per a0^3
+        };
+        // the top layer of a silica bilayer (the face the camera comes down on): silicons on a honeycomb, Si-Si 3.06 A,
+        // a bridging oxygen halfway between each pair (a little raised), an apical oxygen under each silicon (towards the
+        // layer below); the home silicon at the beach point
+        if (s > -13.5) {
+            const double ss = 3.06e-10, bo = 0.3e-10, apical = 1.61e-10;
+            const V3 home = tree.rel(cam.ref, kBeach) - cam.pos;  // the atom's mean place (the nucleus swings about it)
+            add(nuc, 0, a0, 0, 0, 1);
+            add(home - up * apical, 1, a0, 0, 0, 1);
+            const double ang[3] = {90.0, 210.0, 330.0};
+            for (double g : ang) {
+                const V3 dir = east * std::cos(g * kPi / 180.0) + north * std::sin(g * kPi / 180.0);
+                add(home + dir * (0.5 * ss) + up * bo, 1, a0, 0, 0, 1);   // bridging O
+                const V3 si = home + dir * ss;
+                add(si, 0, a0, 0, 0, 1);                                    // neighbour Si
+                add(si - up * apical, 1, a0, 0, 0, 1);
+                // the neighbour's two other bridges (its other neighbours lie at g +- 60 degrees from it)
+                for (double h : {g + 60.0, g - 60.0}) {
+                    const V3 d2 = east * std::cos(h * kPi / 180.0) + north * std::sin(h * kPi / 180.0);
+                    add(si + d2 * (0.5 * ss) + up * bo, 1, a0, 0, 0, 1);
+                }
+            }
+        }
+        // the nucleus: silicon-28's 28 nucleons, the time average, Woods-Saxon (R = 3.07 fm, a = 0.52 fm, its charge's
+        // fit) with rho0 = 28 / (4/3 pi R^3 (1 + pi^2 a^2 / R^2)) = 0.176 per fm^3
+        add(nuc, 2, fm, 3.07f, 0.52f, 0.176f);
+        // a proton near its middle and, in a fast probe's snapshot (deep inelastic scattering sees the partons frozen),
+        // its three valence quarks joined by a Y of gluon flux
+        const float snap = float(smoothstep(-13.3, -14.0, s));   // the snapshot comes in over the nucleus's last decade
+        if (snap > 0.0f) {
+            const V3 pr = tree.rel(cam.ref, kProton) - cam.pos;
+            add(pr, 3, fm, 0, 0.485f, 0.556f * snap);   // one proton: rms radius 0.84 fm (sigma 0.485), 1 / ((2 pi)^1.5 sigma^3)
+            const V3 q = tree.rel(cam.ref, kQuark) - cam.pos;
+            const V3 qs[3] = {q, pr + east * 0.30e-15 + north * 0.12e-15, pr + north * -0.32e-15 + east * 0.05e-15};
+            V3 junction = (qs[0] + qs[1] + qs[2]) * (1.0 / 3.0);
+            for (int i = 0; i < 3; ++i) {
+                const double sq = i == 0 ? sigQ / fm : 0.07;   // one quark: 1 / ((2 pi)^1.5 sigma^3)
+                add(qs[i], 3, fm, 0, float(sq), float(snap / (15.7496 * sq * sq * sq)));
+                if (dn.n < kMaxDensity) {
+                    add(qs[i], 4, fm, 0, 0.06f, 6.0f * snap);
+                    dn.b[dn.n - 1].c2 = toCamSpace(junction);
+                }
+            }
+        }
+        // the fill's range: designed for each scale like the exposure (PLAN §5: a function of s, never read from the
+        // picture; OLCEK_DEBUG prints what the screen holds, which these were set from)
+        const DensKey* k = kDensRange;
+        while (k[1].s > s && k + 2 < kDensRange + sizeof(kDensRange) / sizeof(kDensRange[0])) ++k;
+        const double u = std::clamp((k[0].s - s) / (k[0].s - k[1].s), 0.0, 1.0);
+        dn.lo = float(k[0].lo + (k[1].lo - k[0].lo) * u);
+        dn.hi = float(k[0].hi + (k[1].hi - k[0].hi) * u);
+        dn.relief = 0.01f;
+    }
 
     // ---- the inner world: designed light, seen by "the instrument of its scale" (PLAN §5)
     const float into = float(smoothstep(-9.3, -10.3, s));
-    if (s < -9.0) {
+    if (s < -9.0 && !densityMap) {
         const V3 nuc = tree.rel(cam.ref, kNucleus) - cam.pos;
         const float3 grey = make_float3(1, 1, 1);
         // the home atom's electrons: the valence cloud, the L and K shells (Ö4: Clementi-Raimondi densities)
@@ -1083,27 +1185,62 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
             }
         }
     }
-    // the desert and the foam: self-similar octaves on the focus plane, each with its clock, averaged by the shutter
-    if (s < -16.0) {
-        GHaze& hz = v.haze;
-        hz.amount = float(smoothstep(-16.0, -17.2, s));
-        hz.foam = float(smoothstep(-32.3, -33.5, s));
-        hz.color = make_float3(1, 1, 1);
+    // ---- the desert and the bottom (Ö5): the field around the home quark (see GField)
+    v.field = GField{};
+    if (s < -16.3) {
+        GField& F = v.field;
+        F.on = 1;
+        F.weight = float(smoothstep(-16.3, -17.3, s));
+        F.logW = float(std::log10(W));
+        F.sigma = float(std::max(sigQ / W, 0.0012));
+        // the fill's range: from the screen's edge to ten pixels from the quark (or its middle, while the probe's
+        // smearing is wider), at the couplings' mean there
+        auto meanCoupling = [](double r) {
+            const double L = std::log(1.97327e-16 / 91.1876 / r);   // ln(mu / M_Z), mu = hbar c / r
+            return (1.0 / (59.0 - 41.0 / 10.0 / (2.0 * kPi) * L) + 1.0 / (29.6 + 19.0 / 6.0 / (2.0 * kPi) * L) +
+                    1.0 / (8.47 + 7.0 / (2.0 * kPi) * L)) / 3.0;
+        };
+        const double A = std::log10(meanCoupling(0.05 * W));
+        const double sg2 = double(F.sigma) * F.sigma;
+        F.lo = float(A - 2.0 * std::log10(0.55 * 0.55 + sg2));
+        F.hi = float(A - 2.0 * std::log10(0.004 * 0.004 + sg2));
+        F.relief = 0.01f;
+        // the foam: octaves from the screen's width down to the string's size, each displacing by ~ the Planck length
         const double R = rate(s);
-        const int jLo = int(std::ceil(-std::log2(W)));
-        hz.octaves = 0;
-        for (int j = jLo; j < jLo + kMaxOctaves && hz.octaves < kMaxOctaves; ++j) {
-            const double freq = W * std::ldexp(1.0, j);   // cycles per screen width
-            const double lf = std::log2(freq);            // 0 .. 12
-            const double win = std::sin(kPi * std::clamp(lf / 11.0, 0.0, 1.0));
-            const double life = std::ldexp(1.0, -j) / kC / R;   // its life on the screen, seconds
-            const double kept = std::exp(-2.0 * kPi * kPi * shutter * shutter / (life * life));
-            const int idx = std::clamp(j - 40, 0, 127);
-            hz.index[hz.octaves] = j;
-            hz.freq[hz.octaves] = float(freq);
-            hz.weight[hz.octaves] = float(win * win * (0.25 + 0.75 * kept));
-            hz.phase[hz.octaves] = float(clk.haze[idx]);
-            ++hz.octaves;
+        if (kPlanckLength / W > 2e-5) {
+            const int jTop = int(std::ceil(-std::log2(2.0 * W)));
+            for (int j = jTop; j < jTop + 40 && F.octaves < kMaxOctaves; ++j) {
+                const double lam = std::ldexp(1.0, -j);
+                const double freq = W / lam;
+                if (freq > 400.0 || lam < kLoop) break;
+                const double life = lam / kC / R;   // its life on the screen, seconds
+                const double kept = std::exp(-2.0 * kPi * kPi * shutter * shutter / (life * life));
+                const double amp = kFoamAmp * kPlanckLength / W * kept * smoothstep(kLoop, 3.0 * kLoop, lam);
+                if (amp < 1e-4) continue;
+                F.index[F.octaves] = j;
+                F.freq[F.octaves] = float(freq);
+                F.amp[F.octaves] = float(amp);
+                F.phase[F.octaves] = float(clk.foam[std::clamp(j - 40, 0, 127)]);
+                ++F.octaves;
+            }
+        }
+        // the string: once it is more than a twentieth of the point's smearing
+        const double loopR = kLoop / W;
+        if (loopR > 0.05 * F.sigma) {
+            F.loop = 1;
+            double keptA[kModes], blur2 = 0.0;
+            for (int n = 0; n < kModes; ++n) {
+                const double kept = keptBy((n + 2) * kC / kLoop * R, shutter);
+                keptA[n] = kModeAmp[n] * kept;
+                blur2 += sqr(kModeAmp[n] * loopR) * (1.0 - kept * kept) * 0.5;
+            }
+            F.loopBlur = float(std::sqrt(blur2));
+            for (int k = 0; k < kLoopPoints; ++k) {
+                const double ph = 2.0 * kPi * k / kLoopPoints;
+                double m = 1.0;
+                for (int n = 0; n < kModes; ++n) m += keptA[n] * std::cos((n + 2) * ph + clk.string[n]);
+                F.pts[k] = make_float2(float(loopR * m * std::cos(ph)), float(loopR * m * std::sin(ph)));
+            }
         }
     }
 }

@@ -1,5 +1,5 @@
 // Scene 7 "Ölçek": the deterministic renderer (see olcek_kernels.h). Ö0's placeholders: spheres, discs, clouds,
-// points, the ground at the beach (the shore, the grains, the grain's top, its atoms) and the desert's haze.
+// points, the ground at the beach (the shore, the grains, the grain's top, its atoms) the density maps and the desert's field.
 #include "scenes/olcek/olcek_kernels.h"
 #include "shared/display.h"
 
@@ -19,7 +19,7 @@ __device__ __forceinline__ unsigned int pcg(unsigned int v) {
     return (word >> 22u) ^ word;
 }
 __device__ __forceinline__ float hash1(int x, int y, int z, int seed) {
-    unsigned int h = pcg(unsigned(x) * 73856093u ^ pcg(unsigned(y) * 19349663u ^ pcg(unsigned(z) * 83492791u ^ unsigned(seed) * 2654435761u)));
+    const unsigned int h = pcg(unsigned(x) * 73856093u ^ unsigned(y) * 19349663u ^ unsigned(z) * 83492791u ^ unsigned(seed) * 2654435761u);
     return float(h >> 8) * (1.0f / 16777216.0f);
 }
 __device__ __forceinline__ float fractf(float x) { return x - floorf(x); }
@@ -43,7 +43,7 @@ __device__ float vnoise3(float x, float y, float z, int seed, int pz = 0) {
 // gradient (Perlin) noise in [0, 1]: value noise's flat lattice corners read as squares when magnified (the beach's foam
 // was blocky); periodic in z with period pz (> 0) for the clocks
 __device__ __forceinline__ float gradDot(int x, int y, int z, int seed, float dx, float dy, float dz) {
-    const unsigned int h = pcg(unsigned(x) * 73856093u ^ pcg(unsigned(y) * 19349663u ^ pcg(unsigned(z) * 83492791u ^ unsigned(seed) * 2654435761u)));
+    const unsigned int h = pcg(unsigned(x) * 73856093u ^ unsigned(y) * 19349663u ^ unsigned(z) * 83492791u ^ unsigned(seed) * 2654435761u);
     switch (h % 12u) {   // the twelve edge directions of a cube
     case 0: return dx + dy;
     case 1: return -dx + dy;
@@ -74,6 +74,28 @@ __device__ float gnoise3(float x, float y, float z, int seed, int pz = 0) {
         v[k] = lerpf(lerpf(a, b, tx), lerpf(c, d, tx), ty);
     }
     return saturate(0.5f + 0.5f * lerpf(v[0], v[1], tz));
+}
+
+// 2D gradient noise with its derivatives (one hash a corner; the surfaces' height fields need the slope for the shading,
+// and three evaluations per octave for finite differences were the frame's largest cost). Returns about -1..1.
+__device__ __forceinline__ float2 grad2(int x, int y, int seed) {
+    const unsigned int h = pcg(unsigned(x) * 73856093u ^ unsigned(y) * 19349663u ^ unsigned(seed) * 2654435761u);
+    const float a = float(h >> 8) * (6.2831853f / 16777216.0f);
+    return make_float2(cosf(a), sinf(a));
+}
+__device__ float gnoise2d(float x, float y, int seed, float2& d) {
+    const float fx = floorf(x), fy = floorf(y);
+    const int ix = int(fx), iy = int(fy);
+    const float rx = x - fx, ry = y - fy;
+    const float2 ga = grad2(ix, iy, seed), gb = grad2(ix + 1, iy, seed), gc = grad2(ix, iy + 1, seed), gd = grad2(ix + 1, iy + 1, seed);
+    const float va = ga.x * rx + ga.y * ry, vb = gb.x * (rx - 1.0f) + gb.y * ry;
+    const float vc = gc.x * rx + gc.y * (ry - 1.0f), vd = gd.x * (rx - 1.0f) + gd.y * (ry - 1.0f);
+    const float ux = fade5(rx), uy = fade5(ry);
+    const float dux = 30.0f * rx * rx * (rx - 1.0f) * (rx - 1.0f), duy = 30.0f * ry * ry * (ry - 1.0f) * (ry - 1.0f);
+    const float k = va - vb - vc + vd;
+    d.x = ga.x + ux * (gb.x - ga.x) + uy * (gc.x - ga.x) + ux * uy * (ga.x - gb.x - gc.x + gd.x) + dux * (uy * k + (vb - va));
+    d.y = ga.y + ux * (gb.y - ga.y) + uy * (gc.y - ga.y) + ux * uy * (ga.y - gb.y - gc.y + gd.y) + duy * (ux * k + (vc - va));
+    return (va + ux * (vb - va) + uy * (vc - va) + ux * uy * k) * 1.4f;
 }
 
 __device__ float fbm3(float3 p, int oct, int seed) {
@@ -267,7 +289,8 @@ __device__ float3 beachAlbedo(float x, float y, float fp, float t) {
     for (int i = 0; i < 13; ++i) {
         const float lim = smoothstepf(2.0f, 3.5f, 1.0f / (fp * f));
         if (lim <= 0.0f) break;
-        grit += amp * lim * (gnoise3(x * f + 0.37f * i, y * f - 0.21f * i, 0.5f, 40 + i) - 0.5f);
+        float2 dn;
+        grit += amp * lim * 0.5f * gnoise2d(x * f + 0.37f * i, y * f - 0.21f * i, 40 + i, dn);
         f *= 2.3f;
         amp *= i < 4 ? 0.7f : 0.92f;
     }
@@ -308,78 +331,192 @@ __device__ __forceinline__ float beachShare(float x, float y) {
     return smoothstepf(-32.0f, -18.0f, dsea) * (1.0f - smoothstepf(20.0f, 45.0f, dsea));
 }
 
-// ---- the sand grains: a grid of spheres sitting under the beach's plane (the home grain's top is the beach point)
+// ---- the sand grains (Ö4): rounded, irregular quartz-sand grains (ellipsoids of random shape and turn), two layers on a
+// grid; the home grain's top is the beach point. Kinds by share: clear-to-yellow quartz, iron-stained quartz, feldspar,
+// dark rock fragments, shell (a beach on a granite-and-volcanic coast).
 struct Grain {
-    float3 c;
-    float r;
+    float3 c, r;      // centre, semi-axes (along its own x, y, z)
+    float ca, sa;     // its turn about the vertical
+    int kind;         // 0 quartz, 1 iron-stained, 2 feldspar, 3 dark, 4 shell
     float tone;
 };
-__device__ Grain grainAt(int i, int j, float R) {
-    const float cell = 2.3f * R;
+__device__ Grain grainAt(int i, int j, int layer, float R) {
+    const float cell = 2.0f * R;
     Grain g;
-    if (i == 0 && j == 0) {
-        g.c = make_float3(0, 0, -R);
-        g.r = R;
-        g.tone = 0.5f;
-        return g;
+    const int seed = 101 + 17 * layer;
+    const float a = hash1(i, j, 0, seed), b = hash1(i, j, 1, seed), c = hash1(i, j, 2, seed), e = hash1(i, j, 3, seed);
+    const float f = hash1(i, j, 5, seed), h = hash1(i, j, 6, seed), k = hash1(i, j, 7, seed);
+    const float size = R * (0.7f + 0.55f * a);
+    g.r = make_float3(size * (0.95f + 0.25f * f), size * (0.75f + 0.2f * h), size * (0.6f + 0.25f * k));
+    const float ang = 6.2831853f * e;
+    g.ca = cosf(ang);
+    g.sa = sinf(ang);
+    const float off = layer ? 0.5f : 0.0f;
+    g.c = make_float3((i + off + (b - 0.5f) * 0.55f) * cell, (j + off + (c - 0.5f) * 0.55f) * cell, -g.r.z - (layer ? 0.9f : 0.25f) * R * hash1(i, j, 8, seed) - (layer ? 0.55f * R : 0.0f));
+    const float kk = hash1(i, j, 4, seed);
+    g.kind = kk < 0.70f ? 0 : kk < 0.82f ? 1 : kk < 0.90f ? 2 : kk < 0.96f ? 3 : 4;
+    g.tone = hash1(i, j, 9, seed);
+    if (layer == 0 && i == 0 && j == 0) {   // the home grain: its top at the beach point, upright
+        g.r = make_float3(R * 1.05f, R * 0.85f, R * 0.7f);
+        g.c = make_float3(0, 0, -g.r.z);
+        g.kind = 0;
+        g.tone = 0.55f;
     }
-    const float a = hash1(i, j, 0, 101), b = hash1(i, j, 1, 101), c = hash1(i, j, 2, 101), e = hash1(i, j, 3, 101);
-    g.r = R * (0.75f + 0.5f * a);
-    g.c = make_float3((i + (b - 0.5f) * 0.5f) * cell, (j + (c - 0.5f) * 0.5f) * cell, -g.r - 0.35f * R * e);
-    g.tone = hash1(i, j, 4, 101);
     return g;
 }
-// the ray (metres, local axes) into the grain layer: the nearest grain hit (t in metres), its normal and tone
-__device__ bool hitGrains(float3 o, float3 d, float R, float& t, float3& n, float& tone, int& gi, int& gj) {
+// the ray (metres, local axes) into the grains: the nearest hit (t in metres), its normal, kind and tone
+__device__ bool hitGrains(float3 o, float3 d, float R, float& t, float3& n, float& tone, int& gi, int& gj, bool homeOnly = false) {
     if (d.z >= 0.0f) return false;
-    const float t0 = (0.0f - o.z) / d.z, t1 = (-1.7f * R - o.z) / d.z;
-    const float cell = 2.3f * R;
+    const float t0 = (0.0f - o.z) / d.z, t1 = (-2.4f * R - o.z) / d.z;
+    const float cell = 2.0f * R;
     const float3 a = o + d * fmaxf(t0, 0.0f), b = o + d * t1;
-    const int i0 = int(floorf(fminf(a.x, b.x) / cell + 0.5f)) - 1, i1 = int(floorf(fmaxf(a.x, b.x) / cell + 0.5f)) + 1;
-    const int j0 = int(floorf(fminf(a.y, b.y) / cell + 0.5f)) - 1, j1 = int(floorf(fmaxf(a.y, b.y) / cell + 0.5f)) + 1;
     float best = 1e30f;
-    for (int i = i0; i <= min(i1, i0 + 4); ++i)
-        for (int j = j0; j <= min(j1, j0 + 4); ++j) {
-            const Grain g = grainAt(i, j, R);
-            const float3 oc = o - g.c;
-            const float bq = -dot(oc, d);
-            // |oc|^2 - r^2 without cancellation for the home grain (its top is the beach point): at 10^-10 m above a
-            // 0.25 mm sphere the plain form loses every digit (the atom under the camera flickered, DURUM Ö0)
-            const float cq = (i == 0 && j == 0) ? o.x * o.x + o.y * o.y + o.z * (o.z + 2.0f * g.r) : dot(oc, oc) - g.r * g.r;
-            const float disc = bq * bq - cq;
-            if (disc < 0.0f || bq <= 0.0f) continue;
-            const float tt = cq / (bq + sqrtf(disc));   // the near root, stable
-            if (tt > 0.0f && tt < best) {
-                best = tt;
-                n = normalize(o + d * tt - g.c);
-                tone = g.tone;
-                gi = i;
-                gj = j;
+    int bestKind = 0;
+    float bestTone = 0.5f;
+    for (int layer = 0; layer < 2; ++layer) {
+        const float off = layer ? 0.5f : 0.0f;
+        const int i0 = int(floorf(fminf(a.x, b.x) / cell + 0.5f - off)) - 1, i1 = int(floorf(fmaxf(a.x, b.x) / cell + 0.5f - off)) + 1;
+        const int j0 = int(floorf(fminf(a.y, b.y) / cell + 0.5f - off)) - 1, j1 = int(floorf(fmaxf(a.y, b.y) / cell + 0.5f - off)) + 1;
+        for (int i = homeOnly ? 0 : i0; i <= (homeOnly ? 0 : min(i1, i0 + 4)); ++i)
+            for (int j = homeOnly ? 0 : j0; j <= (homeOnly ? 0 : min(j1, j0 + 4)); ++j) {
+                if (homeOnly && layer) continue;
+                const Grain g = grainAt(i, j, layer, R);
+                // into the grain's unit sphere: turn about z, scale by the semi-axes
+                const float3 oc = o - g.c;
+                const float3 ou = make_float3((g.ca * oc.x + g.sa * oc.y) / g.r.x, (-g.sa * oc.x + g.ca * oc.y) / g.r.y, oc.z / g.r.z);
+                const float3 du = make_float3((g.ca * d.x + g.sa * d.y) / g.r.x, (-g.sa * d.x + g.ca * d.y) / g.r.y, d.z / g.r.z);
+                const float aa = dot(du, du);
+                const float bq = -dot(ou, du);
+                // |ou|^2 - 1 without cancellation for the home grain (its top is the beach point): at 10^-10 m above a
+                // 0.25 mm grain the plain form loses every digit (DURUM Ö0)
+                const bool home = layer == 0 && i == 0 && j == 0;
+                const float cq = home ? ou.x * ou.x + ou.y * ou.y + (o.z / g.r.z) * (o.z / g.r.z + 2.0f) : dot(ou, ou) - 1.0f;
+                const float disc = bq * bq - aa * cq;
+                if (disc < 0.0f || bq <= 0.0f) continue;
+                const float tt = cq / (bq + sqrtf(disc));   // the near root, stable
+                if (tt > 0.0f && tt < best) {
+                    best = tt;
+                    const float3 pu = ou + du * tt;
+                    const float3 nl = make_float3(pu.x / g.r.x, pu.y / g.r.y, pu.z / g.r.z);
+                    n = normalize(make_float3(g.ca * nl.x - g.sa * nl.y, g.sa * nl.x + g.ca * nl.y, nl.z));
+                    bestKind = g.kind;
+                    bestTone = g.tone;
+                    gi = i + 1000 * layer;
+                    gj = j;
+                }
             }
-        }
-    if (best < 1e29f) { t = best; return true; }
-    // between the grains: the next layer down, in their shadow
+    }
+    if (best < 1e29f) {
+        t = best;
+        tone = float(bestKind) + 0.99f * bestTone;   // kind in the integer part
+        return true;
+    }
+    // between the grains: deeper sand, in their shadow
     t = t1;
     n = make_float3(0, 0, 1);
     tone = -1.0f;
     return true;
 }
 
-// the atoms of the home grain's top (AFM-like: a height field of Gaussian bumps on the lattice, each vibrating)
-__device__ float atomHeight(float x, float y, const GGround& g, float& hx, float& hy) {
-    const float a = g.lattice, s2 = 2.0f * g.atomSigma * g.atomSigma;
-    const int ci = int(floorf(x / a + 0.5f)), cj = int(floorf(y / a + 0.5f));
+// a grain's colour by kind (albedo, linear)
+__device__ float3 grainAlbedo(float tone) {
+    const int kind = int(floorf(tone));
+    const float v = tone - kind;
+    switch (kind) {
+    case 1: return lerp3(make_float3(0.62f, 0.38f, 0.20f), make_float3(0.75f, 0.52f, 0.30f), v);   // iron-stained quartz
+    case 2: return lerp3(make_float3(0.72f, 0.58f, 0.52f), make_float3(0.82f, 0.74f, 0.70f), v);   // feldspar
+    case 3: return lerp3(make_float3(0.10f, 0.10f, 0.10f), make_float3(0.24f, 0.22f, 0.20f), v);   // rock fragments
+    case 4: return lerp3(make_float3(0.80f, 0.78f, 0.72f), make_float3(0.90f, 0.88f, 0.84f), v);   // shell
+    default: return lerp3(make_float3(0.62f, 0.56f, 0.42f), make_float3(0.80f, 0.76f, 0.66f), v);  // quartz
+    }
+}
+
+// The home grain's top, below a millimetre: frosted quartz (wind and wave wear: pits and V-shaped impact marks) on
+// conchoidal fracture facets; then, under a micrometre, the crystal's terraces, one SiO2 layer high (0.54 nm, the c axis);
+// a height field in metres, its slope for the shading. Octaves finer than ~2 pixels are left out (no shimmer).
+__device__ float grainTopHeight(float x, float y, float fp, float& hx, float& hy) {
     float h = 0.0f;
     hx = hy = 0.0f;
+    // facets: a Voronoi of planes (each cell its own tilt), cells ~40 um
+    {
+        const float cs = 40e-6f;
+        const float u = x / cs, v = y / cs;
+        const int ci = int(floorf(u)), cj = int(floorf(v));
+        float d1 = 1e9f, d2 = 1e9f;
+        int bi = 0, bj = 0;
+        for (int i = ci - 1; i <= ci + 1; ++i)
+            for (int j = cj - 1; j <= cj + 1; ++j) {
+                const float px = i + hash1(i, j, 0, 401), py = j + hash1(i, j, 1, 401);
+                const float dd = sqr(u - px) + sqr(v - py);
+                if (dd < d1) { d2 = d1; d1 = dd; bi = i; bj = j; }
+                else if (dd < d2) d2 = dd;
+            }
+        const float tx = (hash1(bi, bj, 2, 401) - 0.5f) * 0.6f, ty = (hash1(bi, bj, 3, 401) - 0.5f) * 0.6f;
+        const float edge = smoothstepf(0.0f, 0.12f, sqrtf(d2) - sqrtf(d1));   // the ridges between facets, rounded
+        const float vis = smoothstepf(2.0f, 4.0f, cs / fp);
+        h += (tx * x + ty * y) * edge * vis;
+        hx += tx * edge * vis;
+        hy += ty * edge * vis;
+    }
+    // frosting and pits: gradient noise from ~20 um down to the pixel (finite differences of the octaves)
+    float f = 1.0f / 20e-6f, amp = 1.0e-6f;
+    for (int i = 0; i < 14; ++i) {
+        const float lim = smoothstepf(2.0f, 3.5f, 1.0f / (fp * f));
+        if (lim <= 0.0f) break;
+        float2 dn;
+        const float n0 = gnoise2d(x * f, y * f, 430 + i, dn);
+        h += amp * lim * n0;
+        hx += amp * lim * dn.x * f;
+        hy += amp * lim * dn.y * f;
+        f *= 2.2f;
+        amp *= 0.5f;
+    }
+    return h;
+}
+
+// the crystal's terraces under ~100 nm: a vicinal surface (a few degrees off the basal plane) cut into steps of one layer;
+// how near a step edge the point is (for the electron microscope's bright edges) through `edge` (0..1)
+__device__ float terraceHeight(float x, float y, float fp, float& edge) {
+    const float step = 0.5405e-9f;
+    const float H = 0.06f * x + 0.035f * y + 2.0e-9f * (gnoise3(x / 60e-9f, y / 60e-9f, 0.2f, 470) - 0.5f) + 0.8e-9f * (gnoise3(x / 15e-9f, y / 15e-9f, 0.7f, 471) - 0.5f);
+    const float u = H / step;
+    const float fr = u - floorf(u);
+    // distance to the nearest edge across the slope (m): |fr - round| * step / |grad H| (grad ~ the tilt)
+    const float g = 0.07f;
+    const float dist = fminf(fr, 1.0f - fr) * step / g;
+    edge = __expf(-sqr(dist / fmaxf(1.5f * fp, 0.15e-9f)));
+    return floorf(u) * step;
+}
+
+// the atoms of the top layer as a scanning probe draws them (Gaussian bumps), each vibrating (the averaged swing from the
+// host): the top of a silica bilayer, the same net as the density map's (olcek_world.cpp): silicons on a honeycomb
+// (Si-Si 3.06 A), a bridging oxygen halfway between each pair
+__device__ float atomHeight(float x, float y, const GGround& g, float& hx, float& hy) {
+    const float ss = 3.06e-10f, a = ss * 1.7320508f;   // the honeycomb's lattice constant
+    // Bravais a1 = (a, 0), a2 = (a/2, a sqrt3/2); the home silicon (A site) at the origin, B at (0, ss) up the north
+    const float v = y / (a * 0.8660254f), u = x / a - 0.5f * v;
+    const int ci = int(floorf(u)), cj = int(floorf(v));
+    float h = 0.0f;
+    hx = hy = 0.0f;
+    const float sSi = 0.45e-10f, sO = 0.55e-10f;
     for (int i = ci - 1; i <= ci + 1; ++i)
         for (int j = cj - 1; j <= cj + 1; ++j) {
-            const float p1 = 6.2831853f * hash1(i, j, 0, 211), p2 = 6.2831853f * hash1(i, j, 1, 211);
-            const float jx = g.jitter * sinf(g.vibPhase + p1), jy = g.jitter * sinf(g.vibPhase * 1.37f + p2);
-            const float dx = x - (i * a + jx), dy = y - (j * a + jy);
-            const float e = __expf(-(dx * dx + dy * dy) / s2);
-            h += e;
-            hx += -2.0f * dx / s2 * e;
-            hy += -2.0f * dy / s2 * e;
+            const float bx = (i + 0.5f * j) * a, by = j * a * 0.8660254f;
+            // A at the corner, B at (0, ss); the three bridging oxygens of A: towards B's at 90, 210, 330 degrees
+            const float mxs[5] = {0.0f, 0.0f, 0.0f, -0.4330127f * ss, 0.4330127f * ss};
+            const float mys[5] = {0.0f, ss, 0.5f * ss, -0.25f * ss, -0.25f * ss};
+            for (int m = 0; m < 5; ++m) {
+                const bool si = m < 2;
+                const float sig = si ? sSi : sO, amp = si ? 0.6f : 1.0f;
+                const float p1 = 6.2831853f * hash1(i, j, m, 211), p2 = 6.2831853f * hash1(i, j, m + 5, 211);
+                const float jx = g.jitter * sinf(g.vibPhase + p1), jy = g.jitter * sinf(g.vibPhase * 1.37f + p2);
+                const float dx = x - (bx + mxs[m] + jx), dy = y - (by + mys[m] + jy);
+                const float s2 = 2.0f * sig * sig;
+                const float e = amp * __expf(-(dx * dx + dy * dy) / s2);
+                h += e;
+                hx += -2.0f * dx / s2 * e;
+                hy += -2.0f * dy / s2 * e;
+            }
         }
     return h;
 }
@@ -389,50 +526,73 @@ __device__ float3 earthMaps(float3 q, float spin, float fpM, bool local, float l
 
 __device__ float3 groundShade(const GGround& g, float3 lp, float3 nl, float fp, float tone, int gi, int gj, bool onGrain) {
     const float3 sunL = make_float3(dot(g.sunDir, g.east), dot(g.sunDir, g.north), dot(g.sunDir, g.up));
-    float3 alb = beachAlbedo(lp.x, lp.y, fp, cV.haze.phase[0]);
-    if (cV.maps.bay) {
-        const float bs = beachShare(lp.x, lp.y);
-        if (bs < 1.0f) alb = lerp3(earthMaps(make_float3(0, 0, 1), 0.0f, fp, true, lp.x, lp.y), alb, bs);
+    // the beach's own colour only where nothing below a millimetre covers it
+    const bool covered = (onGrain && g.grains >= 1.0f && tone >= 0.0f) || g.surface >= 1.0f;
+    float3 alb = make_float3(0.6f, 0.5f, 0.4f);
+    if (!covered) {
+        alb = beachAlbedo(lp.x, lp.y, fp, cV.beachClock);
+        if (cV.maps.bay) {
+            const float bs = beachShare(lp.x, lp.y);
+            if (bs < 1.0f) alb = lerp3(earthMaps(make_float3(0, 0, 1), 0.0f, fp, true, lp.x, lp.y), alb, bs);
+        }
     }
     float3 n = make_float3(0, 0, 1);
+    float wrap = 0.0f, occl = 1.0f;
     if (onGrain && g.grains > 0.0f) {
         float3 ga;
-        if (tone < 0.0f) ga = make_float3(0.20f, 0.16f, 0.12f) * 0.35f;   // in the dark between them
-        else ga = lerp3(make_float3(0.62f, 0.53f, 0.38f), tone > 0.85f ? make_float3(0.35f, 0.30f, 0.27f) : make_float3(0.72f, 0.64f, 0.50f), tone);
+        if (tone < 0.0f) {
+            ga = make_float3(0.20f, 0.16f, 0.12f) * 0.35f;   // in the dark between them
+        } else {
+            ga = grainAlbedo(tone);
+            // frosting on the grain at its own scale (~20-60 um), while a pixel can hold it
+            const float fr = gnoise3(lp.x / 30e-6f, lp.y / 30e-6f, lp.z / 30e-6f, 480);
+            ga = ga * (0.88f + 0.24f * fr * smoothstepf(2.0f, 4.0f, 30e-6f / fp));
+            wrap = int(floorf(tone)) == 3 ? 0.05f : 0.35f;   // light through the clear grains (dark rock: none)
+            occl = 0.55f + 0.45f * saturate(nl.z * 0.7f + 0.5f + lp.z / (2.0f * g.grainR));   // lower and facing down: darker
+        }
         alb = lerp3(alb, ga, g.grains);
         n = normalize(lerp3(n, nl, g.grains));
+        wrap *= g.grains;
+        occl = lerpf(1.0f, occl, g.grains);
     }
-    // the home grain's top seen as a surface (Ö4: fractures, then the crystal's steps)
-    if (g.surface > 0.0f) {
-        float m = 0.0f, amp = 0.5f;
-        float f = 1.0f / fmaxf(fp * 512.0f, 1e-12f);
-        for (int i = 0; i < 5; ++i) {
-            const float lim = fminf(1.0f, 0.25f / (fp * f));
-            m += amp * lim * (gnoise3(lp.x * f, lp.y * f, 0.5f, 300 + i) - 0.5f);
-            f *= 2.7f;
-            amp *= 0.6f;
-        }
-        alb = lerp3(alb, make_float3(0.64f, 0.58f, 0.48f) * (1.0f + 0.5f * m), g.surface);
+    // the home grain's top as a surface: facets, frosting, pits (Ö4); no longer drawn once the microscope's eye has it
+    float hx = 0.0f, hy = 0.0f;
+    if (g.surface > 0.0f && g.steps < 1.0f) {
+        grainTopHeight(lp.x, lp.y, fp, hx, hy);
+        const float3 ns = normalize(make_float3(-hx, -hy, 1.0f));
+        n = normalize(lerp3(n, ns, g.surface));
+        alb = lerp3(alb, grainAlbedo(0.55f), g.surface);
+        wrap = lerpf(wrap, 0.35f, g.surface);
+        occl = lerpf(occl, 1.0f, g.surface);
     }
     float3 c;
+    const float ndl = (dot(n, sunL) + wrap) / (1.0f + wrap);
     if (cV.atmo.on) {
         const GAtmo& A = cV.atmo;
         const float mu = sunL.z;
         const float3 Ts = sunTransmit(A, 0.0f, mu);
         const float3 sky = make_float3(0.10f, 0.13f, 0.20f) * saturate(mu * 1.5f + 0.15f);
-        c = alb * (A.E * INV_PIf) * (Ts * fmaxf(dot(n, sunL), 0.0f) + sky);
+        c = alb * (A.E * INV_PIf) * (Ts * fmaxf(ndl, 0.0f) + sky) * occl;
     } else {
-        c = alb * (g.sunLit * (fmaxf(dot(n, sunL), 0.0f) + 0.18f));
+        c = alb * (g.sunLit * (fmaxf(ndl, 0.0f) + 0.18f)) * occl;
     }
-    // the atoms: an instrument's picture, not the Sun's (below the light's wavelength)
-    if (g.atoms > 0.0f) {
-        float hx, hy;
-        const float h = atomHeight(lp.x, lp.y, g, hx, hy);
-        const float A = 0.9f * g.atomSigma;
-        const float3 na = normalize(make_float3(-hx * A, -hy * A, 1.0f));
-        const float3 L = normalize(make_float3(-0.55f, 0.45f, 0.70f));
-        const float v = 0.10f + 0.42f * fmaxf(dot(na, L), 0.0f) + 0.18f * h;
-        c = lerp3(c, make_float3(v, v, v), g.atoms);
+    // under the light's wavelength: an electron microscope's picture of the terraces (their tilt dims, their edges shine),
+    // and on them, once a pixel can hold them, the atoms as a probe draws them
+    if (g.steps > 0.0f) {
+        float edge;
+        terraceHeight(lp.x, lp.y, fp, edge);
+        const float tilt = sqrtf(hx * hx + hy * hy);
+        float v = 0.24f + 0.10f * fminf(tilt, 1.5f) + 0.42f * edge;
+        if (g.atoms > 0.0f) {
+            float ax, ay;
+            const float h = atomHeight(lp.x, lp.y, g, ax, ay);
+            const float A = 0.9f * g.atomSigma;
+            const float3 na = normalize(make_float3(-ax * A, -ay * A, 1.0f));
+            const float3 L = normalize(make_float3(-0.55f, 0.45f, 0.70f));
+            const float va = 0.10f + 0.42f * fmaxf(dot(na, L), 0.0f) + 0.18f * h;
+            v = lerpf(v, va * (0.75f + 0.6f * edge) , g.atoms);
+        }
+        c = lerp3(c, make_float3(v, v, v), g.steps);
     }
     return c;
 }
@@ -695,32 +855,80 @@ __device__ float3 webLight(const GWeb& w, float3 d, float tmax, float pixAngle) 
     return L;
 }
 
-// ---- the desert's haze and the foam: octaves on the focus plane (u in screen widths)
-__device__ float3 hazeLight(float3 d) {
-    const GHaze& hz = cV.haze;
-    const float ux = d.x / d.z / (2.0f * cV.tanHalfX), uy = d.y / d.z / (2.0f * cV.tanHalfX);
-    float v = 0.0f, wsum = 0.0f, cells = 0.0f;
-    for (int i = 0; i < hz.octaves; ++i) {
-        const float f = hz.freq[i];
-        const float n = gnoise3(ux * f, uy * f, hz.phase[i], 500 + hz.index[i], 256);
-        v += hz.weight[i] * (n - 0.5f);
-        wsum += hz.weight[i];
-        if (hz.foam > 0.0f) {   // bubbles: one minus the distance to the cell's point
-            const float cx = floorf(ux * f), cy = floorf(uy * f);
-            float m = 1e9f;
-            for (int a = -1; a <= 1; ++a)
-                for (int b = -1; b <= 1; ++b) {
-                    const int ix = int(cx) + a, iy = int(cy) + b;
-                    const float px = ix + hash1(ix, iy, int(hz.phase[i]) & 255, 600 + hz.index[i]);
-                    const float py = iy + hash1(ix, iy, (int(hz.phase[i]) + 7) & 255, 700 + hz.index[i]);
-                    m = fminf(m, sqr(ux * f - px) + sqr(uy * f - py));
-                }
-            cells += hz.weight[i] * smoothstepf(0.35f, 0.0f, sqrtf(m));
-        }
+// ---- the density map (see GDensity, olDensity). On the plane through the focus, across the view (the crystallographer's picture, then the nuclear and the
+// parton physicist's): lines where the density crosses a power of ten, one pixel wide whatever the zoom (their width
+// from the gradient across a pixel: crisp as a drawing, no grain; where they would crowd, they fade), on a fill by
+// the density over this frame's range, hill-shaded as if log10 of it were height. One evaluation and two neighbours.
+// a map's picture from log10 of its quantity at the pixel and its neighbours (x0, and the steps gx, gy): lines at the
+// powers of ten, the fill over [lo, hi], the hill-shading
+__device__ float mapShade(float x0, float gx, float gy, float lo, float hi, float relief) {
+    const float g = sqrtf(gx * gx + gy * gy);
+    const float r = x0 - floorf(x0 + 0.5f);                   // from the nearest power of ten
+    const float line = __expf(-sqr(r / fmaxf(g * 0.75f, 1e-6f))) * (1.0f - smoothstepf(0.2f, 0.5f, g));
+    const float t = saturate((x0 - lo) / fmaxf(hi - lo, 1e-3f));
+    const float k = relief * cV.width;                        // height per decade, in pixels
+    const float3 n = normalize(make_float3(-gx * k, gy * k, 1.0f));   // screen y runs down
+    const float shade = 0.55f + 0.45f * (n.x * -0.5f + n.y * 0.5f + n.z * 0.7071f) / 0.7071f;
+    const float fill = (0.004f + 0.75f * t * t) * fmaxf(shade, 0.15f);
+    return fill + (0.05f + 0.30f * t) * line;
+}
+__device__ float3 densitySlice(const GDensity& D, float px, float py) {
+    const float3 d0 = rayDir(px, py), dx = rayDir(px + 1.0f, py), dy = rayDir(px, py + 1.0f);
+    const float3 p0 = d0 * (1.0f / d0.z), p1 = dx * (1.0f / dx.z), p2 = dy * (1.0f / dy.z);
+    const float x0 = log10f(olDensity(D, p0));
+    const float gx = log10f(olDensity(D, p1)) - x0, gy = log10f(olDensity(D, p2)) - x0;   // decades per pixel
+    const float v = D.weight * mapShade(x0, gx, gy, D.lo, D.hi, D.relief);
+    return make_float3(v, v, v);
+}
+
+// ---- the desert and the bottom (see GField)
+// the couplings at distance r (metres, as log10): 1/alpha_i(mu) = 1/alpha_i(M_Z) - b_i / (2 pi) ln(mu / M_Z), b = (41/10,
+// -19/6, -7), 1/alpha(M_Z) = (59.0, 29.6, 8.47); mu = hbar c / r (1.97327e-16 GeV m), M_Z = 91.1876 GeV; in lobes
+// (strong up, weak lower left, hypercharge lower right), which close in where the quark's smearing is
+__device__ float fieldCoupling(float log10r, float theta, float lobes) {
+    const float L = -40.6747f - 2.302585f * log10r;
+    const float a1 = 1.0f / fmaxf(59.0f - 0.652535f * L, 1.0f);
+    const float a2 = 1.0f / fmaxf(29.6f + 0.504049f * L, 1.0f);
+    const float a3 = 1.0f / fmaxf(8.47f + 1.114085f * L, 1.0f);
+    const float k = 3.0f * lobes;
+    const float c3 = __expf(k * __cosf(theta - 1.570796f)), c2 = __expf(k * __cosf(theta - 3.665191f));
+    const float c1 = __expf(k * __cosf(theta + 0.523599f));
+    return (a1 * c1 + a2 * c2 + a3 * c3) / (c1 + c2 + c3);
+}
+__device__ float fieldLog(const GField& F, float x, float y) {
+    float dx = 0.0f, dy = 0.0f;
+    for (int i = 0; i < F.octaves; ++i) {   // the foam: every distance uncertain by ~ the Planck length
+        const float f = F.freq[i];
+        dx += F.amp[i] * (gnoise3(x * f, y * f, F.phase[i], 800 + (F.index[i] & 255), 256) - 0.5f);
+        dy += F.amp[i] * (gnoise3(x * f + 17.3f, y * f - 9.1f, F.phase[i], 1100 + (F.index[i] & 255), 256) - 0.5f);
     }
-    const float base = 0.035f + 0.06f * (wsum > 0.0f ? v / sqrtf(wsum) : 0.0f);
-    const float foam = 0.12f * cells / fmaxf(wsum, 1e-3f);
-    return hz.color * (hz.amount * (fmaxf(base, 0.0f) + hz.foam * foam));
+    x += dx;
+    y += dy;
+    float d2 = x * x + y * y;
+    if (F.loop) {   // the distance to the string's loop
+        float m = 1e30f;
+        float2 a = F.pts[kLoopPoints - 1];
+        for (int k = 0; k < kLoopPoints; ++k) {
+            const float2 b = F.pts[k];
+            const float ex = b.x - a.x, ey = b.y - a.y, px = x - a.x, py = y - a.y;
+            const float t = saturate((px * ex + py * ey) / fmaxf(ex * ex + ey * ey, 1e-20f));
+            m = fminf(m, sqr(px - ex * t) + sqr(py - ey * t));
+            a = b;
+        }
+        d2 = m;
+    }
+    const float s2 = F.sigma * F.sigma + F.loopBlur * F.loopBlur;
+    const float lobes = smoothstepf(0.0f, 3.0f * F.sigma, sqrtf(x * x + y * y));
+    const float A = fieldCoupling(0.5f * log10f(fmaxf(d2, s2)) + F.logW, atan2f(y, x), lobes);
+    return log10f(A) - 2.0f * log10f(d2 + s2);
+}
+__device__ float3 fieldSlice(const GField& F, float px, float py) {
+    const float3 d0 = rayDir(px, py), dx = rayDir(px + 1.0f, py), dy = rayDir(px, py + 1.0f);
+    const float sc = 1.0f / (2.0f * cV.tanHalfX);   // camera units on the focus plane -> screen widths
+    const float x0 = fieldLog(F, d0.x / d0.z * sc, d0.y / d0.z * sc);
+    const float gx = fieldLog(F, dx.x / dx.z * sc, dx.y / dx.z * sc) - x0, gy = fieldLog(F, dy.x / dy.z * sc, dy.y / dy.z * sc) - x0;
+    const float v = F.weight * mapShade(x0, gx, gy, F.lo, F.hi, F.relief);
+    return make_float3(v, v, v);
 }
 
 // One sample: the nearest surface (spheres, the ground), then the light of the clouds and discs in front of it
@@ -765,7 +973,7 @@ __device__ float3 sampleAt(float px, float py, float& depth) {
         bool onGrain = false;
         if (g.grains > 0.0f) {
             float tg;
-            if (hitGrains(o, dl, g.grainR, tg, n, tone, gi, gj)) {
+            if (hitGrains(o, dl, g.grainR, tg, n, tone, gi, gj, g.surface >= 1.0f)) {
                 tl = tg;
                 onGrain = true;
             }
@@ -797,7 +1005,7 @@ __device__ float3 sampleAt(float px, float py, float& depth) {
                 alb = earthMaps(q, b.spinBlur, fpM, local, lx, ly);
                 if (g.on && g.beach > 0.0f) {
                     const float fp = tBest * g.metres * cV.pixAngle;
-                    alb = lerp3(alb, beachAlbedo(lx, ly, fp, cV.haze.phase[0]), g.beach * beachShare(lx, ly));
+                    alb = lerp3(alb, beachAlbedo(lx, ly, fp, cV.beachClock), g.beach * beachShare(lx, ly));
                 }
             } else if (b.pattern == 1) {
                 // the Earth's turn while the shutter is open: its pattern averaged along the longitude
@@ -824,7 +1032,7 @@ __device__ float3 sampleAt(float px, float py, float& depth) {
                     const float m = g.metres;
                     const float x = dot(lp3, g.east) * m, y = dot(lp3, g.north) * m;
                     const float fp = tBest * m * cV.pixAngle;
-                    alb = lerp3(alb, beachAlbedo(x, y, fp, cV.haze.phase[0]), g.beach);
+                    alb = lerp3(alb, beachAlbedo(x, y, fp, cV.beachClock), g.beach);
                 }
             } else if (b.pattern == 2) {
                 if (cV.maps.moon) {
@@ -870,7 +1078,6 @@ __device__ float3 sampleAt(float px, float py, float& depth) {
             col += b.emit * col1;
         }
     }
-    if (cV.haze.amount > 0.0f) col += hazeLight(d);
     depth = tBest;
     return col;
 }
@@ -904,6 +1111,8 @@ __global__ void kFrame(float4* accum, float* depthOut, int samples) {
     float3 avg = sum * (1.0f / wsum);
     if (cV.galaxy.on) avg += galaxyLight(cV.galaxy, rayDir(x + 0.5f, y + 0.5f), dCentre, cV.pixAngle / cV.galaxy.kpc);
     if (cV.web.on) avg += webLight(cV.web, rayDir(x + 0.5f, y + 0.5f), dCentre, cV.pixAngle);
+    if (cV.dens.on) avg = avg * (1.0f - cV.dens.weight) + densitySlice(cV.dens, x + 0.5f, y + 0.5f);
+    if (cV.field.on) avg = avg * (1.0f - cV.field.weight) + fieldSlice(cV.field, x + 0.5f, y + 0.5f);
     if (cV.atmo.on) {   // the air between the camera and what the pixel's centre sees (or space behind the limb)
         float3 T;
         const float3 La = airLight(cV.atmo, rayDir(x + 0.5f, y + 0.5f), dCentre, T);

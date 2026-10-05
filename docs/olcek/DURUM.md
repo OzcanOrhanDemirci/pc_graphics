@@ -2,6 +2,71 @@
 
 > Tek kaynak durum panosu. Plan `docs/olcek/PLAN.md`. En yeni en üstte.
 
+## 2026-10-05 gece · Ö4 ve Ö5'in ilk hâli: kum tanesinden Planck'a bütün iç yol
+
+Akış önce, ayrıntı sonra (Özcan): 10⁻³'ten 10⁻³⁵'e her onlukta gerçek ölçülerle bir resim var, kesintisiz. Cila sırada.
+
+- **Kum ve tane** (10⁻³-10⁻⁶): taneler elipsoit, iki katman; ev tanesi ekranı doldurunca yalnız o çizilir. Tanenin
+  üstü Voronoi yüzeyleri, kırağı ve çukurlar (2B gradyan gürültüsü, türevleri analitik).
+- **Işığın altında** (10⁻⁶-10⁻⁹): elektron mikroskobu gibi teraslar (kenarlar parlar), sonra atomik kuvvet mikroskobu
+  gibi silika çift katmanının petek örgüsü (Si-Si 3,06 Å, köprü oksijenleri). Renk -6 ile -7 arasında söner.
+- **Yoğunluk haritası** (10⁻⁹-10⁻¹⁷), kristalografın dili: odaktan geçen düzlemde yoğunluk; her on katta bir çizgi
+  (zoom ne olursa olsun bir piksel, sıklaşınca söner), dolgu bu ölçeğin aralığında, log yoğunluk yükseklikmiş gibi
+  sol üstten ışıklı kabartma. Tek birim: a0³ başına parçacık. Hepsi gerçek profiller:
+  - Si ve O atomları Clementi-Raimondi Slater yörüngeleriyle (kabukların toplamı), silika peteğinin üst katı;
+  - Si-28 çekirdeği Woods-Saxon (R 3,07 fm, a 0,52 fm, ρ0 = 0,176 nükleon/fm³: 28 nükleonun zaman ortalaması);
+  - proton (rms 0,84 fm) ve üç kuark, Y biçimli gluon akısıyla: derin esnek saçılmanın donmuş anlık görüntüsü
+    (sondanın etkileşim süresi partonların ömründen kısa), -13,3 ile -14 arasında belirir.
+  - Kuark, sondanın çözünürlüğüyle görülür: protona kadar 0,07 fm, sonra onlukta 1,6 onluk keskinleşir (ölçülen boyutu
+    yok, 10⁻¹⁹ m'ye kadar nokta).
+- **Pozlama tasarlanmış tablo** (`kDensRange`, s'nin işlevi): ilk denemede dolgunun aralığını ekrandan okudum, çekirdek
+  -11'de eklenince bir karede söndü; PLAN §5 zaten yasaklıyordu. Tablo ekranın gerçekte ne tuttuğundan kuruldu
+  (`OLCEK_DEBUG` basıyor). Atomun içine girerken aydınlık uç elektronlardan çekirdeğe yarım onlukta geçer: bulut kararır,
+  ortada nokta gibi çekirdek kalır. Mesaj bu: atom neredeyse boş.
+- **Çöl** (10⁻¹⁷-10⁻³²): kuarkın çevresindeki alanın zaman ortalaması, enerji yoğunluğu u = A / (d² + σ²)². A, o
+  uzaklıktaki güçlü, zayıf ve hiperyük bağlaşımları: Standart Model, tek döngü (b = 41/10, -19/6, -7; M_Z'de 1/α =
+  59,0 · 29,6 · 8,47; μ = ħc / d). Üçü dilimin üç lobunda (yukarı güçlü, sol alt zayıf, sağ alt hiperyük): halkalar
+  -17'de belirgin üç köşeli, derine indikçe yuvarlaklaşır. r⁻⁴ ölçekten bağımsız olduğu için resim her onlukta aynı
+  ("yeni bir şey yok"), değişen yalnız bağlaşımlar. Gerçek sayılar: kesişmiyorlar, yaklaşıyorlar; Planck'ta yeniden
+  ayrılıyorlar.
+- **Dip** (10⁻³²-10⁻³⁵): Wheeler köpüğü: her uzaklık ~ Planck uzunluğu kadar belirsiz. Oktav başına yer değiştirme
+  0,4 L_P (mertebe); her oktav kendi ışık geçiş süresiyle yaşar. Ekranda 0,15 sn'lik deklanşörden hızlı olanlar
+  ortalamada söner, yavaşlar oynar. Kendiliğinden yalnız son ~1,5 onlukta görünür. Kuark kapalı bir sicim: halka
+  (yarıçap 0,32 L_P), 2-5. modlar n c / r ile döner. Deklanşörün keskin tuttuğu kısım çizgide, ortalanan salınım
+  genişlik olur (dünya yüzeyi). Uzaklık halkaya ölçülür, iç halkalar sicimi sarar.
+- **Plandan ayrılanlar** (gerekçeleriyle):
+  - *Çizgiler:* PLAN §5 "görüntü üstünde çizgi yok" diyor; yoğunluk haritasının eş-değer çizgileri ölçeği gören aletin
+    kendi çizimi (kristalografi haritaları), etiket ya da ok değil. Sönük tutuldu.
+  - *Çölde pus yerine alan:* plan dalgalanmaları ortalanmış pus olarak düşünmüştü; ortalaması gerçekten tekdüze. Gözle
+    görülür ve dürüst olan, kuarkın kendi alanının durağan ortalaması. Kıpraşma yok, deterministik.
+  - *Loblar:* resmin bir aracı (üç kuvvet aynı yerde üst üste; ayrı loplar yalnız karşılaştırmayı görünür kılıyor).
+  - *Sicimin boyu:* kuram bir mertebe veriyor, sayı vermiyor; dipte kadraja sığsın diye 0,32 L_P seçildi.
+- Eski yer tutucu pus (`GHaze`) kaldırıldı. Hızlı oktavları %25 kontrastla hareket ettirdiği için pır pır üretirdi.
+
+### Ölçümler (2560×1440)
+- Kare: iç dünyada en kötü 8,8 ms (atomik görüntü); yoğunluk haritası 1-2 ms, çöl 0,7 ms, dip 2-3,7 ms.
+- `olcek-sure` (bütün yol, adım 0,01): en uzun kare **15,2 ms, bütçe GEÇTİ**; ev kadrajda en kötü 0,59. Sıçrama 173
+  kare (eşik 0,04):
+  - 114'ü s 23,4-23,7: galaksi geçişi, eskiden beri;
+  - 23'ü s ≈ 6-7: köşeler, karelere bakılmıştı;
+  - 12'si s 16-17: yıldızlar;
+  - iç yolda yalnız s -16/-17'de 21 kare (en büyük 0,045): kuarkın keskinleşmesi ve alana devir. İlk denemede 127
+    kareydi; keskinleşme onlukta 2'den 1,6 onluğa indi ve alanın aydınlık ucu sondanın yayılmasını izledi;
+  - dipte 3 kare (0,065): köpüğün gerçek hareketi.
+
+  -9 ile -15 arası sıfır.
+- `olcek-hassasiyet`: en kötü 9,5e-5 piksel, GEÇTİ. `olcek-zaman`: GEÇTİ.
+- Sıçrama raporu artık onluk başına sayı ve en büyük değeri basıyor (eskiden yalnız en büyük 40 sıçrama).
+
+### NE DOĞRULANMADI
+- Canlıda (tekerlekle) hiçbir şeye bakılmadı; yalnız kareler ve tarama.
+- Dip yumuşak: sicim bulanık bir bant gibi, köpükte hücre yok. Cila listesinde.
+- Bağlaşımlar M_Z'nin altında da tek döngü SM b'leriyle (2 GeV'de α3 ≈ 0,24, gerçeği ~0,30); temsil için yeterli,
+  ölçülmedi.
+- Yoğunluk haritasının tonları ve atomun içindeki pozlama geçişi gözle ayarlandı; bir ölçüte bağlanmadı.
+- s ≈ 23,4-23,7'deki galaksi geçişi sıçramaları hâlâ duruyor (eskiden beri).
+- autotest bu değişikliklerle koşulmadı.
+
 ## 2026-10-05 akşam · Kozmik ağ: hacim ve dilim
 
 - **Ağ** (`tools/olcek_veri.py ag`): CDM benzeri tayflı (BBKS, Γ = 0,2) Gauss rastgele alan, Zel'dovich yaklaşımıyla

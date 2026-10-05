@@ -341,6 +341,18 @@ int testContinuity(OlcekApp& app, double step) {
     }
     std::printf("  ev kadrajda: en kotu %.2f (1 = kenar; s = %.2f)\n", worstHome, worstHomeS);
     std::printf("  sicrama (esik %.3f): %zu kare\n", threshold, flags.size());
+    {   // where they are: per decade, how many and the worst (the list below is only the forty largest)
+        int nFlag[80] = {};
+        float wFlag[80] = {};
+        for (const Flag& f : flags) {
+            const int d = std::clamp(int(std::floor(f.s)) + 40, 0, 79);
+            ++nFlag[d];
+            wFlag[d] = std::max(wFlag[d], float(f.v));
+        }
+        std::printf("   onluk: sayi / en buyuk\n");
+        for (int d = 0; d < 80; ++d)
+            if (nFlag[d]) std::printf("    %4d: %4d / %.3f\n", d - 40, nFlag[d], wFlag[d]);
+    }
     std::sort(flags.begin(), flags.end(), [](const Flag& a, const Flag& b) { return a.v > b.v; });
     for (size_t i = 0; i < std::min<size_t>(flags.size(), 40); ++i)
         std::printf("    s = %7.3f  %.3f  blok (%d, %d)\n", flags[i].s, flags[i].v, flags[i].bx, flags[i].by);
@@ -471,6 +483,17 @@ int runOlcekCli(int argc, char** argv) {
                     std::printf("    blob %d: c %.5g %.5g %.5g sigma %.5g emit %.4g\n", i, v.blobs[i].c.x, v.blobs[i].c.y, v.blobs[i].c.z, v.blobs[i].sigma,
                                 v.blobs[i].emit.x);
                 std::printf("    splats %zu, ground fade %.3f atoms %.3f surface %.3f\n", app.splats.size(), v.ground.fade, v.ground.atoms, v.ground.surface);
+                if (v.dens.on) {   // the density over a 33 x 19 grid on the screen, and at the focus (log10, per a0^3)
+                    float lo = 1e30f, hi = -1e30f;
+                    for (int j = 0; j <= 18; ++j)
+                        for (int i = 0; i <= 32; ++i) {
+                            const float x = std::log10(olDensity(v.dens, make_float3(v.tanHalfX * (i / 16.0f - 1.0f), v.tanHalfY * (j / 9.0f - 1.0f), 1.0f)));
+                            lo = std::min(lo, x);
+                            hi = std::max(hi, x);
+                        }
+                    std::printf("    density: screen %.2f .. %.2f, focus %.2f; fill %.2f .. %.2f, %d bodies\n", lo, hi,
+                                std::log10(olDensity(v.dens, make_float3(0, 0, 1))), v.dens.lo, v.dens.hi, v.dens.n);
+                }
             }
             char name[64];
             std::snprintf(name, sizeof(name), "s%+07.3f", app.sc.s);

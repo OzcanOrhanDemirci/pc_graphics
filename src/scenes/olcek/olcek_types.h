@@ -86,6 +86,71 @@ struct GWeb {
     float dim[33];              // (1 + z)^-4 at r = i/32 of R
 };
 
+// The inner world's density map (Ö4-Ö5): what an instrument of that scale measures, drawn as a crystallographer draws it:
+// soft shells where the density crosses levels a factor of e apart, glowing where the view grazes them. Bodies: atoms
+// (electron density from Clementi-Raimondi orbital exponents), a nucleus (Woods-Saxon charge density), a proton and its
+// quarks (Gaussians), a flux tube (a Y of segments). Positions in camera space; the density in the body's own unit.
+constexpr int kMaxDensity = 24;
+struct GDensityBody {
+    float3 c{0, 0, 0};
+    int type = 0;              // 0 Si atom, 1 O atom, 2 nucleus (Woods-Saxon), 3 Gaussian, 4 tube from c to c2
+    float3 c2{0, 0, 0};
+    float scale = 1.0f;        // metres per camera unit / the body's length unit (a0, fm): camera units -> its unit
+    float r = 1.0f, a = 0.5f;  // Woods-Saxon radius and diffuseness; Gaussian / tube sigma (its unit)
+    float amp = 1.0f;          // its peak, in particles per a0^3 (the one unit of the map, whatever the body's own)
+};
+struct GDensity {
+    int on = 0, n = 0;
+    float weight = 1.0f;       // its share (comes in and goes out over a decade)
+    float lo = -2.0f, hi = 3.0f;   // log10 of the density the fill's dark and light ends stand for (this frame's range)
+    float relief = 0.01f;      // the hill-shading's height: screen widths per decade
+    GDensityBody b[kMaxDensity];
+};
+
+// The density, in particles per a0^3: the electrons of an atom (Slater-type orbitals with Clementi-Raimondi exponents,
+// rho = sum N/(4 pi) (2 zeta)^(2n+1)/(2n)! r^(2n-2) e^(-2 zeta r), r in a0),
+// a nucleus's nucleons, partons. The same code gives the host its exposure and the GPU its map.
+HD float olP5(float t) { return t * t * t * t * t; }
+HD float olP7(float t) { return t * t * t * t * t * t * t; }
+HD float olAtomDensity(int type, float r) {
+    // Si: 1s2 (13.5745), 2s2 (4.9008), 2p6 (4.9725), 3s2 (1.6344), 3p2 (1.4284); O: 1s2 (7.6579), 2s2 (2.2458), 2p4 (2.2266)
+    float rho;
+    if (type == 0) {
+        const float z1 = 13.5745f, z2 = 4.9008f, z2p = 4.9725f, z3 = 1.6344f, z3p = 1.4284f;
+        rho = 2.0f * (4.0f * z1 * z1 * z1) * expf(-2.0f * z1 * r);
+        const float r2 = r * r, r4 = r2 * r2;
+        rho += 2.0f * olP5(2.0f * z2) / 24.0f * r2 * expf(-2.0f * z2 * r);
+        rho += 6.0f * olP5(2.0f * z2p) / 24.0f * r2 * expf(-2.0f * z2p * r);
+        rho += 2.0f * olP7(2.0f * z3) / 720.0f * r4 * expf(-2.0f * z3 * r);
+        rho += 2.0f * olP7(2.0f * z3p) / 720.0f * r4 * expf(-2.0f * z3p * r);
+    } else {
+        const float z1 = 7.6579f, z2 = 2.2458f, z2p = 2.2266f;
+        rho = 2.0f * (4.0f * z1 * z1 * z1) * expf(-2.0f * z1 * r);
+        rho += 2.0f * olP5(2.0f * z2) / 24.0f * r * r * expf(-2.0f * z2 * r);
+        rho += 4.0f * olP5(2.0f * z2p) / 24.0f * r * r * expf(-2.0f * z2p * r);
+    }
+    return rho * 0.0795775f;   // 1 / 4 pi
+}
+HD float olBodyDensity(const GDensityBody& b, float3 p) {
+    const float3 d = (p - b.c) * b.scale;
+    const float dd = d.x * d.x + d.y * d.y + d.z * d.z;
+    if (b.type <= 1) return olAtomDensity(b.type, sqrtf(dd));
+    if (b.type == 2) return b.amp / (1.0f + expf((sqrtf(dd) - b.r) / b.a));
+    if (b.type == 3) return b.amp * expf(-0.5f * dd / (b.a * b.a));
+    // a tube: the distance to the segment
+    const float3 e = (b.c2 - b.c) * b.scale;
+    const float ee = e.x * e.x + e.y * e.y + e.z * e.z;
+    float t = (d.x * e.x + d.y * e.y + d.z * e.z) / fmaxf(ee, 1e-12f);
+    t = fminf(fmaxf(t, 0.0f), 1.0f);
+    const float3 q = d - e * t;
+    return b.amp * expf(-0.5f * (q.x * q.x + q.y * q.y + q.z * q.z) / (b.a * b.a));
+}
+HD float olDensity(const GDensity& D, float3 p) {
+    float rho = 1e-30f;
+    for (int k = 0; k < D.n; ++k) rho += olBodyDensity(D.b[k], p);
+    return rho;
+}
+
 // a point of light: its flux as the sum of its pixels (display-referred radiance x pixels); a Gaussian on the screen
 struct GSplat {
     float3 p;                   // position (camera space)
@@ -106,6 +171,7 @@ struct GGround {
     float grains = 0.0f;        // the sand grains' share (0: their mean colour)
     float grainR = 2.5e-4f;     // a grain's radius (m)
     float surface = 0.0f;       // the home grain's top seen as a surface (0..1): its texture, then the atoms
+    float steps = 0.0f;         // the crystal's terraces, as an electron microscope sees them (0..1)
     float atoms = 0.0f;         // the atoms of its top layer (a height field, AFM-like) (0..1)
     float3 sunDir{0, 0, 1};     // towards the Sun (unit), and its irradiance / pi (display-referred)
     float sunLit = 0.0f;
@@ -115,17 +181,29 @@ struct GGround {
     float vibPhase = 0.0f;      // the vibration's clock (radians)
 };
 
-// the self-similar haze of the desert and the foam at the bottom: octaves of noise on the focus plane, each with its
-// own clock and its contrast after the averaging
-struct GHaze {
-    float amount = 0.0f;        // 0 off
-    float3 color{1, 1, 1};
-    int octaves = 0;
-    int index[kMaxOctaves];     // the octave's own number (its wavelength 2^-index m): its noise, at every zoom
-    float freq[kMaxOctaves];    // cycles per screen width
-    float weight[kMaxOctaves];  // contrast (after the averaging)
-    float phase[kMaxOctaves];   // its clock (wraps at 256)
-    float foam = 0.0f;          // 0 the desert's soft haze, 1 the Planck foam's cells
+// The desert and the bottom (Ö5): the time average of the field around the home quark, drawn as the density map is.
+// Its energy density u = A(theta, d) / (d^2 + sigma^2)^2, d the distance to the quark (screen widths): A the strong,
+// weak and hypercharge couplings at that distance (one loop, the Standard Model's: they run towards each other), each in
+// a lobe of the slice (a picture's device: the rings are round where the three are equal). At the bottom the distances
+// are uncertain by ~ the Planck length (Wheeler's foam: octaves of displacement, the slow ones moving, the fast ones
+// averaged away by the shutter), and the quark is a closed string: the distance is to the loop, its modes as the
+// shutter sees them (kept sharp, or widened by their averaged swing).
+constexpr int kLoopPoints = 64;
+struct GField {
+    int on = 0;
+    float weight = 0.0f;
+    float logW = 0.0f;              // log10 of the screen's width in metres (the couplings run with metres)
+    float sigma = 0.0012f;          // the point's smearing (screen widths): the probe's resolution, a few pixels
+    float lo = 0.0f, hi = 10.0f;    // log10 u at the fill's dark and light ends
+    float relief = 0.01f;           // the hill-shading's height: screen widths per decade
+    int octaves = 0;                // the foam
+    int index[kMaxOctaves];         // the octave's own number (its wavelength 2^-index m)
+    float freq[kMaxOctaves];        // cycles per screen width
+    float amp[kMaxOctaves];         // displacement (screen widths), after the shutter's averaging
+    float phase[kMaxOctaves];       // its clock (wraps at 256)
+    int loop = 0;                   // the string drawn as a loop (else a point: it is far below the pixel)
+    float loopBlur = 0.0f;          // the width its averaged swing adds (screen widths)
+    float2 pts[kLoopPoints];        // the loop (screen widths from the focus)
 };
 
 // the maps (Ö1): texture objects and where they lie. Local maps are squares centred on the beach point, in its east and
@@ -180,11 +258,13 @@ struct OlcekView {
     GBlob blobs[kMaxBlobs];
     GDisc discs[kMaxDiscs];
     GGround ground;
-    GHaze haze;
+    GField field;
+    float beachClock = 0.0f;   // the swash, seconds (wraps)
     GMaps maps;
     GAtmo atmo;
     GGalaxy galaxy;
     GWeb web;
+    GDensity dens;
 };
 
 }   // namespace olcek

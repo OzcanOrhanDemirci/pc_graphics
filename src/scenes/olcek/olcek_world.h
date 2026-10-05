@@ -84,7 +84,8 @@ struct Clocks {
     double galaxy = 0.0;          // the Sun around the Galaxy's centre, radians
     double arms = 0.0;            // the arms' pattern, radians
     double vib[3] = {};           // the lattice's vibration, radians (three modes)
-    double haze[128] = {};        // the desert's octaves, each its own phase (wraps at 256)
+    double foam[128] = {};        // the foam's octaves, each its own phase (wraps at 256)
+    double string[4] = {};        // the string's modes, radians
     double beach = 0.0;           // the swash, seconds (wraps)
 };
 
