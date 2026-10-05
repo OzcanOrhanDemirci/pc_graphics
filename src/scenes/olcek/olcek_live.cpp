@@ -331,11 +331,7 @@ public:
         p.ship = &s;
         p.route = &a_.route;
         p.bb = &a_.bb;
-        p.trace = &trace_;
         p.k = hz::kin(s.phi);
-        const PanoNow pn = panoNow();
-        p.xFromStart = pn.x;
-        p.ctSinceDepart = pn.ct;
         // the Earth: "now" in the rocket's frame (its simultaneity), and the Earth seen (its light, delayed, Doppler-shifted)
         const olcek::V3 pos = hz::position(s, a_.route);
         const olcek::V3 rel = pos - a_.route.earth;
@@ -354,18 +350,6 @@ public:
     }
 
 private:
-    // where the rocket is in its leg's plane: x from the leg's start, ct since its first thrust (< 0: not yet)
-    struct PanoNow {
-        double x = 0.0, ct = -1.0;
-    };
-    PanoNow panoNow() const {
-        const hz::Ship& s = a_.ship;
-        PanoNow pn;
-        const int L = std::min(s.leg, 1);
-        pn.x = a_.route.length[L] + s.x.value();
-        if (s.legTau >= 0.0) pn.ct = hz::kC * hz::add(s.t, hz::neg(s.legT)).value();
-        return pn;
-    }
 
     // ---- the second option: Hız ---------------------------------------------------------------------------------------
 
@@ -421,7 +405,6 @@ private:
         if (in.pressed(GLFW_KEY_G)) graphs_ = !graphs_;
         if (reset) {
             a_.ship = hz::depart(a_.route);
-            trace_.clear();
             pano_ = hz::PanoState{};
             resetArmed_ = -1.0;
             yaw_ = pitch_ = 0.0;
@@ -431,15 +414,8 @@ private:
         const int legBefore = a_.ship.leg;
         const hz::Events ev = hz::step(a_.ship, a_.route, dtau, cmd);
         notices(host, ev, legBefore);
-        if (a_.ship.leg != legBefore) {   // a new leg: its own world line, its own diagram
-            trace_.clear();
-            pano_ = hz::PanoState{};
-        }
+        if (a_.ship.leg != legBefore) pano_ = hz::PanoState{};   // a new leg: the graphs' axes afresh
         lastDtau_ = dtau;
-        {   // the world line in the leg's plane (the Minkowski diagram), from the leg's first thrust
-            const PanoNow pn = panoNow();
-            if (pn.ct >= 0.0) trace_.add(pn.x, pn.ct);
-        }
 
         // the view's own input
         const bool inView = in.view.w > 0.0f && in.view.contains(in.mouseX, in.mouseY);
@@ -727,7 +703,6 @@ private:
     bool lookAhead_ = false;            // R: the head turning back to the bow
     bool overshootShown_ = false;       // the "too fast to stop" notice given (once per such brake)
     bool graphs_ = true;                // the five panels of graphs (G)
-    hz::Trace trace_;                   // the leg's world line (the Minkowski diagram)
     hz::PanoState pano_;
     double lastDtau_ = 0.0;
     double zoom_ = std::log10(std::tan(37.5 * kPi / 180.0));   // log10 tan(fov/2): 75 degrees across

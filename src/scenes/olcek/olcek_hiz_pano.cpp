@@ -56,29 +56,6 @@ Box panel(float x, float y, float w, float h, float S, const std::string& title,
     return Box{x + S * 20.0f, y + S * 46.0f, w - S * 40.0f, h - S * 62.0f};
 }
 
-// 1, 2, 5 x 10^k: the nearest at or above v
-double niceStep(double v) {
-    const double e = std::pow(10.0, std::floor(std::log10(v)));
-    const double m = v / e;
-    return (m <= 1.0 ? 1.0 : m <= 2.0 ? 2.0 : m <= 5.0 ? 5.0 : 10.0) * e;
-}
-
-// a length unit for a diagram whose half size is h metres (light-time units: the diagram's ct and x share it)
-struct Unit {
-    double m;
-    std::string name;
-};
-Unit unitFor(double h) {
-    constexpr double c = kC;
-    if (h < 60.0 * c) return {c, L("ışık saniyesi", "light seconds")};
-    if (h < 3600.0 * c) return {60.0 * c, L("ışık dakikası", "light minutes")};
-    if (h < 86400.0 * c) return {3600.0 * c, L("ışık saati", "light hours")};
-    if (h < kYear * c) return {86400.0 * c, L("ışık günü", "light days")};
-    if (h < 1e3 * kLy) return {kLy, L("ışık yılı", "light years")};
-    if (h < 1e6 * kLy) return {1e3 * kLy, L("bin ışık yılı", "thousand light years")};
-    return {1e6 * kLy, L("milyon ışık yılı", "million light years")};
-}
-
 // how much of the Sun's output an energy is: seconds, minutes, hours, days, years
 std::string sunTime(double joules) {
     const double s = joules / kSunLuminosity;
@@ -102,39 +79,16 @@ std::string bandOf(double T) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-// HIZ: the nines' ladder, the speed bar against the wall of light, gamma's curve
+// HIZ: the speed bar against the wall of light, gamma's curve (the nines: in the title)
 
 void drawSpeed(const Pano& p, PanoState& st, Box b, float S) {
     const Kin& k = p.k;
     const ui::TextStyle lab = theme::mono(theme::Scale{S}, 12.5f, white(0.55f));
     const ui::TextStyle small = theme::small(theme::Scale{S}, white(0.62f));
     const float axisH = b.h - S * 30.0f;   // the room under the plots for their names
-    // the ladder: 0 .. 22 nines up the left; the cap at 21
-    {
-        const float x = b.x + S * 26.0f, y0 = b.y + axisH, y1 = b.y + S * 4.0f;
-        const float per = (y0 - y1) / 22.0f;
-        ui::line(x, y0, x, y1, S * 1.2f, white(0.35f));
-        for (int n = 0; n <= 22; ++n) {
-            const float y = y0 - per * n;
-            const bool major = n % 3 == 0;
-            ui::line(x - S * (major ? 8.0f : 4.0f), y, x + S * (major ? 8.0f : 4.0f), y, S * (major ? 1.2f : 1.0f), white(major ? 0.55f : 0.3f));
-            if (major && n > 0) {
-                const std::string t = std::to_string(n);
-                ui::text(x - S * 14.0f - ui::measure(t, lab), y - S * 8.0f, t, lab);
-            }
-        }
-        // the cap: a gold rung at 21
-        const float yc = y0 - per * 21.0f;
-        ui::line(x - S * 12.0f, yc, x + S * 12.0f, yc, S * 1.6f, gold(0.85f));
-        // where it is: a bar up the ladder, a bright rung
-        const float yn = y0 - per * float(std::clamp(k.nines, 0.0, 22.0));
-        ui::rect(ui::Rect{x - S * 3.0f, yn, S * 6.0f, y0 - yn}, white(0.28f), S * 2.0f);
-        ui::line(x - S * 16.0f, yn, x + S * 16.0f, yn, S * 2.2f, white(0.95f));
-        ui::text(x - S * 20.0f, b.y + axisH + S * 8.0f, L("DOKUZ", "NINES"), theme::caption(theme::Scale{S}, white(0.5f)));
-    }
     // the speed bar: 0 .. c, the wall of light at c
     {
-        const float x = b.x + S * 96.0f, y0 = b.y + axisH, y1 = b.y + S * 4.0f + (axisH - S * 4.0f) * (1.0f / 23.0f);
+        const float x = b.x + S * 20.0f, y0 = b.y + axisH, y1 = b.y + S * 14.0f;
         ui::rect(ui::Rect{x - S * 5.0f, y1, S * 10.0f, y0 - y1}, white(0.07f), S * 3.0f);
         const float yb = y0 - (y0 - y1) * float(k.beta);
         ui::rect(ui::Rect{x - S * 5.0f, yb, S * 10.0f, y0 - yb}, white(0.85f), S * 3.0f);
@@ -144,7 +98,7 @@ void drawSpeed(const Pano& p, PanoState& st, Box b, float S) {
     }
     // gamma(beta): beta across (0 .. 1), log10 gamma up, the axis grows with it
     {
-        const float px = b.x + S * 168.0f, pw = b.w - S * 176.0f, py0 = b.y + axisH, py1 = b.y + S * 4.0f;
+        const float px = b.x + S * 84.0f, pw = b.w - S * 92.0f, py0 = b.y + axisH, py1 = b.y + S * 4.0f;
         const double want = std::max(1.0, std::ceil(std::log10(std::max(k.gamma, 1.0)) + 0.35));
         if (st.gammaTop < 0.0) st.gammaTop = want;
         st.gammaTop += (want - st.gammaTop) * std::min(1.0, std::max(p.dt, 1.0 / 240.0) * 3.0);
@@ -181,97 +135,48 @@ void drawSpeed(const Pano& p, PanoState& st, Box b, float S) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-// UZAY-ZAMAN: the Minkowski diagram of the leg
+// UZAY-ZAMAN: the rocket's own space and time drawn in the Earth's (Özcan's reference, assets/olcek/referans/
+// uzay-kisalmasi.png). The Earth's axes, and a patch of the rocket's grid whose sides run along its x' and t': they lean
+// towards the light line as the speed grows (each atan beta from its axis) and the patch flattens into a line. Only the
+// folding: the far time and space fold up and shorten for you; the other panels carry the numbers
 
-void drawMinkowski(const Pano& p, PanoState& st, Box b, float S) {
-    const Kin& k = p.k;
-    const Ship& s = *p.ship;
-    const Route& R = *p.route;
-    const int Lg = std::min(s.leg, 1);
-    const double Lm = R.length[Lg];
-    const double X = p.xFromStart, CT = std::max(p.ctSinceDepart, 0.0);
-    // the view: the leg's start and now, square (light at 45 degrees), growing smoothly
-    const double want = std::max({0.62 * std::max(X, CT), 2.0 * kC, 0.1 * std::fabs(X - CT)});
-    if (st.minkScale < 0.0) st.minkScale = want;
-    st.minkScale = std::exp(std::log(st.minkScale) + (std::log(want) - std::log(st.minkScale)) * std::min(1.0, std::max(p.dt, 1.0 / 240.0) * 2.5));
-    const double H = st.minkScale;
-    const double cxW = 0.5 * X, cyW = 0.5 * CT;
-    const float side = std::min(b.w, b.h - S * 26.0f);
-    const float ox = b.x + 0.5f * (b.w - side), oy = b.y;
-    const float pxPerM = float(side / (2.0 * H));
-    auto SX = [&](double x) { return ox + 0.5f * side + float(x - cxW) * pxPerM; };
-    auto SY = [&](double ct) { return oy + 0.5f * side - float(ct - cyW) * pxPerM; };
-    ui::Rect clip{ox, oy, side, side};
-    ui::rect(clip, ui::hex(0x000000, 0.25f), S * 6.0f);
-    ui::scissor(&clip);
-    // the Earth's frame: its grid
-    const Unit u = unitFor(H);
-    const double step = niceStep(2.0 * H / 5.0 / u.m) * u.m;
-    {
-        const double x0 = std::floor((cxW - H) / step) * step, x1 = cxW + H;
-        for (double x = x0; x <= x1; x += step) ui::line(SX(x), oy, SX(x), oy + side, S * 1.0f, white(0.08f));
-        const double c0 = std::floor((cyW - H) / step) * step, c1 = cyW + H;
-        for (double c = c0; c <= c1; c += step) ui::line(ox, SY(c), ox + side, SY(c), S * 1.0f, white(0.08f));
+void drawSpacetime(const Pano& p, Box b, float S) {
+    const double beta = std::clamp(p.k.beta, 0.0, 1.0);
+    const float side = std::min(b.w, b.h);
+    const float len = side - S * 44.0f;   // the axes' length
+    const float ox = b.x + 0.5f * (b.w - len) - S * 6.0f, oy = b.y + 0.5f * (b.h + len) - S * 4.0f;   // the origin
+    // the Earth's axes: space across, time up
+    const ui::Color ax = white(0.7f);
+    const float h = S * 7.0f;
+    ui::line(ox, oy, ox + len, oy, S * 1.3f, ax);
+    ui::line(ox, oy, ox, oy - len, S * 1.3f, ax);
+    const float tipX[6] = {ox + len - h, oy - 0.6f * h, ox + len, oy, ox + len - h, oy + 0.6f * h};
+    const float tipT[6] = {ox - 0.6f * h, oy - len + h, ox, oy - len, ox + 0.6f * h, oy - len + h};
+    ui::polyline(tipX, 3, S * 1.3f, ax);
+    ui::polyline(tipT, 3, S * 1.3f, ax);
+    const ui::TextStyle name = theme::mono(theme::Scale{S}, 15.0f, white(0.8f));
+    const ui::TextStyle cap = theme::caption(theme::Scale{S}, white(0.45f));
+    ui::text(ox + len + S * 6.0f, oy - S * 9.0f, "x", name);
+    ui::text(ox - S * 4.0f, oy - len - S * 26.0f, "t", name);
+    ui::text(ox + S * 14.0f, oy - len - S * 22.0f, L("ZAMAN", "TIME"), cap);
+    const std::string space = L("UZAY", "SPACE");
+    ui::text(ox + len - ui::measure(space, cap), oy + S * 8.0f, space, cap);
+    // the rocket's grid: 5 x 5 cells, its x' side along (1, beta) and its t' side along (beta, 1), each side ell long
+    // (a sketch's cells, not the calibrated ones: those would stretch by gamma off the panel)
+    const double n = 1.0 / std::sqrt(1.0 + beta * beta);
+    const float ell = 0.64f * len;
+    const float ux = float(ell * n), uy = float(ell * beta * n);   // x'
+    const float tx = float(ell * beta * n), ty = float(ell * n);   // t'
+    for (int i = 0; i <= 5; ++i) {
+        const float f = float(i) / 5.0f;
+        const float w = S * (i == 0 ? 1.8f : 1.1f);   // its own axes heavier
+        const ui::Color c = white(i == 0 ? 0.95f : 0.7f);
+        ui::line(ox + f * ux, oy - f * uy, ox + f * ux + tx, oy - f * uy - ty, w, c);   // x' constant: along t'
+        ui::line(ox + f * tx, oy - f * ty, ox + f * tx + ux, oy - f * ty - uy, w, c);   // t' constant: along x'
     }
-    // the start's world line (the Earth, then Proxima) and the target's
-    ui::line(SX(0.0), oy, SX(0.0), oy + side, S * 1.6f, red(0.85f));
-    ui::line(SX(Lm), oy, SX(Lm), oy + side, S * 1.2f, white(0.45f), S * 6.0f, S * 5.0f);
-    // the rocket's grid: lines of its own time (along its x') and place (along its t'), a unit apart in its frame;
-    // they fold towards the light line and squeeze by 1/gamma (only those a few pixels apart are drawn)
-    const double gb = k.gb, g = k.gamma, beta = k.beta;
-    {
-        const double perp = step / (g * std::sqrt(1.0 + beta * beta)) * pxPerM;   // pixels between neighbours
-        int every = 1;
-        while (perp * every < 7.0 && every < (1 << 30)) every *= 2;
-        const float a = float(std::clamp(0.10 * std::min(1.0, perp * every / 14.0) + 0.04, 0.04, 0.14));
-        const double ext = 4.0 * H;   // long enough to cross the box at any slant
-        for (int i = -40; i <= 40; ++i) {
-            const double kk = double(i) * every * step;
-            // constant t': through event + kk (gamma beta, gamma), along (1, beta)
-            const double tx = X + kk * gb, tc = CT + kk * g;
-            ui::line(SX(tx - ext), SY(tc - ext * beta), SX(tx + ext), SY(tc + ext * beta), S * 1.0f, white(a));
-            // constant x': through event + kk (gamma, gamma beta), along (beta, 1)
-            const double qx = X + kk * g, qc = CT + kk * gb;
-            ui::line(SX(qx - ext * beta), SY(qc - ext), SX(qx + ext * beta), SY(qc + ext), S * 1.0f, white(a));
-        }
-    }
-    // the light cone at now
-    {
-        const double e = 4.0 * H;
-        ui::line(SX(X - e), SY(CT - e), SX(X + e), SY(CT + e), S * 1.3f, gold(0.75f), S * 5.0f, S * 4.0f);
-        ui::line(SX(X - e), SY(CT + e), SX(X + e), SY(CT - e), S * 1.3f, gold(0.75f), S * 5.0f, S * 4.0f);
-    }
-    // the rocket's axes: t' along its world line, x' its "now" (both towards the light line as it speeds up)
-    {
-        const double e = 4.0 * H;
-        ui::line(SX(X - e * beta), SY(CT - e), SX(X + e * beta), SY(CT + e), S * 1.4f, white(0.9f));
-        ui::line(SX(X - e), SY(CT - e * beta), SX(X + e), SY(CT + e * beta), S * 1.4f, white(0.9f));
-    }
-    // the world line so far
-    if (p.trace && p.trace->x.size() >= 2) {
-        std::vector<float> pts;
-        pts.reserve(p.trace->x.size() * 2 + 2);
-        for (size_t i = 0; i < p.trace->x.size(); ++i) {
-            pts.push_back(SX(p.trace->x[i]));
-            pts.push_back(SY(p.trace->ct[i]));
-        }
-        pts.push_back(SX(X));
-        pts.push_back(SY(CT));
-        ui::polyline(pts.data(), int(pts.size() / 2), S * 2.2f, white(1.0f));
-    }
-    // where "now" cuts the start's world line, and where the light now arriving left it
-    const double ctNowStart = CT - beta * X, ctSeen = CT - X;
-    ui::circle(SX(0.0), SY(ctNowStart), S * 5.0f, red(1.0f));
-    ui::circle(SX(0.0), SY(ctSeen), S * 4.0f, gold(1.0f));
-    ui::circle(SX(X), SY(CT), S * 5.5f, white(1.0f));
-    ui::scissor(nullptr);
-    // the axes' names and the unit
-    const ui::TextStyle lab = theme::mono(theme::Scale{S}, 12.5f, white(0.6f));
-    ui::text(ox, oy + side + S * 6.0f, L("ızgara: ", "grid: ") + sig3(step / u.m) + " " + u.name, lab);
-    const std::string leg = s.leg == kLegProxima ? L("Dünya", "Earth") : L("Proxima", "Proxima");
-    const std::string tgt = s.leg == kLegProxima ? "Proxima" : "Andromeda";
-    const std::string key = L("kırmızı: ", "red: ") + leg + L(" · kesik: ", " · dashed: ") + tgt;
-    ui::text(ox + side - ui::measure(key, lab), oy + side + S * 6.0f, key, lab);
+    // its axes' names at their ends: t' up and to the left, x' down and to the right (apart when they fold together)
+    ui::text(ox + tx - S * 26.0f, oy - ty - S * 22.0f, "t′", name);
+    ui::text(ox + ux + S * 8.0f, oy - uy + S * 2.0f, "x′", name);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -564,36 +469,6 @@ Cost costOf(double phi) {
 
 // ---------------------------------------------------------------------------------------------------------------------
 
-void Trace::clear() {
-    x.clear();
-    ct.clear();
-    minStep = 0.0;
-}
-void Trace::add(double xm, double ctm) {
-    if (!x.empty()) {
-        const double dx = xm - x.back(), dc = ctm - ct.back();
-        if (std::sqrt(dx * dx + dc * dc) < minStep) return;
-    }
-    x.push_back(xm);
-    ct.push_back(ctm);
-    if (int(x.size()) >= kTraceMax) {   // every other point dropped, the first and the last kept
-        std::vector<double> nx, nc;
-        for (size_t i = 0; i < x.size(); i += 2) {
-            nx.push_back(x[i]);
-            nc.push_back(ct[i]);
-        }
-        if ((x.size() - 1) % 2 != 0) {
-            nx.push_back(x.back());
-            nc.push_back(ct.back());
-        }
-        x.swap(nx);
-        ct.swap(nc);
-        // the spacing grows with the world line's length
-        const double dx = x.back() - x.front(), dc = ct.back() - ct.front();
-        minStep = std::sqrt(dx * dx + dc * dc) / double(kTraceMax);
-    }
-}
-
 // ---------------------------------------------------------------------------------------------------------------------
 
 void drawPanels(const Pano& p, PanoState& st, const ui::Rect& view, float Sapp, unsigned show, const std::vector<ui::Rect>& avoid) {
@@ -604,13 +479,13 @@ void drawPanels(const Pano& p, PanoState& st, const ui::Rect& view, float Sapp, 
     const float m = S * 40.0f, w = S * 520.0f, gap = S * 16.0f;
     const float vx1 = view.x + view.w, vy1 = view.y + view.h, midY = view.y + 0.5f * view.h;
     // one panel at (x, y), its sizes times Sk (h: its height for 1440)
-    auto one = [&](unsigned bit, float x, float y, float Sk, float h) {
-        const float wk = Sk * 520.0f, hk = Sk * h;
+    auto one = [&](unsigned bit, float x, float y, float Sk, float h, float w) {
+        const float wk = Sk * w, hk = Sk * h;
         switch (bit) {
         case 1:
             drawSpeed(p, st, panel(x, y, wk, hk, Sk, L("HIZ", "SPEED"), theme::num(std::max(p.k.nines, 0.0), 2) + L(" dokuz", " nines")), Sk);
             break;
-        case 2: drawMinkowski(p, st, panel(x, y, wk, hk, Sk, L("UZAY-ZAMAN", "SPACETIME"), "t′ · x′"), Sk); break;
+        case 2: drawSpacetime(p, panel(x, y, wk, hk, Sk, L("UZAY-ZAMAN", "SPACETIME")), Sk); break;
         case 4: {
             const std::string to = p.ship->leg == kLegProxima ? "→ Proxima" : p.ship->leg == kLegAndromeda ? "→ Andromeda" : "";
             drawRoad(p, st, panel(x, y, wk, hk, Sk, L("YOL", "THE WAY"), to), Sk);
@@ -622,39 +497,42 @@ void drawPanels(const Pano& p, PanoState& st, const ui::Rect& view, float Sapp, 
     };
     struct Item {
         unsigned bit;
-        float h;
+        float h, w;   // for 1440 lines
     };
     // a column at an edge: its panels stacked from the top of the room the application's panels leave it (those in the
     // upper half push its top down, those in the lower half its bottom up), all shrunk together if they do not fit;
-    // returns its inner edge
+    // returns its inner edge (the right column's panels sit flush right)
     auto column = [&](std::initializer_list<Item> items, bool right, float y0, float y1) {
-        float need = 0.0f;
+        float need = 0.0f, wMax = 0.0f;
         int n = 0;
         for (const Item& it : items)
             if (show & it.bit) {
                 need += S * it.h;
+                wMax = std::max(wMax, S * it.w);
                 ++n;
             }
         if (n == 0) return right ? vx1 : view.x;
         need += gap * float(n - 1);
-        const float x0 = right ? vx1 - m - w : view.x + m;
+        const float x0 = right ? vx1 - m - wMax : view.x + m;
         for (const ui::Rect& r : avoid) {
-            if (r.w <= 0.0f || r.h <= 0.0f || r.x >= x0 + w || r.x + r.w <= x0) continue;
+            if (r.w <= 0.0f || r.h <= 0.0f || r.x >= x0 + wMax || r.x + r.w <= x0) continue;
             if (r.y + 0.5f * r.h < midY) y0 = std::max(y0, r.y + r.h + gap);
             else y1 = std::min(y1, r.y - gap);
         }
         const float k = std::clamp((y1 - y0) / need, 0.35f, 1.0f);
-        const float x = right ? vx1 - m - w * k : x0;
-        float y = y0;
+        float y = y0, edge = right ? vx1 : view.x;
         for (const Item& it : items) {
             if (!(show & it.bit)) continue;
-            one(it.bit, x, y, S * k, it.h);
+            const float wk = S * k * it.w;
+            const float x = right ? vx1 - m - wk : x0;
+            one(it.bit, x, y, S * k, it.h, it.w);
+            edge = right ? std::min(edge, x) : std::max(edge, x + wk);
             y += S * k * it.h + gap * k;
         }
-        return right ? x : x + w * k;
+        return edge;
     };
-    column({{1, 300.0f}, {4, 240.0f}}, false, view.y + S * 110.0f, vy1 - m);
-    const float rightEdge = column({{2, 560.0f}, {8, 330.0f}}, true, view.y + m, vy1 - m);
+    column({{1, 300.0f, 520.0f}, {4, 240.0f, 520.0f}}, false, view.y + S * 110.0f, vy1 - m);
+    const float rightEdge = column({{2, 400.0f, 400.0f}, {8, 330.0f, 520.0f}}, true, view.y + m, vy1 - m);
     // the cost at the bottom, next to the application's panel there (the scene's, on the left), away from the middle
     // where the notices rise; clear of the keys and of the right column
     if (show & 16) {
@@ -666,7 +544,7 @@ void drawPanels(const Pano& p, PanoState& st, const ui::Rect& view, float Sapp, 
             else x1 = std::min(x1, r.x - gap);
         }
         const float k = std::clamp((x1 - x0) / w, 0.35f, 1.0f);
-        one(16, x0, vy1 - m - h * k, S * k, 330.0f);
+        one(16, x0, vy1 - m - h * k, S * k, 330.0f, 520.0f);
     }
 }
 

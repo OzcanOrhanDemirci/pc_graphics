@@ -12,16 +12,14 @@ Kapalı** (ya da **G**).
 
 **Panolar** (`src/scenes/olcek/olcek_hiz_pano.h/.cpp`):
 1. **HIZ:**
-   - Dokuz merdiveni (0-22, tavan 21'de altın basamak).
    - Işık duvarına dayanan hız çubuğu.
    - γ(β) eğrisi ve üstünde nokta (logaritmik; ekseni kendini büyütür).
-2. **UZAY-ZAMAN:** ayağın Minkowski diyagramı.
-   - Dünya'nın ızgarası.
-   - Başlangıcın (kırmızı) ve hedefin (kesik) dünya çizgileri.
-   - Roketin ızgarası: 1/γ sıkışır, ışık çizgisine katlanır.
-   - Işık konisi, t′ ve x′ eksenleri, roketin dünya çizgisi.
-   - "Şimdi"nin başlangıcı kestiği yer (kırmızı nokta: eşzamanlılık) ve şimdi gelen ışığın oradan çıktığı an (altın).
-   - Birim kendiliğinden seçilir: ışık saniyesinden milyon ışık yılına.
+   - Dokuz sayısı başlıkta.
+2. **UZAY-ZAMAN** (400×400, Özcan'ın referansı `assets/olcek/referans/uzay-kisalmasi.png`):
+   - Dünya'nın eksenleri: x (uzay) ve t (zaman).
+   - Roketin 5×5'lik ızgarası, kenarları x′ ve t′ boyunca. Hızlandıkça ikisi de ışık çizgisine doğru yatar (eksenden
+     atan β kadar) ve ızgara bir çizgiye döner.
+   - Yalnız bu katlanma: uzak zaman ve uzay senin için bükülüp kısalır. Sayıları öteki panolar veriyor.
 3. **YOL:**
    - İki cetvel: Dünya'nın ölçtüğü ve senin ölçtüğün (γ kat kısa).
    - Durma mesafesi: altın köşeli çizgi ve yazı.
@@ -56,6 +54,15 @@ Kapalı** (ya da **G**).
   - 1'in altı üç anlamlı basamak.
   - 0,01'in altı 10'un kuvveti.
   - Tam sıfır "0".
+
+**Revize (Özcan'ın ilk bakışı, aynı gece):**
+- *"Uzay zaman grafiği [...] Sağda kocaman. Orada bir eğri çizmeye gerek yok. [...] ızgara bükülüp çizgileşiyor. O sade
+  his yeterli."* Minkowski diyagramı (Dünya'nın ızgarası, dünya çizgileri, ışık konisi, noktalar) söküldü; yerine
+  referanstaki gibi eksenler ve katlanan ızgara. Küçüldü: 520×560'tan 400×400'e.
+- *"Kaç tane dokuz olduğunun sayısına bence gerek yok [...] sayısal detay olarak yazıyor zaten."* Dokuz merdiveni
+  söküldü.
+- Dünya çizgisinin izi (`Trace`) ve diyagramın ölçeği kodun her yerinden çıktı.
+- Görüntü üzerine söyledikleri (hız hissi, ivme, yandan bakış) bir sonraki taşın konusu; konuşuluyor.
 
 ### Ölçümler
 - **`--test olcek-hiz`, hepsi GEÇTİ.** Yeni üç sınama var.

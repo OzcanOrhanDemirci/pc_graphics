@@ -1,9 +1,9 @@
 // Scene 7 "Ölçek", second option "Hız": the five panels of graphs (PLAN §4: "the graphs are as important as the
 // picture"). Drawn with the interface kit over the picture (crisp text and lines at the screen's resolution): thin white
 // lines, capital titles with their letters spaced, the passenger's clock white, the Earth's red, light gold.
-//   HIZ          the nines' ladder that keeps climbing where the speed bar hits the wall of light; gamma's curve
-//   UZAY-ZAMAN   a Minkowski diagram: the Earth's grid, the rocket's world line, its axes and grid folding towards the
-//                light line, the light cone, its "now" line where it cuts the Earth's world line (simultaneity)
+//   HIZ          the speed bar against the wall of light; gamma's curve (the nines are in its title)
+//   UZAY-ZAMAN   the rocket's own space and time drawn in the Earth's: a patch of its grid folding towards the light
+//                line and flattening into a line as the speed grows (Özcan's reference: only the folding)
 //   YOL          two rulers to the target (the Earth's, fixed; yours, melting by gamma), the stopping distance, a grid
 //                of space squeezed along the motion
 //   SAATLER      two dials (yours; the Earth's, gamma times faster, its hands blurred by the eye's shutter), the date,
@@ -50,25 +50,12 @@ Cost costOf(double phi);
 // the forward-facing plate's light from the CMB: the forward hemisphere of D^4 (sigma T0^4 / pi) cos theta'
 double cmbOnPlate(const Kin& k);
 
-// the rocket's world line in the leg's own plane: x from the leg's start along it, ct since the leg's first thrust
-// (metres both); kept thin (at most kTraceMax points, every other dropped when full: the shape stays)
-struct Trace {
-    static constexpr int kTraceMax = 2048;
-    std::vector<double> x, ct;
-    double minStep = 0.0;         // the spacing below which a new point is not kept (doubles when thinned)
-    void clear();
-    void add(double xm, double ctm);
-};
-
 // one frame's numbers for the panels (the scene fills it from the ship and the route)
 struct Pano {
     const Ship* ship = nullptr;
     const Route* route = nullptr;
     const Blackbody* bb = nullptr;
-    const Trace* trace = nullptr;
     Kin k;
-    double xFromStart = 0.0;      // along the leg (m)
-    double ctSinceDepart = 0.0;   // c (t - the leg's first thrust) (m); < 0 before it
     double earthNow = 0.0;        // the Earth's time simultaneous with "now" in the rocket's frame (s since today)
     double earthSeen = 0.0;       // the Earth's time the light reaching the rocket now left it (s since today)
     double earthSeenRate = 1.0;   // how fast that seen clock runs against yours (its Doppler factor)
@@ -82,9 +69,7 @@ constexpr unsigned kPanoAll = 31;
 // draws the panels over `view` (window pixels), S the layout's scale (sizes for 2560x1440). The panels' own state (the
 // axes growing smoothly) lives in `state`, kept by the scene between frames.
 struct PanoState {
-    double minkScale = -1.0;      // the Minkowski diagram's half size (m), eased
     double gammaTop = -1.0;       // the gamma curve's axis top (log10), eased
-    double clockSweepPrev = 0.0;  // (the dials)
 };
 // `avoid`: the application's panels; each column keeps to the room between them, smaller if it must
 void drawPanels(const Pano& p, PanoState& state, const ui::Rect& view, float S, unsigned show, const std::vector<ui::Rect>& avoid = {});
