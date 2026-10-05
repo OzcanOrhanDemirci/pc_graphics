@@ -312,6 +312,8 @@ void HeykelApp::home() {
     camPos = homePos;
     focus = homeFocus;
     level = 1.0f;
+    trail.assign(1, TrailPoint{camPos, focus, yaw, pitch, level});
+    rewinding = false;
 }
 
 void HeykelApp::cameraBasis(float3& right, float3& up, float3& fwd) const {
@@ -629,14 +631,18 @@ HeykelView HeykelApp::view() const {
 }
 
 // the cursor's ray marched on the host in doubles (the same threshold as the pictures: half a pixel's footprint)
-bool HeykelApp::pick(float px, float py, D3& hit, float3* normal) const {
+bool HeykelApp::pick(float px, float py, D3& hit, float3* normal, bool* sculpture) const {
     float3 r, u, f;
     cameraBasis(r, u, f);
     const double tanHalf = std::tan(0.5 * fovDeg * kDeg);
     const double aspect = double(width) / height;
     const double sx = (px / width * 2.0 - 1.0) * tanHalf * aspect, sy = (1.0 - py / double(height) * 2.0) * tanHalf;
     D3 rd = d3(f) + d3(r) * sx + d3(u) * sy;
-    rd = rd * (1.0 / length(rd));
+    return pickRay(rd * (1.0 / length(rd)), hit, normal, sculpture);
+}
+
+bool HeykelApp::pickRay(D3 rd, D3& hit, float3* normal, bool* sculpture) const {
+    const double tanHalf = std::tan(0.5 * fovDeg * kDeg);
     const double slope = 2.0 * tanHalf / height * cfg.f("detail", 0.5f);
     const int steps = cfg.i("steps", 400) * 2;
     double t = 0.0;
@@ -645,6 +651,8 @@ bool HeykelApp::pick(float px, float py, D3& hit, float3* normal) const {
         const double d = deHost(p);
         if (d < slope * t) {
             hit = p;
+            if (sculpture)   // not the plinth, not the floor
+                *sculpture = sdBoxD(p - d3(world.plinthC), d3(world.plinthH)) > 2.0 * slope * t && p.y - world.floorY > 2.0 * slope * t;
             if (normal) {
                 const double e = slope * t;
                 const D3 g = d3(deHost(p + d3(e, 0, 0)) - deHost(p - d3(e, 0, 0)), deHost(p + d3(0, e, 0)) - deHost(p - d3(0, e, 0)),
@@ -694,37 +702,265 @@ double HeykelApp::freePath(D3 a, D3 b, double clearance) const {
     return t;
 }
 
+// Where the wheel zooms: the sculpture under the cursor; when the cursor is on the dark room or the plinth, the
+// sculpture's point nearest to it on the screen (rays towards its middle and around it). Never a point in the air: the
+// camera flew off towards it and the sculpture was lost (Ozcan 2026-10-05: "modele yakinlasayim derken modeli
+// kaybedebiliyoruz").
+bool HeykelApp::zoomTarget(float px, float py, D3& q) const {
+    bool on = false;
+    if (pick(px, py, q, nullptr, &on) && on) return true;
+    float3 r, u, f;
+    cameraBasis(r, u, f);
+    const D3 c = focus;   // on the sculpture (or its middle, at the first view)
+    const double rw = double(world.s.boundR) * world.s.scale;
+    const double tanHalf = std::tan(0.5 * fovDeg * kDeg), aspect = double(width) / height;
+    const D3 cur = d3(f) + d3(r) * ((px / width * 2.0 - 1.0) * tanHalf * aspect) + d3(u) * ((1.0 - py / double(height) * 2.0) * tanHalf);
+    // from the focus towards the cursor in steps: the first ray that meets the sculpture
+    const D3 toC = c - camPos;
+    const double dc = length(toC);
+    const D3 dirC = toC * (1.0 / dc), dirCur = cur * (1.0 / length(cur));
+    for (int k = 0; k <= 8; ++k) {
+        const double a = 1.0 - k / 8.0;   // from the cursor's side back to the focus
+        D3 dir = dirC * (1.0 - a) + dirCur * a;
+        dir = dir * (1.0 / length(dir));
+        if (pickRay(dir, q, nullptr, &on) && on) return true;
+    }
+    for (int k = 0; k < 12; ++k) {   // the focus in a hole: around it
+        const double ph = k * 6.2831853 / 12.0, rr = (k < 6 ? 0.15 : 0.35) * std::min(rw, dc);
+        D3 dir = toC + d3(r) * (std::cos(ph) * rr) + d3(u) * (std::sin(ph) * rr);
+        dir = dir * (1.0 / length(dir));
+        if (pickRay(dir, q, nullptr, &on) && on) return true;
+    }
+    return false;
+}
+
+// The leash (Ozcan 2026-10-05: "modelin belli bir cevresinde kamera olsun, daha uzaga veya saga sola kacamasin"): the
+// camera stays inside the sphere about the first view's centre through the first view's camera. Zooming in about a
+// point far down a tunnel and then out again used to carry it off several times that far, into the dark room.
+double HeykelApp::leashRadius() const {
+    return length(homePos - homeFocus) * cfg.f("camera.leash", 1.0f);
+}
+
+// How much of the way from a to b is inside the leash (1: all of it).
+double HeykelApp::leashFraction(D3 a, D3 b) const {
+    const double R = leashRadius();
+    const D3 f = a - homeFocus, d = b - a;
+    if (dot(b - homeFocus, b - homeFocus) <= R * R) return 1.0;
+    const double dd = dot(d, d), fd = dot(f, d), c = dot(f, f) - R * R;
+    if (dd <= 0.0) return 1.0;
+    if (c >= 0.0) return fd < 0.0 ? 1.0 : 0.0;   // already on the edge: inwards only
+    return std::clamp((-fd + std::sqrt(std::max(fd * fd - dd * c, 0.0))) / dd, 0.0, 1.0);
+}
+
+// A fraction k of the way back to the first view: the camera round its centre (an arc, not a chord that could cut
+// through the sculpture), its direction and the focus with it; k = 1 lands on it. No faster than `maxMove` (camera
+// travel; as many radians of turn per first-view distance): what the arc could not do earlier is not made up in one
+// jump. k comes back as done. False: the way is not clear.
+bool HeykelApp::homeStep(double& k, D3& q, double maxMove) {
+    k = std::clamp(k, 0.0, 1.0);
+    const D3 a = camPos - homeFocus, b = homePos - homeFocus;
+    const double ra = length(a), rb = length(b);
+    auto at = [&](double kk) {
+        D3 dir;
+        if (ra < 1e-12) {
+            dir = b * (1.0 / rb);
+        } else {
+            const D3 ua = a * (1.0 / ra), ub = b * (1.0 / rb);
+            const double w = std::acos(std::clamp(dot(ua, ub), -1.0, 1.0));
+            if (w < 1e-6) {
+                dir = ub;
+            } else if (w > 3.14159 - 1e-3) {   // right behind it: round the vertical
+                const double ang = kk * w, c = std::cos(ang), s = std::sin(ang);
+                dir = d3(ua.x * c - ua.z * s, ua.y, ua.x * s + ua.z * c);
+            } else {
+                dir = ua * (std::sin((1.0 - kk) * w) / std::sin(w)) + ub * (std::sin(kk * w) / std::sin(w));
+            }
+        }
+        return homeFocus + dir * (ra + (rb - ra) * kk);
+    };
+    float dyaw = homeYaw - yaw;
+    while (dyaw > 3.14159265f) dyaw -= 6.2831853f;
+    while (dyaw < -3.14159265f) dyaw += 6.2831853f;
+    const double turn = (std::fabs(double(dyaw)) + std::fabs(double(homePitch - pitch))) * rb;   // as a travel
+    for (int i = 0; i < 3; ++i) {   // the arc is near straight over a step: a proportional cut lands close
+        const double move = std::max(length(at(k) - camPos), turn * k);
+        if (move <= maxMove * 1.0001) break;
+        k *= maxMove / move;
+    }
+    const D3 drawn = at(k);
+    const D3 qk = q + (homeFocus - q) * k;
+    const double clearance = length(drawn - qk) * cfg.f("camera.clearance", 0.05f);
+    if (deHost(drawn) < clearance || freePath(camPos, drawn, clearance) < length(drawn - camPos) * 0.999) return false;
+    camPos = drawn;
+    yaw += dyaw * float(k);
+    pitch += (homePitch - pitch) * float(k);
+    q = qk;
+    return true;
+}
+
+// The camera's pose onto the trail. A leg is kept only when the camera could not have gone straight from the point
+// before it (a wall between): the trail stays short, and every leg of it is a clear line.
+void HeykelApp::record() {
+    const TrailPoint t{camPos, focus, yaw, pitch, level};
+    if (trail.empty()) {
+        trail.push_back(t);
+        return;
+    }
+    if (trail.size() >= 2) {
+        const TrailPoint& a = trail[trail.size() - 2];
+        const double cl = 0.25 * std::min(deHost(a.pos), deHost(t.pos));
+        const double len = length(t.pos - a.pos);
+        if (cl > 0.0 && (len <= 0.0 || freePath(a.pos, t.pos, cl) >= len * 0.999)) {
+            trail.back() = t;
+            return;
+        }
+    }
+    if (trail.size() < 65536) trail.push_back(t);
+}
+
+// Back the way the camera came (Ozcan 2026-10-05 asked for it to stay near the sculpture; deep in the lattice with a
+// wall right behind, the wheel then did nothing at all). A backward zoom of -logAmount: over the legs the zoom grew on,
+// at the rate it grew (a leg that went from 10 to 10,000 times is gone back over as it came, slowly where it is deep);
+// over the legs it did not (turns), at a backward zoom's pace (camera.retrace times it). The focus and the direction
+// come along, so the first point of the trail is the first view itself.
+bool HeykelApp::retrace(float logAmount) {
+    double left = -double(logAmount);
+    const double homeDist = length(homePos - homeFocus), pace = cfg.f("camera.retrace", 1.5f);
+    bool moved = false;
+    auto wrap = [](double a) {
+        while (a > 3.14159265358979) a -= 6.28318530717959;
+        while (a < -3.14159265358979) a += 6.28318530717959;
+        return a;
+    };
+    while (left > 1e-9 && trail.size() >= 2) {
+        // a short cut: when the point before the next one is in clear sight, the next one is no longer on the way
+        while (trail.size() >= 3) {
+            const D3 a = trail[trail.size() - 3].pos, c = trail.back().pos;
+            const double cl = 0.25 * std::min(deHost(a), deHost(c)), len = length(a - c);
+            if (!(cl > 0.0 && freePath(c, a, cl) >= len * 0.999)) break;
+            trail.erase(trail.end() - 2);
+        }
+        TrailPoint& C = trail.back();
+        const TrailPoint& P = trail[trail.size() - 2];
+        const double Lc = C.level, Lp = std::min(double(P.level), Lc);
+        double g, L = Lc;
+        // what the leg costs in backward zoom: its zoom change, its length at the scale it was seen at, its turn;
+        // a zoom leg goes back as it came (the distance to what was zoomed on goes as 1 / zoom), the others evenly
+        const double need = std::log(Lc / Lp);
+        const double scale = std::max(std::max(length(P.pos - P.focus), length(C.pos - C.focus)), 1e-300);
+        const double walk = std::max(length(P.pos - C.pos) / scale,
+                                     std::fabs(wrap(double(P.yaw) - C.yaw)) + std::fabs(double(P.pitch) - C.pitch)) / pace;
+        const double cost = std::max(need, walk);
+        if (left >= cost) {
+            left -= cost;
+            g = 1.0;
+            L = Lp;
+        } else if (need >= walk) {
+            L = Lc * std::exp(-left);
+            g = (1.0 / L - 1.0 / Lc) / (1.0 / Lp - 1.0 / Lc);
+            left = 0.0;
+        } else {
+            g = left / cost;
+            L = Lc * std::pow(Lp / Lc, g);
+            left = 0.0;
+        }
+        TrailPoint n;
+        n.pos = C.pos + (P.pos - C.pos) * g;
+        n.focus = C.focus + (P.focus - C.focus) * g;
+        n.yaw = float(C.yaw + wrap(double(P.yaw) - C.yaw) * g);
+        n.pitch = float(C.pitch + (double(P.pitch) - C.pitch) * g);
+        n.level = float(L);
+        if (g >= 1.0) trail.pop_back();
+        trail.back() = n;
+        camPos = n.pos;
+        focus = n.focus;
+        yaw = n.yaw;
+        pitch = n.pitch;
+        level = n.level;
+        moved = true;
+    }
+    if (trail.size() == 1 && length(camPos - homePos) <= homeDist * 1e-9) home();
+    return moved;
+}
+
 bool HeykelApp::zoomAbout(D3 q, float logAmount) {
     float target = level * std::exp(logAmount);
     const float cap = zoomCapAt(q);
     if (target > cap) logAmount = std::log(std::max(cap / level, 1.0f));
-    if (target < 1.0f) {   // out past the first view: back to it
-        home();
-        return true;
-    }
-    bool blocked = false;
-    if (logAmount < 0.0f) {   // backwards: the camera bumps into the sculpture instead of passing through it
-        const double r = length(camPos - q);
-        const D3 want = q + (camPos - q) * std::exp(-double(logAmount));
+    const D3 q0 = q, before = camPos;
+    const double r = length(camPos - q);
+    const float wasYaw = yaw, wasPitch = pitch;
+    float lv = level * std::exp(logAmount);
+    if (logAmount >= 0.0f) {   // in: towards a point on the sculpture, inside the leash all the way (it is round)
+        camPos = q + (camPos - q) * std::exp(-double(logAmount));
+        // the zoom tells how near the camera is: towards a wall far down a tunnel it does not grow until the camera is
+        // that near (it used to read 10,000 times with the camera hundreds of times that far off, and the way out then
+        // took it as far off as the zoom said, out of the room)
+        const double nearAs = cfg.f("zoom.true", 1.5f) * length(homePos - homeFocus) / std::max(length(camPos - q), 1e-300);
+        lv = std::max(level, std::min(lv, float(std::min(nearAs, 1e30))));
+        rewinding = false;
+    } else if (rewinding) {   // once on the way back it keeps to it (a leg won and lost again is no way home)
+        return retrace(logAmount);
+    } else {
+        lv = std::max(lv, 1.0f);
+        // backwards along the line from q; the camera bumps into the sculpture instead of passing through it: with a
+        // wall behind, it goes back the way it came instead
+        D3 want = q + (camPos - q) * std::exp(-double(logAmount));
         const double travel = length(want - camPos);
-        const double free = freePath(camPos, want, r * cfg.f("camera.clearance", 0.05f));
-        if (free < travel) {
-            blocked = true;
-            logAmount = -float(std::log((r + free) / r));
-            if (logAmount > -1e-6f) return false;
+        if (freePath(camPos, want, r * cfg.f("camera.clearance", 0.05f)) < travel) {
+            rewinding = true;
+            return retrace(logAmount);
         }
+        // and it stops at the leash
+        const double t = leashFraction(camPos, want);
+        const bool leashed = t < 1.0;
+        camPos = camPos + (want - camPos) * t;
+        // the last of the way out leads back to the first view (position, direction, focus) instead of drifting off to
+        // a side: from zoom.home.from times on, or as soon as the leash is in the way, a share of what is left, so that
+        // it lands on the first view as the zoom reaches 1 (no jump at the end)
+        const float from = cfg.f("zoom.home.from", 3.0f);
+        auto u = [&](float l) {   // how far along the way home the zoom l is: 0 at `from`, 1 at the first view
+            const double x = std::clamp(double((from - l) / (from - 1.0f)), 0.0, 1.0);
+            return x * x * (3.0 - 2.0 * x);
+        };
+        double k = 0.0;
+        if (level > 1.0f) {
+            if (u(level) < 1.0) k = (u(lv) - u(level)) / (1.0 - u(level));
+            if (leashed) k = std::max(k, 1.0 - std::log(double(lv)) / std::log(double(level)));
+        } else {   // at the first zoom already, turned away from the first view: a glide back
+            k = 1.0 - std::exp(6.0 * double(logAmount));
+        }
+        bool homed = false;
+        if (k > 0.0) {
+            const double a = length(camPos - homePos) / length(homePos - homeFocus);
+            if (k >= 0.999 || (lv <= 1.0f && a < 1e-3)) k = 1.0;
+            homed = homeStep(k, q, length(homePos - homeFocus) * -double(logAmount) * cfg.f("camera.retrace", 1.5f));
+            if (homed && k >= 1.0) {
+                home();
+                return true;
+            }
+            if (!homed && (leashed || level <= 1.0f || lv <= 1.0f)) {   // the arc is blocked: the way it came
+                camPos = before;
+                yaw = wasYaw;
+                pitch = wasPitch;
+                rewinding = true;
+                return retrace(logAmount);
+            }
+        }
+        if (length(camPos - before) <= r * 1e-6) return false;
+        if (!homed) lv = std::max(level * float(length(camPos - q) > 0.0 ? r / length(camPos - q) : 1.0), 1.0f);
     }
-    const double s = std::exp(-double(logAmount));
-    camPos = q + (camPos - q) * s;
     // the lamp goes with the camera, as a macro photographer's does: scaled about the same point (its light on what
     // is seen stays the same while zooming; keepLampClear keeps its line clear, turning it smoothly)
-    lightTarget = q + (lightTarget - q) * s;
+    const double s = length(camPos - q) / std::max(r, 1e-300);
+    lightTarget = q + (lightTarget - q0) * s;
     lightDist *= float(s);
     lightRadius *= float(s);
     litRadius *= float(s);
-    level *= std::exp(logAmount);
+    level = lv;
     focus = q;
-    return !blocked;
+    record();
+    return true;
 }
 
 // The lamp seen from where it points? A ray from the target (lifted off the surface) to the lamp's centre.
@@ -831,6 +1067,13 @@ bool HeykelApp::orbit(float dyaw, float dpitch) {
     const double ang = newPitch - pitch, ca = std::cos(ang), sa = std::sin(ang);
     const D3 cr = d3(ax.y * rel.z - ax.z * rel.y, ax.z * rel.x - ax.x * rel.z, ax.x * rel.y - ax.y * rel.x);
     rel = rel * ca + cr * sa + ax * (dot(ax, rel) * (1.0 - ca));
+    // the leash: turning about a point off the middle could carry the camera out of it; it comes in along its line
+    // to the focus instead (a little closer, the zoom with it)
+    const D3 g = focus - homeFocus;
+    const double R = leashRadius(), rr = dot(rel, rel), gr = dot(g, rel), gc = dot(g, g) - R * R;
+    double lam = 1.0;
+    if (dot(g + rel, g + rel) > R * R && gc < 0.0) lam = std::clamp((-gr + std::sqrt(std::max(gr * gr - rr * gc, 0.0))) / rr, 1e-3, 1.0);
+    rel = rel * lam;
     const D3 p = focus + rel;
     // the camera bumps into the sculpture: the end clear, and the way there (a fast drag deep inside could step a wall)
     const double clearance = length(rel) * cfg.f("camera.clearance", 0.05f);
@@ -838,6 +1081,9 @@ bool HeykelApp::orbit(float dyaw, float dpitch) {
     camPos = p;
     yaw = newYaw;
     pitch = newPitch;
+    level = std::min(level / float(lam), zoomCap());
+    rewinding = false;
+    record();
     return true;
 }
 
@@ -978,40 +1224,80 @@ int stabilityFrames(HeykelApp& app, int cand, const std::string& mode, D3 target
     return 0;
 }
 
-// --test kamera: random walks of the hand (zoom in under a random pixel, turn, zoom out), the camera checked after every
-// step: never inside the sculpture (Ozcan 2026-10-05 found it backing through a wall after turning round inside)
+// --test kamera: random walks of the hand (zoom in towards a random pixel anywhere on the screen, the dark room's
+// corners too; turn; zoom out), the camera checked after every step: never inside the sculpture (Ozcan 2026-10-05 found
+// it backing through a wall after turning round inside) and never away from it (zooming towards the dark room, the
+// camera flew off and the sculpture was lost). Each walk ends with the wheel turned out in small steps, as the window
+// does over its frames: the camera must reach the first view, without a jump on the way (--set test.seed=N for others).
 int testCamera(HeykelApp& app) {
     app.setCandidate(app.sculpture());
-    unsigned int seed = 777u;
+    unsigned int seed = unsigned(app.cfg.f("test.seed", 777.0f));
     auto rnd = [&]() { seed = seed * 1664525u + 1013904223u; return float((seed >> 8) * (1.0 / 16777216.0)); };
-    int steps = 0, inside = 0, blockedOut = 0, blockedTurn = 0;
-    double worst = 1e30;
+    int steps = 0, inside = 0, blockedOut = 0, blockedTurn = 0, homes = 0, lost = 0;
+    double worst = 1e30, farthest = 0.0, jump = 0.0;
+    int longest = 0;   // the most frame shares a walk took to get back
+    const double homeDist = length(app.homePos - app.homeFocus);
+    double worstIn = 1e30, worstOut = 1e30;   // the narrowest clearance zooming in / on the way back
+    auto check = [&](int kind) {   // after every single move; kind 0 in, 1 turn, 2 out
+        ++steps;
+        farthest = std::max(farthest, length(app.camPos - app.homeFocus) / homeDist);
+        const double r = length(app.camPos - app.focus);
+        const double d = app.deHost(app.camPos) / r;   // the camera's clearance, as a fraction of its distance
+        worst = std::min(worst, d);
+        if (kind == 0) worstIn = std::min(worstIn, d);
+        if (kind == 2) worstOut = std::min(worstOut, d);
+        if (d <= 0.0) ++inside;
+    };
     for (int walk = 0; walk < 40; ++walk) {
         app.home();
         for (int k = 0; k < 60; ++k) {
             const float op = rnd();
-            if (op < 0.45f) {   // in, under a random pixel
+            if (op < 0.45f) {   // in, towards a random pixel anywhere
                 D3 q;
-                if (app.pick((0.2f + 0.6f * rnd()) * app.width, (0.2f + 0.6f * rnd()) * app.height, q))
-                    for (int j = 0; j < 4; ++j) app.zoomAbout(q, 0.35f);
+                if (app.zoomTarget(rnd() * app.width, rnd() * app.height, q))
+                    for (int j = 0; j < 4; ++j) { app.zoomAbout(q, 0.35f); check(0); }
             } else if (op < 0.75f) {   // turn, as a drag does: many small steps
                 const float dy = (rnd() - 0.5f) * 0.08f, dp = (rnd() - 0.5f) * 0.04f;
-                for (int j = 0; j < 40; ++j)
-                    if (!app.orbit(dy, dp)) { ++blockedTurn; break; }
+                for (int j = 0; j < 40; ++j) {
+                    const bool ok = app.orbit(dy, dp);
+                    check(1);
+                    if (!ok) { ++blockedTurn; break; }
+                }
             } else {   // out
-                for (int j = 0; j < 8; ++j)
-                    if (!app.zoomAbout(app.focus, -0.35f)) { ++blockedOut; break; }
+                for (int j = 0; j < 8; ++j) {
+                    const bool ok = app.zoomAbout(app.focus, -0.35f);
+                    check(2);
+                    if (!ok) { ++blockedOut; break; }
+                }
             }
-            ++steps;
-            const double r = length(app.camPos - app.focus);
-            const double d = app.deHost(app.camPos) / r;   // the camera's clearance, as a fraction of its distance
-            worst = std::min(worst, d);
-            if (d <= 0.0) ++inside;
+        }
+        // all the way out, a frame's share of the wheel at a time (0.05 of the 0.30 a notch is); the camera's largest
+        // move in one of them, as a fraction of the first view's distance, is the jump the eye would see
+        bool reached = false;
+        int j = 0;
+        for (; j < 4000 && !reached; ++j) {
+            const D3 was = app.camPos;
+            app.zoomAbout(app.focus, -0.05f);
+            check(2);
+            jump = std::max(jump, length(app.camPos - was) / homeDist);
+            reached = app.level == 1.0f && length(app.camPos - app.homePos) < homeDist * 1e-9;
+        }
+        longest = std::max(longest, j);
+        if (reached) {
+            ++homes;
+        } else {
+            ++lost;
+            std::printf("  donemedi: yuruyus %d, seviye %.3f, ilk gorunume %.3f, iz %d nokta\n", walk, app.level,
+                        length(app.camPos - app.homePos) / homeDist, int(app.trail.size()));
         }
     }
-    std::printf("kamera: %d adim, iceride %d, en dar aciklik %.4f (uzakligin kati), duvara carpan geri cekilme %d, donus %d\n", steps, inside,
-                worst, blockedOut, blockedTurn);
-    return inside == 0 ? 0 : 1;
+    std::printf("kamera: en dar aciklik yakinlasirken %.2e, geri donerken %.2e (odak uzakliginin kati)\n", worstIn, worstOut);
+    std::printf("kamera: %d adim, iceride %d, en dar aciklik %.4f (uzakligin kati), duvara carpan geri cekilme %d, donus %d, "
+                "en uzak %.4f (ilk gorunumun uzakliginin kati, tasma %.2f), ilk gorunume donen yuruyus %d/%d, "
+                "en buyuk sicrama %.4f (0.05'lik payda, ilk gorunumun uzakliginin kati), en uzun donus %.1f tik\n",
+                steps, inside, worst, blockedOut, blockedTurn, farthest, app.leashRadius() / homeDist, homes, homes + lost, jump,
+                longest * 0.05 / std::log(1.35));
+    return inside == 0 && farthest <= app.leashRadius() / homeDist * 1.0001 && lost == 0 && jump < 0.1 ? 0 : 1;
 }
 
 int testPerturbation(HeykelApp& app) {

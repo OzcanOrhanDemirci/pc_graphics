@@ -162,24 +162,22 @@ public:
             // the wheel: what is under the cursor is the point the camera closes in on (it stays put on the screen)
             if (in.scroll != 0.0f && inView) {
                 D3 q;
-                if (!h_.pick(rx, ry, q)) {   // nothing there: a point on the ray as far as the focus
-                    float3 r, u, f;
-                    h_.cameraBasis(r, u, f);
-                    const float t = std::tan(0.5f * h_.fovDeg * 3.14159265f / 180.0f);
-                    const float sx = (rx / h_.width * 2.0f - 1.0f) * t * float(h_.width) / h_.height, sy = (1.0f - ry / h_.height * 2.0f) * t;
-                    q = h_.camPos + d3(normalize(f + r * sx + u * sy)) * length(h_.focus - h_.camPos);
+                if (in.scroll < 0.0f) {   // out: about the focus (the way back to the first view, zoomAbout)
+                    zoomQ_ = h_.focus;
+                    pending_ += in.scroll * std::log(1.35f);
+                } else if (h_.zoomTarget(rx, ry, q)) {   // in: towards the sculpture only (on the cursor, else nearest)
+                    zoomQ_ = q;
+                    pending_ += in.scroll * std::log(1.35f);
                 }
-                zoomQ_ = q;
-                pending_ += in.scroll * std::log(1.35f);
             }
             if (std::fabs(pending_) > 1e-5f) {
                 float dz = pending_ * (1.0f - std::exp(-dt * 12.0f));
                 if (std::fabs(pending_) < 2e-3f) dz = pending_;
-                const float before = h_.level;
-                const bool clear = h_.zoomAbout(zoomQ_, dz);
+                // out: about the focus as it is now (on the way back to the first view it moves with the camera)
+                const bool clear = h_.zoomAbout(dz < 0.0f ? h_.focus : zoomQ_, dz);
                 h_.followLight(dt);
-                pending_ = clear ? pending_ - dz : 0.0f;   // backing into a wall: it stops there
-                if (h_.level == 1.0f && before != 1.0f && dz < 0.0f) pending_ = 0.0f;   // back at the first view
+                pending_ = clear ? pending_ - dz : 0.0f;   // nowhere further to go: it stops there
+                if (dz < 0.0f && h_.atHome()) pending_ = 0.0f;   // back at the first view
                 if (h_.level >= h_.zoomCapAt(zoomQ_) * 0.999f && dz > 0.0f) pending_ = 0.0f;
                 if (std::fabs(pending_) <= 1e-5f) pending_ = 0.0f;   // the lamp came along: nothing to re-aim
                 changed = true;
@@ -327,7 +325,8 @@ private:
         }
         if (out_) {   // out to the first view in two seconds or so
             h_.zoomAbout(h_.focus, -dt * 4.6f);
-            if (h_.level <= 1.0f) {
+            h_.followLight(dt);
+            if (h_.atHome()) {
                 dive_ = (dive_ + 1) % kDiveCount;
                 beginDive();
             }

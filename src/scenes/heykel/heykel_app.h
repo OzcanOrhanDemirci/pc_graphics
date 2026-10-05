@@ -103,10 +103,22 @@ struct HeykelApp {
     int itersNow() const;            // the anchor orbit's length at this zoom (enough for the nearest points)
     void setLod(hk::World& w) const; // the pixel rule for the iterations, point by point (hk::itersAt)
 
-    bool pick(float px, float py, D3& hit, float3* normal = nullptr) const;   // render pixels
+    bool pick(float px, float py, D3& hit, float3* normal = nullptr, bool* sculpture = nullptr) const;   // render pixels
+    bool pickRay(D3 dir, D3& hit, float3* normal = nullptr, bool* sculpture = nullptr) const;         // from the camera
+    bool zoomTarget(float px, float py, D3& q) const;   // the wheel's point: on the sculpture, never in the air
     bool zoomAbout(D3 q, float logAmount);       // > 0 in; the point q stays where it is on the screen; false: the
                                                  // camera bumped into the sculpture backing out (it stops there)
     double freePath(D3 a, D3 b, double clearance) const;   // how far from a towards b the camera can go
+    double leashRadius() const;                  // the camera stays this near the first view's centre
+    double leashFraction(D3 a, D3 b) const;      // how much of the way a to b is inside the leash
+    bool homeStep(double& k, D3& q, double maxMove = 1e300);   // a share k of the way back to the first view
+                                                 // (false: blocked)
+    struct TrailPoint { D3 pos, focus; float yaw, pitch, level; };
+    std::vector<TrailPoint> trail;               // the way the camera came from the first view, each leg clear
+    void record();                               // the camera's pose onto the trail (after every move)
+    bool retrace(float logAmount);               // back along the trail: a backward zoom of -logAmount (< 0)
+    bool rewinding = false;
+    bool atHome() const { return level == 1.0f && camPos.x == homePos.x && camPos.y == homePos.y && camPos.z == homePos.z; }                      // zooming out goes back along the trail (till a zoom in or a turn)
     bool orbit(float dyaw, float dpitch);        // around the focus; false: it would go into the stone
     void defaultLight();                         // from the upper left, a little towards the viewer (a raking key)
     void aimLight(D3 target, const float3* normal = nullptr);   // onto a point, its size from the view there;

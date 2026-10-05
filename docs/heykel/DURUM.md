@@ -2,6 +2,45 @@
 
 > Tek kaynak durum panosu. Plan `docs/heykel/PLAN.md`. En yeni en üstte.
 
+## 🔁 Revize 4 · Kamera heykelin yanında kalır (2026-10-05 gece)
+
+**Özcan:** *"eğer en başta bir anda yakınlaşırsak kamera modelden ayrı bir yere ışınlanıyor ve model yok oluyor [...]
+Modelin belli bir çevresinde kamera olsun daha uzağa veya sağa sola kaçamasın."*
+
+**Sebep (üç parça, `--test kamera` ölçtükçe çıktı):**
+1. İmleç karanlık odadayken tekerlek, ışının odak uzaklığındaki **havadaki bir noktaya** yakınlaşıyordu.
+2. Derinde imleç bir tünelin ucundaki uzak duvara düşünce yakınlaşma sayısı gerçeğin çok üstüne çıkıyordu (kamera 300
+   kat yakınken "10.000" yazıyordu). Uzaklaşma bu sayıyı 1'e indirene kadar kamerayı o kadar geri götürüyordu: ölçülen en
+   kötü durumda ilk görünümün uzaklığının **5,7 katı**, odanın karanlığına.
+3. Revize 3'ün çarpması doğruydu ama bir eksiği vardı: derinde arkası duvar olunca tekerlek hiçbir şey yapmıyordu.
+   40 rastgele yürüyüşün 32'si ilk görünüme dönemedi.
+
+**Yapılanlar:**
+- **Hedef yalnız heykel:** imleç heykelin üstündeyse orası; değilse imlece en yakın heykel noktası (odaktan imlece doğru
+  ışınlar, olmazsa odağın çevresi). Havaya yakınlaşma yok. Uzaklaşma her karede o anki odaktan.
+- **Tasma:** kamera, ilk görünümün merkezinden ilk görünümdeki uzaklığından öteye gidemez (`camera.leash` 1,0). Geri
+  çekilme sınıra gelince orada durur, kalan uzaklaşma kamerayı sınırın üstünden ilk görünüme süzer. Çevirme sınırı
+  aşacaksa kamera odağına doğru biraz yaklaşır.
+- **İlk görünüme süzülme sıçramasız:** 3 kattan sonra (ya da sınıra gelince) kalan yolun payı kadar, yay çizerek (düz hat
+  heykeli kesebilirdi) ve hızı sınırlı: daha önce yapılamayan kısım sonda tek karede yapılmıyor (önce 0,89'luk sıçrama
+  ölçüldü). Sayı 1'e indiğinde kamera tam ilk görünümde.
+- **Geldiği yoldan dönüş:** kameranın yolu kaydediliyor (her bacak açık bir hat; düz gidilebilen noktalar birleşir).
+  Arkası duvarsa ya da süzülme yolu kapalıysa uzaklaşma bu yolu geri sarar: yakınlaşarak gelinen bacaklar geldiği hızla,
+  çevirmeler `camera.retrace` hızıyla, görüşü açık olan kestirmeler atlanarak. Geri sarma başlayınca kullanıcı
+  yakınlaşana ya da çevirene kadar sürer (iki yol birbirini geri almasın diye).
+- **Yakınlaşma sayısı dürüst:** bakılan noktaya gerçek yakınlığın en fazla 1,5 katı (`zoom.true`); öndeki noktalara normal
+  yakınlaşmada fark yok (ilk görünümde oran ~1,33).
+
+**Ölçümler (`--test kamera`, 4 tohum × 40 yürüyüş × 60 işlem, her yürüyüş sonunda tekerlek 0,05'lik paylarla sonuna kadar
+geri):** her tohumda içeride **0**, en uzak **1,0000** (tasma 1,00), ilk görünüme dönen yürüyüş **40/40**, bir payda en büyük
+kamera hareketi ilk görünüm uzaklığının 0,080-0,095'i (yay çizerek süzülme; ölçüt < 0,1), en uzun dönüş 31-63 tık (10.000
+kattan düz yol 31 tık). `--test pert` değişmedi (10.000 katta ort. 0,017 piksel). `--autotest-only heykel` geçti; turun
+ikinci dalışı ve çevrilmiş derin görünüm karelerine bakıldı.
+
+**NE DOĞRULANMADI:** gerçek fareyle; sınıra gelince süzülmenin ve geri sarmanın elde nasıl hissettirdiği (geri sarma
+çevirmeleri de geri alır: arkası duvarken uzaklaşınca kamera geldiği yöne döner). Yakınlaşırken kamera bir kenarın çok
+yakınından geçebiliyor (odak uzaklığının 1/100.000'i kadar; içeri girmiyor, çizimde bozulma beklemiyorum ama bakılmadı).
+
 ## 🔁 Revize 3 · Kamera modele çarpar (2026-10-05 akşam)
 
 **Özcan:** *"modelin içine girip yakınlaşarak kamerayı ters çevirirsen kameranın arkası modelde oluyor. Oradan da
