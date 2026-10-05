@@ -418,6 +418,8 @@ void Scale::init() {
         }
     }
     for (int k = 0; k < 6000; ++k) addGal(lan + v3(rng.n(), rng.n(), rng.n()) * 1.6e24);   // the Laniakea basin's own
+    lanFromSun_ = lan;
+    mergeSurvey();
 
     clk = Clocks{};
     place();
@@ -453,6 +455,61 @@ bool Scale::loadStars(const std::string& path, std::string& log) {
     }
     char b[128];
     std::snprintf(b, sizeof(b), "  yildizlar.bin: %u yildiz (HYG v4.1)%c", n, 10);
+    log += b;
+    return true;
+}
+
+// the survey's galaxies in, the placeholder's out where the survey reaches (it is flux-limited: thin far out, but real)
+void Scale::mergeSurvey() {
+    if (surveyPos_.empty()) return;
+    const double reach = 200e6 * kPc;
+    std::vector<V3> pos;
+    std::vector<float4> flux;
+    for (size_t i = 0; i < galPos_.size(); ++i)
+        if (length(galPos_[i] + lanFromSun_) > reach) {
+            pos.push_back(galPos_[i]);
+            flux.push_back(galFlux_[i]);
+        }
+    for (size_t i = 0; i < surveyPos_.size(); ++i) {
+        pos.push_back(surveyPos_[i] - lanFromSun_);
+        flux.push_back(surveyFlux_[i]);
+    }
+    galPos_.swap(pos);
+    galFlux_.swap(flux);
+}
+
+bool Scale::loadGalaxies(const std::string& path, std::string& log) {
+    FILE* f = std::fopen(path.c_str(), "rb");
+    if (!f) {
+        log += "  yok: " + path + std::string(1, char(10));
+        return false;
+    }
+    char magic[4];
+    unsigned int n = 0;
+    if (std::fread(magic, 1, 4, f) != 4 || std::memcmp(magic, "OLST", 4) != 0 || std::fread(&n, 4, 1, f) != 1) {
+        std::fclose(f);
+        log += "  bicim: " + path + std::string(1, char(10));
+        return false;
+    }
+    std::vector<double> pos(size_t(n) * 3);
+    std::vector<float> att(size_t(n) * 4);
+    const bool ok = std::fread(pos.data(), 8, pos.size(), f) == pos.size() && std::fread(att.data(), 4, att.size(), f) == att.size();
+    std::fclose(f);
+    if (!ok) {
+        log += "  kisa: " + path + std::string(1, char(10));
+        return false;
+    }
+    surveyPos_.resize(n);
+    surveyFlux_.resize(n);
+    for (unsigned int i = 0; i < n; ++i) {
+        surveyPos_[i] = v3(pos[3 * i], pos[3 * i + 1], pos[3 * i + 2]);
+        surveyFlux_[i] = make_float4(att[4 * i + 1], att[4 * i + 2], att[4 * i + 3], att[4 * i]);
+    }
+    const size_t before = galPos_.size();
+    mergeSurvey();
+    char b[160];
+    std::snprintf(b, sizeof(b), "  galaksiler.bin: %u galaksi (2MRS), yer tutucu agdan %zu kaldi (200 Mpc otesi)%c", n, galPos_.size() - n, 10);
+    (void)before;
     log += b;
     return true;
 }

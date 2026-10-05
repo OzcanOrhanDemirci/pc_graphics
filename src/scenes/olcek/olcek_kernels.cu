@@ -237,7 +237,13 @@ __device__ float seaDistance(float x, float y) {
     float d;
     if (M.shore) {
         const float h = M.shoreHalf;
-        d = tex2D<float>(cudaTextureObject_t(M.shore), (x + h) / (2.0f * h), (h - y) / (2.0f * h));
+        // bilinear in float on point samples (texel centres at i + 0.5)
+        const float fx = (x + h) / (2.0f * h) * M.shoreSize - 0.5f, fy = (h - y) / (2.0f * h) * M.shoreSize - 0.5f;
+        const float x0 = floorf(fx), y0 = floorf(fy), tx = fx - x0, ty = fy - y0;
+        const cudaTextureObject_t T = cudaTextureObject_t(M.shore);
+        const float a = tex2D<float>(T, x0 + 0.5f, y0 + 0.5f), b = tex2D<float>(T, x0 + 1.5f, y0 + 0.5f);
+        const float c = tex2D<float>(T, x0 + 0.5f, y0 + 1.5f), e = tex2D<float>(T, x0 + 1.5f, y0 + 1.5f);
+        d = lerpf(lerpf(a, b, tx), lerpf(c, e, tx), ty);
         d -= M.shoreCentre * __expf(-(x * x + y * y) / (150.0f * 150.0f));   // through the beach point (the map errs ~10 m)
     } else {
         d = y - 0.75f;
@@ -247,19 +253,25 @@ __device__ float seaDistance(float x, float y) {
 }
 
 __device__ float3 beachAlbedo(float x, float y, float fp, float t) {
-    const float dsea = seaDistance(x, y);
+    // the water's edge wanders at the centimetres too (the swash runs up unevenly), as far as a pixel can show it
+    float dsea = seaDistance(x, y);
+    dsea += 0.05f * (gnoise3(x * 9.0f, y * 9.0f, 2.0f, 61) - 0.5f) * smoothstepf(2.0f, 4.0f, 1.0f / (fp * 9.0f))
+          + 0.02f * (gnoise3(x * 31.0f, y * 31.0f, 3.0f, 62) - 0.5f) * smoothstepf(2.0f, 4.0f, 1.0f / (fp * 31.0f));
     const float run = 0.5f * (0.5f + 0.5f * sinf(t * (6.2831853f / 8.0f)));   // the last wave runs up and back
     const float w = fmaxf(0.004f, fp);
     const float edge = -run;
     // the sand: dry, then darker where the waves wet it; grainy down to the pixel (octaves finer than a pixel fade out)
+    // the sand: broad mottling, then nearly white noise down to the grains' clusters (~1 mm): an octave lives while its
+    // wavelength is at least 3.5 pixels and fades out by 2 (finer would shimmer as the view moves)
     float grit = 0.0f, amp = 0.5f, f = 0.25f;
-    for (int i = 0; i < 9; ++i) {
-        const float lim = saturate(1.5f - 2.0f * fp * f);
+    for (int i = 0; i < 13; ++i) {
+        const float lim = smoothstepf(2.0f, 3.5f, 1.0f / (fp * f));
+        if (lim <= 0.0f) break;
         grit += amp * lim * (gnoise3(x * f + 0.37f * i, y * f - 0.21f * i, 0.5f, 40 + i) - 0.5f);
         f *= 2.3f;
-        amp *= 0.72f;
+        amp *= i < 4 ? 0.7f : 0.92f;
     }
-    float3 sand = make_float3(0.60f, 0.51f, 0.38f) * (1.0f + 0.35f * grit);
+    float3 sand = make_float3(0.60f, 0.51f, 0.38f) * (1.0f + 1.1f * grit);
     const float wet = smoothstepf(-1.4f - w, -0.5f + w, dsea);
     sand = lerp3(sand, sand * make_float3(0.55f, 0.55f, 0.58f), wet);
     // the swash: a film of water over the sand, deeper seaward (its colour over the sand, then the sea's)
@@ -270,9 +282,22 @@ __device__ float3 beachAlbedo(float x, float y, float fp, float t) {
     float3 c = lerp3(sand, water, film);
     // foam: a lace at the edge and a little behind it (the wave's run back), broken by noise; fades below a pixel
     const float fw = 0.04f;
-    const float lace = gnoise3(x * 6.0f, y * 6.0f, t * 0.6f, 3) * 0.6f + gnoise3(x * 23.0f, y * 23.0f, t * 0.9f, 4) * 0.4f;
-    const float foam = (__expf(-sqr((dsea - edge) / fmaxf(fw, fp))) + 0.35f * __expf(-sqr((dsea - edge - 0.25f) / fmaxf(0.12f, fp))))
-                       * fminf(1.0f, fw / fp) * smoothstepf(0.35f, 0.75f, lace);
+    // the lace: ridges of noise (bubbles gather in lines), finer octaves only while a pixel can hold them
+    float lace = 0.0f, lw = 0.0f;
+    {
+        float fl = 7.0f, al = 0.5f;
+        for (int i = 0; i < 4; ++i) {
+            const float lim = smoothstepf(2.0f, 3.5f, 1.0f / (fp * fl));
+            const float r = 1.0f - fabsf(2.0f * gnoise3(x * fl, y * fl, t * (0.5f + 0.3f * i), 3 + i) - 1.0f);
+            lace += al * lim * r * r;
+            lw += al * lim;
+            fl *= 2.8f;
+            al *= 0.75f;
+        }
+        lace = lw > 0.0f ? lace / lw : 0.0f;
+    }
+    const float foam = (__expf(-sqr((dsea - edge) / fmaxf(fw, fp))) + 0.3f * __expf(-sqr((dsea - edge - 0.22f) / fmaxf(0.12f, fp))))
+                       * fminf(1.0f, fw / fp) * smoothstepf(0.45f, 0.85f, lace);
     c = c + make_float3(0.55f, 0.57f, 0.58f) * (foam * 0.85f);
     return c;
 }

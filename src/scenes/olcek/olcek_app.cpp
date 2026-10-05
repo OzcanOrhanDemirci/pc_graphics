@@ -56,6 +56,7 @@ void OlcekApp::loadMaps() {
     mapsLog.clear();
     const std::string dir = root + "/assets/olcek/";
     if (cfg.i("stars.real", 1)) sc.loadStars(dir + "yildizlar.bin", mapsLog);
+    if (cfg.i("galaxies.real", 1)) sc.loadGalaxies(dir + "galaksiler.bin", mapsLog);
     struct M { olcek::Texture* t; const char* file; bool wrap; };
     const M ms[] = {{&world, "bmng_dunya.tex", true}, {&zonal, "bmng_kusak.tex", false}, {&region, "bmng_ege.tex", false},
                     {&bay, "s2_ev.tex", false}, {&moon, "ay.tex", true}, {&cloudWorld, "bulut_dunya.tex", true},
@@ -123,6 +124,7 @@ void OlcekApp::render() {
     view.maps.shore = shore.tex;
     view.maps.shoreHalf = 0.5f * shore.size * shore.texel;
     view.maps.shoreCentre = shore.centre;
+    view.maps.shoreSize = shore.size;
     view.maps.worldGain = cfg.f("maps.gain.world", 1.0f);
     view.maps.bayGain = cfg.f("maps.gain.bay", 0.25f);
     view.maps.moonGain = cfg.f("maps.gain.moon", 0.6f);

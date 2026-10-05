@@ -2,6 +2,42 @@
 
 > Tek kaynak durum panosu. Plan `docs/olcek/PLAN.md`. En yeni en üstte.
 
+## 2026-10-05 akşamüstü (2) · Samanyolu, gerçek yıldızlar ve galaksiler, kumsal
+
+Planın sırası (Ö2 → Ö3) Özcan'ın *"harbiden Samanyolu gibi"* sözüyle karıştırıldı: önce en çok göze batan yer tutucular.
+
+- **Samanyolu** (Ö3'ün ilk parçası): yüzden bir model, ölçümlerden. Kollar Reid ve ark. 2019 (ApJ 885, 131) Tablo 2'nin
+  kırıklı log-periyodik sarmalları, makaleden birebir (3 kpc, Norma, Sct-Cen, Sgr-Car, Yerel, Perseus, Dış); dört ana kol
+  ölçülmeyen tarafta 12° eğimle bir sarmal sürer (temsil), kısa kollar ölçüldükleri yerde kalır. Kol genişliği makalenin
+  w(R) = 336 + 36 (R - 8,15) pc'si. Uzun çubuk Wegg ve ark. 2015 (yarı boy 5 kpc, Güneş-merkez çizgisiyle 28°). Üstel eski
+  disk (2,6 kpc), çubuk ve çekirdek, kollarda genç yıldız bulutları ve H-alfa düğümleri, kolların iç kenarında toz
+  şeritleri (kızartarak), ince oktavlar iki pikselden küçük olunca söner; piksel başına bir kez (2-5 ms). Güneş Yerel
+  kolun hemen içinde, Sgr-Car ile Perseus arasında (ölçülen yeri). İlk iki deneme plak gibi halka halkaydı (kolları
+  birkaç tur uzatmıştım), sonra pürüzsüz boru gibiydi: kareler `captures/olcek/o3_a..d`.
+- **Yıldızlar** (Ö2'nin ilk parçası): yer tutucu alan yerine HYG v4.1'in uzaklığı bilinen **109.400 yıldızı** (gerçek
+  yer, mutlak kadirden ışık, B-V'den renk). 10 pc içinde 318 yıldız.
+- **Galaksiler**: 2MASS Redshift Survey'in **43.490 galaksisi** (Huchra ve ark. 2012; uzaklık kırmızıya kaymadan,
+  H0 = 70, ışık K bandından). 10^25-10^25,5'te yakın evrenin gerçek ipliksi yapısı görünüyor. **Açık sorun:** anket
+  200 Mpc'yi kapsıyor, ötesindeki yer tutucu ağ 170 bin kat seyrek; 10^26-10^27'de çevremiz parlak bir top gibi. Doğrusu
+  ağı hacim olarak çizmek (ortalama ışık yoğunluğu ~10^8 L_güneş/Mpc³), Ö3'ün sıradaki işi.
+- **Kumsal** (s 0-1): tane dokusu piksel ölçeğine kadar (3,5 pikselden ince oktav söner), su kenarı santimlerde
+  düzensiz, köpük gürültü sırtlarından dantel. **Doku süzgeci tuzağı:** ekran kartının çift doğrusal süzgecinin
+  ağırlıkları 8 bit; 2 m'lik kıyı alanı 1 m'lik ekranda 8 mm'lik basamaklar çiziyordu. Kıyı alanı artık nokta örnekle
+  okunup float'la ara değerleniyor.
+- Bulutlar: Çandarlı'nın tuzlası yanlışlıkla bulut sayılıyordu (parlak ve beyaz); o gün sahilin üstü açık olduğu için
+  15 km çevre bulutsuz.
+- `--autotest-only olcek`: 72-162 fps (en yavaş 1 km'de 13,5 ms ve atomda 12,9 ms), kart belleği 4,2 GB.
+- `olcek-sure` (Ö1 içeriğiyle, galaksiden önce): kare her yerde ≤ 15,7 ms, **bütçe geçti**; ev kadrajda (en kötü 1,00
+  s = 24,8'de: Laniakea geçişi 24,6-25,4'e kaydırıldı). Sıçramalar 120 kare: s ≈ -10,5 (zemin sönerken arkasındaki
+  bulutları örtüyordu: düzeltildi), s ≈ 7 köşeler (karelere bakıldı: odak düzlemi yerden Dünya'nın merkezine kayarken
+  kenarın akışı, gerçek hareket; ölçünün derinlik varsayımı), s ≈ 26 (kozmik ağın yer tutucusu).
+
+### NE DOĞRULANMADI (bu parça)
+- Sıçrama ölçüsü galaksi, gerçek yıldızlar ve 2MRS ile yeniden koşulmadı.
+- Samanyolu'nun ölçülmeyen yarısı ve kol uzantıları temsil; renkler ve parlaklıklar gözle ayarlandı, bir fotoğrafa karşı
+  ölçülmedi. M31 ve M33 hâlâ eski düz disk yer tutucuları.
+- Canlıda elle hiçbir şeye bakılmadı (yalnız autotest'in sanal tekerleği).
+
 ## 2026-10-05 akşamüstü · Ö1 sürüyor: gerçek Dünya, Çandarlı, bugünün bulutları, hava
 
 Özcan yer tutucuları görünce *"harbiden Dünya gibi"* bekliyordu (Universe Sandbox seviyesi); ev katmanı artık gerçek

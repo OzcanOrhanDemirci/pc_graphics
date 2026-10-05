@@ -118,6 +118,8 @@ public:
     void init();                  // the catalogue, the tree, today's orbits
     // the real stars (tools/olcek_veri.py yildiz: HYG v4.1) in place of the placeholder field; false: kept the field
     bool loadStars(const std::string& path, std::string& log);
+    // the real galaxies (tools/olcek_veri.py galaksi: 2MRS) in place of the placeholder web where the survey reaches
+    bool loadGalaxies(const std::string& path, std::string& log);
     // time: dt seconds of screen time at scale s (sPrev: where the last frame was; zooming in pulls the home back)
     void advance(double dt, double sPrev);
     void place();                 // the tree's offsets from the clocks
@@ -142,6 +144,10 @@ private:
     bool realStars_ = false;      // the catalogue is in starPos_ (loadStars)
     std::vector<float4> starFlux_;   // luminosity (W) and colour
     std::vector<V3> galPos_;      // galaxies (from the Laniakea centre)
+    std::vector<V3> surveyPos_;   // the survey's (from the Sun), kept across init(); the placeholder web stays beyond it
+    std::vector<float4> surveyFlux_;
+    V3 lanFromSun_;
+    void mergeSurvey();
     std::vector<float4> galFlux_;
     Kepler moonOrbit_, planetOrbit_[8];
     V3 earthPole_, earthBeach_, earthUp_, earthNorth_, earthEast_;   // today

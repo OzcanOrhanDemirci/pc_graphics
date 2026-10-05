@@ -122,6 +122,7 @@ struct GMaps {
     float cloudGain = 1.0f, cloudFade = 1.0f;   // the clouds' share (they thin out as the camera comes down to them)
     unsigned long long shore = 0;    // the sea's signed distance near the beach point (m, + over the water; float)
     float shoreHalf = 2048.0f, shoreCentre = 0.0f;   // its half width (m); its value at the beach point
+    int shoreSize = 0;                               // texels across (read with point samples, interpolated in float)
     float worldGain = 1.0f, bayGain = 0.25f, moonGain = 0.6f;
     float regionHalf = 1024e3f, regionTexel = 500.0f;
     float bayHalf = 40960.0f, bayTexel = 10.0f;

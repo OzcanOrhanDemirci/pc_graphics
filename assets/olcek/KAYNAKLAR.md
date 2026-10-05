@@ -14,9 +14,10 @@ Bu klasördeki dosyalar git'e girmez (yalnız bu liste girer). Hepsini `tools/ol
 | `bulut_ege.tex` | NASA GIBS (Worldview), MODIS Terra Corrected Reflectance True Color, **2026-10-05**, ev çevresi | NASA EOSDIS GIBS: kısıtsız kullanım, atıf | Bugünün bulutları (bulutsuz Blue Marble'a göre fark) |
 | `bulut_dunya.tex` | NASA GIBS, VIIRS NOAA-20 Corrected Reflectance True Color, 2026-10-04 (5 Ekim'in günü tamamlanınca o) | Aynı | Dünyanın bulutları |
 | `yildizlar.bin` | HYG Database v4.1 (Hipparcos, Yale Bright Star, Gliese; astronexus, David Nash) | CC BY-SA 4.0 | Uzaklığı bilinen 109.400 yıldızın gerçek yeri, ışığı (mutlak kadirden), rengi (B-V'den, Ballesteros 2012) |
+| `galaksiler.bin` | 2MASS Redshift Survey (Huchra ve ark. 2012, ApJS 199, 26; VizieR J/ApJS/199/26) | Bilimsel katalog, atıfla serbest | 43.490 galaksinin gerçek yönü, kırmızıya kaymadan uzaklığı (H0 = 70), K bandından ışığı |
 | `ay.tex` | NASA SVS 4720 (CGI Moon Kit), LRO LROC WAC renk mozaiği `lroc_color_poles_8k.tif` | NASA, kamu malı | Ay'ın yüzü |
 
 Atıf metni (README ve galerinin "Ayrıntılar"ında): *Contains modified Copernicus Sentinel data 2025. Blue Marble: NASA Earth
-Observatory. Clouds: NASA Worldview / GIBS (MODIS Terra, VIIRS NOAA-20). Stars: HYG Database v4.1 (CC BY-SA 4.0). Milky Way arms: Reid et
+Observatory. Clouds: NASA Worldview / GIBS (MODIS Terra, VIIRS NOAA-20). Stars: HYG Database v4.1 (CC BY-SA 4.0). Galaxies: 2MASS Redshift Survey (Huchra et al. 2012). Milky Way arms: Reid et
 al. 2019. Moon: NASA's Scientific Visualization Studio,
 LRO LROC.*

@@ -14,6 +14,7 @@ dogu ve kuzey metre: sahnenin GGround eksenleriyle ayni.
   python tools/olcek_veri.py kiyi      # sahildeki noktanin kiyisi: Sentinel-2 su maskesinden isaretli uzaklik
   python tools/olcek_veri.py bulut     # bugunun gercek bulutlari: NASA GIBS (MODIS Terra ev cevresi, VIIRS dunya)
   python tools/olcek_veri.py yildiz    # yildizlar: HYG v4.1 (uzakligi bilinen her yildiz, gercek yeri, isigi, rengi)
+  python tools/olcek_veri.py galaksi   # galaksiler: 2MASS Redshift Survey (44.600 galaksi, kirmiziya kaymadan uzaklik)
   python tools/olcek_veri.py hepsi
 """
 import math
@@ -394,6 +395,46 @@ def yildiz():
     print(f"  yazildi assets/olcek/yildizlar.bin: {n} yildiz ({near} tanesi 10 pc icinde)")
 
 
+# ---------------------------------------------------------------------------------------------------------------------
+# Galaxies: the 2MASS Redshift Survey (Huchra et al. 2012, ApJS 199, 26; VizieR J/ApJS/199/26): 44,600 galaxies to
+# Ks = 11.75 over the whole sky but the Milky Way's plane. Distance from the redshift (H0 = 70; the nearest, whose own
+# motions swamp the expansion, no nearer than 2.5 Mpc: the Local Group's members are the scene's own), light from the
+# K band (L_V ~ 0.35 L_K, about right for the old stars that dominate it). Same format as the stars ("OLST").
+def galaksi(H0=70.0):
+    path = fetch("https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=J/ApJS/199/26/table3&-out=RAJ2000,DEJ2000,cz,Ktmag&-out.max=unlimited",
+                 "2mrs.tsv")
+    mpc = 3.0856775814913673e22
+    pos, att = [], []
+    for line in open(path, encoding="utf-8"):
+        if not line[:1].isdigit():
+            continue
+        f = line.rstrip("\n").split("\t")
+        try:
+            ra, dec, cz, kt = float(f[0]), float(f[1]), float(f[2]), float(f[3])
+        except (ValueError, IndexError):
+            continue
+        if cz < 150.0:
+            continue
+        d = max(cz / H0, 2.5)                          # Mpc
+        mk = kt - 5.0 * math.log10(d * 1e6 / 10.0)
+        lk = 10.0 ** (-0.4 * (mk - 3.28))
+        a, b = math.radians(ra), math.radians(dec)
+        u = (math.cos(b) * math.cos(a), math.cos(b) * math.sin(a), math.sin(b))
+        pos.append([u[0] * d * mpc, u[1] * d * mpc, u[2] * d * mpc])
+        # colour: early types redder; without the type, a mean galaxy's (~5500 K)
+        att.append([0.35 * lk, 1.08, 0.98, 0.86])
+    pos = np.array(pos, np.float64)
+    att = np.array(att, np.float32)
+    order = np.argsort(-att[:, 0])
+    pos, att = pos[order], att[order]
+    with open(os.path.join(OUT, "galaksiler.bin"), "wb") as f:
+        f.write(b"OLST")
+        f.write(np.array([len(pos)], np.uint32).tobytes())
+        f.write(np.ascontiguousarray(pos).tobytes())
+        f.write(np.ascontiguousarray(att).tobytes())
+    print(f"  yazildi assets/olcek/galaksiler.bin: {len(pos)} galaksi (2MRS)")
+
+
 if __name__ == "__main__":
     what = sys.argv[1] if len(sys.argv) > 1 else "hepsi"
     os.makedirs(OUT, exist_ok=True)
@@ -409,6 +450,8 @@ if __name__ == "__main__":
         bulut()
     if what in ("yildiz", "hepsi"):
         yildiz()
+    if what in ("galaksi", "hepsi"):
+        galaksi()
     if what == "kusak":
         from PIL import Image
         Image.MAX_IMAGE_PIXELS = None

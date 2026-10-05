@@ -121,9 +121,11 @@ bool Field::load(const std::string& path, std::string& err) {
     rd.res.array.array = arr;
     cudaTextureDesc td{};
     td.addressMode[0] = td.addressMode[1] = cudaAddressModeClamp;
-    td.filterMode = cudaFilterModeLinear;
+    // point samples: the shader interpolates in float (the hardware's bilinear weights have 8 bits: a 2 m texel seen at
+    // 1 m across the screen showed 8 mm steps)
+    td.filterMode = cudaFilterModePoint;
     td.readMode = cudaReadModeElementType;
-    td.normalizedCoords = 1;
+    td.normalizedCoords = 0;
     if (cudaCreateTextureObject(&tex, &rd, &td, nullptr) != cudaSuccess) {
         err = "doku nesnesi: " + path;
         release();
