@@ -23,6 +23,8 @@ namespace olcek::hiz {
 
 constexpr double kC = 299792458.0;
 constexpr double kG0 = 9.80665;         // standard gravity (m/s^2): the drive starts at 1 g
+constexpr double kEyeShutter = 1.0 / 60.0;   // the eye's shutter in the side view (the passenger's seconds): what moves
+                                             // in it is drawn along its way (PLAN §3.2)
 constexpr double kEpsCap = 1e-21;       // 1 - beta at the cap: "21 nines" (PLAN §1, Özcan's choice)
 constexpr double kLy = 9.4607304725808e15;
 constexpr double kAU = 1.495978707e11;

@@ -396,6 +396,18 @@ private:
             s.departT = hz::dd(0.0);
             fixtureDone_ = true;
         }
+        // ... or (--set hiz.test.phi=v) coasting at rapidity v two fifths along the first leg (the highest speeds' views)
+        if (testing_ && a_.cfg.f("hiz.test.phi", 0.0f) > 0.0f && !fixtureDone_) {
+            hz::Ship& s = a_.ship;
+            s = hz::depart(a_.route);
+            s.phi = std::min(double(a_.cfg.f("hiz.test.phi", 0.0f)), hz::phiCap());
+            s.x = hz::dd(-0.6 * a_.route.length[0]);
+            s.drive = hz::Drive::Coast;
+            s.legTau = 0.0;
+            s.legT = hz::dd(0.0);
+            s.departT = hz::dd(0.0);
+            fixtureDone_ = true;
+        }
         persist();
     }
     void leaveHiz() {
@@ -579,6 +591,7 @@ private:
             sc.hiz.rocket = pos;
             sc.hiz.motion = s.heading;
             sc.hiz.rate = k.gamma;
+            sc.hiz.shutterMove = hz::kC * k.gb * hz::kEyeShutter;
             {   // at the Local Group's scale the leg's middle (the rocket crawls between its two stops); nearer, the rocket
                 const int Lg = std::min(s.leg, 1);
                 const double tMid = -s.x.value() - 0.5 * a_.route.length[Lg];

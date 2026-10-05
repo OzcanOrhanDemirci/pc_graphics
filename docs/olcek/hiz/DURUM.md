@@ -52,6 +52,17 @@ yanından akan ortam noktaları çizgiye döner.
   - **Motor ışığı:** aynanın genişliğinde yumuşak bir altın şerit; parlaklığı ivmenin logaritması (1 g'de sönük, tavanda
     tam). Bir harita öğesi: ışığın gittiği yer.
   - **Hız yazısı:** v, β ve "senin bir saniyende X" (γβc · 1 sn: 21 dokuzda ~700 ışık yılı).
+- **Hızda yıldızlar:** kamera roketle senin bir saniyende γβc yol alır (21 dokuzda 709 ışık yılı). Ölçek motorunun
+  yıldız ve galaksi noktaları, gözün kapağında aldıkları piksel yoluna bölünmüş ışıkla çizilir (`hiz.shutterMove`).
+  Işık çizgi boyunca dağılır; uzun çizgi çeken yakın yıldızlar söner, kısa çekenler yumuşak kayar. Kareden kareye
+  sıçrayıp titreyen yıldız yok.
+- **21 dokuzda** (düzenek `olcek/hizyuksek --set hiz.test.phi=24.5237`):
+  - roket 2,2 × 10¹⁰ kat kısa, ince bir çizgi;
+  - ortam noktaları kararlı ışık izleri;
+  - frende roket dönmüş, ışığı öne bakıyor;
+  - Samanyolu ölçeğinde galaksi ve roket.
+  Düzenek, 21 dokuzda süzülürken saniyeler içinde Proxima'yı binlerce ışık yılı geçiyor: iki durak da arkada kalınca
+  etiketleri alt alta dizilir.
 - Uygulama: `Overlay.hud` (sahnenin 2B resmi her zaman, grafikler yalnız arayüzle). Arayüz takımına dolu dışbükey çokgen
   (`ui::fill`).
 - Otomatik test yeniden yazıldı. `olcek/hiz`: yandan duruşta ve itişte, 2-6 durakları, göz, Boşluk, bir dakika sonra.

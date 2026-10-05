@@ -16,7 +16,7 @@ namespace olcek::hiz {
 namespace {
 
 constexpr double kPi = 3.14159265358979323846;
-constexpr double kShutter = 1.0 / 60.0;   // the eye's shutter, in the passenger's seconds (PLAN §3.2)
+constexpr double kShutter = kEyeShutter;
 constexpr double kTurnTime = 0.9;         // the rocket turning round to brake, as drawn (s)
 
 uint64_t mix64(uint64_t x) {   // splitmix64: the medium's points from their cell, the same every frame
@@ -208,6 +208,7 @@ void drawWay(const SideLayer& L, const Cam& cam, float S) {
     // the stops: on the screen a ring and their names; beyond it, at the edge with an arrow
     const ui::TextStyle nameT = theme::small(theme::Scale{S}, ui::withAlpha(theme::text(), 0.9f));
     const ui::TextStyle distT = theme::mono(theme::Scale{S}, 13.0f, ui::withAlpha(theme::text(), 0.7f));
+    int onSide[2] = {0, 0};   // labels already beyond the screen on the left, on the right (past a target both are behind)
     auto stop = [&](bool has, double t, double px, double py, double dist, const std::string& name) {
         if (!has) return;
         const std::string d = distText(dist);
@@ -228,7 +229,8 @@ void drawWay(const SideLayer& L, const Cam& cam, float S) {
         const bool toRight = ox > rx;
         const float ex = float(rx + (toRight ? 0.30 : -0.30) * L.view.w);
         const double k = (ex - rx) / (ox - rx);
-        const float ey = float(std::clamp(ry + (oy - ry) * k, double(L.view.y + S * 60.0f), double(L.view.y + L.view.h - S * 60.0f)));
+        const float ey = float(std::clamp(ry + (oy - ry) * k, double(L.view.y + S * 60.0f), double(L.view.y + L.view.h - S * 60.0f))) +
+                         S * 46.0f * float(onSide[toRight ? 1 : 0]++);
         const std::string arrowName = toRight ? name + "  →" : "←  " + name;
         const float wName = ui::measure(arrowName, nameT), wDist = ui::measure(d, distT);
         ui::text(toRight ? ex - wName : ex, ey - S * 34.0f, arrowName, nameT);
@@ -352,7 +354,7 @@ void drawRocket(const SideLayer& L, const SideState& st, const Cam& cam, float S
         const ui::Color skin = ui::hex(0xDDE2EA, 0.95f);
         ui::fill(h.data(), int(h.size() / 2), skin);
         const auto b0 = P(2.47, 0.95), b1 = P(2.56, 1.22);   // the back, up to the neck
-        ui::line(b0[0], b0[1], b1[0], b1[1], std::max(1.2f, float(0.27 * sy)), skin);
+        ui::line(b0[0], b0[1], b1[0], b1[1], std::max(1.2f, float(0.27 * std::min(sy, std::fabs(sx)))), skin);
     }
     // the hull: a slim body, its nose rounded to a point, its back flat-rounded
     const std::vector<std::array<double, 2>> hull = {

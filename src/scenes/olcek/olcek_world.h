@@ -126,6 +126,8 @@ public:
         V3 rocket;                // from the Sun (m)
         V3 motion{1, 0, 0};       // unit: the screen's right
         double rate = 1.0;        // the world's seconds per screen second (gamma): what the shutter averages
+        double shutterMove = 0.0; // the camera's way along the motion in the eye's shutter (m, rest frame): a star drawn
+                                  // there is a streak, its light spread along it (a point keeps its share: no strobing)
         V3 focus;                 // where the camera looks, from the rocket (m): the rocket, or at the Local Group's scale
                                   // the leg's middle (both galaxies in view, the rocket crawling between them)
         double ev = 23.5;         // the exposure (EV against the sunlit world's)

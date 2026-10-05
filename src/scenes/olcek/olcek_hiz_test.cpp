@@ -611,6 +611,7 @@ int runHizFrames(OlcekApp& app, const std::vector<double>& phis, int leg, double
                 sc.hiz.rocket = pos;
                 sc.hiz.motion = s.heading;
                 sc.hiz.rate = k.gamma;
+                sc.hiz.shutterMove = hz::kC * k.gb * hz::kEyeShutter;
                 {   // the scene's framing: at the Local Group's scale the leg's middle (olcek_live.cpp)
                     const int Lg = std::min(s.leg, 1);
                     const double u = std::clamp((sv - 21.6) / 0.8, 0.0, 1.0);

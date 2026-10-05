@@ -927,7 +927,9 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
             const float near = float(smoothstep(0.03, 0.25, std::sqrt(d2) / D));
             if (near <= 0.0f) continue;
             const float4 f = starFlux_[i];
-            const double fl = double(f.w) * kLsun / (4.0 * kPi * d2) * k / omegaPx;
+            double fl = double(f.w) * kLsun / (4.0 * kPi * d2) * k / omegaPx;
+            // the second option's side view moving: the star crosses this many pixels while the shutter is open
+            if (hiz.on && hiz.shutterMove > 0.0) fl /= std::max(1.0, hiz.shutterMove / dot(rel, cam.fwd) / pa);
             if (fl < 2e-4) continue;
             splats.push_back({toCamSpace(rel), make_float3(f.x, f.y, f.z) * (float(fl) * near), 0.75f});
         }
@@ -946,7 +948,8 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
             near *= float(std::exp(-0.5 * dz * dz));
             if (near < 0.01f) continue;
             const float4 f = galFlux_[i];
-            const double fl = double(f.w) * kLsun / (4.0 * kPi * d2) * k / omegaPx;
+            double fl = double(f.w) * kLsun / (4.0 * kPi * d2) * k / omegaPx;
+            if (hiz.on && hiz.shutterMove > 0.0) fl /= std::max(1.0, hiz.shutterMove / dot(rel, cam.fwd) / pa);
             if (fl < 2e-4) continue;
             // a galaxy is ~30 kpc across: a disc on the screen when near
             const double rpx = 15e3 * kPc / std::sqrt(d2) / pa;

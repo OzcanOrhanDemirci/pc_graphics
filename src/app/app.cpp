@@ -597,7 +597,7 @@ int App::run(const Options& opt) {
                 wait(10.0); log("heykel tur 10000"); shot("heykel_tur_10000");
                 key(GLFW_KEY_T); wait(0.5); key(GLFW_KEY_R); wait(1.0);
             }
-            if (infos_[s].id == "olcek" && part != "hiz" && part != "hizvaris") {
+            if (infos_[s].id == "olcek" && part != "hiz" && part != "hizvaris" && part != "hizyuksek") {
                 // the beach, the wheel out (a notch is x1.5: ~5.7 a decade) to the Earth, the Solar System, the Galaxy and
                 // the edge, R home, in to the grain, the atom, the nucleus and the desert, then the tour from the panel
                 wait(2.0); log("olcek sahil"); shot("olcek_sahil");
@@ -624,7 +624,7 @@ int App::run(const Options& opt) {
                 // "olcek/hizvaris" (with --set hiz.test.varis=1): the scene starts a minute before Proxima braking on the
                 // stopping curve: the arrival, the turn, both views there.
                 control("secenek", 1); wait(0.15); click(); wait(1.35); log("olcek hiz (cift tik: yolculuk baslamaz, Hiz 0)"); shot("olcek_hiz_kalkis");
-                if (part != "hizvaris") {
+                if (part != "hizvaris" && part != "hizyuksek") {
                     key(GLFW_KEY_TAB); wait(1.5); shot("olcek_hiz_yandan");
                     hold(GLFW_KEY_W, true); wait(5.0); log("olcek hiz W 5 sn (yandan, motor isigi)"); shot("olcek_hiz_yandan_itis");
                     key(GLFW_KEY_2); wait(5.0); log("olcek hiz W 10 sn (Dunya ve Ay)"); shot("olcek_hiz_yandan_dunya_ay");
@@ -644,6 +644,14 @@ int App::run(const Options& opt) {
                         wait(60.0); log("olcek hiz bir dakika sonra"); shot("olcek_hiz_dakika");
                         key(GLFW_KEY_TAB); wait(1.5); shot("olcek_hiz_dakika_yandan"); key(GLFW_KEY_TAB);
                     }
+                } else if (part == "hizyuksek") {
+                    // (with --set hiz.test.phi=v) coasting fast: the side view's stops, a brake (the rocket turns round), the eye
+                    key(GLFW_KEY_TAB); wait(1.5); log("olcek hiz yuksek"); shot("olcek_hiz_yuksek_roket");
+                    key(GLFW_KEY_4); wait(4.0); shot("olcek_hiz_yuksek_yildizlar");
+                    key(GLFW_KEY_5); wait(3.0); shot("olcek_hiz_yuksek_samanyolu");
+                    key(GLFW_KEY_1); wait(7.0);
+                    hold(GLFW_KEY_S, true); wait(2.0); shot("olcek_hiz_yuksek_fren"); hold(GLFW_KEY_S, false);
+                    key(GLFW_KEY_TAB); wait(1.5); shot("olcek_hiz_yuksek_goz");
                 } else {
                     wait(58.0); log("olcek hiz proxima"); shot("olcek_hiz_proxima");
                     wait(4.0); shot("olcek_hiz_donus");
