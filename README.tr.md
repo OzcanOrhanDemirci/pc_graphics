@@ -288,12 +288,13 @@ Orada ekranın genişliği 0,15 mm, iki saç teli kadardır.
 
 ### 7 · Ölçek · Ekim 2026
 
-| ![Dünya 10 bin km'den: Akdeniz, Kuzey Afrika, Arabistan, Rusya'nın üstünde büyük bir fırtına; o günün gerçek bulutları](docs/images/olcek-dunya.jpg) | ![Samanyolu tepeden: ölçülmüş kollar, çubuk, toz şeritleri](docs/images/olcek-samanyolu.jpg) |
+| ![Dünya 10 bin km'den: Akdeniz, Kuzey Afrika, Arabistan, Rusya'nın üstünde büyük bir fırtına; o günlerin gerçek bulutları](docs/images/olcek-dunya.jpg) | ![Samanyolu tepeden: çubuk ve toz şeritleri, iki yıldız kolu, pembe bulutsular, yıldız kümeleri](docs/images/olcek-samanyolu.jpg) |
 |---|---|
-| ![Çandarlı'da kalenin önündeki kumsal: köpüğün ucu, ıslak ve kuru kum](docs/images/olcek-sahil.jpg) | ![Kum taneleri: elipsoit kuvars taneleri, arada koyu boşluklar](docs/images/olcek-kum.jpg) |
-| ![Kuvarsın elektron yoğunluğu haritası: parlak çekirdekli silisyumlar, yumuşak oksijenler, altıgen boşluklar](docs/images/olcek-kristal.jpg) | ![Bir silisyum atomu ve kabukları: parlak K çekirdeği, karanlık kuşak, parlak L halkası](docs/images/olcek-atom.jpg) |
-| ![Proton ve üç kuarkı, Y biçimli gluon akısıyla](docs/images/olcek-proton.jpg) | ![Çöl: kuarkın alanı, üç köşeli halkalar](docs/images/olcek-col.jpg) |
-| ![Dip: titreşen bir sicim, ortalaması kenarları parlak bir bant](docs/images/olcek-sicim.jpg) | |
+| ![Güneş sistemi: Güneş, yörüngelerinde nokta gezegenler, asteroit kuşağı, Jüpiter'in Truvalıları](docs/images/olcek-gunes-sistemi.jpg) | ![Çandarlı'da kalenin önündeki kumsal: köpüğün ucu, ıslak ve kuru kum](docs/images/olcek-sahil.jpg) |
+| ![Kum taneleri: elipsoit kuvars taneleri, arada koyu boşluklar](docs/images/olcek-kum.jpg) | ![Kuvarsın elektron yoğunluğu haritası: silisyumlar altın, oksijenler kırmızı, altıgen boşluklar](docs/images/olcek-kristal.jpg) |
+| ![Bir silisyum atomu: elektronları kabuklarının dağılımında ışık noktaları](docs/images/olcek-atom.jpg) | ![Silisyum-28 çekirdeği: 14 proton ve 14 nötron, içlerinde renk yükleriyle kuarklar](docs/images/olcek-cekirdek.jpg) |
+| ![Protonun içi: üç kuark, gluon akısı, deniz kuarkları ve gluonlar](docs/images/olcek-proton.jpg) | ![Çöl: kuarkın çevresinde her ölçekte sanal çift halkaları](docs/images/olcek-col.jpg) |
+| ![Dip: altın renkli titreşen bir sicim, çevresinde uzay-zaman köpüğünün baloncukları](docs/images/olcek-sicim.jpg) | |
 
 Ölçeğin sahnesi. Çandarlı'da (İzmir, Dikili) kalenin önündeki kumsaldan başlarsın, yalnız tekerlekle uzaklaşır ya da
 yaklaşırsın: dışarı evrenin kenarına, içeri Planck uzunluğuna. 62 onluk, kesintisiz, kesme ve solma yok. Her şey 5 Ekim
@@ -307,24 +308,30 @@ yaklaşırsın: dışarı evrenin kenarına, içeri Planck uzunluğuna. 62 onluk
   - Dünya Blue Marble, üstünde o günlerin MODIS ve VIIRS bulutları. Uydunun deniz parıltısı, VIIRS'in bulut optik
     kalınlığı ürünüyle ayıklandı;
   - tek saçılımlı hava, Ay LRO'dan;
-  - 109.400 yıldız HYG'den; Samanyolu kollarıyla ölçümlerden (Reid ve ark. 2019, uzun çubuk Wegg ve ark. 2015);
-    M31 ve M33 aynı modelle, gerçek yönelimleriyle;
+  - asteroit ve Kuiper kuşakları Minor Planet Center'ın 1,57 milyon yörüngesinden (zaman ortalamalı halkalar),
+    Jüpiter'in Truvalıları iki küme; gezegenler yörüngelerinde nokta (pozlamanın sonundaki flaş);
+  - 109.400 yıldız HYG'den; Samanyolu kollarıyla ölçümlerden (Reid ve ark. 2019, uzun çubuk Wegg ve ark. 2015),
+    görünüşü tanıdık çizime doğru (iki yıldız kolu, iki gaz kolu, kümeler ve bulutsular); M31 ve M33 aynı modelle,
+    gerçek yönelimleriyle;
   - 43.490 galaksi 2MRS'ten. Ötesi Zel'dovich yaklaşımıyla gerçek istatistikten bir kozmik ağ, bir dilim olarak
     (gigaparseklerce derinlik üst üste binince ağ sise dönüşür; her anket görseli bu yüzden bir dilimdir).
-- **Işığın altında aletin gözü:** renk ışığın dalga boyunda söner (yalnız temsil).
-  - Elektron mikroskobu gibi teraslar, atomik kuvvet mikroskobu gibi atomlar.
-  - Kristalografın yoğunluk haritası: kuvarsın gerçek elektron yoğunluğu (Clementi-Raimondi Slater yörüngeleri).
-    Atomun kabukları, yoğunluğun Laplasyeninin işaretinden (Bader), kapalı biçimde.
-  - Si-28 çekirdeği Woods-Saxon; proton ve üç kuarkı, derin esnek saçılmanın anlık görüntüsü.
-  - Kuarkın çevresinde alanının zaman ortalaması. Güçlü, zayıf ve hiperyük bağlaşımları Standart Model'in tek döngü
-    sayılarıyla ölçekle değişir; halkalar derine indikçe yuvarlaklaşır.
-  - En dipte uzay-zaman köpüğü ve kapalı bir sicim (kuram).
+- **Işığın altında temsil, sayılar gerçek:** renk ışığın dalga boyunda söner, mikroskopların gri resimleri gelir;
+  atomdan aşağısı temsili renkle parçacıklar.
+  - Elektron mikroskobu gibi teraslar, atomik kuvvet mikroskobu gibi atomlar, sonra kuvarsın yoğunluk haritası
+    (Clementi-Raimondi Slater yörüngeleri, kimyacıların renginde).
+  - Atom: elektronları, kabuklarının radyal dağılımından ışık noktaları; değerlik elektronları dört bağ boyunca (sp³).
+    İçeri girerken yıldızlar gibi yanından geçerler.
+  - Silisyum-28'in 28 nükleonu (proton sıcak, nötron soğuk), protonun üç kuarkı (renk yükleri), Y biçimli gluon akısı,
+    deniz kuarkları.
+  - Kuarkın çevresinde her ölçekte sanal çift halkaları; türleri o boydaki bağlaşımlara göre (Standart Model, tek
+    döngü), derine indikçe karışım dengelenir.
+  - En dipte uzay-zaman köpüğünün baloncukları ve altın renkli kapalı bir sicim (kuram).
 - **Zaman akıyormuş gibi:** her katmanın kendi saati var, hepsi tek kuralla (dışarı hızlanır, içeri yavaşlar). Gözün
   deklanşöründen hızlı olan ortalanır: yörünge halka olur, titreşen sicim kenarları parlak bir bant. Hiçbiri evi
   değiştirmez: sahile hep aynı öğlede, aynı ışıkta inilir.
 - **Gren ve titreme yok:** her piksel her karede aynı dört sabit örneği alır. Pikselin altına inen her şey ışığını
   koruyarak noktaya döner. Pozlama ölçeğin tasarlanmış bir işlevi, görüntüden okunmaz. Bütün yolda kare ≤ 16 ms; bir
-  sınama yolu 0,01 onluk adımla tarayıp sıçramaları ölçer.
+  sınama yolu 0,01 onluk adımla tarayıp sıçramaları ölçer; parçacıklar kimlikleriyle izlenir.
 
 Plan, kararlar, plandan ayrılanlar ve ölçümler `docs/olcek/`'te.
 

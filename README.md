@@ -298,12 +298,13 @@ and its surface was pixel-sized circles at every scale. Everything in `docs/heyk
 
 ### 7 · Scale *(Ölçek)* · October 2026
 
-| ![The Earth from 10,000 km: the Mediterranean, North Africa, Arabia, a large storm over Russia; that day's real clouds](docs/images/olcek-dunya.jpg) | ![The Milky Way from above: its measured arms, the bar, dust lanes](docs/images/olcek-samanyolu.jpg) |
+| ![The Earth from 10,000 km: the Mediterranean, North Africa, Arabia, a large storm over Russia; those days' real clouds](docs/images/olcek-dunya.jpg) | ![The Milky Way from above: the bar and its dust lanes, two stellar arms, pink nebulae, star clusters](docs/images/olcek-samanyolu.jpg) |
 |---|---|
-| ![The beach in front of the castle at Çandarlı: the swash's edge, wet and dry sand](docs/images/olcek-sahil.jpg) | ![Grains of sand: ellipsoidal quartz grains, dark gaps between them](docs/images/olcek-kum.jpg) |
-| ![The electron density map of quartz: bright-cored silicons, soft oxygens, hexagonal voids](docs/images/olcek-kristal.jpg) | ![A silicon atom and its shells: a bright K core, a dark band, a bright L ring](docs/images/olcek-atom.jpg) |
-| ![A proton and its three quarks, with a Y of gluon flux](docs/images/olcek-proton.jpg) | ![The desert: the quark's field, three-cornered rings](docs/images/olcek-col.jpg) |
-| ![The bottom: a vibrating string, its average a band with bright edges](docs/images/olcek-sicim.jpg) | |
+| ![The Solar System: the Sun, the planets as points on their orbits, the asteroid belt, Jupiter's Trojans](docs/images/olcek-gunes-sistemi.jpg) | ![The beach in front of the castle at Çandarlı: the swash's edge, wet and dry sand](docs/images/olcek-sahil.jpg) |
+| ![Grains of sand: ellipsoidal quartz grains, dark gaps between them](docs/images/olcek-kum.jpg) | ![The electron density map of quartz: silicons gold, oxygens red, hexagonal voids](docs/images/olcek-kristal.jpg) |
+| ![A silicon atom: its electrons as points of light in their shells' distribution](docs/images/olcek-atom.jpg) | ![A silicon-28 nucleus: 14 protons and 14 neutrons, quarks with their colour charges inside](docs/images/olcek-cekirdek.jpg) |
+| ![Inside the proton: three quarks, the gluon flux, sea quarks and gluons](docs/images/olcek-proton.jpg) | ![The desert: virtual pairs' loops at every scale about the quark](docs/images/olcek-col.jpg) |
+| ![The bottom: a golden vibrating string, the bubbles of spacetime foam about it](docs/images/olcek-sicim.jpg) | |
 
 The scene of scale. You start at the beach in front of the castle at Çandarlı (Izmir, Dikili) and move out or in with
 the wheel alone: out to the edge of the universe, in to the Planck length. 62 decades, without a cut or a fade.
@@ -319,24 +320,31 @@ length.
   - the Earth from Blue Marble, with those days' MODIS and VIIRS clouds on it. The satellite's glint on the sea was
     sorted out with VIIRS's cloud optical thickness product;
   - single-scattering air, the Moon from LRO;
+  - the asteroid and Kuiper belts from the Minor Planet Center's 1.57 million orbits (rings, time-averaged), Jupiter's
+    Trojans as two swarms; the planets as points on their orbits (a flash at the end of the exposure);
   - 109,400 stars from HYG; the Milky Way with its arms from measurements (Reid et al. 2019, the long bar Wegg et al.
-    2015); M31 and M33 by the same model in their true orientation;
+    2015), its look towards the familiar drawing (two stellar arms, two of gas, clusters and nebulae); M31 and M33 by
+    the same model in their true orientation;
   - 43,490 galaxies from 2MRS. Beyond them a cosmic web from the true statistics, by the Zel'dovich approximation, seen
     as a slice (gigaparsecs of depth piled up turn the web into fog, which is why every survey picture is a slice).
-- **Below the light, the instrument's eye:** colour fades at the light's wavelength (a representation only).
-  - Terraces as an electron microscope sees them, atoms as an atomic force microscope does.
-  - A crystallographer's density map: quartz's true electron density (Clementi-Raimondi Slater orbitals). The atom's
-    shells from the sign of the density's Laplacian (Bader), in closed form.
-  - The silicon-28 nucleus by Woods-Saxon; a proton and its three quarks, a deep inelastic scattering snapshot.
-  - Around the quark, its field averaged over time. The strong, weak and hypercharge couplings run with scale by the
-    Standard Model's one-loop numbers; the rings round out deeper down.
-  - At the bottom, spacetime foam and a closed string (theory).
+- **Below the light, representation with true numbers:** colour fades at the light's wavelength into the microscopes'
+  grey pictures; from the atom down, particles in a representational palette.
+  - Terraces as an electron microscope sees them, atoms as an atomic force microscope does, then quartz's density map
+    (Clementi-Raimondi Slater orbitals, in the chemists' colours).
+  - The atom: its electrons as points of light in their shells' radial distributions, the valence ones along its four
+    bonds (sp3). They stream past like stars on the way in.
+  - Silicon-28's 28 nucleons (protons warm, neutrons cold), a proton's three quarks (colour charges), the Y of gluon
+    flux, sea quarks.
+  - About the quark, virtual pairs' loops at every scale; their kinds by the couplings at that size (the Standard
+    Model, one loop), the mix evening out deeper down.
+  - At the bottom, spacetime foam's bubbles and a golden closed string (theory).
 - **Time as if it flows:** every layer keeps its own clock, all by one rule (faster outwards, slower inwards). What
   moves faster than the eye's shutter is averaged: an orbit becomes a ring, a vibrating string a band with bright edges.
   None of it changes home: you always come down to the beach at the same noon, in the same light.
 - **No grain, no flicker:** every pixel takes the same four fixed samples every frame, and whatever shrinks below a
   pixel turns into a point keeping its light. The exposure is a designed function of scale, never read from the
-  picture. Every frame of the way takes ≤ 16 ms; a test path sweeps it in steps of 0.01 decade and measures the jumps.
+  picture. Every frame of the way takes ≤ 16 ms; a test path sweeps it in steps of 0.01 decade and measures the jumps,
+  the particles followed by their identities.
 
 Plan, decisions, departures from the plan and measurements in `docs/olcek/` (Turkish).
 

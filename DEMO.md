@@ -162,11 +162,12 @@ the screen's width.
 **Try:**
 - Move out from the beach slowly: the beach in front of the castle (Sentinel-2), the Bay of Çandarlı, the Aegean, the
   Earth with today's clouds.
-- From the Earth to the Sun: the planets become rings. See the Milky Way from above, then Andromeda. Furthest out, 2MRS's
-  real galaxies and the cosmic web.
-- Back to the beach with R, and in: grains of sand, the crystal's steps, the atoms' honeycomb. Then a crystallographer's
-  map: the atom's shells, the nucleus a dot in the middle of the empty atom, a proton and its three quarks.
-- Further in. In the desert the quark's field, its rings rounding out deeper down (the three forces converge). At the
-  bottom foam and a vibrating string.
+- From the Earth to the Sun: the planets as points on their orbits, the asteroid belt, Jupiter's Trojans, the Kuiper
+  belt. See the Milky Way from above, then Andromeda. Furthest out, 2MRS's real galaxies and the cosmic web.
+- Back to the beach with R, and in: grains of sand, the crystal's steps, the atoms' honeycomb, the crystal's density
+  map. Then the atom's electrons (they stream past), the nucleus's 28 nucleons in the empty atom, a proton and its
+  three quarks.
+- Further in: virtual pairs' loops at every scale about the quark (the colour mix follows the forces' strengths). At
+  the bottom foam bubbles and a golden string.
 
 Plan and status in `docs/olcek/` (Turkish). Settings `scenes/olcek.cfg` (F5).

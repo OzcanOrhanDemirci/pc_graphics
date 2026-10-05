@@ -151,11 +151,11 @@ ama hiçbir şeyi değiştirmez: sahile hep aynı öğlede dönülür. Sağ üst
 
 **Dene:**
 - Sahilden yavaşça uzaklaş. Kalenin önündeki kumsal (Sentinel-2), Çandarlı Körfezi, Ege, bugünün bulutlarıyla Dünya.
-- Dünya'dan Güneş'e geç: gezegenler halkaya döner. Samanyolu'nu tepeden gör, sonra Andromeda'yı. En dışta 2MRS'in gerçek
-  galaksileri ve kozmik ağ.
-- R ile sahile dön ve içeri in. Kum taneleri, kristal basamakları, atomların peteği. Sonra kristalografi haritası:
-  atomun kabukları, boş atomun ortasında nokta gibi çekirdek, proton ve üç kuarkı.
-- Daha da in. Çölde kuarkın alanı, halkaları derine indikçe yuvarlaklaşır (üç kuvvet yaklaşır). En dipte köpük ve
-  titreşen bir sicim.
+- Dünya'dan Güneş'e geç: gezegenler yörüngelerinde birer nokta, asteroit kuşağı, Jüpiter'in Truvalıları, Kuiper
+  kuşağı. Samanyolu'nu tepeden gör, sonra Andromeda'yı. En dışta 2MRS'in gerçek galaksileri ve kozmik ağ.
+- R ile sahile dön ve içeri in. Kum taneleri, kristal basamakları, atomların peteği, kristalin yoğunluk haritası.
+  Sonra atomun elektronları (yanından geçerler), boş atomun ortasında çekirdeğin 28 nükleonu, proton ve üç kuarkı.
+- Daha da in. Kuarkın çevresinde her ölçekte sanal çift halkaları (renk karışımı kuvvetlerin şiddetini izler). En
+  dipte köpük baloncukları ve altın renkli bir sicim.
 
 Plan ve durum `docs/olcek/`. Ayarlar `scenes/olcek.cfg` (F5 ile).

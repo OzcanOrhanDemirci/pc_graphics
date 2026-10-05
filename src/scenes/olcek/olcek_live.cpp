@@ -48,24 +48,26 @@ public:
                "nothing: every way home ends at the same noon.")},
             {L("Işık olan yerde gerçek veri", "Where there is light, real data"),
              L("Kalenin önündeki kumsal Sentinel-2'den (10 m), kıyı çizgisi oradan; Dünya Blue Marble, üstünde o günlerin "
-               "MODIS ve VIIRS bulutları (deniz parıltısı bulut ürünüyle ayıklanmış). Ay LRO'dan. 109.400 yıldız HYG'den, "
+               "MODIS ve VIIRS bulutları (deniz parıltısı bulut ürünüyle ayıklanmış). Ay LRO'dan. Asteroit ve Kuiper "
+               "kuşakları Minor Planet Center'ın 1,57 milyon yörüngesinden. 109.400 yıldız HYG'den, "
                "Samanyolu'nun kolları ölçümlerden (Reid 2019), M31 ve M33 gerçek yönelimleriyle, 43.490 galaksi 2MRS'ten; "
                "ötesi kozmik ağın gerçek istatistiği, bir dilim olarak.",
                "The beach in front of the castle from Sentinel-2 (10 m), the shoreline from it; the Earth from Blue Marble, "
                "with those days' MODIS and VIIRS clouds on it (the sea's glint sorted out by a cloud product). The Moon from "
-               "LRO. 109,400 stars from HYG, the Milky Way's arms from measurements (Reid 2019), M31 and M33 in their true "
-               "orientation, 43,490 galaxies from 2MRS; beyond them the cosmic web's true statistics, as a slice.")},
+               "LRO. The asteroid and Kuiper belts from the Minor Planet Center's 1.57 million orbits. 109,400 stars from "
+               "HYG, the Milky Way's arms from measurements (Reid 2019), M31 and M33 in their true orientation, 43,490 "
+               "galaxies from 2MRS; beyond them the cosmic web's true statistics, as a slice.")},
             {L("Işığın altında", "Below the light"),
-             L("Renk ışığın dalga boyunda söner; altı o ölçeği gören aletin gözüyle çizilir. Elektron mikroskobu gibi "
-               "teraslar, atomik kuvvet mikroskobu gibi atomlar, sonra kristalografın yoğunluk haritası: silisyum ve "
-               "oksijenlerin gerçek elektron yoğunluğu, atomun kabukları (yoğunluğun Laplasyeni), Woods-Saxon çekirdek, "
-               "proton ve üç kuarkı. Kuarkın çevresinde üç kuvvet ölçekle değişen gerçek şiddetleriyle; en dipte "
-               "uzay-zaman köpüğü ve bir sicim (kuram).",
-               "Colour fades at the light's wavelength; below, the world is drawn as the instrument of each scale sees it. "
-               "Terraces as an electron microscope sees them, atoms as an atomic force microscope does, then a "
-               "crystallographer's density map: the true electron density of silicon and oxygen, the atom's shells (the "
-               "density's Laplacian), a Woods-Saxon nucleus, a proton and its three quarks. Around the quark the three forces "
-               "with their true strengths, running with scale; at the bottom spacetime foam and a string (theory).")},
+             L("Renk ışığın dalga boyunda söner, mikroskopların gri resimleri gelir; atomdan aşağısı temsili renkle "
+               "parçacıklar, sayılar gerçek. Elektronlar kabuklarının dağılımında ışık noktaları (içeri girerken yanından "
+               "geçerler), çekirdeğin 28 nükleonu, protonun renk yüklü üç kuarkı ve gluon akısı, kuarkın çevresinde her "
+               "ölçekte sanal çift halkaları (türleri kuvvetlerin o boydaki şiddetine göre), en dipte köpük ve bir sicim "
+               "(kuram).",
+               "Colour fades at the light's wavelength into the microscopes' grey pictures; from the atom down, particles "
+               "in a representational palette, the numbers true. Electrons as points of light in their shells' "
+               "distributions (they stream past on the way in), the nucleus's 28 nucleons, the proton's three coloured "
+               "quarks and their gluon flux, virtual pairs' loops at every scale about the quark (their kinds by the "
+               "forces' strengths at that size), at the bottom foam and a string (theory).")},
             {L("Görüntü", "The picture"),
              L("Her piksel her karede aynı dört sabit örneği alır: gren yok, titreme yok. Pikselin altına inen bir cisim ışığını "
                "koruyarak noktaya döner; gözün kapağından hızlı dönen bir yörünge halkaya, hızlı titreşen bir sicim kenarları "
