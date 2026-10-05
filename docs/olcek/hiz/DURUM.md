@@ -123,7 +123,9 @@ Hepsi düzeltildi:
 - Planck eğrisi yayımlanan kromatikliklerle (1.000 K: 0,6528 / 0,3445). D³B(ν/D, T) = B(ν, DT): 9e-16.
   Çok sıcakta görünür pay T⁻³.
 - Kayıt dosyası bit bit geri gelir, aynı sürer.
-- Ölçek'in sınamaları değişmedi: `olcek-hassasiyet` en kötü 9,5e-5 piksel, `olcek-zaman` GEÇTİ.
+- Ölçek'in sınamaları değişmedi: `olcek-hassasiyet` en kötü 9,5e-5 piksel, `olcek-zaman` GEÇTİ, `olcek-sure` kabul
+  edilmiş taramayla (`captures/olcek/sure_r2.txt`) sıçrama ve parçacık sayılarında birebir aynı, en uzun kare 15,78 ms
+  (bütçe 16; referans 15,71). `readme2`'nin 8 karesi bit bit aynı.
 
 ### Kareler ve canlı yol
 - Komut satırı: `--headless --hiz --phi 0,2,5,12,24.5237 [--ayak 1 --yer 0.5 --yan 12,16]` → `captures/olcek_hiz/`.
