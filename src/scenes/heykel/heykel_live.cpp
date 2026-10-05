@@ -59,12 +59,12 @@ public:
                "point's orbit is computed in double precision on the processor, every pixel follows it as a small difference. The "
                "measured error at ten thousand times: three thousandths of a pixel.")},
             {L("Işık", "Light"),
-             L("Bir spot, kameranın arkasında hafif bir dolgu ve tavandan sönük bir ışık. Spot sen yaklaştıkça seninle yaklaşır, "
-               "yolu kapalıysa yakında açık bir açı arar. Hareket sürerken yumuşak bir önizleme; durunca yol izleme birikir: "
-               "spotun gerçek gölgesi, oyuklara seke seke giren ışık.",
-               "A spot, a faint fill behind the camera and a dim light from the ceiling. The spot comes closer as you do, and if "
-               "its way is blocked it looks for an open angle nearby. While anything moves, a soft preview; still, path tracing "
-               "accumulates: the spot's true shadow, light bouncing into the hollows.")}};
+             L("Bir spot, merceğin üstünde hafif bir halka ışık ve tavandan sönük bir ışık. Spot sen yaklaştıkça seninle yaklaşır, "
+               "yolu kapalıysa yakında açık bir açı arar. Rastgele sayı yok: her piksel her karede aynı sabit örnekleri alır, "
+               "durunca yenileri eklenir (kenarlar, spotun yarı gölgesi), hiç gren olmaz.",
+               "A spot, a faint ring light on the lens and a dim light from the ceiling. The spot comes closer as you do, and if "
+               "its way is blocked it looks for an open angle nearby. No random numbers: every pixel takes the same fixed samples "
+               "every frame, still it adds more of them (the edges, the spot's penumbra), never grain.")}};
         i.tags = {L("Geometri", "Geometry"), L("Fraktal", "Fractal"), L("10.000 kat", "10,000 times")};
         i.image = "assets/gallery/heykel.jpg";
         i.accent = 0x9D8CE0;
@@ -103,7 +103,8 @@ public:
             return;
         default:
             cudaMallocHost(reinterpret_cast<void**>(&pinned_), size_t(h_.width) * h_.height * sizeof(uchar4));
-            h_.renderPreview();
+            h_.resetSamples();
+            h_.addSamples(1);
             h_.resolve();
             st.fraction = 1.0f;
             st.done = true;
@@ -214,21 +215,22 @@ public:
         leftWas_ = in.leftDown;
 
         if (changed) {
-            h_.renderPreview();
+            // the picture again from sample 0, as many of the fixed pattern's samples as fit in ~25 ms (at least one,
+            // the whole picture: a moving view never shows a half-made frame)
+            h_.resetSamples();
+            const int n = h_.sampleMs > 0.0f ? std::clamp(int(25.0f / h_.sampleMs), 1, 4) : 1;
+            h_.addSamples(n);
             h_.resolve();
             phase_ = 0;
         } else if (h_.samples < maxSamples_) {
             // still: as many samples as fit in ~35 ms; a sample slower than that is spread over several frames by rows
-            if (phase_ == 0) stripes_ = h_.pathMs > 0.0f ? std::clamp(int(std::ceil(h_.pathMs / 35.0f)), 1, 24) : 4;
+            if (phase_ == 0) stripes_ = h_.sampleMs > 0.0f ? std::clamp(int(std::ceil(h_.sampleMs / 35.0f)), 1, 24) : 1;
             if (stripes_ == 1) {
-                const int spp = std::clamp(int(35.0f / std::max(h_.pathMs, 0.1f)), 1, 16);
-                h_.accumulate(std::min(spp, maxSamples_ - h_.samples));
+                const int spp = std::clamp(int(35.0f / std::max(h_.sampleMs, 0.1f)), 1, 16);
+                h_.addSamples(std::min(spp, maxSamples_ - h_.samples));
             } else {
-                h_.pathPass(1, phase_, stripes_);
-                if (++phase_ == stripes_) {
-                    phase_ = 0;
-                    ++h_.samples;
-                }
+                h_.addSamples(1, phase_, stripes_);
+                if (++phase_ == stripes_) phase_ = 0;
             }
             h_.resolve();
         } else if (toneOnly) {
@@ -261,8 +263,7 @@ public:
             s.metrics.push_back({L("Ekranın genişliği", "The screen's width"), w});
         }
         s.metrics.push_back({L("Örnek", "Samples"), std::to_string(h_.samples)});
-        s.metrics.push_back({L("Önizleme", "Preview"), num(h_.previewMs, 1) + " ms"});
-        s.metrics.push_back({L("Yol izleme", "Path tracing"), num(h_.pathMs, 1) + L(" ms/örnek", " ms/sample")});
+        s.metrics.push_back({L("Bir örnek", "One sample"), num(h_.sampleMs, 1) + " ms"});
         app::Control c;
         c.kind = app::Control::Kind::Button;
         c.id = "tur";
@@ -293,7 +294,8 @@ public:
         h_.setCandidate(cathedral());
         pending_ = 0.0f;
         tour_ = false;
-        h_.renderPreview();
+        h_.resetSamples();
+        h_.addSamples(1);
         h_.resolve();
         host.toast(L("Ayarlar yeniden yüklendi", "Settings reloaded"));
     }
@@ -333,11 +335,11 @@ private:
         const D3 q = kDives[dive_];
         if (holding_) {   // let the picture settle: a while, and enough samples
             hold_ += dt;
-            // measured at 2560x1440 (DURUM): the first view is clean in half a second; at 1,000 and 10,000 times 128
-            // samples take 10-17 s and leave 2-4% of the pixels more than 8 grey levels off the converged picture
-            const float maxHolds[] = {2.5f, 5.0f, 8.0f, 12.0f, 12.0f};   // home, 10, 100, 1,000, 10,000 times
-            const float minHold = stop_ < 0 ? 2.5f : 3.0f, maxHold = maxHolds[stop_ + 1];
-            if (hold_ < minHold || (hold_ < maxHold && h_.samples < 128)) return false;
+            // deterministic: no grain to wait out, only the edges and the penumbra to settle (64 of the fixed samples;
+            // at 10,000 times ~45 ms each at 2560x1440)
+            const float maxHolds[] = {2.5f, 3.0f, 3.5f, 4.5f, 4.5f};   // home, 10, 100, 1,000, 10,000 times
+            const float minHold = 2.5f, maxHold = maxHolds[stop_ + 1];
+            if (hold_ < minHold || (hold_ < maxHold && h_.samples < 64)) return false;
             holding_ = false;
             if (stop_ == kStopCount - 1) {   // the bottom: back out
                 out_ = true;
@@ -376,7 +378,7 @@ private:
     D3 zoomQ_{0, 0, 0};
     bool leftWas_ = false, dragging_ = false, pressInView_ = false;
     float pressX_ = 0.0f, pressY_ = 0.0f;
-    int maxSamples_ = 1024;
+    int maxSamples_ = 128;          // the fixed pattern: edges and the lamp's penumbra are smooth by then
     int stripes_ = 4, phase_ = 0;    // a slow sample spread over frames: rows y = phase (mod stripes) this frame
     // the tour
     bool tour_ = false, holding_ = false, out_ = false;

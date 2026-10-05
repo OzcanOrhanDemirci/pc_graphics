@@ -72,14 +72,11 @@ struct HeykelApp {
     hk::KStep* devSteps = nullptr;
 
     // GPU
-    float4* preview = nullptr;
-    float4* accum = nullptr;
-    float* accY2 = nullptr;          // the samples' squared luminance, summed (adaptive sampling)
+    float4* accum = nullptr;         // rgb weighted, w the weights (the fixed pattern's samples)
     uchar4* output = nullptr;
-    int samples = 0;                 // accumulated a pixel
-    bool dof = true;                 // the macro lens's depth of field (path tracer only; the preview is a pinhole)
-    int previewRays = 4;             // the preview's rays a preview pixel (renderPreview halves or doubles them by its time)
-    float previewMs = 0.0f, pathMs = 0.0f;   // the last preview; a whole sample a pixel of the path tracer
+    int samples = 0;                 // the pattern's samples in accum
+    bool dof = false;                // the macro lens's depth of field (off: Özcan wants it sharp)
+    float sampleMs = 0.0f;           // one sample over the whole picture, measured
 
     void loadConfig();
     void buildCandidates();
@@ -96,7 +93,8 @@ struct HeykelApp {
     float zoomCap() const { return deep() ? maxLevel : std::min(maxLevel, cfg.f("zoom.max.float", 1000.0f)); }
     float zoomCapAt(D3 q) const;     // and at a point (flat cut faces and the plinth: shallow)
     double deHost(D3 p) const;       // the scene's estimate at a world point, in doubles where it matters (picking)
-    int itersNow() const;            // the formula's iterations at this zoom (the GPU and the picks alike)
+    int itersNow() const;            // the anchor orbit's length at this zoom (enough for the nearest points)
+    void setLod(hk::World& w) const; // the pixel rule for the iterations, point by point (hk::itersAt)
 
     bool pick(float px, float py, D3& hit, float3* normal = nullptr) const;   // render pixels
     void zoomAbout(D3 q, float logAmount);       // > 0 in; the point q stays where it is on the screen
@@ -110,9 +108,8 @@ struct HeykelApp {
     void settleLight();                          // the zoom stopped: the lamp onto the focus, a clear line
     void keepLampClear();                        // while zooming: a ray a frame; blocked, the nearest clear direction
 
-    void renderPreview();            // and resets the accumulation
-    void accumulate(int spp);
-    void pathPass(int spp, int stripe, int stripes);   // one part of a sample (rows y = stripe mod stripes); pathMs a whole one
+    void resetSamples();             // something changed: the picture starts again from sample 0
+    void addSamples(int count, int stripe = 0, int stripes = 1);   // the next samples (rows y = stripe mod stripes)
     void resolve();
     void save(const std::string& prefix);
 };

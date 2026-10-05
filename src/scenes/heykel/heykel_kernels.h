@@ -1,7 +1,9 @@
-// Scene 6 "Heykel": the CUDA kernels. A frame is either a preview (moving: one ray a pixel through its centre, direct
-// light with an estimated soft shadow and occlusion, no noise) or samples of a path tracer that accumulate while
-// everything is still (the area light's true shadow, light bouncing into the hollows, sub-pixel samples); the
-// resolve blends the preview into the accumulation over the first samples and tone maps.
+// Scene 6 "Heykel": the CUDA kernels. Deterministic, as scene 5's are: no random numbers anywhere. A sample index s is
+// the same sub-pixel position and the same point on the lamp's disc (and on the lens) for every pixel, every frame:
+// a still view is the same picture bit for bit, a moving light changes the shading smoothly, and while the view is
+// still the samples add only what more of them can add (edges, the penumbra), never grain. Sample 0 is the pixel's
+// centre and the lamp's centre. Özcan 2026-10-05: "görüntüyü taneciksiz [...] ve pır pırsız yapman. Ada da 1 er örnekle
+// bile bunu başarmıştın" (the path tracer's grain and its restart on every change made the geometry unreadable).
 #pragma once
 #include "scenes/heykel/heykel_de.h"
 
@@ -23,38 +25,30 @@ struct HeykelView {   // one frame's world, camera and light, by value to the ke
     float pixAngle = 0.0f;        // 2 tanHalf / height: a pixel's angle
     float detail = 0.5f;          // the surface threshold, in pixels
     int maxSteps = 400;           // the camera's rays
-    int maxSteps2 = 200;          // the shadow and bounce rays (out of steps near something: a hit, dark)
-    float shadowSlope = 2.0f, bounceSlope = 4.0f;   // their thresholds, times the camera's (they need no pixel's precision)
-    float filterSigma = 0.45f;    // the reconstruction's Gaussian, pixels
+    int maxSteps2 = 200;          // the shadow rays (out of steps near something: a hit, dark)
+    float shadowSlope = 2.0f;     // their threshold, times the camera's
+    float shadowReach = 1e30f;    // how far the lamp's shadow ray looks for an occluder (m; the view scales it)
+    int softKey = 1;              // the lamp's shadow: 1 estimated (smooth as it moves), 0 traced from the disc's points
+    float normalScale = 1.0f;     // the normal's differences, times the surface threshold (wider: calmer shading)
+    float filterRadius = 1.5f;    // the reconstruction: Blackman-Harris over this many pixels (scene 5's)
     float aperture = 0.0f, focusDist = 1.0f;   // the lens's radius (m; 0: a pinhole) and its focus along the view
     float tmax = 30.0f;
-    // 0 the key: a spot pointed at what was clicked; 1 unused (off)
-    HeykelLight light[2];
+    HeykelLight key;              // the spot pointed at what was clicked
     // the eye light: a ring light on the lens. Every point the camera sees sees it, so it casts no shadow the camera
-    // could see and needs no shadow ray: the same in the preview and in the path tracer, without noise. Its fall with
-    // distance softened near the lens (an art setting, by name): E = eyeE (d² + c²) / (r² + c²), d the focus's distance
+    // could see and needs no shadow ray. Its fall with distance softened near the lens (an art setting, by name):
+    // E = eyeE (d² + c²) / (r² + c²), d the focus's distance
     float3 eyePos{0, 0, 0}, eyeColor{1, 1, 1};
     float eyeE = 0.0f, eyeD = 1.0f, eyeC = 0.5f;
-    // the fill: a dim dome, brighter above
+    // the room: a dim light from high above; ambient: what the white surfaces throw at each other, by the occlusion
     float fillLe = 0.02f;
     float3 fillColor{1, 1, 1};
+    float ambient = 0.0f;
     float3 albedo[3] = {{0.8f, 0.8f, 0.8f}, {0.2f, 0.2f, 0.2f}, {0.04f, 0.04f, 0.04f}};   // sculpture, plinth, floor
     float exposure = 1.0f;
-    int previewRays = 4;          // rays a preview pixel (1, 2 or 4: fewer when it is slow, deep in the lattice)
-    float previewGain = 1.2f;     // the preview against the accumulation (interreflection it lacks; --spp 0 vs 512)
-    // adaptive sampling: after adaptMin samples a pixel stops when its mean's standard error is below adaptRel of the
-    // mean (or adaptAbs); accY2 holds the sum of the samples' squared luminance
-    float adaptMin = 32.0f, adaptRel = 0.012f, adaptAbs = 0.0015f;
-    int sample = 0;               // the accumulation's first sample index this frame
-    int bounces = 2;
 };
 
-// the preview: half resolution ((w+1)/2 x (h+1)/2), four rays a preview pixel, linear colour
-void heykelPreview(const HeykelView& v, float4* preview, cudaStream_t s);
-// adds `samples` path-traced samples a pixel to accum (w counts them), on the rows y = stripe (mod stripes) only (a
-// sample too slow for one frame is spread over several)
-void heykelPath(const HeykelView& v, float4* accum, float* accY2, int samples, int stripe, int stripes, cudaStream_t s);
-// the picture: the preview blended into the accumulation's mean, exposure, AgX, sRGB, a fixed dither
-void heykelResolve(const HeykelView& v, const float4* preview, const float4* accum, uchar4* out, cudaStream_t s);
-// the mean of accum into a linear float RGBA image (for EXR and measurements)
-void heykelLinear(const HeykelView& v, const float4* preview, const float4* accum, float4* out, cudaStream_t s);
+// adds samples s = first .. first+count-1 (the fixed pattern) to accum (rgb weighted, w the weights), on the rows
+// y = stripe (mod stripes) only (a sample too slow for one frame is spread over several)
+void heykelSamples(const HeykelView& v, float4* accum, int first, int count, int stripe, int stripes, cudaStream_t s);
+// the picture: accum's weighted mean, exposure, AgX, sRGB, a fixed dither
+void heykelResolve(const HeykelView& v, const float4* accum, uchar4* out, cudaStream_t s);

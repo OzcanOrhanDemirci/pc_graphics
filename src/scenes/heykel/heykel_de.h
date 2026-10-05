@@ -52,6 +52,7 @@ struct KStep {          // the anchor, one iteration
     float r2, r2m;         // |Af|² and |Af|² - size
     float size;            // this iteration's inversion size
     int bx, by, bz;        // the anchor's fold branch per axis: -1, 0, 1
+    float3 An;             // the anchor after this iteration (where a point that stops here ends)
 };
 
 struct World {
@@ -69,7 +70,20 @@ struct World {
     float3 cutRel{0, 0, 0}, cutSign{1, 1, 1};   // |A0| - the cut box's half size, sign(A0), per axis
     const KStep* st = nullptr;      // the orbit: n steps (device memory for the kernels, host memory for the host's
                                     // own estimates; a kernel parameter array indexed in a loop spills to local memory)
+    // The pixel rule for the formula, point by point (Kleinian): a point r from the camera takes
+    // lodBase + lodK log10(lodRef / r) iterations, the fraction blended between two counts (no seam, no popping). A
+    // pixel's footprint grows with r, so the far layers get no lace finer than a pixel: calmer, and cheaper.
+    int lod = 0;
+    float3 camRel{0, 0, 0};         // the camera, as an offset from the anchor
+    float lodRef = 1.0f, lodK = 2.0f, lodBase = 10.0f, lodMin = 6.0f;
 };
+
+// the iterations a point o (offset from the anchor) takes: its distance from the camera, by the pixel rule
+HD float itersAt(float3 o, const World& w, int most) {
+    const float3 d = o - w.camRel;
+    const float r = fmaxf(sqrtf(dot(d, d)), 1e-20f);
+    return clampf(w.lodBase + w.lodK * log10f(w.lodRef / r), w.lodMin, float(most) - 1.001f);
+}
 
 HD float fractf(float x) { return x - floorf(x); }
 HD float sdBox(float3 p, float3 h) {
@@ -141,6 +155,28 @@ HD float deKleinian(float3 p, const Shape& s) {
     }
     const float rxy = sqrtf(p.x * p.x + p.y * p.y);
     return fmaxf(rxy - s.b, fabsf(rxy * p.z) / length(p)) / df;
+}
+
+// the Kleinian's end: the thin disc the last iteration leaves, over the scale the iterations gathered
+HD float kleinianEnd(float3 z, float df, const Shape& s) {
+    const float rxy = sqrtf(z.x * z.x + z.y * z.y);
+    return fmaxf(rxy - s.b, fabsf(rxy * z.z) / length(z)) / df;
+}
+
+// the same, stopped after mf iterations (fractional: blended between floor and floor + 1)
+HD float deKleinianLod(float3 p, const Shape& s, float mf) {
+    const int m0 = int(mf);
+    const float f = mf - float(m0);
+    float df = 1.0f, d0 = 0.0f;
+    for (int i = 0; i <= m0; ++i) {
+        if (i == m0) d0 = kleinianEnd(p, df, s);
+        const float3 c = i < s.split ? s.k : s.k2;
+        p = make_float3(2.0f * clampf(p.x, -c.x, c.x) - p.x, 2.0f * clampf(p.y, -c.y, c.y) - p.y, 2.0f * clampf(p.z, -c.z, c.z) - p.z);
+        const float k = fmaxf((i < s.split ? s.a : s.a2) / dot(p, p), 1.0f);
+        p *= k;
+        df *= k;
+    }
+    return d0 + (kleinianEnd(p, df, s) - d0) * f;
 }
 
 // Apollonian packing (after Inigo Quilez): a lattice of sphere inversions, a its strength
@@ -234,12 +270,16 @@ HD float foldDelta(float d, float toPos, float toNeg, int bA) {
     return (bp == 1 ? 2.0f : -2.0f) * (toPos - toNeg) - d;   // the opposite sides: 4C - d or -4C - d
 }
 
-// the pseudo-Kleinian by perturbation around the anchor (fractal units in, fractal units out)
-HD float deKleinianPert(float3 d, const World& w) {
+// the pseudo-Kleinian by perturbation around the anchor (fractal units in, fractal units out), stopped after mf
+// iterations (fractional, as deKleinianLod)
+HD float deKleinianPert(float3 d, const World& w, float mf) {
     const Shape& s = w.s;
-    float df = 1.0f;
-    for (int i = 0; i < w.n; ++i) {
+    const int m0 = int(mf);
+    const float f = mf - float(m0);
+    float df = 1.0f, d0 = 0.0f;
+    for (int i = 0; i <= m0; ++i) {
         const KStep& k = w.st[i];
+        if (i == m0) d0 = kleinianEnd((i == 0 ? w.A0 : w.st[i - 1].An) + d, df, s);
         d = make_float3(foldDelta(d.x, k.toPos.x, k.toNeg.x, k.bx), foldDelta(d.y, k.toPos.y, k.toNeg.y, k.by),
                         foldDelta(d.z, k.toPos.z, k.toNeg.z, k.bz));
         const float ad = 2.0f * dot(k.Af, d) + dot(d, d);   // |z|² - |Af|²
@@ -253,9 +293,7 @@ HD float deKleinianPert(float3 d, const World& w) {
         d = d * kz + k.Af * dk;
         df *= kz;
     }
-    const float3 z = w.AN + d;
-    const float rxy = sqrtf(z.x * z.x + z.y * z.y);
-    return fmaxf(rxy - s.b, fabsf(rxy * z.z) / length(z)) / df;
+    return d0 + (kleinianEnd(w.st[m0].An + d, df, s) - d0) * f;
 }
 
 // the sculpture: o is an offset from the frame's anchor (metres); outside its bounding sphere the sphere is the
@@ -270,7 +308,7 @@ HD float deSculpture(float3 o, const World& w) {
         d = bd;
     } else if (w.pert) {
         const float3 d0 = mul(s.orient, o) * (1.0f / s.scale);   // from the anchor, fractal units
-        d = deKleinianPert(d0, w);
+        d = deKleinianPert(d0, w, w.lod ? itersAt(o, w, w.n) : float(w.n) - 1.001f);
         if (s.cut == 2) {   // the box, near a face from |A0| - h exactly
             float3 c;
             c.x = fabsf(w.A0.x) > 0.5f * s.cutSize.x ? w.cutRel.x + w.cutSign.x * d0.x : fabsf(w.A0.x + d0.x) - s.cutSize.x;
@@ -278,6 +316,11 @@ HD float deSculpture(float3 o, const World& w) {
             c.z = fabsf(w.A0.z) > 0.5f * s.cutSize.z ? w.cutRel.z + w.cutSign.z * d0.z : fabsf(w.A0.z + d0.z) - s.cutSize.z;
             d = fmaxf(d, length(fmaxf3(c, make_float3(0, 0, 0))) + fminf(fmaxf(c.x, fmaxf(c.y, c.z)), 0.0f));
         }
+        d *= s.scale;
+    } else if (w.lod && s.fractal == kKleinian) {
+        const float3 pf = mul(s.orient, q) * (1.0f / s.scale);
+        d = deKleinianLod(pf, s, itersAt(o, w, kMaxSteps));
+        if (s.cut == 2) d = fmaxf(d, sdBox(pf, s.cutSize));
         d *= s.scale;
     } else {
         d = deFractal(mul(s.orient, q) * (1.0f / s.scale), s) * s.scale;

@@ -1,4 +1,4 @@
-// Scene 6 "Heykel": preview, path tracer and resolve (see heykel_kernels.h).
+// Scene 6 "Heykel": the deterministic renderer and the resolve (see heykel_kernels.h).
 #include "scenes/heykel/heykel_kernels.h"
 #include "shared/display.h"
 
@@ -11,24 +11,13 @@ __device__ __forceinline__ unsigned int pcgHash(unsigned int v) {
     const unsigned int word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
     return (word >> 22u) ^ word;
 }
-// The path's random numbers: a Kronecker (Weyl) sequence per dimension, the fractional parts of the square roots of
-// the primes as the steps, each pixel's dimensions shifted by a hash (Cranley-Patterson). Low discrepancy along the
-// samples of one pixel: the soft shadow and the bounces settle several times faster than with independent numbers.
-__constant__ float kAlpha[32] = {
-    0.41421356f, 0.73205081f, 0.23606798f, 0.64575131f, 0.31662479f, 0.60555128f, 0.12310563f, 0.35889894f,
-    0.79583152f, 0.38516481f, 0.56776436f, 0.08276253f, 0.40312424f, 0.55743852f, 0.85565460f, 0.28010989f,
-    0.68114574f, 0.81024968f, 0.18535277f, 0.42614977f, 0.54400375f, 0.88819442f, 0.11043153f, 0.43398113f,
-    0.84885503f, 0.04987562f, 0.14889157f, 0.34408043f, 0.44030651f, 0.63014581f, 0.26942767f, 0.44552314f};
-struct Rng {
-    unsigned int pix;
-    int k, dim = 0;
-    __device__ float next() {
-        const float off = float(pcgHash(pix * 32u + unsigned(dim) + 0x9e3779b9u) >> 8) * (1.0f / 16777216.0f);
-        const float a = kAlpha[dim & 31];
-        ++dim;
-        return fractf(off + a * float(k & 0xFFFFF));
-    }
-};
+
+// The fixed pattern: the R4 sequence (Roberts' generalised golden ratio, d = 4), the same for every pixel. Dimensions
+// 0-1 the sub-pixel position, 2-3 the point on the lamp's disc and on the lens. Sample 0 is the centre of all three.
+__device__ __forceinline__ float r4(int s, int dim) {
+    const float a[4] = {0.8566748838545029f, 0.7338918566271260f, 0.6287067210378086f, 0.5385972572236101f};
+    return fractf(0.5f + a[dim] * float(s));
+}
 
 __device__ __forceinline__ float3 rayDir(const HeykelView& v, float px, float py) {
     const float aspect = float(v.width) / float(v.height);
@@ -47,7 +36,8 @@ __device__ __forceinline__ float spotOf(const HeykelLight& l, float3 fromLight) 
     return l.coneOuter < -1.0f ? 1.0f : smoothstepf(l.coneOuter, l.coneInner, dot(fromLight, l.axis));
 }
 
-// soft shadow estimate from the distances along the ray (Quilez): k ~ the light's distance over its radius
+// soft shadow estimate from the distances along the ray (Quilez): k ~ the light's distance over its radius. Used only
+// for the room's faint light from above (wide, soft); the lamp's shadow is traced.
 __device__ float softShadow(const HeykelView& v, float3 ro, float3 rd, float tmax, float eps0, float slope, float k) {
     float res = 1.0f, t = eps0 * 2.0f, ph = 1e20f;
     for (int i = 0; i < 160; ++i) {
@@ -86,203 +76,101 @@ __device__ __forceinline__ float3 eyeLight(const HeykelView& v, float3 p, float3
     return v.eyeColor * (v.eyeE * (v.eyeD * v.eyeD + c2) / (r2 + c2) * fmaxf(dot(n, L), 0.0f));
 }
 
-__device__ float3 shadePreview(const HeykelView& v, float3 p, float3 n, int id, float eps, float t) {
+// One sample's shading, no randomness: the lamp seen from a fixed point of its disc (this sample's), traced; the eye
+// light; the room's light from above by the occlusion and how open the point is upwards; ambient by the occlusion.
+__device__ float3 shade(const HeykelView& v, float3 p, float3 n, int id, float eps, float t, int s) {
     const float3 alb = v.albedo[id < 0 ? 0 : id];
     float3 direct = make_float3(0, 0, 0);
-    for (int li = 0; li < 2; ++li) {
-        const HeykelLight& l = v.light[li];
-        if (l.le <= 0.0f) continue;
-        float3 L = l.pos - p;
+    const HeykelLight& l = v.key;
+    if (l.le > 0.0f) {
+        // the disc's point: uniform in area, in the plane across the lamp's axis (the same basis for every pixel)
+        float3 t1, t2;
+        makeBasis(l.axis, t1, t2);
+        const float rr = s == 0 ? 0.0f : l.r * sqrtf(r4(s, 2)), ph = 6.2831853f * r4(s, 3);
+        const float3 lp = l.pos + (t1 * cosf(ph) + t2 * sinf(ph)) * rr;
+        float3 L = lp - p;
         const float dist = length(L);
         L = L * (1.0f / dist);
         const float cosT = dot(n, L);
-        if (cosT <= 0.0f) continue;
         const float spot = spotOf(l, -L);
-        if (spot <= 0.0f) continue;
-        const float E = l.le * M_PIf * (l.r * l.r) / (dist * dist) * cosT * spot;
-        const float sh = softShadow(v, p + n * (eps * 2.0f), L, dist - l.r, eps, v.pixAngle * v.detail * 2.0f, dist / l.r);
-        direct += l.color * (E * sh);
+        if (cosT > 0.0f && spot > 0.0f) {
+            float vis;
+            if (v.softKey) {   // the penumbra estimated from the distances along one ray to the lamp's centre: it moves
+                               // smoothly with the lamp (a traced edge jumps a pixel at a time while the lamp is dragged)
+                vis = softShadow(v, p + n * (eps * 2.0f), L, fminf(dist - l.r, v.shadowReach), eps, v.pixAngle * v.detail * v.shadowSlope, dist / l.r);
+            } else {
+                Hit h;
+                vis = march(p + n * (eps * 2.0f), L, dist, eps, v.pixAngle * v.detail * v.shadowSlope, v.maxSteps2, v.w.s.relax, v.w, h) ? 0.0f : 1.0f;
+            }
+            const float lc = length(l.pos - p);
+            direct += l.color * (l.le * M_PIf * (l.r * l.r) / (lc * lc) * cosT * spot * vis);
+        }
     }
     direct += eyeLight(v, p, n);
     const float ao = occlusion(v, p, n, t * v.tanHalf);
-    // the room's light comes from high above: how open the point is upwards (a wide soft shadow towards the ceiling;
-    // deep in the lattice the arches above shut most of it out, as the path tracer finds)
     const float3 upDir = normalize(make_float3(0.0f, 1.0f, 0.0f) + n * 0.35f);
-    const float sky = softShadow(v, p + n * (eps * 2.0f), upDir, 2.0f, eps, v.pixAngle * v.detail * 4.0f, 1.2f);
+    // the room's light from above: how open the point is upwards (a wide soft shadow towards the ceiling). It fades out
+    // with the zoom (deep in the lattice it is shut out anyway), and so does this march: the longest of a sample's rays
+    const float sky = v.fillLe > 0.0f ? softShadow(v, p + n * (eps * 2.0f), upDir, 2.0f, eps, v.pixAngle * v.detail * 4.0f, 1.2f) : 0.0f;
     const float fill = v.fillLe * M_PIf * (0.35f + 0.65f * saturate(n.y * 0.5f + 0.5f)) * ao * (0.15f + 0.85f * sky);
-    // light bouncing between the white surfaces (the path tracer has it, the preview not): a measured gain
-    return alb * INV_PIf * (direct + v.fillColor * fill) * v.previewGain;
+    const float amb = v.ambient * M_PIf * ao;
+    return alb * INV_PIf * (direct + v.fillColor * fill + v.eyeColor * amb);
 }
 
-// The preview at half resolution, four rays a preview pixel (a rotated grid over its 2x2 screen pixels): as costly as
-// one ray a screen pixel, but filtered. Fine lace sparkles with one ray a pixel while it moves; this one is soft and
-// steady, and close in look to the accumulation it hands over to.
-__global__ void kPreview(HeykelView v, float4* out) {
-    const int pw = (v.width + 1) / 2, ph = (v.height + 1) / 2;
-    const int x = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y;
-    if (x >= pw || y >= ph) return;
-    const float slope = v.pixAngle * v.detail;
-    const float2 grid[4] = {{0.625f, 0.125f}, {0.125f, 0.375f}, {0.875f, 0.625f}, {0.375f, 0.875f}};
-    float3 c = make_float3(0, 0, 0);
-    for (int s = 0; s < v.previewRays; ++s) {
-        const float3 rd = rayDir(v, 2.0f * (x + grid[s].x), 2.0f * (y + grid[s].y));
-        Hit h;
-        if (march(v.camPos, rd, v.tmax, 0.0f, slope, v.maxSteps, v.w.s.relax, v.w, h)) {
-            const float3 p = v.camPos + rd * h.t;
-            const float eps = slope * h.t;
-            const float3 n = normalAt(p, eps, v.w);
-            c += shadePreview(v, p, n, h.id, eps, h.t);
-        } else {
-            c += env(v, rd);
-        }
-    }
-    const float inv = 1.0f / float(v.previewRays);
-    out[y * pw + x] = make_float4(c.x * inv, c.y * inv, c.z * inv, 1.0f);
+// Blackman-Harris over [0, 1]: 1 at the centre, 0 at the edge
+__device__ __forceinline__ float blackmanHarris(float x) {
+    const float u = 0.5f + 0.5f * saturate(x);   // the window's second half
+    const float a = 2.0f * M_PIf * u;
+    return 0.35875f - 0.48829f * cosf(a) + 0.14128f * cosf(2.0f * a) - 0.01168f * cosf(3.0f * a);
 }
 
-// the half-resolution preview at a screen pixel, bilinear
-__device__ __forceinline__ float3 previewAt(const HeykelView& v, const float4* preview, int x, int y) {
-    const int pw = (v.width + 1) / 2, ph = (v.height + 1) / 2;
-    const float fx = fminf(fmaxf((x + 0.5f) * 0.5f - 0.5f, 0.0f), float(pw - 1)), fy = fminf(fmaxf((y + 0.5f) * 0.5f - 0.5f, 0.0f), float(ph - 1));
-    const int x0 = int(fx), y0 = int(fy), x1 = min(x0 + 1, pw - 1), y1 = min(y0 + 1, ph - 1);
-    const float tx = fx - x0, ty = fy - y0;
-    const float4 a = preview[y0 * pw + x0], b = preview[y0 * pw + x1], c = preview[y1 * pw + x0], d = preview[y1 * pw + x1];
-    const float4 top = a * (1.0f - tx) + b * tx, bot = c * (1.0f - tx) + d * tx;
-    const float4 m = top * (1.0f - ty) + bot * ty;
-    return make_float3(m.x, m.y, m.z);
-}
-
-// a sphere light by sampling the cone it fills (uniform in solid angle), the spot by the leaving direction
-__device__ float3 lightSample(const HeykelView& v, const HeykelLight& l, float3 p, float3 n, float eps, float slope, Rng& rng) {
-    const float u1 = rng.next(), u2 = rng.next();   // drawn even when unused: the dimensions stay in step
-    if (l.le <= 0.0f) return make_float3(0, 0, 0);
-    const float3 L = l.pos - p;
-    const float d2 = dot(L, L), d = sqrtf(d2);
-    const float sin2 = fminf(l.r * l.r / d2, 1.0f);
-    const float cosMax = sqrtf(1.0f - sin2);
-    const float oneMinus = sin2 / (1.0f + cosMax);   // 1 - cosMax without cancelling
-    const float cosT = 1.0f - u1 * oneMinus;
-    const float sinT = sqrtf(fmaxf(0.0f, 1.0f - cosT * cosT));
-    const float phi = 2.0f * M_PIf * u2;
-    const Frame f = Frame::from(L * (1.0f / d));
-    const float3 dir = f.toWorld(make_float3(cosf(phi) * sinT, sinf(phi) * sinT, cosT));
-    const float cosN = dot(n, dir);
-    if (cosN <= 0.0f) return make_float3(0, 0, 0);
-    const float b = dot(L, dir);
-    const float tS = b - sqrtf(fmaxf(b * b - (d2 - l.r * l.r), 0.0f));
-    const float spot = spotOf(l, -dir);
-    if (spot <= 0.0f) return make_float3(0, 0, 0);
-    Hit h;
-    if (march(p + n * (eps * 2.0f), dir, tS, eps, slope, v.maxSteps2, v.w.s.relax, v.w, h)) return make_float3(0, 0, 0);
-    return l.color * (l.le * spot * cosN * 2.0f * M_PIf * oneMinus);
-}
-
-__device__ float3 trace(const HeykelView& v, float3 ro, float3 rd, Rng& rng) {
-    float3 thr = make_float3(1, 1, 1), sum = make_float3(0, 0, 0);
-    float eps0 = 0.0f;
-    float slope = v.pixAngle * v.detail;
-    for (int b = 0; b <= v.bounces; ++b) {
-        Hit h;
-        if (!march(ro, rd, v.tmax, eps0, slope, b == 0 ? v.maxSteps : v.maxSteps2, v.w.s.relax, v.w, h)) {
-            sum += thr * env(v, rd);
-            break;
-        }
-        const float3 p = ro + rd * h.t;
-        const float eps = eps0 + slope * h.t;
-        float3 n = normalAt(p, eps, v.w);
-        if (dot(n, rd) > 0.0f) n = normalize(n - rd * (2.0f * dot(n, rd)));
-        const float3 alb = v.albedo[h.id < 0 ? 0 : h.id];
-        const float sslope = v.pixAngle * v.detail * v.shadowSlope;
-        // the camera's fill only where the camera looks: its light carried by the bounces is a few percent of what they
-        // carry, its shadow rays a third of the cost (measured)
-        float3 Ld = lightSample(v, v.light[0], p, n, eps, sslope, rng);
-        if (b == 0) Ld += eyeLight(v, p, n);
-        sum += thr * alb * INV_PIf * Ld;
-        if (b == v.bounces) break;
-        // cosine-weighted bounce
-        const float u1 = rng.next(), u2 = rng.next();
-        const float r = sqrtf(u1), phi = 2.0f * M_PIf * u2;
-        rd = Frame::from(n).toWorld(make_float3(r * cosf(phi), r * sinf(phi), sqrtf(fmaxf(0.0f, 1.0f - u1))));
-        ro = p + n * (eps * 2.0f);
-        thr *= alb;
-        eps0 = eps;
-        slope = v.pixAngle * v.detail * v.bounceSlope;
-        if (b >= 1) {   // Russian roulette
-            const float q = fminf(0.95f, maxc(thr) * 1.5f);
-            if (rng.next() > q) break;
-            thr = thr * (1.0f / q);
-        }
-    }
-    return sum;
-}
-
-__global__ void kPath(HeykelView v, float4* accum, float* accY2, int samples, int stripe, int stripes) {
+__global__ void kSamples(HeykelView v, float4* accum, int first, int count, int stripe, int stripes) {
     const int x = blockIdx.x * blockDim.x + threadIdx.x, y = stripe + (blockIdx.y * blockDim.y + threadIdx.y) * stripes;
     if (x >= v.width || y >= v.height) return;
-    const unsigned int pix = unsigned(y * v.width + x);
-    // adaptive: a pixel whose mean is already known to a fraction of itself takes no more samples (the void, flat
-    // lit faces); the deep views' cost goes where the grain is
-    {
-        const float4 a = accum[pix];
-        if (a.w >= v.adaptMin) {
-            const float n = a.w, mean = luminance709(make_float3(a.x, a.y, a.z)) / n;
-            const float var = fmaxf(accY2[pix] / n - mean * mean, 0.0f);
-            if (sqrtf(var / n) < fmaxf(v.adaptRel * mean, v.adaptAbs)) return;
+    const int pix = y * v.width + x;
+    const float slope = v.pixAngle * v.detail;
+    float4 a = accum[pix];
+    for (int s = first; s < first + count; ++s) {
+        // the sub-pixel position: the centre first, then uniform over a disc of filterRadius pixels, weighted
+        float ox = 0.0f, oy = 0.0f, w = 1.0f;
+        if (s > 0) {
+            const float r = v.filterRadius * sqrtf(r4(s, 0)), ph = 6.2831853f * r4(s, 1);
+            ox = r * cosf(ph);
+            oy = r * sinf(ph);
+            w = blackmanHarris(r / v.filterRadius);
         }
-    }
-    // the sub-pixel positions: the R2 sequence shifted per pixel, mapped to a Gaussian around the pixel's centre
-    // (sigma v.filterSigma pixels, cut at 3 sigma): a reconstruction a little wider than the pixel, no box edges
-    const float g1 = 0.7548776662466927f, g2 = 0.5698402909980532f;
-    const float ox = float(pcgHash(pix * 2u + 1u) >> 8) * (1.0f / 16777216.0f);
-    const float oy = float(pcgHash(pix * 2u + 7919u) >> 8) * (1.0f / 16777216.0f);
-    float3 c = make_float3(0, 0, 0);
-    float y2 = 0.0f;
-    for (int s = 0; s < samples; ++s) {
-        const int k = v.sample + s;
-        Rng rng{pix, k, 0};
-        const float u1 = fractf(ox + g1 * k), u2 = fractf(oy + g2 * k);
-        const float cut = 1.0f - expf(-4.5f);   // 3 sigma
-        const float r = v.filterSigma * sqrtf(-2.0f * logf(1.0f - u1 * cut)), ph = 2.0f * M_PIf * u2;
-        float3 ro = v.camPos, rd = rayDir(v, x + 0.5f + r * cosf(ph), y + 0.5f + r * sinf(ph));
-        if (v.aperture > 0.0f) {   // a thin lens focused on the plane through the zoom's point (a macro lens's depth)
+        float3 ro = v.camPos, rd = rayDir(v, x + 0.5f + ox, y + 0.5f + oy);
+        if (v.aperture > 0.0f && s > 0) {   // a thin lens focused on the plane through the zoom's point
             const float3 fp = ro + rd * (v.focusDist / dot(rd, v.camFwd));
-            const float lr = v.aperture * sqrtf(rng.next()), la = 2.0f * M_PIf * rng.next();
+            const float lr = v.aperture * sqrtf(r4(s, 3)), la = 6.2831853f * r4(s, 2) + 1.3f;
             ro = ro + v.camRight * (lr * cosf(la)) + v.camUp * (lr * sinf(la));
             rd = normalize(fp - ro);
+        }
+        Hit h;
+        float3 c;
+        if (march(ro, rd, v.tmax, 0.0f, slope, v.maxSteps, v.w.s.relax, v.w, h)) {
+            const float3 p = ro + rd * h.t;
+            const float eps = slope * h.t;
+            float3 n = normalAt(p, eps * v.normalScale, v.w);
+            if (dot(n, rd) > 0.0f) n = normalize(n - rd * (2.0f * dot(n, rd)));
+            c = shade(v, p, n, h.id, eps, h.t, s);
         } else {
-            rng.next();   // the dimensions stay in step
-            rng.next();
+            c = env(v, rd);
         }
-        const float3 cs = trace(v, ro, rd, rng);
-        c += cs;
-        y2 += luminance709(cs) * luminance709(cs);
+        a.x += c.x * w;
+        a.y += c.y * w;
+        a.z += c.z * w;
+        a.w += w;
     }
-    float4 a = accum[pix];
-    a.x += c.x;
-    a.y += c.y;
-    a.z += c.z;
-    a.w += float(samples);
     accum[pix] = a;
-    accY2[pix] += y2;
 }
 
-__device__ __forceinline__ float3 blended(const HeykelView& v, const float4* preview, const float4* accum, int i) {
-    float3 c = previewAt(v, preview, i % v.width, i / v.width);
-    if (accum) {
-        const float4 a = accum[i];
-        if (a.w > 0.0f) {
-            const float3 m = make_float3(a.x, a.y, a.z) * (1.0f / a.w);
-            c = lerp3(c, m, saturate(a.w / 6.0f));
-        }
-    }
-    return c;
-}
-
-__global__ void kResolve(HeykelView v, const float4* preview, const float4* accum, uchar4* out) {
+__global__ void kResolve(HeykelView v, const float4* accum, uchar4* out) {
     const int x = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y;
     if (x >= v.width || y >= v.height) return;
     const int i = y * v.width + x;
-    float3 c = blended(v, preview, accum, i) * v.exposure;
+    const float4 a = accum[i];
+    float3 c = a.w > 0.0f ? make_float3(a.x, a.y, a.z) * (v.exposure / a.w) : make_float3(0, 0, 0);
     c = fmaxf3(c, make_float3(0, 0, 0));
     c = agx(c);
     // a fixed triangular dither (the same every frame: nothing moves on a still picture)
@@ -293,33 +181,14 @@ __global__ void kResolve(HeykelView v, const float4* preview, const float4* accu
     out[i] = make_uchar4((unsigned char)r, (unsigned char)g, (unsigned char)b, 255);
 }
 
-__global__ void kLinear(HeykelView v, const float4* preview, const float4* accum, float4* out) {
-    const int x = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y;
-    if (x >= v.width || y >= v.height) return;
-    const int i = y * v.width + x;
-    const float3 c = blended(v, preview, accum, i);
-    out[i] = make_float4(c.x, c.y, c.z, 1.0f);
-}
-
-dim3 grid(const HeykelView& v, dim3 b) { return dim3((v.width + b.x - 1) / b.x, (v.height + b.y - 1) / b.y); }
-
 }   // namespace
 
-void heykelPreview(const HeykelView& v, float4* preview, cudaStream_t s) {
-    const dim3 b(16, 8);
-    const int pw = (v.width + 1) / 2, ph = (v.height + 1) / 2;
-    kPreview<<<dim3((pw + b.x - 1) / b.x, (ph + b.y - 1) / b.y), b, 0, s>>>(v, preview);
-}
-void heykelPath(const HeykelView& v, float4* accum, float* accY2, int samples, int stripe, int stripes, cudaStream_t s) {
+void heykelSamples(const HeykelView& v, float4* accum, int first, int count, int stripe, int stripes, cudaStream_t s) {
     const dim3 b(16, 8);
     const int rows = (v.height - stripe + stripes - 1) / stripes;
-    kPath<<<dim3((v.width + b.x - 1) / b.x, (rows + b.y - 1) / b.y), b, 0, s>>>(v, accum, accY2, samples, stripe, stripes);
+    kSamples<<<dim3((v.width + b.x - 1) / b.x, (rows + b.y - 1) / b.y), b, 0, s>>>(v, accum, first, count, stripe, stripes);
 }
-void heykelResolve(const HeykelView& v, const float4* preview, const float4* accum, uchar4* out, cudaStream_t s) {
+void heykelResolve(const HeykelView& v, const float4* accum, uchar4* out, cudaStream_t s) {
     const dim3 b(16, 8);
-    kResolve<<<grid(v, b), b, 0, s>>>(v, preview, accum, out);
-}
-void heykelLinear(const HeykelView& v, const float4* preview, const float4* accum, float4* out, cudaStream_t s) {
-    const dim3 b(16, 8);
-    kLinear<<<grid(v, b), b, 0, s>>>(v, preview, accum, out);
+    kResolve<<<dim3((v.width + b.x - 1) / b.x, (v.height + b.y - 1) / b.y), b, 0, s>>>(v, accum, out);
 }

@@ -192,25 +192,18 @@ void HeykelApp::applyOverrides(int i) {
 
 void HeykelApp::init() {
     const size_t n = size_t(width) * height;
-    cudaMalloc(reinterpret_cast<void**>(&preview), n * sizeof(float4));
     cudaMalloc(reinterpret_cast<void**>(&accum), n * sizeof(float4));
-    cudaMalloc(reinterpret_cast<void**>(&accY2), n * sizeof(float));
-    cudaMemset(accY2, 0, n * sizeof(float));
     cudaMalloc(reinterpret_cast<void**>(&output), n * sizeof(uchar4));
     cudaMalloc(reinterpret_cast<void**>(&devSteps), sizeof(hk::KStep) * hk::kMaxSteps);
-    cudaMemset(preview, 0, n * sizeof(float4));
     cudaMemset(accum, 0, n * sizeof(float4));
 }
 
 void HeykelApp::release() {
-    if (preview) cudaFree(preview);
     if (accum) cudaFree(accum);
-    if (accY2) cudaFree(accY2);
-    accY2 = nullptr;
     if (output) cudaFree(output);
     if (devSteps) cudaFree(devSteps);
     devSteps = nullptr;
-    preview = accum = nullptr;
+    accum = nullptr;
     output = nullptr;
 }
 
@@ -371,6 +364,7 @@ void HeykelApp::setAnchor(hk::World& w, D3 W) const {
         k.size = float(size);
         const double kA = r2 < size ? size / r2 : 1.0;
         A = Af * kA;
+        k.An = f3(A);
     }
     w.AN = f3(A);
 }
@@ -378,25 +372,67 @@ void HeykelApp::setAnchor(hk::World& w, D3 W) const {
 // The iterations follow the zoom (the pixel rule for the formula): each one adds structure about a few times finer,
 // so one or two more a decade keep the detail from running out (at 10,000 times 10 left rings floating in the dark,
 // 14-18 kept the lace, PLAN G1). Below a pixel the extra ones change nothing that is drawn.
+// The iterations follow the pixel's footprint, point by point (hk::itersAt): a point r from the camera takes
+// base + 2 log10(home distance / r) (at the first view 10, at 10,000 times 18 on the focus; at 10,000 times with only 10
+// the lace had dissolved into rings, PLAN G1). Farther points take fewer, blended between two counts: no lace finer
+// than a pixel in the far layers. This is the orbit's length: enough for points ~30 times nearer than the focus.
 int HeykelApp::itersNow() const {
     const int base = cands[cand].shape.iters;
     if (!deep()) return base;
-    const float per = cfg.f("iters.per.decade", 2.0f);
-    return std::clamp(base + int(std::lround(per * std::log10(std::max(level, 1.0f)))), base, hk::kMaxSteps);
+    const double r = std::max(length(camPos - focus) / 30.0, 1e-20);
+    const double m = base + cfg.f("iters.per.decade", 2.0f) * std::log10(length(homePos - homeFocus) / r);
+    return std::clamp(int(std::ceil(m)) + 2, base, hk::kMaxSteps);
 }
+
+void HeykelApp::setLod(hk::World& w) const {
+    w.lod = deep() ? 1 : 0;
+    w.camRel = f3(camPos - focus);
+    w.lodRef = float(length(homePos - homeFocus));
+    w.lodK = cfg.f("iters.per.decade", 2.0f);
+    w.lodBase = float(cands[cand].shape.iters) + cfg.f("iters.offset", 0.0f);
+    w.lodMin = cfg.f("iters.min", 6.0f);
+}
+
+namespace {
+
+// the Kleinian in doubles stopped after mf iterations (as hk::deKleinianLod)
+double deKleinianDLod(D3 p, const hk::Shape& s, double mf) {
+    const int m0 = int(mf);
+    const double f = mf - m0;
+    auto end = [&](D3 z, double df) {
+        const double rxy = std::sqrt(z.x * z.x + z.y * z.y);
+        return std::max(rxy - s.b, std::fabs(rxy * z.z) / length(z)) / df;
+    };
+    double df = 1.0, d0 = 0.0;
+    for (int i = 0; i <= m0; ++i) {
+        if (i == m0) d0 = end(p, df);
+        const float3 c = i < s.split ? s.k : s.k2;
+        p = d3(2.0 * std::clamp(p.x, -double(c.x), double(c.x)) - p.x, 2.0 * std::clamp(p.y, -double(c.y), double(c.y)) - p.y,
+               2.0 * std::clamp(p.z, -double(c.z), double(c.z)) - p.z);
+        const double k = std::max(double(i < s.split ? s.a : s.a2) / dot(p, p), 1.0);
+        p = p * k;
+        df *= k;
+    }
+    return d0 + (end(p, df) - d0) * f;
+}
+
+}   // namespace
 
 double HeykelApp::deHost(D3 p) const {
     if (!deep()) return hk::deScene(f3(p), world);   // world's anchor is the origin
-    hk::Shape s = world.s;
-    s.iters = itersNow();
+    const hk::Shape& s = world.s;
     double d;
     const D3 q = p - d3(s.center);
     const double rw = double(s.boundR) * s.scale, bd = length(q) - rw;
     if (bd > 0.05 * rw) {
         d = bd;
     } else {
+        // the same count as the GPU's (hk::itersAt), from the camera's distance
+        const double r = std::max(length(p - camPos), 1e-20);
+        const double mf = std::clamp(s.iters + cfg.f("iters.offset", 0.0f) + cfg.f("iters.per.decade", 2.0f) * std::log10(length(homePos - homeFocus) / r),
+                                     double(cfg.f("iters.min", 6.0f)), hk::kMaxSteps - 1.001);
         const D3 pf = mulD(s.orient, q) * (1.0 / s.scale);
-        d = deKleinianD(pf, s);
+        d = deKleinianDLod(pf, s, mf);
         if (s.cut == 2) d = std::max(d, sdBoxD(pf, d3(s.cutSize)));
         d *= s.scale;
     }
@@ -410,6 +446,7 @@ HeykelView HeykelApp::view() const {
     v.w = world;
     v.w.s.iters = itersNow();
     setAnchor(v.w, focus);
+    setLod(v.w);
     // perturbation only where floats fall short (it costs ~2-3 times the straight estimate): at 1,000 times the straight
     // one errs by 0.02-0.05 of a pixel (--test pert), the switch cannot be seen
     if (level < cfg.f("pert.from", 1000.0f)) v.w.pert = 0;
@@ -427,11 +464,13 @@ HeykelView HeykelApp::view() const {
     v.maxSteps = cfg.i("steps", 400);
     v.maxSteps2 = cfg.i("steps2", 200);
     v.shadowSlope = cfg.f("shadow.slope", 2.0f);
-    v.bounceSlope = cfg.f("bounce.slope", 4.0f);
-    v.filterSigma = cfg.f("filter.sigma", 0.45f);
+    v.softKey = cfg.i("shadow.soft", 1);
+    v.shadowReach = cfg.f("shadow.reach", 100.0f) * float(length(camPos - focus));
+    v.normalScale = cfg.f("normal.scale", 1.0f);
+    v.filterRadius = cfg.f("filter.radius", 1.5f);
     v.tmax = 30.0f;
-    {   // the key
-        HeykelLight& l = v.light[0];
+    {   // the key: a spot
+        HeykelLight& l = v.key;
         l.pos = f3(lightTarget + d3(lampDir) * lightDist - focus);
         l.axis = -lampDir;
         l.r = lightRadius;
@@ -441,40 +480,29 @@ HeykelView HeykelApp::view() const {
         l.coneInner = std::cos(inner);
         l.color = cfg.v3("light.color", make_float3(1.0f, 0.93f, 0.84f));
     }
-    {   // the eye light: on the lens, a little above it; its light on the focus a fraction of the key's. The fall softened
-        // within ~eye.soft focus distances of the lens: what comes close is not burnt white (the study: a near arch
-        // clipped 4.6% of the picture with a plain square law)
+    // the photographer puts the ring light on when going macro: faint at the first view (the room's dark, the plinth's
+    // shaded side), full from ten times on; the ambient the same way (deep in the lattice the white walls light each other)
+    const float ramp = std::clamp(std::log10(std::max(level, 1.0f)), 0.0f, 1.0f);
+    {   // the eye light: on the lens, a little above it; its fall softened within ~eye.soft focus distances of it
         const float d = float(length(camPos - focus));
         v.eyePos = v.camPos + v.camUp * (cfg.f("eye.up", 0.05f) * d);
         v.eyeD = d;
-        v.eyeC = cfg.f("eye.soft", 0.6f) * d;
-        // the photographer puts the ring light on when going macro: faint at the first view (the room's dark, the
-        // plinth's shaded side; with the deep strength it lit the plinth's front flat), full from ten times on
-        const float ramp = std::clamp(std::log10(std::max(level, 1.0f)), 0.0f, 1.0f);
+        v.eyeC = cfg.f("eye.soft", 0.35f) * d;
         v.eyeE = (cfg.f("eye.first", 0.025f) + (cfg.f("eye", 0.12f) - cfg.f("eye.first", 0.025f)) * ramp) * cfg.f("light.e", 3.14159f);
         v.eyeColor = cfg.v3("eye.color", make_float3(0.92f, 0.96f, 1.0f));
-        v.light[1].le = 0.0f;
     }
-    v.fillLe = cfg.f("fill", 0.03f);
+    v.fillLe = cfg.f("fill", 0.03f) * (1.0f - ramp);
     v.fillColor = cfg.v3("fill.color", make_float3(0.80f, 0.88f, 1.0f));
+    v.ambient = (cfg.f("ambient.first", 0.0f) + (cfg.f("ambient", 0.03f) - cfg.f("ambient.first", 0.0f)) * ramp) * cfg.f("light.e", 3.14159f) / 3.14159f;
     v.albedo[0] = cfg.v3("albedo", make_float3(0.80f, 0.78f, 0.74f));
     v.albedo[1] = cfg.v3("albedo.plinth", make_float3(0.16f, 0.16f, 0.16f));
     v.albedo[2] = cfg.v3("albedo.floor", make_float3(0.035f, 0.035f, 0.035f));
     v.exposure = std::exp2(ev + cfg.f("ev", 0.0f));
-    v.previewGain = cfg.f("preview.gain", 1.2f);
-    v.previewRays = previewRays;
     {   // a macro lens: the aperture a fixed fraction of the focus distance (the same blur at every zoom, in angle)
         const D3 toF = focus - camPos;
         v.focusDist = std::max(float(dot(toF, d3(v.camFwd))), 1e-12f);
         v.aperture = dof ? cfg.f("dof", 0.003f) * float(length(toF)) : 0.0f;
     }
-    v.sample = samples;
-    // two bounces where the light travels between big white surfaces, one deep in the lattice where a bounce costs as
-    // much as the rest of the path and its light differs by little (measured: 32 -> 23 ms a sample at 10,000 times)
-    v.bounces = level < cfg.f("bounces.deep.from", 100.0f) ? cfg.i("bounces", 2) : cfg.i("bounces.deep", 1);
-    v.adaptMin = cfg.f("adapt.min", 32.0f);
-    v.adaptRel = cfg.f("adapt.rel", 0.012f);
-    v.adaptAbs = cfg.f("adapt.abs", 0.0015f);
     return v;
 }
 
@@ -666,49 +694,30 @@ void HeykelApp::turnLight(float dAzimuth, float dElevation) {
     lampDir = lightDir;   // the hand on it decides: no search while dragging
 }
 
-void HeykelApp::renderPreview() {
-    const HeykelView v = view();
-    cudaEvent_t a, b;
-    cudaEventCreate(&a);
-    cudaEventCreate(&b);
-    cudaEventRecord(a);
-    heykelPreview(v, preview, 0);
-    cudaEventRecord(b);
-    cudaEventSynchronize(b);
-    cudaEventElapsedTime(&previewMs, a, b);
-    // fewer preview rays when it is slow (deep in the lattice), more again when there is time: ~40 ms at most
-    if (previewMs > 40.0f && previewRays > 1) previewRays /= 2;
-    else if (previewMs < 15.0f && previewRays < 4) previewRays *= 2;
-    cudaEventDestroy(a);
-    cudaEventDestroy(b);
+void HeykelApp::resetSamples() {
     cudaMemset(accum, 0, size_t(width) * height * sizeof(float4));
-    cudaMemset(accY2, 0, size_t(width) * height * sizeof(float));
     samples = 0;
 }
 
-void HeykelApp::accumulate(int spp) {
-    if (spp <= 0) return;
-    pathPass(spp, 0, 1);
-    samples += spp;
-}
-
-void HeykelApp::pathPass(int spp, int stripe, int stripes) {
+void HeykelApp::addSamples(int count, int stripe, int stripes) {
+    if (count <= 0) return;
     const HeykelView v = view();
     cudaEvent_t a, b;
     cudaEventCreate(&a);
     cudaEventCreate(&b);
     cudaEventRecord(a);
-    heykelPath(v, accum, accY2, spp, stripe, stripes, 0);
+    heykelSamples(v, accum, samples, count, stripe, stripes, 0);
     cudaEventRecord(b);
     cudaEventSynchronize(b);
     float ms = 0.0f;
     cudaEventElapsedTime(&ms, a, b);
-    pathMs = ms * stripes / spp;
+    sampleMs = ms * stripes / count;
     cudaEventDestroy(a);
     cudaEventDestroy(b);
+    if (stripe == stripes - 1) samples += count;   // a sample counts when its last rows are in
 }
 
-void HeykelApp::resolve() { heykelResolve(view(), preview, samples > 0 ? accum : nullptr, output, 0); }
+void HeykelApp::resolve() { heykelResolve(view(), accum, output, 0); }
 
 void HeykelApp::save(const std::string& prefix) {
     std::vector<unsigned char> px(size_t(width) * height * 4);
@@ -731,6 +740,41 @@ std::vector<float> floats(const std::string& s) {
 // --test pert: the perturbed estimate (floats, offsets from an anchor, what the GPU runs) against the straight one in
 // doubles, at points ever closer to anchors on the surface; the straight float estimate beside it for scale. The
 // error is in pixels of the 2560x1440 view at the zoom where those points fill the screen.
+// --kararlilik zoom|isik: frames for tools/kararlilik.py. live_NNNN: what the window draws while something moves (the
+// fixed pattern's first samples, as many as the live scene takes in ~25 ms); ref_NNNN: the same moment with 64.
+// zoom: from `from` to `to` times towards the target in `frames` steps; isik: at `from` times, the lamp swung by ~1°
+// a frame (a drag).
+int stabilityFrames(HeykelApp& app, const std::string& mode, D3 target, float from, float to, int frames, const std::string& out) {
+    app.setCandidate(1);
+    std::filesystem::create_directories(std::filesystem::path(app.root) / out);
+    app.home();
+    app.defaultLight();
+    app.aimLight(app.homeFocus);
+    app.zoomAbout(target, std::log(from));
+    app.settleLight();
+    for (int f = 0; f < frames; ++f) {
+        if (f > 0) {
+            if (mode == "zoom") app.zoomAbout(target, std::log(to / from) / (frames - 1));
+            else app.turnLight(0.017f, 0.004f);
+        }
+        app.resetSamples();
+        app.addSamples(1);
+        const int n = std::clamp(int(25.0f / std::max(app.sampleMs, 0.1f)), 1, 4);   // as the live scene does
+        if (n > 1) app.addSamples(n - 1);
+        app.resolve();
+        char name[512];
+        std::snprintf(name, sizeof(name), "%s/%s/live_%04d", app.root.c_str(), out.c_str(), f);
+        app.save(name);
+        app.resetSamples();
+        for (int k = 0; k < 8; ++k) app.addSamples(8);
+        app.resolve();
+        std::snprintf(name, sizeof(name), "%s/%s/ref_%04d", app.root.c_str(), out.c_str(), f);
+        app.save(name);
+        std::printf("  kare %d: x%.0f, canli %d ornek (%.1f ms/ornek)\n", f, app.level, n, app.sampleMs);
+    }
+    return 0;
+}
+
 int testPerturbation(HeykelApp& app) {
     app.setCandidate(1);
     if (!app.deep()) { std::printf("aday 1 Klein degil\n"); return 1; }
@@ -760,12 +804,19 @@ int testPerturbation(HeykelApp& app) {
         const double pixel = dist * 2.0 * tanHalf / app.height;
         double ep = 0.0, ef = 0.0;
         int n = 0;
-        app.level = float(zoom);   // the iterations follow the zoom (itersNow): the same count on every side
-        hk::World wf = app.world;
-        wf.s.iters = app.itersNow();
+        app.level = float(zoom);
         for (const D3& W : anchors) {
+            // the camera at this zoom's distance from the anchor: the iterations follow it (hk::itersAt), the same count
+            // on every side
+            app.camPos = W + d3(0.0, 0.0, dist);
+            app.focus = W;
+            hk::World wf = app.world;
+            wf.s.iters = app.itersNow();
+            app.setLod(wf);
+            wf.camRel = f3(app.camPos);   // wf takes world positions (its anchor is the origin)
             hk::World wa = wf;
             app.setAnchor(wa, W);
+            app.setLod(wa);
             for (int j = 0; j < 64; ++j) {
                 // points within ~200 pixels of the anchor
                 const D3 o = d3(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5) * (400.0 * pixel);
@@ -796,6 +847,8 @@ int runHeykelCli(int argc, char** argv) {
     int dives = 0;
     D3 target;
     bool hasTarget = false, moving = false;
+    std::string stability;
+    int frames = 24;
     unsigned int seed = 1u;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
@@ -813,6 +866,8 @@ int runHeykelCli(int argc, char** argv) {
         else if (a == "--dalis") dives = std::stoi(next());
         else if (a == "--seed") seed = unsigned(std::stoul(next()));
         else if (a == "--hareket") moving = true;
+        else if (a == "--kararlilik") stability = next();
+        else if (a == "--kare") frames = std::stoi(next());
         else if (a == "--hedef") {   // a world point to zoom straight at (the tour's dives)
             std::stringstream ss(next());
             char c;
@@ -825,6 +880,12 @@ int runHeykelCli(int argc, char** argv) {
     app.height = h;
     app.buildCandidates();
     if (test == "pert") return testPerturbation(app);
+    if (!stability.empty()) {
+        app.init();
+        setPNGCompression(1);
+        return stabilityFrames(app, stability, target, zooms.size() > 0 ? zooms.front() : 50.0f, zooms.size() > 1 ? zooms.back() : 70.0f,
+                               frames, out);
+    }
     app.init();
     setPNGCompression(1);
     std::filesystem::create_directories(std::filesystem::path(app.root) / out);
@@ -892,11 +953,11 @@ int runHeykelCli(int argc, char** argv) {
                 app.settleLight();
             }
             const double t0 = nowS();
-            app.renderPreview();
-            int left = spp;
+            app.resetSamples();
+            int left = std::max(spp, 1);
             while (left > 0) {
                 const int b = std::min(left, 8);
-                app.accumulate(b);
+                app.addSamples(b);
                 left -= b;
             }
             app.resolve();
@@ -906,8 +967,8 @@ int runHeykelCli(int argc, char** argv) {
             std::snprintf(name, sizeof(name), "%s/%s_x%g", out.c_str(), job.label.c_str(), z);
             app.save(app.root + "/" + name);
             const cudaError_t e = cudaGetLastError();
-            std::printf("  x%-6g onizleme %.1f ms, yol %.1f ms/ornek, %d ornek %.1f sn%s -> %s.png\n", z, app.previewMs, app.pathMs,
-                        spp, t1 - t0, e != cudaSuccess ? cudaGetErrorString(e) : "", name);
+            std::printf("  x%-6g %.1f ms/ornek, %d ornek %.1f sn%s -> %s.png\n", z, app.sampleMs, std::max(spp, 1), t1 - t0,
+                        e != cudaSuccess ? cudaGetErrorString(e) : "", name);
         }
     }
     app.release();
