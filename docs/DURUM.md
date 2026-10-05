@@ -5,6 +5,7 @@
 > `docs/tanecik/` arşiv.
 
 ## Şu an
+- **2026-10-05 (akşam) · Sahne 7 "Ölçek": ilk seçenek kabul, ikinci seçenek "Hız" planlandı.** Özcan: *"Evet bu sefer güzel olmuş, artık her aşama netleşti."* İkinci seçenek: bir roket ve manken, özel göreliliğin bütün etkileri tam formüllerle, roketin saatiyle gerçek zaman, 21 dokuz, Dünya → Proxima (89 sn) → Andromeda (~1 saat; Dünya'da 2,4 milyon yıl). Plan `docs/olcek/hiz/PLAN.md`.
 - **2026-10-05 (gece) · Sahne 7 "Ölçek": bütün yol gerçek içerikle.** Dışarısı gerçek veriyle: Sentinel-2 Çandarlı,
   Blue Marble ve o günlerin bulutları (deniz parıltısı VIIRS bulut ürünüyle ayıklandı), HYG yıldızları, Samanyolu
   (Reid 2019), M31 ve M33, 2MRS, kozmik ağ dilimi. İçerisi o ölçeği gören aletin gözüyle: SEM terasları, AFM peteği,

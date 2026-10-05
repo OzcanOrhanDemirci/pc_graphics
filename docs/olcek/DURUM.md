@@ -2,6 +2,10 @@
 
 > Tek kaynak durum panosu. Plan `docs/olcek/PLAN.md`. En yeni en üstte.
 
+## 2026-10-05 akşamı (sonra) · Kabul ve ikinci seçenek
+
+Revizeden sonra Özcan: *"Evet bu sefer güzel olmuş, artık her aşama netleşti."* İlk seçenek (Adres) kabul. İkinci seçenek **"Hız"** planlandı (roket, özel görelilik, Dünya → Proxima → Andromeda): `docs/olcek/hiz/PLAN.md`, durum `docs/olcek/hiz/DURUM.md`.
+
 ## 2026-10-05 akşam · Özcan'ın ilk canlı bakışı ve revize: atom altı, Samanyolu, Güneş sistemi
 
 Özcan: *"Kesintisizlik mükemmel olmuş. Mouse hızlı kaydırınca çok güzel oldu."* Dünya *"harbiden photorealistic"*, uzay

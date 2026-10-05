@@ -234,5 +234,5 @@ Sıra değişebilir; her taşın sonunda Özcan baştan sona kaydırabileceği b
 
 - **Merdiven:** aynı sahnede ikinci seçenek; adres yok, her ölçekte bir örnek büyükten küçüğe (VY Canis Majoris,
   süpernova, kuasar, kara delik diski gibi Özcan'ın istediği estetik duraklar).
-- **Zaman:** Özcan'ın izafiyet ve hızlanma fikri; üçüncü seçenek ya da ayrı sahne. Gerçek gelecek (Güneş'in ölümü,
+- **Zaman:** Özcan'ın izafiyet ve hızlanma fikri. **Yapılıyor:** ikinci seçenek "Hız" (2026-10-05 akşamı planlandı, `docs/olcek/hiz/PLAN.md`). Gerçek gelecek (Güneş'in ölümü,
   Samanyolu-Andromeda) orada olabilir.
