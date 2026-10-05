@@ -176,9 +176,9 @@ public:
                 float dz = pending_ * (1.0f - std::exp(-dt * 12.0f));
                 if (std::fabs(pending_) < 2e-3f) dz = pending_;
                 const float before = h_.level;
-                h_.zoomAbout(zoomQ_, dz);
+                const bool clear = h_.zoomAbout(zoomQ_, dz);
                 h_.followLight(dt);
-                pending_ -= dz;
+                pending_ = clear ? pending_ - dz : 0.0f;   // backing into a wall: it stops there
                 if (h_.level == 1.0f && before != 1.0f && dz < 0.0f) pending_ = 0.0f;   // back at the first view
                 if (h_.level >= h_.zoomCapAt(zoomQ_) * 0.999f && dz > 0.0f) pending_ = 0.0f;
                 if (std::fabs(pending_) <= 1e-5f) pending_ = 0.0f;   // the lamp came along: nothing to re-aim

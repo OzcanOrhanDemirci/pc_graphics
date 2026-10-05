@@ -676,13 +676,43 @@ float HeykelApp::zoomCapAt(D3 q) const {
     return zoomCap();
 }
 
-void HeykelApp::zoomAbout(D3 q, float logAmount) {
+// How far the camera can move from a towards b before the sculpture is within `clearance` of it (Ozcan 2026-10-05:
+// turned round inside the lattice and zoomed out, the camera went backwards through a wall: "kamera modelin icine
+// girememeli"). A march along the segment in doubles; the whole length when it is clear.
+double HeykelApp::freePath(D3 a, D3 b, double clearance) const {
+    const D3 ab = b - a;
+    const double len = length(ab);
+    if (len <= 0.0) return 0.0;
+    const D3 dir = ab * (1.0 / len);
+    double t = 0.0;
+    for (int i = 0; i < 400; ++i) {
+        const double d = deHost(a + dir * t);
+        if (d < clearance) return std::max(0.0, t - clearance);
+        t += std::max(d - clearance * 0.5, clearance * 0.25) * world.s.relax;
+        if (t >= len) return len;
+    }
+    return t;
+}
+
+bool HeykelApp::zoomAbout(D3 q, float logAmount) {
     float target = level * std::exp(logAmount);
     const float cap = zoomCapAt(q);
     if (target > cap) logAmount = std::log(std::max(cap / level, 1.0f));
     if (target < 1.0f) {   // out past the first view: back to it
         home();
-        return;
+        return true;
+    }
+    bool blocked = false;
+    if (logAmount < 0.0f) {   // backwards: the camera bumps into the sculpture instead of passing through it
+        const double r = length(camPos - q);
+        const D3 want = q + (camPos - q) * std::exp(-double(logAmount));
+        const double travel = length(want - camPos);
+        const double free = freePath(camPos, want, r * cfg.f("camera.clearance", 0.05f));
+        if (free < travel) {
+            blocked = true;
+            logAmount = -float(std::log((r + free) / r));
+            if (logAmount > -1e-6f) return false;
+        }
     }
     const double s = std::exp(-double(logAmount));
     camPos = q + (camPos - q) * s;
@@ -694,6 +724,7 @@ void HeykelApp::zoomAbout(D3 q, float logAmount) {
     litRadius *= float(s);
     level *= std::exp(logAmount);
     focus = q;
+    return !blocked;
 }
 
 // The lamp seen from where it points? A ray from the target (lifted off the surface) to the lamp's centre.
@@ -801,7 +832,9 @@ bool HeykelApp::orbit(float dyaw, float dpitch) {
     const D3 cr = d3(ax.y * rel.z - ax.z * rel.y, ax.z * rel.x - ax.x * rel.z, ax.x * rel.y - ax.y * rel.x);
     rel = rel * ca + cr * sa + ax * (dot(ax, rel) * (1.0 - ca));
     const D3 p = focus + rel;
-    if (deHost(p) < length(rel) * 0.02) return false;
+    // the camera bumps into the sculpture: the end clear, and the way there (a fast drag deep inside could step a wall)
+    const double clearance = length(rel) * cfg.f("camera.clearance", 0.05f);
+    if (deHost(p) < clearance || freePath(camPos, p, clearance) < length(p - camPos)) return false;
     camPos = p;
     yaw = newYaw;
     pitch = newPitch;
@@ -945,6 +978,42 @@ int stabilityFrames(HeykelApp& app, int cand, const std::string& mode, D3 target
     return 0;
 }
 
+// --test kamera: random walks of the hand (zoom in under a random pixel, turn, zoom out), the camera checked after every
+// step: never inside the sculpture (Ozcan 2026-10-05 found it backing through a wall after turning round inside)
+int testCamera(HeykelApp& app) {
+    app.setCandidate(app.sculpture());
+    unsigned int seed = 777u;
+    auto rnd = [&]() { seed = seed * 1664525u + 1013904223u; return float((seed >> 8) * (1.0 / 16777216.0)); };
+    int steps = 0, inside = 0, blockedOut = 0, blockedTurn = 0;
+    double worst = 1e30;
+    for (int walk = 0; walk < 40; ++walk) {
+        app.home();
+        for (int k = 0; k < 60; ++k) {
+            const float op = rnd();
+            if (op < 0.45f) {   // in, under a random pixel
+                D3 q;
+                if (app.pick((0.2f + 0.6f * rnd()) * app.width, (0.2f + 0.6f * rnd()) * app.height, q))
+                    for (int j = 0; j < 4; ++j) app.zoomAbout(q, 0.35f);
+            } else if (op < 0.75f) {   // turn, as a drag does: many small steps
+                const float dy = (rnd() - 0.5f) * 0.08f, dp = (rnd() - 0.5f) * 0.04f;
+                for (int j = 0; j < 40; ++j)
+                    if (!app.orbit(dy, dp)) { ++blockedTurn; break; }
+            } else {   // out
+                for (int j = 0; j < 8; ++j)
+                    if (!app.zoomAbout(app.focus, -0.35f)) { ++blockedOut; break; }
+            }
+            ++steps;
+            const double r = length(app.camPos - app.focus);
+            const double d = app.deHost(app.camPos) / r;   // the camera's clearance, as a fraction of its distance
+            worst = std::min(worst, d);
+            if (d <= 0.0) ++inside;
+        }
+    }
+    std::printf("kamera: %d adim, iceride %d, en dar aciklik %.4f (uzakligin kati), duvara carpan geri cekilme %d, donus %d\n", steps, inside,
+                worst, blockedOut, blockedTurn);
+    return inside == 0 ? 0 : 1;
+}
+
 int testPerturbation(HeykelApp& app) {
     app.setCandidate(app.sculpture());
     if (!app.deep()) { std::printf("aday %d derin degil\n", app.cand); return 1; }
@@ -1050,6 +1119,7 @@ int runHeykelCli(int argc, char** argv) {
     app.height = h;
     app.buildCandidates();
     if (test == "pert") return testPerturbation(app);
+    if (test == "kamera") return testCamera(app);
     if (!stability.empty()) {
         app.init();
         setPNGCompression(1);

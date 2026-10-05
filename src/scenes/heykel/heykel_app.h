@@ -104,7 +104,9 @@ struct HeykelApp {
     void setLod(hk::World& w) const; // the pixel rule for the iterations, point by point (hk::itersAt)
 
     bool pick(float px, float py, D3& hit, float3* normal = nullptr) const;   // render pixels
-    void zoomAbout(D3 q, float logAmount);       // > 0 in; the point q stays where it is on the screen
+    bool zoomAbout(D3 q, float logAmount);       // > 0 in; the point q stays where it is on the screen; false: the
+                                                 // camera bumped into the sculpture backing out (it stops there)
+    double freePath(D3 a, D3 b, double clearance) const;   // how far from a towards b the camera can go
     bool orbit(float dyaw, float dpitch);        // around the focus; false: it would go into the stone
     void defaultLight();                         // from the upper left, a little towards the viewer (a raking key)
     void aimLight(D3 target, const float3* normal = nullptr);   // onto a point, its size from the view there;

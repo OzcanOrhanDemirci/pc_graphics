@@ -2,7 +2,18 @@
 
 > Tek kaynak durum panosu. Plan `docs/heykel/PLAN.md`. En yeni en üstte.
 
-## 🔁 Revize 2 · Tek dünya: her kare aynı (2026-10-05 öğleden sonra) · Özcan'ın bakacağı yer
+## 🔁 Revize 3 · Kamera modele çarpar (2026-10-05 akşam)
+
+**Özcan:** *"modelin içine girip yakınlaşarak kamerayı ters çevirirsen kameranın arkası modelde oluyor. Oradan da
+uzaklaşırsan kamera modelin içine girmiş oluyor [...] kamera modelin içine girememeli."* Sebep: uzaklaşma kamerayı geri
+doğru düz çizgide götürüyordu ve yolu sınanmıyordu; çevirmede yalnız varış noktası sınanıyordu. Şimdi ikisinde de yol
+(`freePath`, çift hassasiyetli yürüyüş): kamera, uzaklığının %5'i kadar payla modele çarpıp durur (`camera.clearance`),
+bekleyen yakınlaşma da söner. `--test kamera`: 40 rastgele yürüyüş, 2.400 adım (yakınlaş, çevir, uzaklaş): **içeride 0**;
+196 geri çekilme ve 258 çevirme duvara çarpıp durdu.
+
+**NE DOĞRULANMADI:** gerçek fareyle; çarpınca durmanın elde nasıl hissettirdiği (sert durur, kaymaz).
+
+## 🔁 Revize 2 · Tek dünya: her kare aynı (2026-10-05 öğleden sonra)
 
 **Özcan:** *"netlik oldu gerçekten. Şuan tek sorun ışığın hesaplanırken kıpraşması [...] rtxin olayı nedir, ışık oradadır
 [...] Şuanki hissiyat sen yakınlaştın ben bi ayarlıyım kendimi dur diyormuş gibi [...] Yakınlaştırıp uzaklaştırırken
