@@ -43,8 +43,8 @@ __device__ __forceinline__ float3 env(const HeykelView& v, float3 d) {
     return v.fillColor * (v.fillLe * (0.015f + 2.2f * up * up));
 }
 
-__device__ __forceinline__ float spotOf(const HeykelView& v, float3 fromLight) {
-    return smoothstepf(v.coneOuter, v.coneInner, dot(fromLight, v.lightAxis));
+__device__ __forceinline__ float spotOf(const HeykelLight& l, float3 fromLight) {
+    return l.coneOuter < -1.0f ? 1.0f : smoothstepf(l.coneOuter, l.coneInner, dot(fromLight, l.axis));
 }
 
 // soft shadow estimate from the distances along the ray (Quilez): k ~ the light's distance over its radius
@@ -78,22 +78,25 @@ __device__ float occlusion(const HeykelView& v, float3 p, float3 n, float scale)
 
 __device__ float3 shadePreview(const HeykelView& v, float3 p, float3 n, int id, float eps, float t) {
     const float3 alb = v.albedo[id < 0 ? 0 : id];
-    float3 L = v.lightPos - p;
-    const float dist = length(L);
-    L = L * (1.0f / dist);
-    const float cosT = dot(n, L);
-    float direct = 0.0f;
-    if (cosT > 0.0f) {
-        const float spot = spotOf(v, -L);
-        if (spot > 0.0f) {
-            const float E = v.lightLe * M_PIf * (v.lightR * v.lightR) / (dist * dist) * cosT * spot;
-            const float sh = softShadow(v, p + n * (eps * 2.0f), L, dist - v.lightR, eps, v.pixAngle * v.detail * 2.0f, dist / v.lightR);
-            direct = E * sh;
-        }
+    float3 direct = make_float3(0, 0, 0);
+    for (int li = 0; li < 2; ++li) {
+        const HeykelLight& l = v.light[li];
+        if (l.le <= 0.0f) continue;
+        float3 L = l.pos - p;
+        const float dist = length(L);
+        L = L * (1.0f / dist);
+        const float cosT = dot(n, L);
+        if (cosT <= 0.0f) continue;
+        const float spot = spotOf(l, -L);
+        if (spot <= 0.0f) continue;
+        const float E = l.le * M_PIf * (l.r * l.r) / (dist * dist) * cosT * spot;
+        // the key's shadow estimated; the camera's light casts almost none that the camera sees
+        const float sh = li == 0 ? softShadow(v, p + n * (eps * 2.0f), L, dist - l.r, eps, v.pixAngle * v.detail * 2.0f, dist / l.r) : 1.0f;
+        direct += l.color * (E * sh);
     }
     const float ao = occlusion(v, p, n, t * v.tanHalf);
     const float fill = v.fillLe * M_PIf * (0.35f + 0.65f * saturate(n.y * 0.5f + 0.5f)) * ao;
-    return alb * INV_PIf * (v.lightColor * direct + v.fillColor * fill);
+    return alb * INV_PIf * (direct + v.fillColor * fill);
 }
 
 __global__ void kPreview(HeykelView v, float4* out) {
@@ -116,14 +119,15 @@ __global__ void kPreview(HeykelView v, float4* out) {
     out[y * v.width + x] = make_float4(c.x, c.y, c.z, tHit);
 }
 
-// the key light by sampling the cone its sphere fills (uniform in solid angle), the spot by the leaving direction
-__device__ float3 lightSample(const HeykelView& v, float3 p, float3 n, float eps, float slope, Rng& rng) {
-    const float3 L = v.lightPos - p;
+// a sphere light by sampling the cone it fills (uniform in solid angle), the spot by the leaving direction
+__device__ float3 lightSample(const HeykelView& v, const HeykelLight& l, float3 p, float3 n, float eps, float slope, Rng& rng) {
+    const float u1 = rng.next(), u2 = rng.next();   // drawn even when unused: the dimensions stay in step
+    if (l.le <= 0.0f) return make_float3(0, 0, 0);
+    const float3 L = l.pos - p;
     const float d2 = dot(L, L), d = sqrtf(d2);
-    const float sin2 = fminf(v.lightR * v.lightR / d2, 1.0f);
+    const float sin2 = fminf(l.r * l.r / d2, 1.0f);
     const float cosMax = sqrtf(1.0f - sin2);
     const float oneMinus = sin2 / (1.0f + cosMax);   // 1 - cosMax without cancelling
-    const float u1 = rng.next(), u2 = rng.next();
     const float cosT = 1.0f - u1 * oneMinus;
     const float sinT = sqrtf(fmaxf(0.0f, 1.0f - cosT * cosT));
     const float phi = 2.0f * M_PIf * u2;
@@ -132,12 +136,12 @@ __device__ float3 lightSample(const HeykelView& v, float3 p, float3 n, float eps
     const float cosN = dot(n, dir);
     if (cosN <= 0.0f) return make_float3(0, 0, 0);
     const float b = dot(L, dir);
-    const float tS = b - sqrtf(fmaxf(b * b - (d2 - v.lightR * v.lightR), 0.0f));
-    const float spot = spotOf(v, -dir);
+    const float tS = b - sqrtf(fmaxf(b * b - (d2 - l.r * l.r), 0.0f));
+    const float spot = spotOf(l, -dir);
     if (spot <= 0.0f) return make_float3(0, 0, 0);
     Hit h;
     if (march(p + n * (eps * 2.0f), dir, tS, eps, slope, v.maxSteps2, v.w.s.relax, v.w, h)) return make_float3(0, 0, 0);
-    return v.lightColor * (v.lightLe * spot * cosN * 2.0f * M_PIf * oneMinus);
+    return l.color * (l.le * spot * cosN * 2.0f * M_PIf * oneMinus);
 }
 
 __device__ float3 trace(const HeykelView& v, float3 ro, float3 rd, Rng& rng) {
@@ -155,7 +159,9 @@ __device__ float3 trace(const HeykelView& v, float3 ro, float3 rd, Rng& rng) {
         float3 n = normalAt(p, eps, v.w);
         if (dot(n, rd) > 0.0f) n = normalize(n - rd * (2.0f * dot(n, rd)));
         const float3 alb = v.albedo[h.id < 0 ? 0 : h.id];
-        sum += thr * alb * INV_PIf * lightSample(v, p, n, eps, v.pixAngle * v.detail * v.shadowSlope, rng);
+        const float sslope = v.pixAngle * v.detail * v.shadowSlope;
+        const float3 Ld = lightSample(v, v.light[0], p, n, eps, sslope, rng) + lightSample(v, v.light[1], p, n, eps, sslope, rng);
+        sum += thr * alb * INV_PIf * Ld;
         if (b == v.bounces) break;
         // cosine-weighted bounce
         const float u1 = rng.next(), u2 = rng.next();

@@ -27,6 +27,11 @@ struct Shape {
     float3 cutSize{1, 1, 1};
     float cutOffset = 0.0f;
     int julia = 0;                         // box: 1 adds the constant k instead of the point (a Julia set: bounded, not a cube)
+    // the floors (Kleinian): from iteration split on, the box k2 and the inversion a2 (a later iteration draws finer
+    // structure, so a deeper floor gets its own architecture while the shallower ones stay as they are)
+    int split = 99;
+    float3 k2{1, 1, 1};
+    float a2 = 1.0f;
     float relax = 0.9f;                    // step factor: the estimates of some fractals overshoot a little
     // fractal space -> world: world = center + toWorld(p) * scale
     M3 orient;                             // world -> fractal rotation (rows)
@@ -46,6 +51,7 @@ struct KStep {          // the anchor, one iteration
     float3 toPos, toNeg;   // C - A and -C - A per axis, A the anchor before the fold
     float3 Af;             // the anchor after the fold
     float r2, r2m;         // |Af|² and |Af|² - size
+    float size;            // this iteration's inversion size
     int bx, by, bz;        // the anchor's fold branch per axis: -1, 0, 1
 };
 
@@ -127,10 +133,10 @@ HD float deHybrid(float3 p, const Shape& s) {
 HD float deKleinian(float3 p, const Shape& s) {
     float df = 1.0f;
     for (int i = 0; i < s.iters; ++i) {
-        p = make_float3(2.0f * clampf(p.x, -s.k.x, s.k.x) - p.x, 2.0f * clampf(p.y, -s.k.y, s.k.y) - p.y,
-                        2.0f * clampf(p.z, -s.k.z, s.k.z) - p.z);
+        const float3 c = i < s.split ? s.k : s.k2;
+        p = make_float3(2.0f * clampf(p.x, -c.x, c.x) - p.x, 2.0f * clampf(p.y, -c.y, c.y) - p.y, 2.0f * clampf(p.z, -c.z, c.z) - p.z);
         const float r2 = dot(p, p);
-        const float k = fmaxf(s.a / r2, 1.0f);
+        const float k = fmaxf((i < s.split ? s.a : s.a2) / r2, 1.0f);
         p *= k;
         df *= k;
     }
@@ -240,9 +246,9 @@ HD float deKleinianPert(float3 d, const World& w) {
         const float ad = 2.0f * dot(k.Af, d) + dot(d, d);   // |z|² - |Af|²
         const float r2z = k.r2 + ad, r2mz = k.r2m + ad;
         const bool invZ = r2mz < 0.0f, invA = k.r2m < 0.0f;
-        const float kz = invZ ? s.a / r2z : 1.0f;
+        const float kz = invZ ? k.size / r2z : 1.0f;
         float dk = 0.0f;   // kz - kA, without cancelling
-        if (invZ && invA) dk = -s.a * ad / (r2z * k.r2);
+        if (invZ && invA) dk = -k.size * ad / (r2z * k.r2);
         else if (invZ) dk = -r2mz / r2z;
         else if (invA) dk = k.r2m / k.r2;
         d = d * kz + k.Af * dk;

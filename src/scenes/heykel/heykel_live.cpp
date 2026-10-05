@@ -139,7 +139,11 @@ public:
             h_.zoomAbout(zoomQ_, dz);
             pending_ -= dz;
             if (h_.level == 1.0f && before != 1.0f && dz < 0.0f) pending_ = 0.0f;   // back at the first view
-            if (h_.level >= h_.zoomCap() * 0.999f && dz > 0.0f) pending_ = 0.0f;
+            if (h_.level >= h_.zoomCapAt(zoomQ_) * 0.999f && dz > 0.0f) pending_ = 0.0f;
+            if (std::fabs(pending_) <= 1e-5f) {   // the zoom has stopped: the lamp settles onto what is being looked at
+                pending_ = 0.0f;
+                if (h_.level > 1.0f) h_.settleLight();
+            }
             changed = true;
         }
         // the right button turns the view around the focus (the plinth turning)

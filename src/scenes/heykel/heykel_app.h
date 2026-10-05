@@ -64,7 +64,8 @@ struct HeykelApp {
 
     // the light: pointed at a target from a direction (world), at a distance that follows the view
     D3 lightTarget{0, 0, 0};
-    float3 lightDir{-0.6f, 0.6f, 0.5f};
+    float3 lightDir{-0.6f, 0.6f, 0.5f};   // where it was put (the first light, a drag)
+    float3 lampDir{-0.6f, 0.6f, 0.5f};    // where it is: lightDir, or the nearest direction with a clear line
     float lightDist = 1.5f, lightRadius = 0.06f, litRadius = 0.35f;
     float ev = 0.0f;
 
@@ -91,6 +92,7 @@ struct HeykelApp {
                                                      // into hostSteps; w.st points there)
     bool deep() const { return world.s.fractal == hk::kKleinian; }   // the perturbed one: 10,000 times
     float zoomCap() const { return deep() ? maxLevel : std::min(maxLevel, cfg.f("zoom.max.float", 1000.0f)); }
+    float zoomCapAt(D3 q) const;     // and at a point (flat cut faces and the plinth: shallow)
     double deHost(D3 p) const;       // the scene's estimate at a world point, in doubles where it matters (picking)
     int itersNow() const;            // the formula's iterations at this zoom (the GPU and the picks alike)
 
@@ -101,6 +103,9 @@ struct HeykelApp {
     void aimLight(D3 target, const float3* normal = nullptr);   // onto a point, its size from the view there;
                                                                     // a normal keeps it on the lit side
     void turnLight(float dAzimuth, float dElevation);
+    bool lampClear(D3 target, float3 n, float3 dir, double dist) const;
+    void clearLamp(const float3* normal);        // lampDir: lightDir if its line is clear, else the nearest clear one
+    void settleLight();                          // the zoom stopped: the lamp onto the focus, a clear line
 
     void renderPreview();            // and resets the accumulation
     void accumulate(int spp);

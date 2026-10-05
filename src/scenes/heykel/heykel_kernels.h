@@ -7,6 +7,14 @@
 
 #include <cuda_runtime.h>
 
+// a sphere light behind a spot's cone (coneOuter < -1: no cone)
+struct HeykelLight {
+    float3 pos{0, 1, 1}, axis{0, -1, 0};   // the axis: from the light towards its target
+    float r = 0.05f, le = 0.0f;            // radius (m), radiance; le 0: off
+    float coneOuter = -2.0f, coneInner = -1.0f;
+    float3 color{1, 1, 1};
+};
+
 struct HeykelView {   // one frame's world, camera and light, by value to the kernels
     hk::World w;
     int width = 0, height = 0;
@@ -19,11 +27,9 @@ struct HeykelView {   // one frame's world, camera and light, by value to the ke
     float shadowSlope = 2.0f, bounceSlope = 4.0f;   // their thresholds, times the camera's (they need no pixel's precision)
     float filterSigma = 0.45f;    // the reconstruction's Gaussian, pixels
     float tmax = 30.0f;
-    // the key light: a sphere behind a spot's cone, pointed at what was clicked
-    float3 lightPos{0, 1, 1}, lightAxis{0, -1, 0};   // the axis: from the light towards its target
-    float lightR = 0.05f, lightLe = 10.0f;           // radius (m), radiance
-    float coneOuter = 0.5f, coneInner = 0.8f;        // cosines of the spot's edge
-    float3 lightColor{1, 1, 1};
+    // 0 the key: a spot pointed at what was clicked; 1 the fill on the camera (a macro photographer's ring light: it
+    // reaches every surface the camera sees, deep in the lattice too, and fades with the square of the distance)
+    HeykelLight light[2];
     // the fill: a dim dome, brighter above
     float fillLe = 0.02f;
     float3 fillColor{1, 1, 1};
