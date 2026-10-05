@@ -10,6 +10,7 @@
 #include "scenes/olcek/olcek_app.h"
 #include "scenes/olcek/olcek_bugun.h"
 #include "scenes/olcek/olcek_hiz_pano.h"
+#include "scenes/olcek/olcek_hiz_yan.h"
 
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
@@ -114,13 +115,16 @@ public:
                     {"R", L("Sahile dön", "Back to the beach")},
                     {"T", L("Tur: evrenin kenarına, geri, Planck'a, geri", "The tour: to the edge of the universe, back, to Planck, back")}}},
                   {L("Hız", "Speed"),
-                   {{"W", L("İtiş (0,4 c/s: 12 milyon g)", "Thrust (0.4 c/s: 12 million g)")},
+                   {{"W", L("İtiş: 1 g'den başlar, hızlandıkça artar (%1 c 1 dk, 21 dokuz 8 dk)",
+                            "Thrust: from 1 g, rising with the speed (1% c in 1 min, 21 nines in 8)")},
                     {"S", L("Fren (aynı güçle; geri vites yok)", "Brake (the same power; no reverse)")},
                     {L("Boşluk", "Space"), L("Otomatik varış: doğru anda frenleyip durur", "Automatic arrival: brakes at the right moment")},
                     {"Tab", L("Roketin gözü ↔ yandan", "The rocket's eye ↔ from the side")},
                     {"G", L("Grafikler: aç, kapat", "The graphs: on, off")},
                     {L("Sürükle", "Drag"), L("Başını çevir (roketin gözü)", "Turn your head (the rocket's eye)")},
                     {L("Tekerlek", "Wheel"), L("Dürbün (göz), ölçek (yandan)", "Binoculars (eye), scale (side)")},
+                    {"1-6", L("Yandan ölçek durakları: roket, Dünya ve Ay, Güneş Sistemi, yakın yıldızlar, Samanyolu, Yerel Grup",
+                              "Side view's scales: the rocket, the Earth and Moon, the Solar System, the nearby stars, the Milky Way, the Local Group")},
                     {"R", L("İleri bak / rokete dön", "Look ahead / back to the rocket")}}}};
         i.reloadable = true;
         return i;
@@ -153,6 +157,7 @@ public:
         case 3:
             a_.prepareHiz();
             savePath_ = host.testing() ? std::string() : a_.root + "/hiz_yolculuk.txt";   // (a test run leaves it alone)
+            testing_ = host.testing();
             restore();
             st.label = L("İlk kare", "The first frame");
             st.fraction = 0.9f;
@@ -325,7 +330,24 @@ public:
 
     // the second option's graphs over the picture (both views), under the application's panels
     void overlay(const app::Overlay& o) override {
-        if (mode_ != 1 || !graphs_) return;
+        if (mode_ != 1) return;
+        if (view_ == 1) {   // the side view's own layer: the medium, the way, the rocket (part of the picture)
+            const olcek::Scale& sc = a_.sc;
+            hz::SideLayer L;
+            L.ship = &a_.ship;
+            L.route = &a_.route;
+            L.right = sc.cam.right;
+            L.up = sc.cam.up;
+            L.fwd = sc.cam.fwd;
+            L.focus = sc.hiz.focus;
+            L.D = sc.cam.D;
+            L.W = sc.cam.W;
+            L.tanHalfX = std::tan(0.5 * sc.fovX * kPi / 180.0);
+            L.view = o.view;
+            L.dt = lastDtau_;
+            hz::drawSide(L, side_, std::min(o.scale, o.view.h / 1440.0f));
+        }
+        if (!o.hud || !graphs_) return;
         const hz::Ship& s = a_.ship;
         hz::Pano p;
         p.ship = &s;
@@ -360,6 +382,20 @@ private:
         a_.sc.hiz.on = true;
         lastNow_ = -1.0;
         evInit_ = false;
+        // a test run's fixture (--set hiz.test.varis=1): a minute before Proxima at 1% of c, braking on the stopping curve
+        // with the automatic arrival (the arrival and the turn without the quarter hour's flight)
+        if (testing_ && a_.cfg.f("hiz.test.varis", 0.0f) > 0.5f && !fixtureDone_) {
+            hz::Ship& s = a_.ship;
+            s = hz::depart(a_.route);
+            s.phi = std::atanh(0.01);
+            s.x = hz::dd(-hz::stopDistance(s.phi));
+            s.autopilot = true;
+            s.drive = hz::Drive::Brake;
+            s.legTau = 0.0;
+            s.legT = hz::dd(0.0);
+            s.departT = hz::dd(0.0);
+            fixtureDone_ = true;
+        }
         persist();
     }
     void leaveHiz() {
@@ -431,8 +467,20 @@ private:
             }
             if (in.pressed(GLFW_KEY_R)) lookAhead_ = true;
         } else {
-            if (in.scroll != 0.0f && inView) sidePending_ -= in.scroll * wheelStep;
-            if (in.pressed(GLFW_KEY_R)) sidePending_ = sideDefault() - sideS_;
+            if (in.scroll != 0.0f && inView) {
+                sidePending_ -= in.scroll * wheelStep;
+                sideSlow_ = false;
+            }
+            if (in.pressed(GLFW_KEY_R)) {
+                sidePending_ = sideDefault() - sideS_;
+                sideSlow_ = false;
+            }
+            // the scale's stops (PLAN §3.2): a slow, even zoom there (the same decades per second whatever the jump)
+            for (int i = 0; i < 6; ++i)
+                if (in.pressed(GLFW_KEY_1 + i)) {
+                    sidePending_ = kSideStops[i] - sideS_;
+                    sideSlow_ = true;
+                }
         }
         hizRender(dtau);
         cudaMemcpy(pinned_, a_.output, size_t(a_.sc.width) * a_.sc.height * sizeof(uchar4), cudaMemcpyDeviceToHost);
@@ -442,7 +490,10 @@ private:
         }
     }
 
-    static double sideDefault() { return 1.3; }
+    // the side view's screen width (log10 m): the rocket (14 m) a quarter of it; and the stops of the keys 1-6: the
+    // rocket, the Earth and the Moon, the Solar System, the nearby stars, the Milky Way, the Local Group (with Andromeda)
+    static double sideDefault() { return 1.75; }
+    static constexpr double kSideStops[6] = {1.75, 9.08, 13.08, 17.4, 21.2, 22.63};   // (the last: the leg in the graphs' gap)
 
     void notices(app::Host& host, const hz::Events& ev, int legBefore) {
         const hz::Ship& s = a_.ship;
@@ -484,7 +535,11 @@ private:
             if (std::fabs(zoomPending_) < 1e-6) zoomPending_ = 0.0;
         }
         if (sidePending_ != 0.0) {
-            double d = std::fabs(sidePending_) < 2e-4 ? sidePending_ : sidePending_ * ease;
+            // the wheel: eased like the first option's; a stop: at most 3.5 decades a second, easing in at the end
+            const double easeSide = sideSlow_ ? std::min(1.0 - std::exp(-std::max(dtau, 1.0 / 240.0) * 2.5),
+                                                         3.5 * std::max(dtau, 1.0 / 240.0) / std::max(std::fabs(sidePending_), 1e-9))
+                                              : ease;
+            double d = std::fabs(sidePending_) < 2e-4 ? sidePending_ : sidePending_ * easeSide;
             const double before = sideS_;
             sideS_ = std::clamp(sideS_ + d, 1.0, 23.0);
             sidePending_ = sideS_ == before ? 0.0 : sidePending_ - d;
@@ -524,9 +579,14 @@ private:
             sc.hiz.rocket = pos;
             sc.hiz.motion = s.heading;
             sc.hiz.rate = k.gamma;
-            sc.hiz.gamma = k.gamma;
+            {   // at the Local Group's scale the leg's middle (the rocket crawls between its two stops); nearer, the rocket
+                const int Lg = std::min(s.leg, 1);
+                const double tMid = -s.x.value() - 0.5 * a_.route.length[Lg];
+                const double u = std::clamp((sideS_ - 21.6) / 0.8, 0.0, 1.0);
+                sc.hiz.focus = a_.route.dir[Lg] * (tMid * u * u * (3.0 - 2.0 * u));
+            }
             sc.hiz.ev = a_.sideEv(sideS_, pos);
-            sc.hiz.mark = make_float3(1.0f, 0.93f, 0.86f) * 30.0f;
+            sc.hiz.mark = make_float3(0.0f, 0.0f, 0.0f);   // (the rocket: the side layer draws it)
             sc.s = sideS_;
             // the world from "today" at the first thrust (waiting beside the Earth, the rocket goes round with it)
             sc.hizClocks(s.departT.hi < 0.0 ? 0.0 : hz::add(s.t, hz::neg(s.departT)).value());
@@ -704,10 +764,13 @@ private:
     bool overshootShown_ = false;       // the "too fast to stop" notice given (once per such brake)
     bool graphs_ = true;                // the five panels of graphs (G)
     hz::PanoState pano_;
+    hz::SideState side_;
     double lastDtau_ = 0.0;
     double zoom_ = std::log10(std::tan(37.5 * kPi / 180.0));   // log10 tan(fov/2): 75 degrees across
     double zoomPending_ = 0.0;
-    double sideS_ = 1.3, sidePending_ = 0.0;   // the side view's screen width (log10 m)
+    double sideS_ = 1.75, sidePending_ = 0.0;   // the side view's screen width (log10 m)
+    bool sideSlow_ = false;                     // the zoom to a stop (1-6): slow and even
+    bool testing_ = false, fixtureDone_ = false;   // a test run; its fixture set once
     double eyeEv_ = 17.5;
     bool evInit_ = false;
     hz::EyeSum eyeSum_;

@@ -63,6 +63,8 @@ void circle(float cx, float cy, float radius, Color c);
 void polyline(const float* xy, int n, float width, Color c, float dash = 0.0f, float gap = 0.0f, float phase = 0.0f);
 void line(float x0, float y0, float x1, float y1, float width, Color c, float dash = 0.0f, float gap = 0.0f);
 void arc(float cx, float cy, float r, float a0, float a1, float width, Color c, int segments = 0);   // radians, y down
+// a convex polygon filled with one colour, its edge hard (for a soft one draw its outline over it with polyline)
+void fill(const float* xy, int n, Color c);
 
 // ---- images
 Image loadImage(const std::string& path, int maxWidth = 0);

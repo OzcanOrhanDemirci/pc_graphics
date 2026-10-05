@@ -121,9 +121,10 @@ public:
     virtual bool testing() const { return false; }
 };
 
-// what a scene may draw over its own picture with the interface kit (graphs, diagrams), after the picture and under
-// the application's panels; hidden with the interface (H) like them
+// what a scene may draw over its own picture with the interface kit, after the picture and under the application's
+// panels: its own 2D picture (always) and its graphs (with the interface: hud, hidden by H like the panels)
 struct Overlay {
+    bool hud = true;                     // the interface is shown (H not pressed): graphs and labels only then
     ui::Rect view;                       // where the picture is (window pixels)
     float scale = 1.0f;                  // the layout's scale: sizes are for 2560x1440, times this
     double now = 0.0;                    // seconds since the scene started

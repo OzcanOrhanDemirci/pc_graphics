@@ -300,7 +300,13 @@ double OlcekApp::sideEv(double s, olcek::V3 rocket) const {
     const double space = cfg.f("hiz.yan.ev", 23.5f);
     const double u = std::clamp((std::log10(std::max(length(rocket), 1.0)) - std::log10(30.0 * olcek::hiz::kAU)) / 2.0, 0.0, 1.0);
     const double uu = u * u * (3.0 - 2.0 * u);
-    return std::max(sc.ev(s), sc.ev(s) * (1.0 - uu) + space * uu);
+    // above the Galaxy's disc at a few thousand light years (s 18.5 - 20.5) its light fills the screen: the eye adapts to
+    // it (darker), so its structure shows instead of a grey veil
+    const double dip = 2.5 * std::exp(-0.5 * std::pow((s - 19.5) / 0.55, 2.0));
+    // and between the galaxies, a dark screen with two small discs in it: the eye opens to them (their outer discs show)
+    const double t = std::clamp((s - 21.8) / 0.8, 0.0, 1.0);
+    const double open = 2.5 * t * t * (3.0 - 2.0 * t);
+    return std::max(sc.ev(s), sc.ev(s) * (1.0 - uu) + space * uu) - dip + open;
 }
 
 olcek::hiz::Eye OlcekApp::eyeAt(const olcek::hiz::Ship& s, double yaw, double pitch, double tanHalfX) const {

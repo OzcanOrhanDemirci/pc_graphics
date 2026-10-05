@@ -350,8 +350,9 @@ void App::frameRunning(double now, double dt) {
         const float s = std::min(float(fbw_) / frame_.w, float(fbh_) / frame_.h);
         view_ = ui::Rect{0.5f * (fbw_ - frame_.w * s), 0.5f * (fbh_ - frame_.h * s), frame_.w * s, frame_.h * s};
         ui::image(frame_, view_);
-        if (hud_) {   // the scene's own graphs over its picture, under the panels (and the fade-in over both)
+        {   // the scene's own 2D drawing over its picture, under the panels (and the fade-in over both)
             Overlay o;
+            o.hud = hud_;
             o.view = view_;
             o.scale = S_.s;
             o.now = now - sceneT0_;
@@ -596,7 +597,7 @@ int App::run(const Options& opt) {
                 wait(10.0); log("heykel tur 10000"); shot("heykel_tur_10000");
                 key(GLFW_KEY_T); wait(0.5); key(GLFW_KEY_R); wait(1.0);
             }
-            if (infos_[s].id == "olcek" && part != "hiz") {
+            if (infos_[s].id == "olcek" && part != "hiz" && part != "hizvaris") {
                 // the beach, the wheel out (a notch is x1.5: ~5.7 a decade) to the Earth, the Solar System, the Galaxy and
                 // the edge, R home, in to the grain, the atom, the nucleus and the desert, then the tour from the panel
                 wait(2.0); log("olcek sahil"); shot("olcek_sahil");
@@ -616,25 +617,38 @@ int App::run(const Options& opt) {
                 key(GLFW_KEY_T); wait(0.5); key(GLFW_KEY_R); wait(4.0);
             }
             if (infos_[s].id == "olcek") {
-                // the second option, Hız (a test run starts the journey afresh and leaves the user's own alone): the eye at
-                // rest beside the Earth, W for 5 and 10 s (rapidity 2 and 4), the side view and its wheel, the head turned
-                // by a drag and back with R, Space (the quickest arrival); "olcek/hiz": on to Proxima (~89 s from rest)
+                // the second option, Hız (a test run starts the journey afresh and leaves the user's own alone). A double
+                // click on "Hız" (it must not start the journey); the side view at the rocket: at rest, under thrust (the
+                // drive's light), the scale's stops 2-6 and back; the eye: W, the head turned by a drag and back with R,
+                // Space (the quickest arrival). "olcek/hiz": a minute on (the drive: 1% of c at a minute from rest).
+                // "olcek/hizvaris" (with --set hiz.test.varis=1): the scene starts a minute before Proxima braking on the
+                // stopping curve: the arrival, the turn, both views there.
                 control("secenek", 1); wait(0.15); click(); wait(1.35); log("olcek hiz (cift tik: yolculuk baslamaz, Hiz 0)"); shot("olcek_hiz_kalkis");
-                hold(GLFW_KEY_W, true); wait(5.0); hold(GLFW_KEY_W, false); wait(0.5); log("olcek hiz W 5 sn"); shot("olcek_hiz_itis_5sn");
-                hold(GLFW_KEY_W, true); wait(5.0); hold(GLFW_KEY_W, false); wait(0.5); log("olcek hiz W 10 sn"); shot("olcek_hiz_itis_10sn");
-                key(GLFW_KEY_TAB); wait(1.0); shot("olcek_hiz_yandan");
-                mouse(0.50f, 0.50f); wheel(-40.0f); wait(2.0); shot("olcek_hiz_yandan_uzak");
-                key(GLFW_KEY_R); wait(2.0); key(GLFW_KEY_TAB); wait(1.0);
-                mouse(0.50f, 0.50f); left(true); wait(0.1);
-                for (int k = 1; k <= 12; ++k) { mouse(0.50f + 0.02f * k, 0.50f - 0.008f * k); wait(0.03); }
-                left(false); wait(0.3); shot("olcek_hiz_bakis");
-                key(GLFW_KEY_R); wait(1.5);
-                key(GLFW_KEY_SPACE); wait(3.0); log("olcek hiz otomatik"); shot("olcek_hiz_otomatik");
-                if (part == "hiz") {
-                    // from rapidity 4 the quickest arrival takes ~79 s after Space; the 153-degree turn then ~8 s
-                    wait(76.5); log("olcek hiz proxima"); shot("olcek_hiz_proxima");
+                if (part != "hizvaris") {
+                    key(GLFW_KEY_TAB); wait(1.5); shot("olcek_hiz_yandan");
+                    hold(GLFW_KEY_W, true); wait(5.0); log("olcek hiz W 5 sn (yandan, motor isigi)"); shot("olcek_hiz_yandan_itis");
+                    key(GLFW_KEY_2); wait(5.0); log("olcek hiz W 10 sn (Dunya ve Ay)"); shot("olcek_hiz_yandan_dunya_ay");
+                    hold(GLFW_KEY_W, false);
+                    key(GLFW_KEY_3); wait(3.5); shot("olcek_hiz_yandan_gunes");
+                    key(GLFW_KEY_4); wait(3.0); shot("olcek_hiz_yandan_yildizlar");
+                    key(GLFW_KEY_5); wait(3.0); shot("olcek_hiz_yandan_samanyolu");
+                    key(GLFW_KEY_6); wait(2.5); shot("olcek_hiz_yandan_yerel_grup");
+                    key(GLFW_KEY_1); wait(7.5); key(GLFW_KEY_TAB); wait(1.0);
+                    hold(GLFW_KEY_W, true); wait(5.0); hold(GLFW_KEY_W, false); wait(0.5); log("olcek hiz W 15 sn"); shot("olcek_hiz_itis_15sn");
+                    mouse(0.50f, 0.50f); left(true); wait(0.1);
+                    for (int k = 1; k <= 12; ++k) { mouse(0.50f + 0.02f * k, 0.50f - 0.008f * k); wait(0.03); }
+                    left(false); wait(0.3); shot("olcek_hiz_bakis");
+                    key(GLFW_KEY_R); wait(1.5);
+                    key(GLFW_KEY_SPACE); wait(3.0); log("olcek hiz otomatik"); shot("olcek_hiz_otomatik");
+                    if (part == "hiz") {
+                        wait(60.0); log("olcek hiz bir dakika sonra"); shot("olcek_hiz_dakika");
+                        key(GLFW_KEY_TAB); wait(1.5); shot("olcek_hiz_dakika_yandan"); key(GLFW_KEY_TAB);
+                    }
+                } else {
+                    wait(58.0); log("olcek hiz proxima"); shot("olcek_hiz_proxima");
                     wait(4.0); shot("olcek_hiz_donus");
-                    key(GLFW_KEY_TAB); wait(1.0); shot("olcek_hiz_proxima_yandan"); key(GLFW_KEY_TAB);
+                    key(GLFW_KEY_TAB); wait(1.5); shot("olcek_hiz_proxima_yandan");
+                    key(GLFW_KEY_4); wait(4.0); shot("olcek_hiz_proxima_yildizlar"); key(GLFW_KEY_1); wait(5.0); key(GLFW_KEY_TAB);
                 }
                 control("secenek", 0); wait(1.5); shot("olcek_hiz_geri");
             }

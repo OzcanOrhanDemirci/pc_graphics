@@ -16,7 +16,6 @@ namespace {
 
 constexpr double kPi = 3.14159265358979323846;
 constexpr double kMpC2eV = 938.27208816e6 + 0.51099895e6;   // a hydrogen atom's rest energy (eV)
-constexpr double kG = 9.80665;
 constexpr double kRocketKg = 1000.0;        // the plan's 1 t rocket (the costs are per tonne)
 
 const char* kSupDigits[10] = {"⁰", "¹", "²", "³", "⁴", "⁵", "⁶", "⁷", "⁸", "⁹"};
@@ -331,7 +330,8 @@ void drawCost(const Pano& p, PanoState&, Box b, float S) {
     row(L("Durmak için de yakarsa", "To stop again as well"), L("Güneş'in ", "the Sun's ") + sunTime(c.photonStop), white(0.95f));
     row(L("Kütle oranı (durmakla)", "Mass ratio (with stopping)"), big(c.massRatio) + "  (" + big(c.massRatioStop) + ")", white(0.95f));
     const bool driving = s.drive == Drive::Thrust || s.drive == Drive::Brake;
-    row(L("İvme", "Acceleration"), driving ? theme::num(c.gees / 1e6, 1) + L(" milyon g", " million g") : "0 g", white(0.95f));
+    row(L("İvme", "Acceleration"), !driving ? "0 g" : c.gees < 1e6 ? sig3(c.gees) + " g" : theme::num(c.gees / 1e6, 1) + L(" milyon g", " million g"),
+        white(0.95f));
     const double sun = c.plate / kSolarConstant;
     row(L("Önden gelen ışıma", "Light from ahead"), L("Güneş ışığının ", "sunlight × ") + (sun < 1e4 ? sig3(sun) : sciText(sun, 2)) + L(" katı", ""), gold(0.95f));
     // the CMB ahead: its temperature and the colour of a blackbody that hot (and its band)
@@ -418,6 +418,7 @@ std::string dateText(double t) {
 }
 std::string betaText(const Kin& k) {
     if (k.phi <= 0.0) return "0";
+    if (k.beta < 1e-3) return sciText(k.beta, 2);   // (a slow ship: 1,73 × 10⁻⁷, not 0,000000)
     if (k.nines < 3.0) return theme::num(k.beta, 6);
     const int n = int(std::floor(k.nines + 1e-9));
     const double r = 1.0 - std::pow(10.0, double(n)) * k.eps;   // the digits after the n nines, as 0.xyz
@@ -460,7 +461,7 @@ Cost costOf(double phi) {
     c.photonStop = std::expm1(2.0 * phi) * mc2;
     c.massRatio = std::exp(phi);
     c.massRatioStop = std::exp(2.0 * phi);
-    c.gees = kAlpha * kC / kG;
+    c.gees = driveRate(phi) * kC / kG0;
     c.plate = cmbOnPlate(k);
     c.cmbAhead = kCmbToday * std::exp(phi);
     c.hydrogen = gm1 * kMpC2eV;

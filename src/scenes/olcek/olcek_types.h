@@ -311,7 +311,6 @@ struct OlcekView {
     // The second option's side view is the world as the rocket measures it (PLAN §3.2): every distance along the motion
     // (the screen's x) gamma times shorter about the rocket, which the camera sits straight across from. For what the
     // rays draw that is the same as rays stretched gamma times across (points are contracted on the host). 1: none
-    float stretchX = 1.0f;
     float3 background{0, 0, 0};
     int nBalls = 0, nBlobs = 0, nDiscs = 0;
     GBall balls[kMaxBalls];

@@ -110,7 +110,7 @@ __device__ float fbm3(float3 p, int oct, int seed) {
 }
 
 __device__ __forceinline__ float3 rayDir(float px, float py) {
-    const float sx = (px / cV.width * 2.0f - 1.0f) * cV.tanHalfX * cV.stretchX;
+    const float sx = (px / cV.width * 2.0f - 1.0f) * cV.tanHalfX;
     const float sy = (1.0f - py / cV.height * 2.0f) * cV.tanHalfY;
     return normalize(make_float3(sx, sy, 1.0f));
 }

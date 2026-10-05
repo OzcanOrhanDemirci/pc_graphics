@@ -34,7 +34,8 @@ src/
     olcek/      sahne 7 · Ölçek (62 onluk: çapa ağacı ve hassasiyet, katman saatleri, sabit örnekli CUDA çizici, "bugün"
                 olcek_bugun.h: tools/olcek_bugun.py'nin astropy + DE440s çıktısı); ikinci seçeneği Hız: olcek_hiz.* (özel
                 görelilik, rota, roket, kayıt), olcek_hiz_goz.* (roketin gözü, her sıcaklıkta kara cismin rengi),
-                olcek_hiz_pano.* (beş grafik panosu, arayüz takımıyla resmin üstüne), olcek_hiz_test.cpp
+                olcek_hiz_pano.* (beş grafik panosu, arayüz takımıyla resmin üstüne), olcek_hiz_yan.* (yandan
+                haritanın 2B katmanı: ortam noktaları, yol, roket, motor ışığı), olcek_hiz_test.cpp
                 (--test olcek-hiz, --hiz kareleri)
       particles.*       tanecik çözücüsü (PBF, XPBD bağlar, şekil eşleme, taneler)  surface.* sıvı yüzeyi
       lab_world.*       beş deneyin kurulumu ve adımı (kaba ya da ince)  lab_record.* ince kayıt, işçi iş parçacığı
@@ -63,7 +64,7 @@ tools/        Python araçları: EXR istatistikleri, FLIP karşılaştırması, 
 | `status(s)` | Arayüz şeridinin içeriği: durum etiketleri (`chips`), sağ üstteki ölçümler (`metrics`), panelin denetimleri (`controls`), bir ilerleme çubuğu (ya da sonu olmayan, `progressEndless`). |
 | `screenshot(host)` | F12: sahnenin kendi resmi `captures/<id>_<tarih>` (sahne 1 EXR de yazar). |
 | `reload(host)` | F5 (isteğe bağlı): ayarlar ve programlar yeniden. |
-| `overlay(o)` | İsteğe bağlı: sahnenin resmin üstüne arayüz takımıyla çizdikleri (grafikler, diyagramlar), resimden sonra, uygulamanın panellerinden önce; H ile onlarla birlikte gizlenir. `o.view` resmin yeri, `o.scale` yerleşim ölçeği, `o.panels` uygulamanın panellerinin bir önceki karedeki yerleri: grafikler onlardan uzak durur (Hız'ın sütunları aralarındaki boşluğa sığar, sığmazsa küçülür). |
+| `overlay(o)` | İsteğe bağlı: sahnenin resmin üstüne arayüz takımıyla çizdikleri, resimden sonra, uygulamanın panellerinden önce. Her karede çağrılır; `o.hud` yanlışsa (H) yalnız resmin parçası olanları çizer (Hız'ın yandan roketi), grafikleri değil. `o.view` resmin yeri, `o.scale` yerleşim ölçeği, `o.panels` uygulamanın panellerinin bir önceki karedeki yerleri: grafikler onlardan uzak durur (Hız'ın sütunları aralarındaki boşluğa sığar, sığmazsa küçülür). |
 | `unload()` | Ekran kartı kaynaklarını bırakır. Uygulama ardından `cudaDeviceReset` yapar: bir sahnenin unuttuğu bellek bir sonrakine geçmez. |
 
 `Host` (uygulamanın sahneye sunduğu): bildirim (`toast`), fareyi yakalama (birinci şahıs bakış), proje kökü, ekran görüntüsü

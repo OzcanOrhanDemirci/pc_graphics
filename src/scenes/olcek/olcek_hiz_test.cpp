@@ -61,19 +61,33 @@ double epsLong(double phi) {
     return ddDiv(ddMul(e, 2.0), hz::add(e, 1.0)).value();
 }
 
-// ---- the closed forms against a fine Runge-Kutta integration of dphi/dtau = +-alpha, dt/dtau = cosh, dx/dtau = c sinh
-struct Integ { double dt, dx; };
-Integ rk4(double phi0, double sign, double tau, int n) {
-    // the state (phi, t, x); phi is linear in tau, so the integrand is known exactly at each stage
-    double t = 0.0, x = 0.0;
-    const double h = tau / n;
-    for (int i = 0; i < n; ++i) {
-        const double p0 = phi0 + sign * hz::kAlpha * h * i;
-        const double pm = p0 + sign * hz::kAlpha * 0.5 * h, p1 = p0 + sign * hz::kAlpha * h;
-        t += h / 6.0 * (std::cosh(p0) + 4.0 * std::cosh(pm) + std::cosh(p1));
-        x += h / 6.0 * hz::kC * (std::sinh(p0) + 4.0 * std::sinh(pm) + std::sinh(p1));
+// ---- the drive's closed forms against a fine integration of dphi/dtau = +-kappa(phi), dt/dtau = cosh, dx/dtau = c sinh:
+// the slices' rates only (not their sums), phi linear in tau within each, Simpson's rule on n steps per slice crossed
+struct Integ { double dt, dx, phi; };
+Integ integrate(double phi0, double sign, double tau, int n) {
+    std::vector<double> sp, sk;
+    hz::driveSlices(sp, sk);
+    double t = 0.0, x = 0.0, phi = phi0, left = tau;
+    while (left > 0.0) {
+        if (sign < 0.0 && phi <= 0.0) break;
+        // the slice: up from phi (thrust) or down from it (brake)
+        size_t i;
+        if (sign > 0.0) i = size_t(std::upper_bound(sp.begin(), sp.end(), phi) - sp.begin()) - 1;
+        else i = size_t(std::lower_bound(sp.begin(), sp.end(), phi) - sp.begin()) - 1;
+        const double end = sign > 0.0 ? (i + 1 < sp.size() ? sp[i + 1] : 1e300) : sp[i];
+        const double seg = std::min(left, std::fabs(end - phi) / sk[i]);
+        const double h = seg / n;
+        for (int j = 0; j < n; ++j) {
+            const double p0 = phi + sign * sk[i] * h * j;
+            const double pm = p0 + sign * sk[i] * 0.5 * h, p1 = p0 + sign * sk[i] * h;
+            t += h / 6.0 * (std::cosh(p0) + 4.0 * std::cosh(pm) + std::cosh(p1));
+            x += h / 6.0 * hz::kC * (std::sinh(p0) + 4.0 * std::sinh(pm) + std::sinh(p1));
+        }
+        phi = seg < left ? end : phi + sign * sk[i] * seg;
+        left -= seg;
+        if (seg <= 0.0) break;
     }
-    return {t, x};
+    return {t, x, phi};
 }
 
 // Gauss-Legendre nodes on [-1, 1]
@@ -142,23 +156,69 @@ int runHizTests(OlcekApp& app) {
     const double cap = hz::phiCap();
     std::printf("hiz: ozel gorelilik sinamalari\n");
 
-    // ---- 1. the closed forms against integration
+    // ---- 1. the drive: its law (Özcan's schedule, 1 g at rest, always rising) and its closed forms against integration
     {
-        double worst = 0.0;
-        for (double phi0 : {0.0, 0.5, 3.0, 12.0, 20.0, 23.0})
+        std::vector<double> sp, sk;
+        hz::driveSlices(sp, sk);
+        bool rising = true;
+        double ratio = 0.0;
+        for (size_t i = 0; i + 1 < sk.size(); ++i) {
+            rising = rising && sk[i + 1] > sk[i] && sp[i + 1] > sp[i];
+            ratio = std::max(ratio, sk[i + 1] / sk[i]);
+        }
+        const double g = hz::kG0 / kC;
+        std::printf("    ivme: %zu dilim, komsu dilimler en cok %%%.2f farkli; durusta %.6f g, tavanda %.4g g\n", sk.size(), (ratio - 1.0) * 100.0,
+                    hz::driveRate(0.0) / g, hz::driveRate(cap) / g);
+        check(rising && ratio < 1.0101 && std::fabs(hz::driveRate(0.0) / g - 1.0) < 1e-12, "ivme durusta 1 g, hep artiyor, dilimler %1 adimla (hissedilmez)");
+        const double t1 = hz::driveTime(std::atanh(0.01)), t10 = hz::driveTime(std::atanh(0.1)), t99 = hz::driveTime(std::atanh(0.99));
+        const double tCap = hz::driveTime(cap);
+        std::printf("    W ile durustan: %%1 c %.3f s, %%10 c %.3f s, %%99 c %.3f s, 21 dokuz %.3f s; 300 km/sa %.2f s, kacis hizi %.2f s\n", t1, t10, t99,
+                    tCap, hz::driveTime(std::atanh(83.3333333 / kC)), hz::driveTime(std::atanh(11186.0 / kC)));
+        check(std::fabs(t1 - 60.0) < 0.5 && std::fabs(t10 - 120.0) < 0.5 && std::fabs(t99 - 330.0) < 0.5 && std::fabs(tCap - 480.0) < 0.5,
+              "Ozcan'in takvimi: %1 c 1 dk, %10 c 2 dk, %99 c 5,5 dk, 21 dokuz 8 dk");
+        double worst = 0.0, worstPhi = 0.0;
+        for (double phi0 : {0.0, 1e-7, 3e-4, 0.01, 0.5, 3.0, 12.0, 20.0, 23.0})
             for (double tau : {1.0 / 60.0, 0.7, 5.0}) {
-                // thrust
-                const double p1 = phi0 + hz::kAlpha * tau;
-                const Integ a = rk4(phi0, 1.0, tau, 20000);
-                worst = std::max(worst, std::fabs(hz::sinhDiff(phi0, p1) / hz::kAlpha - a.dt) / a.dt);
-                worst = std::max(worst, std::fabs(kC / hz::kAlpha * hz::coshDiff(phi0, p1) - a.dx) / a.dx);
-                // brake (from phi0 + alpha tau down to phi0)
-                const Integ b = rk4(p1, -1.0, tau, 20000);
-                worst = std::max(worst, std::fabs(hz::sinhDiff(phi0, p1) / hz::kAlpha - b.dt) / b.dt);
-                worst = std::max(worst, std::fabs(kC / hz::kAlpha * hz::coshDiff(phi0, p1) - b.dx) / b.dx);
+                const hz::DriveStep a = hz::driveThrust(phi0, tau, 1e9);
+                const Integ ia = integrate(phi0, 1.0, tau, 4000);
+                worst = std::max({worst, std::fabs(a.dT - ia.dt) / ia.dt, std::fabs(a.dX - ia.dx) / ia.dx});
+                worstPhi = std::max(worstPhi, std::fabs(a.phi1 - ia.phi) / std::max(ia.phi, 1e-300));
+                // brake back down from there for the same time: the same way and time (the law runs backwards)
+                const hz::DriveStep b = hz::driveBrake(a.phi1, tau);
+                const Integ ib = integrate(a.phi1, -1.0, tau, 4000);
+                worst = std::max({worst, std::fabs(b.dT - ib.dt) / ib.dt, std::fabs(b.dX - ib.dx) / ib.dx});
+                worstPhi = std::max(worstPhi, std::fabs(b.phi1 - phi0) / std::max(phi0, 1e-12));
             }
-        std::printf("  kapali bicimler / Runge-Kutta (20.000 adim): en buyuk goreli fark %.2e\n", worst);
-        check(worst < 1e-10, "itis ve fren: dt = (sinh f1 - sinh f0)/alfa, dx = (c/alfa)(cosh f1 - cosh f0)");
+        std::printf("  kapali bicimler / Simpson (dilim basina 4.000 adim): en buyuk goreli fark %.2e; hiz acisi %.2e\n", worst, worstPhi);
+        check(worst < 1e-10 && worstPhi < 1e-9, "itis ve fren dilim dilim: dt = (sinh f1 - sinh f0)/k, dx = (c/k)(cosh f1 - cosh f0); fren itisin aynasi");
+        // the way, the time and the peak: one law (D(phi*) = (r + D(phi0)) / 2 lands on r)
+        double worstPeak = 0.0;
+        for (double phi0 : {0.0, 0.003, 1.0, 9.0})
+            for (double r : {1e3, 1e9, 4e16, 2.2e22}) {
+                const double ps = hz::peakFrom(phi0, r);
+                if (ps < phi0) continue;
+                const double way = hz::stopDistance(ps) - hz::stopDistance(phi0) + hz::stopDistance(ps);
+                worstPeak = std::max(worstPeak, std::fabs(way - r) / r);
+            }
+        check(worstPeak < 1e-9, "tepe hiz: oraya itis + oradan fren tam kalan yol");
+        // the slices for the independent check (tools: an mpmath oracle reads them)
+        std::filesystem::create_directories(std::filesystem::path(app.root) / "captures/olcek_hiz");
+        if (FILE* f = std::fopen((std::filesystem::path(app.root) / "captures/olcek_hiz/ivme_dilimleri.csv").string().c_str(), "wb")) {
+            std::fprintf(f, "phi_start,kappa_per_s\n");
+            for (size_t i = 0; i < sp.size(); ++i) std::fprintf(f, "%.17g,%.17g\n", sp[i], sk[i]);
+            std::fclose(f);
+        }
+        // ... and what this code makes of them, for the oracle to compare (the route's legs, the drive's sums, the journeys)
+        if (FILE* f = std::fopen((std::filesystem::path(app.root) / "captures/olcek_hiz/ivme_sonuclar.txt").string().c_str(), "wb")) {
+            std::fprintf(f, "leg0_m %.17g\nleg1_m %.17g\nphi_cap %.17g\n", R.length[0], R.length[1], cap);
+            for (double phi : {1e-7, 1e-3, 0.0100003333466675, 0.100335347731076, 0.5, 2.6466524123622462, 10.0, 17.0, cap})
+                std::fprintf(f, "phi %.17g T %.17g C %.17g D %.17g\n", phi, hz::driveTime(phi), hz::driveEarthTime(phi), hz::stopDistance(phi));
+            for (int L = 0; L < 2; ++L) {
+                const double ps = hz::peakFrom(0.0, R.length[L]);
+                std::fprintf(f, "peak%d %.17g\n", L, ps);
+            }
+            std::fclose(f);
+        }
     }
 
     // ---- 2. 1 - beta against a double-double evaluation
@@ -197,23 +257,23 @@ int runHizTests(OlcekApp& app) {
         // what the perfect drive takes, from the formulas alone (from rest to rest: thrust to the peak, coast at the cap,
         // brake on the stopping curve)
         auto ideal = [&](double L, double& tau, double& earth) {
-            const double phiStar = std::acosh(1.0 + hz::kAlpha * L / (2.0 * kC));
+            const double phiStar = hz::peakFrom(0.0, L);
             if (phiStar <= cap) {
-                tau = 2.0 * phiStar / hz::kAlpha;
-                earth = 2.0 * std::sinh(phiStar) / hz::kAlpha;
+                tau = 2.0 * hz::driveTime(phiStar);
+                earth = 2.0 * hz::driveEarthTime(phiStar);
             } else {
                 const double coast = (L - 2.0 * hz::stopDistance(cap)) / (kC * std::sinh(cap));
-                tau = 2.0 * cap / hz::kAlpha + coast;
-                earth = 2.0 * std::sinh(cap) / hz::kAlpha + coast * std::cosh(cap);
+                tau = 2.0 * hz::driveTime(cap) + coast;
+                earth = 2.0 * hz::driveEarthTime(cap) + coast * std::cosh(cap);
             }
         };
         double it[2], ie[2];
         ideal(R.length[0], it[0], ie[0]);
         ideal(R.length[1], it[1], ie[1]);
-        std::printf("    kusursuz surus (formulden): Proxima %.6f s / %.6f yil; Andromeda %.6f dk / %.6f milyon yil\n", it[0], ie[0] / hz::kYear,
-                    it[1] / 60.0, ie[1] / hz::kYear * 1e-6);
-        check(std::fabs(it[0] - 89.0) < 0.05 && std::fabs(ie[0] / hz::kYear - 4.25) < 0.01, "Proxima: 89,0 s, Dunya'da 4,25 yil (PLAN §2)");
-        check(std::fabs(it[1] / 60.0 - 58.3) < 0.05 && std::fabs(ie[1] / hz::kYear * 1e-6 - 2.395) < 0.001, "Andromeda: 58,3 dk, Dunya'da 2,395 milyon yil (PLAN §2)");
+        std::printf("    kusursuz surus (formulden): Proxima %.6f s (%.3f dk) / %.6f yil, tepe %.4f (%.2f dokuz); Andromeda %.6f dk / %.6f milyon yil\n", it[0],
+                    it[0] / 60.0, ie[0] / hz::kYear, hz::peakFrom(0.0, R.length[0]), hz::kin(hz::peakFrom(0.0, R.length[0])).nines, it[1] / 60.0,
+                    ie[1] / hz::kYear * 1e-6);
+        check(std::fabs(ie[0] / hz::kYear - 4.25) < 0.01 && std::fabs(ie[1] / hz::kYear * 1e-6 - 2.395) < 0.001, "Dunya'da 4,25 yil ve 2,395 milyon yil");
         struct Case { const char* name; std::function<double(long long)> dt; };
         unsigned long long lcg = 12345;
         const Case cases[] = {
@@ -226,7 +286,7 @@ int runHizTests(OlcekApp& app) {
         };
         double worstT = 0.0, worstE = 0.0, worstPin = 0.0;
         for (const Case& c : cases) {
-            const Journey J = fly(R, c.dt, 4000.0);
+            const Journey J = fly(R, c.dt, 9000.0);
             const double dT0 = std::fabs(J.legTau[0] - it[0]), dT1 = std::fabs(J.legTau[1] - it[1]);
             const double dE0 = std::fabs(J.legEarth[0] - ie[0]) / ie[0], dE1 = std::fabs(J.legEarth[1] - ie[1]) / ie[1];
             std::printf("    %-34s Proxima %.9f s (fark %.1e), Andromeda %.9f s (fark %.1e); Dunya'nin saati farki %.1e / %.1e; "
@@ -249,30 +309,31 @@ int runHizTests(OlcekApp& app) {
         hz::Ship s = hz::depart(r);
         hz::Command w;
         w.thrust = true;
-        for (int i = 0; i < 60 * 46; ++i) hz::step(s, r, 1.0 / 60.0, w);   // 46 s of W: past the middle (44.5 s), not the target
+        const double mid = hz::driveTime(hz::peakFrom(0.0, r.length[0]));   // W this long from rest: the middle of the way
+        for (int i = 0; i < int(60.0 * (mid + 2.0)); ++i) hz::step(s, r, 1.0 / 60.0, w);   // 2 s past the middle: too fast to stop
         const bool past = hz::stopDistance(s.phi) > hz::remaining(s);
         hz::Command sp;
         sp.toggleAuto = true;
         hz::Events ev = hz::step(s, r, 0.0, sp);
         bool overshoot = ev.overshoot, turned = false, arrived = false;
         double tau0 = s.tau;
-        for (int i = 0; i < 60 * 600 && !arrived; ++i) {
+        for (int i = 0; i < 60 * 3000 && !arrived; ++i) {
             ev = hz::step(s, r, 1.0 / 60.0, hz::Command{});
             overshoot = overshoot || ev.overshoot;
             turned = turned || ev.turnStarted;
             arrived = ev.arrived;
         }
-        std::printf("    elle: 46 s itis (durma mesafesi > kalan: %s), Bosluk: gecti %s, dondu %s, vardi %s (%.1f s sonra)\n", past ? "evet" : "hayir",
+        std::printf("    elle: %.1f s itis (durma mesafesi > kalan: %s), Bosluk: gecti %s, dondu %s, vardi %s (%.1f s sonra)\n", mid + 2.0, past ? "evet" : "hayir",
                     overshoot ? "evet" : "hayir", turned ? "evet" : "hayir", arrived ? "evet" : "hayir", s.tau - tau0);
         check(past && overshoot && turned && arrived && s.leg == hz::kLegAndromeda, "hedefi gecince: durur, doner, geri gelir, tam hedefte durur");
 
         hz::Ship c = hz::depart(r);
-        for (int i = 0; i < 60 * 100; ++i) hz::step(c, r, 1.0 / 60.0, w);   // 100 s of W from rest: the cap at 61.3 s
-        std::printf("    100 s W: phi %.15f (tavan %.15f), %s\n", c.phi, cap, c.drive == hz::Drive::Coast ? "suzuluyor" : "itiyor");
+        for (int i = 0; i < 60 * 500; ++i) hz::step(c, r, 1.0 / 60.0, w);   // 500 s of W from rest: the cap at 480 s
+        std::printf("    500 s W: phi %.15f (tavan %.15f), %s\n", c.phi, cap, c.drive == hz::Drive::Coast ? "suzuluyor" : "itiyor");
         check(c.phi == cap && c.drive == hz::Drive::Coast, "W tavanda durur: 21 dokuzun otesi yok");
         hz::Command b;
         b.brake = true;
-        for (int i = 0; i < 60 * 70; ++i) hz::step(c, r, 1.0 / 60.0, b);   // braking from the cap: 61.3 s
+        for (int i = 0; i < 60 * 500; ++i) hz::step(c, r, 1.0 / 60.0, b);   // braking from the cap: 480 s
         check(c.phi == 0.0 && c.drive == hz::Drive::Rest, "S durur ve geri gitmez");
 
         // slow, then Space: the quickest arrival from there (not centuries of coasting at the speed it had)
@@ -283,16 +344,17 @@ int runHizTests(OlcekApp& app) {
         const double tau0q = q.tau;
         hz::step(q, r, 0.0, sp);
         bool arrivedQ = false;
-        for (int i = 0; i < 60 * 200 && !arrivedQ; ++i) arrivedQ = hz::step(q, r, 1.0 / 60.0, hz::Command{}).arrived;
-        std::printf("    bir kare W, sonra Bosluk: %s, %.3f s'de (en hizlisi 88,98 s)\n", arrivedQ ? "vardi" : "varmadi", q.tau - tau0q + 1.0 / 60.0);
-        check(arrivedQ && q.tau - tau0q < 90.0, "yavasken Bosluk: en kisa yoldan (hizlanir), yuzyillarca suzulmez");
+        const double bestQ = 2.0 * hz::driveTime(hz::peakFrom(0.0, r.length[0]));   // the quickest from rest (its peak is under the cap)
+        for (int i = 0; i < 60 * 1200 && !arrivedQ; ++i) arrivedQ = hz::step(q, r, 1.0 / 60.0, hz::Command{}).arrived;
+        std::printf("    bir kare W, sonra Bosluk: %s, %.3f s'de (en hizlisi %.3f s)\n", arrivedQ ? "vardi" : "varmadi", q.tau - tau0q + 1.0 / 60.0, bestQ);
+        check(arrivedQ && q.tau - tau0q < bestQ + 1.0, "yavasken Bosluk: en kisa yoldan (hizlanir), yuzyillarca suzulmez");
 
         // stopped by hand close to the target: the automatic arrival flies the last stretch (and nothing jumps)
         hz::Ship n = hz::depart(r);
         n.x = hz::dd(-3e12);   // 20 AU short, at rest
         bool captured = false, arrivedN = false;
         double jump = 0.0;
-        for (int i = 0; i < 60 * 120 && !arrivedN; ++i) {
+        for (int i = 0; i < 60 * 1500 && !arrivedN; ++i) {
             const double x0 = n.x.value(), phi0 = n.phi;
             const hz::Events e2 = hz::step(n, r, 1.0 / 60.0, hz::Command{});
             captured = captured || e2.captured;
@@ -483,9 +545,9 @@ int runHizTests(OlcekApp& app) {
                     c.gees * 1e-6, c.hydrogen, c.cmbAhead);
         check(std::fabs(h - 1.46) < 0.01 && std::fabs(ph - 2.9) < 0.05 && std::fabs(pst - 15.0) < 0.5,
               "BEDEL, 21 dokuz: Gunes'in 1,46 saati; foton roketi 2,9 saat, durmakla 15 milyon yil (PLAN §4)");
-        check(std::fabs(c.massRatio / 4.5e10 - 1.0) < 0.01 && std::fabs(c.massRatioStop / 2e21 - 1.0) < 0.05 && std::fabs(c.gees * 1e-6 - 12.2) < 0.05 &&
+        check(std::fabs(c.massRatio / 4.5e10 - 1.0) < 0.01 && std::fabs(c.massRatioStop / 2e21 - 1.0) < 0.05 && std::fabs(c.gees * 1e-6 - 11.1) < 0.05 &&
                   std::fabs(c.hydrogen / 2e19 - 1.0) < 0.1,
-              "BEDEL, 21 dokuz: kutle orani 4,5e10 (durmakla 2e21), 12 milyon g, H atomu 2e19 eV (PLAN §4)");
+              "BEDEL, 21 dokuz: kutle orani 4,5e10 (durmakla 2e21), tavanda 11 milyon g (yeni ivme), H atomu 2e19 eV (PLAN §4)");
         const double p17 = hz::costOf(0.5 * std::log(2.0 / 1e-17 - 1.0)).plate / hz::kSolarConstant;   // (1 - beta = 1e-17)
         const double p21 = c.plate / hz::kSolarConstant;
         std::printf("    onden gelen isima: 17 dokuzda Gunes isiginin %.3e, 21 dokuzda %.3e kati\n", p17, p21);
@@ -549,7 +611,11 @@ int runHizFrames(OlcekApp& app, const std::vector<double>& phis, int leg, double
                 sc.hiz.rocket = pos;
                 sc.hiz.motion = s.heading;
                 sc.hiz.rate = k.gamma;
-                sc.hiz.gamma = k.gamma;
+                {   // the scene's framing: at the Local Group's scale the leg's middle (olcek_live.cpp)
+                    const int Lg = std::min(s.leg, 1);
+                    const double u = std::clamp((sv - 21.6) / 0.8, 0.0, 1.0);
+                    sc.hiz.focus = R.dir[Lg] * ((-s.x.value() - 0.5 * R.length[Lg]) * u * u * (3.0 - 2.0 * u));
+                }
                 sc.hiz.ev = app.sideEv(sv, pos);
                 sc.hiz.mark = make_float3(1.0f, 0.93f, 0.86f) * 30.0f;
                 sc.s = sv;
@@ -557,12 +623,15 @@ int runHizFrames(OlcekApp& app, const std::vector<double>& phis, int leg, double
                 app.render();
                 if (std::getenv("OLCEK_DEBUG")) {   // what the frame drew (the view's primitives)
                     const OlcekView& v = app.view;
-                    std::printf("    stretch %.3g, balls %d, blobs %d, atmo %d, web %d, galaxies %d %d %d, ground %d, dens %d, field %d, particles %zu\n",
-                                v.stretchX, v.nBalls, v.nBlobs, v.atmo.on, v.web.on, v.galaxy[0].on, v.galaxy[1].on, v.galaxy[2].on, v.ground.on,
+                    std::printf("    balls %d, blobs %d, atmo %d, web %d, galaxies %d %d %d, ground %d, dens %d, field %d, particles %zu\n",
+                                v.nBalls, v.nBlobs, v.atmo.on, v.web.on, v.galaxy[0].on, v.galaxy[1].on, v.galaxy[2].on, v.ground.on,
                                 v.dens.on, v.field.on, app.sc.particles.size());
                     for (int i = 0; i < v.nBalls; ++i)
                         std::printf("      ball %d: c %.4g %.4g %.4g r %.4g h %.4g weight %.3f emit %.3g\n", i, v.balls[i].c.x, v.balls[i].c.y, v.balls[i].c.z,
                                     v.balls[i].r, v.balls[i].h, v.balls[i].weight, v.balls[i].emit.x);
+                    for (int i = 0; i < 3; ++i)   // the galaxies' centres in camera units (x right, y up, z ahead; z = 1 at the focus)
+                        if (v.galaxy[i].on)
+                            std::printf("      galaxy %d: c %.4g %.4g %.4g, kpc %.4g\n", i, v.galaxy[i].c.x, v.galaxy[i].c.y, v.galaxy[i].c.z, v.galaxy[i].kpc);
                     double fmax = 0.0;
                     for (const GSplat& g : app.splats) fmax = std::max(fmax, double(g.flux.x + g.flux.y + g.flux.z));
                     std::printf("      splats %zu, the brightest %.3g\n", app.splats.size(), fmax);

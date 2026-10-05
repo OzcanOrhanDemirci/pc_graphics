@@ -222,7 +222,7 @@ canlanma. Yolcunun saati **beyaz**, Dünya'nınki **kırmızı** (görüntülerd
      foton roketinin bunun için yaktığı (e^φ − 1)mc² **2,9 saat**, durmak için de yakarsa **Güneş'in 15 milyon yılı**:
      hangisi gösterildiği yazılır).
    - Foton roketi kütle oranı (hızlanmak için e^φ: 21 dokuzda **4,5 × 10¹⁰**, durmakla 2 × 10²¹).
-   - Çekilen ivme (**12 milyon g**).
+   - Çekilen ivme (H0'da sabit **12 milyon g**; 10-06'dan hıza bağlı: duruşta 1 g, tavanda **11 milyon g**).
    - Önden gelen radyasyon ("Güneş ışığının X katı": 17 dokuzda 6 × 10⁸, 21 dokuzda **6 × 10¹²**), öndeki fon
      ışımasının sıcaklığı ve rengi.
    - Her hidrojen atomunun çarpma enerjisi (21 dokuzda 2 × 10¹⁹ eV: gözlenen en enerjik kozmik ışınlar düzeyi).

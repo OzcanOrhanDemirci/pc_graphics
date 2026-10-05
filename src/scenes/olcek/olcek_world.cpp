@@ -694,9 +694,18 @@ void Scale::camera() {
         if (length(up) < 1e-6) up = earthNorth_ - cam.right * dot(earthNorth_, cam.right);
         cam.up = normalize(up);
         cam.fwd = cross(cam.up, cam.right);   // right = fwd x up
+        // at the galaxies' scales the camera rises above the Galaxy's plane about the motion (the motion stays across the
+        // screen): a disc seen inclined, as on Özcan's reference (edge-on it is a faint line, and from within its breadth
+        // the camera sat in a wall of stars); at the rocket's scales a true side view
+        const double tilt = 32.0 * kDeg * smoothstep(16.5, 19.0, s);
+        if (tilt > 0.0) {
+            const V3 f = cam.fwd, u = cam.up;
+            cam.fwd = normalize(f * std::cos(tilt) - u * std::sin(tilt));
+            cam.up = normalize(u * std::cos(tilt) + f * std::sin(tilt));
+        }
         cam.W = std::pow(10.0, s);
         cam.D = cam.W / (2.0 * std::tan(0.5 * fovX * kDeg));
-        cam.pos = cam.fwd * -cam.D;
+        cam.pos = hiz.focus - cam.fwd * cam.D;
         return;
     }
     int a, b;
@@ -709,7 +718,7 @@ void Scale::camera() {
 }
 
 V3 Scale::focus() const {
-    if (hiz.on) return V3{};   // the rocket (the camera's anchor)
+    if (hiz.on) return hiz.focus;   // from the rocket (the camera's anchor)
     int a, b;
     const double u = focusBlend(a, b);
     return tree.rel(cam.ref, a) * (1.0 - u) + tree.rel(cam.ref, b) * u;
@@ -771,9 +780,7 @@ void Scale::ballOrPoint(OlcekView& v, std::vector<GSplat>& splats, const Body& b
         toSun = ts * (1.0 / d);
         E = kLsun / (4.0 * kPi * d * d);
     }
-    // (the second option's side view draws it gamma times narrower: its handover follows the narrow width, so a sliver
-    // thinner than a pixel never blinks between the fixed samples)
-    float wBall = float(smoothstep(1.0, 2.5, hiz.on ? rpx / std::max(hiz.gamma, 1.0) : rpx));
+    float wBall = float(smoothstep(1.0, 2.5, rpx));
     // the shutter (PLAN §4): what moves faster than the eye is drawn along its way, weighted by the shutter; an orbit
     // run through several times in it is its ring (light spread by the time spent: slow at aphelion, bright there)
     int K = 1;
@@ -795,13 +802,11 @@ void Scale::ballOrPoint(OlcekView& v, std::vector<GSplat>& splats, const Body& b
             reach = ring ? o.a * (1.0 + o.e) : std::min(o.a * (1.0 + o.e), kPi * o.a * 6.0 * sigL / P + 3.0 * length(dp));
         }
     }
-    // in front and on the screen (with its size, and the way it is drawn along, as the margin); the second option's
-    // side view measures it contracted (the ball itself is contracted by the kernel's stretched rays)
-    const V3 relM = measured(rel);
+    // in front and on the screen (with its size, and the way it is drawn along, as the margin)
     {
         const double rr = b.radius + reach;
         const double tx = v.tanHalfX, ty = v.tanHalfY;
-        const double x = dot(relM, cam.right), y = dot(relM, cam.up);
+        const double x = dot(rel, cam.right), y = dot(rel, cam.up);
         const double margin = rr / std::max(z, 1e-300) + 4.0 * v.pixAngle;
         if (z <= -rr) return;
         if (z > 0.0 && (std::fabs(x / z) > tx + margin * 1.5 + 0.01 || std::fabs(y / z) > ty + margin * 1.5 + 0.01) && dist > 3.0 * rr) return;
@@ -858,7 +863,7 @@ void Scale::ballOrPoint(OlcekView& v, std::vector<GSplat>& splats, const Body& b
         const float sig = float(std::sqrt(0.75 * 0.75 + 0.25 * rpx * rpx));
         if (fl.x + fl.y + fl.z > 1e-5f) {
             if (K == 1) {
-                splats.push_back({toCamSpace(relM), fl, sig});
+                splats.push_back({toCamSpace(rel), fl, sig});
             } else {
                 std::vector<double> w(K), tau(K);
                 double ws = 0.0;
@@ -870,9 +875,9 @@ void Scale::ballOrPoint(OlcekView& v, std::vector<GSplat>& splats, const Body& b
                 // the flash at the end of the exposure (a representation, the light kept): a third of it where the
                 // body is now, so a planet reads as a point on its ring; the rest along its way
                 const float flash = 0.35f;
-                splats.push_back({toCamSpace(relM), fl * flash, sig});
+                splats.push_back({toCamSpace(rel), fl * flash, sig});
                 for (int i = 0; i < K; ++i)
-                    splats.push_back({toCamSpace(measured(rel + sunShift(b.node, tau[i]))), fl * float((1.0 - flash) * w[i] / ws), sig});
+                    splats.push_back({toCamSpace(rel + sunShift(b.node, tau[i])), fl * float((1.0 - flash) * w[i] / ws), sig});
             }
         }
     }
@@ -891,7 +896,6 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
     // colour ends below the light's wavelength (the instruments' grey: the microscopes' pictures), and comes back as a
     // representation from the atom down (Özcan's revision: the particles' palette)
     v.saturation = float(std::max(smoothstep(-7.0, -6.0, s), smoothstep(-8.4, -9.2, s)));
-    v.stretchX = hiz.on ? float(std::max(hiz.gamma, 1.0)) : 1.0f;
     v.metres = float(cam.D);
     // 3e-3: sunlit sand (~130 W/m^2/sr) at ~0.4 on the display (the second option designs its own exposure)
     const double k = std::exp2(hiz.on ? hiz.ev : ev(s)) * 3.0e-3;
@@ -917,10 +921,9 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
     if (s > 9.0 || hiz.on) {
         const V3 base = tree.rel(cam.ref, kSun) - cam.pos;
         for (size_t i = 0; i < starPos_.size(); ++i) {
-            const V3 rel0 = base + starPos_[i];
-            const V3 rel = measured(rel0);   // where it is drawn (the second option's measured world); its light below
-            if (!inFront(rel)) continue;     // from its real distance: a map's point keeps the brightness it has
-            const double d2 = dot(rel0, rel0);
+            const V3 rel = base + starPos_[i];
+            if (!inFront(rel)) continue;
+            const double d2 = dot(rel, rel);
             const float near = float(smoothstep(0.03, 0.25, std::sqrt(d2) / D));
             if (near <= 0.0f) continue;
             const float4 f = starFlux_[i];
@@ -933,14 +936,13 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
     if (s > 21.0 || hiz.on) {
         const V3 base = tree.rel(cam.ref, kLaniakea) - cam.pos;
         for (size_t i = 0; i < galPos_.size(); ++i) {
-            const V3 rel0 = base + galPos_[i];
-            const V3 rel = measured(rel0);
+            const V3 rel = base + galPos_[i];
             if (!inFront(rel)) continue;
-            const double d2 = dot(rel0, rel0);
+            const double d2 = dot(rel, rel);
             float near = float(smoothstep(0.3, 1.0, std::sqrt(d2) / D));   // wide: nearby galaxies stream past softly
             if (near <= 0.0f) continue;
             // the same slice as the web's (webLight): sigma 20 Mpc about the focus, across the view
-            const double dz = (dot(rel0, cam.fwd) - D) / (20e6 * kPc);
+            const double dz = (dot(rel, cam.fwd) - D) / (20e6 * kPc);
             near *= float(std::exp(-0.5 * dz * dz));
             if (near < 0.01f) continue;
             const float4 f = galFlux_[i];
@@ -955,10 +957,7 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
     // a decade of overlap)
     for (GGalaxy& g : v.galaxy) g = GGalaxy{};
     if (s > 18.5) {
-        // (the second option's measured world squashes a galaxy into a sheet gamma times thinner along the motion; the
-        // side view's camera, within a galaxy's breadth of the rocket, then sits inside the sheet and sees a wall: the
-        // volumes wait for H2's framing, the points stay)
-        const double fade = smoothstep(18.8, 20.0, s) * (hiz.on ? 1.0 - smoothstep(1.2, 1.5, hiz.gamma) : 1.0);
+        const double fade = smoothstep(18.8, 20.0, s);
         // the Milky Way: today's arms (their pattern turns at its own speed: clk.arms)
         GGalaxy& g = v.galaxy[0];
         const V3 rel = tree.rel(cam.ref, kGalCentre) - cam.pos;
@@ -1090,7 +1089,7 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
         }
         if (wB < 1.0f && dot(rel, cam.fwd) > 0.0) {   // small: a point with the same light
             const float3 fl = emit * float(2.0 * kPi * spx * spx) * (1.0f - wB);
-            if (fl.x + fl.y + fl.z > 1e-5f) splats.push_back({toCamSpace(measured(rel)), fl, float(std::sqrt(0.5625 + spx * spx))});
+            if (fl.x + fl.y + fl.z > 1e-5f) splats.push_back({toCamSpace(rel), fl, float(std::sqrt(0.5625 + spx * spx))});
         }
     };
     if (s > 19.0) {
@@ -1100,9 +1099,8 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
             blob(rel, sigma, blackbody(4500.0) * float(col * k * fade));
         };
         // (the Galaxy's bulge is in its model: v.galaxy)
-        const double squash = hiz.on ? 1.0 - smoothstep(1.2, 1.5, hiz.gamma) : 1.0;   // (as the discs above)
-        galBlob(kLMC, 1.5e3 * kPc, 1.5e9 * kLsun, squash);
-        galBlob(kSMC, 0.9e3 * kPc, 4.6e8 * kLsun, squash);
+        galBlob(kLMC, 1.5e3 * kPc, 1.5e9 * kLsun, 1.0);
+        galBlob(kSMC, 0.9e3 * kPc, 4.6e8 * kLsun, 1.0);
     }
     // the cosmic web as a volume (the field's handle is set by the app: v.web.field)
     v.web = GWeb{};
@@ -1122,7 +1120,7 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
         w.bz = dirCam(az);
         // 1e8 L_sun per Mpc^3 (luminosity density of galaxies, visual), isotropic: per camera unit of path
         const double j = 1e8 * kLsun / (mpcM * mpcM * mpcM) / (4.0 * kPi);
-        w.j0 = blackbody(5600.0) * float(j * D * k * smoothstep(23.8, 24.6, s) * (hiz.on ? 1.0 - smoothstep(1.2, 1.5, hiz.gamma) : 1.0));
+        w.j0 = blackbody(5600.0) * float(j * D * k * smoothstep(23.8, 24.6, s));
         // (1 + z)^-4 against comoving distance: LambdaCDM (H0 70, Omega_m 0.3), D_C(z) by quadrature, inverted
         {
             const double H0 = 70.0, c = 299792.458, Om = 0.3, OL = 0.7;

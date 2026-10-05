@@ -2,6 +2,71 @@
 
 > Tek kaynak durum panosu. Plan `docs/olcek/hiz/PLAN.md`. En yeni en üstte.
 
+## 2026-10-06 gecesi · H2 (1. kısım): yeni ivme ve yandan harita
+
+**Özcan'ın bakacağı yer.** Hız → **Tab** (yandan). Roket ortada, kamera onu izliyor. **1-6** ölçek durakları: roket ·
+Dünya ve Ay · Güneş Sistemi · yakın yıldızlar · Samanyolu · Yerel Grup. W'ye basınca motorun ışığı yanar; hızlandıkça
+yanından akan ortam noktaları çizgiye döner.
+
+**İvme (PLAN §2, Özcan'ın takvimi).** Öz-ivme hızın bir işlevi: duruşta 1 g, hep artar, tavanda 11,1 milyon g.
+- Tasarım: on katlık her hız artışının süresi f(log₁₀ φ), 11 sn'den 155 sn'ye bir lojistik. Dört sayısı takvime
+  oturtuldu.
+- 1.638 ince dilimde sabit (komşular %1 farklı). Her dilimde sabit ivmenin kapalı biçimleri, fizik her karede tam.
+- Fren itişin aynası. Durma mesafesi D(φ), otomatik varışın tepesi D(φ*) = (r + D(φ))/2'den, dilim içinde kapalı ters.
+- W ile duruştan:
+  | Hız | Süre | İvme |
+  |---|---|---|
+  | 300 km/sa | 7,5 sn | 1,8 g |
+  | ses hızı | 14 sn | 7 g |
+  | kaçış hızı (11,2 km/s) | 31 sn | 238 g |
+  | %1 c | **60,0 sn** | 36.700 g |
+  | %10 c | **120,0 sn** | 59.300 g |
+  | %99 c | **330,0 sn** | 1,2 milyon g |
+  | 21 dokuz | **480,0 sn** | 11,1 milyon g |
+- Yolculuklar: **Proxima 912,89 sn (15,2 dk)**, en çok 14,7 dokuz, Dünya'da 4,2457 yıl. **Andromeda 72,24 dk** (8 dk itiş,
+  56,2 dk 21 dokuzda süzülme, 8 dk fren), Dünya'da 2,3951 milyon yıl.
+- **Bağımsız kâhin** (mpmath, 50 basamak, dilim tablosundan kendi integraliyle; C++ koduna bakmadan): T, C, D dokuz
+  noktada, tavan ve iki tepe **1,5 × 10⁻¹⁵ içinde aynı**. Takvim 60,0001 / 120,002 / 330,004 / 480,004 sn. Kâhinin tek
+  işareti: kare kare uçuşta yolcunun saati 72 dakikada 7,9 ns (10⁻¹² göreli) farklı, 260 bin karede double olarak biriken
+  saatin yuvarlaması. Fizik değil; testin eşiği 1 µs.
+- Canlı: W ile 5 sn'de 52 m/s, 10 sn'de 154 m/s; otomatik varışla bir dakikada %3,7 c.
+
+**Yandan: Dünya'nın çerçevesi (evrenin haritası).** Özcan: *"Yalnız 1 olsun"*.
+- H0'ın roket çerçevesi ("ölçülen dünya": noktaların kısaltılması, ışın gerdirmesi `stretchX`, γ ile solan galaksiler)
+  kodun her yerinden söküldü.
+- Galaksi ölçeklerinde kamera hareket ekseni etrafında galaksi düzleminin 32° üstüne çıkar (`s` 16,5 → 19). Diskler eğik
+  görünür (referanstaki gibi). Kenardan bakınca Samanyolu sönük bir çizgiydi; içinden bakınca gri bir duvardı.
+- Yerel Grup ölçeğinde kameranın odağı ayağın ortası (`hiz.focus`): iki galaksi aynı karede, roket aralarında sürünür.
+- Pozlama (`sideEv`): disk ışığının ekranı doldurduğu 18,5-20,5'te göz uyumu −2,5 EV; galaksiler arasında +2,5 EV.
+- **2B katman** (`olcek_hiz_yan.*`, arayüz takımıyla; H ile gizlenmez, resmin parçası):
+  - **Ortam noktaları:** durgun çerçevede sabit, 10^k m kafeslerinde, ekran ölçeğine en yakın iki kafes karışarak. Roketin
+    yeri (çift-double) kafesin periyoduna göre kesin alınır: 10²² m'de de noktalar yerinde durur. Gözün kapağı 1/60 sn
+    (yolcunun saati); bu sürede alınan yol γβc/60 kadar çizgiye çekilir. Çizgi ekranı aşınca hücrelerin noktaları sabit
+    sıralara toplanır, sıralar kararlı ışık izleri olur: hiçbir hızda kareden kareye titreme yok.
+  - **Yol:** iki durak arası ince ışıklı çizgi; duraklar ekrandaysa halka, ad ve uzaklık; değilse ortadaki boş alanda
+    okla. Uzak uçlar izdüşümden önce yol üstünde yakına alınır (10¹⁶ m'deki bir noktaya 30 m'den bakınca 10⁻¹⁶'lık eksen
+    hatası metre olur).
+  - **Roket:** 14 m'lik foton roketi. Cam kubbe ve altında oturan, yüzsüz bir yolcu, arkada parabolik ayna, odağında
+    ışık kaynağı. Hareket yönünde Dünya'nın ölçtüğü gibi γ kat kısa. Frende döner (ışık öne bakmalı), 0,9 sn'lik bir yan
+    dönüşle çizilir. Uzakta bir nokta.
+  - **Motor ışığı:** aynanın genişliğinde yumuşak bir altın şerit; parlaklığı ivmenin logaritması (1 g'de sönük, tavanda
+    tam). Bir harita öğesi: ışığın gittiği yer.
+  - **Hız yazısı:** v, β ve "senin bir saniyende X" (γβc · 1 sn: 21 dokuzda ~700 ışık yılı).
+- Uygulama: `Overlay.hud` (sahnenin 2B resmi her zaman, grafikler yalnız arayüzle). Arayüz takımına dolu dışbükey çokgen
+  (`ui::fill`).
+- Otomatik test yeniden yazıldı. `olcek/hiz`: yandan duruşta ve itişte, 2-6 durakları, göz, Boşluk, bir dakika sonra.
+  `olcek/hizvaris --set hiz.test.varis=1`: yalnız test koşusunda Proxima'ya bir dakika kala %1 c'de fren eğrisinden
+  başlar; vardı (1:00), 153° döndü.
+
+### NE DOĞRULANMADI (H2 1. kısım)
+- **Özcan'ın gözü:** yandan haritanın hiçbir karesine bakmadı.
+- **Kenar durumları:** frendeki dönüş çizimi ve 21 dokuzdaki görünüm (ortam çizgileri, γ kat kısa roket) karede
+  görülmedi; yalnız %3,7 c'ye kadar.
+- **F12:** sahnenin kendi resmi (F12) 2B katmanı içermez; ekranın görüntüsü (otomatik test) içerir.
+- **Pozlama ayarları** (−2,5 / +2,5 EV ve 32° eğim) gözle seçildi.
+- **Ölçek'in birinci seçeneği** bu taşta yeniden ölçülmedi. Dokunulan her yol, `hiz.on` kapalıyken yapı gereği aynı
+  (×1,0, kimlik, yalnız Hız dalı); kareler bit bit karşılaştırılmadı.
+
 ## 2026-10-05 gece · H1: grafikler
 
 **Özcan'ın bakacağı yer.** Hız'da beş grafik panosu resmin üstünde, iki görüntüde de. Panelde **Grafikler: Açık |

@@ -73,19 +73,179 @@ double phiCap() {
     return v;
 }
 
+double coshDiff(double phi0, double phi1) { return 2.0 * std::sinh(0.5 * (phi1 + phi0)) * std::sinh(0.5 * (phi1 - phi0)); }
+double sinhDiff(double phi0, double phi1) { return 2.0 * std::cosh(0.5 * (phi1 + phi0)) * std::sinh(0.5 * (phi1 - phi0)); }
+
+// ---------------------------------------------------------------------------------------------------------------------
+// the drive
+
+namespace {
+
+// f(y), the proper seconds per tenfold of rapidity at y = log10 phi: a logistic from kFlo to kFhi around kYm, kW wide. The
+// four numbers are fitted so that W from rest reaches 1% of c at 60 s, 10% at 120 s, 99% at 330 s and the cap at 480 s
+// (Özcan's schedule). kappa = phi ln10 / f rises while d ln f / dy < ln 10: it peaks at 2.264 here (always rising).
+constexpr double kFlo = 11.045826948166013, kFhi = 155.1844369732429, kYm = -1.2793262021112877, kW = 0.25562973259046673;
+constexpr double kSliceStep = 1.01;   // each slice's rate 1% above the one below
+
+double rateTarget(double phi) {
+    const double k0 = kG0 / kC;
+    if (phi <= 0.0) return k0;
+    const double f = kFlo + (kFhi - kFlo) / (1.0 + std::exp(-(std::log10(phi) - kYm) / kW));
+    return std::max(k0, phi * 2.302585092994045684 / f);
+}
+
+struct Slices {
+    std::vector<double> phi, k;    // each slice's start and rate (phi[0] = 0: the 1 g floor)
+    std::vector<double> T, C, D;   // at each slice's start: the proper time, the rest frame's time and way from rest
+};
+
+// where the target rate reaches `want` (it rises monotonically): bisection in log phi
+double phiAtRate(double want, double lo, double hi) {
+    double a = std::log(lo), b = std::log(hi);
+    for (int i = 0; i < 200 && b - a > 1e-15 * std::fabs(b); ++i) {
+        const double m = 0.5 * (a + b);
+        (rateTarget(std::exp(m)) < want ? a : b) = m;
+    }
+    return std::exp(b);
+}
+
+const Slices& slices() {
+    static const Slices S = [] {
+        Slices s;
+        const double k0 = kG0 / kC, top = phiCap() * 1.05;
+        // the floor: 1 g until the rate the law asks for passes it
+        s.phi.push_back(0.0);
+        s.k.push_back(k0);
+        double p = phiAtRate(k0 * 1.0000001, 1e-15, 1.0);
+        while (true) {
+            s.phi.push_back(p);
+            if (p > top) break;
+            const double r0 = rateTarget(p), r1 = r0 * kSliceStep;
+            const double q = phiAtRate(r1, p, top * 2.0);
+            s.k.push_back(std::sqrt(r0 * r1));   // the slice's rate: the middle of its ends' (in ratio)
+            p = q;
+        }
+        s.k.push_back(rateTarget(p));   // (the last slice, past the cap: never reached)
+        const size_t n = s.phi.size();
+        s.T.assign(n, 0.0);
+        s.C.assign(n, 0.0);
+        s.D.assign(n, 0.0);
+        for (size_t i = 0; i + 1 < n; ++i) {
+            s.T[i + 1] = s.T[i] + (s.phi[i + 1] - s.phi[i]) / s.k[i];
+            s.C[i + 1] = s.C[i] + sinhDiff(s.phi[i], s.phi[i + 1]) / s.k[i];
+            s.D[i + 1] = s.D[i] + kC / s.k[i] * coshDiff(s.phi[i], s.phi[i + 1]);
+        }
+        return s;
+    }();
+    return S;
+}
+
+// the slice holding phi: thrust from phi uses the one starting at or below it; brake from phi the one ending at or above it
+size_t sliceUp(double phi) {
+    const Slices& s = slices();
+    const size_t i = size_t(std::upper_bound(s.phi.begin(), s.phi.end(), phi) - s.phi.begin());
+    return i == 0 ? 0 : std::min(i - 1, s.phi.size() - 1);
+}
+size_t sliceDown(double phi) {
+    const Slices& s = slices();
+    const size_t i = size_t(std::lower_bound(s.phi.begin(), s.phi.end(), phi) - s.phi.begin());
+    return i == 0 ? 0 : i - 1;
+}
+
+}   // namespace
+
+double driveRate(double phi) {
+    const Slices& s = slices();
+    return s.k[sliceUp(std::max(phi, 0.0))];
+}
+
+double driveTime(double phi) {
+    phi = std::max(phi, 0.0);
+    const Slices& s = slices();
+    const size_t i = sliceUp(phi);
+    return s.T[i] + (phi - s.phi[i]) / s.k[i];
+}
+
+double driveEarthTime(double phi) {
+    phi = std::max(phi, 0.0);
+    const Slices& s = slices();
+    const size_t i = sliceUp(phi);
+    return s.C[i] + sinhDiff(s.phi[i], phi) / s.k[i];
+}
+
 double stopDistance(double phi) {
-    const double s = std::sinh(0.5 * std::max(phi, 0.0));
-    return 2.0 * (kC / kAlpha) * s * s;   // (c/alpha)(cosh phi - 1)
+    phi = std::max(phi, 0.0);
+    const Slices& s = slices();
+    const size_t i = sliceUp(phi);
+    return s.D[i] + kC / s.k[i] * coshDiff(s.phi[i], phi);
 }
 
 double peakFrom(double phi0, double r) {
-    // sinh^2(phi*/2) = alpha r / (4c) + sinh^2(phi0/2) / 2 (the acosh form loses digits near 1: 8e-5 at r = 1 mm)
-    const double sh = std::sinh(0.5 * std::max(phi0, 0.0));
-    return 2.0 * std::asinh(std::sqrt(kAlpha * std::max(r, 0.0) / (4.0 * kC) + 0.5 * sh * sh));
+    // the way from rest to phi*: D(phi*) = (r + D(phi0)) / 2. Inverted in its slice: (c/k)(cosh phi - cosh phi_i) = d - D_i,
+    // as sinh^2(phi/2) = sinh^2(phi_i/2) + k (d - D_i) / (2c) (the acosh form loses its digits near rest)
+    const Slices& s = slices();
+    const double d = 0.5 * (std::max(r, 0.0) + stopDistance(phi0));
+    size_t i = size_t(std::upper_bound(s.D.begin(), s.D.end(), d) - s.D.begin());
+    i = i == 0 ? 0 : i - 1;
+    const double sh = std::sinh(0.5 * s.phi[i]);
+    return 2.0 * std::asinh(std::sqrt(sh * sh + s.k[i] * (d - s.D[i]) / (2.0 * kC)));
 }
 
-double coshDiff(double phi0, double phi1) { return 2.0 * std::sinh(0.5 * (phi1 + phi0)) * std::sinh(0.5 * (phi1 - phi0)); }
-double sinhDiff(double phi0, double phi1) { return 2.0 * std::cosh(0.5 * (phi1 + phi0)) * std::sinh(0.5 * (phi1 - phi0)); }
+DriveStep driveThrust(double phi0, double h, double phiTo) {
+    const Slices& s = slices();
+    DriveStep st;
+    double phi = std::max(phi0, 0.0), left = std::max(h, 0.0);
+    for (int guard = 0; guard < 100000 && phi < phiTo; ++guard) {
+        const size_t i = sliceUp(phi);
+        const double end = i + 1 < s.phi.size() ? std::min(s.phi[i + 1], phiTo) : phiTo;
+        const double need = (end - phi) / s.k[i];
+        double next = end, dt = need;
+        if (need > left) {
+            next = phi + s.k[i] * left;
+            dt = left;
+        }
+        if (dt <= 0.0 && next <= phi) break;
+        st.dT += sinhDiff(phi, next) / s.k[i];
+        st.dX += kC / s.k[i] * coshDiff(phi, next);
+        st.used += dt;
+        left -= dt;
+        phi = next;
+        if (need > dt || left <= 0.0) break;
+    }
+    st.phi1 = phi;
+    st.reached = phi >= phiTo;
+    return st;
+}
+
+DriveStep driveBrake(double phi0, double h) {
+    const Slices& s = slices();
+    DriveStep st;
+    double phi = std::max(phi0, 0.0), left = std::max(h, 0.0);
+    for (int guard = 0; guard < 100000 && phi > 0.0; ++guard) {
+        const size_t i = sliceDown(phi);
+        const double end = s.phi[i];
+        const double need = (phi - end) / s.k[i];
+        double next = end, dt = need;
+        if (need > left) {
+            next = std::max(phi - s.k[i] * left, end);
+            dt = left;
+        }
+        st.dT += sinhDiff(next, phi) / s.k[i];
+        st.dX += kC / s.k[i] * coshDiff(next, phi);
+        st.used += dt;
+        left -= dt;
+        phi = next;
+        if (need > dt || left <= 0.0) break;
+    }
+    st.phi1 = std::max(phi, 0.0);
+    st.reached = phi <= 0.0;
+    return st;
+}
+
+void driveSlices(std::vector<double>& phi, std::vector<double>& kappa) {
+    phi = slices().phi;
+    kappa = slices().k;
+}
 
 double aberrate(double theta, double phi) {
     return 2.0 * std::atan2(std::exp(-phi) * std::sin(0.5 * theta), std::cos(0.5 * theta));
@@ -203,7 +363,6 @@ double remaining(const Ship& s) { return std::fabs(s.x.value()); }
 Events step(Ship& s, const Route& r, double dtau, const Command& c) {
     Events ev;
     const double cap = phiCap();
-    const double cA = kC / kAlpha;   // c / alpha: the rest frame's metres per unit of cosh under the drive
 
     if (c.toggleAuto && s.leg < kLegDone) {
         s.autopilot = !s.autopilot;
@@ -347,15 +506,11 @@ Events step(Ship& s, const Route& r, double dtau, const Command& c) {
         const double phi0 = s.phi;
         double phi1 = phi0, h = left, dT = 0.0, dX = 0.0;
         if (mode == Thrust) {
-            const double hEv = (phiTo - phi0) / kAlpha;
-            if (hEv <= left) {
-                h = hEv;
-                phi1 = phiTo;
-            } else {
-                phi1 = phi0 + kAlpha * h;
-            }
-            dT = sinhDiff(phi0, phi1) / kAlpha;
-            dX = cA * coshDiff(phi0, phi1);
+            const DriveStep d = driveThrust(phi0, left, phiTo);
+            h = d.used;
+            phi1 = d.reached ? phiTo : d.phi1;
+            dT = d.dT;
+            dX = d.dX;
             if (s.legTau < 0.0) {
                 s.legTau = s.tau;
                 s.legT = s.t;
@@ -364,15 +519,11 @@ Events step(Ship& s, const Route& r, double dtau, const Command& c) {
             if (!s.autopilot) s.handOver = false;   // the hand thrusting again: it may be captured later
             if (phi1 >= cap) ev.capReached = true;
         } else if (mode == Brake) {
-            const double hEv = phi0 / kAlpha;
-            if (hEv <= left) {
-                h = hEv;
-                phi1 = 0.0;
-            } else {
-                phi1 = phi0 - kAlpha * h;
-            }
-            dT = sinhDiff(phi1, phi0) / kAlpha;
-            dX = cA * coshDiff(phi1, phi0);
+            const DriveStep d = driveBrake(phi0, left);
+            h = d.used;
+            phi1 = d.reached ? 0.0 : d.phi1;
+            dT = d.dT;
+            dX = d.dX;
         } else {
             if (phi0 <= 0.0) {   // nothing moves it
                 rest(left);

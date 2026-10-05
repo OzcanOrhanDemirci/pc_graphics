@@ -84,6 +84,7 @@ add_library(pc_core OBJECT
     src/scenes/olcek/olcek_hiz.cpp
     src/scenes/olcek/olcek_hiz_goz.cpp
     src/scenes/olcek/olcek_hiz_pano.cpp
+    src/scenes/olcek/olcek_hiz_yan.cpp
     src/scenes/olcek/olcek_hiz_test.cpp
     src/scenes/olcek/olcek_kernels.cu
     ${TP}/tinyexr/miniz.c)

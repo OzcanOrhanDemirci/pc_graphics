@@ -391,6 +391,20 @@ void polyline(const float* xy, int n, float width, Color c, float dash, float ga
     }
     glEnd();
 }
+void fill(const float* xy, int n, Color c) {
+    if (n < 3 || c.a <= 0.0f) return;
+    gl::Uniform1i(g_prog.mode, 4);           // the stroke's shader: inside a very wide stroke, full cover
+    gl::Uniform2f(g_prog.half, 1e6f, 0.0f);
+    gl::Uniform1f(g_prog.radius, 0.0f);
+    gl::Uniform1f(g_prog.border, 0.0f);
+    color(c);
+    glBegin(GL_TRIANGLE_FAN);
+    for (int i = 0; i < n; ++i) {
+        gl::MultiTexCoord4f(gl::TEXTURE0, 0.0f, 0.0f, 0.0f, 0.0f);
+        glVertex2f(xy[2 * i], xy[2 * i + 1]);
+    }
+    glEnd();
+}
 void line(float x0, float y0, float x1, float y1, float width, Color c, float dash, float gap) {
     const float p[4] = {x0, y0, x1, y1};
     polyline(p, 2, width, c, dash, gap, 0.0f);

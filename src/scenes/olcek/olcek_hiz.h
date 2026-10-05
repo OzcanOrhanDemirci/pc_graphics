@@ -2,8 +2,9 @@
 // and on to Andromeda, under special relativity with its full formulas. The screen's clock is the passenger's: a second
 // of the screen is a second of the rocket's proper time, nothing is sped up.
 //
-// The physics is exact, not integrated: under a constant proper acceleration a the rapidity phi grows linearly with the
-// proper time (dphi/dtau = a/c), and the rest frame's time and distance over a step have closed forms. Every number is
+// The physics is exact, not integrated: the drive's proper acceleration is constant within thin slices of rapidity (see
+// the drive below), and under a constant proper acceleration a the rapidity phi grows linearly with the proper time
+// (dphi/dtau = a/c) and the rest frame's time and distance over a step have closed forms. Every number is
 // formed from the rapidity so that the "nines" survive: 1 - beta = 2 / (e^(2 phi) + 1), never 1 - tanh phi (a double
 // rounds 0.999...9 with 21 nines to 1). Events inside a frame (the cap reached, the moment to brake, the stop) are found
 // exactly and the frame is split there.
@@ -16,11 +17,12 @@
 
 #include <map>
 #include <string>
+#include <vector>
 
 namespace olcek::hiz {
 
 constexpr double kC = 299792458.0;
-constexpr double kAlpha = 0.4;          // the proper acceleration over c, 1/s: a = 0.4 c/s ~ 1.2e7 g (PLAN §2)
+constexpr double kG0 = 9.80665;         // standard gravity (m/s^2): the drive starts at 1 g
 constexpr double kEpsCap = 1e-21;       // 1 - beta at the cap: "21 nines" (PLAN §1, Özcan's choice)
 constexpr double kLy = 9.4607304725808e15;
 constexpr double kAU = 1.495978707e11;
@@ -68,12 +70,35 @@ struct Kin {
 };
 Kin kin(double phi);
 double phiCap();                       // acosh of gamma at 1 - beta = 1e-21: 24.5237...
-double stopDistance(double phi);       // the rest frame's distance to stop from phi at the same power: (2c/alpha) sinh^2(phi/2)
-// the highest rapidity worth reaching from phi0 with r to go and still stop on the target (time-optimal: thrust to it, then
-// brake): cosh phi* = (alpha r / c + cosh phi0 + 1) / 2, in the form that keeps its digits at small r
-double peakFrom(double phi0, double r);
 double coshDiff(double phi0, double phi1);   // cosh phi1 - cosh phi0, without cancellation
 double sinhDiff(double phi0, double phi1);   // sinh phi1 - sinh phi0, without cancellation
+
+// ---- the drive (PLAN §2; Özcan 2026-10-06: "başta insani ölçekte çok yavaş hızlanalım ve hızlandıkça hızlanma şiddeti
+// artsın", "%1'e 1 dk, %10'a 1 dk daha, %99'a 3-4 dk, 21 dokuza birkaç dk"). The proper acceleration is a function of the
+// rapidity alone: 1 g at rest, always rising. Under W from rest: 1% of c at 60 s, 10% at 120 s, 99% at 330 s, 21 nines
+// at 480 s (300 km/h at 7.5 s, the escape velocity at 31 s). dphi/dtau = kappa(phi) = max(g/c, phi ln10 / f(log10 phi)),
+// f the proper seconds per tenfold of rapidity, a logistic from 11 s to 155 s fitted to those four moments. It is held
+// constant in thin slices (each 1% above the one below: not felt), so within a slice the constant acceleration's closed
+// forms hold and the physics stays exact at every frame. Braking is the same law backwards (the same power): the brake
+// from phi takes the time and the way the thrust to phi took.
+struct DriveStep {
+    double phi1 = 0.0;     // where the rapidity got to
+    double used = 0.0;     // the proper time used (s)
+    double dT = 0.0;       // the rest frame's time passed (s)
+    double dX = 0.0;       // the rest frame's distance covered (m)
+    bool reached = false;  // phiTo (thrust) or rest (brake) reached within the time given
+};
+double driveRate(double phi);       // kappa(phi) (1/s): the proper acceleration over c; times c / kG0 for g
+double driveTime(double phi);       // the proper time from rest to phi under the drive (s)
+double driveEarthTime(double phi);  // ... the rest frame's time it takes (s)
+double stopDistance(double phi);    // the rest frame's way from rest to phi under the drive: also the way to stop from phi
+// the highest rapidity worth reaching from phi0 with r to go and still stop on the target (time-optimal: thrust to it,
+// then brake): the way to it and back down, D(phi*) - D(phi0) + D(phi*), is r
+double peakFrom(double phi0, double r);
+DriveStep driveThrust(double phi0, double h, double phiTo);   // thrust from phi0 for h seconds at most, up to phiTo
+DriveStep driveBrake(double phi0, double h);                  // brake from phi0 for h seconds at most, down to rest
+// the slices themselves (the tests and the independent check): their starts and rates; the last runs past the cap
+void driveSlices(std::vector<double>& phi, std::vector<double>& kappa);
 
 // ---- aberration and Doppler. theta: in the rest frame, the angle between the motion and the direction TO the source;
 // thetaP: the same angle as the rocket sees it. Both from their half-angle tangents (stable from 0 to pi).
