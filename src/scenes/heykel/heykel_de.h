@@ -36,10 +36,34 @@ struct Shape {
     float floorCut = 0.0f;                 // world y below which the sculpture is cut flat (it stands on the plinth)
 };
 
+// The deep zoom (10,000 times: a pixel is a few float ulps of the position) by perturbation, as the deep Mandelbrot
+// zooms do: one anchor's orbit through the iteration is computed in doubles on the host, every pixel follows it as a
+// small difference in floats. The folds and the inversion are piecewise rational, so the difference has an exact
+// formula on every branch; where a pixel takes another branch than the anchor, the precise distances to the branch's
+// edge (C - A, |A|² - size: from the doubles) keep it exact.
+const int kMaxSteps = 24;
+struct KStep {          // the anchor, one iteration
+    float3 toPos, toNeg;   // C - A and -C - A per axis, A the anchor before the fold
+    float3 Af;             // the anchor after the fold
+    float r2, r2m;         // |Af|² and |Af|² - size
+    int bx, by, bz;        // the anchor's fold branch per axis: -1, 0, 1
+};
+
 struct World {
     Shape s;
     float3 plinthC{0, -0.5f, 0}, plinthH{0.17f, 0.5f, 0.17f};   // the plinth's centre and half size; its top at y = 0
     float floorY = -1.0f;
+    // The frame's anchor: every position the estimates see is an offset from it, in metres. Far things use the offsets
+    // to them below (from doubles); the Kleinian, when pert, its orbit.
+    float3 plinthRel{0, 0.5f, 0};   // anchor - plinth centre
+    float floorRel = 1.0f;          // anchor.y - floorY
+    float floorCutRel = 0.0f;       // anchor.y - s.floorCut
+    float3 centerRel{0, -0.2f, 0};  // anchor - s.center
+    int pert = 0, n = 0;
+    float3 A0{0, 0, 0}, AN{0, 0, 0};   // the anchor in fractal space, before the first iteration and after the last
+    float3 cutRel{0, 0, 0}, cutSign{1, 1, 1};   // |A0| - the cut box's half size, sign(A0), per axis
+    const KStep* st = nullptr;      // the orbit: n steps (device memory for the kernels, host memory for the host's
+                                    // own estimates; a kernel parameter array indexed in a loop spills to local memory)
 };
 
 HD float fractf(float x) { return x - floorf(x); }
@@ -196,24 +220,73 @@ HD float deFractal(float3 p, const Shape& s) {
     return d;
 }
 
-// the sculpture in the world (metres); outside its bounding sphere the sphere is the estimate (a lower bound)
-HD float deSculpture(float3 pw, const Shape& s) {
-    const float3 q = pw - s.center;
+// one axis of the box fold, as a difference from the anchor's fold (see KStep)
+HD float foldDelta(float d, float toPos, float toNeg, int bA) {
+    const int bp = d > toPos ? 1 : (d < toNeg ? -1 : 0);
+    if (bp == bA) return bA == 0 ? d : -d;
+    if (bA == 0) return (bp == 1 ? 2.0f * toPos : 2.0f * toNeg) - d;
+    if (bp == 0) return d - (bA == 1 ? 2.0f * toPos : 2.0f * toNeg);
+    return (bp == 1 ? 2.0f : -2.0f) * (toPos - toNeg) - d;   // the opposite sides: 4C - d or -4C - d
+}
+
+// the pseudo-Kleinian by perturbation around the anchor (fractal units in, fractal units out)
+HD float deKleinianPert(float3 d, const World& w) {
+    const Shape& s = w.s;
+    float df = 1.0f;
+    for (int i = 0; i < w.n; ++i) {
+        const KStep& k = w.st[i];
+        d = make_float3(foldDelta(d.x, k.toPos.x, k.toNeg.x, k.bx), foldDelta(d.y, k.toPos.y, k.toNeg.y, k.by),
+                        foldDelta(d.z, k.toPos.z, k.toNeg.z, k.bz));
+        const float ad = 2.0f * dot(k.Af, d) + dot(d, d);   // |z|² - |Af|²
+        const float r2z = k.r2 + ad, r2mz = k.r2m + ad;
+        const bool invZ = r2mz < 0.0f, invA = k.r2m < 0.0f;
+        const float kz = invZ ? s.a / r2z : 1.0f;
+        float dk = 0.0f;   // kz - kA, without cancelling
+        if (invZ && invA) dk = -s.a * ad / (r2z * k.r2);
+        else if (invZ) dk = -r2mz / r2z;
+        else if (invA) dk = k.r2m / k.r2;
+        d = d * kz + k.Af * dk;
+        df *= kz;
+    }
+    const float3 z = w.AN + d;
+    const float rxy = sqrtf(z.x * z.x + z.y * z.y);
+    return fmaxf(rxy - s.b, fabsf(rxy * z.z) / length(z)) / df;
+}
+
+// the sculpture: o is an offset from the frame's anchor (metres); outside its bounding sphere the sphere is the
+// estimate (a lower bound)
+HD float deSculpture(float3 o, const World& w) {
+    const Shape& s = w.s;
+    const float3 q = o + w.centerRel;
     const float rw = s.boundR * s.scale;
     const float bd = length(q) - rw;
     float d;
-    if (bd > 0.05f * rw) d = bd;
-    else d = deFractal(mul(s.orient, q) * (1.0f / s.scale), s) * s.scale;
-    return fmaxf(d, s.floorCut - pw.y);
+    if (bd > 0.05f * rw) {
+        d = bd;
+    } else if (w.pert) {
+        const float3 d0 = mul(s.orient, o) * (1.0f / s.scale);   // from the anchor, fractal units
+        d = deKleinianPert(d0, w);
+        if (s.cut == 2) {   // the box, near a face from |A0| - h exactly
+            float3 c;
+            c.x = fabsf(w.A0.x) > 0.5f * s.cutSize.x ? w.cutRel.x + w.cutSign.x * d0.x : fabsf(w.A0.x + d0.x) - s.cutSize.x;
+            c.y = fabsf(w.A0.y) > 0.5f * s.cutSize.y ? w.cutRel.y + w.cutSign.y * d0.y : fabsf(w.A0.y + d0.y) - s.cutSize.y;
+            c.z = fabsf(w.A0.z) > 0.5f * s.cutSize.z ? w.cutRel.z + w.cutSign.z * d0.z : fabsf(w.A0.z + d0.z) - s.cutSize.z;
+            d = fmaxf(d, length(fmaxf3(c, make_float3(0, 0, 0))) + fminf(fmaxf(c.x, fmaxf(c.y, c.z)), 0.0f));
+        }
+        d *= s.scale;
+    } else {
+        d = deFractal(mul(s.orient, q) * (1.0f / s.scale), s) * s.scale;
+    }
+    return fmaxf(d, -(w.floorCutRel + o.y));
 }
 
-// the whole scene: 0 the sculpture, 1 the plinth, 2 the floor
-HD float deScene(float3 p, const World& w, int& id) {
-    float d = deSculpture(p, w.s);
+// the whole scene at an offset o from the anchor: 0 the sculpture, 1 the plinth, 2 the floor
+HD float deScene(float3 o, const World& w, int& id) {
+    float d = deSculpture(o, w);
     id = 0;
-    const float dp = sdBox(p - w.plinthC, w.plinthH);
+    const float dp = sdBox(o + w.plinthRel, w.plinthH);
     if (dp < d) { d = dp; id = 1; }
-    const float df = p.y - w.floorY;
+    const float df = o.y + w.floorRel;
     if (df < d) { d = df; id = 2; }
     return d;
 }

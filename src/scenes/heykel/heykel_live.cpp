@@ -121,13 +121,13 @@ public:
 
         // the wheel: what is under the cursor is the point the camera closes in on (it stays put on the screen)
         if (in.scroll != 0.0f && inView) {
-            float3 q;
+            D3 q;
             if (!h_.pick(rx, ry, q)) {   // nothing there: a point on the ray as far as the focus
                 float3 r, u, f;
                 h_.cameraBasis(r, u, f);
                 const float t = std::tan(0.5f * h_.fovDeg * 3.14159265f / 180.0f);
                 const float sx = (rx / h_.width * 2.0f - 1.0f) * t * float(h_.width) / h_.height, sy = (1.0f - ry / h_.height * 2.0f) * t;
-                q = h_.camPos + normalize(f + r * sx + u * sy) * length(h_.focus - h_.camPos);
+                q = h_.camPos + d3(normalize(f + r * sx + u * sy)) * length(h_.focus - h_.camPos);
             }
             zoomQ_ = q;
             pending_ += in.scroll * std::log(1.35f);
@@ -139,7 +139,7 @@ public:
             h_.zoomAbout(zoomQ_, dz);
             pending_ -= dz;
             if (h_.level == 1.0f && before != 1.0f && dz < 0.0f) pending_ = 0.0f;   // back at the first view
-            if (h_.level >= h_.maxLevel && dz > 0.0f) pending_ = 0.0f;
+            if (h_.level >= h_.zoomCap() * 0.999f && dz > 0.0f) pending_ = 0.0f;
             changed = true;
         }
         // the right button turns the view around the focus (the plinth turning)
@@ -160,7 +160,8 @@ public:
             }
         }
         if (!in.leftDown && leftWas_ && pressInView_ && !dragging_) {
-            float3 q, n;
+            D3 q;
+            float3 n;
             if (h_.pick(rx, ry, q, &n)) {
                 h_.aimLight(q, &n);
                 changed = true;
@@ -248,7 +249,7 @@ private:
     uchar4* pinned_ = nullptr;
     bool paced_ = false;
     float pending_ = 0.0f;           // zoom still to go (log)
-    float3 zoomQ_{0, 0, 0};
+    D3 zoomQ_{0, 0, 0};
     bool leftWas_ = false, dragging_ = false, pressInView_ = false;
     float pressX_ = 0.0f, pressY_ = 0.0f;
     int maxSamples_ = 1024;

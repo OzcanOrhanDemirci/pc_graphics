@@ -4,12 +4,28 @@
 #include "core/config.h"
 #include "scenes/heykel/heykel_kernels.h"
 
+#include <algorithm>
+#include <cmath>
 #include <string>
 #include <vector>
 
 #ifndef PROJECT_ROOT
 #define PROJECT_ROOT "."
 #endif
+
+// A world position in doubles (the host): the camera, the focus and the light are kept in it; the GPU sees offsets
+// from the frame's anchor in floats (see hk::World).
+struct D3 {
+    double x = 0.0, y = 0.0, z = 0.0;
+};
+inline D3 d3(double x, double y, double z) { return D3{x, y, z}; }
+inline D3 d3(float3 v) { return D3{v.x, v.y, v.z}; }
+inline float3 f3(D3 v) { return make_float3(float(v.x), float(v.y), float(v.z)); }
+inline D3 operator+(D3 a, D3 b) { return {a.x + b.x, a.y + b.y, a.z + b.z}; }
+inline D3 operator-(D3 a, D3 b) { return {a.x - b.x, a.y - b.y, a.z - b.z}; }
+inline D3 operator*(D3 a, double s) { return {a.x * s, a.y * s, a.z * s}; }
+inline double dot(D3 a, D3 b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+inline double length(D3 a) { return std::sqrt(dot(a, a)); }
 
 // one candidate of the study (G0): a fractal, its knobs, how it stands and how it is first seen
 struct HeykelCandidate {
@@ -38,18 +54,22 @@ struct HeykelApp {
     float fitR = 1.0f, fitMinY = -1.0f;   // the fit: the outer radius and the lowest point, fractal units (turned)
 
     // camera: a position, yaw (0: looking towards -z) and pitch; the focus is what the zoom and the turn go around
-    float3 camPos{0, 0, 1};
+    D3 camPos{0, 0, 1};
     float yaw = 0.0f, pitch = 0.0f;
-    float3 focus{0, 0, 0};
+    D3 focus{0, 0, 0};               // also the frame's anchor (the GPU's offsets are from it)
     float level = 1.0f;              // how far zoomed in (1: the first view)
-    float3 homePos{0, 0, 1}, homeFocus{0, 0, 0};
+    D3 homePos{0, 0, 1}, homeFocus{0, 0, 0};
     float homeYaw = 0.0f, homePitch = 0.0f;
     float maxLevel = 1000.0f;
 
     // the light: pointed at a target from a direction (world), at a distance that follows the view
-    float3 lightTarget{0, 0, 0}, lightDir{-0.6f, 0.6f, 0.5f};
+    D3 lightTarget{0, 0, 0};
+    float3 lightDir{-0.6f, 0.6f, 0.5f};
     float lightDist = 1.5f, lightRadius = 0.06f, litRadius = 0.35f;
     float ev = 0.0f;
+
+    mutable hk::KStep hostSteps[hk::kMaxSteps];   // the anchor's orbit (setAnchor), and its copy on the GPU
+    hk::KStep* devSteps = nullptr;
 
     // GPU
     float4* preview = nullptr;
@@ -67,12 +87,18 @@ struct HeykelApp {
     void home();
     void cameraBasis(float3& right, float3& up, float3& fwd) const;
     HeykelView view() const;
+    void setAnchor(hk::World& w, D3 anchor) const;   // the offsets to the far things, the Kleinian's orbit (doubles,
+                                                     // into hostSteps; w.st points there)
+    bool deep() const { return world.s.fractal == hk::kKleinian; }   // the perturbed one: 10,000 times
+    float zoomCap() const { return deep() ? maxLevel : std::min(maxLevel, cfg.f("zoom.max.float", 1000.0f)); }
+    double deHost(D3 p) const;       // the scene's estimate at a world point, in doubles where it matters (picking)
+    int itersNow() const;            // the formula's iterations at this zoom (the GPU and the picks alike)
 
-    bool pick(float px, float py, float3& hit, float3* normal = nullptr) const;   // render pixels
-    void zoomAbout(float3 q, float logAmount);   // > 0 in; the point q stays where it is on the screen
+    bool pick(float px, float py, D3& hit, float3* normal = nullptr) const;   // render pixels
+    void zoomAbout(D3 q, float logAmount);       // > 0 in; the point q stays where it is on the screen
     bool orbit(float dyaw, float dpitch);        // around the focus; false: it would go into the stone
     void defaultLight();                         // from the upper left, a little towards the viewer (a raking key)
-    void aimLight(float3 target, const float3* normal = nullptr);   // onto a point, its size from the view there;
+    void aimLight(D3 target, const float3* normal = nullptr);   // onto a point, its size from the view there;
                                                                     // a normal keeps it on the lit side
     void turnLight(float dAzimuth, float dElevation);
 

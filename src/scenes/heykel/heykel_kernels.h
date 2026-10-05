@@ -14,7 +14,10 @@ struct HeykelView {   // one frame's world, camera and light, by value to the ke
     float tanHalf = 0.27f;        // tan(vertical field of view / 2)
     float pixAngle = 0.0f;        // 2 tanHalf / height: a pixel's angle
     float detail = 0.5f;          // the surface threshold, in pixels
-    int maxSteps = 400;
+    int maxSteps = 400;           // the camera's rays
+    int maxSteps2 = 200;          // the shadow and bounce rays (out of steps near something: a hit, dark)
+    float shadowSlope = 2.0f, bounceSlope = 4.0f;   // their thresholds, times the camera's (they need no pixel's precision)
+    float filterSigma = 0.45f;    // the reconstruction's Gaussian, pixels
     float tmax = 30.0f;
     // the key light: a sphere behind a spot's cone, pointed at what was clicked
     float3 lightPos{0, 1, 1}, lightAxis{0, -1, 0};   // the axis: from the light towards its target
