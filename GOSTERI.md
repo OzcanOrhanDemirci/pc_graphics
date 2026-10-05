@@ -123,16 +123,17 @@ Panel (sağ üst): derinlik, basınç, oksijenin kısmi basıncı (ppO2), geçi�
 deliklerin altına git, ışığın kumda salınışını izle; batığın sancak tarafındaki kırıktan içeri gir, feneri aç; şamandıra
 halatını izleyerek in, 35-40 m'de dibin belirişine bak. Ayarlar `scenes/koy.cfg` (F5 ile).
 
-## 06 · Heykel — karanlık bir odada, kaidede beyaz bir fraktal (taslak)
-Geometrinin sahnesi: ayrıntı dokuda değil gerçek geometride, yaklaştıkça bitmiyor. Bu taslakta beş aday var (panelden ya
-da 1-5): Şehir, Katedral, Yıldız, Tohum, Dantel. Kıpırdamadığın sürece görüntü birikir ve netleşir.
+## 06 · Heykel — karanlık bir odada, kaidede beyaz bir fraktal; on bin kat yakına
+Geometrinin sahnesi: ayrıntı dokuda değil gerçek geometride ve yaklaştıkça bitmiyor. Kıpırdamadığın sürece görüntü
+birikir ve netleşir; sağ üstte yakınlaşma ve ekranın o an kaç milimetre genişliğinde olduğu.
 
 | Tuş | Ne yapar |
 |---|---|
-| **Tekerlek** | imlecin gösterdiği yere yaklaş, uzaklaş (o nokta ekranda yerinde kalır; taslakta en fazla 1.000 kat) |
+| **Tekerlek** | imlecin gösterdiği yere yaklaş, uzaklaş (o nokta ekranda yerinde kalır; 10.000 kata kadar, düz kesik yüzlerde 30) |
+| **T** | dalış turu: dört noktaya 10.000 kata kadar, her katta durup netleşir (bir tuş ya da fare durdurur) |
 | **Sol tık** | ışığı tıklanan yere çevir · **sürükle:** ışığı o noktanın çevresinde döndür |
-| **Sağ tık** | sürükle: heykeli çevir · **R** ilk görünüm · **↑ / ↓** pozlama |
+| **Sağ tık** | sürükle: heykeli çevir · **R** ilk görünüm |
+| **F** | netlik alanı: makro (odak yaklaştığın yerde) / hepsi net · **↑ / ↓** pozlama |
 
-**Dene:** Katedral'de bir kemerin kenarına 10-100 kat yaklaş ve dur; ışığı yatık açıya sürükle. Ayarlar
-`scenes/heykel.cfg` (F5 ile).
-
+**Dene:** önce T ile turu izle. Sonra bir kemerin kenarına tekerlekle in ve her onda bir katta dur; ışığı yatık açıya
+sürükle. Ayarlar `scenes/heykel.cfg` (F5 ile).

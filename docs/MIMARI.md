@@ -29,7 +29,8 @@ src/
     yikim/      sahne 3 · Yıkım (ekran kartında fizik çözücü)
     laboratuvar/ sahne 4 · Laboratuvar (sıvı ve tanecik fiziği, ağır çekim kayıtları)
     koy/        sahne 5 · Koy (su altı: sabit örnekli süper örnekleme, tayf tabloları, FFT yüzey, kostik hacmi)
-    heykel/     sahne 6 · Heykel (geometri: fraktallar mesafe kestirimiyle, CUDA önizleme + durunca biriken yol izleme)
+    heykel/     sahne 6 · Heykel (geometri: fraktal mesafe kestirimi, 10.000 kat için pertürbasyon, CUDA önizleme + durunca
+                biriken yol izleme)
       particles.*       tanecik çözücüsü (PBF, XPBD bağlar, şekil eşleme, taneler)  surface.* sıvı yüzeyi
       lab_world.*       beş deneyin kurulumu ve adımı (kaba ya da ince)  lab_record.* ince kayıt, işçi iş parçacığı
       lab_kernels.cu    çözücü, kayıt ve çizici arası küçük çekirdekler  weapons.* gerçek yükler, balistik

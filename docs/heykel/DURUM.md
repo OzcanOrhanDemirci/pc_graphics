@@ -2,7 +2,100 @@
 
 > Tek kaynak durum panosu. Plan `docs/heykel/PLAN.md`. En yeni en üstte.
 
-## 🛑 Durak 1 · Özcan'ın bakacağı yer (2026-10-05 gecesi, G0 etüt taslağı)
+## 🏁 Özcan'ın bakacağı yer (2026-10-05 sabahı, otonom görevin sonu)
+
+Özcan G0 taslağına bakmadan seçimi bana bıraktı ve sahneyi tamamlanana kadar otonom sürdürmemi istedi (*"Hangisini en
+iyi yapabileceksen seç. Sahneyi tamamlayana kadar otonom şekilde devam et [...] Paralel agent kullanma, kendin çalış"*).
+Seçimim **Katedral** (sözde Klein): ilk görünümü gerçek bir müze fotoğrafı gibi, yakında her katta yeni daire dantelleri.
+
+**Açmak:** `build\pc_graphics.exe` → galeride **06 Heykel** (Enter). Bir iki saniyede açılır.
+
+**Nasıl bakılır:**
+- **Dur ve bekle:** kıpırdamadığın sürece görüntü birikir ve netleşir (sağ üstte "Örnek"). Hareket ederken gördüğün
+  yarım çözünürlüklü, yumuşak bir önizleme; parlaklığı birikmiş görüntüyle ölçülerek eşlendi, durunca sıçramaz.
+- **Tekerlek:** imlecin gösterdiği yere yaklaşır (o nokta ekranda yerinde kalır), **10.000 kata kadar.** Sağ üstte
+  yakınlaşma ve **ekranın genişliği** (ilk görünümde ~1,5 m, 10.000 katta 0,15 mm). Bloğun düz kesik yüzlerinde ve
+  kaidede derinlik yok (orada yalnız düzlem kalır): oralarda 30 katta durur.
+- **T ya da panelde "Dalış turu":** dört seçilmiş noktaya 10.000 kata kadar iner, 10, 100, 1.000 ve 10.000 katta durup
+  netleşir, çıkar, sonrakine geçer. Bir tuş ya da fare durdurur.
+- **Sol tık:** ışık tıkladığın yere döner · **sol tıkla sürükle:** ışık o noktanın çevresinde döner (yatık ışıkta
+  dantel okunur) · **sağ tıkla sürükle:** heykeli çevir · **R:** ilk görünüm · **F** ya da panel: netlik alanı
+  (makro / hepsi net) · **↑ / ↓:** pozlama · **H:** arayüzü gizle.
+
+**Ölçümler (2560×1440, RTX 4080):**
+- **Akıcılık** (`--autotest-only heykel`): uygulama 28-44 fps; hareket ederken önizleme 5-33 ms (derinde ışın sayısı
+  kendini düşürür). Kart belleği 2,0 GB.
+- **Durunca netleşme** (komut satırı, 2560×1440, iki dalış; yüzde: 1.024 örnekli referanstan 8 gri seviyesinden fazla
+  ayrılan piksel):
+
+  | | 64 örnek | 128 örnek | 256 örnek |
+  |---|---|---|---|
+  | İlk görünüm | 0,5 sn · %1 | 0,9 sn · %0,3 | 1,7 sn · %0,05 |
+  | 1.000 kat | 6-9 sn · %4-11 | 10-17 sn · %1-3 | 15-33 sn · %0,2-0,6 |
+  | 10.000 kat | 8-9 sn · %6-11 | 14-16 sn · %2-4 | 23-29 sn · %0,3-0,7 |
+
+  Derinde bir örnek tam ekranda ~190-225 ms (uyarlamalı örneklemede sonrakiler ucuzlar). Tur bu yüzden 1.000 ve 10.000
+  katta 12 saniyeye kadar bekler.
+- **Sayısal derinlik** (`--test pert`): 10.000 katta en fazla 0,003 piksel; düz float 0,24-0,49.
+
+### Görev boyunca verdiğim kararlar (her biri bir ölçümle ya da kareye bakarak)
+- **10.000 kat, pertürbasyonla.** Orada bir piksel konumun birkaç float basamağı: düz float'ta hata 0,24-0,49 piksel,
+  yüzey eşiği yarım piksel. Derin Mandelbrot yakınlaşmalarının yolu: çapa noktasının yörüngesi ana işlemcide çift
+  hassasiyetle (`setAnchor`), her piksel ondan float bir fark olarak izlenir. Katlama ve evirme parça parça rasyonel:
+  her dalın kesin bir fark formülü var, dal sınırları çift hassasiyetteki uzaklıklardan (`heykel_de.h`, `KStep`). Ölçü
+  (`--test pert`, 12 çapa, 2.000+ nokta): 10.000 katta en fazla 0,003 piksel. 1.000 kattan önce düz float (fark görünmez,
+  pertürbasyon 2-3 kat pahalı).
+- **Tekrar sayısı yakınlaşmayla artar** (`itersNow`: 10'dan başlar, onda bir katta 2 artar, 18'de durur). 10 tekrarda
+  10.000 kattaki dantel boşlukta yüzen halka bulutuna dağıldı (formül bitmişti); 14-18 tekrarda dantel sürüyor. Piksel
+  kuralının formüle uygulanmış hâli: pikselden ince yapı zaten çizilmiyor.
+- **Katlar formülle ayrı tasarlanamadı.** Belli bir tekrardan sonra kutu ya da evirme ayarını değiştirmek (`split`, `k2`,
+  `a2`) derin katlarda yalnız ince fark verdi. Plandaki geri çekilme yolu: katların karakteri **yer seçimi** (16 rastgele
+  dalıştan 4'ü, her durakta dengeli olanlar) ve **ışıkla** taşınıyor. Kod duruyor, kullanılmıyor (`split` varsayılan 99).
+- **Dalışlar dünya noktası:** ilk sürüm pikseldi; 2560×1440'ta yüzey eşiği daha ince olduğu için yol başka bir deliğe
+  sapıp yoğun kafesin içine daldı. Şimdi her dalış, 10.000 kata inilen noktanın çift hassasiyetli konumu
+  (`--hedef` turun gördüğünü çizer).
+- **Işık üç parça:** (1) **spot:** tıkladığın yere döner; yaklaşırken kamerayla birlikte gelir (makro fotoğrafçının
+  lambası gibi, aynı noktaya göre ölçeklenir), hattını bir kemer kapatırsa en yakın açık açıyı arar (15-60°, her karede
+  tek ışınla kontrol). Önceki hâlinde derin katların çoğu kararıyordu. (2) **göz ışığı:** merceğin üstünde bir halka ışık;
+  kameranın gördüğü her nokta onu da görür, gölge testi gerekmez, gürültüsüz, önizlemeyle birebir. Uzaklıkla düşüşü
+  merceğe yakın yumuşatıldı (**sanat ayarı, adıyla**: `eye.soft`); düz ters kare yasasında yakın bir kemer görüntünün
+  %4,6'sını beyaza patlatıyordu. Kameranın arkasına konmuş ilk sürümü, arkadaki kemerlerin gölgesine giriyordu. (3)
+  tavandan sönük bir dolgu (oda).
+- **Önizleme:** yarım çözünürlük, önizleme pikseli başına 4 ışın (döndürülmüş ızgara): tek ışınlı tam çözünürlük kadar
+  pahalı ama süzülmüş (ince dantel tek ışında kıpraşıyordu). Yavaşlarsa (derinde) ışın sayısı 2'ye, 1'e iner. Parlaklık
+  birikmiş görüntüyle ölçülerek eşlendi (oran 0,93-1,07, 16 piksellik bloklarda ortalama fark 4-10 gri seviyesi).
+- **Birikim:** düşük tutarsızlıklı diziler (Kronecker, asal kökler), Gauss yeniden kurma (σ 0,45 piksel), uyarlamalı
+  örnekleme (32 örnekten sonra ortalaması %1,2 kesinleşen piksel durur), yüzeyde 2, 100 kattan derinde 1 sekme
+  (sekme yolun yarısı kadar pahalı, katkısı az), adım çarpanı 0,9 (0,8'e göre %15 hızlı, 10.000 katta delik ya da benek
+  yok). Bir örnek bir kareye sığmazsa satır satır kareler arasına bölünür: ekran donmaz.
+- **Makro alan derinliği** (yol izlemede ince mercek, açıklık odak uzaklığının %0,3'ü; açısal bulanıklık her yakınlıkta
+  aynı): 100 katta öndeki dantel perdesi yumuşayıp ön plan olarak okunuyor. İlk görünümde etkisi yok. F kapatır.
+- **Ölçek:** plan "10.000 katta ekranın genişliği bir saç teli (~70 µm)" diyordu; ilk görünüm heykeli kaideyle ve payla
+  çerçevelediği için (genişlik ~1,5 m) 10.000 katta ölçülen 0,15 mm, iki saç teli. Özcan'ın sayısı (10.000 kat) korundu.
+- **Diğer dört aday çıktı:** tek dar odak; Katedral dışındakiler float'la 1.000 kata, tur ve ışık ayarı yalnız onda.
+  Komut satırı etüdünde duruyorlar (`--aday 0..4`).
+
+### Bilerek yapılmayanlar
+- **Porselenin ince duvardan ışık geçirmesi:** bu fraktalın duvarlarının gerçek bir kalınlığı yok (sözde Klein'ın
+  yüzeyleri sıfır kalınlıkta disklerin görüntüleri; görünen kalınlığı piksel kuralı veriyor). Geçirgenlik yakınlaşmaya
+  göre değişen, fiziksel olmayan bir şey olurdu.
+- **Son oda** (dalışın sonunda tasarlanmış bir öge): 10.000 kattaki dantelin kendisi varış; eklenen bir nesne o anı
+  ucuzlatırdı.
+- **Yapay zekâ gürültü gidericisi:** ince geometriyi yumuşatma riski bu sahnenin amacına ters; birikim yeterince hızlı.
+
+### NE DOĞRULANMADI
+- **Senin gözün:** hiçbir şey senin canlı bakışından geçmedi. Işığın, sanat ayarlarının (göz ışığı, alan derinliği),
+  turun hızı ve duraklarının yargısı karelere benim bakmamla.
+- **Gerçek fareyle kullanım:** yakınlaşma, ışık tıklama ve sürükleme, çevirme yalnız otomatik sınamanın sanal faresiyle.
+  Sürükleme hızları tahmin.
+- **Hareket hâlindeki kıpraşma ölçülmedi:** yakınlaşırken görülen önizleme süzülmüş ama tek kare başına (zamansal birikim
+  yok); kararlılık ölçüsü (`tools/kararlilik.py`) bu sahneye bağlanmadı. Durağan görüntü ölçüldü (yukarıda).
+- **10.000 katın ötesi:** yakınlaşma orada durur; ötesi denenmedi.
+- **Çok yoğun kafes bakışları:** kameranın hemen önünde ince bir dantel tabakası varken görüntü gri bir örtüye döner
+  (gerçek geometri, cepheden gelen göz ışığıyla düz); turun durakları bunlardan kaçınıyor, serbest gezintide çıkabilir.
+- **Bütün galeri otomatik sınaması** (`--autotest`, bütün sahneler) koşmadı; yalnız `--autotest-only heykel`.
+
+## G0 · Etüt taslağı (2026-10-05 gecesi; Özcan bakmadan seçimi bana bıraktı, aşağıdaki görev)
 
 **Açmak:** `build\pc_graphics.exe` → galeride **06 Heykel** (Enter). Yükleme bir iki saniye. Sol alttaki panelde **Aday**
 düğmeleri (ya da 1-5 tuşları): Şehir · Katedral · Yıldız · Tohum · Dantel.

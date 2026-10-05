@@ -4,6 +4,11 @@
 > `grafik/project_grafik_fikirler.md` sonundaki "Sahne görev çerçevesi" ve ardından gelen bloklarda. Durum ve ölçümler
 > `docs/heykel/DURUM.md`'de. Bağlam sıkıştırılırsa önce bu dosyayı, sonra hafızada `genel/feedback_gpu_ve_grafik.md`
 > §6 (SDF), §13 (teknik ≠ görsel), §19 ve §21'i (kararlılık, netlik) oku.
+>
+> **2026-10-05 sabahı: G0-G4 otonom görevde yapıldı** (Özcan seçimi bana bıraktı: Katedral). Plandan ayrılanlar ve
+> ölçümler `DURUM.md`'nin başında: katlar formülle değil yer seçimi ve ışıkla; dalışlar her yerde 10.000 kat (düz kesik
+> yüzlerde 30); 10.000 katta ekranın genişliği 0,15 mm (ilk görünüm planın varsaydığından geniş); porselen geçirgenliği
+> ve son oda bilerek yok.
 
 ## 1 · Görev ve Özcan'ın sözleri
 

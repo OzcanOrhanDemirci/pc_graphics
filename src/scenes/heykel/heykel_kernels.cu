@@ -243,7 +243,17 @@ __global__ void kPath(HeykelView v, float4* accum, float* accY2, int samples, in
         const float u1 = fractf(ox + g1 * k), u2 = fractf(oy + g2 * k);
         const float cut = 1.0f - expf(-4.5f);   // 3 sigma
         const float r = v.filterSigma * sqrtf(-2.0f * logf(1.0f - u1 * cut)), ph = 2.0f * M_PIf * u2;
-        const float3 cs = trace(v, v.camPos, rayDir(v, x + 0.5f + r * cosf(ph), y + 0.5f + r * sinf(ph)), rng);
+        float3 ro = v.camPos, rd = rayDir(v, x + 0.5f + r * cosf(ph), y + 0.5f + r * sinf(ph));
+        if (v.aperture > 0.0f) {   // a thin lens focused on the plane through the zoom's point (a macro lens's depth)
+            const float3 fp = ro + rd * (v.focusDist / dot(rd, v.camFwd));
+            const float lr = v.aperture * sqrtf(rng.next()), la = 2.0f * M_PIf * rng.next();
+            ro = ro + v.camRight * (lr * cosf(la)) + v.camUp * (lr * sinf(la));
+            rd = normalize(fp - ro);
+        } else {
+            rng.next();   // the dimensions stay in step
+            rng.next();
+        }
+        const float3 cs = trace(v, ro, rd, rng);
         c += cs;
         y2 += luminance709(cs) * luminance709(cs);
     }

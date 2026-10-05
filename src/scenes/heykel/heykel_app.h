@@ -51,7 +51,6 @@ struct HeykelApp {
     std::vector<HeykelCandidate> cands;
     int cand = 0;
     hk::World world;
-    float fitR = 1.0f, fitMinY = -1.0f;   // the fit: the outer radius and the lowest point, fractal units (turned)
 
     // camera: a position, yaw (0: looking towards -z) and pitch; the focus is what the zoom and the turn go around
     D3 camPos{0, 0, 1};
@@ -78,6 +77,7 @@ struct HeykelApp {
     float* accY2 = nullptr;          // the samples' squared luminance, summed (adaptive sampling)
     uchar4* output = nullptr;
     int samples = 0;                 // accumulated a pixel
+    bool dof = true;                 // the macro lens's depth of field (path tracer only; the preview is a pinhole)
     int previewRays = 4;             // the preview's rays a preview pixel (renderPreview halves or doubles them by its time)
     float previewMs = 0.0f, pathMs = 0.0f;   // the last preview; a whole sample a pixel of the path tracer
 

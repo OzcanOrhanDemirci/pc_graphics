@@ -132,17 +132,17 @@ Panel (top right): depth, pressure, the oxygen's partial pressure (ppO2), the pa
 beneath the holes and watch the light sway on the sand; enter the wreck through its fallen starboard side and switch the
 torch on; follow the buoy's rope down and watch the floor appear at 35-40 m. Settings `scenes/koy.cfg` (F5).
 
-## 06 · The Sculpture — a white fractal on a plinth in a dark room (draft)
-The scene of geometry: the detail lives in real geometry, not in textures, and does not end as you come closer. This
-draft has five candidates (on the panel, or 1-5): City, Cathedral, Star, Seed, Lace. As long as nothing moves the
-picture accumulates and sharpens.
+## 06 · The Sculpture — a white fractal on a plinth in a dark room; ten thousand times closer
+The scene of geometry: the detail lives in real geometry, not in textures, and does not end as you come closer. As long
+as nothing moves the picture accumulates and sharpens; top right, the zoom and how many millimetres wide the screen is.
 
 | Key | What it does |
 |---|---|
-| **Wheel** | zoom towards the cursor, and out (that point stays put on the screen; at most 1,000 times in the draft) |
+| **Wheel** | zoom towards the cursor, and out (that point stays put on the screen; to 10,000 times, 30 on the flat cut faces) |
+| **T** | the dive tour: four dives to 10,000 times, stopping at every step to sharpen (a key or the mouse stops it) |
 | **Left button** | point the light at what is clicked · **drag:** swing the light around that spot |
-| **Right button** | drag: turn the sculpture · **R** the first view · **↑ / ↓** exposure |
+| **Right button** | drag: turn the sculpture · **R** the first view |
+| **F** | depth of field: macro (the focus on what you zoom at) / all sharp · **↑ / ↓** exposure |
 
-**Try:** on the Cathedral, zoom 10-100 times into the edge of an arch and wait; drag the light to a raking angle.
-Settings `scenes/heykel.cfg` (F5).
-
+**Try:** watch the tour first (T). Then wheel into the edge of an arch, stopping at every decade; drag the light to a
+raking angle. Settings `scenes/heykel.cfg` (F5).

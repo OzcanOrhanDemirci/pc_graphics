@@ -5,11 +5,13 @@
 > `docs/tanecik/` arşiv.
 
 ## Şu an
-- **2026-10-05 (gece) · Sahne 6 "Heykel" başladı (geometri), G0 etüt taslağı bitti, 🛑 Durak 1 Özcan'ın canlı bakışını
-  bekliyor.** Görev: geometrik ayrıntı; boş, karanlık bir odada kaidede duran beyaz mat bir fraktal heykel, sabit kamera,
-  imlece yakınlaşma, tıklanan yere dönen ışık, durunca biriken yol izleme. Galeride **06 Heykel** (vurgu rengi lavanta
-  `#9D8CE0`), beş aday: Şehir, Katedral, Yıldız, Tohum, Dantel. Plan `docs/heykel/PLAN.md`, neye bakılacağı ve NE
-  DOĞRULANMADI `docs/heykel/DURUM.md`. Uygulamaya genel ek: `--autotest` betiğinde tekerlek adımı.
+- **2026-10-05 (sabah, otonom) · Sahne 6 "Heykel" tamamlandı, Özcan'ın canlı bakışını bekliyor.** Görev: geometri.
+  Özcan G0 taslağına bakmadan seçimi bana bıraktı: **Katedral** (sözde Klein, bloğa kesilmiş, beyaz mat, karanlık oda,
+  kaide). İmlece yakınlaşma **10.000 kata kadar** (pertürbasyon: çapa yörüngesi çift hassasiyetle, piksel farkı float;
+  ölçülen hata 0,003 piksel), tekrar sayısı yakınlaşmayla artar, tıklanan yere dönen ve yakınlaşmayla gelen spot, göz
+  ışığı, makro netlik alanı (F), dört noktalı **dalış turu (T)**. Galeride **06 Heykel** (lavanta `#9D8CE0`). Plan
+  `docs/heykel/PLAN.md`; neye bakılacağı, kararlar, ölçümler ve NE DOĞRULANMADI `docs/heykel/DURUM.md`'nin başında.
+  Uygulamaya genel ek: `--autotest` betiğinde tekerlek adımı (`wheel`).
 - **2026-10-05 (gece) · 🏁 Sahne 5 tamamlandı** (Özcan: *"Sahneyi tamamladık"*). Galeride 05 Ada; son revizeler, panel
   tercihleri ve ölçümler `docs/koy/DURUM.md` başında.
 - **2026-10-04 (gece, otonom) · Sahne 5 ikinci bölüm "Amfora" (plan `docs/koy/PLAN_AMFORA.md`).** Galeride artık **05

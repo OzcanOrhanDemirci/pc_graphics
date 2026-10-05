@@ -250,8 +250,6 @@ void HeykelApp::setCandidate(int i) {
         }
     }
     if (maxR <= 0.0f) { maxR = 1.0f; minY = -1.0f; maxY = 1.0f; }
-    fitR = maxR;
-    fitMinY = minY;
     s.boundR = maxR * 1.04f;
     const float heightF = std::max(maxY - minY, 1e-3f);
     s.scale = c.sizeM / heightF;
@@ -450,7 +448,10 @@ HeykelView HeykelApp::view() const {
         v.eyePos = v.camPos + v.camUp * (cfg.f("eye.up", 0.05f) * d);
         v.eyeD = d;
         v.eyeC = cfg.f("eye.soft", 0.6f) * d;
-        v.eyeE = cfg.f("eye", 0.12f) * cfg.f("light.e", 3.14159f);
+        // the photographer puts the ring light on when going macro: faint at the first view (the room's dark, the
+        // plinth's shaded side; with the deep strength it lit the plinth's front flat), full from ten times on
+        const float ramp = std::clamp(std::log10(std::max(level, 1.0f)), 0.0f, 1.0f);
+        v.eyeE = (cfg.f("eye.first", 0.025f) + (cfg.f("eye", 0.12f) - cfg.f("eye.first", 0.025f)) * ramp) * cfg.f("light.e", 3.14159f);
         v.eyeColor = cfg.v3("eye.color", make_float3(0.92f, 0.96f, 1.0f));
         v.light[1].le = 0.0f;
     }
@@ -462,6 +463,11 @@ HeykelView HeykelApp::view() const {
     v.exposure = std::exp2(ev + cfg.f("ev", 0.0f));
     v.previewGain = cfg.f("preview.gain", 1.2f);
     v.previewRays = previewRays;
+    {   // a macro lens: the aperture a fixed fraction of the focus distance (the same blur at every zoom, in angle)
+        const D3 toF = focus - camPos;
+        v.focusDist = std::max(float(dot(toF, d3(v.camFwd))), 1e-12f);
+        v.aperture = dof ? cfg.f("dof", 0.003f) * float(length(toF)) : 0.0f;
+    }
     v.sample = samples;
     // two bounces where the light travels between big white surfaces, one deep in the lattice where a bounce costs as
     // much as the rest of the path and its light differs by little (measured: 32 -> 23 ms a sample at 10,000 times)
@@ -638,7 +644,11 @@ void HeykelApp::aimLight(D3 target, const float3* normal) {
     lightDist = cfg.f("light.dist", 1.4f) * d;
     lightRadius = cfg.f("light.size", 0.035f) * lightDist;
     const float tanHalf = std::tan(0.5f * fovDeg * kDeg);
-    litRadius = cfg.f("light.spot", 0.6f) * (2.0f * tanHalf * d);
+    // the spot's pool: narrow at the first view (it falls off on the plinth, the room stays dark), wide from ten times on
+    // (deep in the lattice everything in view wants it)
+    const float ramp = std::clamp(std::log10(std::max(level, 1.0f)), 0.0f, 1.0f);
+    const float spot = cfg.f("light.spot.first", 0.55f) + (cfg.f("light.spot", 0.9f) - cfg.f("light.spot.first", 0.55f)) * ramp;
+    litRadius = spot * (2.0f * tanHalf * d);
     clearLamp(normal);
 }
 

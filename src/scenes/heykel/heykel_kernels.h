@@ -26,6 +26,7 @@ struct HeykelView {   // one frame's world, camera and light, by value to the ke
     int maxSteps2 = 200;          // the shadow and bounce rays (out of steps near something: a hit, dark)
     float shadowSlope = 2.0f, bounceSlope = 4.0f;   // their thresholds, times the camera's (they need no pixel's precision)
     float filterSigma = 0.45f;    // the reconstruction's Gaussian, pixels
+    float aperture = 0.0f, focusDist = 1.0f;   // the lens's radius (m; 0: a pinhole) and its focus along the view
     float tmax = 30.0f;
     // 0 the key: a spot pointed at what was clicked; 1 unused (off)
     HeykelLight light[2];

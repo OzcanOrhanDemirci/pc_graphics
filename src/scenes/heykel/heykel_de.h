@@ -12,7 +12,6 @@ struct M3 {   // rows
     float3 r0{1, 0, 0}, r1{0, 1, 0}, r2{0, 0, 1};
 };
 HD float3 mul(const M3& m, float3 v) { return make_float3(dot(m.r0, v), dot(m.r1, v), dot(m.r2, v)); }
-HD float3 mulT(const M3& m, float3 v) { return m.r0 * v.x + m.r1 * v.y + m.r2 * v.z; }
 
 // one candidate: the fractal and its knobs, the cut, where it stands
 struct Shape {

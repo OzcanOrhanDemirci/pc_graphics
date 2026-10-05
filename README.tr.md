@@ -34,11 +34,12 @@ gürültü gidericisiyle saniyede 20-30 kare tutan **canlı kip**. Sahne 2 gerç
 kendi yazdığımız bir katı cisim ve kırılma çözücüsü; sade bir gündüz ışın izleyicisiyle çiziliyor. Sahne 4 bir tanecik
 çözücüsü (sıvılar, taneler, kopabilen bağlar); hızlı anları arka planda ince hesaplanır ve video olarak değil, fizik
 olarak saklanır. Sahne 5 su altında: ışığı yüzeyin üstünde havada da süren deterministik, tayfsal bir ışın izleyici;
-küçük bir adanın iskelesinden bir batığa ve maviye inen bir halata uzanan bir yol.
+küçük bir adanın iskelesinden bir batığa ve maviye inen bir halata uzanan bir yol. Sahne 6 yalnız geometri: bir
+kaidede duran, on bin kat yakınına inilen fraktal bir heykel.
 
 ## Uygulama
 
-Beş sahne tek bir programda yaşıyor. Program bir galeriyle açılır; sahne bir yükleme ekranının arkasında yüklenir
+Altı sahne tek bir programda yaşıyor. Program bir galeriyle açılır; sahne bir yükleme ekranının arkasında yüklenir
 (programları derlenir, dünyası kurulur; bunlar ayrı bir iş parçacığında yapıldığı için pencere canlı kalır) ve sonra hepsi
 için aynı olan bir arayüzün altında çalışır: kim ve ne sol altta, süreler sağ üstte, çıkış yolu sağ altta, tuşlar F1'de.
 Sol alttaki panel fareyle kullanılır: sahne oraya seçenek sıraları, kaydırma çubukları ve düğmeler koyabilir (Yıkım'da
@@ -54,7 +55,7 @@ Esc her zaman geri götürür; kapanan sahne ekran kartını bütünüyle geri v
 
 Görünüm tek bir yazı ailesiyle kurulu, IBM Plex: adlar için Serif, sözcükler için Sans, sayılar ve tuşlar için Mono.
 Resimlerin üstünde koyu cam paneller ve her sahneye ışığından alınmış tek bir vurgu rengi: sıcak altın, soğuk mavi,
-güvenlik turuncusu, deniz yeşili. Bir sahne; renderer'ı, ayarları ve OptiX programlarıyla bir klasör ve sahne kaydında tek bir
+güvenlik turuncusu, deniz yeşili, deniz mavisi, lavanta. Bir sahne; renderer'ı, ayarları ve OptiX programlarıyla bir klasör ve sahne kaydında tek bir
 satırdır; sözleşme ve yeni sahne eklemek [docs/MIMARI.md](docs/MIMARI.md)'de.
 
 ## Sahneler
@@ -253,6 +254,40 @@ yarı yıkık bir kalyon, en uçta dibi görünmeyen maviye inen bir şamandıra
 Açık kalanlar: uygulamanın kendi testinde 33-35 fps (en yavaşı başlangıçtaki iskele salonu, kare ~32 ms); batığın
 içindeki ışık ve görünüş komut satırı kareleriyle tartıldı, canlı yüzülerek henüz bakılmadı. Hepsi
 `docs/koy/DURUM.md`'de.
+
+### 6 · Heykel · Ekim 2026
+
+| ![Karanlık bir odada koyu bir kaidenin üstünde beyaz bir fraktal heykel: bir blokta kemer sıraları ve kum saati sütunlar, sol üstten ışık](docs/images/heykel-1.jpg) |
+|---|
+| ![Yüz kat yakın: daire içinde daire dantel, öndeki katman merceğin derinliğinde yumuşak, odaktaki kemerde bir spot](docs/images/heykel-100.jpg) |
+| ![On bin kat yakın, ekranın genişliği 0,15 mm: dantel sürüyor, kemerlerin içinden kemerler açılıyor](docs/images/heykel-10000.jpg) |
+
+Yalnız geometrinin sahnesi: karanlık bir odada, bir kaidenin üstünde beyaz, mat bir fraktal; hareket yok, fizik yok.
+Herhangi bir noktasına yaklaş; kemerlerinin içinden kemerler açılır, on bin kata kadar. Orada ekranın genişliği 0,15 mm,
+iki saç teli kadardır.
+
+- **Heykel olarak fraktal:** bir bloğa kesilmiş sözde Klein (Knighty'nin kutu katlaması ve küre evirmesi), mesafe
+  kestirimiyle ışın yürütülür. Yüzeyin eşiği ışının olduğu yerde yarım pikselin izi; formülün tekrar sayısı yakınlaşmayla
+  artar (ilk görünümde 10, on bin katta 18): pikselden ince olan çizilmez, ayrıntı bitmez. On bin katta 10 tekrarla dantel
+  karanlıkta yüzen halkalara dağılmıştı.
+- **On bin kat, float'la, pertürbasyonla:** orada bir piksel konumun birkaç float basamağıdır. Derin Mandelbrot
+  yakınlaşmalarının yolu: bir çapa noktasının yörüngesi ana işlemcide çift hassasiyetle tekrarlardan geçer, her piksel
+  onu float'ta küçük bir fark olarak izler; katlamalar ve evirme parça parça rasyonel, her dalın kesin bir fark formülü
+  var, dal sınırları çift hassasiyetten. Düz çift hassasiyetli kestirime karşı: on bin katta pikselin binde üçü (düz
+  float'ta yarım piksele kadar).
+- **Seninle içeri giren ışık:** tıkladığın yere bir spot (sürükleyince o noktanın çevresinde döner); sen yaklaştıkça
+  makro fotoğrafçının lambası gibi o da yaklaşır, bir kemer yolunu kapatınca açık bir hat bulur. Mercekte bir göz ışığı
+  (kameranın görebileceği gölge düşürmez, gölge ışını gerekmez: gürültü yok, önizlemede ve yol izlemede aynı; mercek
+  yakınında düşüşü yumuşatıldı, adıyla bir sanat ayarı). Tavandan sönük bir ışık.
+- **Durunca yakınsar:** bir şey kıpırdarken yarım çözünürlükte, önizleme pikseli başına dört ışınlı, yumuşak ve kararlı
+  bir önizleme (parlaklığı birikmiş görüntüyle ölçülerek eşlendi); durunca düşük tutarsızlıklı örneklerle yol izleme,
+  Gauss yeniden kurma, uyarlamalı örnekleme (yeterince bilinen piksel durur), bir ya da iki sekme ve makro merceğin netlik
+  alanı (F: hepsi net).
+- **Dalış turu (T):** her basamakta duran kareler için on altı rastgele dalıştan seçilmiş dört dalış, dünya noktası olarak
+  (piksel başka çözünürlükte başka yere götürüyordu), on bin kata kadar; her onda bir katta durup netleşir.
+
+Açık: henüz kimse canlı bakmadı; ışık, sanat ayarları ve tur durağan karelere bakılarak karara bağlandı. Hepsi
+`docs/heykel/DURUM.md`'de.
 
 ## Sahne 1: neyi hesaplıyor
 

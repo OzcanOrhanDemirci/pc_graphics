@@ -39,9 +39,9 @@ public:
         i.title = L("Heykel", "The Sculpture");
         i.subtitle = L("Fraktal bir katedral, on bin kat yakına", "A fractal cathedral, ten thousand times closer");
         i.description = L("Karanlık bir odada, bir kaidenin üstünde beyaz, mat bir heykel. Yaklaştıkça kemerlerinin içinden yeni kemerler "
-                          "açılır; on bin katta ekranın genişliği bir saç teli kadardır ve yapı orada da sürer.",
+                          "açılır; on bin katta ekranın genişliği 0,15 mm, iki saç teli kadardır ve yapı orada da sürer.",
                           "A white, matte sculpture on a plinth in a dark room. Come closer and new arches open inside its arches; at "
-                          "ten thousand times the screen is a hair's width across, and the structure goes on there too.");
+                          "ten thousand times the screen is 0.15 mm across, two hairs' width, and the structure goes on there too.");
         i.details = {
             {L("Geometri", "Geometry"),
              L("Heykel bir fraktal (sözde Klein, Knighty'nin kutu katlaması ve küre evirmesi), bir bloğa kesilmiş: biçim üçgenlerden "
@@ -76,7 +76,7 @@ public:
                   {L("Işık", "Light"),
                    {{L("Sol tık", "Left button"), L("Işığı tıklanan yere çevir", "Point the light at what is clicked")},
                     {L("Sol tık", "Left button"), L("Sürükle: ışığı o noktanın çevresinde döndür", "Drag: swing the light around that spot")},
-                    {"↑|↓", L("Pozlama", "Exposure")}}}};
+                    {"↑|↓", L("Pozlama", "Exposure")}, {"F", L("Netlik alanı: makro / hepsi net", "Depth of field: macro / all sharp")}}}};
         i.reloadable = true;
         return i;
     }
@@ -141,6 +141,15 @@ public:
             h_.aimLight(h_.homeFocus);
             pending_ = 0.0f;
             changed = true;
+        }
+        bool dofTo = h_.dof;
+        if (in.pressed(GLFW_KEY_F)) dofTo = !h_.dof;
+        for (const app::ControlEvent& e : in.events)
+            if (e.id == "odak" && e.item >= 0) dofTo = e.item == 0;
+        if (dofTo != h_.dof) {
+            h_.dof = dofTo;
+            changed = true;
+            host.toast(h_.dof ? L("Netlik alanı: makro", "Depth of field: macro") : L("Netlik alanı: hepsi net", "Depth of field: all sharp"));
         }
         if (in.pressed(GLFW_KEY_UP)) { h_.ev += 0.25f; toneOnly = true; }
         if (in.pressed(GLFW_KEY_DOWN)) { h_.ev -= 0.25f; toneOnly = true; }
@@ -241,7 +250,7 @@ public:
         if (h_.samples > 0 && h_.samples < maxSamples_) s.chips.push_back({L("Birikiyor", "Accumulating")});
         const float lv = h_.level;
         s.metrics.push_back({L("Yakınlaşma", "Zoom"), "×" + (lv < 10.0f ? num(lv, 1) : thousands(int(std::lround(lv))))});
-        // what the screen's width is at the focus: from 71 cm at the first view to a hair's width at 10,000 times
+        // what the screen's width is at the focus: about 1.5 m at the first view, 0.15 mm (two hairs) at 10,000 times
         {
             float3 r, u, f;
             h_.cameraBasis(r, u, f);
@@ -262,6 +271,15 @@ public:
         c.strong = !tour_;
         c.detail = L("Dört noktaya on bin kata kadar iner; her katta durup netleşir", "Four dives to ten thousand times; it stops to sharpen at every step");
         s.controls.push_back(c);
+        app::Control d;
+        d.kind = app::Control::Kind::Choice;
+        d.id = "odak";
+        d.title = L("Netlik alanı", "Depth of field");
+        d.items = {L("Makro", "Macro"), L("Hepsi net", "All sharp")};
+        d.active = h_.dof ? 0 : 1;
+        d.detail = L("Makro: odak yaklaştığın noktada, ötesi yumuşar (F)", "Macro: the focus on what you zoom at, beyond it softens (F)");
+        d.section = true;
+        s.controls.push_back(d);
     }
 
     void screenshot(app::Host& host) override {
@@ -315,8 +333,11 @@ private:
         const D3 q = kDives[dive_];
         if (holding_) {   // let the picture settle: a while, and enough samples
             hold_ += dt;
-            const float minHold = stop_ < 0 ? 2.5f : 3.0f, maxHold = 7.0f;
-            if (hold_ < minHold || (hold_ < maxHold && h_.samples < 48)) return false;
+            // measured at 2560x1440 (DURUM): the first view is clean in half a second; at 1,000 and 10,000 times 128
+            // samples take 10-17 s and leave 2-4% of the pixels more than 8 grey levels off the converged picture
+            const float maxHolds[] = {2.5f, 5.0f, 8.0f, 12.0f, 12.0f};   // home, 10, 100, 1,000, 10,000 times
+            const float minHold = stop_ < 0 ? 2.5f : 3.0f, maxHold = maxHolds[stop_ + 1];
+            if (hold_ < minHold || (hold_ < maxHold && h_.samples < 128)) return false;
             holding_ = false;
             if (stop_ == kStopCount - 1) {   // the bottom: back out
                 out_ = true;
