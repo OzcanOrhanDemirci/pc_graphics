@@ -307,7 +307,9 @@ const std::vector<Nucleon>& nucleons(V3 target) {
     N.push_back(t);
     int protons = 1;
     for (int tries = 0; tries < 200000 && N.size() < 28; ++tries) {
-        const V3 p = rng.dir() * (3.0e-15 * std::cbrt(rng.u()));
+        const double pu = rng.u();   // (separate statements: two draws in one expression have no order in C++; this is
+        const V3 pd = rng.dir();     // the order the accepted frames were made with)
+        const V3 p = pd * (3.0e-15 * std::cbrt(pu));
         bool ok = true;
         for (const Nucleon& m : N)
             if (length(p - m.off) < 1.7e-15) { ok = false; break; }
@@ -368,7 +370,7 @@ bool Scale::loadBelts(const std::string& path, std::string& log) {
 void Scale::buildInner(OlcekView& v) {
     particles.clear();
     particleTrack.clear();
-    const bool belts = s > 10.2 && s < 15.6 && (!hiz.on || (hiz.gamma <= 1.0 && length(hiz.rocket) < 3e13));
+    const bool belts = s > 10.2 && s < 15.6 && !hiz.on;   // (the second option: off, as its DURUM says)
     if (s > -8.6 && !belts) return;
     Canvas cv;
     cv.tx = v.tanHalfX;
@@ -550,7 +552,9 @@ void Scale::buildInner(OlcekView& v) {
             cv.setId(0x4000000ull + uint64_t(k) * 4);
             V3 p{0, 0, 0};
             for (int a = 0; a < 3; ++a) {
-                const double g = std::sqrt(-2.0 * std::log(rng.u01())) * std::cos(2.0 * kPi * rng.u());
+                const double g2 = rng.u();     // (in separate statements, in the accepted frames' order: see the foam's draws)
+                const double g1 = rng.u01();
+                const double g = std::sqrt(-2.0 * std::log(g1)) * std::cos(2.0 * kPi * g2);
                 (a == 0 ? p.x : a == 1 ? p.y : p.z) = g * 0.42e-15;
             }
             const V3 pos = pr + p;
@@ -677,7 +681,11 @@ void Scale::buildInner(OlcekView& v) {
                         if (r.u() > 0.8) continue;
                         const V3 pc{qCam.x + (double(i) + r.u()) * L, qCam.y + (double(k) + r.u()) * L, qCam.z + (r.u() - 0.5) * 0.5 * D};
                         // its life: grows from nothing, holds, bursts (a fraction of its cycle, its own offset)
-                        const double ph = clock * (0.6 + 0.8 * r.u()) + r.u();
+                        // (two draws in one expression have no order in C++: a recompile swapped them once, 2026-10-05;
+                        // drawn in separate statements, in the order the accepted frames were made with)
+                        const double uRate = r.u();
+                        const double uOff = r.u();
+                        const double ph = clock * (0.6 + 0.8 * uRate) + uOff;
                         const double f = ph - std::floor(ph);
                         const double grow = sstep(0.0, 0.45, f) * (1.0 - sstep(0.85, 1.0, f));
                         const double size = lam * (0.35 + 0.4 * r.u()) * (0.4 + 0.6 * grow);

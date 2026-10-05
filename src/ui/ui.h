@@ -58,6 +58,11 @@ void stroke(const Rect& r, Color c, float radius, float width);
 void panel(const Rect& r, Color fill, Color border, float radius, float borderWidth = 1.0f);
 void shadow(const Rect& r, float radius, float blur, Color c);
 void circle(float cx, float cy, float radius, Color c);
+// strokes: anti-aliased polylines drawn as one strip with mitered joins (a translucent line does not darken where its
+// segments meet); dash and gap in pixels (0: solid), phase shifts the pattern along it
+void polyline(const float* xy, int n, float width, Color c, float dash = 0.0f, float gap = 0.0f, float phase = 0.0f);
+void line(float x0, float y0, float x1, float y1, float width, Color c, float dash = 0.0f, float gap = 0.0f);
+void arc(float cx, float cy, float r, float a0, float a1, float width, Color c, int segments = 0);   // radians, y down
 
 // ---- images
 Image loadImage(const std::string& path, int maxWidth = 0);

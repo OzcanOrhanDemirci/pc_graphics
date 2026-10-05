@@ -39,10 +39,14 @@ std::string supInt(int e) {
 }
 // v as m x 10^e with `digits` decimals (m in [1, 10))
 std::string sci(double v, int digits) {
-    if (v == 0.0) return "0";
-    const int e = int(std::floor(std::log10(std::fabs(v))));
-    double m = v / std::pow(10.0, e);
-    if (std::fabs(m) >= 9.9999999) { m /= 10.0; return theme::num(m, digits) + " × 10" + supInt(e + 1); }
+    if (v == 0.0 || !std::isfinite(v)) return "0";
+    int e = int(std::floor(std::log10(std::fabs(v))));
+    const double p = std::pow(10.0, digits);
+    double m = std::round(v / std::pow(10.0, e) * p) / p;   // rounded first: 9,9996 at 2 digits carries to 1,00 x 10^(e+1)
+    if (std::fabs(m) >= 10.0) {
+        m /= 10.0;
+        ++e;
+    }
     return theme::num(m, digits) + " × 10" + supInt(e);
 }
 std::string sig3(double v) {
@@ -469,7 +473,7 @@ private:
             if (in.leftDown && inView && in.view.w > 0.0f) {
                 // the sky follows the cursor
                 const double perPx = 2.0 * std::pow(10.0, zoom_) / in.view.w;
-                yaw_ += in.mouseDX * perPx;
+                yaw_ = std::remainder(yaw_ + in.mouseDX * perPx, 2.0 * kPi);
                 pitch_ = std::clamp(pitch_ + in.mouseDY * perPx, -1.55, 1.55);
                 lookAhead_ = false;
             }
@@ -498,7 +502,9 @@ private:
         (void)s;
         if (ev.autoOff) host.toast(L("Otomatik varış kapandı", "Automatic arrival off"));
         if (ev.autoCancelled) host.toast(L("Otomatik varış kapandı: kumanda sende", "Automatic arrival off: you are flying"));
-        if (ev.overshoot) host.toast(L("Bu hızla durulamaz: geçip duracak, dönüp gelecek", "Too fast to stop: it will pass, stop and come back"));
+        if (ev.overshoot && !overshootShown_)   // (reported every step of that brake: told once)
+            host.toast(L("Bu hızla durulamaz: geçip duracak, dönüp gelecek", "Too fast to stop: it will pass, stop and come back"));
+        overshootShown_ = ev.overshoot;
         if (ev.capReached)
             host.toast(L("Hız tavanı: 21 dokuz. Işık hızına bundan fazla yaklaşmıyoruz (tasarım kararı)",
                          "The speed cap: 21 nines. We go no closer to the speed of light (a design choice)"));
@@ -507,8 +513,8 @@ private:
                                                                        : L("Andromeda'ya vardın", "You have reached Andromeda");
             host.toast(where + L(": senin saatinle ", ": by your clock ") + clockText(ev.legTau) + L(", Dünya'da ", ", on the Earth ") +
                        spanText(ev.legEarth) + L(" geçti", " passed"));
-            if (s.leg == hz::kLegAndromeda && legBefore == hz::kLegProxima)
-                host.toast(L("Roket Andromeda'ya dönüyor (", "The rocket turns towards Andromeda (") + theme::num(a_.route.turnDeg, 0) + "°)");
+            if (s.leg == hz::kLegAndromeda && legBefore == hz::kLegProxima && ev.turnStarted)
+                host.toast(L("Roket Andromeda'ya dönüyor (", "The rocket turns towards Andromeda (") + theme::num(ev.turnDeg, 0) + "°)");
         }
     }
 
@@ -550,7 +556,8 @@ private:
                 a_.renderEye(e, eyeSum_);
                 // the eye adapts to the light in its field, a known function of where, how fast and where it looks
                 // (never read from the picture), slowly (a second or so)
-                const double target = a_.eyeEv(eyeSum_.visibleView / eyeSum_.viewShare);
+                double target = a_.eyeEv(eyeSum_.visibleView / eyeSum_.viewShare);
+                if (!std::isfinite(target)) target = std::isfinite(eyeEv_) ? eyeEv_ : 17.5;   // (never a NaN kept)
                 if (!evInit_) {
                     eyeEv_ = target;
                     evInit_ = true;
@@ -596,7 +603,7 @@ private:
         st.metrics.push_back({L("Yol", "Leg"), legs[std::clamp(s.leg, 0, 2)]});
         st.metrics.push_back({L("Hız", "Speed"), speedText(k)});
         st.metrics.push_back({L("β (ışık hızına oranı)", "β (of light's speed)"), betaText(k)});
-        st.metrics.push_back({L("Dokuz", "Nines"), num(std::max(k.nines, 0.0), 2)});   // (at rest -log10(1) is -0)
+        st.metrics.push_back({L("Dokuz", "Nines"), num(k.nines, 2)});
         st.metrics.push_back({L("γ (zaman genişlemesi)", "γ (time dilation)"), gammaText(k.gamma)});
         st.metrics.push_back({L("Hız açısı φ", "Rapidity φ"), num(s.phi, 3)});
         st.metrics.push_back({L("Senin saatin", "Your clock"), clockText(s.tau)});
@@ -699,7 +706,7 @@ private:
         double v[2];
         if (num("hiz.goruntu", 1, v)) view_ = std::clamp(int(v[0]), 0, 1);
         if (num("hiz.bakis", 2, v)) {
-            yaw_ = v[0];
+            yaw_ = std::remainder(v[0], 2.0 * kPi);
             pitch_ = std::clamp(v[1], -1.55, 1.55);
         }
         if (num("hiz.yakinlik", 1, v)) zoom_ = std::clamp(v[0], std::log10(std::tan(0.5e-11)), std::log10(std::tan(60.0 * kPi / 180.0)));
@@ -726,6 +733,7 @@ private:
     double resetArmed_ = -1.0;          // "start over" pressed once: until when a second press confirms
     double yaw_ = 0.0, pitch_ = 0.0;    // the head (radians; the sky follows a drag)
     bool lookAhead_ = false;            // R: the head turning back to the bow
+    bool overshootShown_ = false;       // the "too fast to stop" notice given (once per such brake)
     double zoom_ = std::log10(std::tan(37.5 * kPi / 180.0));   // log10 tan(fov/2): 75 degrees across
     double zoomPending_ = 0.0;
     double sideS_ = 1.3, sidePending_ = 0.0;   // the side view's screen width (log10 m)

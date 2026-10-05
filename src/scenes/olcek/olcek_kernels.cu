@@ -638,7 +638,7 @@ __device__ float3 airLight(const GAtmo& A, float3 d, float tEnd, float3& T) {
     const float ht = A.h - A.top;                       // the camera's height above the top (negative: inside)
     const float qt = ht * (2.0f * Rt + ht);             // |c|^2 - Rt^2
     const float disc = dc * dc - qt;
-    if (disc <= 0.0f) return make_float3(0, 0, 0);
+    if (!(disc > 0.0f)) return make_float3(0, 0, 0);   // (also NaN: inf - inf from an Earth far out of float's reach)
     const float sq = sqrtf(disc);
     float t0 = ht > 0.0f ? (dc > 0.0f ? qt / (dc + sq) : 1e30f) : 0.0f;
     const float t1 = fminf(dc + sq, tEnd);
@@ -1294,7 +1294,11 @@ __global__ void kSplat(const GSplat* sp, int count, float4* accum, const float* 
     const int rad = int(ceilf(3.0f * s));
     const int cx = int(floorf(px)), cy = int(floorf(py));
     if (cx + rad < 0 || cx - rad >= width || cy + rad < 0 || cy - rad >= height) return;
-    const float dist = length(g.p);
+    float dist = length(g.p);
+    if (!(dist < 3e38f)) {   // |p|^2 overflowed: scale first (only the second option's far points; the first's never do)
+        const float m = fmaxf(fabsf(g.p.x), fmaxf(fabsf(g.p.y), fabsf(g.p.z)));
+        dist = m * length(g.p * (1.0f / m));
+    }
     const float norm = 1.0f / (6.2831853f * s * s);
     for (int y = max(cy - rad, 0); y <= min(cy + rad, height - 1); ++y)
         for (int x = max(cx - rad, 0); x <= min(cx + rad, width - 1); ++x) {

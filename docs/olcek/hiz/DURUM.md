@@ -75,6 +75,34 @@ yolculuğuna dokunmaz (`Host::testing`).
    - §3.3 α Erboğa −6,8/−5,5 kadir, 12.060 AU; M31'in perspektifi;
    - §4.5 bedelde kinetik enerji 1,46 saat, foton roketinin yaktığı 2,9 saat.
 
+### Bağımsız inceleme (4 inceleyici, her bulguya ayrı bir şüpheci) ve düzeltmeler
+Hepsi düzeltildi:
+- **Ölçek'e gerileme:** Planck köpüğü (s < −33,9) kabul edilmiş kareden 3,5 milyon pikselde farklıydı. Tek ifadede iki
+  `r.u()` çağrısının sırası C++'ta belirsiz; dosya yeniden derlenince derleyici sırayı değiştirmişti. Üç ifade (köpük,
+  çekirdeğin nükleonları, protonun denizi) ayrı satırlara kabul edilmiş karelerin sırasıyla sabitlendi. `readme2`'nin 8
+  karesi bit bit aynı. Yer tutucu yıldız ve galaksilerin `v3(rng…)` argüman sıraları gerçek veri yüklüyken görünmüyor;
+  sabitlenmedi.
+- **Göz:**
+  - Dürbün 10⁻⁸ radyanın altına inince uyum konisinin gök payı kosinüs yuvarlamasından 0 oluyordu; 0/0 NaN pozlama, göz
+    kalıcı siyah (kayda da geçerdi). Koni artık açıdan ve sinüsten hesaplanıyor.
+  - Uyum yakınlaştırmadan bağımsız: noktalar dürbünde parlamıyor, pozlama da değişmiyor (hep 75°'lik alana uyar).
+    NaN asla tutulmaz.
+- **Yandan:**
+  - Hava, Dünya'dan uzakta da kuruluyordu (koşulum yanlıştı); float taşması yarım ekranı karartıyordu.
+  - Uzak noktaların derinlik sınamasında |p|² taşıyordu; galaksiler küçük ölçekte kayboluyordu.
+  - Top/nokta geçişi kısalmayı saymıyordu; ince şerit sabit örneklerin arasında yanıp sönüyordu.
+  - Kuşaklar ilk itişte bir karede kayboluyordu: Hız'da kapalı.
+- **Fizik ve panel:**
+  - "Bu hızla durulamaz" bildirimi her karede tekrarlanıyordu: bir kez.
+  - Dönüş bildirimi hep 153° diyordu (hedefi geçip dönünce gerçek dönüş 27°).
+  - Hedefin yakınında S ya da Boşluk ile devralınca yakalama kumandayı geri alıyordu: artık el bir daha itene ya da bölge
+    dışına çıkana kadar yakalanmaz.
+  - "Dokuz −0,00".
+  - "↔" yazı atlasında yoktu.
+  - Baş açısı sarılmıyordu (R birkaç tur geri dönüyordu).
+  - Bilimsel gösterimde "10,00 × 10⁵" yuvarlaması.
+  - Otomatik testin Proxima kareleri dönüşten sonra çekiliyordu.
+
 ### Ölçümler (`--test olcek-hiz`, hepsi GEÇTİ)
 - Kapalı biçimler / Runge-Kutta (20.000 adım): en büyük göreli fark 1,7e-13.
 - 1 − β çift-double hesaba karşı ≤ 2e-16; tavanda 1,000e-21 (21,000000 dokuz).

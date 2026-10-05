@@ -771,7 +771,9 @@ void Scale::ballOrPoint(OlcekView& v, std::vector<GSplat>& splats, const Body& b
         toSun = ts * (1.0 / d);
         E = kLsun / (4.0 * kPi * d * d);
     }
-    float wBall = float(smoothstep(1.0, 2.5, rpx));
+    // (the second option's side view draws it gamma times narrower: its handover follows the narrow width, so a sliver
+    // thinner than a pixel never blinks between the fixed samples)
+    float wBall = float(smoothstep(1.0, 2.5, hiz.on ? rpx / std::max(hiz.gamma, 1.0) : rpx));
     // the shutter (PLAN §4): what moves faster than the eye is drawn along its way, weighted by the shutter; an orbit
     // run through several times in it is its ring (light spread by the time spent: slow at aphelion, bright there)
     int K = 1;
@@ -1163,7 +1165,7 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
 
     // ---- the Earth's air: from the sphere through the beach point (the same as its ball), the Sun's direction and light
     v.atmo = GAtmo{};
-    if ((s > 1.5 || (hiz.on && length(tree.rel(cam.ref, kEarth) - cam.pos) < 2e9)) && s < 9.5) {
+    if ((hiz.on ? length(tree.rel(cam.ref, kEarth) - cam.pos) < 2e9 : s > 1.5) && s < 9.5) {
         GAtmo& a = v.atmo;
         const double Re = 6.371e6;
         const V3 up = rotate(earthUp_, earthPole_, clk.spin);

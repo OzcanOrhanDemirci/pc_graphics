@@ -161,10 +161,12 @@ void buildEye(const StarSet& st, const Blackbody& bb, const Eye& e, std::vector<
     const double mx = e.tanHalfX * (1.0 + 8.0 / e.width), my = e.tanHalfY * (1.0 + 8.0 / e.height);
     const double logShareSun = bb.logShare(kTsun);
     // the field's soft cone: full inside the screen's half diagonal, gone a tenth beyond it (the eye adapts to what it
-    // sees; the Sun 61 degrees off the bow at the start, just outside the window, does not dim the stars in it)
-    const double diag = std::atan(std::sqrt(e.tanHalfX * e.tanHalfX + e.tanHalfY * e.tanHalfY));
-    const double cIn = std::cos(diag), cOut = std::cos(std::min(1.1 * diag, kPi));
-    const double viewShare = 0.5 * (1.0 - std::cos(std::min(1.05 * diag, kPi)));
+    // sees; the Sun 61 degrees off the bow at the start, just outside the window, does not dim the stars in it). Angles
+    // off the axis from tangents and sines (a cosine of 1e-11 rad is 1 in a double: the deepest binoculars)
+    const double diag = std::clamp(e.adaptDiag, 1e-6, 1.4);
+    const double aIn = diag, aOut = std::min(1.1 * diag, 0.5 * kPi);
+    const double sh = std::sin(0.525 * std::min(diag, kPi / 1.05));
+    const double viewShare = std::max(sh * sh, 1e-300);   // 0.5 (1 - cos(1.05 diag)) without the cancellation
     const size_t n = st.pos ? st.pos->size() : 0;
     // one more "star": the Sun, at the origin (the catalogue has no Sun)
     const size_t total = n + 1;
@@ -206,9 +208,13 @@ void buildEye(const StarSet& st, const Blackbody& bb, const Eye& e, std::vector<
             S.maxD = std::max(S.maxD, D);
             S.minD = std::min(S.minD, D);
             const double z = dot(np, e.fwd);
-            if (z > cOut) {
-                const double u = std::clamp((z - cOut) / (cIn - cOut), 0.0, 1.0);
-                S.visibleView += vis * u * u * (3.0 - 2.0 * u);
+            if (z > 0.0) {
+                const double xr = dot(np, e.right), yu = dot(np, e.up);
+                const double off = std::atan2(std::sqrt(xr * xr + yu * yu), z);   // the angle off the eye's axis
+                if (off < aOut) {
+                    const double u = std::clamp((aOut - off) / (aOut - aIn), 0.0, 1.0);
+                    S.visibleView += vis * u * u * (3.0 - 2.0 * u);
+                }
             }
             if (z <= 0.0) continue;
             const double x = dot(np, e.right) / z, y = dot(np, e.up) / z;

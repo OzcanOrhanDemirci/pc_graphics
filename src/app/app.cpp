@@ -610,8 +610,9 @@ int App::run(const Options& opt) {
                 key(GLFW_KEY_R); wait(1.5);
                 key(GLFW_KEY_SPACE); wait(3.0); log("olcek hiz otomatik"); shot("olcek_hiz_otomatik");
                 if (part == "hiz") {
-                    wait(85.0); log("olcek hiz proxima"); shot("olcek_hiz_proxima");
-                    wait(10.0); shot("olcek_hiz_donus");
+                    // from rapidity 4 the quickest arrival takes ~79 s after Space; the 153-degree turn then ~8 s
+                    wait(76.5); log("olcek hiz proxima"); shot("olcek_hiz_proxima");
+                    wait(4.0); shot("olcek_hiz_donus");
                     key(GLFW_KEY_TAB); wait(1.0); shot("olcek_hiz_proxima_yandan"); key(GLFW_KEY_TAB);
                 }
                 control("secenek", 0); wait(1.5); shot("olcek_hiz_geri");

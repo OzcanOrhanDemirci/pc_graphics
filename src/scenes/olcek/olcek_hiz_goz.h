@@ -51,6 +51,9 @@ struct Eye {
     double k = 1.0;             // the exposure: display radiance per W/m^2/sr
     double omegaPx = 1e-6;      // the solid angle a point's light is spread over (the unzoomed pixel's: the field of
                                 // view narrowed by the wheel does not brighten the points)
+    double adaptDiag = 0.722;   // the eye adapts to the light within this angle of where it looks (radians): the unzoomed
+                                // field's half diagonal (75 x 42 degrees), so the binoculars change neither the points
+                                // nor the exposure
 };
 struct EyeSum {
     double visible = 0.0;       // the visible light from the whole sky at the rocket (W/m^2, the Sun's spectrum's units)

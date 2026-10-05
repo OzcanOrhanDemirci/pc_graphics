@@ -6,6 +6,7 @@
 #include "stb_image.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <fstream>
@@ -45,7 +46,7 @@ void main() {
 }
 )";
 const char* kFS = R"(#version 120
-uniform int uMode;          // 0 shape, 1 image, 2 text, 3 shadow
+uniform int uMode;          // 0 shape, 1 image, 2 text, 3 shadow, 4 stroke
 uniform vec2 uHalf;
 uniform float uRadius;
 uniform float uBorder;      // > 0: an outline this wide, inside the shape
@@ -63,6 +64,18 @@ void main() {
     if (uMode == 2) {
         float a = texture2D(uTex, vUV).r;
         gl_FragColor = vec4(vColor.rgb, vColor.a * a);
+        return;
+    }
+    if (uMode == 4) {
+        // a stroke: vLocal.x the length along it, vLocal.y the distance across (pixels); uHalf.x its half width,
+        // uHalf.y > 0 a dash pattern's period, uRadius the dash's length, uBorder the pattern's phase
+        float cover = clamp(uHalf.x + 0.5 - abs(vLocal.y), 0.0, 1.0);
+        if (uHalf.y > 0.0) {
+            float u = mod(vLocal.x + uBorder, uHalf.y);
+            float d = u <= uRadius ? -min(u, uRadius - u) : min(u - uRadius, uHalf.y - u);
+            cover *= clamp(0.5 - d, 0.0, 1.0);
+        }
+        gl_FragColor = vec4(vColor.rgb, vColor.a * cover);
         return;
     }
     float d = sdBox(vLocal, uHalf, uRadius);
@@ -118,7 +131,7 @@ Face g_faces[int(Font::Count)];
 
 // the letters baked: ASCII, Latin-1, Latin Extended-A (Turkish), dashes and quotes, arrows, minus and infinity
 struct Range { int first, count; };
-const Range kRanges[] = {{32, 95}, {160, 96}, {256, 128}, {0x0391, 0x39}, {0x2010, 0x28}, {0x2190, 4}, {0x2022, 1}, {0x2026, 1}, {0x2212, 1},
+const Range kRanges[] = {{32, 95}, {160, 96}, {256, 128}, {0x0391, 0x39}, {0x2010, 0x28}, {0x2190, 6}, {0x2022, 1}, {0x2026, 1}, {0x2212, 1},
                           {0x221E, 1}, {0x2248, 1}, {0x2070, 0x30}};
 
 struct Baked {
@@ -339,6 +352,59 @@ void shadow(const Rect& r, float radius, float blur, Color c) {
     quad(r, blur * 1.5f, c, c, c, c);
 }
 void circle(float cx, float cy, float radius, Color c) { rect(Rect{cx - radius, cy - radius, 2 * radius, 2 * radius}, c, radius); }
+
+// ---- strokes: one quad strip along the points, offset along each joint's miter (limited), so that a translucent line
+// covers every pixel once; the fragment's coverage comes from its distance across, a dash pattern from its length along
+void polyline(const float* xy, int n, float width, Color c, float dash, float gap, float phase) {
+    if (n < 2 || width <= 0.0f || c.a <= 0.0f) return;
+    const float hw = 0.5f * width, h = hw + 1.0f;   // the strip reaches a pixel past the edge (its soft border)
+    gl::Uniform1i(g_prog.mode, 4);
+    gl::Uniform2f(g_prog.half, hw, dash > 0.0f && gap > 0.0f ? dash + gap : 0.0f);
+    gl::Uniform1f(g_prog.radius, dash);
+    gl::Uniform1f(g_prog.border, phase);
+    color(c);
+    auto dir = [&](int i) {   // the unit direction of segment i (from point i to i + 1)
+        const float dx = xy[2 * i + 2] - xy[2 * i], dy = xy[2 * i + 3] - xy[2 * i + 1];
+        const float l = std::sqrt(dx * dx + dy * dy);
+        return l > 1e-6f ? std::array<float, 2>{dx / l, dy / l} : std::array<float, 2>{1.0f, 0.0f};
+    };
+    float along = 0.0f;
+    glBegin(GL_QUAD_STRIP);
+    for (int i = 0; i < n; ++i) {
+        const auto a = dir(std::max(i - 1, 0)), b = dir(std::min(i, n - 2));
+        // the normals of the segments before and after, their bisector, the offset that keeps h from both
+        const float nax = -a[1], nay = a[0], nbx = -b[1], nby = b[0];
+        float mx = nax + nbx, my = nay + nby;
+        const float ml = std::sqrt(mx * mx + my * my);
+        if (ml < 1e-4f) { mx = nbx; my = nby; } else { mx /= ml; my /= ml; }
+        const float cosHalf = std::max(mx * nbx + my * nby, 0.25f);   // the miter, at most four times the half width
+        float px = xy[2 * i], py = xy[2 * i + 1];
+        if (i > 0) along += std::sqrt((px - xy[2 * i - 2]) * (px - xy[2 * i - 2]) + (py - xy[2 * i - 1]) * (py - xy[2 * i - 1]));
+        float s = along;
+        if (i == 0) { px -= b[0]; py -= b[1]; s -= 1.0f; }            // the ends reach a pixel further: their soft edge
+        if (i == n - 1) { px += a[0]; py += a[1]; s += 1.0f; }
+        const float ox = mx * h / cosHalf, oy = my * h / cosHalf;
+        gl::MultiTexCoord4f(gl::TEXTURE0, s, -h, 0.0f, 0.0f);
+        glVertex2f(px - ox, py - oy);
+        gl::MultiTexCoord4f(gl::TEXTURE0, s, h, 0.0f, 0.0f);
+        glVertex2f(px + ox, py + oy);
+    }
+    glEnd();
+}
+void line(float x0, float y0, float x1, float y1, float width, Color c, float dash, float gap) {
+    const float p[4] = {x0, y0, x1, y1};
+    polyline(p, 2, width, c, dash, gap, 0.0f);
+}
+void arc(float cx, float cy, float r, float a0, float a1, float width, Color c, int segments) {
+    if (segments <= 0) segments = std::max(8, int(std::ceil(std::fabs(a1 - a0) * std::sqrt(std::max(r, 1.0f)) * 1.5f)));
+    std::vector<float> p(size_t(segments + 1) * 2);
+    for (int i = 0; i <= segments; ++i) {
+        const float a = a0 + (a1 - a0) * float(i) / float(segments);
+        p[size_t(2 * i)] = cx + r * std::cos(a);
+        p[size_t(2 * i + 1)] = cy + r * std::sin(a);
+    }
+    polyline(p.data(), segments + 1, width, c);
+}
 
 // ---- images
 static Image upload(const unsigned char* rgba, int w, int h) {

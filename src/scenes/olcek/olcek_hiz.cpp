@@ -63,7 +63,7 @@ Kin kin(double phi) {
     k.beta = std::tanh(phi);
     k.gamma = std::cosh(phi);
     k.gb = std::sinh(phi);
-    k.nines = -std::log10(k.eps);
+    k.nines = k.eps < 1.0 ? -std::log10(k.eps) : 0.0;   // (eps 1, up to phi ~3e-17: -log10(1) is -0, "-0,00" on the panel)
     return k;
 }
 
@@ -208,8 +208,10 @@ Events step(Ship& s, const Route& r, double dtau, const Command& c) {
     if (c.toggleAuto && s.leg < kLegDone) {
         s.autopilot = !s.autopilot;
         (s.autopilot ? ev.autoOn : ev.autoOff) = true;
+        s.handOver = !s.autopilot;
     } else if (s.autopilot && (c.thrustPressed || c.brakePressed)) {   // a hand on W or S takes over
         s.autopilot = false;
+        s.handOver = true;
         ev.autoCancelled = true;
     }
     // the keys only count by hand (the automatic arrival flies alone, whatever is held)
@@ -222,6 +224,7 @@ Events step(Ship& s, const Route& r, double dtau, const Command& c) {
         s.turnDur = turnDuration(ang);
         s.turnAt = s.tau;
         ev.turnStarted = true;
+        ev.turnDeg = ang / kDeg;
     };
     auto rest = [&](double h) {   // time flows at rest: the two clocks together
         s.tau += h;
@@ -235,6 +238,7 @@ Events step(Ship& s, const Route& r, double dtau, const Command& c) {
             ev.legEarth = add(s.t, neg(s.legT)).value();
         }
         s.autopilot = false;
+        s.handOver = false;
         s.phi = 0.0;
         if (s.leg == kLegProxima) {
             s.leg = kLegAndromeda;
@@ -281,7 +285,8 @@ Events step(Ship& s, const Route& r, double dtau, const Command& c) {
                 continue;
             }
             // stopped by hand close to the target: the last stretch by the automatic arrival, flown (never snapped)
-            if (!s.autopilot && !c.thrust && !c.brake && std::fabs(s.x.value()) <= kCapture * r.length[L]) {
+            if (std::fabs(s.x.value()) > kCapture * r.length[L]) s.handOver = false;   // (outside the zone: forgotten)
+            if (!s.autopilot && !s.handOver && !c.thrust && !c.brake && std::fabs(s.x.value()) <= kCapture * r.length[L]) {
                 s.autopilot = true;
                 ev.captured = true;
             }
@@ -356,6 +361,7 @@ Events step(Ship& s, const Route& r, double dtau, const Command& c) {
                 s.legT = s.t;
             }
             if (s.departT.hi < 0.0) s.departT = s.t;
+            if (!s.autopilot) s.handOver = false;   // the hand thrusting again: it may be captured later
             if (phi1 >= cap) ev.capReached = true;
         } else if (mode == Brake) {
             const double hEv = phi0 / kAlpha;
@@ -405,10 +411,10 @@ std::string serialize(const Ship& s) {
     std::snprintf(b, sizeof(b),
                   "hiz.surum = 1\nhiz.ayak = %d\nhiz.phi = %.17g\nhiz.yon = %d\nhiz.x = %.17g %.17g\nhiz.tau = %.17g\nhiz.t = %.17g %.17g\n"
                   "hiz.burun = %.17g %.17g %.17g\nhiz.donus = %.17g %.17g %.17g %.17g %.17g %.17g %.17g %.17g\n"
-                  "hiz.oto = %d\nhiz.ayak_basi = %.17g %.17g %.17g\nhiz.kalkis = %.17g %.17g\n",
+                  "hiz.oto = %d %d\nhiz.ayak_basi = %.17g %.17g %.17g\nhiz.kalkis = %.17g %.17g\n",
                   s.leg, s.phi, s.sense, s.x.hi, s.x.lo, s.tau, s.t.hi, s.t.lo, s.heading.x, s.heading.y, s.heading.z,
                   s.turnFrom.x, s.turnFrom.y, s.turnFrom.z, s.turnTo.x, s.turnTo.y, s.turnTo.z, s.turnAt, s.turnDur,
-                  s.autopilot ? 1 : 0, s.legTau, s.legT.hi, s.legT.lo, s.departT.hi, s.departT.lo);
+                  s.autopilot ? 1 : 0, s.handOver ? 1 : 0, s.legTau, s.legT.hi, s.legT.lo, s.departT.hi, s.departT.lo);
     return b;
 }
 
@@ -446,8 +452,9 @@ bool parse(Ship& out, const std::map<std::string, std::string>& kv) {
     s.turnAt = a[6];
     s.turnDur = a[7];
     if (s.turnAt >= 0.0 && (std::fabs(length(s.turnFrom) - 1.0) > 1e-6 || std::fabs(length(s.turnTo) - 1.0) > 1e-6)) return false;
-    if (!nums("hiz.oto", 1, a)) return false;
+    if (!nums("hiz.oto", 2, a)) return false;
     s.autopilot = a[0] != 0.0;
+    s.handOver = a[1] != 0.0;
     if (!nums("hiz.ayak_basi", 3, a)) return false;
     s.legTau = a[0];
     s.legT = {a[1], a[2]};

@@ -134,6 +134,8 @@ struct Ship {
     double turnAt = -1.0, turnDur = 0.0;
     bool autopilot = false; // Space: automatic arrival, the quickest from wherever it is (thrust while the peak it can
                             // still stop from is ahead, coast at the cap, brake on the stopping curve)
+    bool handOver = false;  // the hand took over near the target (S, or Space off): no capturing it back until the hand
+                            // thrusts again, or the ship leaves the capture zone, or a leg is reached
     Drive drive = Drive::Rest;   // what the last step did (the panel)
     double legTau = -1.0;   // the leg's first thrust: proper time (s); < 0 not yet
     DD legT = {-1.0, 0.0};  // ... and the Earth's time then
@@ -161,6 +163,7 @@ struct Events {
     double legTau = 0.0, legEarth = 0.0;   // ... the leg from its first thrust: the passenger's seconds, the Earth's
     bool capReached = false;
     bool turnStarted = false;
+    double turnDeg = 0.0;   // ... by how much (the turn at Proxima is 153 degrees from the way in; after passing it, less)
     bool overshoot = false; // the autopilot found it cannot stop in time: it brakes, will pass and come back
     bool captured = false;  // stopped by hand near the target: the automatic arrival takes the last stretch (no snapping)
     double pinJump = 0.0;   // the largest correction made when the brake was pinned to the stopping curve (m; tests)

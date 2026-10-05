@@ -305,6 +305,22 @@ int runHizTests(OlcekApp& app) {
                     arrivedN ? "evet" : "hayir", n.tau, jump);
         check(captured && arrivedN && jump <= 1.0 + 1e-9, "elle hedefe yakin durunca son parcayi otomatik varis ucar (isinlanmadan)");
 
+        // ... but a hand that takes over there keeps it: S during that last stretch, the ship stops and stays
+        hz::Ship hv = hz::depart(r);
+        hv.x = hz::dd(-3e12);
+        hz::step(hv, r, 1.0 / 60.0, hz::Command{});   // captured: it starts the last stretch
+        for (int i = 0; i < 60; ++i) hz::step(hv, r, 1.0 / 60.0, hz::Command{});
+        hz::Command sb;
+        sb.brake = sb.brakePressed = true;
+        hz::step(hv, r, 1.0 / 60.0, sb);
+        sb.brakePressed = false;
+        for (int i = 0; i < 60 * 10 && hv.phi > 0.0; ++i) hz::step(hv, r, 1.0 / 60.0, sb);
+        bool recaptured = false;
+        for (int i = 0; i < 60 * 20; ++i) recaptured = recaptured || hz::step(hv, r, 1.0 / 60.0, hz::Command{}).captured;
+        check(!recaptured && !hv.autopilot && hv.phi == 0.0, "hedefin yakininda S ile devralinca durur ve oyle kalir (geri yakalanmaz)");
+        // and the turn the notice names is the one made (after passing the target it is not Proxima's 153 degrees)
+        check(std::fabs(R.turnDeg - 153.4) < 0.2, "ayaklar arasi donus 153,4 derece");
+
         // a held key does not take over (Space pressed with W down), a pressed one does
         hz::Ship h = hz::depart(r);
         hz::Command held;

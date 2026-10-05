@@ -290,6 +290,7 @@ double OlcekApp::eyeEv(double skyVisible) const {
     // at rest far from the Sun: about the 7th magnitude at the edge of seeing (hiz.ev); a sky twice as bright closes the
     // eye by hiz.uyum EV (a dark sky opens it by at most 6 EV, the Sun near closes it all the way to dazzling)
     const double base = cfg.f("hiz.ev", 17.5f), adapt = cfg.f("hiz.uyum", 0.5f);
+    if (!std::isfinite(skyVisible)) return base;
     return base - std::clamp(adapt * std::log2(std::max(skyVisible, 1e-30) / nightSky), -6.0, 40.0);
 }
 
@@ -324,9 +325,11 @@ olcek::hiz::Eye OlcekApp::eyeAt(const olcek::hiz::Ship& s, double yaw, double pi
     e.tanHalfX = tanHalfX;
     e.tanHalfY = tanHalfX * sc.height / sc.width;
     // a point's light spread over the first option's pixel (fov 40): the same star looks the same in both, and the
-    // binoculars do not brighten it
+    // binoculars do not brighten it; the eye adapts over the unzoomed field (75 degrees across)
     const double pa0 = 2.0 * std::tan(20.0 * 3.14159265358979323846 / 180.0) / sc.width;
     e.omegaPx = pa0 * pa0;
+    const double t0 = std::tan(37.5 * 3.14159265358979323846 / 180.0), t0y = t0 * sc.height / sc.width;
+    e.adaptDiag = std::atan(std::sqrt(t0 * t0 + t0y * t0y));
     return e;
 }
 
