@@ -132,7 +132,7 @@ Panel (top right): depth, pressure, the oxygen's partial pressure (ppO2), the pa
 beneath the holes and watch the light sway on the sand; enter the wreck through its fallen starboard side and switch the
 torch on; follow the buoy's rope down and watch the floor appear at 35-40 m. Settings `scenes/koy.cfg` (F5).
 
-## 06 · The Sculpture — a white fractal on a plinth in a dark room; ten thousand times closer
+## 06 · The Sculpture — a white Menger sponge cut through, on a plinth in a dark room; ten thousand times closer
 The scene of geometry: the detail lives in real geometry, not in textures, and does not end as you come closer. As long
 as nothing moves the picture accumulates and sharpens; top right, the zoom and how many millimetres wide the screen is.
 
@@ -142,7 +142,7 @@ as nothing moves the picture accumulates and sharpens; top right, the zoom and h
 | **T** | the dive tour: four dives to 10,000 times, stopping at every step to sharpen (a key or the mouse stops it) |
 | **Left button** | point the light at what is clicked · **drag:** swing the light around that spot |
 | **Right button** | drag: turn the sculpture · **R** the first view |
-| **F** | depth of field: macro (the focus on what you zoom at) / all sharp · **↑ / ↓** exposure |
+| **F** | depth of field: all sharp (the default) / macro · **↑ / ↓** exposure |
 
-**Try:** watch the tour first (T). Then wheel into the edge of an arch, stopping at every decade; drag the light to a
+**Try:** watch the tour first (T). Then wheel into the edge of a star, stopping at every decade; drag the light to a
 raking angle. Settings `scenes/heykel.cfg` (F5).

@@ -55,6 +55,16 @@ struct KStep {          // the anchor, one iteration
     float3 An;             // the anchor after this iteration (where a point that stops here ends)
 };
 
+// The Menger sponge's anchor, one iteration (the same idea for its folds: abs, three sorting swaps, scale, a step on
+// z): the anchor's values before the branches and the differences that decide them, from the doubles
+struct MStep {
+    float3 A;              // the anchor before the iteration (abs: a point crosses only where |A| is as small as it)
+    float D1, D2, D3;      // the sort's comparisons for the anchor: x - y, then x - z, then y - z (each after the last swap)
+    float E;               // the anchor's z + 1 after the scale (the step on z happens below 0)
+    int flags;             // bits 0-2: the anchor's axis was negative; 3-5: it swapped; 6: it took the step
+    float3 An;             // the anchor after the iteration
+};
+
 struct World {
     Shape s;
     float3 plinthC{0, -0.5f, 0}, plinthH{0.17f, 0.5f, 0.17f};   // the plinth's centre and half size; its top at y = 0
@@ -70,6 +80,8 @@ struct World {
     float3 cutRel{0, 0, 0}, cutSign{1, 1, 1};   // |A0| - the cut box's half size, sign(A0), per axis
     const KStep* st = nullptr;      // the orbit: n steps (device memory for the kernels, host memory for the host's
                                     // own estimates; a kernel parameter array indexed in a loop spills to local memory)
+    const MStep* mst = nullptr;     // the Menger's orbit (pert with fractal kCrystal)
+    float cutPlaneRel = 0.0f;       // dot(A0, plane normal) - offset, from the doubles (the half-space cut)
     // The pixel rule for the formula, point by point (Kleinian): a point r from the camera takes
     // lodBase + lodK log10(lodRef / r) iterations, the fraction blended between two counts (no seam, no popping). A
     // pixel's footprint grows with r, so the far layers get no lace finer than a pixel: calmer, and cheaper.
@@ -209,6 +221,72 @@ HD float deCrystal(float3 z, const Shape& s) {
     return sdBox(z, make_float3(1, 1, 1)) / sc;
 }
 
+// The Menger sponge (scale 3, offset 1, no turn) to a fractional level mf: floor(mf) whole levels by the folds, then
+// in the local cube [-1, 1]³ the next level's cross of tunnels carved with half-width frac(mf) / 3. The newest holes
+// open as true square tunnels growing from their centres, so every in-between shape is a Menger sponge (blending the
+// two levels' distances instead made stars turn into triangles and filled holes with dents). The pixel rule picks mf:
+// no hole smaller than a few pixels is drawn, so the faces stay clean, and none pops in.
+HD float mengerCarve(float3 z, float f) {
+    const float3 a = make_float3(fabsf(z.x), fabsf(z.y), fabsf(z.z));
+    const float dc = fminf(fmaxf(a.x, a.y), fminf(fmaxf(a.y, a.z), fmaxf(a.z, a.x))) - f * (1.0f / 3.0f);
+    return fmaxf(sdBox(z, make_float3(1, 1, 1)), -dc);
+}
+HD float deMengerLod(float3 z, float mf) {
+    const int m0 = int(mf);
+    float sc = 1.0f;
+    for (int i = 0; i < m0; ++i) {
+        z = make_float3(fabsf(z.x), fabsf(z.y), fabsf(z.z));
+        if (z.x < z.y) { const float t = z.x; z.x = z.y; z.y = t; }
+        if (z.x < z.z) { const float t = z.x; z.x = z.z; z.z = t; }
+        if (z.y < z.z) { const float t = z.y; z.y = z.z; z.z = t; }
+        z = z * 3.0f - make_float3(2, 2, 2);
+        if (z.z < -1.0f) z.z += 2.0f;
+        sc *= 3.0f;
+    }
+    return mengerCarve(z, mf - float(m0)) / sc;
+}
+
+// one sorting swap of a pair (a, b) as a difference from the anchor's: D the anchor's a - b, sA whether it swapped
+HD void swapDelta(float& da, float& db, float D, bool sA) {
+    const bool sP = D + (da - db) < 0.0f;
+    if (sA == sP) {
+        if (sA) { const float t = da; da = db; db = t; }
+    } else if (sA) {   // the anchor swapped, the point did not
+        const float a = D + da, b = -D + db;
+        da = a;
+        db = b;
+    } else {           // the point swapped, the anchor did not
+        const float a = -D + db, b = D + da;
+        da = a;
+        db = b;
+    }
+}
+// one axis of abs as a difference: a the anchor's value (where they part, |a| is as small as d)
+HD float absDelta(float d, float a, bool negA) {
+    const bool negP = a + d < 0.0f;
+    if (negP == negA) return negA ? -d : d;
+    return negA ? (2.0f * a + d) : -(2.0f * a + d);
+}
+
+// the Menger by perturbation around the anchor (fractal units), stopped after mf iterations (as deMengerLod)
+HD float deMengerPert(float3 d, const World& w, float mf) {
+    const int m0 = int(mf);
+    float sc = 1.0f;
+    for (int i = 0; i < m0; ++i) {
+        const MStep& k = w.mst[i];
+        d = make_float3(absDelta(d.x, k.A.x, k.flags & 1), absDelta(d.y, k.A.y, k.flags & 2), absDelta(d.z, k.A.z, k.flags & 4));
+        swapDelta(d.x, d.y, k.D1, k.flags & 8);
+        swapDelta(d.x, d.z, k.D2, k.flags & 16);
+        swapDelta(d.y, d.z, k.D3, k.flags & 32);
+        d = d * 3.0f;
+        const bool stepA = k.flags & 64, stepP = k.E + d.z < 0.0f;
+        if (stepA && !stepP) d.z -= 2.0f;
+        else if (stepP && !stepA) d.z += 2.0f;
+        sc *= 3.0f;
+    }
+    return mengerCarve(w.mst[m0].A + d, mf - float(m0)) / sc;
+}
+
 // Sierpinski tetrahedron as a kaleidoscopic folding system (Knighty) with a turn before and after the folds:
 // scale a, offset k
 HD float deTetra(float3 z, const Shape& s) {
@@ -306,6 +384,11 @@ HD float deSculpture(float3 o, const World& w) {
     float d;
     if (bd > 0.05f * rw) {
         d = bd;
+    } else if (w.pert && s.fractal == kCrystal) {
+        const float3 d0 = mul(s.orient, o) * (1.0f / s.scale);   // from the anchor, fractal units
+        d = deMengerPert(d0, w, w.lod ? itersAt(o, w, w.n) : float(w.n) - 1.001f);
+        if (s.cut == 4) d = fmaxf(d, w.cutPlaneRel + dot(d0, normalize(s.cutSize)));
+        d *= s.scale;
     } else if (w.pert) {
         const float3 d0 = mul(s.orient, o) * (1.0f / s.scale);   // from the anchor, fractal units
         d = deKleinianPert(d0, w, w.lod ? itersAt(o, w, w.n) : float(w.n) - 1.001f);
@@ -316,6 +399,11 @@ HD float deSculpture(float3 o, const World& w) {
             c.z = fabsf(w.A0.z) > 0.5f * s.cutSize.z ? w.cutRel.z + w.cutSign.z * d0.z : fabsf(w.A0.z + d0.z) - s.cutSize.z;
             d = fmaxf(d, length(fmaxf3(c, make_float3(0, 0, 0))) + fminf(fmaxf(c.x, fmaxf(c.y, c.z)), 0.0f));
         }
+        d *= s.scale;
+    } else if (w.lod && s.fractal == kCrystal) {
+        const float3 pf = mul(s.orient, q) * (1.0f / s.scale);
+        d = deMengerLod(pf, itersAt(o, w, kMaxSteps));
+        if (s.cut == 4) d = fmaxf(d, dot(pf, normalize(s.cutSize)) - s.cutOffset);
         d *= s.scale;
     } else if (w.lod && s.fractal == kKleinian) {
         const float3 pf = mul(s.orient, q) * (1.0f / s.scale);

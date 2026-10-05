@@ -40,6 +40,7 @@ struct HeykelCandidate {
     float2 dive{0.5f, 0.45f};       // where the tools zoom in, as a fraction of the screen
     float turn = 0.0f, turn2 = 0.0f;   // radians: the folds' turns (crystal, hybrid, tetra), about these axes
     float3 turnAxis{1, 0, 0}, turnAxis2{0, 1, 0};
+    float3 alignUp{0, 0, 0};        // a fractal-space direction turned to world up first (0: none)
 };
 
 struct HeykelApp {
@@ -70,6 +71,8 @@ struct HeykelApp {
 
     mutable hk::KStep hostSteps[hk::kMaxSteps];   // the anchor's orbit (setAnchor), and its copy on the GPU
     hk::KStep* devSteps = nullptr;
+    mutable hk::MStep hostMSteps[hk::kMaxSteps];  // the Menger's
+    hk::MStep* devMSteps = nullptr;
 
     // GPU
     float4* accum = nullptr;         // rgb weighted, w the weights (the fixed pattern's samples)
@@ -84,12 +87,14 @@ struct HeykelApp {
     void init();                     // GPU buffers
     void release();
     void setCandidate(int i);        // fits it onto the plinth, home view, the light at its centre
+    int sculpture() const;           // the scene's sculpture: the candidate named by "heykel" in the settings
     void home();
     void cameraBasis(float3& right, float3& up, float3& fwd) const;
     HeykelView view() const;
     void setAnchor(hk::World& w, D3 anchor) const;   // the offsets to the far things, the Kleinian's orbit (doubles,
                                                      // into hostSteps; w.st points there)
-    bool deep() const { return world.s.fractal == hk::kKleinian; }   // the perturbed one: 10,000 times
+    // the perturbed ones, 10,000 times: the Kleinian and the Menger (the crystal without a turn)
+    bool deep() const { return world.s.fractal == hk::kKleinian || (world.s.fractal == hk::kCrystal && cands[cand].turn == 0.0f); }
     float zoomCap() const { return deep() ? maxLevel : std::min(maxLevel, cfg.f("zoom.max.float", 1000.0f)); }
     float zoomCapAt(D3 q) const;     // and at a point (flat cut faces and the plinth: shallow)
     double deHost(D3 p) const;       // the scene's estimate at a world point, in doubles where it matters (picking)

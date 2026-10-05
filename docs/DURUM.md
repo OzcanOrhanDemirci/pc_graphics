@@ -5,6 +5,11 @@
 > `docs/tanecik/` arşiv.
 
 ## Şu an
+- **2026-10-05 (öğlen) · Heykel revize 1: Yıldız ve deterministik çizici.** Özcan'ın ilk canlı bakışı: grenli, titreyen,
+  noktacıklı (*"vektörde olduğu gibi aşırı net bir şey beklemiştim"*). Yol izleme kalktı (rastgele sayı yok, sabit örnek
+  deseni, Ada'nın yolu); heykel artık köşegeninden kesilmiş bir Menger süngeri (madalyon), her noktada en az 4 piksellik
+  delik, yeni delikler gerçek tüneller olarak açılır; 10.000 kat Menger'de de pertürbasyonla (0,0006 piksel). Işık
+  sürüklerken kıpırtı 0,0125 → 0,0027. Ayrıntı `docs/heykel/DURUM.md` başında.
 - **2026-10-05 (sabah, otonom) · Sahne 6 "Heykel" tamamlandı, Özcan'ın canlı bakışını bekliyor.** Görev: geometri.
   Özcan G0 taslağına bakmadan seçimi bana bıraktı: **Katedral** (sözde Klein, bloğa kesilmiş, beyaz mat, karanlık oda,
   kaide). İmlece yakınlaşma **10.000 kata kadar** (pertürbasyon: çapa yörüngesi çift hassasiyetle, piksel farkı float;

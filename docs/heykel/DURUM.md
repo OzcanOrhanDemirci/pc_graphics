@@ -2,7 +2,49 @@
 
 > Tek kaynak durum panosu. Plan `docs/heykel/PLAN.md`. En yeni en üstte.
 
-## 🏁 Özcan'ın bakacağı yer (2026-10-05 sabahı, otonom görevin sonu)
+## 🔁 Revize 1 · Yıldız, deterministik çizici (2026-10-05 öğlen) · Özcan'ın bakacağı yer
+
+**Özcan'ın ilk canlı bakışı (Katedral):** *"genel görüntü kalitesi çok kötü. Işık hareket edince pır pır titriyor,
+yakınlaşınca görüntü çok tanecikli ve bulanık [...] Ada da 1 er örnekle bile bunu başarmıştın"*; sonra *"dokunun kendisi
+yani geometrinin kendisi çok noktacıklı [...] matematiksel sonsuz diyince ben vektörlde olduğu gibi aşırı net bir şey
+beklemiştim"*; *"en net ve temiz olup incelenebilecek olana geç"*.
+
+**Yapılanlar:**
+- **Rastgele sayı yok** (Ada'nın yolu): yol izleyici kalktı. Her piksel her karede aynı sabit örnekleri alır (R4 dizisi:
+  alt piksel konumu ve spotun diskindeki nokta, Blackman-Harris 1,5 piksel); hareket ederken ~25 ms'ye sığan kadar (1-4),
+  durunca aynı desenden 128'e kadar eklenir: kenarlar ve spotun yarı gölgesi olgunlaşır, gren hiç olmaz. Spotun gölgesi
+  ışın boyunca uzaklıklardan tahmin (ışık sürüklenince kenar piksel piksel atlamaz). Netlik alanı varsayılan kapalı.
+- **Heykel artık Yıldız** (Menger süngeri, köşegeninden ortadan kesilmiş, kesik yüzü izleyiciye dönük, altıgenin düz
+  kenarı üstünde duran bir madalyon). Katedral'in noktacıkları geometrinin kendisiydi: yüzeyi her ölçekte piksel boyu
+  dairelerden oluşur, tekrar azaltmak onu köpüğe dağıtıyordu (kareyle denendi). Menger'in yüzleri düz, kenarları keskin.
+- **Nokta nokta piksel kuralı:** her noktada yalnız en az **4 piksel** büyüklüğündeki delikler çizilir (`lod.pixels`);
+  daha küçükleri gren olurdu. Yaklaştıkça bir sonraki düzeyin delikleri **gerçek kare tüneller olarak merkezlerinden
+  genişleyerek** açılır (iki düzeyin mesafesini karıştırmak yıldızları üçgene çeviriyor, delikleri çukurla dolduruyordu;
+  çözünürlük değişince bile biçim değişiyordu).
+- **10.000 kat Menger'de de pertürbasyonla:** katlamalar (mutlak değer, üç sıralama takası, ölçek, z adımı) parça parça
+  doğrusal; her dalın fark formülü kesin, dal kararları çift hassasiyetteki farklardan (`MStep`). `--test pert`: 10.000
+  katta en fazla **0,0006 piksel** (düz float 0,24).
+- **Işık:** ilk görünümde spot soldan yatık (yıldızlar beyaz, deliklerin içinde gölge), kenarı yumuşak (sert kenar
+  kaidede halka çiziyordu); pozlama ilk görünümde +0,4 EV, 10 kattan itibaren eski düzey.
+- **Tur:** yeni 16 rastgele dalıştan seçilmiş dört nokta (yıldızlar baştan sona · bir köşe ve galeriler · yıldız, üçgen,
+  yıldız · yıldızlardan tünellere); duraklar 2,5-4,5 sn (gren yok, beklenecek şey yalnız kenarlar).
+
+**Ölçümler (2560×1440, `--kararlilik`, `tools/kararlilik.py`, piksel kıpırtısı ort / %99):**
+
+| | Yakınlaşma (50 → 70 kat, kare başı %2) | Işık sürükleme (1.000 kat) |
+|---|---|---|
+| Katedral, eski çizici (yol izleme) | 0,0588 / 0,37 | 0,0125 / 0,26 |
+| Katedral, deterministik | 0,0588 / 0,37 | 0,0022 / 0,05 |
+| **Yıldız, deterministik, 4 piksel** | **0,0137 / 0,11** | **0,0027 / 0,06** |
+
+Bağıl kıpırtı 0,15 (Fener 0,45-1,24, Ada 0,01-0,02). Hareket hâlinde 4 yerine 7 örnek ölçüyü değiştirmedi (0,0136): kalan,
+hızlı yakınlaşmada geometrinin kendisinin akması. Bir örnek tam ekranda 2-14 ms (Katedral'in 3-10 katı hızlı); uygulama
+hareket ederken 30-60 fps, durunca 162.
+
+**NE DOĞRULANMADI:** Yıldız'a senin canlı bakışın; hızlı yakınlaşmadaki kalan kıpırtının gözde nasıl durduğu; Katedral
+ve diğer adaylar artık yalnız komut satırında (`heykel = yildiz`, `scenes/heykel.cfg`).
+
+## Önceki hâl: otonom görevin sonu (Katedral, 2026-10-05 sabahı)
 
 Özcan G0 taslağına bakmadan seçimi bana bıraktı ve sahneyi tamamlanana kadar otonom sürdürmemi istedi (*"Hangisini en
 iyi yapabileceksen seç. Sahneyi tamamlayana kadar otonom şekilde devam et [...] Paralel agent kullanma, kendin çalış"*).

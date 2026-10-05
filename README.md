@@ -34,7 +34,7 @@ night. Scene 3 is a rigid-body and fracture solver of its own, drawn by a plain 
 particle solver (fluids, grains, breakable bonds) whose fast moments are recomputed finely in the background and
 kept as physics, not video. Scene 5 is under water: a deterministic spectral ray tracer whose light goes on through
 the air above the surface, along a lane from a small island's pier to a wreck and a rope into the blue. Scene 6 is
-geometry alone: a fractal sculpture on a plinth, zoomed into ten thousand times.
+geometry alone: a Menger sponge on a plinth, zoomed into ten thousand times.
 
 ## The application
 
@@ -266,38 +266,32 @@ live yet. Everything in `docs/koy/DURUM.md`.
 
 ### 6 · The Sculpture *(Heykel)* · October 2026
 
-| ![A white fractal sculpture on a dark plinth in a dark room: rows of arches and hourglass columns in a block, lit from the upper left](docs/images/heykel-1.jpg) |
+| ![A white Menger sponge cut through its middle, stood up as a medallion on a dark plinth: six-pointed stars in the cut, lit from the left](docs/images/heykel-1.jpg) |
 |---|
-| ![A hundred times closer: lace of circles inside circles, the near layer soft in the lens's depth, a spotlight on the arch in focus](docs/images/heykel-100.jpg) |
-| ![Ten thousand times closer, the screen 0.15 mm across: the lace goes on, arches opening inside arches](docs/images/heykel-10000.jpg) |
+| ![A hundred times closer: the cut's stars, a tunnel going into the sponge, square galleries inside](docs/images/heykel-100.jpg) |
+| ![Ten thousand times closer, the screen 0.15 mm across: stars and square tunnels go on](docs/images/heykel-10000.jpg) |
 
-The scene of geometry and nothing else: a white, matte fractal on a plinth in a dark room, no motion, no physics.
-Zoom towards any point of it; arches open inside its arches down to ten thousand times, where the screen is 0.15 mm
-across (about two hairs).
+The scene of geometry and nothing else: a white, matte Menger sponge cut along its diagonal, stood up on a plinth in
+a dark room; six-pointed stars in the cut. Zoom towards any point of it: new stars and square tunnels open down to ten
+thousand times, where the screen is 0.15 mm across (about two hairs).
 
-- **A fractal as a sculpture:** a pseudo-Kleinian (Knighty's box fold and sphere inversion) cut into a block, ray
-  marched by its distance estimate. The surface's threshold is half a pixel's footprint where the ray is, and the
-  formula's iterations grow with the zoom (10 at the first view, 18 at ten thousand times): nothing thinner than a
-  pixel is drawn, and the detail does not run out. With 10 iterations at ten thousand times the lace had dissolved into
-  rings floating in the dark.
-- **Ten thousand times in floats, by perturbation:** there a pixel is a few float steps of the position. As the deep
-  Mandelbrot zooms do, one anchor's orbit goes through the iteration in doubles on the processor and every pixel
-  follows it as a small difference in floats; the folds and the inversion are piecewise rational, so every branch has
-  an exact difference formula, its edges taken from the doubles. Against a straight double-precision estimate: 0.003 of
-  a pixel at ten thousand times (plain floats: up to half a pixel).
+- **As sharp as a vector drawing:** at every point only holes at least four pixels wide are drawn (smaller ones would
+  only be grain); as you come closer the next level's holes open as true square tunnels widening from their centres, so
+  every in-between shape is still a Menger sponge and nothing pops in.
+- **No random numbers** (scene 5's way): every pixel takes the same fixed sub-pixel samples and the same points of the
+  lamp's disc every frame; still, more of the same pattern are added (the edges, the penumbra), never grain. Measured
+  against a converged reference while dragging the light: 0.0027 (the first, path-traced version of the scene: 0.0125).
+- **Ten thousand times in floats, by perturbation:** there a pixel is a few float steps of the position. One anchor's
+  orbit goes through the folds in doubles on the processor and every pixel follows it as a small difference in floats;
+  the folds are piecewise linear, so every branch has an exact difference formula, decided by differences kept from the
+  doubles. Against a straight double-precision estimate: six ten-thousandths of a pixel at ten thousand times.
 - **Light that follows you in:** a spot on whatever you click (drag swings it around that point), which comes closer as
-  you zoom, as a macro photographer's lamp does, and finds an open line when an arch gets in its way; an eye light on
-  the lens (it casts no shadow the camera could see, so it needs no shadow ray: no noise, the same in the preview and in
-  the path tracer; its fall softened near the lens, an art setting by name); a dim light from the ceiling.
-- **Still, it converges:** while anything moves, a half-resolution preview of four rays a preview pixel, soft and steady
-  and measured to match the converged picture's brightness; still, a path tracer with low-discrepancy samples, a
-  Gaussian reconstruction, adaptive sampling (a pixel known well enough stops), one or two bounces and a macro lens's
-  depth of field (F for all sharp).
-- **The dive tour (T):** four dives chosen from sixteen random ones for frames that hold at every step, kept as world
-  points (a pixel led elsewhere at another resolution), down to ten thousand times, stopping at every decade to sharpen.
+  you zoom and finds an open line when a wall gets in its way; a ring light on the lens that casts no shadow the camera
+  could see; a dim light from the ceiling.
+- **The dive tour (T):** four dives chosen from sixteen random ones, down to ten thousand times, stopping at every decade.
 
-Open: no one has looked at it live yet; the light, the art settings and the tour were judged on still frames. Everything
-in `docs/heykel/DURUM.md` (Turkish).
+The first version (a pseudo-Kleinian "cathedral", path traced) was replaced after Özcan's first look: grainy, flickering,
+and its surface was pixel-sized circles at every scale. Everything in `docs/heykel/DURUM.md` (Turkish).
 
 ## What scene 1 computes
 

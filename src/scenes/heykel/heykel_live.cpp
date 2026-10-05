@@ -1,4 +1,5 @@
-// Scene 6 "Heykel" inside the application: a white fractal cathedral on a plinth in a dark room, 10,000 times deep.
+// Scene 6 "Heykel" inside the application: a white Menger sponge cut through, on a plinth in a dark room, 10,000 times
+// deep.
 // The wheel zooms towards the cursor, the right button turns the view around what was zoomed at, a click points the
 // light at a spot and dragging with the left button swings it around that spot; T runs the dive tour. Still, the
 // picture accumulates.
@@ -22,10 +23,10 @@ using app::L;
 // study's random dives (a pixel picked again all the way down, as a hand on the wheel would) and kept as the point
 // reached at 10,000 times: a pixel would lead elsewhere at another resolution (a finer threshold, another hole).
 // Chosen for frames that hold at every stop (DURUM; --hedef renders them as the tour sees them).
-const D3 kDives[] = {{-0.16122597601070529, 0.38169462667579562, 0.18263348231902773},
-                     {-0.017099008541529775, 0.014046505992941874, -0.12788962696837886},
-                     {0.018479176066056528, 0.026147856746997961, 0.1742891767649056},
-                     {-0.012766515728291123, 0.19496334254062009, -0.010087507275673497}};
+const D3 kDives[] = {{-0.10428323765439799, 0.32260425148676414, 0.14364993971126663},     // stars all the way down
+                     {-0.0090906256663228751, 0.21663721015711312, 0.0030597578837242754},  // a corner, then galleries
+                     {0.16226973321421534, 0.32145899943419298, 0.023848270069743566},      // stars, a triangle, stars
+                     {-0.04421500363838525, 0.13596154418132148, 0.11260087443935322}};     // from the stars into the tunnels
 const int kDiveCount = 4;
 const float kStops[] = {10.0f, 100.0f, 1000.0f, 10000.0f};   // where a dive stops to let the picture settle
 const int kStopCount = 4;
@@ -37,27 +38,28 @@ public:
         i.id = "heykel";
         i.number = "06";
         i.title = L("Heykel", "The Sculpture");
-        i.subtitle = L("Fraktal bir katedral, on bin kat yakına", "A fractal cathedral, ten thousand times closer");
-        i.description = L("Karanlık bir odada, bir kaidenin üstünde beyaz, mat bir heykel. Yaklaştıkça kemerlerinin içinden yeni kemerler "
-                          "açılır; on bin katta ekranın genişliği 0,15 mm, iki saç teli kadardır ve yapı orada da sürer.",
-                          "A white, matte sculpture on a plinth in a dark room. Come closer and new arches open inside its arches; at "
-                          "ten thousand times the screen is 0.15 mm across, two hairs' width, and the structure goes on there too.");
+        i.subtitle = L("Köşesi kesilmiş bir Menger süngeri, on bin kat yakına", "A Menger sponge cut through, ten thousand times closer");
+        i.description = L("Karanlık bir odada, bir kaidenin üstünde beyaz, mat bir küp: ortasından kesilmiş, kesitinde altı köşeli yıldızlar. "
+                          "Yaklaştıkça yıldızların ve kare tünellerin içinden yenileri açılır; on bin katta ekranın genişliği 0,15 mm, iki "
+                          "saç teli kadardır ve yapı orada da sürer.",
+                          "A white, matte cube on a plinth in a dark room, cut through its middle, six-pointed stars in the cut. Come "
+                          "closer and new stars and square tunnels open inside them; at ten thousand times the screen is 0.15 mm across, "
+                          "two hairs' width, and the structure goes on there too.");
         i.details = {
             {L("Geometri", "Geometry"),
-             L("Heykel bir fraktal (sözde Klein, Knighty'nin kutu katlaması ve küre evirmesi), bir bloğa kesilmiş: biçim üçgenlerden "
-               "değil bir formülden gelir, ışın yüzeye formülün söylediği uzaklıkla adım adım yürür. Yüzeyin eşiği pikselin o "
-               "uzaklıktaki izi kadar; formülün tekrar sayısı da yakınlaşmayla artar: pikselden ince olan çizilmez, ayrıntı bitmez.",
-               "The sculpture is a fractal (pseudo-Kleinian: Knighty's box fold and sphere inversion) cut into a block: the form "
-               "comes from a formula, not from triangles, and a ray walks to the surface by the distance the formula gives. The "
-               "surface's threshold is a pixel's footprint there, and the formula's iterations grow with the zoom: nothing thinner "
-               "than a pixel is drawn, and the detail does not run out.")},
+             L("Menger süngeri, köşegeninden kesilmiş: biçim üçgenlerden değil bir formülden gelir, ışın yüzeye formülün söylediği "
+               "uzaklıkla adım adım yürür. Her noktada yalnız en az dört piksel büyüklüğündeki delikler çizilir; daha küçükleri "
+               "gren olurdu. Yaklaştıkça yenileri gerçek kare tüneller olarak merkezlerinden genişleyerek açılır.",
+               "A Menger sponge cut along its diagonal: the form comes from a formula, not from triangles, and a ray walks to the "
+               "surface by the distance the formula gives. At every point only holes at least four pixels wide are drawn; smaller "
+               "ones would be grain. As you come closer the next ones open as true square tunnels, widening from their centres.")},
             {L("On bin kat", "Ten thousand times"),
              L("Ekran kartının sayıları orada bir pikseli ayırt edemez. Derin Mandelbrot yakınlaşmalarının yolu: bir çapa noktasının "
                "yörüngesi ana işlemcide çift hassasiyetle hesaplanır, her piksel ondan küçük bir fark olarak izlenir. Ölçülen hata "
-               "on bin katta piksel başına binde üç.",
+               "on bin katta pikselin on binde altısı.",
                "There the graphics card's numbers cannot tell one pixel from the next. The deep Mandelbrot zooms' way: one anchor "
                "point's orbit is computed in double precision on the processor, every pixel follows it as a small difference. The "
-               "measured error at ten thousand times: three thousandths of a pixel.")},
+               "measured error at ten thousand times: six ten-thousandths of a pixel.")},
             {L("Işık", "Light"),
              L("Bir spot, merceğin üstünde hafif bir halka ışık ve tavandan sönük bir ışık. Spot sen yaklaştıkça seninle yaklaşır, "
                "yolu kapalıysa yakında açık bir açı arar. Rastgele sayı yok: her piksel her karede aynı sabit örnekleri alır, "
@@ -96,7 +98,7 @@ public:
             h_.loadConfig();
             h_.buildCandidates();
             h_.init();
-            h_.setCandidate(cathedral());
+            h_.setCandidate(sculptureIndex());
             st.label = L("İlk kare", "The first frame");
             st.fraction = 0.8f;
             ++st.step;
@@ -291,7 +293,7 @@ public:
     void reload(app::Host& host) override {
         h_.loadConfig();
         h_.buildCandidates();
-        h_.setCandidate(cathedral());
+        h_.setCandidate(sculptureIndex());
         pending_ = 0.0f;
         tour_ = false;
         h_.resetSamples();
@@ -308,11 +310,7 @@ public:
     ~HeykelLive() override { unload(); }
 
 private:
-    int cathedral() const {
-        for (int k = 0; k < int(h_.cands.size()); ++k)
-            if (h_.cands[k].id == "katedral") return k;
-        return 0;
-    }
+    int sculptureIndex() const { return h_.sculpture(); }
 
     // the tour: home (settle), then to each stop of a dive (zooming, the point under the dive's pixel picked again
     // every frame), a pause there while the picture accumulates, out again to the first view, the next dive

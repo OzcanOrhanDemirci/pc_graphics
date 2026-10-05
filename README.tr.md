@@ -35,7 +35,7 @@ kendi yazdığımız bir katı cisim ve kırılma çözücüsü; sade bir günd�
 çözücüsü (sıvılar, taneler, kopabilen bağlar); hızlı anları arka planda ince hesaplanır ve video olarak değil, fizik
 olarak saklanır. Sahne 5 su altında: ışığı yüzeyin üstünde havada da süren deterministik, tayfsal bir ışın izleyici;
 küçük bir adanın iskelesinden bir batığa ve maviye inen bir halata uzanan bir yol. Sahne 6 yalnız geometri: bir
-kaidede duran, on bin kat yakınına inilen fraktal bir heykel.
+kaidede duran, on bin kat yakınına inilen bir Menger süngeri.
 
 ## Uygulama
 
@@ -257,37 +257,32 @@ içindeki ışık ve görünüş komut satırı kareleriyle tartıldı, canlı y
 
 ### 6 · Heykel · Ekim 2026
 
-| ![Karanlık bir odada koyu bir kaidenin üstünde beyaz bir fraktal heykel: bir blokta kemer sıraları ve kum saati sütunlar, sol üstten ışık](docs/images/heykel-1.jpg) |
+| ![Ortasından kesilmiş beyaz bir Menger süngeri, koyu bir kaidede madalyon gibi dik: kesitte altı köşeli yıldızlar, soldan ışık](docs/images/heykel-1.jpg) |
 |---|
-| ![Yüz kat yakın: daire içinde daire dantel, öndeki katman merceğin derinliğinde yumuşak, odaktaki kemerde bir spot](docs/images/heykel-100.jpg) |
-| ![On bin kat yakın, ekranın genişliği 0,15 mm: dantel sürüyor, kemerlerin içinden kemerler açılıyor](docs/images/heykel-10000.jpg) |
+| ![Yüz kat yakın: kesitin yıldızları, süngerin içine giden bir tünel, içeride kare galeriler](docs/images/heykel-100.jpg) |
+| ![On bin kat yakın, ekranın genişliği 0,15 mm: yıldızlar ve kare tüneller sürüyor](docs/images/heykel-10000.jpg) |
 
-Yalnız geometrinin sahnesi: karanlık bir odada, bir kaidenin üstünde beyaz, mat bir fraktal; hareket yok, fizik yok.
-Herhangi bir noktasına yaklaş; kemerlerinin içinden kemerler açılır, on bin kata kadar. Orada ekranın genişliği 0,15 mm,
-iki saç teli kadardır.
+Yalnız geometrinin sahnesi: köşegeninden kesilmiş, karanlık bir odada kaidede dik duran beyaz, mat bir Menger süngeri;
+kesitte altı köşeli yıldızlar. Herhangi bir noktasına yaklaş: on bin kata kadar yeni yıldızlar ve kare tüneller açılır.
+Orada ekranın genişliği 0,15 mm, iki saç teli kadardır.
 
-- **Heykel olarak fraktal:** bir bloğa kesilmiş sözde Klein (Knighty'nin kutu katlaması ve küre evirmesi), mesafe
-  kestirimiyle ışın yürütülür. Yüzeyin eşiği ışının olduğu yerde yarım pikselin izi; formülün tekrar sayısı yakınlaşmayla
-  artar (ilk görünümde 10, on bin katta 18): pikselden ince olan çizilmez, ayrıntı bitmez. On bin katta 10 tekrarla dantel
-  karanlıkta yüzen halkalara dağılmıştı.
-- **On bin kat, float'la, pertürbasyonla:** orada bir piksel konumun birkaç float basamağıdır. Derin Mandelbrot
-  yakınlaşmalarının yolu: bir çapa noktasının yörüngesi ana işlemcide çift hassasiyetle tekrarlardan geçer, her piksel
-  onu float'ta küçük bir fark olarak izler; katlamalar ve evirme parça parça rasyonel, her dalın kesin bir fark formülü
-  var, dal sınırları çift hassasiyetten. Düz çift hassasiyetli kestirime karşı: on bin katta pikselin binde üçü (düz
-  float'ta yarım piksele kadar).
-- **Seninle içeri giren ışık:** tıkladığın yere bir spot (sürükleyince o noktanın çevresinde döner); sen yaklaştıkça
-  makro fotoğrafçının lambası gibi o da yaklaşır, bir kemer yolunu kapatınca açık bir hat bulur. Mercekte bir göz ışığı
-  (kameranın görebileceği gölge düşürmez, gölge ışını gerekmez: gürültü yok, önizlemede ve yol izlemede aynı; mercek
-  yakınında düşüşü yumuşatıldı, adıyla bir sanat ayarı). Tavandan sönük bir ışık.
-- **Durunca yakınsar:** bir şey kıpırdarken yarım çözünürlükte, önizleme pikseli başına dört ışınlı, yumuşak ve kararlı
-  bir önizleme (parlaklığı birikmiş görüntüyle ölçülerek eşlendi); durunca düşük tutarsızlıklı örneklerle yol izleme,
-  Gauss yeniden kurma, uyarlamalı örnekleme (yeterince bilinen piksel durur), bir ya da iki sekme ve makro merceğin netlik
-  alanı (F: hepsi net).
-- **Dalış turu (T):** her basamakta duran kareler için on altı rastgele dalıştan seçilmiş dört dalış, dünya noktası olarak
-  (piksel başka çözünürlükte başka yere götürüyordu), on bin kata kadar; her onda bir katta durup netleşir.
+- **Vektör çizim kadar keskin:** her noktada yalnız en az dört piksel büyüklüğündeki delikler çizilir (daha küçükleri
+  yalnız gren olurdu); yaklaştıkça bir sonraki düzeyin delikleri gerçek kare tüneller olarak merkezlerinden genişleyerek
+  açılır: her ara biçim yine bir Menger süngeridir, hiçbir şey birden belirmez.
+- **Rastgele sayı yok** (5. sahnenin yolu): her piksel her karede aynı sabit alt piksel örneklerini ve spotun diskinde aynı
+  noktaları alır; durunca aynı desenden yenileri eklenir (kenarlar, yarı gölge), hiç gren olmaz. Işık sürüklenirken
+  yakınsamış referansa karşı kıpırtı 0,0027 (sahnenin yol izlemeli ilk hâli: 0,0125).
+- **On bin kat, float'la, pertürbasyonla:** orada bir piksel konumun birkaç float basamağıdır. Bir çapa noktasının
+  yörüngesi ana işlemcide çift hassasiyetle katlamalardan geçer, her piksel onu float'ta küçük bir fark olarak izler;
+  katlamalar parça parça doğrusal, her dalın kesin bir fark formülü var, dal kararları çift hassasiyetten. Düz çift
+  hassasiyetli kestirime karşı: on bin katta pikselin on binde altısı.
+- **Seninle içeri giren ışık:** tıkladığın yere bir spot (sürükleyince o noktanın çevresinde döner); sen yaklaştıkça o da
+  yaklaşır, bir duvar yolunu kapatınca açık bir hat bulur. Mercekte kameranın görebileceği gölge düşürmeyen bir halka ışık;
+  tavandan sönük bir ışık.
+- **Dalış turu (T):** on altı rastgele dalıştan seçilmiş dört dalış, on bin kata kadar, her onda bir katta durur.
 
-Açık: henüz kimse canlı bakmadı; ışık, sanat ayarları ve tur durağan karelere bakılarak karara bağlandı. Hepsi
-`docs/heykel/DURUM.md`'de.
+İlk hâli (yol izlenen sözde Klein bir "katedral") Özcan'ın ilk bakışından sonra değişti: grenliydi, titriyordu ve yüzeyi her
+ölçekte piksel boyu dairelerdi. Hepsi `docs/heykel/DURUM.md`'de.
 
 ## Sahne 1: neyi hesaplıyor
 
