@@ -146,7 +146,7 @@ const Name kNames[] = {
     {4.5, "Ege", "The Aegean"},
     {6.5, "Dünya", "The Earth"},
     {8.5, "Dünya ve Ay", "The Earth and the Moon"},
-    {10.5, "Güneş", "The Sun"},
+    {10.9, "Dünya'nın yörüngesi", "The Earth's orbit"},   // the Sun comes to the middle only from 11 to 11.9
     {11.5, "Güneş sistemi", "The Solar System"},
     {14.5, "Oort bulutu", "The Oort cloud"},
     {16.5, "Güneş'in komşuları", "The Sun's neighbours"},

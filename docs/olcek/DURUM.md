@@ -112,7 +112,16 @@ Akış önce, ayrıntı sonra (Özcan): 10⁻³'ten 10⁻³⁵'e her onlukta ger
 - Bağlaşımlar M_Z'nin altında da tek döngü SM b'leriyle (2 GeV'de α3 ≈ 0,24, gerçeği ~0,30); temsil için yeterli,
   ölçülmedi.
 - Yoğunluk haritasının tonları ve atomun içindeki pozlama geçişi gözle ayarlandı; bir ölçüte bağlanmadı.
-- Galaksi geçişinin düzeltmesi yalnız 22-25 bölümünde tarandı (bütün yol değil).
+- Son tam tarama (bütün düzeltmelerden sonra): en uzun kare 15,7 ms, GEÇTİ. Sıçrama 60 kare, hepsi bilinen:
+  - s ≈ 6-7'de köşeler (23 kare);
+  - s 16-18'de ekranın kenarından hızla geçen parlak yakın yıldızlar (12 kare, 0,041-0,045, eşik 0,04). Gerçek
+    paralaks; yakınlık sönümünü genişletmek düzeltmedi, geri alındı;
+  - s -16/-17'de sondanın keskinleşmesi (21 kare, 0,045);
+  - dipte köpüğün hareketi (4 kare, 0,08).
+
+  Galaksi geçişinin 114 karesi gitti.
+- Güneş sistemi ölçekleri (10-13) dürüst ama sessiz: gezegenler nokta, yörüngeler yalnız deklanşörün ortaladığı soluk
+  yaylar. Pozlamayı yükseltmek ya da başka bir şey Özcan'ın kararı.
 
 ## 2026-10-05 akşam · Kozmik ağ: hacim ve dilim
 
