@@ -55,6 +55,11 @@ Akış önce, ayrıntı sonra (Özcan): 10⁻³'ten 10⁻³⁵'e her onlukta ger
   - dipte 3 kare (0,065): köpüğün gerçek hareketi.
 
   -9 ile -15 arası sıfır.
+- **Galaksi geçişi düzeldi:** s 23,36'daki sıçrama gerçek bir geçişti. Yakın bir galaksi çifti (büyük olasılıkla
+  M81/M82) kamera odağa doğru ilerlerken adımda ~80 piksel kayıyordu. Yakınlık sönümü d/D 0,1-0,5'ten 0,3-1,0'a
+  genişledi: 22-25 arasında sıçrama yok (`--set test.lo=22 --set test.hi=25`: tarama artık bir bölümle sınırlanabiliyor).
+- `--autotest-only olcek`: 81-162 fps (en yavaş 1 km'de 12,5 ms; kum tanesi 10,3; atom 9,8; çöl 6,2; Planck 6,8),
+  kart belleği 4,3 GB.
 - `olcek-hassasiyet`: en kötü 9,5e-5 piksel, GEÇTİ. `olcek-zaman`: GEÇTİ.
 - Sıçrama raporu artık onluk başına sayı ve en büyük değeri basıyor (eskiden yalnız en büyük 40 sıçrama).
 
@@ -75,8 +80,8 @@ Akış önce, ayrıntı sonra (Özcan): 10⁻³'ten 10⁻³⁵'e her onlukta ger
 - Bağlaşımlar M_Z'nin altında da tek döngü SM b'leriyle (2 GeV'de α3 ≈ 0,24, gerçeği ~0,30); temsil için yeterli,
   ölçülmedi.
 - Yoğunluk haritasının tonları ve atomun içindeki pozlama geçişi gözle ayarlandı; bir ölçüte bağlanmadı.
-- s ≈ 23,4-23,7'deki galaksi geçişi sıçramaları hâlâ duruyor (eskiden beri).
-- autotest bu değişikliklerle koşulmadı.
+- Galaksi geçişinin düzeltmesi yalnız 22-25 bölümünde tarandı (bütün yol değil).
+
 
 ## 2026-10-05 akşam · Kozmik ağ: hacim ve dilim
 

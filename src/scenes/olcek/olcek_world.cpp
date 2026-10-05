@@ -837,7 +837,7 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
             const V3 rel = base + galPos_[i];
             if (!inFront(rel)) continue;
             const double d2 = dot(rel, rel);
-            float near = float(smoothstep(0.1, 0.5, std::sqrt(d2) / D));   // wide: nearby galaxies stream past softly
+            float near = float(smoothstep(0.3, 1.0, std::sqrt(d2) / D));   // wide: nearby galaxies stream past softly
             if (near <= 0.0f) continue;
             // the same slice as the web's (webLight): sigma 20 Mpc about the focus, across the view
             const double dz = (dot(rel, cam.fwd) - D) / (20e6 * kPc);

@@ -5,7 +5,8 @@
 //   pc_graphics.exe --scene olcek --headless --decades [...]       every whole decade, the bottom and the top
 //   pc_graphics.exe --scene olcek --test olcek-hassasiyet          the anchors' places on the screen, floats against
 //                                                                  double-doubles, every 0.02 decades (pixels)
-//   pc_graphics.exe --scene olcek --test olcek-sure [--step 0.01]  top to bottom and back: the frame's time, the home
+//   pc_graphics.exe --scene olcek --test olcek-sure [--step 0.01]  top to bottom and back (--set test.lo=.. test.hi=..
+//                                                                  for a part): the frame's time, the home
 //                                                                  in the frame, and every jump (something appearing
 //                                                                  or vanishing that the zoom does not explain)
 //   pc_graphics.exe --scene olcek --test olcek-zaman               the clocks: home always at today's noon, however
@@ -262,10 +263,13 @@ int testContinuity(OlcekApp& app, double step) {
     int frames = 0;
     const double threshold = app.cfg.f("test.jump", 0.04f);
     std::printf("sure: ust uctan alta ve geri, %.3f onluk adimla, zaman donuk (yalniz yakinlasma)\n", step);
+    // --set test.lo=.. test.hi=..: a part of the way only (looking into one place)
+    const double lo = std::max(double(sc.sMin), double(app.cfg.f("test.lo", float(sc.sMin))));
+    const double hi = std::min(double(sc.sMax), double(app.cfg.f("test.hi", float(sc.sMax))));
     std::vector<double> path;
-    for (double s = sc.sMax; s > sc.sMin; s -= step) path.push_back(s);
-    path.push_back(sc.sMin);
-    for (double s = sc.sMin + step; s < sc.sMax; s += step) path.push_back(s);
+    for (double s = hi; s > lo; s -= step) path.push_back(s);
+    path.push_back(lo);
+    for (double s = lo + step; s < hi; s += step) path.push_back(s);
     const double t0 = nowS();
     for (size_t f = 0; f < path.size(); ++f) {
         sc.s = path[f];
