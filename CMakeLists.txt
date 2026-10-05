@@ -77,6 +77,7 @@ add_library(pc_core OBJECT
     src/scenes/heykel/heykel_live.cpp
     src/scenes/heykel/heykel_kernels.cu
     src/scenes/olcek/olcek_world.cpp
+    src/scenes/olcek/olcek_tex.cpp
     src/scenes/olcek/olcek_app.cpp
     src/scenes/olcek/olcek_live.cpp
     src/scenes/olcek/olcek_kernels.cu

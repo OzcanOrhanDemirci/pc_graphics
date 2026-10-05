@@ -52,7 +52,45 @@ void OlcekApp::init() {
     cudaMalloc(reinterpret_cast<void**>(&dSplats), size_t(splatCap) * sizeof(GSplat));
 }
 
+void OlcekApp::loadMaps() {
+    mapsLog.clear();
+    const std::string dir = root + "/assets/olcek/";
+    struct M { olcek::Texture* t; const char* file; bool wrap; };
+    const M ms[] = {{&world, "bmng_dunya.tex", true}, {&zonal, "bmng_kusak.tex", false}, {&region, "bmng_ege.tex", false},
+                    {&bay, "s2_ev.tex", false}, {&moon, "ay.tex", true}, {&cloudWorld, "bulut_dunya.tex", true},
+                    {&cloudRegion, "bulut_ege.tex", false}};
+    {
+        std::string err;
+        if (shore.load(dir + "kiyi.sdf", err)) {
+            char b[160];
+            std::snprintf(b, sizeof(b), "  kiyi.sdf: %dx%d, %.1f m, sahildeki noktada %.1f m%c", shore.size, shore.size, shore.texel, shore.centre, 10);
+            mapsLog += b;
+        } else {
+            mapsLog += "  " + err + std::string(1, char(10));
+        }
+    }
+    for (const M& m : ms) {
+        std::string err;
+        if (cfg.i(std::string("maps.") + m.file, 1) == 0) continue;   // --set maps.<file>=0: without it
+        if (m.t->load(dir + m.file, m.wrap, err)) {
+            char b[160];
+            std::snprintf(b, sizeof(b), "  %s: %dx%d, %.0f MB\n", m.file, m.t->width, m.t->height, m.t->bytes / 1e6);
+            mapsLog += b;
+        } else {
+            mapsLog += "  " + err + "\n";
+        }
+    }
+}
+
 void OlcekApp::release() {
+    world.release();
+    cloudWorld.release();
+    cloudRegion.release();
+    shore.release();
+    zonal.release();
+    region.release();
+    bay.release();
+    moon.release();
     cudaFree(accum);
     cudaFree(depth);
     cudaFree(output);
@@ -69,6 +107,26 @@ void OlcekApp::render() {
     sc.camera();
     sc.build(view, splats);
     view.filterRadius = cfg.f("filter", 1.5f);
+    view.maps.world = world.tex;
+    view.maps.zonal = zonal.tex;
+    view.maps.region = region.tex;
+    view.maps.bay = bay.tex;
+    view.maps.moon = moon.tex;
+    view.maps.cloudWorld = cloudWorld.tex;
+    view.maps.cloudRegion = cloudRegion.tex;
+    view.maps.cloudGain = cfg.f("maps.gain.cloud", 1.0f);
+    {   // the clouds thin out as the camera comes down through their heights (~2-8 km)
+        const double x = std::clamp((sc.s - 3.7) / (4.3 - 3.7), 0.0, 1.0);
+        view.maps.cloudFade = float(x * x * (3.0 - 2.0 * x));
+    }
+    view.maps.shore = shore.tex;
+    view.maps.shoreHalf = 0.5f * shore.size * shore.texel;
+    view.maps.shoreCentre = shore.centre;
+    view.maps.worldGain = cfg.f("maps.gain.world", 1.0f);
+    view.maps.bayGain = cfg.f("maps.gain.bay", 0.25f);
+    view.maps.moonGain = cfg.f("maps.gain.moon", 0.6f);
+    if (world.width) view.maps.worldTexels = float(world.width);
+    if (moon.width) view.maps.moonTexels = float(moon.width);
     if (int(splats.size()) > splatCap) {
         cudaFree(dSplats);
         splatCap = int(splats.size()) * 2;
@@ -273,7 +331,7 @@ int testContinuity(OlcekApp& app, double step) {
 // --test olcek-zaman: out, a wait, back in at a speed; the home must be at today's noon on arrival
 int testTime(OlcekApp& app) {
     Scale& sc = app.sc;
-    const double outs[] = {7.4, 8.0, 9.5, 12.5, 14.0, 21.0, 27.0};
+    const double outs[] = {7.4, 8.0, 8.8, 9.5, 12.5, 14.0, 21.0, 27.0};
     const double waits[] = {0.0, 0.37, 1.3, 5.1, 31.0};
     const double speeds[] = {0.5, 2.0, 8.0, 40.0};
     const double dt = 1.0 / 60.0;
@@ -304,15 +362,15 @@ int testTime(OlcekApp& app) {
                     const double spin0 = sc.clk.spin;
                     sc.s = std::max(0.0, sc.s - v * dt);
                     sc.advance(dt, sPrev);
-                    if (sc.s > 6.6 && sc.s < 7.8) {
+                    if (sc.s > 7.0 && sc.s < 8.6) {
                         double d = sc.clk.spin - spin0;
                         d = std::remainder(d, 2.0 * 3.14159265358979);
                         const double own = 7.292115146706979e-5 * Scale::rate(sc.s) * dt;
                         worstRatio = std::max(worstRatio, std::fabs(d) / std::max(own, 1e-30));
                         ratioBySpeed[vi] = std::max(ratioBySpeed[vi], std::fabs(d) / std::max(own, 1e-30));
-                        extra += std::fabs(d - own * smoothstepD(6.6, 7.8, sc.s));
+                        extra += std::fabs(d - own * smoothstepD(7.0, 8.6, sc.s));
                     }
-                    if (sc.s <= 6.6) worstSpin = std::max(worstSpin, std::fabs(sc.clk.spin));
+                    if (sc.s <= 7.0) worstSpin = std::max(worstSpin, std::fabs(sc.clk.spin));
                     if (sc.s <= 11.9) worstYear = std::max(worstYear, std::fabs(sc.clk.year));
                 }
                 sc.place();
@@ -322,9 +380,9 @@ int testTime(OlcekApp& app) {
             }
     std::printf("zaman: %d yolculuk (disari %zu yere, %zu bekleme, %zu donus hizi)\n", runs, sizeof(outs) / sizeof(outs[0]),
                 sizeof(waits) / sizeof(waits[0]), sizeof(speeds) / sizeof(speeds[0]));
-    std::printf("  10^6,6 altinda Dunya'nin donusu bugunden en cok %.3e rad, 10^11,9 altinda yorungesi %.3e sn\n", worstSpin, worstYear);
+    std::printf("  10^7 altinda Dunya'nin donusu bugunden en cok %.3e rad, 10^11,9 altinda yorungesi %.3e sn\n", worstSpin, worstYear);
     std::printf("  sahile varista sahildeki nokta bugunku yerinden %.3e m\n", worstBeach);
-    std::printf("  geri cekilirken Dunya kendi hizinin en cok %.1f kati dondu (gecis bolgesi 10^6,6-10^7,8)\n", worstRatio);
+    std::printf("  geri cekilirken Dunya kendi hizinin en cok %.1f kati dondu (gecis bolgesi 10^7-10^8,6)\n", worstRatio);
     for (int vi = 0; vi < 4; ++vi)
         std::printf("    saniyede %4.1f onlukla iniste: en cok %.1f kat, kendi donusunden fazla en cok %.2f rad\n", speeds[vi], ratioBySpeed[vi],
                     extraBySpeed[vi]);
@@ -360,6 +418,10 @@ int runOlcekCli(int argc, char** argv) {
     if (h > 0) app.overrides.push_back("height=" + std::to_string(h));
     app.loadConfig();
     app.init();
+    if (test != "olcek-hassasiyet" && test != "olcek-zaman") {
+        app.loadMaps();
+        std::printf("haritalar:\n%s", app.mapsLog.c_str());
+    }
     int rc = 0;
     if (test == "olcek-hassasiyet") rc = testPrecision(app);
     else if (test == "olcek-sure") rc = testContinuity(app, step);

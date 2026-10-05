@@ -27,6 +27,10 @@ constexpr double kMuEarthMoon = 3.986004418e14 + 4.9028e12;
 constexpr double kOmegaSun = 230e3 / 2.5061873317e20;   // rad/s: a flat rotation curve, 230 km/s at R0
 constexpr double kOmegaArms = 25e3 / kPc * 1e-3 / 1.0;   // the arms' pattern: 25 km/s/kpc
 
+// where the camera leaves the Earth's turn (DURUM Ö1: at the plan's pace the globe turns ~1-3 times a second at 10^7-10^8
+// and the shutter averaged it into bands like Jupiter's)
+constexpr double kSpinLo = 7.0, kSpinHi = 8.6;
+
 double smooth01(double x) { x = std::clamp(x, 0.0, 1.0); return x * x * (3.0 - 2.0 * x); }
 double smoothstep(double a, double b, double x) { return smooth01((x - a) / (b - a)); }
 double smoother(double x) { x = std::clamp(x, 0.0, 1.0); return x * x * x * (x * (6.0 * x - 15.0) + 10.0); }
@@ -112,7 +116,7 @@ const Name kNames[] = {
     {-3.5, "Kum tanesi (kuvars)", "A grain of sand (quartz)"},
     {-2.5, "Kum", "Sand"},
     {-1.5, "Sahil", "The beach"},
-    {2.5, "İzmir Körfezi", "The Gulf of İzmir"},
+    {2.5, "Çandarlı Körfezi", "The Bay of Çandarlı"},
     {4.5, "Ege", "The Aegean"},
     {6.5, "Dünya", "The Earth"},
     {8.5, "Dünya ve Ay", "The Earth and the Moon"},
@@ -207,6 +211,7 @@ void Scale::configure(const Config& cfg) {
     height = cfg.i("height", height);
     fovX = cfg.f("fov", float(fovX));
     shutter = cfg.f("shutter", float(shutter));
+    shutterSpin = cfg.f("shutter.spin", float(shutterSpin));
     // the exposure's curve: "s:EV, s:EV, ..."
     evS.clear();
     evV.clear();
@@ -411,10 +416,11 @@ void Scale::init() {
 
 void Scale::advance(double dt, double sPrev) {
     const double T = rate(s) * dt;   // the world's seconds this frame
-    // the Earth's turn: the camera is with the ground below ~10^6.6 m (it turns with it: no sliding, always noon); out
-    // from there it leaves it over a decade and the Earth turns at its own pace. Coming in, what it turned since is
-    // undone in step with the zoom: back to today's turn by 10^6.6, by the shorter way (PLAN §3 "eve dönüş").
-    const double gs = smoothstep(6.6, 7.8, s), gsPrev = smoothstep(6.6, 7.8, sPrev);
+    // the Earth's turn: the camera is with the ground below 10^7 m (it turns with it: no sliding, always noon); out from
+    // there it leaves it over 1.6 decades and the Earth turns at its own pace (so the whole globe is seen turning slowly
+    // first, a blur only once it is small). Coming in, what it turned since is undone in step with the zoom: back to
+    // today's turn by 10^7, by the shorter way (PLAN §3 "eve dönüş").
+    const double gs = smoothstep(kSpinLo, kSpinHi, s), gsPrev = smoothstep(kSpinLo, kSpinHi, sPrev);
     clk.spin = wrapPi(clk.spin + today::kEarthOmega * T * gs);
     if (s < sPrev) clk.spin = gsPrev > 0.0 ? clk.spin * (gs / gsPrev) : 0.0;
     // the year: the same, once the centre has left the Earth for the Sun (a camera following the Earth round its orbit
@@ -612,7 +618,7 @@ void Scale::ballOrPoint(OlcekView& v, std::vector<GSplat>& splats, const Body& b
             g.ax = dirCam(ax);
             g.ay = dirCam(ay);
             g.az = dirCam(earthPole_);
-            g.spinBlur = float(today::kEarthOmega * rate(s) * smoothstep(6.6, 7.8, s) * shutter);
+            g.spinBlur = float(today::kEarthOmega * rate(s) * smoothstep(kSpinLo, kSpinHi, s) * shutterSpin);
             const V3 hb = earthUp_;   // today's beach in the body axes (its vertical: the sphere's normal there)
             const V3 X = v3(today::kEarthAxes[0][0], today::kEarthAxes[1][0], today::kEarthAxes[2][0]);
             const V3 Y = v3(today::kEarthAxes[0][1], today::kEarthAxes[1][1], today::kEarthAxes[2][1]);
@@ -658,6 +664,7 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
     v.nBalls = v.nBlobs = v.nDiscs = 0;
     v.background = make_float3(0, 0, 0);
     v.saturation = float(smoothstep(-7.0, -6.0, s));
+    v.metres = float(cam.D);
     const double k = std::exp2(ev(s)) * 3.0e-3;   // 3e-3: sunlit sand (~130 W/m^2/sr) at ~0.4 on the display
     const double D = cam.D, W = cam.W;
     const float pa = v.pixAngle;
@@ -782,11 +789,33 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
         g.weight = 1.0f;
     }
 
+    // ---- the Earth's air: from the sphere through the beach point (the same as its ball), the Sun's direction and light
+    v.atmo = GAtmo{};
+    if (s > 1.5 && s < 9.5) {
+        GAtmo& a = v.atmo;
+        const double Re = 6.371e6;
+        const V3 up = rotate(earthUp_, earthPole_, clk.spin);
+        const V3 rel = tree.rel(cam.ref, kBeach) - up * Re - cam.pos;
+        const double dist = length(rel);
+        a.on = 1;
+        a.c = toCamSpace(rel);
+        a.r = float(Re / D);
+        a.h = float((dist - Re) / D);
+        a.top = float(100e3 / D);
+        const V3 toSun = tree.rel(kEarth, kSun);
+        const double ds = length(toSun);
+        a.sun = dirCam(toSun * (1.0 / ds));
+        a.E = make_float3(1.0f, 0.96f, 0.92f) * float(kLsun / (4.0 * kPi * ds * ds) * k);   // the Sun's colour above the air (about)
+        a.metres = float(D);
+        a.fade = float(smoothstep(1.5, 2.5, s));
+    }
+
     // ---- the ground at the beach: the Earth's surface there as a plane, in metres from the beach point (PLAN §6, 1)
     GGround& gr = v.ground;
     gr = GGround{};
-    if (s < 3.5 && s > -10.6) {
-        gr.on = 1;
+    if (s < 8.5 && s > -10.6) {   // the axes: the plane below ~3 km, the local maps on the sphere above
+        gr.frame = 1;
+        gr.on = s < 3.5 ? 1 : 0;
         const V3 up = rotate(earthUp_, earthPole_, clk.spin), east = rotate(earthEast_, earthPole_, clk.spin);
         const V3 north = rotate(earthNorth_, earthPole_, clk.spin);
         gr.o = toCamSpace(tree.rel(cam.ref, kBeach) - cam.pos);
@@ -814,7 +843,7 @@ void Scale::build(OlcekView& v, std::vector<GSplat>& splats) {
         gr.vibPhase = float(clk.vib[0]);
         // into the atom: the ground gives way to its clouds over a decade
         gr.fade = float(smoothstep(-10.5, -9.5, s));
-        if (gr.fade <= 0.0f) gr.on = 0;
+        if (gr.fade <= 0.0f) gr.on = gr.frame = 0;
     }
     // the swash's clock (the beach's own)
     v.haze = GHaze{};

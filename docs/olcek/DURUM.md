@@ -2,6 +2,44 @@
 
 > Tek kaynak durum panosu. Plan `docs/olcek/PLAN.md`. En yeni en üstte.
 
+## 2026-10-05 akşamüstü · Ö1 sürüyor: gerçek Dünya, Çandarlı, bugünün bulutları, hava
+
+Özcan yer tutucuları görünce *"harbiden Dünya gibi"* bekliyordu (Universe Sandbox seviyesi); ev katmanı artık gerçek
+veriden. Sahil **Çandarlı**'ya taşındı (Özcan: *"kale var ve onun önünde sahil var. O sahili kullanabilir misin"*).
+
+### Ne yapıldı
+- **Sahildeki nokta**: Çandarlı Kalesi'nin (38,9338 K, 26,9337 D; Wikipedia, UNESCO geçici listesi) ~110 m batısında, batı
+  koyuna bakan kumsalda, Sentinel-2 su maskesinin sıfır çizgisinde (38,93388 K, 26,93247 D). Güneş öğlesi 12:59:18 TSİ.
+  Panelde 10³-10⁴ m "Çandarlı Körfezi".
+- **Haritalar** (`tools/olcek_veri.py`, `.tex`: mip'leri hazır RGBA8 sRGB, açılışta çözme yok; 2,1 GB kart belleği):
+  Blue Marble NG Ekim (dünya 21600×10800, Ege 500 m yerel ızgarada 2048 km), Sentinel-2 L2A (2025-09-23, dört karo, 10 m,
+  82 km; TCI doğrusal yansıtma olarak okunur: DN 255 = 0,2), Ay (LRO renk 8K), Blue Marble'ın enlem ortalaması (dönen
+  Dünya'nın kuşağı). Yerel haritalar sahildeki noktanın doğu/kuzey metresinde, kenarlarının onda birinde söner.
+- **Kıyı**: Sentinel-2'den su maskesi → denizin işaretli uzaklığı (4 km kare, 2 m; `kiyi.sdf`). Yakın plandaki kumsal,
+  dalganın son ucu ve köpük bu gerçek kıyı çizgisine oturur; kumsalın arkası ve açık deniz uydudan.
+- **Bugünün bulutları** (NASA GIBS): ev çevresinde **MODIS Terra 5 Ekim 2026** (geçişi ~09:00 UTC, sahilde öğleden bir
+  saat önce), dünya için VIIRS NOAA-20 (bugünün günü henüz tamamlanmadı: %74 boş; şimdilik 4 Ekim). Bulut = uydunun
+  bulutsuz Blue Marble'dan parlak ve beyaz gördüğü yer. Çandarlı'nın 15 km çevresi bulutsuz tutuldu: o gün gökyüzü açık,
+  farkın bulut sandığı tuzla. Bulutlar 10^3,7-10^4,3 m arasında incelir (kamera onların yüksekliğine iner).
+- **Hava**: tek saçılım (Rayleigh, aerosol, ozon), Chapman (Schüler) ile güneş ışığının yolu, sabit adım (20, ışının en
+  alçak noktasına doğru sık), piksel başına bir kez. Açık gün: aerosol optik derinliği ~0,03. Yer ışığı da havadan
+  geçerek ve gökten aydınlanır.
+- **Dünya'nın dönüşü** (plandan ayrılış): kamera 10^7 m'ye kadar yerle döner, 10^7-10^8,6 arasında bırakır (önce 6,6-7,8);
+  dönüşün göz kapağı **bir kare** (1/60 sn). Neden: planın zaman yasasıyla Dünya 10^7-10^8'de saniyede 1-3 tur atıyor,
+  0,15 sn'lik kapak onu Jüpiter gibi kuşaklara ortalıyordu (karede görüldü); şimdi küre önce yavaşça dönerken görünür,
+  küçüldükçe hızlanır. Yörüngelerin kapağı 0,15 sn kaldı (halkalar).
+- Yakın plandaki dokular gradyan (Perlin) gürültüsüne geçti: değer gürültüsünün kafes köşeleri köpüğü kareli gösteriyordu.
+
+### Ölçümler (2560×1440)
+- `olcek-hassasiyet`: en kötü 9,5 × 10⁻⁵ piksel, GEÇTİ. `olcek-zaman`: varışta sapma 0; geri çekilirken Dünya kendi
+  hızının en çok 1,0 (0,5 onluk/sn) · 1,9 (2) · 8,4 (8) · 21 (40) katı döner (önce 1,1 · 2,6 · 10 · 63).
+- Kare: sahil (s 0-1) 5 ms, s 2-3 10-12 ms (kumsal + uydu + hava), s 3,5-7 ~3 ms, uzay < 1 ms.
+
+### NE DOĞRULANMADI (Ö1, şimdiye kadar)
+- Süreklilik sınaması (`olcek-sure`) yeni içerikle koşulmadı. Canlıda elle bakılmadı.
+- Sentinel-2 ile Blue Marble arasında renk eşlemesi yapılmadı (kenar sönümü var, ton farkı s ≈ 5'te görülebilir).
+- s 2,5-3,5 en zayıf yer: 10 m'lik uydu 4-25 kat büyütülmüş (bulanık), kumsalın bandı üstüne biniyor.
+
 ## 2026-10-05 öğleden sonra · Ö0 bitti: iskelet ve ölçek motoru
 
 Galeride **07 Ölçek** (vurgu rengi gül `#E08BAE`, geçici galeri resmi evrenin kenarından). 62,0 onluğun hepsi

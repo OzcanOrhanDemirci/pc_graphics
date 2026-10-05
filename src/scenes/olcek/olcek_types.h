@@ -54,7 +54,8 @@ struct GSplat {
 // The ground near the beach point: the Earth's surface there, locally a plane (the Earth's ball draws it from afar; this
 // draws what needs metres: the shore, the sand, the grains). Coordinates on it are metres from the beach point.
 struct GGround {
-    int on = 0;
+    int on = 0;                 // its plane is drawn (below ~3 km; above, the Earth's sphere is, with these axes)
+    int frame = 0;              // the axes and the beach point are valid (the local maps are read in them)
     float fade = 1.0f;          // its share (into the atom it gives way to the clouds over a decade)
     float3 o{0, 0, 0};          // the beach point (camera space)
     float3 up{0, 0, 1}, east{1, 0, 0}, north{0, 1, 0};
@@ -85,8 +86,47 @@ struct GHaze {
     float foam = 0.0f;          // 0 the desert's soft haze, 1 the Planck foam's cells
 };
 
+// the maps (Ö1): texture objects and where they lie. Local maps are squares centred on the beach point, in its east and
+// north metres; the world maps are equirectangular (longitude -180..180 left to right, latitude 90..-90 top to bottom)
+struct GMaps {
+    unsigned long long world = 0;    // Blue Marble NG, October: the Earth without clouds (linear x worldGain = albedo)
+    unsigned long long zonal = 0;    // its mean along every latitude (the Earth spinning many times in the shutter)
+    unsigned long long region = 0;   // the region around home, 500 m (Blue Marble's tile)
+    unsigned long long bay = 0;      // the home bay, 10 m (Sentinel-2; alpha: where it has data)
+    unsigned long long moon = 0;     // the Moon (LRO)
+    unsigned long long cloudWorld = 0, cloudRegion = 0;   // today's clouds (rgb the satellite's colour, a the cloud)
+    float cloudGain = 1.0f, cloudFade = 1.0f;   // the clouds' share (they thin out as the camera comes down to them)
+    unsigned long long shore = 0;    // the sea's signed distance near the beach point (m, + over the water; float)
+    float shoreHalf = 2048.0f, shoreCentre = 0.0f;   // its half width (m); its value at the beach point
+    float worldGain = 1.0f, bayGain = 0.25f, moonGain = 0.6f;
+    float regionHalf = 1024e3f, regionTexel = 500.0f;
+    float bayHalf = 40960.0f, bayTexel = 10.0f;
+    float worldTexels = 21600.0f, moonTexels = 8192.0f;   // across 360 degrees
+};
+
+// The Earth's air (Ö1): single scattering, Rayleigh + aerosol (Mie) + ozone, exponential layers, the sunlight's way
+// through it by Chapman's function (Schüler's approximation). Deterministic: fixed steps along each ray. In camera units
+// like everything else; metres where the densities are read.
+struct GAtmo {
+    int on = 0;
+    float3 c{0, 0, 0};          // the Earth's centre (camera space)
+    float r = 1.0f;             // its radius (camera units)
+    float h = 1.0f;             // the camera's altitude above it (camera units, from doubles)
+    float top = 0.0f;           // the air's top above the ground (camera units)
+    float3 sun{0, 0, 1};        // towards the Sun (camera space, unit)
+    float3 E{0, 0, 0};          // the sunlight's irradiance at the top of the air, display-referred (k x W/m^2)
+    float metres = 1.0f;        // metres per camera unit
+    float3 betaR{5.802e-6f, 13.558e-6f, 33.1e-6f};   // Rayleigh scattering at sea level (1/m)
+    float betaM = 2.0e-5f, absorbM = 0.2e-5f;        // aerosol scattering and absorption at sea level (1/m): a clear
+                                                     // day (optical depth ~0.03; MODIS of 5 October: western Anatolia clear)
+    float3 betaO{0.650e-6f, 1.881e-6f, 0.085e-6f};   // ozone absorption at its peak (1/m)
+    float HR = 8000.0f, HM = 1200.0f, g = 0.76f;
+    float fade = 1.0f;          // its share (it comes in with the scale)
+};
+
 struct OlcekView {
     int width = 0, height = 0;
+    float metres = 1.0f;                        // D: metres per camera-space unit (the maps' footprints)
     float tanHalfX = 0.364f, tanHalfY = 0.2f;   // tan(fov/2) across and up
     float pixAngle = 0.0f;                      // 2 tanHalfX / width
     float filterRadius = 1.5f;
@@ -98,6 +138,8 @@ struct OlcekView {
     GDisc discs[kMaxDiscs];
     GGround ground;
     GHaze haze;
+    GMaps maps;
+    GAtmo atmo;
 };
 
 }   // namespace olcek

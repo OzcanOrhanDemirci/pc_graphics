@@ -3,6 +3,7 @@
 #pragma once
 #include "core/config.h"
 #include "scenes/olcek/olcek_kernels.h"
+#include "scenes/olcek/olcek_tex.h"
 #include "scenes/olcek/olcek_world.h"
 
 #include <string>
@@ -27,11 +28,16 @@ struct OlcekApp {
     uchar4* output = nullptr;
     olcek::GSplat* dSplats = nullptr;
     int splatCap = 0;
+    // the maps (Ö1; tools/olcek_veri.py): missing ones fall back to the placeholders
+    olcek::Texture world, zonal, region, bay, moon, cloudWorld, cloudRegion;
+    olcek::Field shore;
+    std::string mapsLog;             // what was loaded (or not), for the loading screen and the console
     float frameMs = 0.0f;            // the GPU's part of the last frame
     double hostMs = 0.0;             // the host's (the tree, the bodies, the points)
 
     void loadConfig();
     void init();                     // the engine and the buffers
+    void loadMaps();                 // the maps from assets/olcek (seconds: 1.9 GB)
     void release();
     // a frame at the engine's s: the camera, the primitives, the picture (output)
     void render();

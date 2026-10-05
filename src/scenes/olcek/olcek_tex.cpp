@@ -83,4 +83,61 @@ void Texture::release() {
     bytes = 0;
 }
 
+bool Field::load(const std::string& path, std::string& err) {
+    release();
+    FILE* f = std::fopen(path.c_str(), "rb");
+    if (!f) {
+        err = "yok: " + path;
+        return false;
+    }
+    char magic[4];
+    uint32_t n = 0;
+    if (std::fread(magic, 1, 4, f) != 4 || std::memcmp(magic, "OLSD", 4) != 0 || std::fread(&n, 4, 1, f) != 1 ||
+        std::fread(&texel, 4, 1, f) != 1) {
+        std::fclose(f);
+        err = "bicim: " + path;
+        return false;
+    }
+    size = int(n);
+    std::vector<float> v(size_t(size) * size);
+    if (std::fread(v.data(), 4, v.size(), f) != v.size()) {
+        std::fclose(f);
+        err = "kisa: " + path;
+        return false;
+    }
+    std::fclose(f);
+    // the middle: the mean of the four texels around it (the beach point is their shared corner)
+    const int c = size / 2;
+    centre = 0.25f * (v[size_t(c - 1) * size + c - 1] + v[size_t(c - 1) * size + c] + v[size_t(c) * size + c - 1] + v[size_t(c) * size + c]);
+    const cudaChannelFormatDesc fmt = cudaCreateChannelDesc<float>();
+    if (cudaMallocArray(&arr, &fmt, size, size) != cudaSuccess) {
+        err = "kart bellegi: " + path;
+        arr = nullptr;
+        return false;
+    }
+    cudaMemcpy2DToArray(arr, 0, 0, v.data(), size_t(size) * 4, size_t(size) * 4, size, cudaMemcpyHostToDevice);
+    cudaResourceDesc rd{};
+    rd.resType = cudaResourceTypeArray;
+    rd.res.array.array = arr;
+    cudaTextureDesc td{};
+    td.addressMode[0] = td.addressMode[1] = cudaAddressModeClamp;
+    td.filterMode = cudaFilterModeLinear;
+    td.readMode = cudaReadModeElementType;
+    td.normalizedCoords = 1;
+    if (cudaCreateTextureObject(&tex, &rd, &td, nullptr) != cudaSuccess) {
+        err = "doku nesnesi: " + path;
+        release();
+        return false;
+    }
+    return true;
+}
+
+void Field::release() {
+    if (tex) cudaDestroyTextureObject(tex);
+    if (arr) cudaFreeArray(arr);
+    tex = 0;
+    arr = nullptr;
+    size = 0;
+}
+
 }   // namespace olcek

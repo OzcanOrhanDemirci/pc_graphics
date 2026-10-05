@@ -78,8 +78,14 @@ public:
             a_.overrides = host.overrides();
             a_.loadConfig();
             a_.init();
+            st.label = L("Dünya'nın ve Ay'ın haritaları", "The maps of the Earth and the Moon");
+            st.fraction = 0.3f;
+            ++st.step;
+            return;
+        case 2:
+            a_.loadMaps();
             st.label = L("İlk kare", "The first frame");
-            st.fraction = 0.8f;
+            st.fraction = 0.9f;
             ++st.step;
             return;
         default:

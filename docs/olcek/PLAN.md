@@ -34,7 +34,7 @@ yalnız tekerlekle.
 | Yol | **Saf adres** (Powers of Ten gibi): her şey gerçek yerinde, kamera yalnız uzaklaşır/yakınlaşır. Ay, Güneş küçük kalır, sistemi görürüz. Her şeyi göstermek takıntı değil |
 | Reddedilenler | Dallar/ağaç (*"ölçek ilüzyonumuzu bozuyor"*), geri çekilen kamera ile cisimlerin yanından geçmek, adres + merdiven karması |
 | Kamera | Yalnız tekerlek. Dönemez, sürüklenmez. Baktığımız şey kadrajdan çıkmaz; dönüşleri görürüz |
-| Başlangıç | İzmir kıyısında bir sahil, insan ölçeği. Kusursuz değil, tutarlı ve mantıklı yeter (*"Dünyadan bir yer"*) |
+| Başlangıç | İzmir kıyısında bir sahil, insan ölçeği. Kusursuz değil, tutarlı ve mantıklı yeter (*"Dünyadan bir yer"*). **Çandarlı** (Dikili): kalenin önündeki kumsal (Özcan, 2026-10-05: *"O sahili kullanabilir misin"*) |
 | Sürekliliği | Kesme yok, yükleme ekranı yok, slayt gibi "pıt" yok. Duraklar arası gerçek boşluk, gerçek oranında |
 | Boşluklar | Gerçek uzunluğunda, hızlandırılmadan: kuark ile Planck arası 17 onluk çöl, atom ile çekirdek arası, yıldızlar arası |
 | Fizik | Her katman kendi fiziğiyle; benzer ölçekler aileler hâlinde (aşağıda 12 aile) |
@@ -68,7 +68,7 @@ Ekranın genişliği W (metre), s = log10 W. Toplam ~61,7 onluk: Planck uzunluğ
 | 10⁹-10¹⁰ | Dünya ve Ay | Ay'ın yörüngesi | 3 | 15-73 gün |
 | 10⁷-10⁸ | Dünya | dönen gezegen, bulutlar, atmosfer kenarı | 3 | 16 saat-3 gün |
 | 10⁵-10⁶ | Ege | kıyılar, adalar, bulutların akışı | 2 | 42 dk-3 saat |
-| 10³-10⁴ | İzmir Körfezi | kıyı, şehir dokusu (gece yok: hep öğle) | 2 | 2-9 dk |
+| 10³-10⁴ | Çandarlı Körfezi | kıyı, kasaba ve kale (gece yok: hep öğle) | 2 | 2-9 dk |
 | 10¹-10² | Sahil | kıyı şeridi, dalgaların izi | 1 | 5-23 sn |
 | 10⁰ (başlangıç) | Sahil | ayak ucundaki kum ve dalganın son ucu | 1 | 1 sn |
 | 10⁻² | Kum | taneler; ağır çekimde su | 1 | 3 ms (×300 ağır) |

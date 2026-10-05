@@ -106,6 +106,7 @@ public:
     double fovX = 40.0;           // degrees, across
     double sMin = -34.79, sMax = 27.25;
     double shutter = 0.15;        // the eye's Gaussian shutter, seconds of screen time (PLAN §4: faster than ~0.5 s: averaged)
+    double shutterSpin = 1.0 / 60.0;   // the Earth's turn: a frame's motion blur only (its continents stay readable)
     std::vector<double> evS, evV; // the exposure's curve: EV at s (PLAN §5: designed)
 
     double s = 0.0;               // where we are

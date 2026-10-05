@@ -18,4 +18,15 @@ struct Texture {
     void release();
 };
 
+// a square float field (tools/olcek_veri.py kiyi: "OLSD", size, metres per texel, then the values, rows from the north),
+// read with bilinear filtering, clamped
+struct Field {
+    cudaArray_t arr = nullptr;
+    cudaTextureObject_t tex = 0;
+    int size = 0;
+    float texel = 1.0f, centre = 0.0f;   // metres per texel; the value at the middle (the beach point)
+    bool load(const std::string& path, std::string& err);
+    void release();
+};
+
 }   // namespace olcek
