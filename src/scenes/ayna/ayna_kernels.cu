@@ -3,6 +3,7 @@
 #include "shared/display.h"
 
 #include <cstddef>
+#include <algorithm>
 #include <cstdio>
 
 namespace ayna {
@@ -71,7 +72,7 @@ __device__ __forceinline__ void take(Hit& h, float t, int kind, int k, float3 n)
 }
 
 // the nearest surface along o + t d inside cell c (t > 0)
-__device__ void nearest(const View& v, const Cell& c, float3 o, float3 d, Hit& h) {
+__device__ void nearest(const View& v, const Cell& c, float3 o, float3 d, Hit& h, float coneR = 0.0f, float coneS = 0.0f) {
     const Lattice& g = v.g;
     h.t = 1e30f;
     h.kind = HNone;
@@ -156,12 +157,18 @@ __device__ void nearest(const View& v, const Cell& c, float3 o, float3 d, Hit& h
             }
         }
     }
-    // the objects standing in this cell (entering only: the primary rays start inside our own sphere)
+    // the objects standing in this cell (entering only: the primary rays start inside our own sphere). The lamps are
+    // not hit here: their light comes by the cone (glowObjects); a lantern is hit while it is large in the footprint
     if (c.idx >= 0) {
         for (int s = 0; s < kCellObjects; ++s) {
             const int id = v.cellObj[c.idx * kCellObjects + s];
             if (id < 0) break;
             const Object& ob = v.obj[id];
+            if (ob.kind == 1) continue;
+            if (ob.kind == 2 && coneR > 0.0f) {
+                const float tc = fmaxf(0.0f, dot(ob.c - o, d));
+                if (coneR + coneS * tc > 0.35f * ob.r) continue;
+            }
             const float3 w = o - ob.c;
             const float b = dot(w, d);
             if (b >= 0.0f) continue;
@@ -193,6 +200,15 @@ __device__ void nearest(const View& v, const Cell& c, float3 o, float3 d, Hit& h
             }
         }
     }
+}
+
+// the overlap of two discs (radii a, b, centres d apart), its area
+__device__ float discOverlap(float a, float b, float d) {
+    if (d >= a + b) return 0.0f;
+    if (d <= fabsf(a - b)) return M_PIf * sqr(fminf(a, b));
+    const float c1 = clampf((d * d + a * a - b * b) / (2.0f * d * a), -1.0f, 1.0f), c2 = clampf((d * d + b * b - a * a) / (2.0f * d * b), -1.0f, 1.0f);
+    const float a1 = acosf(c1), a2 = acosf(c2);
+    return a * a * (a1 - sinf(2.0f * a1) * 0.5f) + b * b * (a2 - sinf(2.0f * a2) * 0.5f);
 }
 
 // the optics tables by cos(theta)
@@ -334,7 +350,7 @@ __device__ float3 evalCell(const View& v, const Cell& c, float3 q, float3 n, flo
             if (rate <= 1e-6f) continue;
             for (int f = 0; f < 2 && !blocked; ++f) {
                 const float tf = ((f == 0 ? 0.0f : ht) - vk[k]) / rate;
-                if (tf >= te) { blocked = true; break; }
+                if (tf >= te) break;   // the light (a lamp in the doorway) comes first: nothing more to cross
                 const float2 x = f2(p2.x + w.x * tf - c.A[k].x, p2.y + w.z * tf - c.A[k].y);
                 if (!inWindow(g, dot2(x, c.e[k]) - 0.5f * g.L, q.y + w.y * tf)) blocked = true;
             }
@@ -363,7 +379,11 @@ __device__ float3 evalCell(const View& v, const Cell& c, float3 q, float3 n, flo
                 if (vk[k] >= ht - 1e-4f) continue;   // (a point on the face itself is not inside)
                 const float rate = w.x * c.n[k].x + w.z * c.n[k].y;
                 if (rate <= 0.0f) {   // deeper into the slab: only through the window the node came in by
-                    if (root || k != nd.entryK) blocked = true;
+                    if (root) {
+                        // unless the light stands in this window's reveal too (a lamp in a doorway, our light passing one)
+                        const float vl = dot2(f2(L.pos.x - c.A[k].x, L.pos.z - c.A[k].y), c.n[k]);
+                        if (vl >= ht) blocked = true;
+                    } else if (k != nd.entryK) blocked = true;
                     continue;
                 }
                 const float tf = (ht - vk[k]) / rate;
@@ -707,7 +727,7 @@ __global__ void kBake(View v, const LightMapBlock* blocks, unsigned bit) {
     loadCell(v, i, j, up, c);
     if (c.idx < 0) return;
     int straight = 0;
-    const float3 E = beamLight(v, c, p, n, 1.0f, 0, nullptr, &straight);
+    const float3 E = beamLight(v, c, p, n, 1.0f, v.beams == 2 ? 1 : 0, nullptr, &straight);
     float4& t = v.lm.E[b.offset + y * b.w + x];
     t.x += E.x;
     t.y += E.y;
@@ -773,6 +793,34 @@ __global__ void kDilate(View v, const LightMapBlock* blocks) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
+// The small lights by the ray's cone: a lamp (and a far lantern) is a glowing disc on the sky; the share of the
+// footprint's disc it covers, at the ray's closest approach, times its radiance. Below a pixel it stays a steady dot
+// instead of being hit by some samples and missed by others (the deep tunnel's lamps would twinkle). What it covers it
+// also hides: the ray carries on with the rest.
+__device__ float3 glowObjects(const View& v, const Cell& c, float3 o, float3 d, float tEnd, float coneW, float coneS, float3& thr) {
+    float3 L = make_float3(0, 0, 0);
+    if (c.idx < 0) return L;
+    for (int s = 0; s < kCellObjects; ++s) {
+        const int id = v.cellObj[c.idx * kCellObjects + s];
+        if (id < 0) break;
+        const Object& ob = v.obj[id];
+        if (ob.kind == 0) continue;
+        const float tc = dot(ob.c - o, d);
+        if (tc <= 0.0f || tc >= tEnd) continue;
+        const float R = fmaxf(coneW + coneS * tc, 1e-5f);   // the footprint's radius there
+        if (ob.kind == 2 && R <= 0.35f * ob.r) continue;     // a near lantern is hit and drawn (nearest)
+        const float3 q = o + d * tc - ob.c;
+        const float dist = length(q);
+        if (dist >= ob.r + R) continue;
+        const float cover = fminf(1.0f, discOverlap(ob.r, R, dist) / (M_PIf * R * R));
+        const Light& Lt = v.light[ob.light];
+        const float open = ob.kind == 2 ? 0.55f * 2.0f : 1.0f;   // a lantern's cage: its mean open share (as drawn near)
+        L += thr * Lt.color * (cover * open / (M_PIf * ob.r * ob.r));
+        thr *= (1.0f - cover);
+    }
+    return L;
+}
+
 // the haze's glow along o + t d, t in [ta, tb], from one node (its image is a point light): the segment cut to the
 // node's wedge, then the point light's in-scattering in closed form, I / (h^2 + (t - t0)^2) integrated as an angle
 // (atan); a spot's cone and the mirrors' reflectance vary along it, so their factor is taken at four Gauss points of
@@ -895,12 +943,35 @@ __device__ float3 tracePath(const View& v, float3 o, float3 d, int& bounces, int
     float3 L = make_float3(0, 0, 0), thr = make_float3(1, 1, 1);
     // the ray's footprint: its width grows with the way (half a pixel's angle a metre: four samples share a pixel);
     // a flat mirror leaves it, our sphere widens its spread
-    float coneW = 0.0f, coneS = 0.5f * v.pixAngle;
+    float coneW = 0.0f, coneS = v.coneScale * v.pixAngle;
     bounces = 0;
+    if (v.testMirror) {
+        // Ö1: the test mirror first (the way to it meets nothing), then the maze from where it reflects
+        const float dn = dot(d, v.tmN);
+        if (dn < 0.0f) {
+            const float t = (v.tmD - dot(v.tmN, o)) / dn;
+            float3 p = o + d * t;
+            coneW += coneS * t;
+            const float ci = -dn;
+            if (v.testMirror == 2) {
+                const float si = sqrtf(fmaxf(1.0f - ci * ci, 0.0f));
+                const float st = si / cOpt.glassN, ct = sqrtf(fmaxf(1.0f - st * st, 0.0f));
+                const float3 tang = d + v.tmN * ci;
+                const float tl = length(tang);
+                if (tl > 1e-7f) p = p + tang * (2.0f * v.g.glass * st / (ct * tl));
+                thr *= mirrorW(ci);
+            }
+            d = d + v.tmN * (2.0f * ci);
+            o = p;
+            locate(v.g, o.x, o.z, i, j, up);
+            loadCell(v, i, j, up, c);
+        }
+    }
     for (steps = 0; steps < v.maxSteps; ++steps) {
         Hit h;
-        nearest(v, c, o, d, h);
+        nearest(v, c, o, d, h, coneW, coneS);
         if (h.kind == HNone) break;
+        if (!glowOnly) L += glowObjects(v, c, o, d, h.t, coneW, coneS, thr);
         float3 p = o + d * h.t;
         coneW += coneS * h.t;
         if (v.hazeSigma > 0.0f && v.hazeOnly != 3) {
@@ -951,7 +1022,7 @@ __device__ float3 tracePath(const View& v, float3 o, float3 d, int& bounces, int
             const float3 q = (p - ob.c) * (1.0f / ob.r);
             const float lon = atan2f(q.z, q.x), lat = asinf(clampf(q.y, -1.0f, 1.0f));
             const float fwl = coneW / ob.r;
-            const float holes = mat::starLattice(lon * 1.6f, lat * 3.2f, 1.0f, 0.12f, fwl * 3.0f);
+            const float holes = mat::starLattice(lon * 1.6f, lat * 3.2f, 1.0f, 0.12f, fwl * 8.0f);
             const float open = 1.0f - holes;   // the lattice is the brass, the rest is open
             if (!glowOnly) {
                 const Light& Lt = v.light[ob.light];
@@ -996,7 +1067,8 @@ __device__ float3 tracePath(const View& v, float3 o, float3 d, int& bounces, int
         float3 ns = h.n;
         if (sf.bump.x != 0.0f || sf.bump.y != 0.0f || sf.bump.z != 0.0f) ns = normalize(h.n + sf.bump);
         if (sf.glossy > 0.0f) {
-            // polished stone: the Fresnel part reflects, the rest is diffuse
+            // polished stone: the Fresnel part reflects, the rest is diffuse; a column, convex, spreads the cone
+            if (h.kind == HColumn) coneS += 2.0f * coneW / v.g.rc;
             const float F = tabLerp(cOpt.stone, ci) * sf.glossy;
             L += thr * sf.albedo * ((1.0f - F) * INV_PIf) * lightAt<Beams>(v, c, h.kind, h.k, p, ns, maxc(thr) * (1.0f - F), counts);
             thr *= F;
@@ -1022,6 +1094,8 @@ __device__ float3 rayDir(const View& v, float px, float py) {
 // the standard multisample positions (Direct3D 11), in sixteenths of a pixel
 __constant__ signed char kPat4[4][2] = {{-2, -6}, {6, -2}, {-6, 2}, {2, 6}};
 __constant__ signed char kPat8[8][2] = {{1, -3}, {-1, 3}, {5, 1}, {-3, -5}, {-5, 5}, {-7, -1}, {3, 7}, {7, -7}};
+// six rooks (one sample in each sixth of the pixel's width and of its height), rows spread: (i + 1/2) / 6 - 1/2
+__constant__ signed char kPat6[6][2] = {{-7, 1}, {-4, -7}, {-1, 4}, {1, -4}, {4, 7}, {7, -1}};
 __constant__ signed char kPat16[16][2] = {{1, 1}, {-1, -3}, {-3, 2}, {4, -1}, {-5, -2}, {2, 5}, {5, 3}, {3, -5},
                                           {-2, 6}, {0, -7}, {-4, -6}, {-6, 4}, {-8, 0}, {7, -4}, {6, 7}, {-7, -8}};
 
@@ -1029,14 +1103,16 @@ template <bool Beams>
 __global__ void kFrame(View v, float4* hdr) {
     const int x = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y;
     if (x >= v.width || y >= v.height) return;
-    const int n = v.samples >= 16 ? 16 : v.samples >= 8 ? 8 : v.samples >= 4 ? 4 : 1;
+    const int n = v.samples >= 16 ? 16 : v.samples >= 8 ? 8 : v.samples >= 6 ? 6 : v.samples >= 4 ? 4 : 1;
     float3 sum = make_float3(0, 0, 0);
     float bsum = 0.0f, ssum = 0.0f, tsum = 0.0f, psum = 0.0f;
     for (int s = 0; s < n; ++s) {
         float ox = 0.0f, oy = 0.0f;
         if (n == 4) { ox = kPat4[s][0]; oy = kPat4[s][1]; }
+        else if (n == 6) { ox = kPat6[s][0]; oy = kPat6[s][1]; }
         else if (n == 8) { ox = kPat8[s][0]; oy = kPat8[s][1]; }
         else if (n == 16) { ox = kPat16[s][0]; oy = kPat16[s][1]; }
+        if (v.testMirror) ox = -ox;   // the mirrored picture's samples, mirrored
         const float3 d = rayDir(v, x + 0.5f + ox / 16.0f, y + 0.5f + oy / 16.0f);
         int b, st;
         int counts[2] = {0, 0};
@@ -1158,6 +1234,65 @@ __global__ void kProbe(View v, float px, float py) {
     }
 }
 
+// Ö4's reference: photons from a point light along a Fibonacci sphere (no random numbers), through the same tracer
+// (the mirrors' glass and silver as the camera's rays meet them, shift included), left on the floor in bins; straight
+// ones and those that came by mirrors apart. Anything else they meet takes them.
+__global__ void kPhotons(View v, float3 lp, float3 I, long long n0, long long count, long long total, float* gridDirect, float* gridMirror,
+                         float x0, float z0, float bin, int gw, int gh) {
+    const long long k = n0 + (long long)(blockIdx.x) * blockDim.x + threadIdx.x;
+    if (k >= n0 + count) return;
+    const double zz = 1.0 - 2.0 * (double(k) + 0.5) / double(total);
+    const double r = sqrt(fmax(0.0, 1.0 - zz * zz));
+    const double ph = double(k) * 2.39996322972865332;   // the golden angle
+    float3 d = make_float3(float(r * cos(ph)), float(zz), float(r * sin(ph)));
+    float3 o = lp;
+    int i, j, up;
+    locate(v.g, o.x, o.z, i, j, up);
+    Cell c;
+    loadCell(v, i, j, up, c);
+    float thr = 1.0f;   // green channel
+    int mirrors = 0;
+    const float flux = float(4.0 * 3.14159265358979 / double(total)) * I.y;
+    for (int step = 0; step < 2000; ++step) {
+        Hit h;
+        nearest(v, c, o, d, h);
+        if (h.kind == HNone) return;
+        float3 p = o + d * h.t;
+        if (h.kind == HPortal) {
+            int ni, nj, nup;
+            cellAcross(c.i, c.j, c.up, h.k, ni, nj, nup);
+            loadCell(v, ni, nj, nup, c);
+            o = p;
+            continue;
+        }
+        if (h.kind == HMirror) {
+            const float ci = -dot(d, h.n);
+            const float si = sqrtf(fmaxf(1.0f - ci * ci, 0.0f));
+            const float st = si / cOpt.glassN, ct = sqrtf(fmaxf(1.0f - st * st, 0.0f));
+            const float3 tang = d + h.n * ci;
+            const float tl = length(tang);
+            if (tl > 1e-7f) {
+                float3 q = p + tang * (2.0f * v.g.glass * st / (ct * tl));
+                q.y = fmaxf(q.y, 0.0f);
+                const float2 rel = f2(q.x - c.A[h.k].x, q.z - c.A[h.k].y);
+                if (!inWindow(v.g, dot2(rel, c.e[h.k]) - 0.5f * v.g.L, q.y)) return;
+                p = q;
+            }
+            thr *= tabLerp(cOpt.mirror[1], ci);
+            d = d + h.n * (2.0f * ci);
+            o = p;
+            ++mirrors;
+            if (thr < 1e-5f) return;
+            continue;
+        }
+        if (h.kind == HFloor) {
+            const int bx = int(floorf((p.x - x0) / bin)), bz = int(floorf((p.z - z0) / bin));
+            if (bx >= 0 && bz >= 0 && bx < gw && bz < gh) atomicAdd((mirrors ? gridMirror : gridDirect) + bz * gw + bx, flux * thr);
+        }
+        return;
+    }
+}
+
 // one ray, its mirror points (the tools' Ö2)
 __global__ void kMirrorPoints(View v, float3 o, float3 d, int maxHits, float3* hits, int* count) {
     int i, j, up;
@@ -1225,6 +1360,16 @@ void renderFrame(const View& v, float4* hdr, cudaStream_t s) {
 void resolveFrame(const View& v, const float4* hdr, const float4* bloomHalf, uchar4* out, cudaStream_t s) {
     const dim3 b(16, 8);
     kResolve<<<dim3((v.width + b.x - 1) / b.x, (v.height + b.y - 1) / b.y), b, 0, s>>>(v, hdr, bloomHalf, out);
+}
+
+void tracePhotons(const View& v, float3 lp, float3 I, long long total, float* gridDirect, float* gridMirror, float x0, float z0, float bin, int gw,
+                  int gh) {
+    const long long chunk = 1 << 24;
+    for (long long n0 = 0; n0 < total; n0 += chunk) {
+        const long long cnt = std::min(chunk, total - n0);
+        kPhotons<<<unsigned((cnt + 255) / 256), 256>>>(v, lp, I, n0, cnt, total, gridDirect, gridMirror, x0, z0, bin, gw, gh);
+        cudaDeviceSynchronize();
+    }
 }
 
 void probePixel(const View& v, float px, float py) {

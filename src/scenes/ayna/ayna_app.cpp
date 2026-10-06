@@ -373,7 +373,7 @@ void AynaApp::bakeLamps() {
         v.nNodes = int(nodes.size());
         v.nEntries = int(cn.size() / 8);
         v.beamEps = eps * cfg.f("lightmap.eps", 0.5f);
-        v.beams = 1;
+        v.beams = bakeStraightOnly ? 2 : 1;
         bakeLightMap(v, dLmBlocks_, int(lmBlocks_.size()), lmMaxW_, lmMaxH_, 1u << baked_, 0);
         cudaDeviceSynchronize();
         cudaFree(dn);
@@ -464,6 +464,10 @@ View AynaApp::makeView() const {
     v.hazeBuf = haze_;
     v.hazeOnly = cfg.i("debug.hazeonly", 0);
     v.plainMat = cfg.i("debug.plain", 0);
+    v.coneScale = cfg.f("cone.scale", 0.5f);
+    v.testMirror = testMirror;
+    v.tmN = tmN;
+    v.tmD = tmD;
     v.badCount = bad_;
     v.oob = oob_;
     v.stats = statsDev;
@@ -830,6 +834,187 @@ static int testO2(AynaApp& a) {
     return worst < 0.1 ? 0 : 1;
 }
 
+// Ö1: sharpness. The same view straight (A) and seen in a mirror plane 5 cm before the eye (B: the eye mirrored behind
+// the plane, looking back at it; the samples mirrored too). With an ideal mirror B is A mirrored, pixel for pixel: the
+// reflection blurs nothing (the footprint, the filters, the light are the same). With the maze's own mirror (glass and
+// silver), B / W(theta) against A: what is left is the glass's own sideways shift (its apparent depth).
+static int testO1(AynaApp& a) {
+    a.overrides.push_back("haze.sigma=0");   // the mist's half-resolution grid does not mirror onto itself (said in DURUM)
+    a.loadConfig();
+    a.width = a.cfg.i("o1.w", 1280);
+    a.height = a.cfg.i("o1.h", 720);
+    a.init();
+    AynaLamp lp;
+    lp.pos = make_float3(-1.10f, 1.10f, 2.10f);
+    lp.color = AynaApp::paletteColor(0);
+    lp.level = AynaApp::levelValue(5);
+    a.lamps.push_back(lp);
+    // the eye in corridor A, looking along it (6 m and more of arches and columns ahead)
+    a.cam.pos = make_float3(-3.3f, 1.3f, 2.05f);
+    a.cam.yaw = -1.5708f;   // towards +x
+    a.cam.pitch = 0.0f;   // level: the mirrored eye looks straight back
+    a.cam.fovY = 40.0f;
+    a.lightOn = false;
+    const float3 D = a.forward();
+    a.testMirror = 0;
+    a.render();
+    a.render();
+    const std::vector<float4> A = a.hdrHost();
+    a.save("captures/ayna/o1_A");
+    double worst = 0;
+    for (int mode = 1; mode <= 2; ++mode) {
+        // the plane 5 cm ahead, facing the eye; the mirrored eye 10 cm ahead, looking back
+        const float3 P0 = a.cam.pos + D * 0.05f;
+        const float3 n = D * -1.0f;
+        AynaCam saved = a.cam;
+        a.cam.pos = saved.pos + D * 0.10f;
+        a.cam.yaw = saved.yaw + 3.14159265f;
+        a.cam.pitch = saved.pitch;
+        a.testMirror = mode;
+        a.tmN = make_float3(-n.x, -n.y, -n.z);   // the face the mirrored eye looks at
+        a.tmD = dot(a.tmN, P0);
+        a.render();
+        const std::vector<float4> B = a.hdrHost();
+        a.save(mode == 1 ? "captures/ayna/o1_B_ideal" : "captures/ayna/o1_B_ayna");
+        a.cam = saved;
+        a.testMirror = 0;
+        // B mirrored left-right against A (pitch keeps up and down); with the real mirror, B over W(theta) of each pixel
+        double sumA = 0, sumE = 0, maxRel = 0;
+        long long over1 = 0, n0 = 0;
+        const float tanHalf = std::tan(0.5f * a.cam.fovY * 3.14159265f / 180.0f), aspect = float(a.width) / a.height;
+        for (int y = 0; y < a.height; ++y)
+            for (int x = 0; x < a.width; ++x) {
+                const float4 pa = A[size_t(y) * a.width + x], pb = B[size_t(y) * a.width + (a.width - 1 - x)];
+                float w = 1.0f;
+                if (mode == 2) {
+                    const float sx = ((x + 0.5f) / a.width * 2.0f - 1.0f) * tanHalf * aspect, sy = (1.0f - (y + 0.5f) / a.height * 2.0f) * tanHalf;
+                    const float ci = 1.0f / std::sqrt(1.0f + sx * sx + sy * sy);   // the ray's angle to the plane's normal (pitch small)
+                    const float xx = std::clamp(ci, 0.0f, 1.0f) * (kOpticsN - 1);
+                    const int i0 = std::min(int(xx), kOpticsN - 2);
+                    w = a.optics.mirror[1][i0] + (a.optics.mirror[1][i0 + 1] - a.optics.mirror[1][i0]) * (xx - i0);
+                }
+                const double la = 0.2126 * pa.x + 0.7152 * pa.y + 0.0722 * pa.z, lb = (0.2126 * pb.x + 0.7152 * pb.y + 0.0722 * pb.z) / w;
+                sumA += la;
+                sumE += std::fabs(la - lb);
+                const double rel = std::fabs(la - lb) / std::max(la, 1e-3);
+                maxRel = std::max(maxRel, rel);
+                if (rel > 0.01) ++over1;
+                ++n0;
+            }
+        std::printf("O1 %s: ortalama |fark| / ortalama parlaklik %.6f, en buyuk bagil %.4f, %%1'i asan piksel %.3f %%\n",
+                    mode == 1 ? "ideal ayna" : "labirentin aynasi (/W)", sumE / sumA, maxRel, 100.0 * double(over1) / double(n0));
+        if (mode == 1) worst = sumE / sumA;
+    }
+    a.release();
+    return worst < 1e-3 ? 0 : 1;
+}
+
+// Ö4: one lamp's light on the floor, the beams (baked into the light map) against photons through the same tracer.
+// Floor bins of 5 cm; the map's texels averaged in each (valid floor only); straight and by mirrors apart.
+static int testO4(AynaApp& a) {
+    a.overrides.push_back("lantern.count=0");
+    a.loadConfig();
+    a.width = 64;
+    a.height = 36;
+    a.init();
+    const float3 lampPos = make_float3(a.cfg.f("o4.x", -0.55f), a.cfg.f("o4.y", 1.3f), a.cfg.f("o4.z", 1.9f));
+    const long long total = (long long)(a.cfg.f("o4.photons", 2e8f));
+    const float bin = 0.05f;
+    const LightMap& lm = a.lightMap();
+    const float x0 = lm.x0, z0 = lm.z0;
+    const int gw = int(lm.gw * lm.texel / bin), gh = int(lm.gh * lm.texel / bin);
+    const int per = int(std::lround(bin / lm.texel));
+    // the photons
+    View v = a.makeView();
+    std::vector<signed char> none(size_t(cellCount(a.maze.g)) * kCellObjects, -1);
+    signed char* dNone = nullptr;
+    cudaMalloc(reinterpret_cast<void**>(&dNone), none.size());
+    cudaMemcpy(dNone, none.data(), none.size(), cudaMemcpyHostToDevice);
+    v.cellObj = dNone;
+    const float3 I = AynaApp::paletteColor(1) * (AynaApp::levelValue(6) * a.cfg.f("lamp.share", 0.03f));
+    float *gd = nullptr, *gm = nullptr;
+    cudaMalloc(reinterpret_cast<void**>(&gd), size_t(gw) * gh * 4);
+    cudaMalloc(reinterpret_cast<void**>(&gm), size_t(gw) * gh * 4);
+    cudaMemset(gd, 0, size_t(gw) * gh * 4);
+    cudaMemset(gm, 0, size_t(gw) * gh * 4);
+    const auto t0 = std::chrono::high_resolution_clock::now();
+    tracePhotons(v, lampPos, I, total, gd, gm, x0, z0, bin, gw, gh);
+    const double ms = std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - t0).count();
+    std::vector<float> hd(size_t(gw) * gh), hm(size_t(gw) * gh);
+    cudaMemcpy(hd.data(), gd, hd.size() * 4, cudaMemcpyDeviceToHost);
+    cudaMemcpy(hm.data(), gm, hm.size() * 4, cudaMemcpyDeviceToHost);
+    // the beams: the full bake, then a straight-only bake, read back from the floor's block
+    auto bakeFloor = [&](bool straight) {
+        a.clearLightMap();
+        a.overrides.push_back(std::string("o4.straight=") + (straight ? "1" : "0"));
+        a.lamps.clear();
+        AynaLamp lp;
+        lp.pos = lampPos;
+        lp.color = AynaApp::paletteColor(1);
+        lp.level = AynaApp::levelValue(6);
+        a.lamps.push_back(lp);
+        a.bakeStraightOnly = straight;
+        a.bakeLampsPublic();
+        std::vector<float4> f(size_t(lm.gw) * lm.gh);
+        cudaMemcpy(f.data(), lm.E + lm.floorOff, f.size() * sizeof(float4), cudaMemcpyDeviceToHost);
+        return f;
+    };
+    const std::vector<float4> full = bakeFloor(false), str = bakeFloor(true);
+    double sumRefD = 0, sumMapD = 0, errD = 0, sumRefM = 0, sumMapM = 0, errM = 0;
+    int bins = 0;
+    double maxRef = 0;
+    for (int bz = 0; bz < gh; ++bz)
+        for (int bx = 0; bx < gw; ++bx) maxRef = std::max(maxRef, double(hd[size_t(bz) * gw + bx] + hm[size_t(bz) * gw + bx]) / (bin * bin));
+    std::vector<unsigned char> img(size_t(gw) * gh * 4, 0);
+    for (int bz = 0; bz < gh; ++bz)
+        for (int bx = 0; bx < gw; ++bx) {
+            double md = 0, mm = 0;
+            int nv = 0;
+            for (int ty = 0; ty < per; ++ty)
+                for (int tx = 0; tx < per; ++tx) {
+                    const int X = bx * per + tx, Z = bz * per + ty;
+                    if (X >= lm.gw || Z >= lm.gh) continue;
+                    const float4 F = full[size_t(Z) * lm.gw + X], S = str[size_t(Z) * lm.gw + X];
+                    unsigned bits;
+                    std::memcpy(&bits, &F.w, 4);
+                    if (!(bits & (1u << 30))) continue;
+                    md += S.y;
+                    mm += F.y - S.y;
+                    ++nv;
+                }
+            if (nv < per * per) continue;   // only bins wholly on visible floor
+            md /= nv;
+            mm /= nv;
+            const double rd = hd[size_t(bz) * gw + bx] / (bin * bin), rm = hm[size_t(bz) * gw + bx] / (bin * bin);
+            sumRefD += rd;
+            sumMapD += md;
+            errD += std::fabs(rd - md);
+            sumRefM += rm;
+            sumMapM += mm;
+            errM += std::fabs(rm - mm);
+            ++bins;
+            unsigned char* o = &img[(size_t(gh - 1 - bz) * gw + bx) * 4];
+            const double e = (mm + md) - (rm + rd);
+            o[0] = (unsigned char)std::min(255.0, std::max(0.0, -e / maxRef * 2550.0));
+            o[1] = (unsigned char)std::min(255.0, std::max(0.0, e / maxRef * 2550.0));
+            o[2] = (unsigned char)std::min(255.0, (rm + rd) / maxRef * 255.0 * 4.0);
+            o[3] = 255;
+        }
+    writePNG("captures/ayna/o4_fark.png", gw, gh, img.data());
+    std::printf("O4: lamba (%.2f %.2f %.2f), %lld foton %.0f ms, %d kutu (5 cm)\n", lampPos.x, lampPos.y, lampPos.z, total, ms, bins);
+    std::printf("  dogrudan:  toplam harita/foton %.4f, kutu basina agirlikli hata %.4f -> uyum %.4f\n", sumMapD / sumRefD, errD / sumRefD,
+                1.0 - errD / sumRefD);
+    std::printf("  aynalardan: toplam harita/foton %.4f, kutu basina agirlikli hata %.4f -> uyum %.4f\n", sumMapM / sumRefM, errM / sumRefM,
+                1.0 - errM / sumRefM);
+    std::printf("  aynalarin payi (foton): %.1f %% ; hepsi: uyum %.4f\n", 100.0 * sumRefM / (sumRefM + sumRefD),
+                1.0 - (errD + errM) / (sumRefD + sumRefM));
+    cudaFree(gd);
+    cudaFree(gm);
+    cudaFree(dNone);
+    a.release();
+    return 0;
+}
+
 int runAynaCli(int argc, char** argv) {
     AynaApp a;
     a.root = PROJECT_ROOT;
@@ -933,6 +1118,44 @@ int runAynaCli(int argc, char** argv) {
         std::printf("fuzz: %s\n", fails ? "HATA BULUNDU" : "temiz"); std::printf("(%d poz)\n", poses);
         a.release();
         return fails ? 1 : 0;
+    }
+    if (test == "o4") return testO4(a);
+    if (test == "o1") return testO1(a);
+    if (test == "o3") {
+        // Ö3: a walk along corridor A turning slowly, our light on, a lamp, the lanterns, the mist: the live frames
+        // (4 samples) and the same moments with 16 (the reference), for tools/kararlilik.py
+        a.loadConfig();
+        a.width = w > 0 ? w : 1280;
+        a.height = h > 0 ? h : 720;
+        a.init();
+        AynaLamp lp;
+        lp.pos = make_float3(-1.10f, 1.10f, 2.10f);
+        lp.color = AynaApp::paletteColor(5);
+        lp.level = AynaApp::levelValue(5);
+        a.lamps.push_back(lp);
+        const std::string dir = out + "/o3";
+        std::filesystem::create_directories(dir);
+        const int frames = a.cfg.i("o3.frames", 48);
+        for (int f = 0; f < frames; ++f) {
+            const float t = float(f) / 30.0f * a.cfg.f("o3.speed", 1.0f);   // 30 frames a second
+            a.cam.pos = make_float3(-3.2f + 0.9f * t, 1.3f + 0.05f * std::sin(t * 2.0f), 2.05f + 0.10f * std::sin(t * 1.3f));
+            a.cam.yaw = -1.25f - 0.35f * t;
+            a.cam.pitch = 0.05f * std::sin(t * 1.7f);
+            char name[64];
+            for (int pass = 0; pass < 2; ++pass) {
+                a.overrides.push_back(pass == 0 ? "samples=" + std::to_string(a.cfg.i("o3.live", 4)) : std::string("samples=16"));
+                a.loadConfig();
+                a.width = w > 0 ? w : 1280;
+                a.height = h > 0 ? h : 720;
+                a.render();
+                std::snprintf(name, sizeof(name), "/%s_%04d", pass == 0 ? "live" : "ref", f);
+                a.save(dir + name);
+                a.overrides.pop_back();
+            }
+        }
+        std::printf("O3: %d kare -> %s (python tools/kararlilik.py %s)\n", frames, dir.c_str(), dir.c_str());
+        a.release();
+        return 0;
     }
     if (test == "lambalar") {   // lamps left one at a time, a frame between each: CUDA must stay clean
         a.loadConfig();

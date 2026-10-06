@@ -63,6 +63,19 @@ public:
     void render();
     bool save(const std::string& pathNoExt);
     void probe(float x, float y);
+    // the tools (Ö4)
+    const ayna::LightMap& lightMap() const { return lm_; }
+    void clearLightMap() { cudaMemset(dLm_, 0, lmTexels_ * sizeof(float4)); baked_ = 0; lampStraight_.clear(); }
+    void bakeLampsPublic() { bakeLamps(); }
+    bool bakeStraightOnly = false;
+    int testMirror = 0;
+    float3 tmN{0, 0, 1};
+    float tmD = 0.0f;
+    std::vector<float4> hdrHost() const {
+        std::vector<float4> h(size_t(width) * height);
+        cudaMemcpy(h.data(), hdr_, h.size() * sizeof(float4), cudaMemcpyDeviceToHost);
+        return h;
+    }
     size_t lmTexelCount() const { return lmTexels_; }
     unsigned oobCount() const { unsigned h = 0; cudaMemcpy(&h, oob_, 4, cudaMemcpyDeviceToHost); return h; }
     ayna::View makeView() const;

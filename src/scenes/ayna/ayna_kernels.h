@@ -121,6 +121,12 @@ struct View {
     float4* hazeBuf = nullptr;       // device: the glow at half resolution
     int hazeOnly = 0;                // the tools: only the glow pass
     int plainMat = 0;                // the tools: plain colours instead of the materials (their cost)
+    float coneScale = 0.5f;          // the footprint: this many pixels a metre (half: four samples share a pixel)
+    // the tools (Ö1): a mirror plane in front of the eye, met before anything else; 1 ideal (all reflected, no glass),
+    // 2 the maze's own mirror (glass and silver); the samples are mirrored with it
+    int testMirror = 0;
+    float3 tmN{0, 0, 1};
+    float tmD = 0.0f;
     LightMap lm;                     // the lamps' baked light
     int nLamps = 0;
     float4 lamp[kMaxLamps];          // xyz the lamp, w its glass's radius (for our sphere's shadow)
@@ -148,6 +154,9 @@ void resolveFrame(const View& v, const float4* hdr, const float4* bloomHalf, uch
 // one ray through the maze for the tools (Ö2: where the n-th copy lands): the plan points where it met mirrors
 int traceMirrorPoints(const View& v, float3 o, float3 d, int maxHits, float3* hitsHost);
 void probePixel(const View& v, float px, float py);   // prints the first surface and its light, both ways
+// Ö4: photons from a point light into floor bins (device grids gw x gh, bin metres, origin x0 z0), straight and by mirrors
+void tracePhotons(const View& v, float3 lp, float3 I, long long total, float* gridDirect, float* gridMirror, float x0, float z0, float bin, int gw,
+                  int gh);
 size_t viewSizeCu();
 size_t viewHazeOffsetCu();
 
