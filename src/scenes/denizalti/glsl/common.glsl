@@ -97,6 +97,40 @@ float fbm(vec3 p, float baseWavelength, int oct, float gain, float size, out vec
     return v;
 }
 
+// ---- cubic B-spline reads from bilinear ones (Sigg & Hadwiger): continuous to the second derivative, so a sharp
+// change baked across a few texels (a contact shadow, the edge of a lamp's cone in the haze) shows no steps along the
+// texel grid. Slightly smoother than the bilinear read (the spline approximates, it does not interpolate).
+void bspline(vec3 f, out vec3 g0, out vec3 h0, out vec3 h1) {
+    vec3 w0 = (1.0 / 6.0) * (1.0 - f) * (1.0 - f) * (1.0 - f);
+    vec3 w1 = (1.0 / 6.0) * (3.0 * f * f * f - 6.0 * f * f + 4.0);
+    vec3 w2 = (1.0 / 6.0) * (-3.0 * f * f * f + 3.0 * f * f + 3.0 * f + 1.0);
+    vec3 w3 = (1.0 / 6.0) * f * f * f;
+    g0 = w0 + w1;
+    h0 = w1 / g0 - 1.0;        // offsets from the texel, in texels
+    h1 = w3 / (w2 + w3) + 1.0;
+}
+vec4 cubic2(sampler2D t, vec2 uv) {
+    vec2 sz = vec2(textureSize(t, 0));
+    vec2 c = uv * sz - 0.5, f = fract(c), i = c - f;
+    vec3 g0, h0, h1;
+    bspline(vec3(f, 0.0), g0, h0, h1);
+    vec2 p0 = (i + h0.xy + 0.5) / sz, p1 = (i + h1.xy + 0.5) / sz;
+    return mix(mix(texture(t, p1), texture(t, vec2(p0.x, p1.y)), g0.x),
+               mix(texture(t, vec2(p1.x, p0.y)), texture(t, p0), g0.x), g0.y);
+}
+vec4 cubic3(sampler3D t, vec3 uvw) {
+    vec3 sz = vec3(textureSize(t, 0));
+    vec3 c = uvw * sz - 0.5, f = fract(c), i = c - f;
+    vec3 g0, h0, h1;
+    bspline(f, g0, h0, h1);
+    vec3 p0 = (i + h0 + 0.5) / sz, p1 = (i + h1 + 0.5) / sz;
+    vec4 a = mix(mix(texture(t, vec3(p1.x, p1.y, p1.z)), texture(t, vec3(p0.x, p1.y, p1.z)), g0.x),
+                 mix(texture(t, vec3(p1.x, p0.y, p1.z)), texture(t, vec3(p0.x, p0.y, p1.z)), g0.x), g0.y);
+    vec4 b = mix(mix(texture(t, vec3(p1.x, p1.y, p0.z)), texture(t, vec3(p0.x, p1.y, p0.z)), g0.x),
+                 mix(texture(t, vec3(p1.x, p0.y, p0.z)), texture(t, vec3(p0.x, p0.y, p0.z)), g0.x), g0.y);
+    return mix(a, b, g0.z);
+}
+
 // ---- the features. Height in metres along the displacement normal, and its gradient in the surface's (u, v) metres.
 // size: the sampling size here (metres): detail finer than ~2 sizes fades out, so tessellated vertices sliding as the
 // factor changes sample a smooth field (no swimming) and the normal map never aliases.
@@ -118,7 +152,7 @@ float featureTessScale(uint feat, vec2 fp) {
     if (feat == FEAT_NONE || feat == FEAT_DIAL) return 8.0;
     if (feat == FEAT_PLATE || feat == FEAT_CAST) return 6.0;
     if (feat == FEAT_LABEL) {
-        float st = decInfo[int(fp.x + 0.5)].w;
+        float st = decInfo[clamp(int(fp.x + 0.5), 0, 255)].w;
         return st > 0.5 && st < 1.5 ? 1.0 : 8.0;
     }
     return 1.0;
@@ -209,7 +243,7 @@ float featureHeight(Surf s, vec3 T, vec3 B, out vec3 gw) {
         gw = 0.0007 * dsg * (d1 + 0.45 * d2);
     } else if (s.feat == FEAT_LABEL) {
         // a brass plate's engraving cut 0.25 mm into the metal (the ink fills it); the mip from the sampling size
-        int id = int(s.fp.x + 0.5);
+        int id = clamp(int(s.fp.x + 0.5), 0, 255);
         if (decInfo[id].w > 0.5 && decInfo[id].w < 1.5) {
             vec2 sizeM = 2.0 * decInfo[id].xy;
             vec2 texels = (decRect[id].zw - decRect[id].xy) * vec2(textureSize(decalTex, 0));

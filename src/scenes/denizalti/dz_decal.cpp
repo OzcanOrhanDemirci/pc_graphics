@@ -47,6 +47,7 @@ struct Col {
 struct Canvas {
     int w, h;
     std::vector<float> c;   // r, g, b, ink
+    bool straight = false;  // "over" compositing in straight alpha (the chart); else the ink lerps the colour (dials)
     Canvas(int W, int H, Col bg) : w(W), h(H), c(size_t(W) * H * 4) {
         for (size_t i = 0; i < size_t(W) * H; ++i) {
             c[i * 4] = bg.r;
@@ -59,6 +60,15 @@ struct Canvas {
         if (x < 0 || y < 0 || x >= w || y >= h || a <= 0.0f) return;
         a = std::min(a, 1.0f);
         float* p = &c[(size_t(y) * w + x) * 4];
+        if (straight) {
+            const float na = a + p[3] * (1.0f - a);
+            const float wk = a / na, wp = 1.0f - wk;
+            p[0] = k.r * wk + p[0] * wp;
+            p[1] = k.g * wk + p[1] * wp;
+            p[2] = k.b * wk + p[2] * wp;
+            p[3] = na;
+            return;
+        }
         p[0] += (k.r - p[0]) * a;
         p[1] += (k.g - p[1]) * a;
         p[2] += (k.b - p[2]) * a;
@@ -296,17 +306,20 @@ void drawChart(Canvas& cv, const Font& bold, const Font& reg) {
     const Col buff{0.95f, 0.86f, 0.60f}, blue{0.68f, 0.82f, 0.93f}, pale{0.84f, 0.91f, 0.96f}, black{0.08f, 0.08f, 0.09f};
     const Col magenta{0.66f, 0.12f, 0.46f}, pencil{0.20f, 0.20f, 0.22f};
     const float contours[] = {2.0f, 5.0f, 10.0f, 20.0f, 50.0f, 100.0f, 200.0f};
-    for (int y = 0; y < H; ++y)
-        for (int x = 0; x < W; ++x) {
+    const float mIn = 0.03f * ppm;   // the inner border (the neatline): the printed area ends there
+    for (int y = int(mIn); y < H - int(mIn); ++y)
+        for (int x = int(mIn); x < W - int(mIn); ++x) {
             const float f = F(x + 0.5f, y + 0.5f);
             const float gx = F(x + 1.5f, y + 0.5f) - F(x - 0.5f, y + 0.5f), gy = F(x + 0.5f, y + 1.5f) - F(x + 0.5f, y - 0.5f);
             const float g = std::max(0.5f * std::hypot(gx, gy), 1e-7f);   // per pixel
             const float onLand = std::clamp(f / g + 0.5f, 0.0f, 1.0f);
             const float d = depth(f);
             if (onLand > 0.0f) cv.blend(x, y, buff, 0.9f * onLand);
-            if (onLand < 1.0f) {
-                if (d < 10.0f) cv.blend(x, y, blue, 0.8f * (1.0f - onLand));
-                else if (d < 20.0f) cv.blend(x, y, pale, 0.7f);
+            if (onLand < 1.0f && f < 0.0f) {
+                const float dd = std::max(380.0f * 1.35f * std::pow(-f, 0.35f) * g, 1e-6f);   // metres of depth a pixel
+                const float in10 = std::clamp((10.0f - d) / dd + 0.5f, 0.0f, 1.0f), in20 = std::clamp((20.0f - d) / dd + 0.5f, 0.0f, 1.0f);
+                if (in20 > in10) cv.blend(x, y, pale, 0.7f * (in20 - in10));
+                if (in10 > 0.0f) cv.blend(x, y, blue, 0.8f * in10 * (1.0f - onLand));
             }
             // the coast, heavier; the depth contours, fine (the depth's own gradient in metres a pixel)
             cv.blend(x, y, black, std::clamp(1.4f - std::fabs(f) / g + 0.5f, 0.0f, 1.0f));
@@ -353,13 +366,13 @@ void drawChart(Canvas& cv, const Font& bold, const Font& reg) {
         int i = 0;
         for (float x = x0 + 0.37f * lonStep; x < x1; x += lonStep, ++i) {
             char b[32];
-            std::snprintf(b, sizeof(b), "26\xC2\xB0%02d'", 35 + 5 * i);
+            std::snprintf(b, sizeof(b), "%02d'", 35 + 5 * i);
             text(cv, reg, b, 0.0045f * ppm, x, y1 + 0.021f * ppm, black);
         }
         i = 0;
         for (float y = y1 - 0.29f * latStep; y > y0 + 0.02f * ppm; y -= latStep, ++i) {
             char b[32];
-            std::snprintf(b, sizeof(b), "38\xC2\xB0%02d'", 10 + 5 * i);
+            std::snprintf(b, sizeof(b), "%02d'", 10 + 5 * i);
             text(cv, reg, b, 0.0045f * ppm, x0 + 0.032f * ppm, y - 0.006f * ppm, black);
         }
     }
@@ -368,7 +381,7 @@ void drawChart(Canvas& cv, const Font& bold, const Font& reg) {
         const float cx = W * 0.74f, cy = H * 0.12f;
         text(cv, bold, "EGE DEN\xC4\xB0Z\xC4\xB0", 0.016f * ppm, cx, cy, black, 0.003f * ppm);
         text(cv, reg, "SEY\xC4\xB0R HAR\xC4\xB0TASI", 0.0085f * ppm, cx, cy + 0.024f * ppm, black, 0.0012f * ppm);
-        text(cv, reg, "\xC3\x96L\xC3\x87" "EK 1 : 50 000  (38\xC2\xB0" "20' ENLEM\xC4\xB0NDE)", 0.0055f * ppm, cx, cy + 0.04f * ppm, black);
+        text(cv, reg, "\xC3\x96L\xC3\x87" "EK 1 : 50 000", 0.0055f * ppm, cx, cy + 0.04f * ppm, black);
         text(cv, reg, "DER\xC4\xB0NL\xC4\xB0KLER METRE \xC4\xB0LE", 0.0055f * ppm, cx, cy + 0.052f * ppm, black);
         text(cv, reg, "MERCATOR PROJEKS\xC4\xB0YONU", 0.0045f * ppm, cx, cy + 0.063f * ppm, black);
     }
@@ -389,14 +402,14 @@ void drawChart(Canvas& cv, const Font& bold, const Font& reg) {
         }
     };
     rose(R, 0.0f, true);
-    rose(R * 0.68f, 5.0f, true);
+    rose(R * 0.68f, 2.5f, true);
     cv.ring(rcx, rcy, R * 0.43f - 0.8f, R * 0.43f + 0.8f, magenta);
     for (int i = 0; i < 4; ++i) {   // the star at north and the arms
         const float th = i * 0.5f * kPi;
         const float s = std::sin(th), c = -std::cos(th);
         cv.line(rcx, rcy, rcx + s * R * 0.4f, rcy + c * R * 0.4f, i == 0 ? 2.2f : 1.0f, magenta);
     }
-    text(cv, reg, "VAR. 5\xC2\xB0" "00'E (1968)", 0.0042f * ppm, rcx, rcy + 0.2f * R, magenta);
+    text(cv, reg, "VAR. 2\xC2\xB0" "30'E (1968)", 0.0042f * ppm, rcx, rcy + 0.2f * R, magenta);
     // soundings on a jittered grid in the water, clear of the rose and the title
     {
         const float step = 0.017f * ppm;
@@ -519,7 +532,7 @@ bool Decals::draw(const std::string& root, std::string& err) {
     std::sort(order.begin(), order.end(), [&](int a, int b) { return items[a].h > items[b].h; });
     std::vector<std::pair<int, int>> pos(specs.size());
     int x = 0, y = 0, shelf = 0;
-    const int pad = 8;
+    const int pad = 24;   // mips to 4 stay clear of the neighbours
     for (int i : order) {
         if (x + items[i].w + pad > width) {
             y += shelf + pad;
@@ -537,7 +550,8 @@ bool Decals::draw(const std::string& root, std::string& err) {
         const DecalSpec& s = specs[i];
         const Col bg = s.kind >= 0 ? dialDef(s.kind).face
                                    : (s.style == PLATE_BLACK ? Col{0.03f, 0.03f, 0.03f} : (s.style == PLATE_BRASS ? Col{0.80f, 0.66f, 0.36f} : Col{0, 0, 0}));
-        Canvas cv(items[i].w, items[i].h, bg);
+        Canvas cv(items[i].w, items[i].h, s.style == PLATE_CHART && s.kind < 0 ? Col{0.906f, 0.898f, 0.855f} : bg);
+        cv.straight = s.style == PLATE_CHART && s.kind < 0;
         if (s.kind >= 0) drawDial(cv, s.kind, bold, reg);
         else if (s.style == PLATE_CHART) drawChart(cv, bold, reg);
         else drawPlate(cv, s, bold);

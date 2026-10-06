@@ -107,14 +107,15 @@ void App::drawGallery(double now) {
 
     // the scenes' list fills the room above the key hints; each entry as tall as the design's until there are too many
     const float listY = S_(566) + lift, itemW = S_(770);
-    const float itemH = std::min(S_(164), (H - S_(154) - S_(566)) / float(std::max<size_t>(1, infos_.size())));
+    const float itemH = std::max(S_(26), std::min(S_(164), (H - S_(154) - S_(566)) / float(std::max<size_t>(1, infos_.size()))));
     entryRects_.clear();
     // the highlight glides to the selected entry
     {
         const ui::Rect hl{x0 - S_(26), listY + selAnim_ * itemH, itemW, itemH - S_(14)};
         ui::rect(hl, ui::hex(0xFFFFFF, 0.045f * appear), S_(16));
         ui::stroke(hl, ui::hex(0xFFFFFF, 0.07f * appear), S_(16), std::max(1.0f, S_(1)));
-        ui::rect(ui::Rect{hl.x, hl.y + S_(26), S_(3), hl.h - S_(52)}, accentOf(cur, appear), S_(1.5f));
+        const float barH = std::max(hl.h - S_(52), 0.5f * hl.h), barY = hl.y + 0.5f * (hl.h - barH);
+        ui::rect(ui::Rect{hl.x, barY, S_(3), barH}, accentOf(cur, appear), S_(1.5f));
     }
     for (int i = 0; i < int(infos_.size()); ++i) {
         const SceneInfo& si = infos_[i];

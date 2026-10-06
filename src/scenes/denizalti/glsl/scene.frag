@@ -143,6 +143,12 @@ M material(uint m) {
     return r;
 }
 
+// a light map plane: bilinear, and the cubic B-spline read mixed in by w (close up)
+vec4 lmRead(sampler2D t, vec2 uv, float w) {
+    vec4 l = texture(t, uv);
+    return w > 0.0 ? mix(l, cubic2(t, uv), w) : l;
+}
+
 bool painted(uint m) {
     return m == MAT_CREAM || m == MAT_PAINT_PIPE || m == MAT_PAINT_HULL || m == MAT_GREY || m == MAT_DECK_GREEN || m == MAT_RED ||
            m == MAT_PAINT_DARK || m == MAT_DECK;
@@ -206,7 +212,8 @@ void weather(inout M m, uint mat, vec3 p, inout vec3 N, float edge, float ao, fl
     }
     // dust on what faces up, away from hands (a damp boat: little of it)
     float up = smoothstep(0.55, 0.95, N.y);
-    if (up > 0.0 && mat != MAT_DECK_GREEN && mat != MAT_EMISSIVE && mat != MAT_RED_GLASS) {
+    if (up > 0.0 && mat != MAT_DECK_GREEN && mat != MAT_EMISSIVE && mat != MAT_RED_GLASS && mat != MAT_PAPER && mat != MAT_WOOD &&
+        mat != MAT_WRINKLE && mat != MAT_DIAL) {
         float dn = fbm(p + 7.7, 0.02, 2, 0.5, size, d);
         float dust = up * clamp(0.35 + dn, 0.0, 1.0) * 0.35;
         m.base = mix(m.base, vec3(0.42, 0.40, 0.36), dust);
@@ -243,7 +250,7 @@ vec3 lamp(vec3 p, vec3 N, vec3 V, M m, vec3 lp, vec3 I) {
 }
 
 void main() {
-    if (i.mat == MAT_GLASS) discard;   // D0: the glass comes with its own pass (D4)
+    // glass (windows, sight glasses) is drawn as itself over the dark behind it: black, glossy, the room in it
     M m = material(i.mat);
     vec3 N = normalize(i.n);
     vec3 T = normalize(i.t.xyz - N * dot(N, i.t.xyz));
@@ -270,11 +277,18 @@ void main() {
         m.emit *= 0.02 + 0.5 * pow(nvg, 4.0);
     }
     if (dot(N, V) < 0.0) N = normalize(N + V * (-dot(N, V) + 0.01));
-    float ao = texture(lmL0, i.uv2).a;
+    // the baked light: on Light High read as a cubic B-spline where a texel spans over two pixels (no texel steps in
+    // contact shadows at 10 cm; farther the bilinear read looks the same and costs a quarter)
+    vec2 lmPx = vec2(textureSize(lmL0, 0));
+    float texPerPx = max(length(dFdx(i.uv2) * lmPx), length(dFdy(i.uv2) * lmPx));
+    // (blended over a band, so a surface moving through the threshold does not switch)
+    float wc = levels.z > 1.5 ? smoothstep(0.7, 0.4, texPerPx) : 0.0;
+    vec4 lm0 = lmRead(lmL0, i.uv2, wc);
+    float ao = lm0.a;
     if (i.feat == FEAT_CORK) m.rough = max(m.rough, 0.6);   // enamel over cork dries satin (no glitter on the granules)
     // the printed faces: a dial's or a plate's colour from the atlas (filtered: anisotropic, mipmapped)
     if (i.feat == FEAT_DIAL || i.feat == FEAT_LABEL) {
-        int id = int(i.fp.x + 0.5);
+        int id = clamp(int(i.fp.x + 0.5), 0, 255);
         vec4 dc = texture(decalTex, decalUV(id, i.uv, i.fp.y), levels.y < 0.5 ? 1.5 : 0.0);
         float style = decInfo[id].w;
         if (i.feat == FEAT_DIAL) {
@@ -289,7 +303,8 @@ void main() {
             m.base = mix(vec3(0.87, 0.72, 0.42), dc.rgb, dc.a);
             m.metal = 1.0 - dc.a;
             m.rough = mix(0.22, 0.55, dc.a);
-        } else if (style < 2.5) {         // a stencil: paint on paint
+        } else if (style < 2.5) {         // a stencil: paint on paint, only where the letters are
+            if (dc.a < 0.02) discard;
             m.base = mix(m.base, dc.rgb, dc.a);
             m.rough = mix(m.rough, 0.45, dc.a);
         } else {                          // the chart: ink printed into the paper (matte as the paper)
@@ -302,9 +317,9 @@ void main() {
     }
     vec3 c = m.emit;
     // ---- the baked light: L1 spherical harmonics of what arrives here (amount and direction), read at the detail normal
-    vec3 c0 = texture(lmL0, i.uv2).rgb;
-    vec3 sr = texture(lmR, i.uv2).xyz, sg = texture(lmG, i.uv2).xyz, sb = texture(lmB, i.uv2).xyz;
-    vec4 vis = texture(lmVis, i.uv2);
+    vec3 c0 = lm0.rgb;
+    vec3 sr = lmRead(lmR, i.uv2, wc).xyz, sg = lmRead(lmG, i.uv2, wc).xyz, sb = lmRead(lmB, i.uv2, wc).xyz;
+    vec4 vis = lmRead(lmVis, i.uv2, wc);
     if (levels.z < 0.5) {   // the light level Low: the light's amount only, no direction (flatter, still right)
         sr = sg = sb = vec3(0);
     }

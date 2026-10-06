@@ -43,8 +43,9 @@ void main() {
         vec3 Lin = vec3(0);
         float s = 0.0;
         if (all(greaterThan(uvw, vec3(0))) && all(lessThan(uvw, vec3(1)))) {
-            vec3 c0 = texture(hazeL0, uvw).rgb;
-            vec3 c1 = texture(hazeL1, uvw).xyz;
+            // cubic: the baked 4 cm cells read trilinearly drew a lamp's light cone as a blocky halo
+            vec3 c0 = cubic3(hazeL0, uvw).rgb;
+            vec3 c1 = cubic3(hazeL1, uvw).xyz;
             float lum = max(dot(c0, vec3(0.2126, 0.7152, 0.0722)), 1e-8);
             // isotropic part plus a little forward scattering (towards the eye from behind the point: along dir)
             Lin = max(c0 * Y0 + (c0 / lum) * (g * Y1 * dot(c1, dir)), vec3(0));

@@ -144,7 +144,11 @@ uint64_t bakeKey(const Mesh& m, const std::vector<DzLight>& lights, const BakeOp
     h = fnv(h, m.idx.data(), m.idx.size() * sizeof(uint32_t));
     h = fnv(h, lights.data(), lights.size() * sizeof(DzLight));
     h = fnv(h, &o, sizeof(o));
-    const int version = 11;   // 9: samples spread over the texel's footprint; 10-11: rough probe mips sampled more, a mip's probes in one launch
+    float3 al[DZ_MAX_MATS];
+    albedos(al);
+    h = fnv(h, al, sizeof(al));
+    const int version = 13;   // 13: stencils are not occluders   // 9: samples spread over the texel's footprint; 10-11: rough probe mips sampled more, a mip's probes in one launch;
+                              // 12: the probes' own clamp, a launch no more paths than a probe's mip once had
     h = fnv(h, &version, sizeof(version));
     return h;
 }
@@ -264,6 +268,9 @@ bool bake(const Mesh& m, const Atlas& a, const std::vector<DzLight>& lights, con
     for (size_t k = 0; k + 2 < m.idx.size(); k += 3) {
         const uint32_t mt = m.v[m.idx[k]].mat;
         if (mt == MAT_GLASS) continue;
+        // a stencil (a cream label quad 0.6 mm off its surface) is paint, not a sheet: as an occluder it baked the
+        // surface under it black, which showed once the quad was drawn only where its letters are
+        if (mt == MAT_CREAM && m.v[m.idx[k]].feat == FEAT_LABEL) continue;
         tri.push_back(make_uint3(m.idx[k], m.idx[k + 1], m.idx[k + 2]));
         tmat.push_back(mt);
     }
@@ -326,6 +333,7 @@ bool bake(const Mesh& m, const Atlas& a, const std::vector<DzLight>& lights, con
     prm.lightCount = unsigned(lights.size());
     prm.maxBounces = unsigned(o.bounces);
     prm.clampLum = o.clamp;
+    prm.probeClampLum = 1.0f;
     prm.emissiveMat = MAT_EMISSIVE;
     prm.glassMat = MAT_GLASS;
     albedos(prm.albedo);
@@ -566,7 +574,7 @@ bool bake(const Mesh& m, const Atlas& a, const std::vector<DzLight>& lights, con
             // the sharp mip shows its noise on glass; the rough ones are few texels but each a wide lobe (at 128 a
             // satin aluminium door wore blotches): 2x, 4x, 8x
             const unsigned int total = unsigned(o.probeSamples * (m == 0 ? 2 : (m == 1 ? 4 : 8)));
-            const unsigned int per = unsigned(std::clamp(64.0 * 393216.0 / double(all), 1.0, 64.0));
+            const unsigned int per = unsigned(std::clamp(64.0 * 98304.0 / double(all), 1.0, 64.0));
             for (unsigned int s = 0; s < total;) {
                 prm.sampleBase = s;
                 prm.samples = std::min(total - s, per);

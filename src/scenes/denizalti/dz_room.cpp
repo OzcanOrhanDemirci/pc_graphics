@@ -138,7 +138,8 @@ void bulkhead(Kit& k, float z, bool facePlus, float cx, float cy, float a, float
     with(k, room * Xform::at(f3(0, b * 0.55f, 0.04f)), MAT_BRASS, FEAT_NONE, [&] {
         k.lathe({{0.055f, -0.002f}, {0.07f, 0.0f}, {0.072f, 0.008f}, {0.064f, 0.012f}, {0.055f, 0.01f}, {0.052f, 0.004f}});
     });
-    with(k, room * Xform::at(f3(0, b * 0.55f, 0.044f)), MAT_BLACK_PLATE, FEAT_NONE, [&] { k.ring(0.0f, 0.056f, 0.0f, true); });
+    with(k, room * Xform::at(f3(0, b * 0.55f, 0.0415f)), MAT_PAINT_DARK, FEAT_NONE, [&] { k.ring(0.0f, 0.056f, 0.0f, true); });
+    with(k, room * Xform::at(f3(0, b * 0.55f, 0.044f)), MAT_GLASS, FEAT_NONE, [&] { k.ring(0.0f, 0.056f, 0.0f, true); });
     // the operating gear: a hub and a two-knobbed lever across
     with(k, room * Xform::at(f3(0, -0.02f, 0.04f)), MAT_STEEL, FEAT_CAST, [&] {
         k.roundedCylinder(0.05f, 0.0f, 0.035f, 0.006f);

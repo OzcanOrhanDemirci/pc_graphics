@@ -229,7 +229,7 @@ extern "C" __global__ void __raygen__probe() {
         bool back;
         float3 Li = probeRadiance(pos, L, rng, back);
         const float lum = 0.2126f * Li.x + 0.7152f * Li.y + 0.0722f * Li.z;
-        if (lum > params.clampLum) Li *= params.clampLum / lum;
+        if (lum > params.probeClampLum) Li *= params.probeClampLum / lum;
         sum += Li * w;
         wsum += w;
         backs += back ? 1.0f : 0.0f;

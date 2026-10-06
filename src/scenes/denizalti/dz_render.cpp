@@ -619,8 +619,8 @@ void Renderer::draw(const Camera& cam, const Settings& s, int ow, int oh, double
     u.levels[1] = float(s.gfx);
     u.levels[2] = float(s.light);
     u.levels[3] = float(s.fx);
-    u.renderSize[0] = float(s.width);
-    u.renderSize[1] = float(s.height);
+    u.renderSize[0] = float(s.width * sx);   // gl_FragCoord runs over the target: 2 x 2 texels a pixel in the fallback
+    u.renderSize[1] = float(s.height * sy);
     glNamedBufferSubData(ubo_, 0, sizeof(u), &u);
     if (hazeOn) {
         const int* fd = fxDims[s.fx];

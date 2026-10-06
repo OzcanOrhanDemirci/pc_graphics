@@ -47,8 +47,8 @@ float hullX(float y, int side, float in = 0.0f) {
 // axis; x along the room as Xform::frame makes it): a flat board tangent to the curve keeps clear of the frames, whose
 // inner flanges stand 12.5 cm in from the cork
 Xform hullBoard(float y, int side, float in, float z) {
-    const float a = std::asin(std::clamp((y - kAxisY) / kRCork, -1.0f, 1.0f));
     const float r = kRCork - in;
+    const float a = std::asin(std::clamp((y - kAxisY) / r, -1.0f, 1.0f));   // at the board's own radius: its centre at y
     return Xform::frame(f3(side * r * std::cos(a), kAxisY + r * std::sin(a), z), f3(-side * std::cos(a), -std::sin(a), 0), f3(0, 1, 0));
 }
 // a frame facing inboard from a side (side -1 port: facing +x), z along the room, y up: x = along z, y = up, z = out
@@ -59,6 +59,29 @@ Xform facing(float3 o, int side) {
 // a box with rounded edges given its centre and half sizes in the frame t
 void box(Kit& k, const Xform& t, float3 c, float3 h, float e, uint32_t mat, uint32_t feat = FEAT_PLATE) {
     with(k, t * Xform::at(c), mat, feat, [&] { k.roundedBox(h, e); });
+}
+// the board's brackets: flat bars from its back (local z = back, half sizes hw along the room, hh up the hull) out to
+// the frames' inner flanges where a frame crosses it, else to the cork at its ends. in: the board's face from the cork
+void boardBrackets(Kit& k, const Xform& b, float hw, float hh, float back, float in) {
+    const float r0 = kRCork - in;
+    std::vector<float> xs;
+    float reach = kRPlate - 0.15f + 0.004f;   // into the flange
+    for (int f = 47; f <= 59; ++f) {
+        const float xl = (frameZ(float(f)) - b.o.z) / b.x.z;
+        if (std::fabs(xl) < hw - 0.02f) xs.push_back(xl);
+    }
+    if (xs.empty()) {
+        xs = {-(hw - 0.05f), hw - 0.05f};
+        reach = kRCork + 0.004f;
+    }
+    for (float xl : xs)
+        for (int s = -1; s <= 1; s += 2) {
+            const float t = s * (hh - 0.06f);
+            const float L = std::sqrt(std::max(0.0f, reach * reach - t * t)) - (r0 - back);
+            if (L <= 0.0f) continue;
+            box(k, b, f3(xl, t, back - 0.5f * L), f3(0.016f, 0.003f, 0.5f * L), 0.0012f, MAT_CREAM, FEAT_PLATE);
+            box(k, b, f3(xl, t + 0.012f * s, back - 0.004f), f3(0.016f, 0.012f, 0.004f), 0.0012f, MAT_CREAM, FEAT_PLATE);   // the foot
+        }
 }
 // a round gauge in frame t at local point c, facing the frame's +z
 void gaugeAt(Kit& k, const Xform& t, float3 c, float rc, float depth, uint32_t bezel = MAT_BRASS, DialKind kind = DIAL_WHITE) {
@@ -91,6 +114,14 @@ void plateAt(Kit& k, const Xform& t, float3 c, float w, float h, const std::stri
         k.fp = make_float2(float(id), 0.0f);
         k.quad(w * 0.985f, h * 0.985f);
     });
+}
+
+// a valve's tag: a brass disc stamped with its name, on a split ring through the handwheel's rim at the bottom (frame
+// t: the wheel's, its y up, rim radius R)
+void valveTag(Kit& k, const Xform& t, float R, float rr, const std::string& name, float swing) {
+    with(k, t * Xform::frame(f3(0, -R - 0.004f, 0), f3(1, 0, 0), f3(0, 1, 0)), MAT_STEEL, FEAT_NONE, [&] { k.torus(rr + 0.0045f, 0.0009f); });
+    const Xform tag = t * Xform::at(f3(0, -R - rr - 0.009f, 0.0f)) * Xform::rotZ(swing) * Xform::at(f3(0, -0.013f, 0.0f));
+    plateAt(k, tag, f3(0, 0, -0.0008f), 0.044f, 0.026f, name, PLATE_BRASS);
 }
 
 // a big handwheel facing +z of frame t: rim radius R, n straight spokes, a grip handle on the rim
@@ -168,6 +199,11 @@ void divingStation(Kit& k) {
             k.t = k.t * Xform::at(f3(0, 0, 0.125f));
             k.sphere(0.016f);
         });
+        // a ribbed rubber mat on the deck where he stands, between the board and the stool
+        with(k, Xform::at(f3(xb + 0.8f, 0.0045f, zz)), MAT_RUBBER, FEAT_TREAD, [&] {
+            k.fp = make_float2(0.025f, 0.0f);
+            k.roundedBox(f3(0.27f, 0.0045f, 0.48f), 0.003f);
+        });
         // the planesman's stool: a steel post, a turquoise vinyl seat
         const float3 st = f3(xb + 1.25f, 0.0f, zz);
         with(k, Xform::frame(st, f3(0, 1, 0), f3(1, 0, 0)), MAT_GREY, FEAT_NONE, [&] {
@@ -186,6 +222,7 @@ void christmasTreeAndManifold(Kit& k, std::vector<DzLight>& minor) {
     const Xform tree = hullBoard(1.74f, side, 0.30f, zc);
     const float3 hs = f3(0.36f, 0.42f, 0.06f);
     box(k, tree, f3(0, 0, -0.06f), hs, 0.008f, MAT_GREY, FEAT_NONE);
+    boardBrackets(k, tree, hs.x, hs.y, -0.12f, 0.30f);
     box(k, tree, f3(0, 0, 0.002f), f3(hs.x - 0.02f, hs.y - 0.02f, 0.002f), 0.002f, MAT_PAINT_DARK, FEAT_NONE);
     for (int r = 0; r < 9; ++r)
         for (int c = 0; c < 7; ++c) {
@@ -221,7 +258,7 @@ void christmasTreeAndManifold(Kit& k, std::vector<DzLight>& minor) {
     {
         const Xform face = axes(f3(xv + 0.112f, yv - 0.08f, zc), f3(0, 0, -1), f3(0, 1, 0), f3(1, 0, 0));
         plateAt(k, face, f3(0, 0, 0), 0.86f, 0.04f, "SAFE    6C&D    6A&B    VENT 3&5    VENT 1&2    B.B.", PLATE_BLACK);
-        plateAt(k, face, f3(0, -0.075f, 0), 0.5f, 0.035f, "MAIN VENT CONTROL MANIFOLD", PLATE_BLACK);
+        plateAt(k, face, f3(0, -0.043f, 0), 0.46f, 0.028f, "MAIN VENT CONTROL MANIFOLD", PLATE_BLACK);
     }
     // the hydraulic supply tank: a grey bolted box with sight glasses, against the forward bulkhead
     const float3 tc = f3(hullX(0.65f, side, 0.30f) + 0.05f, 0.62f, kLength - 0.22f);
@@ -231,6 +268,7 @@ void christmasTreeAndManifold(Kit& k, std::vector<DzLight>& minor) {
     // the main oil pressure and accumulator gauges above the manifold
     const Xform gb = hullBoard(1.45f, side, 0.2f, zc - 0.62f);
     box(k, gb, f3(0, 0, -0.02f), f3(0.16f, 0.22f, 0.02f), 0.005f, MAT_CREAM, FEAT_PLATE);
+    boardBrackets(k, gb, 0.16f, 0.22f, -0.04f, 0.2f);
     gaugeAt(k, gb, f3(0, 0.1f, 0.01f), 0.065f, 0.05f, MAT_BRASS, DIAL_WHITE);
     gaugeAt(k, gb, f3(0, -0.08f, 0.01f), 0.065f, 0.05f, MAT_BRASS, DIAL_WHITE);
 }
@@ -257,11 +295,15 @@ void trimManifold(Kit& k) {
             });
             const float zw = 0.075f + 0.02f * float((v + row) % 3);
             with(k, t * Xform::at(f3(0, 0, zw)), MAT_RED, FEAT_NONE, [&] { handwheel(k, 0.038f, 0.0055f, 3, 0.012f, MAT_RED, MAT_RED); });
+            // the lower row's tags: the tank or line each valve serves
+            static const char* tags[8] = {"FWD\nTRIM", "AFT\nTRIM", "AUX\nNo.1", "AUX\nNo.2", "NEG.\nTANK", "SAFETY\nTANK", "SEA", "DRAIN"};
+            if (row == 0) valveTag(k, t * Xform::at(f3(0, 0, zw)), 0.038f, 0.0055f, tags[v], 0.06f * float(int(v % 3) - 1));
         }
     // the gauge board directly above
     const float yb = 1.55f;
     const Xform gb = hullBoard(yb, side, 0.2f, zc);
     box(k, gb, f3(0, 0, -0.02f), f3(0.5f * (z1 - z0) - 0.04f, 0.24f, 0.02f), 0.006f, MAT_CREAM, FEAT_PLATE);
+    boardBrackets(k, gb, 0.5f * (z1 - z0) - 0.04f, 0.24f, -0.04f, 0.2f);
     for (int g = 0; g < 4; ++g) gaugeAt(k, gb, f3(-0.36f + g * 0.24f, 0.07f, 0.01f), 0.07f, 0.05f, MAT_BRASS, DIAL_SMALL);
     gaugeAt(k, gb, f3(-0.2f, -0.14f, 0.01f), 0.05f, 0.04f, MAT_CHROME, DIAL_SMALL);
     gaugeAt(k, gb, f3(0.2f, -0.14f, 0.01f), 0.05f, 0.04f, MAT_CHROME, DIAL_SMALL);
@@ -308,13 +350,14 @@ void radioRoom(Kit& k) {
     const Xform door = Xform::at(f3(dx, 0.0f, dzz + 0.008f));
     box(k, door, f3(0, 0.27f, 0.0005f), f3(0.22f, 0.12f, 0.0005f), 0.0004f, MAT_PAINT_DARK, FEAT_NONE);
     for (int sl = 0; sl < 9; ++sl)
-        with(k, door * Xform::at(f3(0, 0.165f + sl * 0.026f, 0.004f)) * Xform::rotX(0.75f), MAT_CREAM, FEAT_NONE, [&] { k.roundedBox(f3(0.215f, 0.012f, 0.0011f), 0.0006f); });
+        with(k, door * Xform::at(f3(0, 0.165f + sl * 0.026f, 0.0005f)) * Xform::rotX(0.75f), MAT_CREAM, FEAT_NONE, [&] { k.roundedBox(f3(0.215f, 0.012f, 0.0011f), 0.0006f); });
     for (int sd = -1; sd <= 1; sd += 2) box(k, door, f3(sd * 0.228f, 0.27f, 0.004f), f3(0.008f, 0.128f, 0.004f), 0.002f, MAT_CREAM, FEAT_NONE);
     for (int sd = -1; sd <= 1; sd += 2) box(k, door, f3(0, 0.27f + sd * 0.128f, 0.004f), f3(0.236f, 0.008f, 0.004f), 0.002f, MAT_CREAM, FEAT_NONE);
     with(k, door * Xform::at(f3(0, 1.5f, 0.0f)), MAT_CHROME, FEAT_NONE, [&] {
         k.lathe({{0.075f, -0.001f}, {0.092f, 0.0f}, {0.094f, 0.006f}, {0.084f, 0.009f}, {0.075f, 0.007f}});
     });
-    with(k, door * Xform::at(f3(0, 1.5f, 0.004f)), MAT_BLACK_PLATE, FEAT_NONE, [&] { k.ring(0.0f, 0.077f, 0.0f, true); });
+    with(k, door * Xform::at(f3(0, 1.5f, 0.0012f)), MAT_PAINT_DARK, FEAT_NONE, [&] { k.ring(0.0f, 0.077f, 0.0f, true); });
+    with(k, door * Xform::at(f3(0, 1.5f, 0.0035f)), MAT_GLASS, FEAT_NONE, [&] { k.ring(0.0f, 0.077f, 0.0f, true); });
     plateAt(k, door, f3(0, 1.22f, 0.0f), 0.44f, 0.1f, "TELS\xC4\xB0Z ODASI", PLATE_STENCIL);
     with(k, Xform::frame(f3(doorX0 + 0.38f, 1.0f, zf + 0.045f), f3(0, 1, 0), f3(1, 0, 0)), MAT_CHROME, FEAT_NONE, [&] { k.roundedCylinder(0.01f, -0.08f, 0.08f, 0.004f); });
 }
@@ -366,9 +409,21 @@ void chartTable(Kit& k, float3& top) {
             });
     }
     top = f3(0.5f * (x0 + x1), h + 0.03f, 0.5f * (z0 + z1));
-    // dividers on the chart: two thin legs
-    for (int s = -1; s <= 1; s += 2)
-        with(k, Xform::frame(top + f3(0.08f, 0.0055f, -0.12f), f3(s * 0.25f, 0.0f, 0.97f), f3(0, 1, 0)), MAT_STEEL, FEAT_NONE, [&] { k.roundedCylinder(0.0025f, 0.0f, 0.14f, 0.001f); });
+    // dividers on the chart: two legs from a brass hinge, raised there, their points on the paper
+    {
+        const float3 apex = top + f3(0.08f, 0.0135f, -0.12f);
+        for (int s = -1; s <= 1; s += 2) {
+            const float3 tip = top + f3(0.08f + s * 0.034f, 0.0024f, 0.016f);
+            with(k, Xform::frame(apex, tip - apex, f3(0, 1, 0)), MAT_STEEL, FEAT_NONE, [&] {
+                k.roundedCylinder(0.0024f, 0.0f, length(tip - apex) - 0.008f, 0.001f, true, false);
+                k.lathe({{0.0024f, length(tip - apex) - 0.008f}, {0.0006f, length(tip - apex)}, {0.0f, length(tip - apex) + 0.0002f}});
+            });
+        }
+        with(k, Xform::frame(apex, f3(0, 1, 0), f3(1, 0, 0)), MAT_BRASS, FEAT_NONE, [&] {
+            k.roundedCylinder(0.0068f, -0.0035f, 0.0035f, 0.0012f);
+            k.roundedCylinder(0.0028f, 0.0035f, 0.014f, 0.0008f);
+        });
+    }
     // a parallel rule on the chart: two black rules on brass links, brass knobs to walk it
     {
         const Xform pr = Xform::at(top + f3(-0.12f, 0.0022f, -0.04f)) * Xform::rotY(0.55f);
@@ -384,7 +439,7 @@ void chartTable(Kit& k, float3& top) {
     }
     // a pencil across the track: red lacquer on six flats (the tape's red: no chipped enamel on a pencil), the cut
     // wood, the lead
-    with(k, Xform::frame(top + f3(0.06f, 0.0062f, -0.19f), f3(std::cos(2.3f), 0.0f, std::sin(2.3f)), f3(0, 1, 0)), MAT_TAPE, FEAT_NONE, [&] {
+    with(k, Xform::frame(top + f3(0.17f, 0.0062f, -0.31f), f3(std::cos(1.77f), 0.0f, std::sin(1.77f)), f3(0, 1, 0)), MAT_TAPE, FEAT_NONE, [&] {
         k.hexPrism(0.0072f, 0.0f, 0.15f, 0.0006f);
         k.mat = MAT_WOOD;
         k.lathe({{0.0036f, 0.15f}, {0.0011f, 0.168f}, {0.0f, 0.1683f}});
@@ -392,10 +447,11 @@ void chartTable(Kit& k, float3& top) {
         k.t = k.t * Xform::at(f3(0, 0, 0.1675f));
         k.lathe({{0.00105f, 0.0f}, {0.0002f, 0.0045f}, {0.0f, 0.0046f}});
     });
-    // a coffee mug (cream china) by the chart
-    with(k, Xform::frame(top + f3(0.24f, 0.0f, 0.2f), f3(0, 1, 0), f3(1, 0, 0)), MAT_CREAM, FEAT_NONE, [&] {
+    // a coffee mug (cream china) by the chart, its handle
+    with(k, Xform::frame(top + f3(0.31f, 0.0f, 0.3f), f3(0, 1, 0), f3(1, 0, 0)), MAT_CREAM, FEAT_NONE, [&] {
         k.lathe({{0.0f, 0.0f}, {0.036f, 0.0f}, {0.04f, 0.004f}, {0.042f, 0.09f}, {0.039f, 0.092f}, {0.037f, 0.012f}, {0.0f, 0.012f}});
     });
+    with(k, Xform::frame(top + f3(0.31f + 0.041f, 0.048f, 0.3f), f3(0, 0, 1), f3(0, 1, 0)), MAT_CREAM, FEAT_NONE, [&] { k.torus(0.022f, 0.0055f, -0.5f * kPi, 0.5f * kPi); });
 }
 
 void steeringStand(Kit& k) {
@@ -480,6 +536,7 @@ void airManifold(Kit& k) {
     const float y = 1.55f;
     const Xform gb = hullBoard(y, side, 0.21f, zc);
     box(k, gb, f3(0, 0, -0.02f), f3(0.5f * (z1 - z0) - 0.03f, 0.32f, 0.02f), 0.006f, MAT_ALU, FEAT_NONE);
+    boardBrackets(k, gb, 0.5f * (z1 - z0) - 0.03f, 0.32f, -0.04f, 0.21f);
     for (int row = 0; row < 2; ++row)
         for (int g = 0; g < 9; ++g) gaugeAt(k, gb, f3(-0.62f + g * 0.155f, 0.13f - row * 0.2f, 0.01f), 0.062f, 0.05f, MAT_BRASS, DIAL_AIR);
     plateAt(k, gb, f3(0, 0.285f, 0.002f), 0.5f, 0.035f, "H.P. AIR MANIFOLD   3000 LBS.", PLATE_BRASS);
@@ -619,13 +676,17 @@ void cabinetFace(Kit& k, const Xform& f, float hw, float h, int ci) {
                 }
                 const bool on = (hs >> 24) % 7 != 0;
                 rotarySwitch(k, f, f3(x, y, dz), on ? -0.785f : 0.785f);
-                plateAt(k, f, f3(x, y - 0.042f, dz), 0.08f, 0.016f, circ[label++ % circ.size()], PLATE_BLACK);
+                const size_t li = label++, nc = circ.size();
+                std::string nm = circ[li % nc];
+                if (li >= nc) nm = (li - nc) % 2 == 0 ? std::string("SPARE") : nm + " No.2";
+                if (li >= 2 * nc) nm = "SPARE";
+                plateAt(k, f, f3(x, y - 0.042f, dz), 0.08f, 0.016f, nm, PLATE_BLACK);
             }
         // the louvre: a dark opening behind slats turned down
         const float lw = 0.5f * (xb - xa) - 0.06f;
         with(k, f * Xform::at(f3(0.5f * (xa + xb), 0.27f, dz + 0.0005f)), MAT_PAINT_DARK, FEAT_NONE, [&] { k.quad(2.0f * lw, 0.18f); });
         for (int s = 0; s < 7; ++s)
-            with(k, f * Xform::at(f3(0.5f * (xa + xb), 0.195f + s * 0.025f, dz + 0.005f)) * Xform::rotX(0.75f), MAT_GREY, FEAT_NONE,
+            with(k, f * Xform::at(f3(0.5f * (xa + xb), 0.195f + s * 0.025f, dz + 0.0005f)) * Xform::rotX(0.75f), MAT_GREY, FEAT_NONE,
                  [&] { k.roundedBox(f3(lw, 0.011f, 0.0011f), 0.0006f); });
         for (int s = -1; s <= 1; s += 2)
             box(k, f, f3(0.5f * (xa + xb) + s * (lw + 0.004f), 0.27f, dz + 0.004f), f3(0.004f, 0.095f, 0.004f), 0.0015f, MAT_GREY, FEAT_NONE);
@@ -799,6 +860,24 @@ void props(Kit& k) {
             cord.push_back(c + f3(0.01f * std::sin(t * 9.0f), -0.04f - 0.42f * std::sin(t * kPi) , 0.085f - 0.12f * t));
         }
         with(k, Xform(), MAT_RUBBER, FEAT_NONE, [&] { pipeRun(k, cord, 0.0035f, 0.02f); });
+    }
+    // a sound-powered telephone on the forward bulkhead, starboard of the door: a grey box, the black handset on its
+    // hooks, the circuit selector, the circuit's plate, the cord hanging in a loop
+    {
+        const Xform t = Xform::frame(f3(1.72f, 1.32f, kLength - 0.004f), f3(0, 0, -1), f3(0, 1, 0));
+        box(k, t, f3(0, 0, 0.045f), f3(0.085f, 0.11f, 0.045f), 0.006f, MAT_GREY, FEAT_PLATE);
+        const float hx = -0.022f, hz = 0.104f, hy = 0.015f;
+        with(k, t * Xform::frame(f3(hx, hy - 0.085f, hz), f3(0, 1, 0), f3(1, 0, 0)), MAT_WRINKLE, FEAT_NONE, [&] { k.roundedCylinder(0.0105f, 0.0f, 0.17f, 0.004f); });
+        for (int e = 0; e < 2; ++e)   // the ear and mouth pieces, facing the box
+            with(k, t * Xform::at(f3(hx, hy + (e ? 0.092f : -0.092f), 0.094f)), MAT_WRINKLE, FEAT_NONE, [&] {
+                k.lathe({{0.0f, 0.0f}, {0.022f, 0.0f}, {0.025f, 0.006f}, {0.024f, 0.02f}, {0.012f, 0.03f}, {0.0f, 0.031f}});
+            });
+        for (int s = -1; s <= 1; s += 2)   // the hooks
+            box(k, t, f3(hx + s * 0.017f, hy + 0.03f * s, 0.098f), f3(0.004f, 0.008f, 0.009f), 0.0015f, MAT_CHROME, FEAT_NONE);
+        rotarySwitch(k, t, f3(0.05f, -0.07f, 0.09f), -0.785f);
+        plateAt(k, t, f3(0.05f, 0.065f, 0.09f), 0.05f, 0.02f, "1JV", PLATE_BRASS);
+        // the cord: from the handset's foot down in a loop and back into the box's underside
+        with(k, t * Xform::at(f3(hx + 0.03f, -0.11f, 0.075f)), MAT_RUBBER, FEAT_NONE, [&] { k.torus(0.03f, 0.0032f, kPi, 2.0f * kPi); });
     }
     // the ship's clock on the forward bulkhead (port of the door), a brass case
     {
