@@ -1225,6 +1225,28 @@ __device__ float3 tracePath(const View& v, float3 o, float3 d, int& bounces, int
                 break;
             }
             const float ci = -dot(d, h.n);
+            if (h.k == 0 && v.spotLight >= 0) {
+                // our slit: a narrow window on the sphere's front where our light comes out; seen from inside its cone
+                // its radiance is the light's intensity over the slit's area (a lens is that bright); outside, the
+                // groove is dark. Its edges filtered by the footprint
+                const float3 q = h.n;   // unit, from the centre
+                const float fz = dot(q, v.slitFwd);
+                if (fz > 0.8f) {
+                    const float3 side = cross(v.slitUp, v.slitFwd);
+                    const float u = dot(q, side) * ob.r, w = dot(q, v.slitUp) * ob.r;
+                    const float fwS = fmaxf(coneW, 1e-4f);
+                    const float in = mat::line(u, v.slitHalfW, fwS) * mat::line(w, v.slitHalfH, fwS);
+                    const float groove = mat::line(u, v.slitHalfW + 0.003f, fwS) * mat::line(w, v.slitHalfH + 0.003f, fwS);
+                    if (groove > 0.0f) {
+                        const Light& Ls = v.light[v.spotLight];
+                        const float cone = smoothstepf(Ls.cosOuter, Ls.cosInner, -dot(d, Ls.axis));
+                        const float area = 4.0f * v.slitHalfW * v.slitHalfH;
+                        if (!glowOnly) L += thr * Ls.color * (in * cone / area);
+                        thr *= (1.0f - groove);   // the slit and its groove do not mirror
+                        if (maxc(thr) < v.minWeight) break;
+                    }
+                }
+            }
             thr *= chromeW(ci);
             d = d + h.n * (2.0f * ci);
             o = p;

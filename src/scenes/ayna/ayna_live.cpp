@@ -33,15 +33,40 @@ public:
                           "leave coloured lamps behind; the mirrors multiply everything without end.");
         i.details = {
             {L("Yansıma", "Reflection"),
-             L("Her ayna gerçek değerlerle: 6 mm float camın ön yüzü, arkasında gümüş, camın iki geçişteki soğurması. Derin tünelin "
-               "kararıp yeşile dönmesi buradan gelir, ayar değildir.",
+             L("Her ayna ölçülmüş değerlerle: 6 mm float camın ön yüzü, arkasında gümüş, camın iki geçişteki soğurması. Dik gelişte "
+               "kırmızının %79'u, yeşil ve mavinin %84'ü döner: derin tünel kararır ve camgöbeği-yeşile döner, ayarı yok.",
                "Every mirror from measured constants: the front of 6 mm float glass, silver behind it, the glass's absorption both "
-               "ways. The deep tunnel's darkening and its turn to green come from this, not from a setting.")},
+               "ways. Straight on, 79% of red and 84% of green and blue come back: the deep tunnel darkens and turns cyan-green, "
+               "with no setting.")},
             {L("İzleyici", "Tracer"),
              L("Labirent üçgen bir ızgarada; ışın hücreden hücreye yürür, her hücrede yalnız oradaki zemini, sütunları, kemerleri ve "
-               "aynaları görür. Yüzeyler kesin: yürütme yok, sınır hacmi yok.",
+               "aynaları görür. Yüzeyler kesin: tünelin kırkıncı kopyası hesaplanan yerinden on binde bir piksel sapar.",
                "The labyrinth stands on a triangular lattice; a ray walks from cell to cell, meeting in each only its floor, columns, "
-               "arches and mirrors. The surfaces are exact: no marching, no bounding volumes.")}};
+               "arches and mirrors. The surfaces are exact: the tunnel's fortieth copy lies a ten-thousandth of a pixel from where it "
+               "is computed.")},
+            {L("Aynadan ışık", "Light by the mirrors"),
+             L("Işığın aynadan duvara yolu planda kesin bir hüzme ağacıyla bulunur: her ışığın her aynadaki görüntüsü, pencerelerden "
+               "ve sütunlardan geçebildiği kama. Örnekleme yok, gren yok; aynı izleyiciyle bir milyar fotona karşı %99 uyum.",
+               "The light's way from a mirror to a wall is found exactly, in plan, by a tree of beams: each light's image in each "
+               "mirror, and the wedge of it that passes the windows and the columns. No sampling, no grain; 99% agreement with a "
+               "billion photons through the same tracer.")},
+            {L("Işık haritaları", "Light maps"),
+             L("Bırakılan lambalar ve fenerler durur: ışıkları bırakıldıkları an yüzeylere pişer, küremizin gölgesi her karede "
+               "hesaplanır. Bizim ışığımız her kare yeniden pişer; kendi hücresindeki doğrudan ışığı piksel başına, keskin.",
+               "The lamps left behind and the lanterns stand still: their light is baked into the surfaces the moment they are "
+               "left, our sphere's shadow worked out every frame. Our own light is baked again every frame; straight in its own "
+               "cell it is computed per pixel, sharp.")},
+            {L("Netlik", "Sharpness"),
+             L("Her ışın kendi izdüşüm konisini taşır: desenler onunla süzülür, aynanın ardındaki desen aynı uzaklıktan doğrudan "
+               "bakıldığı kadar keskin. Küçük lambalar konideki paylarıyla toplanır, derin tünelde titremez.",
+               "Every ray carries its own footprint: the patterns are filtered by it, so behind a mirror a pattern is as sharp as "
+               "seen straight at the same distance. Small lamps count by their share of the footprint: in the deep tunnel they do "
+               "not twinkle.")},
+            {L("Görüntü", "Picture"),
+             L("Pikselde altı sabit örnek, her kare aynı; birikim ve gürültü giderici yok. Hafif pus her yol parçası boyunca kapalı "
+               "biçimde. 2560 × 1440'ta saniyede 30-40 kare.",
+               "Six fixed samples a pixel, the same every frame; no accumulation and no denoiser. A light mist, in closed form along "
+               "every piece of the way. 30 to 40 frames a second at 2560 x 1440.")}};
         i.tags = {L("Yansıma", "Reflection"), L("Işık", "Light"), L("Labirent", "Labyrinth")};
         i.image = "assets/gallery/ayna.jpg";
         i.accent = 0x7FC8C2;

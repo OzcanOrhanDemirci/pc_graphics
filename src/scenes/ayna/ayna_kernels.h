@@ -129,6 +129,8 @@ struct View {
     // our light straight in its own cell (and the doorways' far halves) is worked out per pixel, sharp; the rest of its
     // light is in the light map E2
     int spotLight = -1, spotCell = -1;
+    float3 slitFwd{0, 0, -1}, slitUp{0, 1, 0};   // our sphere's slit: its axis and its long side's normal
+    float slitHalfW = 0.04f, slitHalfH = 0.007f; // its half width and half height on the sphere (m)
     int skipRoot = 0;                // the bake of E2: our light's straight light in its own cell is not baked
     int ghosts = 1;                  // the mirrors' front-surface ghosts of the lights, for the path's first this many mirrors
     int ghostCells = 10;             // how far a ghost's ray is followed

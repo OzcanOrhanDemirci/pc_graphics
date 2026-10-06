@@ -518,6 +518,10 @@ View AynaApp::makeView() const {
         L.cosInner = std::cos(cfg.f("spot.inner", 12.0f) * 3.14159265f / 180.0f);
         L.object = -1;
         v.spotLight = v.nLights - 1;
+        v.slitFwd = v.camFwd;
+        v.slitUp = v.camUp;
+        v.slitHalfW = 0.5f * cfg.f("slit.width", 0.08f);
+        v.slitHalfH = 0.5f * cfg.f("slit.height", 0.014f);
         int si, sj, su;
         locate(maze.g, L.pos.x, L.pos.z, si, sj, su);
         v.spotCell = cellIndex(maze.g, si, sj, su);
