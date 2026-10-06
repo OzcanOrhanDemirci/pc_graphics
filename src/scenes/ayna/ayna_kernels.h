@@ -118,6 +118,7 @@ struct View {
     // closed form from the haze nodes of each cell the ray crosses: all of our light's beams, and the lamps' straight
     // ones (their light by the mirrors lights the mist too: not yet, see DURUM)
     float hazeSigma = 0.0f, hazeAbsorb = 0.0f;
+    float hazeG = 0.6f;              // its phase: Henyey-Greenstein, forward (a haze machine's droplets, dust)
     const int* hazeStart = nullptr;  // cellCount + 1
     const int* hazeNodes = nullptr;  // node indices
     float hazeMinWeight = 0.03f;     // a path's mist glow stops being looked for under this weight

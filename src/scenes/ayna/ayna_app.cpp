@@ -84,32 +84,32 @@ AynaCam AynaApp::view(int i) {
     AynaCam c;
     switch (i) {
     default:
-    case 0:   // the hall, from the cell U(0,0)
-        c.pos = make_float3(0.80f, 1.30f, 0.46f);
+    case 0:   // corridor A from its west end, looking along it: arches, columns and lanterns multiplied (the opening)
+        c.pos = make_float3(-3.00f, 1.30f, 2.05f);
+        c.yaw = -1.5708f;
+        c.pitch = 0.06f;
+        break;
+    case 1:   // in corridor A, facing its mirror wall: our sphere and the tunnel of the two parallel mirrors
+        c.pos = make_float3(-1.20f, 1.30f, 2.30f);
         c.yaw = 0.0f;
         c.pitch = 0.0f;
         break;
-    case 1:
+    case 2:   // the hall round the middle column
         c.pos = make_float3(0.80f, 1.30f, 0.46f);
-        c.yaw = 2.094f;
-        c.pitch = -0.1f;
+        c.yaw = 0.35f;
+        c.pitch = 0.05f;
         break;
-    case 2:
-        c.pos = make_float3(0.80f, 1.30f, 0.46f);
-        c.yaw = -2.094f;
-        c.pitch = 0.15f;
-        break;
-    case 3:
-        c.pos = make_float3(0.80f, 1.30f, 0.46f);
-        c.yaw = 1.0f;
-        c.pitch = -0.35f;
+    case 3:   // corridor B, looking down at the polished floor's reflections
+        c.pos = make_float3(1.10f, 1.45f, -2.05f);
+        c.yaw = 1.5708f;
+        c.pitch = -0.30f;
         break;
     }
     return c;
 }
 const char* AynaApp::viewName(int i, bool tr) {
-    static const char* t[4] = {"Salon", "Salon 2", "Salon 3", "Zemin"};
-    static const char* e[4] = {"The hall", "The hall 2", "The hall 3", "The floor"};
+    static const char* t[4] = {"Koridor", "Ayna", "Salon", "Zemin"};
+    static const char* e[4] = {"The corridor", "The mirror", "The hall", "The floor"};
     return (tr ? t : e)[std::clamp(i, 0, 3)];
 }
 
@@ -486,6 +486,7 @@ View AynaApp::makeView() const {
     v.beams = cfg.i("beams", 1);
     v.hazeSigma = cfg.f("haze.sigma", 0.0f);
     v.hazeAbsorb = cfg.f("haze.absorb", 0.0f);
+    v.hazeG = cfg.f("haze.g", 0.6f);
     v.hazeMinWeight = cfg.f("haze.min.weight", 0.03f);
     v.hazeBuf = haze_;
     v.hazeOnly = cfg.i("debug.hazeonly", 0);

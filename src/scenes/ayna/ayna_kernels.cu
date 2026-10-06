@@ -983,31 +983,38 @@ __device__ float3 hazeNode(const View& v, const BeamNode& nd, float3 o, float3 d
     const float h = fmaxf(length(S3 - cp), fmaxf(L.radius, 0.01f));
     const float pa = atanf((ta - t0) / h), pb = atanf((tb - t0) / h);
     const float trans = __expf(-(v.hazeSigma + v.hazeAbsorb) * length(S3 - o - d * clampf(t0, ta, tb)));
-    const float k = v.hazeSigma * (0.25f * INV_PIf) / h * trans;
-    const bool plain = L.cosOuter <= -1.0f && !(nd.m[0] | nd.m[1] | nd.m[2]);
-    if (plain) return L.color * (k * (pb - pa));
-    // four Gauss-Legendre points over the angle
-    const float gx[4] = {-0.8611363116f, -0.3399810436f, 0.3399810436f, 0.8611363116f};
-    const float gw[4] = {0.3478548451f, 0.6521451549f, 0.6521451549f, 0.3478548451f};
+    const float k = v.hazeSigma / h * trans;
+    // the phase (Henyey-Greenstein, forward g) and a spot's cone and the mirrors vary along the way: six Gauss-Legendre
+    // points of the angle
+    const float gx[6] = {-0.9324695142f, -0.6612093865f, -0.2386191861f, 0.2386191861f, 0.6612093865f, 0.9324695142f};
+    const float gw[6] = {0.1713244924f, 0.3607615730f, 0.4679139346f, 0.4679139346f, 0.3607615730f, 0.1713244924f};
+    const float gg = v.hazeG;
     float3 acc = make_float3(0, 0, 0);
     const float mid = 0.5f * (pa + pb), half = 0.5f * (pb - pa);
-    for (int q = 0; q < 4; ++q) {
+    const bool hasMirrors = (nd.m[0] | nd.m[1] | nd.m[2]) != 0;
+    for (int q = 0; q < 6; ++q) {
         const float ph = mid + half * gx[q];
         const float3 x = o + d * (t0 + h * tanf(ph));
-        float3 w = x - S3;   // from the image to the point
+        float3 w = x - S3;   // the light's way at x (from its image)
         w = w * rsqrtf(fmaxf(dot(w, w), 1e-12f));
-        const float2 hl = f2(nd.m00 * w.x + nd.m01 * w.z, nd.m10 * w.x + nd.m11 * w.z);
-        float c = 1.0f;
-        if (L.cosOuter > -1.0f) c = smoothstepf(L.cosOuter, L.cosInner, hl.x * L.axis.x + w.y * L.axis.y + hl.y * L.axis.z);
-        float3 W = make_float3(c, c, c);
-        for (int f = 0; f < 3; ++f) {
-            if (!nd.m[f]) continue;
-            const float2 fn = famNormal(f);
-            const float3 wf = mirrorW(fabsf(hl.x * fn.x + hl.y * fn.y));
-            const float mf = float(nd.m[f]);
-            W *= make_float3(__powf(wf.x, mf), __powf(wf.y, mf), __powf(wf.z, mf));
+        // scattered towards the eye: the angle between the light's way and the way back to the eye (-d)
+        const float ct = -dot(w, d);
+        const float den = 1.0f + gg * gg - 2.0f * gg * ct;
+        const float phase = (1.0f - gg * gg) / (4.0f * M_PIf * den * sqrtf(den));
+        float c = phase;
+        float3 W = make_float3(1, 1, 1);
+        if (L.cosOuter > -1.0f || hasMirrors) {
+            const float2 hl = f2(nd.m00 * w.x + nd.m01 * w.z, nd.m10 * w.x + nd.m11 * w.z);
+            if (L.cosOuter > -1.0f) c *= smoothstepf(L.cosOuter, L.cosInner, hl.x * L.axis.x + w.y * L.axis.y + hl.y * L.axis.z);
+            for (int f = 0; f < 3; ++f) {
+                if (!nd.m[f]) continue;
+                const float2 fn = famNormal(f);
+                const float3 wf = mirrorW(fabsf(hl.x * fn.x + hl.y * fn.y));
+                const float mf = float(nd.m[f]);
+                W *= make_float3(__powf(wf.x, mf), __powf(wf.y, mf), __powf(wf.z, mf));
+            }
         }
-        acc += W * gw[q];
+        acc += W * (c * gw[q]);
     }
     return L.color * acc * (k * half);
 }
