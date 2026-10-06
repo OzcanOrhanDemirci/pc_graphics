@@ -382,7 +382,11 @@ void Renderer::upload(const Mesh& m) {
         const float3 a = m.v[m.idx[k]].p, b = m.v[m.idx[k + 1]].p, c = m.v[m.idx[k + 2]].p;
         longest = std::max(longest, std::max(length(a - b), std::max(length(b - c), length(c - a))));
     }
-    finestTriangle = std::max(longest / 64.0f, 5e-5f);
+    // the band limit's floor: a fixed 0.1 mm. (It was the longest edge over 64: in the room a slab's fan edge of ~0.95 m
+    // made it 14.8 mm, and High's fine relief was filtered out of the geometry everywhere. Where a long patch's factor
+    // stops at 64 the relief left is far below a pixel: the paint's orange peel.)
+    (void)longest;
+    finestTriangle = 1e-4f;
 }
 
 void Renderer::uploadLight(const LightMap& lm) {

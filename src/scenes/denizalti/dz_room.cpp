@@ -65,11 +65,20 @@ float hullX(float y, int side, float in = 0.0f) {
 void bulkhead(Kit& k, float z, bool facePlus, float cx, float cy, float a, float b) {
     const int nu = 360, nv = 110;
     const float R = kRPlate;
+    // the angles round the door; the two that come nearest the hull's corners with the deck moved onto them (a chord
+    // across a corner leaves a hole there)
+    std::vector<float> ths(nu);
+    for (int i = 0; i < nu; ++i) ths[i] = 2.0f * kPi * float(i) / nu;
+    for (int side = -1; side <= 1; side += 2) {
+        float thc = std::atan2(-cy, side * std::sqrt(R * R - kAxisY * kAxisY) - cx);
+        if (thc < 0.0f) thc += 2.0f * kPi;
+        ths[int(std::lround(thc / (2.0f * kPi) * nu)) % nu] = thc;
+    }
     with(k, Xform(), MAT_CREAM, FEAT_PLATE, [&] {
         k.grid(nu, nv, [&](int i, int j) {
             Kit::GridPt g;
             const int ii = facePlus ? nu - i : i;   // the winding faces the room
-            const float th = 2.0f * kPi * float(ii % nu) / nu;
+            const float th = ths[ii % nu];
             const float c = std::cos(th), s = std::sin(th);
             const float ro = std::pow(std::pow(std::fabs(c) / a, 4.0f) + std::pow(std::fabs(s) / b, 4.0f), -0.25f);
             // the ray to the hull's circle and to the deck
@@ -181,6 +190,44 @@ void frames(Kit& k) {
         out.push_back(out.front());
         with(k, Xform::at(f3(0, kAxisY, 0)), MAT_CREAM, FEAT_PLATE, [&] { k.lathe(out, a0, a1); });
     }
+}
+
+// the deck's edge: an angle bar welded to the hull along both sides, the plates resting on its flange (no gap to the
+// lining); under the plates the pump room's dark (what the plates' joints show)
+void deckEdges(Kit& k) {
+    for (int side = -1; side <= 1; side += 2) {
+        const float xh = side * std::sqrt(kRCork * kRCork - kAxisY * kAxisY);   // the lining at the deck's height
+        // an L in the (x, y) plane: a horizontal flange under the plates' edge, a vertical leg up the lining
+        const float x0 = side * 2.33f;
+        std::vector<float2> poly = {{x0, -0.012f}, {xh + side * 0.01f, -0.012f}, {xh + side * 0.01f, 0.06f}, {xh - side * 0.012f, 0.06f},
+                                    {xh - side * 0.012f, -0.004f}, {x0, -0.004f}};
+        if (side < 0) std::reverse(poly.begin(), poly.end());
+        float area = 0.0f;
+        for (size_t i = 0; i < poly.size(); ++i) {
+            const float2 p0 = poly[i], p1 = poly[(i + 1) % poly.size()];
+            area += p0.x * p1.y - p1.x * p0.y;
+        }
+        if (area < 0.0f) std::reverse(poly.begin(), poly.end());
+        with(k, Xform(), MAT_CREAM, FEAT_PLATE, [&] { k.extrude(Kit::roundOutline(poly, 0.002f, 2), 0.0f, kLength, true); });
+    }
+    // the pump room's floor far below, dark
+    with(k, Xform::at(f3(0, -0.45f, 0.5f * kLength)) * Xform::rotX(-0.5f * kPi), MAT_PAINT_DARK, FEAT_NONE, [&] {
+        const float m0 = k.maxEdge;
+        k.maxEdge = 0.25f;
+        k.quad(4.9f, kLength);
+        k.maxEdge = m0;
+    });
+    // its walls: the bulkheads going on down (2 mm behind their room face, up past the deck, so no seam with them) and
+    // the sides; a joint's slanting view ends on one of them
+    const float m0 = k.maxEdge;
+    k.maxEdge = 0.25f;
+    for (int end = 0; end < 2; ++end)
+        with(k, Xform::at(f3(0, -0.215f, end ? kLength + 0.002f : -0.002f)) * (end ? Xform::rotY(kPi) : Xform()), MAT_PAINT_DARK, FEAT_NONE,
+             [&] { k.quad(4.9f, 0.47f); });
+    for (int side = -1; side <= 1; side += 2)
+        with(k, Xform::at(f3(side * 2.44f, -0.225f, 0.5f * kLength)) * Xform::rotY(-side * 0.5f * kPi), MAT_PAINT_DARK, FEAT_NONE,
+             [&] { k.quad(kLength + 0.01f, 0.45f); });
+    k.maxEdge = m0;
 }
 
 void deck(Kit& k) {
@@ -323,6 +370,7 @@ Start buildRoom(Mesh& m, float maxEdge, std::vector<DzLight>& lights) {
     bulkhead(k, 0.0f, true, 1.1f, 0.48f + 0.485f, 0.255f, 0.485f);
     bulkhead(k, kLength, false, 1.1f, 0.48f + 0.485f, 0.255f, 0.485f);
     deck(k);
+    deckEdges(k);
     overhead(k);
     // stencils: the forward door's order in Turkish (the boat's own hand, 1970s-2000), frame numbers on the frames
     if (activeDecals) {

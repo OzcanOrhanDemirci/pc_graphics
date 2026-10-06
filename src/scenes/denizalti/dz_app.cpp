@@ -311,6 +311,34 @@ int runCli(int argc, char** argv) {
             }
         return 0;
     }
+    if (hasArg(argc, argv, "--kararlilik")) {
+        // a slow walk with a turn from the start (the live settings), the same frames as a reference at 16x: the
+        // frames for tools/kararlilik.py (live_i.png, ref_i.png)
+        const std::string dir = out + "kararlilik_" + argValue(argc, argv, "--kararlilik") + "/";
+        std::filesystem::create_directories(dir);
+        const int n = std::stoi(argValue(argc, argv, "--kare-sayisi", "48"));
+        const Camera c0 = a.cam;
+        const float3 fw0 = c0.forward();
+        Settings live = a.set, ref = a.set;
+        ref.ssaa = 16;
+        setPNGCompression(1);
+        for (int pass = 0; pass < 2; ++pass)
+            for (int i = 0; i < n; ++i) {
+                a.cam = c0;
+                a.cam.pos = c0.pos + make_float3(fw0.x, 0.0f, fw0.z) * (0.008f * i);
+                a.cam.yaw = c0.yaw + 0.0025f * i;
+                a.cam.pitch = c0.pitch + 0.0008f * i;
+                const Settings& s = pass ? ref : live;
+                a.renderer.draw(a.cam, s, s.width, s.height, 0.0);
+                std::vector<uint8_t> px;
+                a.renderer.readOutput(px);
+                char nm[32];
+                std::snprintf(nm, sizeof(nm), "%s_%04d.png", pass ? "ref" : "live", i);
+                writePNG(dir + nm, a.renderer.outW(), a.renderer.outH(), px.data());
+            }
+        std::printf("kararlilik kareleri: %s (%d canli + %d referans, canli %dx, referans 16x)\n", dir.c_str(), n, n, live.ssaa);
+        return 0;
+    }
     if (hasArg(argc, argv, "--foto")) {
         // the photo as F12 makes it: tiles of 1920 x 1080 with a 192 px guard band
         const std::string name = argValue(argc, argv, "--foto");
@@ -345,8 +373,63 @@ int runCli(int argc, char** argv) {
         const std::string name = argValue(argc, argv, "--kare");
         const GpuTimes g = timeFrames(a, 3);
         savePng(out + name + ".png", a.renderer);
+        if (hasArg(argc, argv, "--siyah-maske")) {   // the pixels where no surface was drawn (HDR exactly zero), cyan
+            std::vector<float> rgb;
+            int w = 0, h = 0;
+            a.renderer.readHdr(rgb, w, h);
+            std::vector<uint8_t> m(size_t(w) * h * 4, 0);
+            int n = 0;
+            for (size_t i = 0; i < size_t(w) * h; ++i) {
+                const bool z = rgb[i * 3] == 0.0f && rgb[i * 3 + 1] == 0.0f && rgb[i * 3 + 2] == 0.0f;
+                n += z;
+                m[i * 4 + 0] = z ? 0 : uint8_t(std::min(255.0f, rgb[i * 3] * 4000.0f));
+                m[i * 4 + 1] = z ? 255 : uint8_t(std::min(255.0f, rgb[i * 3 + 1] * 4000.0f));
+                m[i * 4 + 2] = z ? 255 : uint8_t(std::min(255.0f, rgb[i * 3 + 2] * 4000.0f));
+                m[i * 4 + 3] = 255;
+            }
+            writePNG(out + name + "_maske.png", w, h, m.data());
+            std::printf("siyah piksel: %d\n", n);
+        }
         std::printf("kare %s: %s %dx tess %d, %.2f ms\n", name.c_str(), kResNames[a.resIndex], kSsaa[a.ssaaIndex], a.set.tess, g.total);
         return 0;
+    }
+    if (argValue(argc, argv, "--test") == "oda-catlak") {
+        // the room is a closed shell: a crack shows the clear colour (exactly black; every surface gets at least the
+        // haze). The same views drawn as High and with every factor 1 (the base mesh as it is): gaps that are real
+        // (between deck plates) are black in both; what High adds is cracks
+        const float cams[][5] = {{0.95f, 1.62f, 2.45f, -0.2f, -0.06f}, {1.3f, 1.2f, 2.2f, 0.69f, -0.25f}, {-0.9f, 1.62f, 6.9f, 3.3f, -0.1f},
+                                 {0.2f, 1.7f, 4.6f, 1.57f, 0.5f}, {-0.5f, 1.4f, 1.0f, -0.9f, -0.4f}, {1.15f, 1.4f, 5.3f, 1.25f, 0.02f}};
+        auto black = [&](Renderer& r) {
+            std::vector<float> rgb;
+            int w = 0, h = 0;
+            r.readHdr(rgb, w, h);
+            int n = 0;
+            for (size_t i = 0; i < size_t(w) * h; ++i)
+                if (rgb[i * 3] == 0.0f && rgb[i * 3 + 1] == 0.0f && rgb[i * 3 + 2] == 0.0f) ++n;
+            return n;
+        };
+        int worst = 0;
+        for (const auto& c : cams) {
+            a.cam.pos = make_float3(c[0], c[1], c[2]);
+            a.cam.yaw = c[3];
+            a.cam.pitch = c[4];
+            for (int ss : {0, 2}) {
+                a.ssaaIndex = ss;
+                a.applyChoices();
+                a.set.tess = 2;
+                a.set.tessOff = false;
+                timeFrames(a, 1);
+                const int hi = black(a.renderer);
+                a.set.tessOff = true;
+                timeFrames(a, 1);
+                const int base = black(a.renderer);
+                a.set.tessOff = false;
+                std::printf("  kamera (%.2f, %.2f, %.2f) %2dx: siyah piksel High %d, bolmesiz %d, fark %d\n", c[0], c[1], c[2], kSsaa[ss], hi, base, hi - base);
+                worst = std::max(worst, hi - base);
+            }
+        }
+        std::printf("oda catlak testi: en kotu fark %d piksel -> %s\n", worst, worst > 0 ? "KALDI" : "GECTI");
+        return worst > 0 ? 1 : 0;
     }
     if (argValue(argc, argv, "--test") == "catlak") {
         int fails = 0;
