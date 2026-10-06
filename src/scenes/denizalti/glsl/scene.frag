@@ -84,6 +84,69 @@ M material(uint m) {
     return r;
 }
 
+bool painted(uint m) {
+    return m == MAT_CREAM || m == MAT_PAINT_PIPE || m == MAT_PAINT_HULL || m == MAT_GREY || m == MAT_DECK_GREEN || m == MAT_RED ||
+           m == MAT_PAINT_DARK || m == MAT_DECK;
+}
+
+// A boat in commission, kept up but lived in (Ozcan's 1-a): paint chipped on the edges hands and boots knock (down to
+// the red primer, at the worst to bare steel), grime gathered in the corners, a little dust on what faces up, brass
+// tarnished where it is not handled, the deck's paint worn along the walkway. Deterministic: world position, the
+// baked occlusion, the edge weight the kit wrote; every threshold softened by the sample's footprint (no aliasing).
+void weather(inout M m, uint mat, vec3 p, inout vec3 N, float edge, float ao, float size) {
+    float fw = max(size * 40.0, 0.02);   // the width of a threshold in noise units at this footprint
+    vec3 d;
+    if (painted(mat)) {
+        // chips: where the edge is exposed and the noise says so
+        float n1 = fbm(p, 0.018, 3, 0.55, size, d);
+        float n2 = fbm(p + 11.3, 0.0045, 2, 0.5, size, d);
+        // chips need an edge: a face alone never chips (else specks everywhere, read as grain)
+        float worn = edge * 1.3 + n1 * 0.7 + n2 * 0.25 - 1.05 - (1.0 - smoothstep(0.2, 0.55, edge)) * 2.0;
+        if (mat == MAT_DECK_GREEN || mat == MAT_DECK) {
+            // the walkway: boots scuff the paint along the centre line and in front of the stations
+            float walk = 1.0 - smoothstep(0.35, 0.9, abs(p.x)) + 0.5 * (1.0 - smoothstep(0.2, 0.6, abs(abs(p.x) - 1.3)));
+            float scuff = clamp(walk * (0.6 + n1), 0.0, 1.0);
+            m.base = mix(m.base, m.base * 1.35 + vec3(0.02), scuff * 0.5);
+            m.rough = mix(m.rough, 0.6, scuff * 0.6);
+        }
+        float primer = smoothstep(-fw, fw, worn);
+        float steel = smoothstep(0.18 - fw, 0.18 + fw, worn);
+        m.base = mix(m.base, vec3(0.30, 0.11, 0.06), primer);
+        m.rough = mix(m.rough, 0.62, primer);
+        m.base = mix(m.base, vec3(0.50, 0.50, 0.50), steel);
+        m.metal = mix(m.metal, 1.0, steel);
+        m.rough = mix(m.rough, 0.42, steel);
+        // the paint film's edge: a step where it chips (the normal tilts across it)
+        // grime: in the corners the paint darkens and dulls, a little streaked downwards
+        float gn = fbm(p * vec3(1.0, 0.35, 1.0), 0.06, 3, 0.5, size, d);
+        float grime = clamp((1.0 - ao) * 1.6 + gn * 0.5 - 0.25, 0.0, 1.0);
+        m.base *= mix(1.0, 0.62, grime);
+        m.rough = mix(m.rough, min(m.rough + 0.2, 0.85), grime);
+        // smudges: the gloss varies where hands go
+        float sm = fbm(p + 4.1, 0.09, 2, 0.5, size, d);
+        m.rough = clamp(m.rough + 0.08 * sm, 0.05, 0.95);
+    }
+    if (mat == MAT_BRASS) {
+        float t = fbm(p, 0.03, 3, 0.55, size, d);
+        float tarnish = clamp(0.45 + t * 0.9 - edge * 0.6 - (1.0 - ao) * -0.5, 0.0, 1.0);
+        m.base = mix(m.base, m.base * vec3(0.55, 0.48, 0.36), tarnish);
+        m.rough = mix(m.rough, 0.45, tarnish);
+    }
+    if (mat == MAT_STEEL || mat == MAT_CHROME) {
+        float t = fbm(p, 0.006, 2, 0.5, size, d);
+        m.rough = clamp(m.rough + 0.08 * t + (1.0 - ao) * 0.15, 0.03, 0.9);
+    }
+    // dust on what faces up, away from hands (a damp boat: little of it)
+    float up = smoothstep(0.55, 0.95, N.y);
+    if (up > 0.0 && mat != MAT_DECK_GREEN && mat != MAT_EMISSIVE && mat != MAT_RED_GLASS) {
+        float dn = fbm(p + 7.7, 0.02, 2, 0.5, size, d);
+        float dust = up * clamp(0.35 + dn, 0.0, 1.0) * 0.35;
+        m.base = mix(m.base, vec3(0.42, 0.40, 0.36), dust);
+        m.rough = mix(m.rough, 0.8, dust);
+        m.metal = mix(m.metal, 0.0, dust);
+    }
+}
+
 float D_GGX(float nh, float a) {
     float a2 = a * a;
     float d = nh * nh * (a2 - 1.0) + 1.0;
@@ -133,6 +196,11 @@ void main() {
     }
     vec3 V = normalize(camPos.xyz - i.p);
     if (dot(N, V) < 0.0) N = normalize(N + V * (-dot(N, V) + 0.01));
+    float ao = texture(lmL0, i.uv2).a;
+    {
+        float d = max(distance(i.p, camPos.xyz), 0.02);
+        weather(m, i.mat, i.p, N, i.edge, ao, 2.0 * camPos.w * d / viewport.y);
+    }
     vec3 c = m.emit;
     // ---- the baked light: L1 spherical harmonics of what arrives here (amount and direction), read at the detail normal
     vec3 c0 = texture(lmL0, i.uv2).rgb;
@@ -148,7 +216,8 @@ void main() {
     vec3 Lr = max(vec3(0.282095 * c0.r + 0.488603 * dot(sr, R), 0.282095 * c0.g + 0.488603 * dot(sg, R), 0.282095 * c0.b + 0.488603 * dot(sb, R)), vec3(0));
     vec3 envF = envBRDF(f0, m.rough, nv);
     c += (1.0 - m.metal) * m.base * (1.0 - envF) * E / PI;
-    c += Lr * envF;
+    float specOcc = clamp(pow(nv + ao, exp2(-16.0 * m.rough - 1.0)) - 1.0 + ao, 0.0, 1.0);   // Lagarde
+    c += Lr * envF * specOcc;
     // the key lamps' highlights: sphere lights, their shadow baked (visibility per texel)
     for (int k = 0; k < 4; ++k) {
         if (lampL[k].w <= 0.0) continue;

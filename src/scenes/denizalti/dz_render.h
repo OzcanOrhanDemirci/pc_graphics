@@ -64,6 +64,7 @@ public:
 
 private:
     bool buildPrograms(std::string& err);
+    void makeNoise();
     void targets(int w, int h, int ssaa, int ow, int oh);
     void freeTargets();
 
@@ -86,6 +87,7 @@ private:
     // targets
     unsigned msColor_ = 0, msDepth_ = 0, msFbo_ = 0;
     unsigned lightTex_[5] = {};
+    unsigned noiseTex_ = 0;
     float lampPos_[4][4] = {}, lampL_[4][4] = {};
     unsigned hdrTex_ = 0, ldrTex_ = 0, ldrFbo_ = 0, outTex_ = 0, outFbo_ = 0;
     int rw_ = 0, rh_ = 0, ssaa_ = 0, outW_ = 0, outH_ = 0;

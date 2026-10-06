@@ -53,17 +53,23 @@ float gnoise(vec3 x, out vec3 d) {
 // fade an octave out as its wavelength nears the sampling size (band limit: no octave finer than ~2 samples)
 float bandWeight(float wavelength, float size) { return clamp(wavelength / (4.0 * size) - 0.5, 0.0, 1.0); }
 
-// fractal noise with a band limit; returns value, d the 3D gradient
+// The noise, precomputed: one octave of periodic gradient noise (32 cells, 4 texels a cell, 128^3) with its gradient,
+// mipmapped: an octave is one filtered fetch instead of eight hashes, and its mip level is chosen from the sampling size
+// (the band limit comes with the filtering). Built by the renderer from the same gnoise as above (dz_render.cpp).
+layout(binding = 6) uniform sampler3D noiseTex;   // r: value, gba: d(value)/d(lattice)
+
+// fractal noise with a band limit; returns value, d the 3D gradient (per metre)
 float fbm(vec3 p, float baseWavelength, int oct, float gain, float size, out vec3 d) {
     float v = 0.0, a = 1.0, wl = baseWavelength;
     d = vec3(0);
     for (int i = 0; i < oct; ++i) {
         float w = bandWeight(wl, size);
         if (w <= 0.0) break;
-        vec3 g;
-        float n = gnoise(p / wl + float(i) * 17.31, g);
-        v += a * w * n;
-        d += a * w * g / wl;
+        vec3 q = p / wl + vec3(float(i) * 17.31, float(i) * 5.17, float(i) * 11.83);
+        float lod = log2(max(4.0 * size / wl, 1e-6));
+        vec4 s = textureLod(noiseTex, q / 32.0, lod);
+        v += a * w * s.r;
+        d += a * w * s.gba / wl;
         a *= gain;
         wl *= 0.5;
     }

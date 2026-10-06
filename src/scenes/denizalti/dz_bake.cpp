@@ -143,7 +143,7 @@ uint64_t bakeKey(const Mesh& m, const std::vector<DzLight>& lights, const BakeOp
     h = fnv(h, m.idx.data(), m.idx.size() * sizeof(uint32_t));
     h = fnv(h, lights.data(), lights.size() * sizeof(DzLight));
     h = fnv(h, &o, sizeof(o));
-    const int version = 3;
+    const int version = 4;
     h = fnv(h, &version, sizeof(version));
     return h;
 }
@@ -385,7 +385,7 @@ bool bake(const Mesh& m, const Atlas& a, const std::vector<DzLight>& lights, con
                 dd[k * 4 + 2] = v[k].z * inv;
                 dd[k * 4 + 3] = 0.0f;
             }
-            dd[3] = 1.0f;   // covered
+            dd[3] = h2[i].w > 0.0f ? h1[i].w / h2[i].w : 1.0f;   // the occlusion within 25 cm (1 open)
             dd[16] = v[4].x * inv;
             dd[17] = v[4].y * inv;
             dd[18] = v[4].z * inv;

@@ -140,6 +140,7 @@ extern "C" __global__ void __raygen__bake() {
     const unsigned int gi = params.texelBase + i;
     float3 L0 = make_float3(0, 0, 0), L1r = L0, L1g = L0, L1b = L0;
     float vis[4] = {0, 0, 0, 0};
+    float aoVis = 0.0f, aoW = 0.0f;   // cosine-weighted openness within 25 cm (where grime gathers, where reflections dim)
     const float Y0 = 0.282095f, Y1 = 0.488603f;
     // the first direction of every sample from a 2D low-discrepancy sequence (R2), shifted per texel
     const float sx = float(pcg(gi * 2u + 1u) >> 8) * (1.0f / 16777216.0f), sy = float(pcg(gi * 2u + 2u) >> 8) * (1.0f / 16777216.0f);
@@ -169,6 +170,9 @@ extern "C" __global__ void __raygen__bake() {
         frame(n, tt, bb);
         const float cz = u1, sz = sqrtf(fmaxf(0.0f, 1.0f - cz * cz)), ph = 2.0f * M_PIf * u2;
         const float3 w = normalize(tt * (sz * cosf(ph)) + bb * (sz * sinf(ph)) + n * cz);
+        const float cw = fmaxf(dot(w, n), 0.0f);
+        aoW += cw;
+        if (visible(o, w, 0.25f)) aoVis += cw;
         const float3 Li = incoming(o, w, rng);
         const float3 c = Li * (2.0f * M_PIf);
         L0 += c * Y0;
@@ -178,8 +182,8 @@ extern "C" __global__ void __raygen__bake() {
     }
     float4 a0 = params.acc0[i], a1 = params.acc1[i], a2 = params.acc2[i], a3 = params.acc3[i];
     a0 = make_float4(a0.x + L0.x, a0.y + L0.y, a0.z + L0.z, a0.w + float(params.samples));
-    a1 = make_float4(a1.x + L1r.x, a1.y + L1r.y, a1.z + L1r.z, 0.0f);
-    a2 = make_float4(a2.x + L1g.x, a2.y + L1g.y, a2.z + L1g.z, 0.0f);
+    a1 = make_float4(a1.x + L1r.x, a1.y + L1r.y, a1.z + L1r.z, a1.w + aoVis);
+    a2 = make_float4(a2.x + L1g.x, a2.y + L1g.y, a2.z + L1g.z, a2.w + aoW);
     a3 = make_float4(a3.x + L1b.x, a3.y + L1b.y, a3.z + L1b.z, 0.0f);
     params.acc0[i] = a0;
     params.acc1[i] = a1;

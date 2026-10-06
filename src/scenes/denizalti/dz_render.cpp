@@ -164,6 +164,7 @@ bool Renderer::init(const std::string& root, std::string& err) {
     std::printf("denizalti: GL %s | %s | ornek: en cok %d (renk %d, derinlik %d) | tessellation en cok %d\n", glVersion.c_str(),
                 glRenderer.c_str(), maxSamples, maxColorSamples, maxDepthSamples, maxTessLevel);
     if (!buildPrograms(err)) return false;
+    makeNoise();
     glCreateBuffers(1, &ubo_);
     glNamedBufferStorage(ubo_, sizeof(FrameUBO), nullptr, GL_DYNAMIC_STORAGE_BIT);
     glCreateVertexArrays(1, &emptyVao_);
@@ -172,6 +173,88 @@ bool Renderer::init(const std::string& root, std::string& err) {
 }
 
 bool Renderer::reloadShaders(std::string& err) { return buildPrograms(err); }
+
+namespace {
+// the shader's gradient noise (common.glsl gnoise), periodic in 32 lattice cells: value and gradient
+uint32_t nhash(uint32_t x, uint32_t y, uint32_t z) {
+    x = (x & 31u) + 65536u;   // periodic, and the shader's offset into unsigned range
+    y = (y & 31u) + 65536u;
+    z = (z & 31u) + 65536u;
+    x *= 1597334673u;
+    y *= 3812015801u;
+    z *= 2798796415u;
+    uint32_t n = (x ^ y ^ z) * 1597334673u;
+    n ^= n >> 16;
+    n *= 2246822519u;
+    n ^= n >> 13;
+    return n;
+}
+void ngrad(uint32_t x, uint32_t y, uint32_t z, float g[3]) {
+    const uint32_t h = nhash(x, y, z);
+    g[0] = float(h & 1023u) / 511.5f - 1.0f;
+    g[1] = float((h >> 10) & 1023u) / 511.5f - 1.0f;
+    g[2] = float((h >> 20) & 1023u) / 511.5f - 1.0f;
+}
+float gnoise(float px, float py, float pz, float d[3]) {
+    const float ix = std::floor(px), iy = std::floor(py), iz = std::floor(pz);
+    const float f[3] = {px - ix, py - iy, pz - iz};
+    const uint32_t cx = uint32_t(int(ix)), cy = uint32_t(int(iy)), cz = uint32_t(int(iz));
+    float u[3], du[3];
+    for (int k = 0; k < 3; ++k) {
+        u[k] = f[k] * f[k] * f[k] * (f[k] * (f[k] * 6.0f - 15.0f) + 10.0f);
+        du[k] = 30.0f * f[k] * f[k] * (f[k] * (f[k] - 2.0f) + 1.0f);
+    }
+    float v[8], gs[8][3];
+    for (int c = 0; c < 8; ++c) {
+        const int ox = c & 1, oy = (c >> 1) & 1, oz = (c >> 2) & 1;
+        ngrad(cx + ox, cy + oy, cz + oz, gs[c]);
+        v[c] = gs[c][0] * (f[0] - ox) + gs[c][1] * (f[1] - oy) + gs[c][2] * (f[2] - oz);
+    }
+    // trilinear in the quintic weights, and its derivative (numerically exact enough for a texture)
+    auto lerpf = [](float a, float b, float t) { return a + (b - a) * t; };
+    const float x00 = lerpf(v[0], v[1], u[0]), x10 = lerpf(v[2], v[3], u[0]), x01 = lerpf(v[4], v[5], u[0]), x11 = lerpf(v[6], v[7], u[0]);
+    const float y0 = lerpf(x00, x10, u[1]), y1 = lerpf(x01, x11, u[1]);
+    const float val = lerpf(y0, y1, u[2]);
+    // the gradient: the weights' derivatives plus the interpolated corner gradients
+    float g[3] = {0, 0, 0};
+    for (int c = 0; c < 8; ++c) {
+        const int ox = c & 1, oy = (c >> 1) & 1, oz = (c >> 2) & 1;
+        const float wx = ox ? u[0] : 1.0f - u[0], wy = oy ? u[1] : 1.0f - u[1], wz = oz ? u[2] : 1.0f - u[2];
+        const float w = wx * wy * wz;
+        for (int k = 0; k < 3; ++k) g[k] += w * gs[c][k];
+        g[0] += (ox ? du[0] : -du[0]) * wy * wz * v[c];
+        g[1] += wx * (oy ? du[1] : -du[1]) * wz * v[c];
+        g[2] += wx * wy * (oz ? du[2] : -du[2]) * v[c];
+    }
+    for (int k = 0; k < 3; ++k) d[k] = g[k];
+    return val;
+}
+}   // namespace
+
+void Renderer::makeNoise() {
+    const int N = 128;   // 4 texels per lattice cell, 32 cells
+    std::vector<uint16_t> data(size_t(N) * N * N * 4);
+    for (int z = 0; z < N; ++z)
+        for (int y = 0; y < N; ++y)
+            for (int x = 0; x < N; ++x) {
+                float d[3];
+                const float v = gnoise((x + 0.5f) / 4.0f, (y + 0.5f) / 4.0f, (z + 0.5f) / 4.0f, d);
+                uint16_t* o = &data[((size_t(z) * N + y) * N + x) * 4];
+                o[0] = toHalf(v);
+                o[1] = toHalf(d[0]);
+                o[2] = toHalf(d[1]);
+                o[3] = toHalf(d[2]);
+            }
+    glCreateTextures(GL_TEXTURE_3D, 1, &noiseTex_);
+    glTextureStorage3D(noiseTex_, 8, GL_RGBA16F, N, N, N);
+    glTextureSubImage3D(noiseTex_, 0, 0, 0, 0, N, N, N, GL_RGBA, GL_HALF_FLOAT, data.data());
+    glGenerateTextureMipmap(noiseTex_);
+    glTextureParameteri(noiseTex_, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTextureParameteri(noiseTex_, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTextureParameteri(noiseTex_, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTextureParameteri(noiseTex_, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTextureParameteri(noiseTex_, GL_TEXTURE_WRAP_R, GL_REPEAT);
+}
 
 void Renderer::upload(const Mesh& m) {
     if (vao_) glDeleteVertexArrays(1, &vao_);
@@ -418,6 +501,7 @@ void Renderer::draw(const Camera& cam, const Settings& s, int ow, int oh, double
     glBindVertexArray(vao_);
     glPatchParameteri(GL_PATCH_VERTICES, 3);
     for (int k = 0; k < 5; ++k) glBindTextureUnit(1 + k, lightTex_[k]);
+    glBindTextureUnit(6, noiseTex_);
     {   // the clusters inside the view (each box against the clip planes, the projection's rows)
         const float* M = u.viewProj;
         auto row = [&](int r) { return std::array<float, 4>{M[r], M[4 + r], M[8 + r], M[12 + r]}; };
@@ -534,6 +618,8 @@ void Renderer::release() {
         if (t) glDeleteTextures(1, &t);
         t = 0;
     }
+    if (noiseTex_) glDeleteTextures(1, &noiseTex_);
+    noiseTex_ = 0;
     for (auto& f : queries_)
         if (f[0]) glDeleteQueries(5, f);
     std::memset(queries_, 0, sizeof(queries_));

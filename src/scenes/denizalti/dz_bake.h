@@ -19,8 +19,8 @@ struct BakeOptions {
     float texel = 0.002f;    // metres per texel (the base density)
 };
 
-// what the live picture reads: five RGBA16F planes over the atlas (L0 rgb; L1 of red, green, blue as xyz; the
-// visibility of the four key lamps, their specular highlight's baked shadow)
+// what the live picture reads: five RGBA16F planes over the atlas (L0 rgb + the occlusion within 25 cm; L1 of red,
+// green, blue as xyz; the visibility of the four key lamps, their specular highlight's baked shadow)
 struct LightMap {
     Atlas atlas;
     std::vector<uint16_t> plane[5];   // half floats, 4 per texel, row 0 = atlas row 0
