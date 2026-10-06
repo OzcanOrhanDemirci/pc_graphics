@@ -27,7 +27,9 @@ Atlas buildAtlas(Mesh& m, float texel, int maxWidth) {
         }
         const float sx = c.hi.x - c.lo.x, sy = c.hi.y - c.lo.y;
         // small parts are looked at closely: up to twice as fine
-        c.tex = std::max(sx, sy) < 0.06f ? texel * 0.5f : texel;
+        // small parts are looked at closely (twice as fine); the big plain surfaces (lining, deck, bulkheads) carry
+        // smooth light: half as coarse again
+        c.tex = std::max(sx, sy) < 0.06f ? texel * 0.5f : (sx * sy > 0.5f ? texel * 1.5f : texel);
         c.w = int(std::ceil(sx / c.tex)) + 1 + 2 * a.pad;
         c.h = int(std::ceil(sy / c.tex)) + 1 + 2 * a.pad;
         if (c.w > maxWidth) {   // too wide for the atlas: coarser

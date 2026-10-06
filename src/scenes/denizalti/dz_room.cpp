@@ -287,7 +287,7 @@ void redLamp(Kit& k, std::vector<DzLight>& lights, float3 p) {
         with(k, Xform(), MAT_CREAM, FEAT_NONE, [&] { pipeRun(k, pts, 0.0035f, 0.01f); });
     }
     // the light: the globe glows red (a filtered bulb inside)
-    lights.push_back(DzLight{c, rg * 0.98f, make_float3(1.0f, 0.02f, 0.006f) * (1.2f / 0.2126f), 0.0f});
+    lights.push_back(DzLight{c, rg * 0.98f, make_float3(1.0f, 0.02f, 0.006f) * (0.55f / 0.2126f), 0.0f});
 }
 
 // the chart lamp: a short arm off the overhead, an enamelled cone shade, a bulb inside
@@ -347,18 +347,21 @@ Start buildRoom(Mesh& m, float maxEdge, std::vector<DzLight>& lights) {
         }
     }
     float3 chartTop = f3(-0.4f, 0.98f, frameZ(50.25f));
-    buildEquipment(k, chartTop);
+    std::vector<DzLight> minor;
+    buildEquipment(k, chartTop, minor);
     // the night lamps over the port side's stations and the passage
     redLamp(k, lights, onHull(0.5f * kPi + 0.42f, frameZ(52.0f), 0.08f));
     redLamp(k, lights, onHull(0.5f * kPi + 0.42f, frameZ(49.4f), 0.08f));
     redLamp(k, lights, onHull(0.5f * kPi - 0.5f, frameZ(53.0f), 0.08f));
     chartLamp(k, lights, onHull(0.5f * kPi + 0.16f, chartTop.z, 0.12f), chartTop + f3(0.0f, 0.62f, 0.0f));
+    // the key lamps first (their highlights are drawn, dz_render), then the small glows
+    lights.insert(lights.end(), minor.begin(), minor.end());
     // built with x to starboard: mirrored so starboard is on the right of someone facing the bow (dz_room.h)
     mirrorX(m);
     for (DzLight& l : lights) l.p.x = -l.p.x;
     finishMesh(m);
-    // standing inside the after door (starboard), looking forward and a little to port along the room
-    return Start{f3(-0.85f, 1.62f, 0.95f), 0.22f, -0.07f};
+    // standing on the port side by the trim manifold, looking forward along the diving station to the Christmas tree
+    return Start{f3(0.95f, 1.62f, 2.45f), -0.2f, -0.06f};
 }
 
 }   // namespace dz

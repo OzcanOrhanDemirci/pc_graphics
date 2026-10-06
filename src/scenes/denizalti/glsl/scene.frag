@@ -19,18 +19,18 @@ layout(binding = 3) uniform sampler2D lmG;
 layout(binding = 4) uniform sampler2D lmB;
 layout(binding = 5) uniform sampler2D lmVis;
 
-// irradiance from one channel's L1 harmonics, the non-linear reconstruction (Geomerics: no negative lobe, a strongly
-// directional light stays sharp)
-float irradianceL1(float L0, vec3 L1, vec3 n) {
-    float R0 = PI * 0.282095 * L0;                    // the mean irradiance
-    float R1 = (2.0 * PI / 3.0) * 0.488603 * length(L1);   // its directional part
-    if (R0 <= 1e-8) return 0.0;
-    float r1 = clamp(R1 / R0, 0.0, 0.999);
-    vec3 dir = R1 > 1e-9 ? L1 / length(L1) : n;
-    float q = 0.5 * (1.0 + dot(dir, n));
-    float p = 1.0 + 2.0 * r1;
-    float a = (1.0 - r1) / (1.0 + r1);
-    return R0 * (a + (1.0 - a) * (p + 1.0) * pow(max(q, 0.0), p));
+// irradiance from L1 harmonics, one direction for all three channels (the luminance's): a weak channel's own direction
+// is mostly noise and would tint a bumpy surface in specks. Each channel keeps its own mean and its own share of the
+// directional part along that direction; the response is the linear one (gentle, never below zero).
+vec3 irradianceL1(vec3 L0, vec3 r, vec3 g, vec3 b, vec3 n) {
+    vec3 R0 = PI * 0.282095 * L0;
+    vec3 l1 = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    float ll = length(l1);
+    vec3 dir = ll > 1e-9 ? l1 / ll : n;
+    // each channel's directional amount along the shared direction
+    vec3 R1 = (2.0 * PI / 3.0) * 0.488603 * vec3(dot(r, dir), dot(g, dir), dot(b, dir));
+    vec3 ratio = clamp(R1 / max(R0, vec3(1e-8)), vec3(0.0), vec3(0.95));
+    return max(R0 * (1.0 + ratio * dot(dir, n)), vec3(0.0));
 }
 // the split-sum's environment term, analytic (Karis, mobile)
 vec3 envBRDF(vec3 f0, float rough, float nv) {
@@ -73,14 +73,14 @@ M material(uint m) {
     else if (m == MAT_VINYL) { r.base = vec3(0.08, 0.38, 0.40); r.rough = 0.35; }
     else if (m == MAT_ALU) { r.base = vec3(0.91, 0.92, 0.92); r.rough = 0.40; r.metal = 1.0; }
     else if (m == MAT_WRINKLE) { r.base = vec3(0.03); r.rough = 0.70; }
-    else if (m == MAT_RED_GLASS) { r.base = vec3(0.5, 0.02, 0.01); r.rough = 0.1; r.emit = vec3(1.0, 0.02, 0.006) * (1.2 / 0.2126); }
+    else if (m == MAT_RED_GLASS) { r.base = vec3(0.5, 0.02, 0.01); r.rough = 0.1; r.emit = vec3(1.0, 0.02, 0.006) * (0.55 / 0.2126); }
     else if (m == MAT_TAPE) { r.base = vec3(0.42, 0.04, 0.03); r.rough = 0.75; }
     else if (m == MAT_BLACK_PLATE) { r.base = vec3(0.03); r.rough = 0.3; }
     else if (m == MAT_LAMP_SHADE) { r.base = vec3(0.05, 0.11, 0.07); r.rough = 0.3; }
     else if (m == MAT_WOOD) { r.base = vec3(0.36, 0.22, 0.12); r.rough = 0.4; }
     else if (m == MAT_PAPER) { r.base = vec3(0.80, 0.78, 0.70); r.rough = 0.8; }
-    else if (m == MAT_INDICATOR_RED) { r.base = vec3(0.3, 0.02, 0.02); r.rough = 0.15; r.emit = vec3(0.12, 0.004, 0.003); }
-    else if (m == MAT_INDICATOR_GREEN) { r.base = vec3(0.02, 0.3, 0.05); r.rough = 0.15; r.emit = vec3(0.004, 0.10, 0.018); }
+    else if (m == MAT_INDICATOR_RED) { r.base = vec3(0.3, 0.02, 0.02); r.rough = 0.15; r.emit = vec3(1.0, 0.03, 0.02) * 0.22; }
+    else if (m == MAT_INDICATOR_GREEN) { r.base = vec3(0.02, 0.3, 0.05); r.rough = 0.15; r.emit = vec3(0.02, 1.0, 0.18) * 0.22; }
     return r;
 }
 
@@ -229,7 +229,7 @@ void main() {
     vec3 c0 = texture(lmL0, i.uv2).rgb;
     vec3 sr = texture(lmR, i.uv2).xyz, sg = texture(lmG, i.uv2).xyz, sb = texture(lmB, i.uv2).xyz;
     vec4 vis = texture(lmVis, i.uv2);
-    vec3 E = vec3(irradianceL1(c0.r, sr, N), irradianceL1(c0.g, sg, N), irradianceL1(c0.b, sb, N));
+    vec3 E = irradianceL1(c0, sr, sg, sb, N);
     vec3 f0 = mix(vec3(0.04), m.base, m.metal);
     float nv = max(dot(N, V), 1e-4);
     float a = max(m.rough * m.rough, 0.002);

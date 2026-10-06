@@ -173,7 +173,11 @@ extern "C" __global__ void __raygen__bake() {
         const float cw = fmaxf(dot(w, n), 0.0f);
         aoW += cw;
         if (visible(o, w, 0.25f)) aoVis += cw;
-        const float3 Li = incoming(o, w, rng);
+        float3 Li = incoming(o, w, rng);
+        // a firefly clamp on the indirect light: 0.5 is ~20 times the brightest surface in the room (the chart under its
+        // lamp ~0.025); a path that found a hot spot no longer speckles the room
+        const float lum = 0.2126f * Li.x + 0.7152f * Li.y + 0.0722f * Li.z;
+        if (lum > 0.5f) Li *= 0.5f / lum;
         const float3 c = Li * (2.0f * M_PIf);
         L0 += c * Y0;
         L1r += w * (c.x * Y1);

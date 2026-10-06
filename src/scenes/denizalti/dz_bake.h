@@ -17,6 +17,7 @@ struct BakeOptions {
     int samples = 1024;      // paths per texel
     int bounces = 12;
     float texel = 0.002f;    // metres per texel (the base density)
+    int filter = 2;          // the edge-keeping filter's radius in texels (0: none)
 };
 
 // what the live picture reads: five RGBA16F planes over the atlas (L0 rgb + the occlusion within 25 cm; L1 of red,

@@ -170,7 +170,7 @@ void divingStation(Kit& k) {
     }
 }
 
-void christmasTreeAndManifold(Kit& k) {
+void christmasTreeAndManifold(Kit& k, std::vector<DzLight>& minor) {
     const int side = -1;
     const float z0 = frameZ(49.7f), z1 = frameZ(47.6f);
     const float zc = 0.5f * (z0 + z1);
@@ -188,6 +188,12 @@ void christmasTreeAndManifold(Kit& k) {
             box(k, tree, p, f3(0.025f, 0.014f, 0.004f), 0.002f, green ? MAT_INDICATOR_GREEN : MAT_INDICATOR_RED, FEAT_NONE);
         }
     plateAt(k, tree, f3(0, 0.385f, 0.004f), 0.6f, 0.05f, "INDICATOR FOR HULL OPENINGS\nNAVY YARD, PORTSMOUTH, N.H.", PLATE_BLACK);
+    // the board's glow: three small green lights just off the lenses (the panel's green light on the manifold below)
+    for (int g = 0; g < 3; ++g) {
+        // a soft glow off the board (the lamps sit behind the lenses: they light the room a little, not the panel hot)
+        const float3 lp = tree.point(f3(-0.2f + g * 0.2f, -0.05f, 0.16f));
+        minor.push_back(DzLight{lp, 0.09f, make_float3(0.02f, 1.0f, 0.18f) * 0.03f, 0.0f});
+    }
     // the main vent control manifold: six bronze valve bodies on a cast base, chrome levers with ball ends
     const float yv = 1.02f;
     const float xv = hullX(yv, side, 0.38f);
@@ -462,9 +468,9 @@ void electricalPanels(Kit& k) {
 
 }   // namespace
 
-void buildEquipment(Kit& k, float3& chartTop) {
+void buildEquipment(Kit& k, float3& chartTop, std::vector<DzLight>& minor) {
     divingStation(k);
-    christmasTreeAndManifold(k);
+    christmasTreeAndManifold(k, minor);
     trimManifold(k);
     radioRoom(k);
     chartTable(k, chartTop);

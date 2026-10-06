@@ -43,6 +43,7 @@ void DzApp::build() {
     bakeOpt.samples = cfg.i("bake.samples", 1024);
     bakeOpt.bounces = cfg.i("bake.bounces", 12);
     bakeOpt.texel = cfg.f("bake.texel", 0.002f);
+    bakeOpt.filter = cfg.i("bake.filter", 2);
     activeDecals = nullptr;
     std::string derr;
     if (!decals.draw(root, derr)) std::fprintf(stderr, "denizalti: %s\n", derr.c_str());
@@ -209,6 +210,7 @@ int runCli(int argc, char** argv) {
     a.set.debug = std::stoi(argValue(argc, argv, "--debug", "0"));
     a.set.displacement = argValue(argc, argv, "--yerdegistirme", "1") != "0";
     a.set.tessOff = hasArg(argc, argv, "--bolmesiz");
+    a.set.normalDetail = argValue(argc, argv, "--detay", "1") != "0";
     a.applyChoices();
     const std::string camArg = argValue(argc, argv, "--cam");
     if (!camArg.empty()) {

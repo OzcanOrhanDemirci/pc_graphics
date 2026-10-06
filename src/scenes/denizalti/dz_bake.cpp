@@ -14,6 +14,7 @@
 #include <filesystem>
 #include <fstream>
 #include <sstream>
+#include <thread>
 
 namespace dz {
 
@@ -143,7 +144,7 @@ uint64_t bakeKey(const Mesh& m, const std::vector<DzLight>& lights, const BakeOp
     h = fnv(h, m.idx.data(), m.idx.size() * sizeof(uint32_t));
     h = fnv(h, lights.data(), lights.size() * sizeof(DzLight));
     h = fnv(h, &o, sizeof(o));
-    const int version = 4;
+    const int version = 6;
     h = fnv(h, &version, sizeof(version));
     return h;
 }
@@ -326,8 +327,13 @@ bool bake(const Mesh& m, const Atlas& a, const std::vector<DzLight>& lights, con
     cudaStream_t stream;
     CK(cudaStreamCreate(&stream));
 
-    const int CH = 20;   // L0 rgb + covered, L1 r, L1 g, L1 b (xyz + 0), lamp visibility 0..3
-    std::vector<float> data(size_t(a.width) * a.height * CH, 0.0f);
+    // the result goes straight into the five half-float planes (no full-atlas float copy: the room's atlas is ~10^8
+    // texels); a chart id per texel for the filter
+    const size_t atlasN = size_t(a.width) * a.height;
+    out.atlas = a;
+    out.texels = nt;
+    for (int k = 0; k < 5; ++k) out.plane[k].assign(atlasN * 4, toHalf(0.0f));
+    std::vector<int32_t> chartOf(atlasN, -1);
     std::vector<float4> hp(batch), hn(batch), h0(batch), h1(batch), h2(batch), h3(batch), h4(batch);
     unsigned int perLaunch = 8;   // samples per launch: grown while launches stay short
     size_t done = 0;
@@ -366,7 +372,7 @@ bool bake(const Mesh& m, const Atlas& a, const std::vector<DzLight>& lights, con
             const float f = float((double(done) + double(cnt) * s / o.samples) / double(nt));
             char line[160];
             std::snprintf(line, sizeof(line), "isik izleniyor: %zu/%zu teksel, %u/%d ornek", b0 + cnt, nt, s, o.samples);
-            say(0.05f + 0.9f * f, line);
+            say(0.05f + 0.85f * f, line);
         }
         CK(cudaMemcpy(h0.data(), acc[0], cnt * sizeof(float4), cudaMemcpyDeviceToHost));
         CK(cudaMemcpy(h1.data(), acc[1], cnt * sizeof(float4), cudaMemcpyDeviceToHost));
@@ -377,30 +383,68 @@ bool bake(const Mesh& m, const Atlas& a, const std::vector<DzLight>& lights, con
             const Texel& t = ras.texels[b0 + i];
             const size_t ai = size_t(t.xy & 0xFFFFu) + size_t(t.xy >> 16) * a.width;
             const float inv = 1.0f / std::max(1.0f, h0[i].w);
-            float* dd = &data[ai * CH];
             const float4 v[5] = {h0[i], h1[i], h2[i], h3[i], h4[i]};
-            for (int k = 0; k < 4; ++k) {
-                dd[k * 4 + 0] = v[k].x * inv;
-                dd[k * 4 + 1] = v[k].y * inv;
-                dd[k * 4 + 2] = v[k].z * inv;
-                dd[k * 4 + 3] = 0.0f;
+            for (int k = 0; k < 5; ++k) {
+                uint16_t* d = &out.plane[k][ai * 4];
+                d[0] = toHalf(v[k].x * inv);
+                d[1] = toHalf(v[k].y * inv);
+                d[2] = toHalf(v[k].z * inv);
+                d[3] = toHalf(k == 4 ? v[k].w * inv : 0.0f);
             }
-            dd[3] = h2[i].w > 0.0f ? h1[i].w / h2[i].w : 1.0f;   // the occlusion within 25 cm (1 open)
-            dd[16] = v[4].x * inv;
-            dd[17] = v[4].y * inv;
-            dd[18] = v[4].z * inv;
-            dd[19] = v[4].w * inv;
+            out.plane[0][ai * 4 + 3] = toHalf(h2[i].w > 0.0f ? h1[i].w / h2[i].w : 1.0f);   // the occlusion within 25 cm
+            chartOf[ai] = int32_t(m.v[m.idx[size_t(t.tri) * 3]].chart);
         }
         done += cnt;
     }
-    say(0.96f, "kenarlar dolduruluyor");
-    dilate(data, CH, a, ras.index);
-    out.atlas = a;
-    out.texels = nt;
-    for (int k = 0; k < 5; ++k) out.plane[k].resize(size_t(a.width) * a.height * 4);
-    for (size_t i = 0; i < size_t(a.width) * a.height; ++i)
-        for (int k = 0; k < 5; ++k)
-            for (int c = 0; c < 4; ++c) out.plane[k][i * 4 + c] = toHalf(data[i * CH + k * 4 + c]);
+    // the Monte Carlo noise left: an edge-keeping filter in the atlas, inside each chart only (5 x 5 texels, weighted by
+    // distance and by how alike the light is: a shadow's edge stays), then the padding filled; plane by plane
+    say(0.92f, "gurultu suzuluyor");
+    std::vector<float> guide(atlasN, 0.0f);
+    for (size_t i = 0; i < atlasN; ++i)
+        if (chartOf[i] >= 0)
+            guide[i] = 0.2126f * fromHalf(out.plane[0][i * 4]) + 0.7152f * fromHalf(out.plane[0][i * 4 + 1]) + 0.0722f * fromHalf(out.plane[0][i * 4 + 2]);
+    const int radius = o.filter;
+    std::vector<float> fsrc, dst;
+    for (int k = 0; k < 5; ++k) {
+        fsrc.assign(atlasN * 4, 0.0f);
+        for (size_t i = 0; i < atlasN * 4; ++i) fsrc[i] = fromHalf(out.plane[k][i]);
+        dst = fsrc;
+        if (radius > 0) {
+            const int W = a.width, Hh = a.height;
+            auto rows = [&](int y0, int y1) {
+                for (int y = y0; y < y1; ++y)
+                    for (int x = 0; x < W; ++x) {
+                        const size_t i = size_t(y) * W + x;
+                        const int c = chartOf[i];
+                        if (c < 0) continue;
+                        const float g0 = guide[i];
+                        float acc4[4] = {0, 0, 0, 0}, ws = 0.0f;
+                        for (int dy = -radius; dy <= radius; ++dy) {
+                            const int yy = y + dy;
+                            if (yy < 0 || yy >= Hh) continue;
+                            for (int dx = -radius; dx <= radius; ++dx) {
+                                const int xx = x + dx;
+                                if (xx < 0 || xx >= W) continue;
+                                const size_t j = size_t(yy) * W + xx;
+                                if (chartOf[j] != c) continue;
+                                const float rel = (guide[j] - g0) / (0.25f * (guide[j] + g0) + 1e-4f);
+                                const float w = std::exp(-0.35f * float(dx * dx + dy * dy) - rel * rel);
+                                for (int q = 0; q < 4; ++q) acc4[q] += w * fsrc[j * 4 + q];
+                                ws += w;
+                            }
+                        }
+                        for (int q = 0; q < 4; ++q) dst[i * 4 + q] = acc4[q] / ws;
+                    }
+            };
+            const int nth = std::max(1u, std::thread::hardware_concurrency());
+            std::vector<std::thread> th;
+            for (int t = 0; t < nth; ++t) th.emplace_back(rows, Hh * t / nth, Hh * (t + 1) / nth);
+            for (auto& t : th) t.join();
+        }
+        dilate(dst, 4, a, ras.index);
+        for (size_t i = 0; i < atlasN * 4; ++i) out.plane[k][i] = toHalf(dst[i]);
+    }
+    say(0.98f, "kenarlar dolduruldu");
 
     cudaFree(dP);
     cudaFree(dN);
