@@ -215,3 +215,29 @@ High). 8K 16x canlıda 8K 4x çizilir; fotoğraf 16x'tir.
 - F12 ile 8K 16x fotoğraf al ve dosyada yaklaş.
 
 Plan ve durum `docs/denizalti/`. Ayarlar `scenes/denizalti.cfg` (F5 ile).
+
+## 09 · Ayna — Endülüs kemerli bir ayna labirentinde krom bir küre
+
+Biz krom bir küreyiz; göz kürenin ortasında, kendimizi yalnız aynalarda görürüz. Aynalar gerçek değerlerle (6 mm float
+cam + gümüş), yansıma doğrudan bakış kadar keskin.
+
+| Tuş | |
+| --- | --- |
+| **Fare** | etrafa bak (tıklamadan; **Tab** imleci bırakır) |
+| **W A S D** | ileri, geri, yanlara · **Boşluk / C** yüksel, alçal · **Shift** hızlı |
+| **Q / E** | ışığımızın rengi (sıcak beyaz, gün ışığı, kırmızı, turuncu, yeşil, camgöbeği, mavi, mor) |
+| **Tekerlek** | ışığımızın şiddeti (8 kademe) · **F** aç / kapa |
+| **G** ya da **sol tık** | önüne lamba bırak (o anki renk ve şiddette, en çok 8) · **X** lambaları topla |
+| **R** | başa dön · **↑ / ↓** pozlama |
+
+Ayar paneli yok: kalite 2560 × 1440 için ayarlı (saniyede 30-40 kare).
+
+**Dene:**
+- Başlangıçta koridor boyunca bak: kemerler, sütunlar ve fenerler aynalarda sonsuza gider.
+- Koridorda sağdaki ya da soldaki aynaya dön: karşında küremiz ve yarığındaki ışık; iki paralel aynanın tünelinde
+  kopyaları küçülerek kararır ve yeşile döner (camın demirinden).
+- Işığı bir aynaya yatık tut: yansıyan koni öbür duvara ve pusa düşer.
+- Farklı renkte üç lamba bırakıp uzaklaş, sonra aynalara bak: her biri her yöne çoğalır.
+- Bir kapı aralığından yavaşça geç: ışığın pervaza düşüşü yakından da keskin.
+
+Plan, ölçümler ve durum `docs/ayna/`. Ayarlar `scenes/ayna.cfg` (F5 ile).

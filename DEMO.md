@@ -229,3 +229,29 @@ Medium, High). 8K 16x is drawn live at 8K 4x; the photograph is 16x.
 - Take an 8K 16x photograph with F12 and zoom into the file.
 
 Plan and status in `docs/denizalti/` (Turkish). Settings in `scenes/denizalti.cfg` (F5).
+
+## 09 · The Mirror — a chrome sphere in a mirror labyrinth of Moorish arches
+
+You are a chrome sphere; the eye is at its centre, you see yourself only in the mirrors. The mirrors are measured
+(6 mm float glass + silver); a reflection is as sharp as a straight look.
+
+| Key | |
+| --- | --- |
+| **Mouse** | look around (no click; **Tab** releases the cursor) |
+| **W A S D** | forward, back, sideways · **Space / C** rise, sink · **Shift** fast |
+| **Q / E** | our light's colour (warm white, daylight, red, orange, green, cyan, blue, violet) |
+| **Wheel** | our light's strength (8 steps) · **F** on / off |
+| **G** or **left click** | leave a lamp in front (in the light's colour and strength, at most 8) · **X** gather them |
+| **R** | back to the start · **↑ / ↓** exposure |
+
+No settings panel: the quality is set for 2560 × 1440 (30-40 frames a second).
+
+**Try:**
+- At the start look along the corridor: arches, columns and lanterns go on without end in the mirrors.
+- Turn to the corridor's mirror: our sphere and the light in its slit; in the tunnel of the two parallel mirrors its copies
+  shrink, darken and turn green (the glass's iron).
+- Hold the light slanting at a mirror: the reflected cone falls on the far wall and into the mist.
+- Leave three lamps of different colours, walk away and look at the mirrors: each multiplies in every direction.
+- Pass slowly through a doorway: the light on the jamb is sharp even close up.
+
+Plan, measurements and status in `docs/ayna/` (Turkish). Settings `scenes/ayna.cfg` (F5).

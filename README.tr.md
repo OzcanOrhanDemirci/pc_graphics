@@ -37,11 +37,13 @@ olarak saklanır. Sahne 5 su altında: ışığı yüzeyin üstünde havada da s
 küçük bir adanın iskelesinden bir batığa ve maviye inen bir halata uzanan bir yol. Sahne 6 yalnız geometri: bir
 kaidede duran, on bin kat yakınına inilen bir Menger süngeri. Sahne 7 ölçek: Çandarlı'da bir kumsaldan, gerçek
 veriyle evrenin kenarına ve ışığın altında aletin gözüyle Planck uzunluğuna, 62 onluk. Sahne 8 bir denizaltının
-kontrol odası: bütün ışığı önceden ışın izlemeyle pişirilmiş, ekran kartının bütün gücü görüntüye gidiyor.
+kontrol odası: bütün ışığı önceden ışın izlemeyle pişirilmiş, ekran kartının bütün gücü görüntüye gidiyor. Sahne 9
+yansıma: krom bir kürenin içinden görülen, Endülüs kemerli bir ayna labirenti; her ayna arkası gümüşlenmiş bir float
+cam, yansımanın yansımasının yansıması odanın kendisi kadar keskin.
 
 ## Uygulama
 
-Sekiz sahne tek bir programda yaşıyor. Program bir galeriyle açılır; sahne bir yükleme ekranının arkasında yüklenir
+Dokuz sahne tek bir programda yaşıyor. Program bir galeriyle açılır; sahne bir yükleme ekranının arkasında yüklenir
 (programları derlenir, dünyası kurulur; bunlar ayrı bir iş parçacığında yapıldığı için pencere canlı kalır) ve sonra hepsi
 için aynı olan bir arayüzün altında çalışır: kim ve ne sol altta, süreler sağ üstte, çıkış yolu sağ altta, tuşlar F1'de.
 Sol alttaki panel fareyle kullanılır: sahne oraya seçenek sıraları, kaydırma çubukları ve düğmeler koyabilir (Yıkım'da
@@ -57,7 +59,7 @@ Esc her zaman geri götürür; kapanan sahne ekran kartını bütünüyle geri v
 
 Görünüm tek bir yazı ailesiyle kurulu, IBM Plex: adlar için Serif, sözcükler için Sans, sayılar ve tuşlar için Mono.
 Resimlerin üstünde koyu cam paneller ve her sahneye ışığından alınmış tek bir vurgu rengi: sıcak altın, soğuk mavi,
-güvenlik turuncusu, deniz yeşili, deniz mavisi, lavanta, gül, gece kırmızısı. Bir sahne; renderer'ı, ayarları ve OptiX programlarıyla bir klasör ve sahne kaydında tek bir
+güvenlik turuncusu, deniz yeşili, deniz mavisi, lavanta, gül, gece kırmızısı, ayna camı. Bir sahne; renderer'ı, ayarları ve OptiX programlarıyla bir klasör ve sahne kaydında tek bir
 satırdır; sözleşme ve yeni sahne eklemek [docs/MIMARI.md](docs/MIMARI.md)'de.
 
 ## Sahneler
@@ -372,6 +374,41 @@ kartının bütün gücü görüntüye gidiyor. Dar bir odada yürünür, her ş
 
 Plan, kararlar ve ölçümler `docs/denizalti/`.
 
+### 9 · Ayna · Ekim 2026
+
+| ![Labirentin bir koridoru: yeşil mermer sütunlarda kırmızı tuğla ve krem taş kemer taşlı at nalı kemerler, pirinç fenerler, aynalarda süren koridor, iki lamba](docs/images/ayna-koridor.jpg) | ![Aynaya karşı: krom küremiz ve yarığından çıkan ışık, iki paralel aynanın tünelinde çoğalan camgöbeği lambalar](docs/images/ayna-ayna.jpg) |
+|---|---|
+| ![Ortadaki sütunun çevresindeki salon: her yöne kemerler, sıcak bir lamba, hepsini yansıtan cilalı siyah mermer zemin](docs/images/ayna-salon.jpg) | ![Yukarı bakış: kemer taşları, altın filetolar, yıldızlı friz ve sedir tavan, aynalarda yinelenen kemerler](docs/images/ayna-kemerler.jpg) |
+
+Odağı yansıma: *yansımanın yansımasının yansıması, tam kalitede*. 60° üçgen ızgarada kompakt bir ayna labirenti (1896
+Luzern labirenti gibi), Kurtuba Camii ve Elhamra'dan giyinmiş. İçinde süzülen krom bir küresin; kendini yalnız
+aynalarda görürsün. Kürenin yarığından kendi ışığını yakarsın (sekiz renk, sekiz şiddet), arkanda renkli lambalar
+bırakırsın; aynalar her şeyi sonsuza dek çoğaltır.
+
+- **Ayar değil fizik:** her ayna 6 mm float cam ve arkasında gümüş: önde Fresnel, içeri ve dışarı kırılma, gümüşün
+  yansıtması, camın iki yöndeki soğurması, hepsi ölçülmüş değerlerden (cam Rubin 1985, gümüş Johnson ve Christy 1972,
+  kromumuz Rakić 1998). Dik gelişte kırmızının %79'u, yeşil ve mavinin %84'ü döner: derin tünel kendiliğinden kararır
+  ve camgöbeği-yeşile döner. Işın camın içinde gerçek bir aynadaki gibi yana kayar.
+- **OptiX değil, kendi kesin izleyicimiz:** aynalar ızgara çizgilerinde durduğu için ışın hücreden hücreye yürür, her
+  hücrede yalnız oranın zemini, tavanı, üç sütunu ve üç duvar modülüyle (yüz, pencere pervazı, aynanın camı ya da
+  geçidin orta düzlemi) kesişir. Her yüzey kesin: yürütme, sınır hacmi, kendi kendini kesme ötelemesi yok. Tünelin
+  kırkıncı kopyası hesaplanan yerinin on binde bir pikseli içinde.
+- **Aynadan ışık, kesin:** yol izleyici nokta ışığın aynadan duvara yolunu bulamaz. Burada planda bir hüzme ağacı
+  bulur (hücreden hücreye; Heckbert ve Hanrahan, 1984): her ışığın her aynadaki görüntüsü ve onun pencerelerden ve
+  sütunlardan geçen kaması, jamb tepesinin üstünde 3B denetimle. Örnekleme yok, gren yok; aynı izleyiciden geçen bir
+  milyar fotona karşı %99 uyum.
+- **Işık haritaları:** lambalar ve fenerler durur: ışıkları (doğrudan ve bütün aynalardan) bırakıldıkları an yüzeylere
+  pişer (23 milyon texel; bir karış öteden bakılan pervaz ve sütunlarda daha ince). Bizim ışığımız bizimle yürür: her
+  kare yarım çözünürlükte yeniden pişer, kendi hücresindeki doğrudan ışığı piksel başına hesaplanır. Küremizin
+  lambalardan düşen gölgesi her kare hesaplanır.
+- **Aynanın ardında keskin:** her ışın kendi izdüşümünü taşır; düz ayna onu değiştirmez, küremiz genişletir. Desenler
+  onunla süzülür: aynanın ardındaki desen, aynı uzaklıktan doğrudan bakıldığı kadar keskin ve sakin (ölçüldü: ideal
+  aynadan aynı görüntü, piksel piksel). Küçük lambalar izdüşümdeki paylarıyla toplanır: derin tünelin lambaları titremez.
+- **Görüntü:** pikselde altı sabit örnek, her kare aynı, birikim ve gürültü giderici yok; ileri saçan hafif bir pus her
+  yol parçası boyunca kapalı biçimde; 2560 × 1440'ta saniyede 30-40 kare. Kalite ayarı yok.
+
+Plan, kararlar, ölçümler ve doğrulanmayanlar `docs/ayna/` içinde.
+
 ## Sahne 1: neyi hesaplıyor
 
 | | |
@@ -628,6 +665,7 @@ src/
     heykel/           sahne 6: Menger süngeri, pertürbasyonla on bin kat yakınlaşma (CUDA)
     olcek/            sahne 7: çapa ağacı, katman saatleri, CUDA çizici, haritalar, yoğunluk haritaları, çöl ve dip
     denizalti/        sahne 8: oda ve teçhizat kiti, çıkartma atlası, OptiX fırını (device/), OpenGL 4.6 tessellation hattı (glsl/)
+    ayna/             sahne 9: ızgara izleyici, labirent, hüzmeler, ışık haritaları, pus, malzemeler (CUDA)
 scenes/               sahnelerin ayarları (<sahne>.cfg)
 assets/               yazı tipleri (IBM Plex), galeri resimleri, mavi gürültü dokusu, deprem kayıtları (ESM, AFAD TADAS)
 tools/                EXR istatistikleri, FLIP ve RMSE karşılaştırması, gürültü haritaları, temas tabakaları, prizma planlayıcı, değer etütleri;

@@ -37,11 +37,13 @@ the air above the surface, along a lane from a small island's pier to a wreck an
 geometry alone: a Menger sponge on a plinth, zoomed into ten thousand times. Scene 7 is scale: from a beach at
 Çandarlı out to the edge of the universe with real data, and in, below the light, through the instrument's eye to the
 Planck length, 62 decades. Scene 8 is a submarine's control room: all its light traced and baked beforehand, the
-graphics card's whole strength going to the picture.
+graphics card's whole strength going to the picture. Scene 9 is reflection: a mirror labyrinth of Moorish arches, seen
+from inside a chrome sphere, every mirror a pane of float glass silvered behind, the reflection of the reflection of the
+reflection as sharp as the room itself.
 
 ## The application
 
-The eight scenes live in one program. It opens on a gallery; a scene loads behind a loading screen (its programs
+The nine scenes live in one program. It opens on a gallery; a scene loads behind a loading screen (its programs
 compile and its world is built on a worker thread, so the window stays alive) and then runs under an interface that is
 the same for all of them: who and what at the bottom left, timings at the top right, the way out at the bottom right,
 the keys on F1. The panel at the bottom left takes the mouse: a scene can put rows of choices, sliders and buttons there
@@ -57,7 +59,7 @@ speaks Turkish or English (TR | EN at the top right of the gallery, or L); the c
 
 The look is one family for everything, IBM Plex: Serif for names, Sans for words, Mono for numbers and keys. Dark glass
 panels over the pictures, and one accent colour per scene, taken from its light: warm gold, cold blue, safety orange,
-sea green, sea blue, lavender, rose, night red.
+sea green, sea blue, lavender, rose, night red, mirror glass.
 A scene is a folder with its renderer, its settings and its OptiX programs, plus one line in the scene registry;
 [docs/MIMARI.md](docs/MIMARI.md) (Turkish) describes the contract and how to add one.
 
@@ -429,6 +431,44 @@ look at anything from 10 to 15 cm.
 
 Plan, decisions and measurements in `docs/denizalti/` (Turkish).
 
+### 9 · The Mirror *(Ayna)* · October 2026
+
+| ![A corridor of the labyrinth: horseshoe arches of red brick and cream stone voussoirs on green marble columns, brass lanterns, the corridor going on in the mirrors, two lamps](docs/images/ayna-koridor.jpg) | ![Facing a mirror: our chrome sphere and the light from its slit, cyan lamps multiplied down the tunnel of two parallel mirrors](docs/images/ayna-ayna.jpg) |
+|---|---|
+| ![The hall round the middle column: arches in every direction, a warm lamp, the polished black marble floor reflecting it all](docs/images/ayna-salon.jpg) | ![Looking up: the voussoirs, the gilded fillets, the star frieze and the cedar ceiling, the arches repeating in the mirrors](docs/images/ayna-kemerler.jpg) |
+
+Its focus is reflection: *the reflection of the reflection of the reflection, at full quality*. A compact mirror
+labyrinth on a 60° triangular lattice (after the Luzern labyrinth of 1896), dressed after the Mezquita of Córdoba and
+the Alhambra. You are a chrome sphere floating through it; you see yourself only in the mirrors. You shine your own light
+from a slit in the sphere, in eight colours and eight strengths, and leave coloured lamps behind; the mirrors multiply
+everything without end.
+
+- **Physics, not settings:** every mirror is 6 mm of float glass with silver behind it: Fresnel at the front, refraction
+  in and out, the silver's reflectance, the glass's absorption both ways, all from measured constants (Rubin 1985 for
+  the glass, Johnson and Christy 1972 for silver, Rakić 1998 for our chrome). Straight on, 79% of red and 84% of green
+  and blue come back: the deep tunnel darkens and turns cyan-green by itself. The ray is shifted inside the glass as a
+  real mirror shifts it.
+- **An exact tracer of its own, not OptiX:** the mirrors stand on lattice lines, so a ray walks from cell to cell and
+  meets in each only that cell's floor, ceiling, three columns and three wall modules (face, window reveal, the mirror's
+  glass or the passage's middle plane). Every surface is exact; there is no marching, no bounding volume and no
+  self-intersection offset. The tunnel's fortieth copy lies within a ten-thousandth of a pixel of where it is computed.
+- **Light by the mirrors, exactly:** a path tracer can not find a point light's way off a mirror onto a wall. Here a tree
+  of beams finds it in plan (cell to cell; Heckbert and Hanrahan, 1984): each light's image in each mirror and the wedge
+  of it that passes the windows and the columns, checked in 3D above the jambs. No sampling, no grain; against a billion
+  photons through the same tracer it agrees to 99%.
+- **Light maps:** the lamps and lanterns stand still, so their light (straight and by every mirror) is baked into the
+  surfaces when they are left (23 million texels, finer on the reveals and columns seen from a hand's breadth). Our own
+  light moves with us: it is baked again every frame at half resolution, and straight in its own cell computed per
+  pixel. Our sphere's shadow on the lamps' light is worked out every frame.
+- **Sharp behind the mirror:** every ray carries its footprint, which a flat mirror leaves alone and our sphere widens;
+  the patterns are filtered by it, so a pattern behind a mirror is as sharp and as still as seen straight at the same
+  distance (measured: the same picture through an ideal mirror, pixel for pixel). Small lamps count by their share of the
+  footprint, so the deep tunnel's lamps do not twinkle.
+- **Picture:** six fixed samples a pixel, the same every frame, no accumulation, no denoiser; a light forward-scattering
+  mist in closed form along every piece of the way; 30 to 40 frames a second at 2560 × 1440. No quality settings.
+
+Plan, decisions, measurements and what is not verified in `docs/ayna/` (Turkish).
+
 ## What scene 1 computes
 
 | | |
@@ -696,6 +736,7 @@ src/
     heykel/           scene 6: the Menger sponge, ten thousand times closer by perturbation (CUDA)
     olcek/            scene 7: tree of anchors, layer clocks, CUDA renderer, maps, density maps, the desert and the bottom
     denizalti/        scene 8: room and equipment kit, decal atlas, OptiX oven (device/), OpenGL 4.6 tessellation pipeline (glsl/)
+    ayna/             scene 9: the lattice tracer, the maze, the beams, light maps, the mist, the materials (CUDA)
 scenes/               the scenes' settings (<scene>.cfg)
 assets/               fonts (IBM Plex), gallery pictures, blue-noise texture, earthquake records (ESM, AFAD TADAS)
 tools/                EXR statistics, FLIP and RMSE comparison, noise maps, contact sheets, prism planner, value studies;
