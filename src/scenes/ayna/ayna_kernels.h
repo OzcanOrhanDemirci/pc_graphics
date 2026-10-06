@@ -51,6 +51,32 @@ struct BeamNode {
 };
 constexpr int kBins = 5;             // each cell's bounding box in kBins x kBins bins, each with its own node list
 
+// The lamps' light, baked: a lamp stands still, so its light (straight and by every mirror, the same beams) is
+// worked out once when it is left, into texels on every surface: the floor and the ceiling (one grid each), each
+// slab face (u along the edge, y up), each window's reveal (s round the jambs and the arch, depth into the slab) and
+// each column (angle, y). A texel keeps the irradiance and, in w's bits, which lamps it sees straight (for our
+// sphere's moving shadow, worked out per pixel).
+struct LightMapBlock {
+    int type = 0;        // 0 floor, 1 ceiling, 2 face, 3 reveal, 4 column
+    int offset = 0;      // first texel
+    int w = 0, h = 0;    // texels
+    int fam = 0, i = 0, j = 0, side = 1;   // faces and reveals: the edge and the side's cell; columns: i, j the vertex
+};
+struct LightMap {
+    float texel = 0.01f;
+    float x0 = 0, z0 = 0;            // the floor's and ceiling's grid origin
+    int gw = 0, gh = 0;              // their size
+    int floorOff = 0, ceilOff = 0;
+    const int* faceBlock = nullptr;  // per edgeIndex * 2 + (side > 0 ? 0 : 1): block index or -1
+    const int* revBlock = nullptr;
+    const int* colBlock = nullptr;   // per vertexIndex
+    const LightMapBlock* blocks = nullptr;
+    float4* E = nullptr;             // rgb irradiance, w the straight-visible lamps' bits
+    float perimeter = 1.0f;          // a reveal's length round the window
+    int on = 0;
+};
+constexpr int kMaxLamps = 8;
+
 // optics from measured constants (filled on the host, see ayna_app.cpp): per channel, over cos(theta) at the
 // glass's front surface: the mirror's main reflection (Fresnel in and out of the glass, silver behind it, the glass's
 // absorption both ways), the front surface's own (the first ghost); our chrome; the polished stone's Fresnel
@@ -84,19 +110,41 @@ struct View {
     const int* cellStart = nullptr;  // cellCount * kBins * kBins + 1 (per cell, per bin)
     const int* cellNodes = nullptr;
     float beamEps = 1e-3f;           // irradiance under which a node's light is not looked for (times the path's weight)
+    // the haze: a thin, even mist (scattering and absorption per metre; isotropic). Its glow along a ray comes in
+    // closed form from the haze nodes of each cell the ray crosses: all of our light's beams, and the lamps' straight
+    // ones (their light by the mirrors lights the mist too: not yet, see DURUM)
+    float hazeSigma = 0.0f, hazeAbsorb = 0.0f;
+    const int* hazeStart = nullptr;  // cellCount + 1
+    const int* hazeNodes = nullptr;  // node indices
+    float hazeMinWeight = 0.03f;     // a path's mist glow stops being looked for under this weight
+    float4* hazeBuf = nullptr;       // device: the glow at half resolution
+    int hazeOnly = 0;                // the tools: only the glow pass
+    LightMap lm;                     // the lamps' baked light
+    int nLamps = 0;
+    float4 lamp[kMaxLamps];          // xyz the lamp, w its glass's radius (for our sphere's shadow)
+    float3 lampI[kMaxLamps];
+    int bake = 0;                    // 1 while baking: no sphere, no light map
+    int firstLamp = 0;               // light[firstLamp ..] are the lamps (their glass is an object too)
     int beams = 1;                   // 0: straight light only (shadow rays), the tools' comparison
     unsigned int* badCount = nullptr;
     unsigned long long* stats = nullptr;   // the tools: beam nodes looked at, and lit by (debug 3 / 4)
+    unsigned int* oob = nullptr;     // the tools: out-of-range indices met (and skipped)
+    int nNodes = 0, nEntries = 0;
     // tools: draw the bounce count instead of the picture (1), or the cell steps (2)
     int debug = 0;
 };
 
 void setOptics(const Optics& o);
+// bakes the lights in v (their nodes in v.nodes) into v.lm.E, adding; `bit` is or-ed into the texels that see light 0
+// straight. nBlocks blocks, the largest maxW x maxH texels.
+void bakeLightMap(const View& v, const LightMapBlock* blocksHost, int nBlocks, int maxW, int maxH, unsigned bit, cudaStream_t s);
 void renderFrame(const View& v, float4* hdr, cudaStream_t s);
 void resolveFrame(const View& v, const float4* hdr, const float4* bloomHalf, uchar4* out, cudaStream_t s);
 
 // one ray through the maze for the tools (Ö2: where the n-th copy lands): the plan points where it met mirrors
 int traceMirrorPoints(const View& v, float3 o, float3 d, int maxHits, float3* hitsHost);
 void probePixel(const View& v, float px, float py);   // prints the first surface and its light, both ways
+size_t viewSizeCu();
+size_t viewHazeOffsetCu();
 
 }   // namespace ayna

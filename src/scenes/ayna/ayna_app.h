@@ -42,6 +42,7 @@ public:
     unsigned long long* statsDev = nullptr;   // the tools' counters (debug 3 / 4)
     ayna::BeamBuildStats beamStats;   // the last frame's (all lights)
     double beamMs = 0.0;
+    double bakeMs = 0.0;     // the last lamp's bake
     uchar4* output = nullptr;   // device: the last picture
 
     static int paletteCount();
@@ -60,6 +61,8 @@ public:
     void render();
     bool save(const std::string& pathNoExt);
     void probe(float x, float y);
+    size_t lmTexelCount() const { return lmTexels_; }
+    unsigned oobCount() const { unsigned h = 0; cudaMemcpy(&h, oob_, 4, cudaMemcpyDeviceToHost); return h; }
     ayna::View makeView() const;
     void computeOptics();
     float3 sphereCentre() const { return cam.pos; }
@@ -67,6 +70,7 @@ public:
 
 private:
     float4* hdr_ = nullptr;
+    float4* haze_ = nullptr;
     static const int kLevels = 6;
     float4* levels_[kLevels] = {};
     float4* accum_[kLevels] = {};
@@ -82,8 +86,29 @@ private:
     int* dCellNodes_ = nullptr;
     size_t capNodes_ = 0, capCellNodes_ = 0;
     void uploadBeams(ayna::View& v);
+    std::vector<int> hazeStart_, hazeNodes_;
+    int* dHazeStart_ = nullptr;
+    int* dHazeNodes_ = nullptr;
+    size_t capHaze_ = 0;
+    std::vector<std::vector<ayna::BeamNode>> lampStraight_;   // each baked lamp's straight beams (the mist's glow)
+    // the lamps' light map
+    std::vector<ayna::LightMapBlock> lmBlocks_;
+    std::vector<int> lmFace_, lmRev_, lmCol_;
+    ayna::LightMapBlock* dLmBlocks_ = nullptr;
+    int* dLmFace_ = nullptr;
+    int* dLmRev_ = nullptr;
+    int* dLmCol_ = nullptr;
+    float4* dLm_ = nullptr;
+    size_t lmTexels_ = 0;
+    int lmMaxW_ = 0, lmMaxH_ = 0;
+    ayna::LightMap lm_;
+    int baked_ = 0;          // lamps in the map (the first baked_ of `lamps`)
+    bool errorShown_ = false;
+    void buildLightMap();
+    void bakeLamps();
     cudaEvent_t ev0_ = nullptr, ev1_ = nullptr;
     unsigned int* bad_ = nullptr;
+    unsigned int* oob_ = nullptr;
     void uploadObjects(const ayna::View& v);
 };
 

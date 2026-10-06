@@ -161,8 +161,10 @@ void AynaApp::init() {
     lat.glass = cfg.f("maze.glass", 0.006f);
     maze.build(lat, cfg.i("maze.radius", 3), unsigned(cfg.i("maze.seed", 7)), cfg.i("maze.loops", 4), cfg.i("maze.layout", 1));
     computeOptics();
+    cudaDeviceSetLimit(cudaLimitStackSize, size_t(cfg.i("debug.stack", 1024)));
 
     hdr_ = devAlloc<float4>(size_t(width) * height);
+    haze_ = devAlloc<float4>(size_t((width + 1) / 2) * ((height + 1) / 2));
     output = devAlloc<uchar4>(size_t(width) * height);
     int w = width, h = height;
     for (int k = 0; k < kLevels; ++k) {
@@ -181,10 +183,188 @@ void AynaApp::init() {
     cudaEventCreate(&ev0_);
     cudaEventCreate(&ev1_);
     bad_ = devAlloc<unsigned int>(1);
+    oob_ = devAlloc<unsigned int>(1);
+    cudaMemset(oob_, 0, 4);
+    if (cfg.i("lightmap", 1)) buildLightMap();
+}
+
+// the light map's blocks: the floor and ceiling grids over the maze, then every face, reveal and column there is
+void AynaApp::buildLightMap() {
+    const Lattice& g = maze.g;
+    const float ts = cfg.f("lightmap.texel", 0.01f);
+    lm_ = LightMap();
+    lm_.texel = ts;
+    lmBlocks_.clear();
+    const float R = float(maze.radius);
+    lm_.x0 = -(R + 0.6f) * g.L;
+    lm_.z0 = -(R + 0.2f) * g.h;
+    lm_.gw = int(std::ceil(2.0f * (R + 0.6f) * g.L / ts));
+    lm_.gh = int(std::ceil(2.0f * (R + 0.2f) * g.h / ts));
+    size_t off = 0;
+    LightMapBlock b;
+    b.type = 0;
+    b.offset = int(off);
+    b.w = lm_.gw;
+    b.h = lm_.gh;
+    lm_.floorOff = b.offset;
+    lmBlocks_.push_back(b);
+    off += size_t(b.w) * b.h;
+    b.type = 1;
+    b.offset = int(off);
+    lm_.ceilOff = b.offset;
+    lmBlocks_.push_back(b);
+    off += size_t(b.w) * b.h;
+    const double thL = std::atan2(g.yk - g.yc, -g.wHalf) + 2.0 * 3.14159265358979, thR = std::atan2(g.yk - g.yc, g.wHalf);
+    lm_.perimeter = float(2.0 * g.yk + g.ra * (thL - thR));
+    lmFace_.assign(size_t(edgeCount(g)) * 2, -1);
+    lmRev_.assign(size_t(edgeCount(g)) * 2, -1);
+    lmCol_.assign(size_t(vertexCount(g)), -1);
+    const int fw = int(std::ceil(g.L / ts)), fh = int(std::ceil(g.Hc / ts));
+    const int rw = int(std::ceil(lm_.perimeter / ts)), rh = std::max(2, int(std::ceil(0.5f * g.t / ts)));
+    for (int j = g.j0; j < g.j0 + g.nj; ++j)
+        for (int i = g.i0; i < g.i0 + g.ni; ++i)
+            for (int up = 0; up < 2; ++up) {
+                if (!maze.inside(i, j, up)) continue;
+                for (int k = 0; k < 3; ++k) {
+                    const EdgeRef e = cellEdge(i, j, up, k);
+                    const int ei = edgeIndex(g, e.fam, e.i, e.j);
+                    const int slot = ei * 2 + (e.side > 0 ? 0 : 1);
+                    if (lmFace_[slot] < 0) {
+                        LightMapBlock f;
+                        f.type = 2;
+                        f.offset = int(off);
+                        f.w = fw;
+                        f.h = fh;
+                        f.fam = e.fam;
+                        f.i = e.i;
+                        f.j = e.j;
+                        f.side = e.side;
+                        lmFace_[slot] = int(lmBlocks_.size());
+                        lmBlocks_.push_back(f);
+                        off += size_t(fw) * fh;
+                        LightMapBlock r = f;
+                        r.type = 3;
+                        r.offset = int(off);
+                        r.w = rw;
+                        r.h = rh;
+                        lmRev_[slot] = int(lmBlocks_.size());
+                        lmBlocks_.push_back(r);
+                        off += size_t(rw) * rh;
+                    }
+                }
+                int ci[3], cj[3];
+                cellCornerIdx(i, j, up, ci, cj);
+                for (int k = 0; k < 3; ++k) {
+                    const int vi = vertexIndex(g, ci[k], cj[k]);
+                    if (vi < 0 || lmCol_[vi] >= 0) continue;
+                    LightMapBlock c;
+                    c.type = 4;
+                    c.offset = int(off);
+                    c.w = int(std::ceil(2.0f * 3.14159265f * g.rc / ts));
+                    c.h = fh;
+                    c.i = ci[k];
+                    c.j = cj[k];
+                    lmCol_[vi] = int(lmBlocks_.size());
+                    lmBlocks_.push_back(c);
+                    off += size_t(c.w) * c.h;
+                }
+            }
+    lmTexels_ = off;
+    lmMaxW_ = lmMaxH_ = 0;
+    for (const LightMapBlock& bb : lmBlocks_) {
+        lmMaxW_ = std::max(lmMaxW_, bb.w);
+        lmMaxH_ = std::max(lmMaxH_, bb.h);
+    }
+    dLm_ = devAlloc<float4>(lmTexels_);
+    cudaMemset(dLm_, 0, lmTexels_ * sizeof(float4));
+    dLmBlocks_ = devAlloc<LightMapBlock>(lmBlocks_.size());
+    cudaMemcpy(dLmBlocks_, lmBlocks_.data(), lmBlocks_.size() * sizeof(LightMapBlock), cudaMemcpyHostToDevice);
+    dLmFace_ = devAlloc<int>(lmFace_.size());
+    cudaMemcpy(dLmFace_, lmFace_.data(), lmFace_.size() * sizeof(int), cudaMemcpyHostToDevice);
+    dLmRev_ = devAlloc<int>(lmRev_.size());
+    cudaMemcpy(dLmRev_, lmRev_.data(), lmRev_.size() * sizeof(int), cudaMemcpyHostToDevice);
+    dLmCol_ = devAlloc<int>(lmCol_.size());
+    cudaMemcpy(dLmCol_, lmCol_.data(), lmCol_.size() * sizeof(int), cudaMemcpyHostToDevice);
+    lm_.faceBlock = dLmFace_;
+    lm_.revBlock = dLmRev_;
+    lm_.colBlock = dLmCol_;
+    lm_.blocks = dLmBlocks_;
+    lm_.E = dLm_;
+    lm_.on = 1;
+    baked_ = 0;
+}
+
+// the lamps not yet in the map: each one's beams, baked into it (gathered lamps: the map starts again)
+void AynaApp::bakeLamps() {
+    if (int(lamps.size()) < baked_) {
+        cudaMemset(dLm_, 0, lmTexels_ * sizeof(float4));
+        baked_ = 0;
+        lampStraight_.clear();
+    }
+    if (int(lamps.size()) == baked_) return;
+    const auto t0 = std::chrono::high_resolution_clock::now();
+    View base = makeView();
+    const float lampR = cfg.f("lamp.radius", 0.03f), lampK = cfg.f("lamp.share", 0.03f);
+    const float eps = cfg.f("beam.eps", 0.01f) / std::max(1e-6f, base.exposure / 0.12f);
+    std::vector<BeamNode> nodes;
+    std::vector<int> cs, cn;
+    std::vector<signed char> none(size_t(cellCount(maze.g)) * kCellObjects, -1);
+    for (; baked_ < int(lamps.size()) && baked_ < kMaxLamps; ++baked_) {
+        const AynaLamp& lp = lamps[baked_];
+        View v = base;
+        v.nLights = 1;
+        v.light[0] = Light();
+        v.light[0].pos = lp.pos;
+        v.light[0].radius = lampR;
+        v.light[0].color = lp.color * (lp.level * lampK);
+        v.light[0].object = -1;
+        v.nObjects = 0;
+        v.bake = 1;
+        v.lm = lm_;
+        nodes.clear();
+        BeamBuildStats st;
+        buildBeams(maze, optics, v.light[0], 0, eps * cfg.f("lightmap.eps", 0.5f), cfg.i("beam.max", 60000), nodes, &st);
+        sortIntoCells(maze, nodes, cs, cn);
+        {
+            // its straight beams (no mirror), for the mist: their parents are kept as indices into this list
+            std::vector<BeamNode> st;
+            std::vector<int> remap(nodes.size(), -1);
+            for (size_t q = 0; q < nodes.size(); ++q) {
+                const BeamNode& nd = nodes[q];
+                if (nd.m[0] | nd.m[1] | nd.m[2]) continue;
+                remap[q] = int(st.size());
+                st.push_back(nd);
+            }
+            for (BeamNode& nd : st) nd.parent = nd.parent >= 0 ? remap[nd.parent] : -1;
+            if (int(lampStraight_.size()) <= baked_) lampStraight_.resize(baked_ + 1);
+            lampStraight_[baked_] = st;
+        }
+        BeamNode* dn = devAlloc<BeamNode>(std::max<size_t>(1, nodes.size()));
+        int* dcs = devAlloc<int>(cs.size());
+        int* dcn = devAlloc<int>(std::max<size_t>(1, cn.size()));
+        cudaMemcpy(dn, nodes.data(), nodes.size() * sizeof(BeamNode), cudaMemcpyHostToDevice);
+        cudaMemcpy(dcs, cs.data(), cs.size() * sizeof(int), cudaMemcpyHostToDevice);
+        cudaMemcpy(dcn, cn.data(), cn.size() * sizeof(int), cudaMemcpyHostToDevice);
+        v.nodes = dn;
+        v.cellStart = dcs;
+        v.cellNodes = dcn;
+        v.nNodes = int(nodes.size());
+        v.nEntries = int(cn.size() / 8);
+        v.beamEps = eps * cfg.f("lightmap.eps", 0.5f);
+        v.beams = 1;
+        bakeLightMap(v, dLmBlocks_, int(lmBlocks_.size()), lmMaxW_, lmMaxH_, 1u << baked_, 0);
+        cudaDeviceSynchronize();
+        cudaFree(dn);
+        cudaFree(dcs);
+        cudaFree(dcn);
+    }
+    bakeMs = std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - t0).count();
 }
 
 void AynaApp::release() {
     cudaFree(hdr_);
+    cudaFree(haze_);
+    haze_ = nullptr;
     cudaFree(output);
     for (int k = 0; k < kLevels; ++k) {
         cudaFree(levels_[k]);
@@ -194,9 +374,24 @@ void AynaApp::release() {
     cudaFree(dEdges_);
     cudaFree(dColumns_);
     cudaFree(dCellObj_);
+    cudaFree(dLm_);
+    cudaFree(dLmBlocks_);
+    cudaFree(dLmFace_);
+    cudaFree(dLmRev_);
+    cudaFree(dLmCol_);
+    dLm_ = nullptr;
+    dLmBlocks_ = nullptr;
+    dLmFace_ = dLmRev_ = dLmCol_ = nullptr;
+    lm_ = LightMap();
+    baked_ = 0;
     cudaFree(dNodes_);
     cudaFree(dCellNodes_);
     cudaFree(dCellStart_);
+    cudaFree(dHazeNodes_);
+    cudaFree(dHazeStart_);
+    dHazeNodes_ = dHazeStart_ = nullptr;
+    capHaze_ = 0;
+    lampStraight_.clear();
     dNodes_ = nullptr;
     dCellNodes_ = nullptr;
     dCellStart_ = nullptr;
@@ -239,7 +434,13 @@ View AynaApp::makeView() const {
     v.maxSteps = cfg.i("steps", 1500);
     v.debug = debug;
     v.beams = cfg.i("beams", 1);
+    v.hazeSigma = cfg.f("haze.sigma", 0.0f);
+    v.hazeAbsorb = cfg.f("haze.absorb", 0.0f);
+    v.hazeMinWeight = cfg.f("haze.min.weight", 0.03f);
+    v.hazeBuf = haze_;
+    v.hazeOnly = cfg.i("debug.hazeonly", 0);
     v.badCount = bad_;
+    v.oob = oob_;
     v.stats = statsDev;
     // our sphere: chrome, the eye at its centre
     const float R = cfg.f("sphere.radius", 0.175f);
@@ -260,6 +461,13 @@ View AynaApp::makeView() const {
     }
     // the lamps left behind
     const float lampR = cfg.f("lamp.radius", 0.03f), lampK = cfg.f("lamp.share", 0.03f);
+    v.lm = lm_;
+    v.nLamps = std::min(int(lamps.size()), std::min(baked_, kMaxLamps));
+    for (int i = 0; i < v.nLamps; ++i) {
+        v.lamp[i] = make_float4(lamps[i].pos.x, lamps[i].pos.y, lamps[i].pos.z, lampR);
+        v.lampI[i] = lamps[i].color * (lamps[i].level * lampK);
+    }
+    v.firstLamp = v.nLights;
     for (const AynaLamp& lp : lamps) {
         if (v.nLights >= kMaxLights || v.nObjects >= kMaxObjects) break;
         Object& ob = v.obj[v.nObjects];
@@ -324,6 +532,7 @@ void AynaApp::uploadBeams(View& v) {
     setBeamBulge(cfg.i("beam.bulge", 1) != 0);
     double ms = 0.0;
     for (int l = 0; l < v.nLights; ++l) {
+        if (lm_.on && l >= v.firstLamp && l - v.firstLamp < baked_) continue;   // baked into the light map
         BeamBuildStats st;
         buildBeams(maze, optics, v.light[l], l, eps, maxNodes, nodes_, &st);
         beamStats.nodes += st.nodes;
@@ -331,7 +540,49 @@ void AynaApp::uploadBeams(View& v) {
         beamStats.maxDepth = std::max(beamStats.maxDepth, st.maxDepth);
         ms += st.ms;
     }
+    const size_t surfaceNodes = nodes_.size();
+    // the lamps' straight beams join for the mist only (their light on surfaces is in the map)
+    if (lm_.on) {
+        for (int i = 0; i < baked_ && i < int(lampStraight_.size()); ++i) {
+            const int base = int(nodes_.size());
+            for (BeamNode nd : lampStraight_[i]) {
+                nd.light = short(v.firstLamp + i);
+                if (nd.parent >= 0) nd.parent += base;
+                nodes_.push_back(nd);
+            }
+        }
+    }
+    // the mist's lists: every node once per cell (our light's and the lamps' straight ones)
+    {
+        const int nc = cellCount(maze.g);
+        hazeStart_.assign(nc + 1, 0);
+        for (const BeamNode& n : nodes_)
+            if (n.cell >= 0) ++hazeStart_[n.cell + 1];
+        for (int c = 0; c < nc; ++c) hazeStart_[c + 1] += hazeStart_[c];
+        hazeNodes_.assign(hazeStart_[nc], 0);
+        std::vector<int> fill(hazeStart_.begin(), hazeStart_.end() - 1);
+        for (int q = 0; q < int(nodes_.size()); ++q)
+            if (nodes_[q].cell >= 0) hazeNodes_[fill[nodes_[q].cell]++] = q;
+    }
+    // the surface lists only from our own nodes (sortIntoCells looks at all: hide the lamps' with cell -1 meanwhile)
+    std::vector<int> savedCells;
+    for (size_t q = surfaceNodes; q < nodes_.size(); ++q) {
+        savedCells.push_back(nodes_[q].cell);
+        nodes_[q].cell = -1;
+    }
     sortIntoCells(maze, nodes_, cellStart_, cellNodes_);
+    for (size_t q = surfaceNodes; q < nodes_.size(); ++q) nodes_[q].cell = savedCells[q - surfaceNodes];
+    if (hazeNodes_.size() > capHaze_ || !dHazeStart_) {
+        cudaFree(dHazeNodes_);
+        cudaFree(dHazeStart_);
+        capHaze_ = hazeNodes_.size() * 2 + 1024;
+        dHazeNodes_ = devAlloc<int>(capHaze_);
+        dHazeStart_ = devAlloc<int>(hazeStart_.size());
+    }
+    cudaMemcpy(dHazeNodes_, hazeNodes_.data(), hazeNodes_.size() * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(dHazeStart_, hazeStart_.data(), hazeStart_.size() * sizeof(int), cudaMemcpyHostToDevice);
+    v.hazeStart = dHazeStart_;
+    v.hazeNodes = dHazeNodes_;
     if (nodes_.size() > capNodes_) {
         cudaFree(dNodes_);
         capNodes_ = nodes_.size() * 2 + 1024;
@@ -349,15 +600,45 @@ void AynaApp::uploadBeams(View& v) {
     v.nodes = dNodes_;
     v.cellStart = dCellStart_;
     v.cellNodes = dCellNodes_;
+    v.nNodes = int(nodes_.size());
+    v.nEntries = int(cellNodes_.size() / 8);
     v.beamEps = eps;
     beamStats.ms = ms;
 }
 
+// the tools: after each stage, wait and name the first CUDA error
+static bool stageCheck(bool on, const char* stage) {
+    if (!on) return true;
+    const cudaError_t e = cudaDeviceSynchronize();
+    if (e != cudaSuccess) {
+        std::fprintf(stderr, "ayna: asama '%s': %s\n", stage, cudaGetErrorString(e));
+        return false;
+    }
+    return true;
+}
+
 void AynaApp::render() {
+    const bool chk = cfg.i("debug.sync", 0) != 0;
+    if (lm_.on) bakeLamps();
+    if (!stageCheck(chk, "pisirme")) return;
     View v = makeView();
     uploadObjects(v);
     const auto tb = std::chrono::high_resolution_clock::now();
     if (v.beams > 0) uploadBeams(v);
+    if (!stageCheck(chk, "huzme yukleme")) return;
+    if (chk) {
+        // the haze pass and the frame apart
+        View hz = v;
+        if (hz.hazeSigma > 0.0f) {
+            View only = v;
+            renderFrame(only, hdr_, 0);
+            if (!stageCheck(true, "kare (pus + yuzeyler)")) {
+                std::fprintf(stderr, "  dugum %zu, pus listesi %zu, kamera (%.4f %.4f %.4f) %.3f %.3f\n", nodes_.size(), hazeNodes_.size(), cam.pos.x,
+                             cam.pos.y, cam.pos.z, cam.yaw, cam.pitch);
+                return;
+            }
+        }
+    }
     beamMs = std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - tb).count();
     cudaMemsetAsync(bad_, 0, sizeof(unsigned int), 0);
     cudaEventRecord(ev0_, 0);
@@ -369,6 +650,12 @@ void AynaApp::render() {
     float ms = 0.0f;
     cudaEventElapsedTime(&ms, ev0_, ev1_);
     cudaMemcpy(&lastBad, bad_, sizeof(unsigned int), cudaMemcpyDeviceToHost);
+    const cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess && !errorShown_) {
+        errorShown_ = true;
+        std::fprintf(stderr, "ayna: CUDA hatasi '%s'  kamera (%.4f %.4f %.4f) yaw %.3f pitch %.3f  lamba %zu  dugum %d\n", cudaGetErrorString(err),
+                     cam.pos.x, cam.pos.y, cam.pos.z, cam.yaw, cam.pitch, lamps.size(), beamStats.nodes);
+    }
     frameMs = frameMs <= 0.0f ? ms : frameMs + (ms - frameMs) * 0.1f;
 }
 
@@ -538,6 +825,84 @@ int runAynaCli(int argc, char** argv) {
         }
     }
     if (test == "o2") return testO2(a);
+    if (test == "fuzz") {   // random poses (fixed seed) inside the maze, lamps left and gathered: CUDA must stay clean
+        a.loadConfig();
+        a.width = w > 0 ? w : 320;
+        a.height = h > 0 ? h : 180;
+        a.init();
+        unsigned st = 12345u;
+        auto rnd = [&]() {
+            st ^= st << 13;
+            st ^= st >> 17;
+            st ^= st << 5;
+            return float(st >> 8) * (1.0f / 16777216.0f);
+        };
+        const float R = a.cfg.f("sphere.radius", 0.175f);
+        int fails = 0;
+        const int poses = a.cfg.i("fuzz.poses", 400);
+        for (int k = 0; k < poses && fails < 3; ++k) {
+            float3 p = make_float3((rnd() * 2.0f - 1.0f) * 4.5f, 0.3f + rnd() * 2.8f, (rnd() * 2.0f - 1.0f) * 4.0f);
+            if (!a.maze.insidePoint(p.x, p.z)) continue;
+            a.maze.collide(p, R);
+            if (!a.maze.insidePoint(p.x, p.z)) continue;
+            a.cam.pos = p;
+            a.cam.yaw = rnd() * 6.2832f;
+            a.cam.pitch = (rnd() * 2.0f - 1.0f) * 1.4f;
+            if (rnd() < 0.3f && a.lamps.size() < 8) {
+                AynaLamp lp;
+                const float3 f = make_float3(-std::sin(a.cam.yaw), 0.0f, -std::cos(a.cam.yaw));
+                float3 q = p + f * 0.32f;
+                a.maze.collide(q, 0.04f);
+                if (!a.maze.insidePoint(q.x, q.z)) q = p;
+                lp.pos = q;
+                lp.color = AynaApp::paletteColor(int(rnd() * 8));
+                lp.level = AynaApp::levelValue(int(rnd() * 8));
+                a.lamps.push_back(lp);
+            }
+            if (rnd() < 0.05f) a.lamps.clear();
+            a.colorIndex = int(rnd() * 8);
+            a.levelIndex = int(rnd() * 8);
+            a.lightOn = rnd() < 0.85f;
+            a.render();
+            const cudaError_t e = cudaGetLastError();
+            if (e != cudaSuccess) {
+                ++fails;
+                std::printf("HATA %d: %s  kamera \"%.4f %.4f %.4f %.4f %.4f 62\"  isik %d %d %d  lamba %zu\n", k, cudaGetErrorString(e), p.x, p.y, p.z,
+                            a.cam.yaw, a.cam.pitch, a.colorIndex, a.levelIndex, a.lightOn ? 1 : 0, a.lamps.size());
+                for (const AynaLamp& lp : a.lamps) std::printf("   --lamp \"%.4f %.4f %.4f\"\n", lp.pos.x, lp.pos.y, lp.pos.z);
+                break;   // the context is gone after an illegal access
+            }
+        }
+        std::printf("fuzz: %s\n", fails ? "HATA BULUNDU" : "temiz"); std::printf("(%d poz)\n", poses);
+        a.release();
+        return fails ? 1 : 0;
+    }
+    if (test == "lambalar") {   // lamps left one at a time, a frame between each: CUDA must stay clean
+        a.loadConfig();
+        if (w > 0) a.width = w;
+        if (h > 0) a.height = h;
+        a.init();
+        a.cam = AynaApp::view(0);
+        int bad = 0;
+        for (int k = 0; k < 10; ++k) {
+            if (k < 9) {
+                AynaLamp lp;
+                lp.pos = a.cam.pos + make_float3(0.0f, -0.1f * k, -0.32f);
+                lp.color = AynaApp::paletteColor(k);
+                lp.level = AynaApp::levelValue(4);
+                if (int(a.lamps.size()) < 8) a.lamps.push_back(lp);
+            } else {
+                a.lamps.clear();
+            }
+            a.render();
+            const cudaError_t e = cudaGetLastError();
+            std::printf("adim %d: %zu lamba, kare %.1f ms, pisirme %.1f ms, %s\n", k, a.lamps.size(), a.frameMs, a.bakeMs,
+                        e == cudaSuccess ? "temiz" : cudaGetErrorString(e));
+            if (e != cudaSuccess) ++bad;
+        }
+        a.release();
+        return bad ? 1 : 0;
+    }
     if (!headless) {
         std::printf("ayna: --headless --out <klasor> [--view 0..n|all] [--cam \"x y z yaw pitch fov\"] [--w --h] [--set k=v] [--plan]\n");
         return 2;
@@ -547,6 +912,7 @@ int runAynaCli(int argc, char** argv) {
     if (h > 0) a.height = h;
     a.init();
     std::filesystem::create_directories(out);
+    std::printf("View: cpp %zu / cu %zu, hazeBuf %zu / %zu\n", sizeof(View), viewSizeCu(), offsetof(View, hazeBuf), viewHazeOffsetCu());
     std::printf("labirent: %d ayna, %d gecit, hucre %d\n", a.maze.mirrorCount(), a.maze.openCount(),
                 int(std::count(a.maze.cells.begin(), a.maze.cells.end(), (unsigned char)1)));
     if (plan) {
@@ -576,6 +942,7 @@ int runAynaCli(int argc, char** argv) {
         }
         const std::string path = out + "/ayna_bakis" + std::to_string(i);
         const bool ok = a.save(path);
+        std::printf("pisirme %.1f ms, %zu texel, dizin ihlali %u\n", a.bakeMs, a.lmTexelCount(), a.oobCount());
         std::printf("bakis %d: %s  %.1f ms  (%dx%d, %d ornek)  bozuk piksel %u  huzme %d dugum (kesilen %d, derinlik %d, %.2f ms)\n", i,
                     ok ? (path + ".png").c_str() : "YAZILAMADI", a.frameMs, a.width, a.height, a.cfg.i("samples", 4), a.lastBad, a.beamStats.nodes,
                     a.beamStats.cut, a.beamStats.maxDepth, a.beamMs);

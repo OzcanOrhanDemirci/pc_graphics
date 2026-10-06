@@ -2,11 +2,13 @@
 #include "scenes/ayna/ayna_kernels.h"
 #include "shared/display.h"
 
+#include <cstddef>
 #include <cstdio>
 
 namespace ayna {
 
 __constant__ Optics cOpt;
+constexpr unsigned kTexelValid = 1u << 30;   // a light map texel on a real surface
 
 namespace {
 
@@ -234,7 +236,7 @@ __device__ float3 directLight(const View& v, float3 p, float3 n) {
 // lit by them through the other call).
 __device__ int gTested, gPassed;   // (the tools' counts; per thread they are not meaningful, only as a heat map)
 __device__ float3 evalCell(const View& v, const Cell& c, float3 q, float3 n, float pathW, int throughK, bool mirrorK, int skipK,
-                           int onlyStraight, int* counts) {
+                           int onlyStraight, int* counts, int* straight = nullptr) {
     float3 E = make_float3(0, 0, 0);
     if (c.idx < 0) return E;
     const Lattice& g = v.g;
@@ -243,7 +245,7 @@ __device__ float3 evalCell(const View& v, const Cell& c, float3 q, float3 n, flo
     float vk[3];
     for (int k = 0; k < 3; ++k) vk[k] = dot2(f2(p2.x - c.A[k].x, p2.y - c.A[k].y), c.n[k]);
     bool sphereHere = false;
-    for (int s = 0; s < kCellObjects; ++s) {
+    for (int s = 0; s < kCellObjects && !v.bake; ++s) {
         const int id = v.cellObj[c.idx * kCellObjects + s];
         if (id < 0) break;
         if (id == 0) sphereHere = true;
@@ -254,6 +256,10 @@ __device__ float3 evalCell(const View& v, const Cell& c, float3 q, float3 n, flo
     const int bj = min(kBins - 1, max(0, int((p2.y - bz) * (float(kBins) / g.h))));
     const int list = c.idx * kBins * kBins + bj * kBins + bi;
     const int s0 = v.cellStart[list], s1 = v.cellStart[list + 1];
+    if (s0 < 0 || s1 > v.nEntries || s0 > s1) {
+        if (v.oob) atomicAdd(v.oob, 100u);
+        return E;
+    }
     const bool high = fmaxf(q.y, 0.0f) > g.yk;
     const float4* hot = reinterpret_cast<const float4*>(v.cellNodes);
     for (int s = s0; s < s1; ++s) {
@@ -263,6 +269,10 @@ __device__ float3 evalCell(const View& v, const Cell& c, float3 q, float3 n, flo
         const float2 d = f2(p2.x - h0.x, p2.y - h0.y);
         if (h0.z * d.y - h0.w * d.x < 0.0f || d.x * h1.y - d.y * h1.x < 0.0f) continue;   // (a root's a = b = 0 passes)
         const int nodeIdx = __float_as_int(h1.w);
+        if (nodeIdx < 0 || nodeIdx >= v.nNodes) {
+            if (v.oob) atomicAdd(v.oob, 1u);
+            continue;
+        }
         const BeamNode& nd = v.nodes[nodeIdx];
         if (nd.high && !high && v.light[nd.light].pos.y <= g.yk) continue;   // a bulge's light never comes this low
         if (int(nd.entryK) == skipK || (throughK >= 0 && int(nd.entryK) == throughK)) continue;
@@ -371,6 +381,10 @@ __device__ float3 evalCell(const View& v, const Cell& c, float3 q, float3 n, flo
                 }
                 at = an.parent;
                 if (at < 0) break;
+                if (at >= v.nNodes) {
+                    if (v.oob) atomicAdd(v.oob, 1000u);
+                    break;
+                }
             }
             if (blocked) continue;
         }
@@ -387,11 +401,13 @@ __device__ float3 evalCell(const View& v, const Cell& c, float3 q, float3 n, flo
         if (mirrorK) W *= mirrorW(fabsf(w.x * c.n[throughK].x + w.z * c.n[throughK].y));
         E += L.color * W * (cone * cn / d2);
         if (counts) ++counts[1];
+        if (straight && !mirrorK && !(nd.m[0] | nd.m[1] | nd.m[2])) *straight = 1;
     }
     return E;
 }
 
-__device__ float3 beamLight(const View& v, const Cell& c, float3 p, float3 n, float pathW, int onlyStraight, int* counts = nullptr) {
+__device__ float3 beamLight(const View& v, const Cell& c, float3 p, float3 n, float pathW, int onlyStraight, int* counts = nullptr,
+                            int* straight = nullptr) {
     if (c.idx < 0 || !v.nodes) return make_float3(0, 0, 0);
     const float ht = 0.5f * v.g.t;
     // a point in one of the cell's windows (on a jamb, the arch's underside, the floor between the faces) also takes
@@ -399,14 +415,14 @@ __device__ float3 beamLight(const View& v, const Cell& c, float3 p, float3 n, fl
     int inK = -1;
     for (int k = 0; k < 3; ++k)
         if (dot2(f2(p.x - c.A[k].x, p.z - c.A[k].y), c.n[k]) < ht - 1e-4f) inK = k;
-    float3 E = evalCell(v, c, p, n, pathW, -1, false, inK, onlyStraight, counts);
+    float3 E = evalCell(v, c, p, n, pathW, -1, false, inK, onlyStraight, counts, straight);
     if (inK >= 0 && c.type[inK] != kEdgeOut) {
         if (c.type[inK] == kEdgeOpen) {
             int ni, nj, nup;
             cellAcross(c.i, c.j, c.up, inK, ni, nj, nup);
             Cell t;
             loadCell(v, ni, nj, nup, t);
-            E += evalCell(v, t, p, n, pathW, inK, false, -1, onlyStraight, counts);
+            E += evalCell(v, t, p, n, pathW, inK, false, -1, onlyStraight, counts, straight);
         } else {
             const float2 nk = c.n[inK];
             const float vp = dot2(f2(p.x - c.A[inK].x, p.z - c.A[inK].y), nk);
@@ -419,9 +435,347 @@ __device__ float3 beamLight(const View& v, const Cell& c, float3 p, float3 n, fl
     return E;
 }
 
-__device__ __forceinline__ float3 lightAt(const View& v, const Cell& c, float3 p, float3 n, float pathW, int* counts = nullptr) {
-    if (v.beams > 0) return beamLight(v, c, p, n, pathW, v.beams == 2, counts);
-    return directLight(v, p, n);
+// ---------------------------------------------------------------------------------------------------------------
+// the light map (the lamps' baked light)
+__device__ __forceinline__ float revealS(const Lattice& g, float du, float y, float perim) {
+    // round the window from the left jamb's foot: up the jamb, over the arch, down the right jamb
+    if (y <= g.yk) return du < 0.0f ? y : perim - y;
+    // the arc runs from the left junction (thL, past pi) down over the top to the right junction (thR)
+    const float thL = atan2f(g.yk - g.yc, -g.wHalf) + 2.0f * M_PIf, thR = atan2f(g.yk - g.yc, g.wHalf);
+    float th = atan2f(y - g.yc, du);
+    if (th < thR) th += 2.0f * M_PIf;
+    return g.yk + g.ra * (thL - th);
+}
+
+// a surface point's block and its coordinates in texels (-1: no light map for it)
+__device__ int texelOf(const View& v, const Cell& c, int kind, int k, float3 p, float& tx, float& ty) {
+    const LightMap& lm = v.lm;
+    const Lattice& g = v.g;
+    const float inv = 1.0f / lm.texel;
+    switch (kind) {
+    case HFloor:
+    case HCeil:
+        tx = (p.x - lm.x0) * inv - 0.5f;
+        ty = (p.z - lm.z0) * inv - 0.5f;
+        return kind == HFloor ? -2 : -3;
+    case HFace:
+    case HJamb:
+    case HArc: {
+        const EdgeRef e = cellEdge(c.i, c.j, c.up, k);
+        const int ei = edgeIndex(g, e.fam, e.i, e.j);
+        if (ei < 0) return -1;
+        const float2 rel = f2(p.x - c.A[k].x, p.z - c.A[k].y);
+        const float u = dot2(rel, c.e[k]);
+        if (kind == HFace) {
+            tx = u * inv - 0.5f;
+            ty = p.y * inv - 0.5f;
+            return lm.faceBlock[ei * 2 + (e.side > 0 ? 0 : 1)];
+        }
+        const float vv = dot2(rel, c.n[k]);
+        tx = revealS(g, u - 0.5f * g.L, p.y, lm.perimeter) * inv - 0.5f;
+        ty = (0.5f * g.t - vv) * inv - 0.5f;
+        return lm.revBlock[ei * 2 + (e.side > 0 ? 0 : 1)];
+    }
+    case HColumn: {
+        int ci[3], cj[3];
+        cellCornerIdx(c.i, c.j, c.up, ci, cj);
+        const int vi = vertexIndex(g, ci[k], cj[k]);
+        if (vi < 0) return -1;
+        float phi = atan2f(p.z - c.corner[k].y, p.x - c.corner[k].x);
+        if (phi < 0.0f) phi += 2.0f * M_PIf;
+        tx = phi * (g.rc * inv) - 0.5f;
+        ty = p.y * inv - 0.5f;
+        return lm.colBlock[vi];
+    }
+    default: return -1;
+    }
+}
+
+__device__ float4 fetchMap(const View& v, int block, float tx, float ty) {
+    const LightMap& lm = v.lm;
+    int off, w, h;
+    bool wrapX = false;
+    if (block == -2 || block == -3) {
+        off = block == -2 ? lm.floorOff : lm.ceilOff;
+        w = lm.gw;
+        h = lm.gh;
+    } else {
+        const LightMapBlock& b = lm.blocks[block];
+        off = b.offset;
+        w = b.w;
+        h = b.h;
+        wrapX = b.type == 4;
+    }
+    tx = wrapX ? tx : fminf(fmaxf(tx, 0.0f), float(w) - 1.001f);
+    ty = fminf(fmaxf(ty, 0.0f), float(h) - 1.001f);
+    int x0 = int(floorf(tx)), y0 = int(ty);
+    const float fx = tx - floorf(tx), fy = ty - float(y0);
+    int x1 = x0 + 1;
+    if (wrapX) {
+        x0 = (x0 % w + w) % w;
+        x1 = (x1 % w + w) % w;
+    }
+    const int y1 = min(y0 + 1, h - 1);
+    const float4 a = lm.E[off + y0 * w + x0], b = lm.E[off + y0 * w + x1], c = lm.E[off + y1 * w + x0], d = lm.E[off + y1 * w + x1];
+    float4 r;
+    r.x = (a.x * (1 - fx) + b.x * fx) * (1 - fy) + (c.x * (1 - fx) + d.x * fx) * fy;
+    r.y = (a.y * (1 - fx) + b.y * fx) * (1 - fy) + (c.y * (1 - fx) + d.y * fx) * fy;
+    r.z = (a.z * (1 - fx) + b.z * fx) * (1 - fy) + (c.z * (1 - fx) + d.z * fx) * fy;
+    // the bits: the nearest texel's
+    const float4& nn = fx < 0.5f ? (fy < 0.5f ? a : c) : (fy < 0.5f ? b : d);
+    r.w = nn.w;
+    return r;
+}
+
+// how much of a lamp's glowing ball our sphere hides, seen from p (two discs on the sky, their overlap)
+__device__ float sphereHides(const View& v, float3 p, float3 lp, float lr) {
+    const float3 toL = lp - p, toS = v.obj[0].c - p;
+    const float dl = length(toL), ds = length(toS);
+    if (ds >= dl || ds <= v.obj[0].r) return 0.0f;
+    const float al = asinf(fminf(1.0f, lr / dl)), as = asinf(fminf(1.0f, v.obj[0].r / ds));
+    const float cb = dot(toL, toS) / (dl * ds);
+    const float beta = acosf(fminf(1.0f, fmaxf(-1.0f, cb)));
+    if (beta >= al + as) return 0.0f;
+    if (beta <= as - al) return 1.0f;
+    if (beta <= al - as) return (as * as) / (al * al);
+    // the lens of two circles (radii al, as, centres beta apart), over the lamp's disc
+    const float r1 = al, r2 = as, dd = beta;
+    const float c1 = (dd * dd + r1 * r1 - r2 * r2) / (2.0f * dd * r1), c2 = (dd * dd + r2 * r2 - r1 * r1) / (2.0f * dd * r2);
+    const float a1 = acosf(fminf(1.0f, fmaxf(-1.0f, c1))), a2 = acosf(fminf(1.0f, fmaxf(-1.0f, c2)));
+    const float lens = r1 * r1 * (a1 - sinf(2.0f * a1) * 0.5f) + r2 * r2 * (a2 - sinf(2.0f * a2) * 0.5f);
+    return fminf(1.0f, lens / (M_PIf * r1 * r1));
+}
+
+__device__ float3 lightAt(const View& v, const Cell& c, int kind, int k, float3 p, float3 n, float pathW, int* counts = nullptr) {
+    float3 E = make_float3(0, 0, 0);
+    if (v.beams > 0) E = beamLight(v, c, p, n, pathW, v.beams == 2, counts);
+    else E = directLight(v, p, n);
+    if (v.lm.on && !v.bake) {
+        float tx, ty;
+        const int blk = texelOf(v, c, kind, k, p, tx, ty);
+        if (blk != -1) {
+            const float4 m = fetchMap(v, blk, tx, ty);
+            E += make_float3(m.x, m.y, m.z);
+            // our sphere's shadow on the lamps this point sees straight
+            const unsigned bits = __float_as_uint(m.w) & 0xFFFFu;
+            for (int i = 0; i < v.nLamps; ++i) {
+                if (!(bits & (1u << i))) continue;
+                const float3 lp = make_float3(v.lamp[i].x, v.lamp[i].y, v.lamp[i].z);
+                const float hide = sphereHides(v, p, lp, v.lamp[i].w);
+                if (hide <= 0.0f) continue;
+                const float3 w = lp - p;
+                const float d2 = dot(w, w);
+                const float cn = dot(n, w) * rsqrtf(d2);
+                if (cn > 0.0f) E -= v.lampI[i] * (hide * cn / d2);
+            }
+            E = fmaxf3(E, make_float3(0, 0, 0));
+        }
+    }
+    return E;
+}
+
+// the bake: one texel's surface point, its normal and its cell; false if the texel is on no surface
+__device__ bool texelPoint(const View& v, const LightMapBlock& b, int x, int y, float3& p, float3& n) {
+    const Lattice& g = v.g;
+    const float ts = v.lm.texel;
+    const float fx = (float(x) + 0.5f) * ts, fy = (float(y) + 0.5f) * ts;
+    switch (b.type) {
+    case 0:
+    case 1: {
+        p = make_float3(v.lm.x0 + fx, b.type == 0 ? 0.0f : g.Hc, v.lm.z0 + fy);
+        n = make_float3(0.0f, b.type == 0 ? 1.0f : -1.0f, 0.0f);
+        // not under a slab's solid part (the floor shows only in the windows; the ceiling never over a slab), nor in a column
+        int i, j, up;
+        locate(g, p.x, p.z, i, j, up);
+        if (cellIndex(g, i, j, up) < 0) return false;
+        float2 cc[3];
+        cellCorners(g, i, j, up, cc);
+        for (int k = 0; k < 3; ++k) {
+            if (sqr(p.x - cc[k].x) + sqr(p.z - cc[k].y) < g.rc * g.rc) return false;
+            const EdgeRef e = cellEdge(i, j, up, k);
+            float2 A, B;
+            edgeEnds(g, e.fam, e.i, e.j, A, B);
+            const float2 ed = famDir(e.fam), nn = famNormal(e.fam);
+            const float vv = fabsf((p.x - A.x) * nn.x + (p.z - A.y) * nn.y);
+            if (vv >= 0.5f * g.t) continue;
+            if (b.type == 1) return false;
+            const float du = (p.x - A.x) * ed.x + (p.z - A.y) * ed.y - 0.5f * g.L;
+            if (fabsf(du) > g.wHalf) return false;
+        }
+        return true;
+    }
+    case 2:
+    case 3: {
+        float2 A, B;
+        edgeEnds(g, b.fam, b.i, b.j, A, B);
+        const float2 e = famDir(b.fam), nn = famNormal(b.fam);
+        const float2 nin = f2(nn.x * float(b.side), nn.y * float(b.side));
+        if (b.type == 2) {
+            if (fx > g.L || fy > g.Hc) return false;
+            if (inWindow(g, fx - 0.5f * g.L, fy)) return false;
+            const float off = 0.5f * g.t;
+            p = make_float3(A.x + e.x * fx + nin.x * off, fy, A.y + e.y * fx + nin.y * off);
+            n = lift(nin);
+            return true;
+        }
+        // a reveal: s round the window, depth from the face
+        const float perim = v.lm.perimeter;
+        if (fx > perim) return false;
+        const float depth = fminf(fy, 0.5f * g.t - 0.001f);
+        float du, yy;
+        float3 nl;   // (du, y) normal
+        if (fx <= g.yk) {
+            du = -g.wHalf; yy = fx; nl = make_float3(1, 0, 0);
+        } else if (fx >= perim - g.yk) {
+            du = g.wHalf; yy = perim - fx; nl = make_float3(-1, 0, 0);
+        } else {
+            const float thL = atan2f(g.yk - g.yc, -g.wHalf) + 2.0f * M_PIf;
+            const float th = thL - (fx - g.yk) / g.ra;
+            du = g.ra * cosf(th);
+            yy = g.yc + g.ra * sinf(th);
+            nl = make_float3(-cosf(th), -sinf(th), 0);
+        }
+        const float vv = 0.5f * g.t - depth;
+        p = make_float3(A.x + e.x * (0.5f * g.L + du) + nin.x * vv, yy, A.y + e.y * (0.5f * g.L + du) + nin.y * vv);
+        n = make_float3(e.x * nl.x, nl.y, e.y * nl.x);
+        return true;
+    }
+    case 4: {
+        const float2 V = vtx(g, b.i, b.j);
+        const float phi = fx / g.rc;
+        if (phi > 2.0f * M_PIf || fy > g.Hc) return false;
+        n = make_float3(cosf(phi), 0.0f, sinf(phi));
+        p = make_float3(V.x + n.x * g.rc, fy, V.y + n.z * g.rc);
+        return true;
+    }
+    }
+    return false;
+}
+
+__global__ void kBake(View v, const LightMapBlock* blocks, unsigned bit) {
+    const LightMapBlock& b = blocks[blockIdx.z];
+    const int x = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y;
+    if (x >= b.w || y >= b.h) return;
+    float3 p, n;
+    if (!texelPoint(v, b, x, y, p, n)) return;
+    // the point's cell: a hair off the surface, along its normal
+    const float3 q = p + n * 0.002f;
+    int i, j, up;
+    locate(v.g, q.x, q.z, i, j, up);
+    if (cellIndex(v.g, i, j, up) < 0) return;
+    Cell c;
+    loadCell(v, i, j, up, c);
+    if (c.idx < 0) return;
+    int straight = 0;
+    const float3 E = beamLight(v, c, p, n, 1.0f, 0, nullptr, &straight);
+    float4& t = v.lm.E[b.offset + y * b.w + x];
+    t.x += E.x;
+    t.y += E.y;
+    t.z += E.z;
+    t.w = __uint_as_float(__float_as_uint(t.w) | (straight ? bit : 0u) | kTexelValid);
+}
+
+// texels on no surface (in a window, under a slab, inside a column) take their valid neighbours' mean: the bilinear
+// fetch at a surface's rim then reads its own light, not the dark beyond it (reads only valid texels: no order)
+__global__ void kDilate(View v, const LightMapBlock* blocks) {
+    const LightMapBlock& b = blocks[blockIdx.z];
+    const int x = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y;
+    if (x >= b.w || y >= b.h) return;
+    float4* E = v.lm.E + b.offset;
+    if (__float_as_uint(E[y * b.w + x].w) & kTexelValid) return;
+    float3 sum = make_float3(0, 0, 0);
+    float wsum = 0.0f;
+    unsigned bits = 0;
+    for (int dy = -2; dy <= 2; ++dy)
+        for (int dx = -2; dx <= 2; ++dx) {
+            const int xx = x + dx, yy = y + dy;
+            if (xx < 0 || yy < 0 || xx >= b.w || yy >= b.h) continue;
+            const float4 q = E[yy * b.w + xx];
+            const unsigned qb = __float_as_uint(q.w);
+            if (!(qb & kTexelValid)) continue;
+            const float w = 1.0f / float(1 + dx * dx + dy * dy);
+            sum += make_float3(q.x, q.y, q.z) * w;
+            wsum += w;
+            bits |= qb & 0xFFFFu;
+        }
+    if (wsum > 0.0f) {
+        sum = sum * (1.0f / wsum);
+        E[y * b.w + x] = make_float4(sum.x, sum.y, sum.z, __uint_as_float(bits));
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// the haze's glow along o + t d, t in [ta, tb], from one node (its image is a point light): the segment cut to the
+// node's wedge, then the point light's in-scattering in closed form, I / (h^2 + (t - t0)^2) integrated as an angle
+// (atan); a spot's cone and the mirrors' reflectance vary along it, so their factor is taken at four Gauss points of
+// that angle
+__device__ float3 hazeNode(const View& v, const BeamNode& nd, float3 o, float3 d, float ta, float tb) {
+    const Light& L = v.light[nd.light];
+    const float2 o2 = f2(o.x, o.z), d2 = f2(d.x, d.z);
+    if (nd.entryK != 3) {
+        // the two sides: cross(a, P - S) >= 0, cross(P - S, b) >= 0 with P = o2 + d2 t
+        const float2 r = f2(o2.x - nd.S.x, o2.y - nd.S.y);
+        const float ca0 = nd.a.x * r.y - nd.a.y * r.x, ca1 = nd.a.x * d2.y - nd.a.y * d2.x;
+        const float cb0 = r.x * nd.b.y - r.y * nd.b.x, cb1 = d2.x * nd.b.y - d2.y * nd.b.x;
+        if (fabsf(ca1) > 1e-9f) {
+            const float tc = -ca0 / ca1;
+            if (ca1 > 0.0f) ta = fmaxf(ta, tc); else tb = fminf(tb, tc);
+        } else if (ca0 < 0.0f) return make_float3(0, 0, 0);
+        if (fabsf(cb1) > 1e-9f) {
+            const float tc = -cb0 / cb1;
+            if (cb1 > 0.0f) ta = fmaxf(ta, tc); else tb = fminf(tb, tc);
+        } else if (cb0 < 0.0f) return make_float3(0, 0, 0);
+        if (tb <= ta) return make_float3(0, 0, 0);
+    }
+    const float3 S3 = make_float3(nd.S.x, L.pos.y, nd.S.y);
+    const float t0 = dot(S3 - o, d);
+    const float3 cp = o + d * t0;
+    const float h = fmaxf(length(S3 - cp), fmaxf(L.radius, 0.01f));
+    const float pa = atanf((ta - t0) / h), pb = atanf((tb - t0) / h);
+    const float trans = __expf(-(v.hazeSigma + v.hazeAbsorb) * length(S3 - o - d * clampf(t0, ta, tb)));
+    const float k = v.hazeSigma * (0.25f * INV_PIf) / h * trans;
+    const bool plain = L.cosOuter <= -1.0f && !(nd.m[0] | nd.m[1] | nd.m[2]);
+    if (plain) return L.color * (k * (pb - pa));
+    // four Gauss-Legendre points over the angle
+    const float gx[4] = {-0.8611363116f, -0.3399810436f, 0.3399810436f, 0.8611363116f};
+    const float gw[4] = {0.3478548451f, 0.6521451549f, 0.6521451549f, 0.3478548451f};
+    float3 acc = make_float3(0, 0, 0);
+    const float mid = 0.5f * (pa + pb), half = 0.5f * (pb - pa);
+    for (int q = 0; q < 4; ++q) {
+        const float ph = mid + half * gx[q];
+        const float3 x = o + d * (t0 + h * tanf(ph));
+        float3 w = x - S3;   // from the image to the point
+        w = w * rsqrtf(fmaxf(dot(w, w), 1e-12f));
+        const float2 hl = f2(nd.m00 * w.x + nd.m01 * w.z, nd.m10 * w.x + nd.m11 * w.z);
+        float c = 1.0f;
+        if (L.cosOuter > -1.0f) c = smoothstepf(L.cosOuter, L.cosInner, hl.x * L.axis.x + w.y * L.axis.y + hl.y * L.axis.z);
+        float3 W = make_float3(c, c, c);
+        for (int f = 0; f < 3; ++f) {
+            if (!nd.m[f]) continue;
+            const float2 fn = famNormal(f);
+            const float3 wf = mirrorW(fabsf(hl.x * fn.x + hl.y * fn.y));
+            const float mf = float(nd.m[f]);
+            W *= make_float3(__powf(wf.x, mf), __powf(wf.y, mf), __powf(wf.z, mf));
+        }
+        acc += W * gw[q];
+    }
+    return L.color * acc * (k * half);
+}
+
+// the haze's glow along a ray's piece inside cell c
+__device__ float3 hazeSegment(const View& v, const Cell& c, float3 o, float3 d, float len) {
+    float3 g = make_float3(0, 0, 0);
+    if (c.idx < 0 || !v.hazeStart) return g;
+    const int s0 = v.hazeStart[c.idx], s1 = v.hazeStart[c.idx + 1];
+    for (int s = s0; s < s1; ++s) {
+        const int q = v.hazeNodes[s];
+        if (q < 0 || q >= v.nNodes) {
+            if (v.oob) atomicAdd(v.oob, 1000000u);
+            continue;
+        }
+        g += hazeNode(v, v.nodes[q], o, d, 0.0f, len);
+    }
+    return g;
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -435,7 +789,7 @@ __device__ float3 albedoAt(const View& v, int kind, float3 p) {
     }
 }
 
-__device__ float3 tracePath(const View& v, float3 o, float3 d, int& bounces, int& steps, int* counts) {
+__device__ float3 tracePath(const View& v, float3 o, float3 d, int& bounces, int& steps, int* counts, bool haze = false, bool glowOnly = false) {
     int i, j, up;
     locate(v.g, o.x, o.z, i, j, up);
     Cell c;
@@ -447,6 +801,11 @@ __device__ float3 tracePath(const View& v, float3 o, float3 d, int& bounces, int
         nearest(v, c, o, d, h);
         if (h.kind == HNone) break;
         float3 p = o + d * h.t;
+        if (v.hazeSigma > 0.0f && v.hazeOnly != 3) {
+            if (haze && maxc(thr) > v.hazeMinWeight) L += thr * hazeSegment(v, c, o, d, h.t);
+            thr *= __expf(-(v.hazeSigma + v.hazeAbsorb) * h.t);
+        }
+        if (glowOnly && maxc(thr) < v.hazeMinWeight) break;
         if (h.kind == HPortal) {
             int ni, nj, nup;
             cellAcross(c.i, c.j, c.up, h.k, ni, nj, nup);
@@ -468,7 +827,7 @@ __device__ float3 tracePath(const View& v, float3 o, float3 d, int& bounces, int
                 // the shifted exit must still be in the window (at its very rim it would be in the frame's groove)
                 const float2 rel = f2(q.x - c.A[h.k].x, q.z - c.A[h.k].y);
                 if (!inWindow(v.g, dot2(rel, c.e[h.k]) - 0.5f * v.g.L, q.y)) {
-                    L += thr * albedoAt(v, HJamb, p) * INV_PIf * lightAt(v, c, p, h.n, maxc(thr), counts);
+                    if (!glowOnly) L += thr * albedoAt(v, HJamb, p) * INV_PIf * lightAt(v, c, HJamb, h.k, p, h.n, maxc(thr), counts);
                     break;
                 }
                 p = q;
@@ -484,7 +843,7 @@ __device__ float3 tracePath(const View& v, float3 o, float3 d, int& bounces, int
             const Object& ob = v.obj[h.k];
             if (ob.kind == 1) {
                 const Light& Lt = v.light[ob.light];
-                L += thr * Lt.color * (1.0f / (M_PIf * ob.r * ob.r));
+                if (!glowOnly) L += thr * Lt.color * (1.0f / (M_PIf * ob.r * ob.r));
                 break;
             }
             const float ci = -dot(d, h.n);
@@ -501,7 +860,7 @@ __device__ float3 tracePath(const View& v, float3 o, float3 d, int& bounces, int
             // polished stone: the Fresnel part reflects, the rest is diffuse
             const float ci = -dot(d, h.n);
             const float F = tabLerp(cOpt.stone, ci);
-            L += thr * alb * ((1.0f - F) * INV_PIf) * lightAt(v, c, p, h.n, maxc(thr) * (1.0f - F), counts);
+            if (!glowOnly) L += thr * alb * ((1.0f - F) * INV_PIf) * lightAt(v, c, h.kind, h.k, p, h.n, maxc(thr) * (1.0f - F), counts);
             thr *= F;
             d = d + h.n * (2.0f * ci);
             o = p;
@@ -509,7 +868,7 @@ __device__ float3 tracePath(const View& v, float3 o, float3 d, int& bounces, int
             if (maxc(thr) < v.minWeight) break;
             continue;
         }
-        L += thr * alb * INV_PIf * lightAt(v, c, p, h.n, maxc(thr), counts);
+        if (!glowOnly) L += thr * alb * INV_PIf * lightAt(v, c, h.kind, h.k, p, h.n, maxc(thr), counts);
         break;
     }
     return L;
@@ -549,6 +908,19 @@ __global__ void kFrame(View v, float4* hdr) {
         psum += float(counts[1]);
     }
     sum = sum * (1.0f / float(n));
+    if (v.hazeSigma > 0.0f && v.debug == 0 && v.hazeBuf && v.hazeOnly != 2) {
+        // the mist's glow, worked out at half resolution (one ray through each 2 x 2 block's centre): bilinear
+        const int hw = (v.width + 1) / 2, hh = (v.height + 1) / 2;
+        float gx = (x + 0.5f) * 0.5f - 0.5f, gy = (y + 0.5f) * 0.5f - 0.5f;
+        gx = fminf(fmaxf(gx, 0.0f), hw - 1.001f);
+        gy = fminf(fmaxf(gy, 0.0f), hh - 1.001f);
+        const int x0 = int(gx), y0 = int(gy);
+        const float fx = gx - x0, fy = gy - y0;
+        const int x1 = min(x0 + 1, hw - 1), y1 = min(y0 + 1, hh - 1);
+        const float4 a = v.hazeBuf[y0 * hw + x0], b = v.hazeBuf[y0 * hw + x1], c = v.hazeBuf[y1 * hw + x0], d = v.hazeBuf[y1 * hw + x1];
+        const float4 m = (a * (1 - fx) + b * fx) * (1 - fy) + (c * (1 - fx) + d * fx) * fy;
+        sum += make_float3(m.x, m.y, m.z);
+    }
     if (v.debug == 1) {
         const float b = bsum / float(n) / 60.0f;
         sum = make_float3(b, b * b, 1.0f - b) * (1.0f / v.exposure) * 0.5f;
@@ -567,6 +939,16 @@ __global__ void kFrame(View v, float4* hdr) {
         if (v.badCount) atomicAdd(v.badCount, 1u);
     }
     hdr[y * v.width + x] = make_float4(sum.x, sum.y, sum.z, 1.0f);
+}
+
+__global__ void kHaze(View v, float4* out) {
+    const int hw = (v.width + 1) / 2, hh = (v.height + 1) / 2;
+    const int x = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y;
+    if (x >= hw || y >= hh) return;
+    int b, st;
+    float3 g = tracePath(v, v.camPos, rayDir(v, 2.0f * x + 1.0f, 2.0f * y + 1.0f), b, st, nullptr, true, true);
+    if (!(isfinite(g.x) && isfinite(g.y) && isfinite(g.z))) g = make_float3(0, 0, 0);
+    out[y * hw + x] = make_float4(g.x, g.y, g.z, 0.0f);
 }
 
 __device__ __forceinline__ unsigned int pcg(unsigned int v) {
@@ -675,8 +1057,19 @@ __global__ void kMirrorPoints(View v, float3 o, float3 d, int maxHits, float3* h
 
 void setOptics(const Optics& o) { cudaMemcpyToSymbol(cOpt, &o, sizeof(Optics)); }
 
+void bakeLightMap(const View& v, const LightMapBlock* blocksDev, int nBlocks, int maxW, int maxH, unsigned bit, cudaStream_t s) {
+    const dim3 b(16, 16);
+    kBake<<<dim3((maxW + 15) / 16, (maxH + 15) / 16, nBlocks), b, 0, s>>>(v, blocksDev, bit);
+    kDilate<<<dim3((maxW + 15) / 16, (maxH + 15) / 16, nBlocks), b, 0, s>>>(v, blocksDev);
+}
+
 void renderFrame(const View& v, float4* hdr, cudaStream_t s) {
     const dim3 b(16, 8);
+    if (v.hazeSigma > 0.0f && v.hazeBuf && v.debug == 0) {
+        const int hw = (v.width + 1) / 2, hh = (v.height + 1) / 2;
+        kHaze<<<dim3((hw + b.x - 1) / b.x, (hh + b.y - 1) / b.y), b, 0, s>>>(v, v.hazeBuf);
+    }
+    if (v.hazeOnly == 1) return;   // (the tools)
     kFrame<<<dim3((v.width + b.x - 1) / b.x, (v.height + b.y - 1) / b.y), b, 0, s>>>(v, hdr);
 }
 
@@ -705,3 +1098,8 @@ int traceMirrorPoints(const View& v, float3 o, float3 d, int maxHits, float3* hi
 }
 
 }   // namespace ayna
+
+namespace ayna {
+size_t viewSizeCu() { return sizeof(View); }
+size_t viewHazeOffsetCu() { return offsetof(View, hazeBuf); }
+}
