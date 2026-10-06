@@ -27,7 +27,7 @@ float edgeFactor(vec3 a, vec3 b) {
     float d = max(distance(m, camPos.xyz), 0.02);
     float len = distance(a, b);
     // the target: target.x samples per triangle edge at this distance
-    float f = len / (target.x * sampleSize(d));
+    float f = len / (target.x * featureTessScale(i[0].feat) * sampleSize(d));
     return clamp(f, 1.0, target.y);
 }
 

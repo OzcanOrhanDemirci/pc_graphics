@@ -116,6 +116,9 @@ struct FrameUBO {
     float lampL[4][4];     // radiance rgb, w: 1 if present
     float camFw[4];        // the view axis
     float haze[4];         // near, far, slices, on
+    float probeLo[4];      // the probe grid's first probe; w: mips (0: no probes)
+    float probeStep[4];    // its spacing; w: how many probes a sample blends (1 nearest, 8 trilinear)
+    float probeDims[4];
 };
 
 // column-major 4x4 products for the camera
@@ -416,6 +419,30 @@ void Renderer::uploadLight(const LightMap& lm) {
             volSize_[a] = lm.volDim[a] * lm.volCell;
         }
     }
+    if (probeTex_) glDeleteTextures(1, &probeTex_);
+    probeTex_ = 0;
+    const int np = lm.probeDims[0] * lm.probeDims[1] * lm.probeDims[2];
+    if (np > 0 && !lm.probes.empty()) {
+        glCreateTextures(GL_TEXTURE_CUBE_MAP_ARRAY, 1, &probeTex_);
+        glTextureStorage3D(probeTex_, lm.probeMips, GL_RGBA16F, lm.probeRes, lm.probeRes, 6 * np);
+        size_t off = 0;
+        for (int p = 0; p < np; ++p)
+            for (int m = 0; m < lm.probeMips; ++m) {
+                const int r = std::max(1, lm.probeRes >> m);
+                glTextureSubImage3D(probeTex_, m, 0, 0, 6 * p, r, r, 6, GL_RGBA, GL_HALF_FLOAT, &lm.probes[off * 4]);
+                off += size_t(6) * r * r;
+            }
+        glTextureParameteri(probeTex_, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTextureParameteri(probeTex_, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTextureParameteri(probeTex_, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTextureParameteri(probeTex_, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        for (int a = 0; a < 3; ++a) {
+            probeLo_[a] = lm.probeLo[a];
+            probeStep_[a] = lm.probeStep[a];
+            probeDims_[a] = lm.probeDims[a];
+        }
+        probeMips_ = lm.probeMips;
+    }
 }
 
 void Renderer::setLamps(const ::DzLight* l, int n) {
@@ -561,6 +588,13 @@ void Renderer::draw(const Camera& cam, const Settings& s, int ow, int oh, double
     u.haze[1] = 12.0f;
     u.haze[2] = hazeOn ? float(fxDims[s.fx][2]) : 0.0f;
     u.haze[3] = hazeOn ? 1.0f : 0.0f;
+    for (int a = 0; a < 3; ++a) {
+        u.probeLo[a] = probeLo_[a];
+        u.probeStep[a] = probeStep_[a];
+        u.probeDims[a] = float(probeDims_[a]);
+    }
+    u.probeLo[3] = (probeTex_ && s.light > 0) ? float(probeMips_) : 0.0f;
+    u.probeStep[3] = s.light == 2 ? 8.0f : 1.0f;
     glNamedBufferSubData(ubo_, 0, sizeof(u), &u);
     if (hazeOn) {
         const int* fd = fxDims[s.fx];
@@ -623,6 +657,7 @@ void Renderer::draw(const Camera& cam, const Settings& s, int ow, int oh, double
     glBindTextureUnit(6, noiseTex_);
     glBindTextureUnit(7, decalTex_);
     glBindTextureUnit(10, hazeOn ? froxelTex_ : 0);
+    glBindTextureUnit(11, probeTex_);
     if (decalUbo_) glBindBufferBase(GL_UNIFORM_BUFFER, 1, decalUbo_);
     {   // the clusters inside the view (each box against the clip planes, the projection's rows)
         const float* M = u.viewProj;
@@ -782,6 +817,8 @@ void Renderer::release() {
     if (froxelTex_) glDeleteTextures(1, &froxelTex_);
     froxelTex_ = 0;
     froxDims_[0] = froxDims_[1] = froxDims_[2] = 0;
+    if (probeTex_) glDeleteTextures(1, &probeTex_);
+    probeTex_ = 0;
     if (progFroxel_) glDeleteProgram(progFroxel_);
     progFroxel_ = 0;
     if (progBloom_) glDeleteProgram(progBloom_);

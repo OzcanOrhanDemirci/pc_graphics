@@ -41,4 +41,9 @@ struct DzBakeParams {
     float3 volLo;
     float volCell;
     uint3 volDim;
+    // a reflection probe's mip (the probe pass): where, the face size, the GGX roughness of this mip
+    float3 probePos;
+    unsigned int probeRes;
+    float probeRough;
+    float4* probeOut;          // res * res * 6 texels: rgb, w: back-facing hits (the probe sits inside something)
 };

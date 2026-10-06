@@ -51,7 +51,7 @@ void main() {
     // the sampling size here, a function of the position alone (so a point on a shared edge gets the same height from
     // both triangles: no cracks): the target triangle size at this distance, floored by what the base mesh can reach
     // (its longest edge over the largest factor)
-    float sz = max(target.x * 2.0 * camPos.w * max(distance(p, camPos.xyz), 0.02) / viewport.y, target.z);
+    float sz = max(target.x * featureTessScale(i[0].feat) * 2.0 * camPos.w * max(distance(p, camPos.xyz), 0.02) / viewport.y, target.z);
     o.size = sz;
     if (target.w > 0.5 && i[0].feat != FEAT_NONE) {
         Surf s;

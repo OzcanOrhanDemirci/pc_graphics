@@ -144,7 +144,7 @@ uint64_t bakeKey(const Mesh& m, const std::vector<DzLight>& lights, const BakeOp
     h = fnv(h, m.idx.data(), m.idx.size() * sizeof(uint32_t));
     h = fnv(h, lights.data(), lights.size() * sizeof(DzLight));
     h = fnv(h, &o, sizeof(o));
-    const int version = 7;
+    const int version = 8;
     h = fnv(h, &version, sizeof(version));
     return h;
 }
@@ -213,7 +213,7 @@ bool bake(const Mesh& m, const Atlas& a, const std::vector<DzLight>& lights, con
         err = std::string("optixModuleCreate: ") + olog;
         return false;
     }
-    OptixProgramGroupDesc d[4] = {};
+    OptixProgramGroupDesc d[5] = {};
     d[0].kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
     d[0].raygen.module = module;
     d[0].raygen.entryFunctionName = "__raygen__bake";
@@ -222,18 +222,21 @@ bool bake(const Mesh& m, const Atlas& a, const std::vector<DzLight>& lights, con
     d[3].kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
     d[3].raygen.module = module;
     d[3].raygen.entryFunctionName = "__raygen__volume";
-    OptixProgramGroup groups[4];
+    d[4].kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
+    d[4].raygen.module = module;
+    d[4].raygen.entryFunctionName = "__raygen__probe";
+    OptixProgramGroup groups[5];
     OptixProgramGroupOptions go{};
     olen = sizeof(olog);
-    OK(optixProgramGroupCreate(ctx, d, 4, &go, olog, &olen, groups));
+    OK(optixProgramGroupCreate(ctx, d, 5, &go, olog, &olen, groups));
     OptixPipelineLinkOptions lo{};
     lo.maxTraceDepth = 1;
     OptixPipeline pipe = nullptr;
     olen = sizeof(olog);
-    OK(optixPipelineCreate(ctx, &pco, &lo, groups, 4, olog, &olen, &pipe));
+    OK(optixPipelineCreate(ctx, &pco, &lo, groups, 5, olog, &olen, &pipe));
     OK(optixPipelineSetStackSizeFromCallDepths(pipe, 1, 0, 0, 0, 1));
-    CUdeviceptr rec[4] = {};
-    for (int i = 0; i < 4; ++i) {
+    CUdeviceptr rec[5] = {};
+    for (int i = 0; i < 5; ++i) {
         Record r{};
         OK(optixSbtRecordPackHeader(groups[i], &r));
         CK(cudaMalloc(reinterpret_cast<void**>(&rec[i]), sizeof(Record)));
@@ -511,6 +514,78 @@ bool bake(const Mesh& m, const Atlas& a, const std::vector<DzLight>& lights, con
         std::printf("pus: %ux%ux%u hucre (%.0f mm), %d ornek\n", dim.x, dim.y, dim.z, cell * 1000.0f, o.volSamples);
     }
 
+    // ---- reflection probes: a 3 x 2 x 9 grid in the room's air (x across, y two heights, z along), cube maps with a
+    // GGX-filtered mip per roughness, traced here (no filtering pass after)
+    {
+        const int nx = 3, ny = 2, nz = 9, res = o.probeRes, mips = 6;
+        out.probeDims[0] = nx;
+        out.probeDims[1] = ny;
+        out.probeDims[2] = nz;
+        out.probeLo[0] = -0.9f;
+        out.probeLo[1] = 0.55f;
+        out.probeLo[2] = 0.45f;
+        out.probeStep[0] = 0.9f;
+        out.probeStep[1] = 0.9f;
+        out.probeStep[2] = 0.92f;
+        out.probeRes = res;
+        out.probeMips = mips;
+        size_t perProbe = 0;
+        for (int m = 0; m < mips; ++m) perProbe += size_t(6) * std::max(1, res >> m) * std::max(1, res >> m);
+        const int np = nx * ny * nz;
+        out.probes.assign(perProbe * np * 4, toHalf(0.0f));
+        float4* dOut = nullptr;
+        CK(cudaMalloc(reinterpret_cast<void**>(&dOut), size_t(6) * res * res * sizeof(float4)));
+        std::vector<float4> hOut(size_t(6) * res * res);
+        sbt.raygenRecord = rec[4];
+        int invalid = 0;
+        for (int p = 0; p < np; ++p) {
+            const int ix = p % nx, iy = (p / nx) % ny, iz = p / (nx * ny);
+            prm.probePos = make_float3(out.probeLo[0] + ix * out.probeStep[0], out.probeLo[1] + iy * out.probeStep[1], out.probeLo[2] + iz * out.probeStep[2]);
+            size_t off = perProbe * p;
+            float valid = 1.0f;
+            for (int m = 0; m < mips; ++m) {
+                const int r = std::max(1, res >> m);
+                const size_t n = size_t(6) * r * r;
+                CK(cudaMemset(dOut, 0, n * sizeof(float4)));
+                prm.probeOut = dOut;
+                prm.probeRes = unsigned(r);
+                prm.probeRough = float(m) / float(mips - 1);
+                const unsigned int total = unsigned(m == 0 ? o.probeSamples / 2 : o.probeSamples);
+                unsigned int s = 0;
+                while (s < total) {
+                    prm.sampleBase = s;
+                    prm.samples = std::min(total - s, 64u);
+                    CK(cudaMemcpyAsync(dPrm, &prm, sizeof(prm), cudaMemcpyHostToDevice, stream));
+                    OK(optixLaunch(pipe, stream, CUdeviceptr(dPrm), sizeof(DzBakeParams), &sbt, unsigned(r), unsigned(r), 6));
+                    CK(cudaStreamSynchronize(stream));
+                    s += prm.samples;
+                }
+                CK(cudaMemcpy(hOut.data(), dOut, n * sizeof(float4), cudaMemcpyDeviceToHost));
+                if (m == 0) {   // a probe inside a part sees mostly back faces: it is not used
+                    double backs = 0.0;
+                    for (size_t i = 0; i < n; ++i) backs += hOut[i].w;
+                    if (backs / (double(n) * total) > 0.2) valid = 0.0f;
+                }
+                for (size_t i = 0; i < n; ++i) {
+                    const float inv = m == 0 ? 1.0f / float(total) : (hOut[i].w > 0.0f ? 1.0f / hOut[i].w : 0.0f);
+                    uint16_t* d = &out.probes[(off + i) * 4];
+                    d[0] = toHalf(hOut[i].x * inv);
+                    d[1] = toHalf(hOut[i].y * inv);
+                    d[2] = toHalf(hOut[i].z * inv);
+                    d[3] = toHalf(valid);
+                }
+                off += n;
+            }
+            if (valid == 0.0f) {   // its earlier mips were written before it was known
+                ++invalid;
+                for (size_t i = perProbe * p; i < perProbe * (p + 1); ++i) out.probes[i * 4 + 3] = toHalf(0.0f);
+            }
+            say(0.99f, "yansima yoklamalari");
+        }
+        cudaFree(dOut);
+        std::printf("yoklama: %d (%d gecersiz: bir parcanin icinde), %d px, %d mip, %d ornek\n", np, invalid, res, mips, o.probeSamples);
+    }
+
     cudaFree(dP);
     cudaFree(dN);
     for (auto p : acc) cudaFree(p);
@@ -548,6 +623,14 @@ bool saveLightMap(const std::string& path, const LightMap& lm) {
     f.write(reinterpret_cast<const char*>(lm.volLo), sizeof(lm.volLo));
     f.write(reinterpret_cast<const char*>(&lm.volCell), sizeof(lm.volCell));
     for (int k = 0; k < 2; ++k) f.write(reinterpret_cast<const char*>(lm.vol[k].data()), std::streamsize(lm.vol[k].size() * 2));
+    f.write(reinterpret_cast<const char*>(lm.probeDims), sizeof(lm.probeDims));
+    f.write(reinterpret_cast<const char*>(lm.probeLo), sizeof(lm.probeLo));
+    f.write(reinterpret_cast<const char*>(lm.probeStep), sizeof(lm.probeStep));
+    f.write(reinterpret_cast<const char*>(&lm.probeRes), sizeof(lm.probeRes));
+    f.write(reinterpret_cast<const char*>(&lm.probeMips), sizeof(lm.probeMips));
+    const uint64_t pn = lm.probes.size();
+    f.write(reinterpret_cast<const char*>(&pn), 8);
+    f.write(reinterpret_cast<const char*>(lm.probes.data()), std::streamsize(pn * 2));
     return bool(f);
 }
 
@@ -576,6 +659,15 @@ bool loadLightMap(const std::string& path, uint64_t key, LightMap& lm) {
         lm.vol[k].resize(nv * 4);
         f.read(reinterpret_cast<char*>(lm.vol[k].data()), std::streamsize(lm.vol[k].size() * 2));
     }
+    f.read(reinterpret_cast<char*>(lm.probeDims), sizeof(lm.probeDims));
+    f.read(reinterpret_cast<char*>(lm.probeLo), sizeof(lm.probeLo));
+    f.read(reinterpret_cast<char*>(lm.probeStep), sizeof(lm.probeStep));
+    f.read(reinterpret_cast<char*>(&lm.probeRes), sizeof(lm.probeRes));
+    f.read(reinterpret_cast<char*>(&lm.probeMips), sizeof(lm.probeMips));
+    uint64_t pn = 0;
+    f.read(reinterpret_cast<char*>(&pn), 8);
+    lm.probes.resize(size_t(pn));
+    f.read(reinterpret_cast<char*>(lm.probes.data()), std::streamsize(pn * 2));
     return bool(f);
 }
 

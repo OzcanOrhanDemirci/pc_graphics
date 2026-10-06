@@ -92,6 +92,9 @@ private:
     unsigned noiseTex_ = 0, decalTex_ = 0, decalUbo_ = 0;
     unsigned hazeTex_[2] = {}, froxelTex_ = 0, progFroxel_ = 0;
     unsigned bloomTex_ = 0, progBloom_ = 0;
+    unsigned probeTex_ = 0;
+    float probeLo_[3] = {0, 0, 0}, probeStep_[3] = {1, 1, 1};
+    int probeDims_[3] = {0, 0, 0}, probeMips_ = 0;
     int bloomLevels_ = 0;
     int froxDims_[3] = {0, 0, 0};
     float volLo_[3] = {0, 0, 0}, volSize_[3] = {1, 1, 1};

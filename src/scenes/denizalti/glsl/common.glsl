@@ -10,6 +10,9 @@ layout(std140, binding = 0) uniform Frame {
     vec4 lampL[4];      // radiance rgb, w: present
     vec4 camFwd;        // the view axis
     vec4 haze;          // the froxels' near, far, slices, on
+    vec4 probeLo;       // the probe grid's first probe; w: mips (0: none)
+    vec4 probeStep;     // its spacing; w: probes blended (1 or 8)
+    vec4 probeDims;
 };
 
 const uint MAT_PAINT_HULL = 0u, MAT_PAINT_PIPE = 1u, MAT_PAINT_DARK = 2u, MAT_BRASS = 3u, MAT_STEEL = 4u, MAT_CHROME = 5u,
@@ -102,6 +105,17 @@ struct Surf {
     uint feat;
     float size;
 };
+
+// How fine a surface needs cutting, relative to the target: where the feature raises real relief (threads, tread,
+// welds, cork granules, braid, knurls, engraving) a triangle per sample on High; where its relief is below a pixel
+// anyway (the paint's orange peel, a casting's pitting: the normal carries it) six times coarser; where there is none,
+// only enough to round the curves. One function for the control and the evaluation stage (the band limit follows it:
+// a shared edge always gets one size).
+float featureTessScale(uint feat) {
+    if (feat == FEAT_NONE || feat == FEAT_DIAL) return 8.0;
+    if (feat == FEAT_PLATE || feat == FEAT_CAST) return 6.0;
+    return 1.0;
+}
 
 // smooth step profile helpers
 float bump(float x) { x = clamp(x, -1.0, 1.0); return (1.0 - x * x) * (1.0 - x * x); }

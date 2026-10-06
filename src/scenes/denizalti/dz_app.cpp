@@ -46,6 +46,8 @@ void DzApp::build() {
     bakeOpt.filter = cfg.i("bake.filter", 2);
     bakeOpt.volCell = cfg.f("bake.volCell", 0.04f);
     bakeOpt.volSamples = cfg.i("bake.volSamples", 256);
+    bakeOpt.probeRes = cfg.i("bake.probeRes", 128);
+    bakeOpt.probeSamples = cfg.i("bake.probeSamples", 128);
     activeDecals = nullptr;
     std::string derr;
     if (!decals.draw(root, derr)) std::fprintf(stderr, "denizalti: %s\n", derr.c_str());

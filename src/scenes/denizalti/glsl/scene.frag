@@ -19,6 +19,64 @@ layout(binding = 3) uniform sampler2D lmG;
 layout(binding = 4) uniform sampler2D lmB;
 layout(binding = 5) uniform sampler2D lmVis;
 layout(binding = 10) uniform sampler3D froxels;   // the haze along the view (froxel.comp): in-scatter so far, transmittance
+layout(binding = 11) uniform samplerCubeArray probes;   // the reflection probes (rgb; a: valid), a GGX mip per roughness
+
+// the room's box for the probes' parallax (a cylinder's bounds: corners reflect a little wrong, the rest right)
+const vec3 roomLo = vec3(-2.42, 0.0, 0.0), roomHi = vec3(2.42, 2.55, 8.23);
+
+vec3 probeSample(int idx, vec3 probePos, vec3 p, vec3 R, float lod, out float valid) {
+    // where the reflected ray leaves the room's box, seen from the probe
+    vec3 inv = 1.0 / R;
+    vec3 t1 = (roomHi - p) * inv, t0 = (roomLo - p) * inv;
+    float tExit = min(min(max(t0.x, t1.x), max(t0.y, t1.y)), max(t0.z, t1.z));
+    vec3 hit = p + R * max(tExit, 0.0);
+    vec4 s = textureLod(probes, vec4(normalize(hit - probePos), float(idx)), lod);
+    valid = s.a;
+    return s.rgb;
+}
+
+// the reflections around p: the probe grid trilinear (High) or the nearest valid probe (Medium)
+vec3 probeReflection(vec3 p, vec3 N, vec3 R, float rough, out bool ok) {
+    ok = false;
+    if (probeLo.w <= 0.0) return vec3(0);
+    float lod = rough * (probeLo.w - 1.0);
+    vec3 g = clamp((p - probeLo.xyz) / probeStep.xyz, vec3(0), probeDims.xyz - 1.0);
+    ivec3 g0 = ivec3(floor(g));
+    g0 = min(g0, ivec3(probeDims.xyz) - 2);
+    vec3 f = g - vec3(g0);
+    vec3 sum = vec3(0);
+    float wsum = 0.0;
+    if (probeStep.w > 4.0) {
+        for (int c = 0; c < 8; ++c) {
+            ivec3 o = ivec3(c & 1, (c >> 1) & 1, (c >> 2) & 1);
+            ivec3 gi = g0 + o;
+            vec3 w3 = mix(1.0 - f, f, vec3(o));
+            float w = w3.x * w3.y * w3.z;
+            if (w < 1e-4) continue;
+            int idx = gi.x + int(probeDims.x) * (gi.y + int(probeDims.y) * gi.z);
+            vec3 pp = probeLo.xyz + vec3(gi) * probeStep.xyz;
+            float valid;
+            vec3 s = probeSample(idx, pp, p, R, lod, valid);
+            sum += s * w * valid;
+            wsum += w * valid;
+        }
+    } else {
+        ivec3 gi = ivec3(floor(g + 0.5));
+        int idx = gi.x + int(probeDims.x) * (gi.y + int(probeDims.y) * gi.z);
+        float valid;
+        sum = probeSample(idx, probeLo.xyz + vec3(gi) * probeStep.xyz, p, R, lod, valid);
+        wsum = valid;
+        if (valid < 0.5) {   // the nearest is inside a part: the next one up the room
+            gi.z = clamp(gi.z + (f.z > 0.5 ? -1 : 1), 0, int(probeDims.z) - 1);
+            idx = gi.x + int(probeDims.x) * (gi.y + int(probeDims.y) * gi.z);
+            sum = probeSample(idx, probeLo.xyz + vec3(gi) * probeStep.xyz, p, R, lod, valid);
+            wsum = valid;
+        }
+    }
+    if (wsum < 1e-4) return vec3(0);
+    ok = true;
+    return sum / wsum;
+}
 
 // irradiance from L1 harmonics, one direction for all three channels (the luminance's): a weak channel's own direction
 // is mostly noise and would tint a bumpy surface in specks. Each channel keeps its own mean and its own share of the
@@ -238,6 +296,13 @@ void main() {
     // with the split-sum's analytic fit
     vec3 R = reflect(-V, N);
     vec3 Lr = max(vec3(0.282095 * c0.r + 0.488603 * dot(sr, R), 0.282095 * c0.g + 0.488603 * dot(sg, R), 0.282095 * c0.b + 0.488603 * dot(sb, R)), vec3(0));
+    // the probes where a reflection shows (metal, glossy): on satin paint (F ~0.04 of a blurred room) the harmonics'
+    // guess above is indistinguishable and eight cube fetches a sample are not
+    if (m.metal > 0.5 || m.rough < 0.3) {
+        bool okP;
+        vec3 Lp = probeReflection(i.p, N, R, m.rough, okP);
+        if (okP) Lr = Lp;
+    }
     vec3 envF = envBRDF(f0, m.rough, nv);
     c += (1.0 - m.metal) * m.base * (1.0 - envF) * E / PI;
     float specOcc = clamp(pow(nv + ao, exp2(-16.0 * m.rough - 1.0)) - 1.0 + ao, 0.0, 1.0);   // Lagarde
@@ -258,6 +323,30 @@ void main() {
         vec3 F = F_Schlick(f0, vh);
         vec3 illum = lampL[k].rgb * (PI * r * r / d2) * nl;
         c += D_GGX(nh, a2) * V_Smith(nv, nl, a2) * F * norm * illum * vis[k];
+    }
+    // a gauge's glass over its face: Fresnel reflection of the room and the lamps, the face seen through it
+    if (i.feat == FEAT_DIAL) {
+        vec3 Ng = normalize(i.n);
+        float ng = max(dot(Ng, V), 1e-3);
+        float Fg = 0.04 + 0.96 * pow(1.0 - ng, 5.0);
+        vec3 Rg = reflect(-V, Ng);
+        bool okG;
+        vec3 Lg = probeReflection(i.p, Ng, Rg, 0.03, okG);
+        if (!okG) Lg = max(vec3(0.282095 * c0.r + 0.488603 * dot(sr, Rg), 0.282095 * c0.g + 0.488603 * dot(sg, Rg), 0.282095 * c0.b + 0.488603 * dot(sb, Rg)), vec3(0));
+        vec3 glints = vec3(0);
+        for (int k = 0; k < 4; ++k) {
+            if (lampL[k].w <= 0.0) continue;
+            vec3 Lv = lampPos[k].xyz - i.p;
+            float d2 = dot(Lv, Lv), d = sqrt(d2);
+            vec3 l = Lv / d;
+            float nl = dot(Ng, l);
+            if (nl <= 0.0) continue;
+            float a2 = clamp(0.0016 + lampPos[k].w / (2.0 * d), 0.0, 1.0);
+            vec3 H = normalize(l + V);
+            float nh = max(dot(Ng, H), 0.0);
+            glints += D_GGX(nh, a2) * V_Smith(ng, nl, a2) * Fg * lampL[k].rgb * (PI * lampPos[k].w * lampPos[k].w / d2) * nl * vis[k] * (0.0016 / a2) * (0.0016 / a2);
+        }
+        c = c * (1.0 - Fg) + Lg * Fg * specOcc + glints;
     }
     // the haze between the eye and this sample
     if (haze.w > 0.5) {

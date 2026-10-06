@@ -169,6 +169,74 @@ extern "C" __global__ void __raygen__volume() {
     params.acc1[i] = make_float4(a1.x + L1.x, a1.y + L1.y, a1.z + L1.z, 0.0f);
 }
 
+// the radiance arriving along -d from direction d, and whether the first hit was a back face (the probe is inside a
+// part); lamps are not counted (their highlights are drawn analytically)
+static __forceinline__ __device__ float3 probeRadiance(float3 o, float3 d, Rng& rng, bool& back) {
+    Hit h;
+    back = false;
+    if (!trace(o, d, 1e4f, h)) return make_float3(0, 0, 0);
+    if (!h.front) {
+        back = true;
+        return make_float3(0, 0, 0);
+    }
+    return incoming(o, d, rng);
+}
+
+// GL's cube map faces: the direction of a texel (s, t in -1..1)
+static __forceinline__ __device__ float3 cubeDir(unsigned int face, float s, float t) {
+    switch (face) {
+    case 0: return normalize(make_float3(1.0f, -t, -s));
+    case 1: return normalize(make_float3(-1.0f, -t, s));
+    case 2: return normalize(make_float3(s, 1.0f, t));
+    case 3: return normalize(make_float3(s, -1.0f, -t));
+    case 4: return normalize(make_float3(s, -t, 1.0f));
+    default: return normalize(make_float3(-s, -t, -1.0f));
+    }
+}
+
+// a reflection probe's mip: every texel the GGX-weighted light around its direction (normal = view = reflection, the
+// split sum's assumption); roughness 0 jitters within the texel only
+extern "C" __global__ void __raygen__probe() {
+    const uint3 li = optixGetLaunchIndex();
+    const unsigned int res = params.probeRes;
+    if (li.x >= res || li.y >= res) return;
+    const unsigned int face = li.z;
+    const unsigned int idx = (face * res + li.y) * res + li.x;
+    float3 sum = make_float3(0, 0, 0);
+    float wsum = 0.0f, backs = 0.0f;
+    const float a = fmaxf(params.probeRough * params.probeRough, 1e-4f);
+    for (unsigned int s = 0; s < params.samples; ++s) {
+        const unsigned int k = params.sampleBase + s;
+        Rng rng{pcg(idx * 4099u + k * 7907u + face * 131u + res * 17u)};
+        const float js = (float(li.x) + rng.next()) / res * 2.0f - 1.0f, jt = (float(li.y) + rng.next()) / res * 2.0f - 1.0f;
+        const float3 N = cubeDir(face, js, jt);
+        float3 L = N;
+        float w = 1.0f;
+        if (params.probeRough > 0.0f) {
+            // a GGX half vector about N
+            const float u1 = rng.next(), u2 = rng.next();
+            const float ph = 2.0f * M_PIf * u2;
+            const float ct = sqrtf((1.0f - u1) / (1.0f + (a * a - 1.0f) * u1)), st = sqrtf(fmaxf(0.0f, 1.0f - ct * ct));
+            float3 t, b;
+            frame(N, t, b);
+            const float3 H = normalize(t * (st * cosf(ph)) + b * (st * sinf(ph)) + N * ct);
+            L = H * (2.0f * dot(N, H)) - N;
+            w = dot(N, L);
+            if (w <= 0.0f) continue;
+        }
+        bool back;
+        float3 Li = probeRadiance(params.probePos, L, rng, back);
+        const float lum = 0.2126f * Li.x + 0.7152f * Li.y + 0.0722f * Li.z;
+        if (lum > 0.5f) Li *= 0.5f / lum;
+        sum += Li * w;
+        wsum += w;
+        backs += back ? 1.0f : 0.0f;
+    }
+    const float4 o = params.probeOut[idx];
+    // w: on the sharp mip the back-facing hits (the probe's validity), on the rough ones the weights' sum
+    params.probeOut[idx] = make_float4(o.x + sum.x, o.y + sum.y, o.z + sum.z, o.w + (params.probeRough > 0.0f ? wsum : backs));
+}
+
 extern "C" __global__ void __raygen__bake() {
     const unsigned int i = optixGetLaunchIndex().x;
     if (i >= params.count) return;
