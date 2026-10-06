@@ -59,7 +59,8 @@ enum Feat : uint32_t {
     FEAT_CAST,      // sand-cast metal (valve bodies)
     FEAT_BRAID,     // braided / served cable
     FEAT_CORK,      // granulated cork lining under paint
-    FEAT_DIAL,      // a gauge's face: ticks and numerals (fp: kind, radius)
+    FEAT_DIAL,      // a gauge's face from the decal atlas (fp: decal, radius)
+    FEAT_LABEL,     // a plate's or a stencil's face from the decal atlas (fp: decal)
     FEAT_COUNT
 };
 

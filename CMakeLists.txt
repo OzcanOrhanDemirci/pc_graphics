@@ -93,6 +93,7 @@ add_library(pc_core OBJECT
     src/scenes/denizalti/dz_world.cpp
     src/scenes/denizalti/dz_room.cpp
     src/scenes/denizalti/dz_equip.cpp
+    src/scenes/denizalti/dz_decal.cpp
     src/scenes/denizalti/dz_render.cpp
     src/scenes/denizalti/dz_atlas.cpp
     src/scenes/denizalti/dz_bake.cpp

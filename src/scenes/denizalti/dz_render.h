@@ -41,6 +41,7 @@ public:
     bool reloadShaders(std::string& err);
     void upload(const Mesh& m);
     void uploadLight(const struct LightMap& lm);
+    void uploadDecals(const struct Decals& d);
     void setLamps(const ::DzLight* l, int n);   // the key lamps whose highlights are drawn (shadowed by the bake)
     // one frame: the picture at outW x outH (the window), drawn at the settings' resolution and supersampling
     void draw(const Camera& cam, const Settings& s, int outW, int outH, double time);
@@ -87,7 +88,7 @@ private:
     // targets
     unsigned msColor_ = 0, msDepth_ = 0, msFbo_ = 0;
     unsigned lightTex_[5] = {};
-    unsigned noiseTex_ = 0;
+    unsigned noiseTex_ = 0, decalTex_ = 0, decalUbo_ = 0;
     float lampPos_[4][4] = {}, lampL_[4][4] = {};
     unsigned hdrTex_ = 0, ldrTex_ = 0, ldrFbo_ = 0, outTex_ = 0, outFbo_ = 0;
     int rw_ = 0, rh_ = 0, ssaa_ = 0, outW_ = 0, outH_ = 0;

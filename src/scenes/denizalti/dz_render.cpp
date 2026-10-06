@@ -1,5 +1,6 @@
 #include "scenes/denizalti/dz_render.h"
 #include "scenes/denizalti/dz_bake.h"
+#include "scenes/denizalti/dz_decal.h"
 #include "scenes/denizalti/dz_gl.h"
 
 #include <algorithm>
@@ -230,6 +231,41 @@ float gnoise(float px, float py, float pz, float d[3]) {
     return val;
 }
 }   // namespace
+
+void Renderer::uploadDecals(const Decals& d) {
+    if (decalTex_) glDeleteTextures(1, &decalTex_);
+    if (decalUbo_) glDeleteBuffers(1, &decalUbo_);
+    decalTex_ = decalUbo_ = 0;
+    if (d.rgba.empty()) return;
+    int levels = 1;
+    while ((std::max(d.width, d.height) >> levels) > 0) ++levels;
+    glCreateTextures(GL_TEXTURE_2D, 1, &decalTex_);
+    glTextureStorage2D(decalTex_, levels, GL_SRGB8_ALPHA8, d.width, d.height);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glTextureSubImage2D(decalTex_, 0, 0, 0, d.width, d.height, GL_RGBA, GL_UNSIGNED_BYTE, d.rgba.data());
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+    glGenerateTextureMipmap(decalTex_);
+    glTextureParameteri(decalTex_, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTextureParameteri(decalTex_, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTextureParameterf(decalTex_, GL_TEXTURE_MAX_ANISOTROPY, 16.0f);
+    glTextureParameteri(decalTex_, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(decalTex_, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    std::vector<float> table(256 * 8, 0.0f);   // vec4 rect[256], vec4 info[256]
+    for (size_t i = 0; i < d.entries.size() && i < 256; ++i) {
+        const DecalEntry& e = d.entries[i];
+        table[i * 4 + 0] = e.u0;
+        table[i * 4 + 1] = e.v0;
+        table[i * 4 + 2] = e.u1;
+        table[i * 4 + 3] = e.v1;
+        table[1024 + i * 4 + 0] = e.halfW;
+        table[1024 + i * 4 + 1] = e.halfH;
+        table[1024 + i * 4 + 2] = float(e.mode);
+        table[1024 + i * 4 + 3] = float(e.style);
+    }
+    glCreateBuffers(1, &decalUbo_);
+    glNamedBufferStorage(decalUbo_, table.size() * sizeof(float), table.data(), 0);
+    if (d.entries.size() > 256) std::printf("denizalti: %zu cikartma, 256'si kullaniliyor\n", d.entries.size());
+}
 
 void Renderer::makeNoise() {
     const int N = 128;   // 4 texels per lattice cell, 32 cells
@@ -502,6 +538,8 @@ void Renderer::draw(const Camera& cam, const Settings& s, int ow, int oh, double
     glPatchParameteri(GL_PATCH_VERTICES, 3);
     for (int k = 0; k < 5; ++k) glBindTextureUnit(1 + k, lightTex_[k]);
     glBindTextureUnit(6, noiseTex_);
+    glBindTextureUnit(7, decalTex_);
+    if (decalUbo_) glBindBufferBase(GL_UNIFORM_BUFFER, 1, decalUbo_);
     {   // the clusters inside the view (each box against the clip planes, the projection's rows)
         const float* M = u.viewProj;
         auto row = [&](int r) { return std::array<float, 4>{M[r], M[4 + r], M[8 + r], M[12 + r]}; };
@@ -620,6 +658,9 @@ void Renderer::release() {
     }
     if (noiseTex_) glDeleteTextures(1, &noiseTex_);
     noiseTex_ = 0;
+    if (decalTex_) glDeleteTextures(1, &decalTex_);
+    if (decalUbo_) glDeleteBuffers(1, &decalUbo_);
+    decalTex_ = decalUbo_ = 0;
     for (auto& f : queries_)
         if (f[0]) glDeleteQueries(5, f);
     std::memset(queries_, 0, sizeof(queries_));

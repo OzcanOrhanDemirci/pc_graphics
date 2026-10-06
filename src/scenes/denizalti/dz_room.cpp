@@ -1,9 +1,11 @@
 #include "scenes/denizalti/dz_room.h"
+#include "scenes/denizalti/dz_decal.h"
 #include "scenes/denizalti/dz_equip.h"
 #include "scenes/denizalti/dz_parts.h"
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 
 namespace dz {
 
@@ -322,6 +324,28 @@ Start buildRoom(Mesh& m, float maxEdge, std::vector<DzLight>& lights) {
     bulkhead(k, kLength, false, 1.1f, 0.48f + 0.485f, 0.255f, 0.485f);
     deck(k);
     overhead(k);
+    // stencils: the forward door's order in Turkish (the boat's own hand, 1970s-2000), frame numbers on the frames
+    if (activeDecals) {
+        const int id = activeDecals->plate("SU GEÇMEZ KAPI\nSEYİRDE KAPALI TUTULACAK", 0.42f, 0.11f, PLATE_STENCIL);
+        with(k, Xform::at(f3(1.1f, 1.68f, kLength - 0.0005f)) * Xform::rotY(kPi), MAT_CREAM, FEAT_LABEL, [&] {
+            k.fp = make_float2(float(id), 0.0f);
+            k.quad(0.42f, 0.11f);
+        });
+        for (int f = 48; f <= 58; f += 2) {
+            char buf[8];
+            std::snprintf(buf, sizeof(buf), "%d", f);
+            const int fid = activeDecals->plate(buf, 0.07f, 0.045f, PLATE_STENCIL);
+            for (int side = -1; side <= 1; side += 2) {
+                // on the frame's after face of the web, a hand's height above the deck
+                const float y = 0.42f;
+                const float x = side * (std::sqrt(kRCork * kRCork - (y - kAxisY) * (y - kAxisY)) - 0.075f);
+                with(k, Xform::at(f3(x, y, frameZ(float(f)) - 0.0065f)) * Xform::rotY(kPi), MAT_CREAM, FEAT_LABEL, [&] {
+                    k.fp = make_float2(float(fid), 0.0f);
+                    k.quad(0.07f, 0.045f);
+                });
+            }
+        }
+    }
     float3 chartTop = f3(-0.4f, 0.98f, frameZ(50.25f));
     buildEquipment(k, chartTop);
     // the night lamps over the port side's stations and the passage

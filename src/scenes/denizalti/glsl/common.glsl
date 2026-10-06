@@ -16,7 +16,7 @@ const uint MAT_PAINT_HULL = 0u, MAT_PAINT_PIPE = 1u, MAT_PAINT_DARK = 2u, MAT_BR
            MAT_TAPE = 19u, MAT_BLACK_PLATE = 20u, MAT_LAMP_SHADE = 21u, MAT_WOOD = 22u, MAT_PAPER = 23u,
            MAT_INDICATOR_RED = 24u, MAT_INDICATOR_GREEN = 25u;
 const uint FEAT_NONE = 0u, FEAT_PLATE = 1u, FEAT_WELD = 2u, FEAT_RIVETS = 3u, FEAT_THREAD = 4u, FEAT_KNURL = 5u, FEAT_TREAD = 6u,
-           FEAT_CAST = 7u, FEAT_BRAID = 8u, FEAT_CORK = 9u, FEAT_DIAL = 10u;
+           FEAT_CAST = 7u, FEAT_BRAID = 8u, FEAT_CORK = 9u, FEAT_DIAL = 10u, FEAT_LABEL = 11u;
 const float PI = 3.14159265358979;
 
 // ---- noise: gradient noise in 3D (deterministic: a hash of the lattice, no random state anywhere)
@@ -57,6 +57,20 @@ float bandWeight(float wavelength, float size) { return clamp(wavelength / (4.0 
 // mipmapped: an octave is one filtered fetch instead of eight hashes, and its mip level is chosen from the sampling size
 // (the band limit comes with the filtering). Built by the renderer from the same gnoise as above (dz_render.cpp).
 layout(binding = 6) uniform sampler3D noiseTex;   // r: value, gba: d(value)/d(lattice)
+
+// the printed and engraved faces (dz_decal): the atlas and where each face lies in it
+layout(binding = 7) uniform sampler2D decalTex;   // sRGB colour, a: ink
+layout(std140, binding = 1) uniform DecalTable {
+    vec4 decRect[256];   // u0 v0 u1 v1
+    vec4 decInfo[256];   // half width, half height (m), mode (0 dial, 1 plate), style (0 black, 1 brass, 2 stencil)
+};
+// the atlas coordinate of a surface point: a dial's (uv centred, radius r) or a plate's (uv centred, its half sizes)
+vec2 decalUV(int id, vec2 uv, float r) {
+    vec4 rc = decRect[id], inf = decInfo[id];
+    vec2 t = inf.z < 0.5 ? uv / (2.0 * r) + 0.5 : uv / (2.0 * inf.xy) + 0.5;
+    t = clamp(t, vec2(0.002), vec2(0.998));
+    return vec2(mix(rc.x, rc.z, t.x), mix(rc.y, rc.w, 1.0 - t.y));
+}
 
 // fractal noise with a band limit; returns value, d the 3D gradient (per metre)
 float fbm(vec3 p, float baseWavelength, int oct, float gain, float size, out vec3 d) {
@@ -170,6 +184,20 @@ float featureHeight(Surf s, vec3 T, vec3 B, out vec3 gw) {
         float dsg = 1.0 / ((1.0 + abs(g) / k) * (1.0 + abs(g) / k));
         h = 0.0007 * sg;
         gw = 0.0007 * dsg * (d1 + 0.45 * d2);
+    } else if (s.feat == FEAT_LABEL) {
+        // a brass plate's engraving cut 0.25 mm into the metal (the ink fills it); the mip from the sampling size
+        int id = int(s.fp.x + 0.5);
+        if (decInfo[id].w > 0.5 && decInfo[id].w < 1.5) {
+            vec2 sizeM = 2.0 * decInfo[id].xy;
+            vec2 texels = (decRect[id].zw - decRect[id].xy) * vec2(textureSize(decalTex, 0));
+            float lod = log2(max(s.size * texels.x / sizeM.x, 1e-4));
+            float e = max(s.size, sizeM.x / texels.x);
+            float ink = textureLod(decalTex, decalUV(id, s.uv, 0.0), lod).a;
+            float ix = textureLod(decalTex, decalUV(id, s.uv + vec2(e, 0), 0.0), lod).a;
+            float iy = textureLod(decalTex, decalUV(id, s.uv + vec2(0, e), 0.0), lod).a;
+            h = -0.00025 * ink;
+            gw = -0.00025 * ((ix - ink) / e * T + (iy - ink) / e * B);
+        }
     } else if (s.feat == FEAT_CAST) {
         // a sand casting under paint: soft, fine pitting
         vec3 d;

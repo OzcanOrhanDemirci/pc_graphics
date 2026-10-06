@@ -3,6 +3,7 @@
 #include "core/config.h"
 #include "scenes/denizalti/dz_atlas.h"
 #include "scenes/denizalti/dz_bake.h"
+#include "scenes/denizalti/dz_decal.h"
 #include "scenes/denizalti/dz_geom.h"
 #include "scenes/denizalti/dz_render.h"
 #include "scenes/denizalti/dz_room.h"
@@ -27,6 +28,7 @@ struct DzApp {
     std::vector<DzLight> lights;
     Atlas atlas;
     LightMap light;
+    Decals decals;
     BakeOptions bakeOpt;
     Start start{};
     Camera cam;

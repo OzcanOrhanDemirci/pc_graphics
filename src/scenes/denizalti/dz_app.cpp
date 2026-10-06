@@ -36,11 +36,16 @@ void DzApp::loadConfig() {
 void DzApp::build() {
     mesh = Mesh();
     lights.clear();
+    decals = Decals();
+    activeDecals = &decals;
     if (cfg.i("world.testWall", 0)) start = buildTestWall(mesh, cfg.f("geom.maxEdge", 0.012f), lights);
     else start = buildRoom(mesh, cfg.f("geom.maxEdge", 0.012f), lights);
     bakeOpt.samples = cfg.i("bake.samples", 1024);
     bakeOpt.bounces = cfg.i("bake.bounces", 12);
     bakeOpt.texel = cfg.f("bake.texel", 0.002f);
+    activeDecals = nullptr;
+    std::string derr;
+    if (!decals.draw(root, derr)) std::fprintf(stderr, "denizalti: %s\n", derr.c_str());
     atlas = buildAtlas(mesh, bakeOpt.texel);
     std::fprintf(stderr, "denizalti: %zu ucgen, %u parca (chart), atlas %dx%d\n", mesh.tris(), mesh.charts, atlas.width, atlas.height);
     home();
@@ -74,6 +79,7 @@ void DzApp::home() {
 bool DzApp::initGL(std::string& err) {
     if (!renderer.init(root, err)) return false;
     renderer.upload(mesh);
+    renderer.uploadDecals(decals);
     if (light.valid()) renderer.uploadLight(light);
     renderer.setLamps(lights.data(), int(lights.size()));
     glReady = true;

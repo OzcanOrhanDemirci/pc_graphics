@@ -197,6 +197,29 @@ void main() {
     vec3 V = normalize(camPos.xyz - i.p);
     if (dot(N, V) < 0.0) N = normalize(N + V * (-dot(N, V) + 0.01));
     float ao = texture(lmL0, i.uv2).a;
+    if (i.feat == FEAT_CORK) m.rough = max(m.rough, 0.6);   // enamel over cork dries satin (no glitter on the granules)
+    // the printed faces: a dial's or a plate's colour from the atlas (filtered: anisotropic, mipmapped)
+    if (i.feat == FEAT_DIAL || i.feat == FEAT_LABEL) {
+        int id = int(i.fp.x + 0.5);
+        vec4 dc = texture(decalTex, decalUV(id, i.uv, i.fp.y));
+        float style = decInfo[id].w;
+        if (i.feat == FEAT_DIAL) {
+            m.base = dc.rgb;
+            m.rough = mix(0.4, 0.5, dc.a);
+            m.metal = 0.0;
+        } else if (style < 0.5) {         // black plate, white filled engraving
+            m.base = dc.rgb;
+            m.rough = mix(0.28, 0.5, dc.a);
+            m.metal = 0.0;
+        } else if (style < 1.5) {         // brass, black filled engraving
+            m.base = mix(vec3(0.87, 0.72, 0.42), dc.rgb, dc.a);
+            m.metal = 1.0 - dc.a;
+            m.rough = mix(0.22, 0.55, dc.a);
+        } else {                          // a stencil: paint on paint
+            m.base = mix(m.base, dc.rgb, dc.a);
+            m.rough = mix(m.rough, 0.45, dc.a);
+        }
+    }
     {
         float d = max(distance(i.p, camPos.xyz), 0.02);
         weather(m, i.mat, i.p, N, i.edge, ao, 2.0 * camPos.w * d / viewport.y);

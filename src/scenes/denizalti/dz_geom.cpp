@@ -526,6 +526,7 @@ void mirrorX(Mesh& m) {
         v.n.x = -v.n.x;
         v.dn.x = -v.dn.x;
         v.t.x = -v.t.x;
+        v.uv.x = -v.uv.x;   // the surface's own coordinates too: printing reads forwards, threads stay right-handed
     }
     for (size_t k = 0; k + 2 < m.idx.size(); k += 3) std::swap(m.idx[k + 1], m.idx[k + 2]);
 }

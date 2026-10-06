@@ -1,5 +1,6 @@
 // Scene 8's equipment: the stations of the control room (REFERANS §3), each at its frame.
 #include "scenes/denizalti/dz_equip.h"
+#include "scenes/denizalti/dz_decal.h"
 #include "scenes/denizalti/dz_parts.h"
 
 #include <algorithm>
@@ -52,14 +53,14 @@ void box(Kit& k, const Xform& t, float3 c, float3 h, float e, uint32_t mat, uint
     with(k, t * Xform::at(c), mat, feat, [&] { k.roundedBox(h, e); });
 }
 // a round gauge in frame t at local point c, facing the frame's +z
-void gaugeAt(Kit& k, const Xform& t, float3 c, float rc, float depth, uint32_t bezel = MAT_BRASS) {
+void gaugeAt(Kit& k, const Xform& t, float3 c, float rc, float depth, uint32_t bezel = MAT_BRASS, DialKind kind = DIAL_WHITE) {
     with(k, t * Xform::at(c), MAT_PAINT_DARK, FEAT_NONE, [&] {
         k.roundedCylinder(rc, -depth, -0.002f, std::min(0.006f, rc * 0.1f), true, false);
         k.mat = bezel;
         k.lathe({{rc * 0.86f, 0.006f}, {rc * 0.9f, 0.0085f}, {rc * 0.97f, 0.008f}, {rc * 1.03f, 0.004f}, {rc * 1.035f, -0.004f}, {rc * 0.995f, -0.006f}});
         k.mat = MAT_DIAL;
         k.feat = FEAT_DIAL;
-        k.fp = make_float2(1.0f, rc * 0.87f);
+        k.fp = make_float2(activeDecals ? float(activeDecals->dial(kind)) : 0.0f, rc * 0.87f);
         k.ring(0.0f, rc * 0.87f, 0.0f, true);
         k.feat = FEAT_NONE;
         k.mat = MAT_PAINT_DARK;
@@ -71,6 +72,19 @@ void gaugeAt(Kit& k, const Xform& t, float3 c, float rc, float depth, uint32_t b
         k.t = t0;
     });
 }
+// a label: a thin plate (black or brass) and its engraved face, or a stencil straight on the surface; in frame t at c
+void plateAt(Kit& k, const Xform& t, float3 c, float w, float h, const std::string& text, int style) {
+    const int id = activeDecals ? activeDecals->plate(text, w, h, style) : 0;
+    const uint32_t mat = style == PLATE_BRASS ? MAT_BRASS : MAT_BLACK_PLATE;
+    if (style != PLATE_STENCIL) {
+        with(k, t * Xform::at(c), mat, FEAT_NONE, [&] { k.slab(Kit::roundOutline({{-0.5f * w, -0.5f * h}, {0.5f * w, -0.5f * h}, {0.5f * w, 0.5f * h}, {-0.5f * w, 0.5f * h}}, std::min(w, h) * 0.08f, 3), 0.0015f, 0.0004f); });
+    }
+    with(k, t * Xform::at(c + f3(0, 0, style == PLATE_STENCIL ? 0.0006f : 0.0016f)), style == PLATE_STENCIL ? MAT_CREAM : mat, FEAT_LABEL, [&] {
+        k.fp = make_float2(float(id), 0.0f);
+        k.quad(w * 0.985f, h * 0.985f);
+    });
+}
+
 // a big handwheel facing +z of frame t: rim radius R, n straight spokes, a grip handle on the rim
 void bigWheel(Kit& k, const Xform& t, float R, float r, int n, uint32_t rimMat, uint32_t spokeMat) {
     with(k, t, rimMat, FEAT_CAST, [&] { k.torus(R, r); });
@@ -111,15 +125,19 @@ void divingStation(Kit& k) {
     for (int s = -1; s <= 1; s += 2) box(k, panel, f3(s * (0.5f * (z1 - z0) - 0.02f), 0, 0.006f), f3(0.02f, hh, 0.006f), 0.002f, MAT_CREAM);
     // depth gauges: two 16" shallow gauges, the 8.5" deep gauge between them, all on the board's upper half
     const float zc = 0.5f * (z0 + z1);
-    gaugeAt(k, panel, f3(zc - zS, 0.32f, 0.01f), 0.203f, 0.09f, MAT_PAINT_DARK);
-    gaugeAt(k, panel, f3(zc - zB, 0.32f, 0.01f), 0.203f, 0.09f, MAT_PAINT_DARK);
-    gaugeAt(k, panel, f3(zc - 0.5f * (zS + zB), 0.42f, 0.01f), 0.108f, 0.07f, MAT_BRASS);
+    gaugeAt(k, panel, f3(zc - zS, 0.32f, 0.01f), 0.203f, 0.09f, MAT_PAINT_DARK, DIAL_DEPTH16);
+    gaugeAt(k, panel, f3(zc - zB, 0.32f, 0.01f), 0.203f, 0.09f, MAT_PAINT_DARK, DIAL_DEPTH16);
+    gaugeAt(k, panel, f3(zc - 0.5f * (zS + zB), 0.42f, 0.01f), 0.108f, 0.07f, MAT_BRASS, DIAL_DEPTH_DEEP);
+    plateAt(k, panel, f3(zc - zS, 0.32f + 0.25f, 0.004f), 0.2f, 0.035f, "STERN PLANES", PLATE_BRASS);
+    plateAt(k, panel, f3(zc - zB, 0.32f + 0.25f, 0.004f), 0.2f, 0.035f, "BOW PLANES", PLATE_BRASS);
+    plateAt(k, panel, f3(zc - 0.5f * (zS + zB), 0.42f + 0.14f, 0.004f), 0.17f, 0.03f, "DEEP DEPTH GAUGE", PLATE_BLACK);
     // plane angle indicators (chrome boxes, cream faces) beside each shallow gauge, the rudder angle indicator between
     for (float zz : {zS, zB}) {
         box(k, panel, f3(zc - zz + (zz == zS ? 0.32f : -0.32f), 0.2f, 0.05f), f3(0.07f, 0.11f, 0.045f), 0.008f, MAT_CHROME, FEAT_NONE);
         with(k, panel * Xform::at(f3(zc - zz + (zz == zS ? 0.32f : -0.32f), 0.2f, 0.096f)), MAT_DIAL, FEAT_NONE, [&] { k.roundedBox(f3(0.055f, 0.09f, 0.001f), 0.002f); });
     }
-    gaugeAt(k, panel, f3(zc - 0.5f * (zS + zB), 0.08f, 0.01f), 0.075f, 0.06f, MAT_CHROME);
+    gaugeAt(k, panel, f3(zc - 0.5f * (zS + zB), 0.08f, 0.01f), 0.075f, 0.06f, MAT_CHROME, DIAL_COMPASS);
+    plateAt(k, panel, f3(zc - 0.5f * (zS + zB), -0.03f, 0.004f), 0.15f, 0.026f, "RUDDER ANGLE", PLATE_BLACK);
     // the bubble inclinometers: a curved glass tube in a brass case, high in the middle
     with(k, panel * Xform::at(f3(zc - 0.5f * (zS + zB), 0.66f, 0.03f)), MAT_BRASS, FEAT_NONE, [&] { k.roundedBox(f3(0.3f, 0.05f, 0.03f), 0.01f); });
     with(k, panel * Xform::at(f3(zc - 0.5f * (zS + zB), 0.66f, 0.062f)), MAT_DIAL, FEAT_NONE, [&] { k.roundedBox(f3(0.26f, 0.025f, 0.002f), 0.003f); });
@@ -169,7 +187,7 @@ void christmasTreeAndManifold(Kit& k) {
             const float3 p = f3(-0.27f + c * 0.09f, -0.33f + r * 0.08f, 0.006f);
             box(k, tree, p, f3(0.025f, 0.014f, 0.004f), 0.002f, green ? MAT_INDICATOR_GREEN : MAT_INDICATOR_RED, FEAT_NONE);
         }
-    box(k, tree, f3(0, 0.39f, 0.01f), f3(0.3f, 0.022f, 0.002f), 0.002f, MAT_BLACK_PLATE, FEAT_NONE);
+    plateAt(k, tree, f3(0, 0.385f, 0.004f), 0.6f, 0.05f, "INDICATOR FOR HULL OPENINGS\nNAVY YARD, PORTSMOUTH, N.H.", PLATE_BLACK);
     // the main vent control manifold: six bronze valve bodies on a cast base, chrome levers with ball ends
     const float yv = 1.02f;
     const float xv = hullX(yv, side, 0.38f);
@@ -187,8 +205,12 @@ void christmasTreeAndManifold(Kit& k) {
             k.sphere(0.022f);
         });
     }
-    // the label strip under the levers
-    box(k, Xform(), f3(xv + 0.115f, yv - 0.08f, zc), f3(0.002f, 0.022f, 0.42f), 0.001f, MAT_BLACK_PLATE, FEAT_NONE);
+    // the label strip under the levers, and the manifold's name
+    {
+        const Xform face = axes(f3(xv + 0.112f, yv - 0.08f, zc), f3(0, 0, -1), f3(0, 1, 0), f3(1, 0, 0));
+        plateAt(k, face, f3(0, 0, 0), 0.86f, 0.04f, "SAFE    6C&D    6A&B    VENT 3&5    VENT 1&2    B.B.", PLATE_BLACK);
+        plateAt(k, face, f3(0, -0.075f, 0), 0.5f, 0.035f, "MAIN VENT CONTROL MANIFOLD", PLATE_BLACK);
+    }
     // the hydraulic supply tank: a grey bolted box with sight glasses, against the forward bulkhead
     const float3 tc = f3(hullX(0.65f, side, 0.30f) + 0.05f, 0.62f, kLength - 0.22f);
     box(k, Xform(), tc, f3(0.22f, 0.6f, 0.12f), 0.012f, MAT_GREY, FEAT_PLATE);
@@ -197,8 +219,8 @@ void christmasTreeAndManifold(Kit& k) {
     // the main oil pressure and accumulator gauges above the manifold
     const Xform gb = Xform::frame(f3(hullX(1.45f, side, 0.10f), 1.45f, zc - 0.62f), f3(0.95f, -0.3f, 0), f3(0, 1, 0));
     box(k, gb, f3(0, 0, -0.02f), f3(0.16f, 0.22f, 0.02f), 0.005f, MAT_CREAM, FEAT_PLATE);
-    gaugeAt(k, gb, f3(0, 0.1f, 0.01f), 0.065f, 0.05f);
-    gaugeAt(k, gb, f3(0, -0.08f, 0.01f), 0.065f, 0.05f);
+    gaugeAt(k, gb, f3(0, 0.1f, 0.01f), 0.065f, 0.05f, MAT_BRASS, DIAL_WHITE);
+    gaugeAt(k, gb, f3(0, -0.08f, 0.01f), 0.065f, 0.05f, MAT_BRASS, DIAL_WHITE);
 }
 
 void trimManifold(Kit& k) {
@@ -228,9 +250,10 @@ void trimManifold(Kit& k) {
     const float yb = 1.55f;
     const Xform gb = Xform::frame(f3(hullX(yb, side, 0.10f), yb, zc), f3(0.92f, -0.38f, 0), f3(0, 1, 0));
     box(k, gb, f3(0, 0, -0.02f), f3(0.5f * (z1 - z0) - 0.04f, 0.24f, 0.02f), 0.006f, MAT_CREAM, FEAT_PLATE);
-    for (int g = 0; g < 4; ++g) gaugeAt(k, gb, f3(-0.36f + g * 0.24f, 0.07f, 0.01f), 0.07f, 0.05f);
-    gaugeAt(k, gb, f3(-0.2f, -0.14f, 0.01f), 0.05f, 0.04f, MAT_CHROME);
-    gaugeAt(k, gb, f3(0.2f, -0.14f, 0.01f), 0.05f, 0.04f, MAT_CHROME);
+    for (int g = 0; g < 4; ++g) gaugeAt(k, gb, f3(-0.36f + g * 0.24f, 0.07f, 0.01f), 0.07f, 0.05f, MAT_BRASS, DIAL_SMALL);
+    gaugeAt(k, gb, f3(-0.2f, -0.14f, 0.01f), 0.05f, 0.04f, MAT_CHROME, DIAL_SMALL);
+    gaugeAt(k, gb, f3(0.2f, -0.14f, 0.01f), 0.05f, 0.04f, MAT_CHROME, DIAL_SMALL);
+    plateAt(k, gb, f3(0, 0.205f, 0.002f), 0.4f, 0.035f, "TRIM MANIFOLD", PLATE_BRASS);
 }
 
 void radioRoom(Kit& k) {
@@ -296,7 +319,7 @@ void steeringStand(Kit& k) {
     // the gyro repeater (black square box) and the rudder angle indicator (chrome) on the head, facing aft
     const Xform aft = axes(f3(xc, 1.18f, zc - 0.18f), f3(-1, 0, 0), f3(0, 1, 0), f3(0, 0, -1));
     box(k, aft, f3(-0.1f, 0.03f, 0.02f), f3(0.085f, 0.085f, 0.04f), 0.008f, MAT_WRINKLE, FEAT_NONE);
-    gaugeAt(k, aft, f3(-0.1f, 0.03f, 0.065f), 0.065f, 0.02f, MAT_CHROME);
+    gaugeAt(k, aft, f3(-0.1f, 0.03f, 0.065f), 0.065f, 0.02f, MAT_CHROME, DIAL_COMPASS);
     box(k, aft, f3(0.11f, 0.03f, 0.02f), f3(0.07f, 0.06f, 0.04f), 0.01f, MAT_CHROME, FEAT_NONE);
     with(k, aft * Xform::at(f3(0.11f, 0.03f, 0.062f)), MAT_DIAL, FEAT_NONE, [&] { k.roundedBox(f3(0.055f, 0.045f, 0.001f), 0.003f); });
     // the wheel: 65 cm, four bronze spokes, its rim wound with red tape, on the stand's after face
@@ -371,7 +394,8 @@ void airManifold(Kit& k) {
     const Xform gb = Xform::frame(f3(hullX(y, side, 0.12f), y, zc), f3(-0.92f, -0.38f, 0), f3(0, 1, 0));
     box(k, gb, f3(0, 0, -0.02f), f3(0.5f * (z1 - z0) - 0.03f, 0.32f, 0.02f), 0.006f, MAT_ALU, FEAT_NONE);
     for (int row = 0; row < 2; ++row)
-        for (int g = 0; g < 9; ++g) gaugeAt(k, gb, f3(-0.62f + g * 0.155f, 0.13f - row * 0.2f, 0.01f), 0.062f, 0.05f);
+        for (int g = 0; g < 9; ++g) gaugeAt(k, gb, f3(-0.62f + g * 0.155f, 0.13f - row * 0.2f, 0.01f), 0.062f, 0.05f, MAT_BRASS, DIAL_AIR);
+    plateAt(k, gb, f3(0, 0.285f, 0.002f), 0.5f, 0.035f, "H.P. AIR MANIFOLD   3000 LBS.", PLATE_BRASS);
     // the manifold: three horizontal tiers of valves, facing inboard, white bodies, chrome T handles
     for (int tier = 0; tier < 3; ++tier) {
         const float yy = 0.72f + tier * 0.16f;
@@ -418,7 +442,7 @@ void electricalPanels(Kit& k) {
             if (yy > c.h - 0.1f) continue;
             for (int s = 0; s < 4; ++s) {
                 const float xx = -w + s * (2.0f * w / 3.0f);
-                if (r == 0) gaugeAt(k, face, f3(xx, yy, 0.01f), 0.045f, 0.03f, MAT_CHROME);
+                if (r == 0) gaugeAt(k, face, f3(xx, yy, 0.01f), 0.045f, 0.03f, MAT_CHROME, DIAL_METER);
                 else {
                     with(k, face * Xform::at(f3(xx, yy, 0.0f)), MAT_PAINT_DARK, FEAT_NONE, [&] {
                         k.roundedCylinder(0.022f, 0.0f, 0.02f, 0.004f);
@@ -431,7 +455,8 @@ void electricalPanels(Kit& k) {
                 }
             }
         }
-        box(k, face, f3(0, c.h - 0.12f, 0.005f), f3(w, 0.02f, 0.002f), 0.001f, MAT_BLACK_PLATE, FEAT_NONE);
+        static const char* names[] = {"GYRO CONTROL", "I.C. SWITCHBOARD", "AUX. GYRO", "FWD. D.C. DISTRIBUTION", "EXT. SWITCHBOARD"};
+        plateAt(k, face, f3(0, c.h - 0.12f, 0.002f), 2.0f * w * 0.9f, 0.04f, names[&c - cabs], PLATE_BLACK);
     }
 }
 
