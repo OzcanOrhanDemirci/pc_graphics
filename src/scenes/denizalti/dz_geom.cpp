@@ -321,7 +321,7 @@ void Kit::torus(float R, float r, float a0, float a1) {
         const float3 rad = f3(std::cos(b), std::sin(b), 0);
         g.n = rad * std::cos(th) + f3(0, 0, std::sin(th));
         g.p = rad * R + g.n * r;
-        g.s = make_float2(C * float(i) / nu, R * (b - a0));
+        g.s = make_float2(C * float(i) / nu, R * (a1 - a0) * float(j) / nv);   // past the seam, never back to 0
         return g;
     });
     fp = keep;
@@ -482,7 +482,8 @@ void Kit::lathe(const std::vector<float2>& rz, float a0, float a1, const std::ve
         const float ca = std::cos(a), sa = std::sin(a);
         g.p = f3(rz[j].x * ca, rz[j].x * sa, rz[j].y);
         g.n = normalize(f3(nrm[j].x * ca, nrm[j].x * sa, nrm[j].y));
-        g.s = make_float2(rmax * (a - a0), arc[j]);
+        // the surface coordinate keeps running past the seam (the chart must not fold back onto itself)
+        g.s = make_float2(rmax * (a1 - a0) * float(i) / nu, arc[j]);
         g.edge = edgeW.empty() ? 0.0f : edgeW[j];
         return g;
     });

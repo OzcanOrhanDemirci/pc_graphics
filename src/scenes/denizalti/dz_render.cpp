@@ -1,4 +1,5 @@
 #include "scenes/denizalti/dz_render.h"
+#include "scenes/denizalti/dz_bake.h"
 #include "scenes/denizalti/dz_gl.h"
 
 #include <algorithm>
@@ -109,6 +110,8 @@ struct FrameUBO {
     float target[4];
     float viewport[4];
     float misc[4];
+    float lampPos[4][4];   // xyz, radius
+    float lampL[4][4];     // radiance rgb, w: 1 if present
 };
 
 // column-major 4x4 products for the camera
@@ -206,6 +209,39 @@ void Renderer::upload(const Mesh& m) {
         longest = std::max(longest, std::max(length(a - b), std::max(length(b - c), length(c - a))));
     }
     finestTriangle = std::max(longest / 64.0f, 5e-5f);
+}
+
+void Renderer::uploadLight(const LightMap& lm) {
+    for (unsigned& t : lightTex_) {
+        if (t) glDeleteTextures(1, &t);
+        t = 0;
+    }
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    for (int k = 0; k < 5; ++k) {
+        glCreateTextures(GL_TEXTURE_2D, 1, &lightTex_[k]);
+        glTextureStorage2D(lightTex_[k], 1, GL_RGBA16F, lm.atlas.width, lm.atlas.height);
+        glTextureSubImage2D(lightTex_[k], 0, 0, 0, lm.atlas.width, lm.atlas.height, GL_RGBA, GL_HALF_FLOAT, lm.plane[k].data());
+        glTextureParameteri(lightTex_[k], GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTextureParameteri(lightTex_[k], GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTextureParameteri(lightTex_[k], GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTextureParameteri(lightTex_[k], GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    }
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+}
+
+void Renderer::setLamps(const ::DzLight* l, int n) {
+    std::memset(lampPos_, 0, sizeof(lampPos_));
+    std::memset(lampL_, 0, sizeof(lampL_));
+    for (int k = 0; k < std::min(n, 4); ++k) {
+        lampPos_[k][0] = l[k].p.x;
+        lampPos_[k][1] = l[k].p.y;
+        lampPos_[k][2] = l[k].p.z;
+        lampPos_[k][3] = l[k].r;
+        lampL_[k][0] = l[k].L.x;
+        lampL_[k][1] = l[k].L.y;
+        lampL_[k][2] = l[k].L.z;
+        lampL_[k][3] = 1.0f;
+    }
 }
 
 void Renderer::freeTargets() {
@@ -315,6 +351,8 @@ void Renderer::draw(const Camera& cam, const Settings& s, int ow, int oh, double
     u.misc[1] = s.exposure;
     u.misc[2] = float(s.debug);
     u.misc[3] = s.normalDetail ? 1.0f : 0.0f;
+    std::memcpy(u.lampPos, lampPos_, sizeof(lampPos_));
+    std::memcpy(u.lampL, lampL_, sizeof(lampL_));
     glNamedBufferSubData(ubo_, 0, sizeof(u), &u);
 
     // ---- the samples
@@ -339,6 +377,7 @@ void Renderer::draw(const Camera& cam, const Settings& s, int ow, int oh, double
     glBindBufferBase(GL_UNIFORM_BUFFER, 0, ubo_);
     glBindVertexArray(vao_);
     glPatchParameteri(GL_PATCH_VERTICES, 3);
+    for (int k = 0; k < 5; ++k) glBindTextureUnit(1 + k, lightTex_[k]);
     if (indexCount_) glDrawElements(GL_PATCHES, GLsizei(indexCount_), GL_UNSIGNED_INT, nullptr);
     glDisable(GL_SAMPLE_SHADING);
     glDisable(GL_CULL_FACE);
@@ -413,6 +452,10 @@ void Renderer::release() {
     if (ibo_) glDeleteBuffers(1, &ibo_);
     if (ubo_) glDeleteBuffers(1, &ubo_);
     vao_ = emptyVao_ = vbo_ = ibo_ = ubo_ = 0;
+    for (unsigned& t : lightTex_) {
+        if (t) glDeleteTextures(1, &t);
+        t = 0;
+    }
     for (auto& f : queries_)
         if (f[0]) glDeleteQueries(5, f);
     std::memset(queries_, 0, sizeof(queries_));

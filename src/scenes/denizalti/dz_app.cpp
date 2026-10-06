@@ -35,8 +35,31 @@ void DzApp::loadConfig() {
 
 void DzApp::build() {
     mesh = Mesh();
-    start = buildTestWall(mesh, cfg.f("geom.maxEdge", 0.012f));
+    lights.clear();
+    start = buildTestWall(mesh, cfg.f("geom.maxEdge", 0.012f), lights);
+    bakeOpt.samples = cfg.i("bake.samples", 1024);
+    bakeOpt.bounces = cfg.i("bake.bounces", 12);
+    bakeOpt.texel = cfg.f("bake.texel", 0.002f);
+    atlas = buildAtlas(mesh, bakeOpt.texel);
+    std::fprintf(stderr, "denizalti: %zu ucgen, %u parca (chart), atlas %dx%d\n", mesh.tris(), mesh.charts, atlas.width, atlas.height);
     home();
+}
+
+std::string DzApp::lightPath() const { return root + "/cache/denizalti/isik.bin"; }
+
+bool DzApp::ensureLight(std::string& err, const std::function<void(float, const std::string&)>& progress, bool forceBake) {
+    const uint64_t key = bakeKey(mesh, lights, bakeOpt);
+    if (!forceBake && loadLightMap(lightPath(), key, light)) {
+        std::printf("isik haritasi onbellekten: %dx%d, %zu teksel (pisirme %.0f sn)\n", light.atlas.width, light.atlas.height, light.texels,
+                    light.bakeSeconds);
+        return true;
+    }
+    if (!bake(mesh, atlas, lights, bakeOpt, root, light, err, progress)) return false;
+    light.key = key;
+    std::printf("isik pisirildi: %dx%d, %zu teksel, %d ornek, %.1f sn\n", light.atlas.width, light.atlas.height, light.texels, bakeOpt.samples,
+                light.bakeSeconds);
+    if (!saveLightMap(lightPath(), light)) std::printf("isik haritasi yazilamadi: %s\n", lightPath().c_str());
+    return true;
 }
 
 void DzApp::home() {
@@ -44,11 +67,14 @@ void DzApp::home() {
     cam.yaw = start.yaw;
     cam.pitch = start.pitch;
     cam.fovY = cfg.f("cam.fov", 60.0f) * 3.14159265f / 180.0f;
+    set.exposure = cfg.f("cam.ev", 4.7f);
 }
 
 bool DzApp::initGL(std::string& err) {
     if (!renderer.init(root, err)) return false;
     renderer.upload(mesh);
+    if (light.valid()) renderer.uploadLight(light);
+    renderer.setLamps(lights.data(), int(lights.size()));
     glReady = true;
     return true;
 }
@@ -140,6 +166,20 @@ int runCli(int argc, char** argv) {
     a.build();
     const double buildMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
     std::printf("denizalti: dunya %zu ucgen, %zu kose, %.0f ms\n", a.mesh.tris(), a.mesh.v.size(), buildMs);
+    {
+        std::string berr;
+        int lastPct = -1;
+        if (!a.ensureLight(berr, [&](float f, const std::string& s) {
+                const int pct = int(f * 100.0f);
+                if (pct != lastPct && pct % 5 == 0) {
+                    std::printf("  %3d%% %s\n", pct, s.c_str());
+                    lastPct = pct;
+                }
+            }, hasArg(argc, argv, "--firin"))) {
+            std::printf("firin: %s\n", berr.c_str());
+            return 1;
+        }
+    }
     GLFWwindow* win = hiddenContext();
     if (!win) {
         std::printf("GL baglami acilamadi\n");

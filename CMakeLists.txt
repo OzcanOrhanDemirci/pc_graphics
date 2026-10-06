@@ -92,6 +92,8 @@ add_library(pc_core OBJECT
     src/scenes/denizalti/dz_parts.cpp
     src/scenes/denizalti/dz_world.cpp
     src/scenes/denizalti/dz_render.cpp
+    src/scenes/denizalti/dz_atlas.cpp
+    src/scenes/denizalti/dz_bake.cpp
     src/scenes/denizalti/dz_app.cpp
     src/scenes/denizalti/dz_live.cpp
     ${TP}/tinyexr/miniz.c)

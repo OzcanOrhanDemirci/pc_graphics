@@ -3,7 +3,26 @@
 > Tek kaynak durum panosu. Plan `docs/denizalti/PLAN.md`, kaynaklar `docs/denizalti/REFERANS.md`. En yeni en üstte.
 > Otonom görev (Özcan, 2026-10-06 sabahı): soru sormadan, bitene kadar; kareler SendUserFile ile.
 
-**Sıradaki taş: D1 · Fırın** (UV2 açılımı, OptiX yol izleme ile yönlü ışık haritası, yoklamalar, pus hacmi).
+**Sıradaki taş: D3 · Oda** (gerçek ölçülerle kontrol odası, REFERANS §0-§3), sonra D1'in kalanı (yoklamalar, pus).
+
+## D1 (1. kısım) · Fırın: yönlü ışık haritası (2026-10-06 öğle)
+
+- `dz_atlas.*`: her ızgara bir chart; chart'ın kendi yüzey koordinatları (metre) atlas dikdörtgenine; rafa dizme;
+  küçük parçalar (< 6 cm) iki kat ince. Teksel-yüzey eşlemesi: teksel merkezi üçgenin içinde ya da 0,75 teksel
+  yakınında (chart kenarı da aydınlanır), sonra boş kenar teksellerine komşu ortalaması (padding).
+- `dz_bake.*` + `device/dz_bake.cu` (OptiX, NVRTC): teksel başına N yol; lambalara doğrudan örnekleme (küre ışık,
+  gölge ışını: kafes gölgesi düşer), sekmelerde yeniden doğrudan örnekleme, Rus ruleti; gelen ışık L1 küresel
+  harmoniğe (miktar + yön). Ayrıca dört ana lambanın teksel başına görünürlüğü (parlamanın pişmiş gölgesi: 2010'ların
+  "sabit ışık" yolu; canlıda yalnız okunur). Kısa başlatmalar (~250 ms, sürücünün 2 sn bekçisinin çok altında).
+  Önbellek `cache/denizalti/isik.bin` (git dışı), anahtar: geometri + lambalar + ayarlar.
+- Gölgelendirici: yaygın ışık L1'den doğrusal olmayan kurulumla (Geomerics: negatif lob yok), ortam yansıması
+  harmoniklerden (yoklamalar gelene kadar), lamba parlaması küre ışık (Karis) × pişmiş görünürlük.
+- **Ölçüm:** test duvarı 8192×1953 atlas, 8,96 milyon teksel (%56 dolu); **64 örnek 2,7 sn, 1024 örnek 16,3 sn**.
+  Kare 1440p 4x High: 16,6 ms (D0'ın geçici ışığıyla 13,5 ms).
+- **Bulunan hata:** ilk pişirmede duvarda tek tük parlak teksel. Sebep: yarım küreyi kosinüsle örnekleyip RADYANSI
+  harmoniğe izdüşürürken ağırlık π/cos sıyırma açısında patlıyor. Düzgün yarım küre örneklemesi (ağırlık 2π, sınırlı):
+  benekler gitti. Kalan: 1024 örnekte ince lekelenme → son pişirme daha çok örnekle.
+- Çatlak: `dilate` 16 kanallık geçici diziyle 20 kanalı yazıyordu → yığın taşması (0xC0000409, çıktısız). Düzeltildi.
 
 ## D0 · Hat ve test duvarı (2026-10-06 öğle)
 

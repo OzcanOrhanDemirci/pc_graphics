@@ -1,6 +1,9 @@
 // Scene 8's world: what is built, where. World axes: y up, z towards the bow, x to starboard; the deck at y = 0.
 #pragma once
+#include "scenes/denizalti/dz_bake_shared.h"
 #include "scenes/denizalti/dz_geom.h"
+
+#include <vector>
 
 namespace dz {
 
@@ -10,6 +13,6 @@ struct Start {
     float3 pos;
     float yaw, pitch;
 };
-Start buildTestWall(Mesh& m, float maxEdge);
+Start buildTestWall(Mesh& m, float maxEdge, std::vector<DzLight>& lights);
 
 }   // namespace dz

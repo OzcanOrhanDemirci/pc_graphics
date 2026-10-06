@@ -6,6 +6,8 @@ layout(std140, binding = 0) uniform Frame {
     vec4 target;        // x: target triangle edge in samples, y: max tess factor, z: the finest triangle (m), w: displacement on (0/1)
     vec4 viewport;      // x, y: the sample grid (width, height in samples), z: 1/sqrt(samples per pixel), w: level (0 low .. 2 high)
     vec4 misc;          // x: time (s), y: exposure (EV), z: debug view, w: normal-detail scale
+    vec4 lampPos[4];    // the key lamps: xyz, radius
+    vec4 lampL[4];      // radiance rgb, w: present
 };
 
 const uint MAT_PAINT_HULL = 0u, MAT_PAINT_PIPE = 1u, MAT_PAINT_DARK = 2u, MAT_BRASS = 3u, MAT_STEEL = 4u, MAT_CHROME = 5u,

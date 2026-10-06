@@ -10,7 +10,7 @@ const float kPi = 3.14159265358979f;
 float3 f3(float x, float y, float z) { return make_float3(x, y, z); }
 }   // namespace
 
-Start buildTestWall(Mesh& m, float maxEdge) {
+Start buildTestWall(Mesh& m, float maxEdge, std::vector<DzLight>& lights) {
     Kit k(m);
     k.maxEdge = maxEdge;
     const float R = 2.44f;          // the pressure hull's inside radius (16 ft diameter)
@@ -87,6 +87,18 @@ Start buildTestWall(Mesh& m, float maxEdge) {
     k.t = Xform();
     k.mat = MAT_PAINT_PIPE;
     pipeRun(k, {f3(-2.12f, 0.42f, -1.25f), f3(-2.12f, 0.42f, 1.25f)}, 0.0445f, 0.15f);
+    // the lamps (D1's test light): a caged 40 W bulb over the manifold, a red night lamp aft of it. Radiance in the
+    // scene's units (cd/m^2 / 1000): a 40 W bulb's ~450 lm over a 3 cm sphere is ~12,700 cd/m^2
+    auto lamp = [&](float3 p, float r, float3 L) {
+        lights.push_back(DzLight{p, r, L, 0.0f});
+        k.t = Xform::at(p);
+        k.mat = MAT_EMISSIVE;
+        k.feat = FEAT_NONE;
+        k.sphere(r * 0.97f);
+    };
+    const float3 warm = make_float3(1.0f, 0.72f, 0.42f) * (1.0f / 0.758f);   // ~2700 K, luminance 1
+    lamp(f3(-1.3f, 2.75f, -0.1f), 0.03f, warm * 12.7f);
+    lamp(f3(-1.6f, 2.25f, 1.05f), 0.025f, make_float3(1.0f, 0.025f, 0.012f) * (8.0f / 0.215f));
     (void)kPi;
     finishMesh(m);
     return Start{f3(-0.9f, 1.62f, -0.15f), -1.35f, -0.08f};

@@ -19,3 +19,8 @@ assets/koy/_dl/
 # Ölçek: data fetched and prepared by tools/olcek_veri.py, not committed (the sources: assets/olcek/KAYNAKLAR.md)
 assets/olcek/*
 !assets/olcek/KAYNAKLAR.md
+
+# Scene 8: the baked light (cache/denizalti/), rebuilt by the oven
+cache/
+# Scene 8: reference pictures (various licences: private reference, see docs/denizalti/REFERANS.md)
+assets/denizalti/referans/

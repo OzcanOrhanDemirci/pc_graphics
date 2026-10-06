@@ -2,6 +2,7 @@
 // displaced every frame (nothing kept), every sample of a multisampled target is shaded on its own (supersampling),
 // the samples are resolved to pixels, tone mapped, dithered and fitted to the window.
 #pragma once
+#include "scenes/denizalti/dz_bake_shared.h"
 #include "scenes/denizalti/dz_geom.h"
 
 #include <cstdint>
@@ -39,6 +40,8 @@ public:
     bool init(const std::string& root, std::string& err);
     bool reloadShaders(std::string& err);
     void upload(const Mesh& m);
+    void uploadLight(const struct LightMap& lm);
+    void setLamps(const ::DzLight* l, int n);   // the key lamps whose highlights are drawn (shadowed by the bake)
     // one frame: the picture at outW x outH (the window), drawn at the settings' resolution and supersampling
     void draw(const Camera& cam, const Settings& s, int outW, int outH, double time);
     unsigned output() const { return outTex_; }
@@ -70,6 +73,8 @@ private:
     size_t indexCount_ = 0;
     // targets
     unsigned msColor_ = 0, msDepth_ = 0, msFbo_ = 0;
+    unsigned lightTex_[5] = {};
+    float lampPos_[4][4] = {}, lampL_[4][4] = {};
     unsigned hdrTex_ = 0, ldrTex_ = 0, ldrFbo_ = 0, outTex_ = 0, outFbo_ = 0;
     int rw_ = 0, rh_ = 0, ssaa_ = 0, outW_ = 0, outH_ = 0;
     // timing: a ring of timestamp queries (5 per frame)
