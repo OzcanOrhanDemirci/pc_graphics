@@ -12,7 +12,8 @@
 sancak panoları (döner şalterler, devre etiketleri), kafesli kırmızı lambalar, telsiz odasının kapısı. Görseller
 `docs/images/denizalti-*.jpg`.
 
-**Durum: görev kapandı (10-06 akşamüstü).** Bağımsız gözden geçirmenin bulguları düzeltildi, son pişirme ve ölçümler
+**🏁 Sahne tamamlandı (Özcan, 10-06 akşam: *"Tamamdır. Sahne tamamlandı."*).** Kendi ekranında gezdi: *"En iyi
+sahnelerimizden biri oldu."* Görev kapandı (10-06 akşamüstü); Bağımsız gözden geçirmenin bulguları düzeltildi, son pişirme ve ölçümler
 aşağıda. Açık kalanlar "D7 (2)" sonunda.
 
 ## Revize 2 · Güverteden çıkan çark (Özcan, 2026-10-06 akşam, sahneyi kendi ekranında gezerek)
