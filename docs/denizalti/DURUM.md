@@ -12,7 +12,67 @@
 sancak panoları (döner şalterler, devre etiketleri), kafesli kırmızı lambalar, telsiz odasının kapısı. Görseller
 `docs/images/denizalti-*.jpg`.
 
-**Sıradaki taş: D7 (2) · bağımsız gözden geçirmenin bulguları**, sonra kapanış (hasat).
+**Durum: görev kapandı (10-06 akşamüstü).** Bağımsız gözden geçirmenin bulguları düzeltildi, son pişirme ve ölçümler
+aşağıda. Açık kalanlar "D7 (2)" sonunda.
+
+## D7 (2) · Bağımsız gözden geçirme ve kapanış (2026-10-06 akşamüstü)
+
+Bir ajan kodu (a4ba730'dan bu yana) ve kareleri kendi gözüyle denetledi (12 kod, 13 görsel bulgu). Düzeltilenler:
+
+- **Panolar yanlış yükseklikteydi (yüksek):** `hullBoard` açıyı mantarın yarıçapından alıyordu, pano kendi yarıçapında
+  11-20 cm alçak duruyordu; vent kolları Christmas tree kutusuna giriyordu. Doğru yükseklikte ise **gövdedeki boru
+  şeridiyle çakıştılar**: kesit düzleminde hesap (her pano × 8 boru + 4 kablo borusu) ağacın içinden 4 boru ve 2 kablo
+  borusunun geçtiğini gösterdi. Panolar şeridin önüne alındı (arkaları 25-27 cm içeride), postalara **braketlerle**
+  bağlandı (braketler boruların geçtiği yerden kaçar), dalış istasyonu panosu 1,85 m'de biter (göstergeler oturan
+  dümencinin göz hizasında), dolapların üst-arka pahı borular arkadan geçecek kadar büyüdü. Hesap: hepsi temiz.
+- **Bloklu pus halesi:** 4 cm'lik pişmiş pus hücreleri üç doğrusal okununca lamba konisinin kenarı eksenlere hizalı
+  basamaklar veriyordu. Pus hacmi **kübik B-spline** okunur (8 süzgeçli okuma, froxel geçişinde).
+- **Temas gölgelerinde texel basamağı** (cetvel, kalem, pergel): ışık haritası Işık High'da, texel ekranda 2 pikselden
+  büyükse kübik B-spline okunur; geçiş bandında iki okuma karışır (eşikte anahtarlama kıpırdamasın). +1 ms (1x).
+- **Toz** harita, laminat, cetvel ve kadranlarda yok (gürültü bulut gibi okunuyordu).
+- **Şablonlar** yalnız harflerde çizilir (örnek başına alfa testi) ve **fırında engel değil**: dörtgen engel olunca
+  altındaki boyayı kapkara pişiriyordu, dörtgen saydamlaşınca kara bir levha göründü (bulundu, düzeltildi).
+- **Pencereler koyu cam:** MAT_GLASS artık atılmıyor; arkası karanlık, yüzünde odanın yansıması.
+- Kalem cetvelin içindeydi (uzaklaştı); menteşeli pergel, uçları kâğıtta; kulplu kupa, haritanın dışında; panjur
+  çubukları çerçevenin derinliğinde; manifold etiketi tabanında; **aynı devre adı iki kez yok** (fazlası "SPARE",
+  "… No.2").
+- **Harita:** basılı alan iç çerçevede biter; dakika etiketleri (derece gerçek bir kıyıyı adlandırıyordu, çizim o kıyı
+  değil); sapma 1968 Ege'sine göre 2°30'E; düz alfa (kenarlar griye çalmıyor, mip'ler kâğıtla ortalanır); derinlik
+  renkleri yumuşak; atlas payı 24 px.
+- **Fırın:** yoklamalara ayrı parlaklık sınırı (1,0: aynanın gördüğü yüzey ateş böceği değil); yoklama başlatması
+  başına yol eski sınırında (yavaş kartta sürücü bekçisi); albedo tablosu önbellek anahtarında; stensiller engel değil
+  (sürüm 13).
+- 2×2 SSAA yedeğinde pus ekran okuması hedefin boyuyla; galeri listesi çok küçük pencerede taban yükseklikle.
+- **Yeni içerik:** trim manifoldunun alt sırasında pirinç vana künyeleri (halka ile çarka asılı), dalış istasyonunda
+  lastik paspaslar, baş perdede ses gücüyle çalışan telefon (ahize, seçici, "1JV" levhası, kordon).
+
+**Ölçümler (son pişirme, 512 örnek):**
+- Taban ağı 7,32 milyon üçgen; ışık atlası 8192×10416, 62,2 milyon texel. **Pişirme 305 sn, ilk açılış ~5 dk 10 sn.**
+- **Işığın gürültüsü** (256 ve 512 örnekli iki pişirme, iç içe örnekler: farkın sapması 512'nin kendi gürültüsüdür;
+  dört görünüm, 16x, 8 bit çıktı): sapma **0,22-0,59 / 255**, %99'luk dilim ≤ 1,7 seviye, 8×8 blok lekeliliği
+  0,09-0,50 / 255, yanlılık ~0. Bir renk adımının altında: görünmez.
+- Kare süresi 1440p (başlangıç görünümü, Grafik/Işık/Efekt High):
+
+| Tess | 1x | 2x | 4x | 8x | 16x |
+|---|---|---|---|---|---|
+| Low | 8,2 | 9,0 | 13,9 | 24,0 | 35,2 |
+| Medium | 9,1 | 9,9 | 15,6 | 27,5 | 39,5 |
+| High | **13,8** | 16,9 | **33,3** | 75,2 | 130,5 |
+
+  Grafik/Işık/Efekt seviyeleri (High tess, 1x): hepsi High 11,9; Grafik Low 8,2; Işık Low 11,0; hepsi Low 7,2 ms
+  (D7 (2)'den önce ölçüldü).
+- Canlı uygulama (1440p 4x High): **31 FPS, 32,7 ms**, kart belleği 5,4 / 16 GB. Özcan'ın canlı bütçesi (1440p High
+  1x 25-33 ms) içinde: 13,8 ms.
+- Oda çatlak testi: **0 piksel**. Kararlılık (canlı 4x / referans 16x): başlangıç yolu piksel 0,00068 (blok 0,00017),
+  FLIP 0,0043; yakın yol 0,00039 (blok 0,00015), FLIP 0,0024. Ada tabanının (0,001) altında, ama D7 (1)'den biraz
+  yüksek: ısı haritasında kıpırtı hareketli ince ve parlak kenarlarda (kafesli vantilatörün telleri, şalter sıraları,
+  doğru yerine çıkan Christmas tree'nin yeşil lambaları); 4x'te ince geometrinin kenar kırılması.
+
+**Açık kalanlar (bilerek):**
+- Ateş böceği sınırı (0,06) lambaya bitişik yüzeylerin sektirdiği ışığı da biraz kırpar (enerji yanlılığı, ölçülmedi).
+- Çıkartma tablosu 256 kayıt (şu an altında; GPU tarafında kimlik sıkıştırılır, kayıt sayısı payı ölçülmedi).
+- Alüminyum hava panosunda kalan hafif yansıma dikişi (yoklama sınırı).
+- Galeri listesinin 1440p'deki görünümü ölçülmedi (bu oturumda monitör 1280×720 modundaydı); hesapla sığıyor.
 
 ## D5 (3)-D7 · Teçhizat, yoklamalar, ayarlar, fotoğraf, kalite turu (2026-10-06 öğleden sonra)
 

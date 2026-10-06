@@ -352,7 +352,8 @@ kartının bütün gücü görüntüye gidiyor. Dar bir odada yürünür, her ş
   1953/68 genel planlarından ve ABD Donanması'nın 1946 eğitim kitabından (NAVPERS 16160). Kaynaklar `docs/denizalti/REFERANS.md`.
 - **Kodla yapılmış her parça:** borular ve dirsekler, flanşlar, somun ve dişli saplamalar, glob vanalar, el çarkları,
   göstergeler, döner şalterler, sigortalar, kafesli lambalar, menteşe ve kilitler. Keskin kenar yok: her köşe
-  yuvarlatılmış. Panolar postaların iç yüzüne oturur; bir denetim aracı hiçbir istasyonun postalara girmediğini ölçer.
+  yuvarlatılmış. Panolar gövdedeki boru şeridinin önünde, postalara braketlerle bağlı; postalara ve borulara
+  girmedikleri hesapla denetlendi.
 - **Basılı yüzler:** kadranlar, etiketler ve harita bir çıkartma atlasına çizilir. 16" derinlik göstergesinde
   0,2 mm/piksel, pirinç etiketlerde yazı 0,25 mm oyulur. Masada uydurma bir kıyının **seyir haritası** var: derinlik
   eğrileri, iskandiller, pusula gülü, fener, kayalıklar, batık, nöbetçinin kurşun kalemle çizdiği rota, bir kahve halkası.
@@ -367,7 +368,7 @@ kartının bütün gücü görüntüye gidiyor. Dar bir odada yürünür, her ş
 - **Süper örnekleme:** her piksel 16 örneğe kadar ayrı ayrı gölgelendirilir. Rastgele sayı yok, her karede aynı desen
   kullanılır. 8K 16x yalnız fotoğrafta (F12): 1920 × 1080'lik parçalar, kenarlarında koruma bandıyla.
 - **Ayarlar:** Tessellation, Grafik, Işık ve Efekt için ayrı ayrı Low/Medium/High; çözünürlük 720p-8K, SSAA 1x-16x.
-  1440p'de High, SSAA kapalı ~11,5 ms; 4x SSAA ile ~30 ms.
+  1440p'de High, SSAA kapalı ~14 ms; 4x SSAA ile ~33 ms.
 
 Plan, kararlar ve ölçümler `docs/denizalti/`.
 

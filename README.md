@@ -407,8 +407,8 @@ look at anything from 10 to 15 cm.
   1953/68 general arrangement plans and the US Navy's 1946 training manual (NAVPERS 16160). Sources in
   `docs/denizalti/REFERANS.md`.
 - **Every part made in code:** pipes and bends, flanges, nuts and threaded studs, globe valves, handwheels, gauges, rotary
-  switches, fuses, caged lamps, hinges and latches. No knife edges: every corner is rounded. The boards sit on the
-  frames' inner faces; a check measures that no station cuts into a frame.
+  switches, fuses, caged lamps, hinges and latches. No knife edges: every corner is rounded. The boards stand in front of
+  the hull's pipe runs on brackets to the frames; a check computed that none cuts into a frame or a pipe.
 - **Printed faces:** the dials, the labels and the chart are drawn into a decal atlas, 0.2 mm a pixel on the 16" depth
   gauge, the lettering cut 0.25 mm into the brass plates. On the table lies a **sea chart** of a made-up coast:
   depth contours, soundings, a compass rose, a lighthouse, rocks, a wreck, the watch's course in pencil, a coffee ring.
@@ -424,7 +424,7 @@ look at anything from 10 to 15 cm.
 - **Supersampling:** each pixel is shaded up to 16 times. There are no random numbers; the pattern is the same every
   frame. 8K at 16x is for photographs only (F12), taken in 1920 × 1080 tiles with guard bands.
 - **Settings:** Low/Medium/High each for tessellation, graphics, light and effects; resolution 720p to 8K, SSAA 1x to
-  16x. At 1440p, High without SSAA takes ~11.5 ms, with 4x SSAA ~30 ms.
+  16x. At 1440p, High without SSAA takes ~14 ms, with 4x SSAA ~33 ms.
 
 Plan, decisions and measurements in `docs/denizalti/` (Turkish).
 

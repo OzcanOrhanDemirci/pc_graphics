@@ -60,6 +60,15 @@ Xform facing(float3 o, int side) {
 void box(Kit& k, const Xform& t, float3 c, float3 h, float e, uint32_t mat, uint32_t feat = FEAT_PLATE) {
     with(k, t * Xform::at(c), mat, feat, [&] { k.roundedBox(h, e); });
 }
+// the hull's service runs along the room (hullServices builds them; the boards stand in front of them, 15-25 cm in
+// from the cork, and their brackets keep clear): angle from starboard (degrees), in from the cork, radius
+struct HullRun { float aDeg, in, r; uint32_t mat; bool valve; };
+const HullRun kHighRuns[] = {{132.0f, 0.18f, 0.016f, MAT_CREAM, true},  {128.0f, 0.2f, 0.011f, MAT_BRASS, false}, {137.0f, 0.19f, 0.0095f, MAT_CREAM, false},
+                             {124.0f, 0.22f, 0.022f, MAT_RED, true},    {48.0f, 0.18f, 0.016f, MAT_CREAM, true},  {52.0f, 0.2f, 0.011f, MAT_BRASS, false},
+                             {43.0f, 0.19f, 0.0095f, MAT_BRASS, false}, {56.0f, 0.22f, 0.019f, MAT_CREAM, true}};
+const float kConduitDeg[] = {140.0f, 40.0f, 118.0f, 62.0f};
+const float kConduitIn = 0.165f;
+
 // the board's brackets: flat bars from its back (local z = back, half sizes hw along the room, hh up the hull) out to
 // the frames' inner flanges where a frame crosses it, else to the cork at its ends. in: the board's face from the cork
 void boardBrackets(Kit& k, const Xform& b, float hw, float hh, float back, float in) {
@@ -74,9 +83,28 @@ void boardBrackets(Kit& k, const Xform& b, float hw, float hh, float back, float
         xs = {-(hw - 0.05f), hw - 0.05f};
         reach = kRCork + 0.004f;
     }
+    // the runs in the board's frame: their offset up the board (u) and depth (w, negative outboard); a bracket at u = t
+    // must pass them by
+    struct Near { float u, w, r; };
+    std::vector<Near> near;
+    auto addRun = [&](float aDeg, float inn, float r) {
+        const float a = aDeg * kPi / 180.0f, rr = kRCork - inn;
+        const float3 p = f3(rr * std::cos(a), kAxisY + rr * std::sin(a), b.o.z);
+        const float3 d = p - b.o;
+        near.push_back({dot(d, b.y), dot(d, b.z), r});
+    };
+    for (const HullRun& h : kHighRuns) addRun(h.aDeg, h.in, h.r);
+    for (float a : kConduitDeg) addRun(a, kConduitIn, 0.035f);   // and its junction boxes
     for (float xl : xs)
         for (int s = -1; s <= 1; s += 2) {
-            const float t = s * (hh - 0.06f);
+            float t = s * (hh - 0.06f);
+            for (int tries = 0; tries < 40; ++tries) {
+                bool clear = true;
+                for (const Near& n : near)
+                    if (n.w < back + n.r && std::fabs(n.u - t) < n.r + 0.012f) clear = false;
+                if (clear) break;
+                t -= s * 0.01f;
+            }
             const float L = std::sqrt(std::max(0.0f, reach * reach - t * t)) - (r0 - back);
             if (L <= 0.0f) continue;
             box(k, b, f3(xl, t, back - 0.5f * L), f3(0.016f, 0.003f, 0.5f * L), 0.0012f, MAT_CREAM, FEAT_PLATE);
@@ -151,8 +179,8 @@ void divingStation(Kit& k) {
     const float z0 = frameZ(53.3f), z1 = frameZ(49.8f);
     // the panel: a flat board leaning back with the hull, from 0.55 m to 2.05 m, its back clear of the frames' inner
     // flanges (12.5 cm in from the cork) all the way up
-    const float yb = 0.55f, yt = 2.05f;
-    const float xb = hullX(yb, side, 0.30f), xt = hullX(yt, side, 0.21f);
+    const float yb = 0.55f, yt = 1.85f;
+    const float xb = hullX(yb, side, 0.31f), xt = hullX(yt, side, 0.31f);   // its back 25 cm in: the high runs pass behind
     const float3 pb = f3(xb, yb, 0.5f * (z0 + z1)), pt = f3(xt, yt, 0.5f * (z0 + z1));
     const float3 up = normalize(pt - pb);
     const float3 along = f3(0, 0, -1);                // the board's x runs aft (right-handed with z into the room)
@@ -219,10 +247,10 @@ void christmasTreeAndManifold(Kit& k, std::vector<DzLight>& minor) {
     const float z0 = frameZ(49.7f), z1 = frameZ(47.6f);
     const float zc = 0.5f * (z0 + z1);
     // the Christmas tree: a grey box leaning with the hull, a grid of red and green lenses behind white rules
-    const Xform tree = hullBoard(1.74f, side, 0.30f, zc);
-    const float3 hs = f3(0.36f, 0.42f, 0.06f);
-    box(k, tree, f3(0, 0, -0.06f), hs, 0.008f, MAT_GREY, FEAT_NONE);
-    boardBrackets(k, tree, hs.x, hs.y, -0.12f, 0.30f);
+    const Xform tree = hullBoard(1.74f, side, 0.33f, zc);   // its back 27 cm in: the high runs pass behind
+    const float3 hs = f3(0.36f, 0.42f, 0.03f);
+    box(k, tree, f3(0, 0, -0.03f), hs, 0.008f, MAT_GREY, FEAT_NONE);
+    boardBrackets(k, tree, hs.x, hs.y, -0.06f, 0.33f);
     box(k, tree, f3(0, 0, 0.002f), f3(hs.x - 0.02f, hs.y - 0.02f, 0.002f), 0.002f, MAT_PAINT_DARK, FEAT_NONE);
     for (int r = 0; r < 9; ++r)
         for (int c = 0; c < 7; ++c) {
@@ -266,9 +294,9 @@ void christmasTreeAndManifold(Kit& k, std::vector<DzLight>& minor) {
     for (int s = 0; s < 2; ++s)
         with(k, Xform::frame(tc + f3(-0.08f + s * 0.16f, -0.2f, -0.125f), f3(0, 1, 0), f3(1, 0, 0)), MAT_GLASS, FEAT_NONE, [&] { k.tube(0.011f, 0.0f, 0.5f); });
     // the main oil pressure and accumulator gauges above the manifold
-    const Xform gb = hullBoard(1.45f, side, 0.2f, zc - 0.62f);
+    const Xform gb = hullBoard(1.45f, side, 0.29f, zc - 0.62f);
     box(k, gb, f3(0, 0, -0.02f), f3(0.16f, 0.22f, 0.02f), 0.005f, MAT_CREAM, FEAT_PLATE);
-    boardBrackets(k, gb, 0.16f, 0.22f, -0.04f, 0.2f);
+    boardBrackets(k, gb, 0.16f, 0.22f, -0.04f, 0.29f);
     gaugeAt(k, gb, f3(0, 0.1f, 0.01f), 0.065f, 0.05f, MAT_BRASS, DIAL_WHITE);
     gaugeAt(k, gb, f3(0, -0.08f, 0.01f), 0.065f, 0.05f, MAT_BRASS, DIAL_WHITE);
 }
@@ -301,9 +329,9 @@ void trimManifold(Kit& k) {
         }
     // the gauge board directly above
     const float yb = 1.55f;
-    const Xform gb = hullBoard(yb, side, 0.2f, zc);
+    const Xform gb = hullBoard(yb, side, 0.29f, zc);
     box(k, gb, f3(0, 0, -0.02f), f3(0.5f * (z1 - z0) - 0.04f, 0.24f, 0.02f), 0.006f, MAT_CREAM, FEAT_PLATE);
-    boardBrackets(k, gb, 0.5f * (z1 - z0) - 0.04f, 0.24f, -0.04f, 0.2f);
+    boardBrackets(k, gb, 0.5f * (z1 - z0) - 0.04f, 0.24f, -0.04f, 0.29f);
     for (int g = 0; g < 4; ++g) gaugeAt(k, gb, f3(-0.36f + g * 0.24f, 0.07f, 0.01f), 0.07f, 0.05f, MAT_BRASS, DIAL_SMALL);
     gaugeAt(k, gb, f3(-0.2f, -0.14f, 0.01f), 0.05f, 0.04f, MAT_CHROME, DIAL_SMALL);
     gaugeAt(k, gb, f3(0.2f, -0.14f, 0.01f), 0.05f, 0.04f, MAT_CHROME, DIAL_SMALL);
@@ -534,9 +562,9 @@ void airManifold(Kit& k) {
     const float z0 = frameZ(54.0f), z1 = frameZ(52.0f), zc = 0.5f * (z0 + z1);
     // the gauge board (polished aluminium) leaning with the hull, two rows of gauges
     const float y = 1.55f;
-    const Xform gb = hullBoard(y, side, 0.21f, zc);
+    const Xform gb = hullBoard(y, side, 0.3f, zc);
     box(k, gb, f3(0, 0, -0.02f), f3(0.5f * (z1 - z0) - 0.03f, 0.32f, 0.02f), 0.006f, MAT_ALU, FEAT_NONE);
-    boardBrackets(k, gb, 0.5f * (z1 - z0) - 0.03f, 0.32f, -0.04f, 0.21f);
+    boardBrackets(k, gb, 0.5f * (z1 - z0) - 0.03f, 0.32f, -0.04f, 0.3f);
     for (int row = 0; row < 2; ++row)
         for (int g = 0; g < 9; ++g) gaugeAt(k, gb, f3(-0.62f + g * 0.155f, 0.13f - row * 0.2f, 0.01f), 0.062f, 0.05f, MAT_BRASS, DIAL_AIR);
     plateAt(k, gb, f3(0, 0.285f, 0.002f), 0.5f, 0.035f, "H.P. AIR MANIFOLD   3000 LBS.", PLATE_BRASS);
@@ -708,7 +736,7 @@ void electricalPanels(Kit& k) {
         // the body: its back corner at the top cut along the hull, clear of the frames' inner flanges (a cabinet stands on
         // its foundation, the frames run on behind it)
         std::vector<float2> prof = {{x0, 0.0f}, {x1, 0.0f}};
-        const float rf = kRPlate - 0.15f - 0.012f;   // the flanges' inner face, less a clearance (from the hull's axis)
+        const float rf = kRCork - 0.255f;   // clear of the frames' flanges and the high runs (from the hull's axis)
         const float yc = kAxisY + std::sqrt(std::max(0.0f, rf * rf - x1 * x1));
         if (yc < c.h) {
             const float xc = std::sqrt(std::max(0.0f, rf * rf - (c.h - kAxisY) * (c.h - kAxisY)));
@@ -799,18 +827,14 @@ void conduitRun(Kit& k, Rng& rng, float a, float in, float z0, float z1) {
 void hullServices(Kit& k) {
     Rng rng{20260606u};
     const float kPiF = kPi;
-    // the high band, both sides: above the stations, below the overhead's cable runs
-    struct Run { float aDeg; float in, r; uint32_t mat; bool valve; };
-    const Run high[] = {{132.0f, 0.18f, 0.016f, MAT_CREAM, true},  {128.0f, 0.2f, 0.011f, MAT_BRASS, false}, {137.0f, 0.19f, 0.0095f, MAT_CREAM, false},
-                        {124.0f, 0.22f, 0.022f, MAT_RED, true},    {48.0f, 0.18f, 0.016f, MAT_CREAM, true},  {52.0f, 0.2f, 0.011f, MAT_BRASS, false},
-                        {43.0f, 0.19f, 0.0095f, MAT_BRASS, false}, {56.0f, 0.22f, 0.019f, MAT_CREAM, true}};
-    for (const Run& r : high) serviceRun(k, rng, r.aDeg * kPiF / 180.0f, r.in, r.r, r.mat, 0.06f, kLength - 0.06f, r.valve);
+    // the high band, both sides: behind the boards, below the overhead's cable runs
+    for (const HullRun& r : kHighRuns) serviceRun(k, rng, r.aDeg * kPiF / 180.0f, r.in, r.r, r.mat, 0.06f, kLength - 0.06f, r.valve);
     // the low band at the deck's edge, both sides: the 3" trim lines and drains
-    const Run low[] = {{186.0f, 0.17f, 0.0445f, MAT_CREAM, true}, {190.0f, 0.2f, 0.016f, MAT_CREAM, false}, {-6.0f, 0.17f, 0.0445f, MAT_CREAM, true},
-                       {-10.0f, 0.19f, 0.019f, MAT_CREAM, false}};
-    for (const Run& r : low) serviceRun(k, rng, r.aDeg * kPiF / 180.0f, r.in, r.r, r.mat, 0.06f, kLength - 0.06f, r.valve);
+    const HullRun low[] = {{186.0f, 0.17f, 0.0445f, MAT_CREAM, true}, {190.0f, 0.2f, 0.016f, MAT_CREAM, false}, {-6.0f, 0.17f, 0.0445f, MAT_CREAM, true},
+                           {-10.0f, 0.19f, 0.019f, MAT_CREAM, false}};
+    for (const HullRun& r : low) serviceRun(k, rng, r.aDeg * kPiF / 180.0f, r.in, r.r, r.mat, 0.06f, kLength - 0.06f, r.valve);
     // conduits with junction boxes
-    for (float aDeg : {140.0f, 40.0f, 118.0f, 62.0f}) conduitRun(k, rng, aDeg * kPiF / 180.0f, 0.165f, 0.08f, kLength - 0.08f);
+    for (float aDeg : kConduitDeg) conduitRun(k, rng, aDeg * kPiF / 180.0f, kConduitIn, 0.08f, kLength - 0.08f);
 }
 
 // ---------------------------------------------------------------------------------------------------
