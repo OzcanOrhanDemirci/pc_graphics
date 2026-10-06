@@ -235,8 +235,9 @@ void AynaApp::buildLightMap() {
     lmFace_.assign(size_t(edgeCount(g)) * 2, -1);
     lmRev_.assign(size_t(edgeCount(g)) * 2, -1);
     lmCol_.assign(size_t(vertexCount(g)), -1);
+    const float tsR = cfg.f("lightmap.texel.reveal", 0.0025f), tsC = cfg.f("lightmap.texel.column", 0.005f);
     const int fw = int(std::ceil(g.L / ts)), fh = int(std::ceil(g.Hc / ts));
-    const int rw = int(std::ceil(lm_.perimeter / ts)), rh = std::max(2, int(std::ceil(0.5f * g.t / ts)));
+    const int rw = int(std::ceil(lm_.perimeter / tsR)), rh = std::max(2, int(std::ceil(0.5f * g.t / tsR)));
     for (int j = g.j0; j < g.j0 + g.nj; ++j)
         for (int i = g.i0; i < g.i0 + g.ni; ++i)
             for (int up = 0; up < 2; ++up) {
@@ -255,6 +256,7 @@ void AynaApp::buildLightMap() {
                         f.i = e.i;
                         f.j = e.j;
                         f.side = e.side;
+                        f.ts = ts;
                         lmFace_[slot] = int(lmBlocks_.size());
                         lmBlocks_.push_back(f);
                         off += size_t(fw) * fh;
@@ -263,6 +265,7 @@ void AynaApp::buildLightMap() {
                         r.offset = int(off);
                         r.w = rw;
                         r.h = rh;
+                        r.ts = tsR;
                         lmRev_[slot] = int(lmBlocks_.size());
                         lmBlocks_.push_back(r);
                         off += size_t(rw) * rh;
@@ -276,8 +279,9 @@ void AynaApp::buildLightMap() {
                     LightMapBlock c;
                     c.type = 4;
                     c.offset = int(off);
-                    c.w = int(std::ceil(2.0f * 3.14159265f * g.rc / ts));
-                    c.h = fh;
+                    c.w = int(std::ceil(2.0f * 3.14159265f * g.rc / tsC));
+                    c.h = int(std::ceil(g.Hc / tsC));
+                    c.ts = tsC;
                     c.i = ci[k];
                     c.j = cj[k];
                     lmCol_[vi] = int(lmBlocks_.size());
@@ -293,8 +297,28 @@ void AynaApp::buildLightMap() {
     }
     dLm_ = devAlloc<float4>(lmTexels_);
     cudaMemset(dLm_, 0, lmTexels_ * sizeof(float4));
-    dLm2_ = devAlloc<float4>(lmTexels_);
-    cudaMemset(dLm2_, 0, lmTexels_ * sizeof(float4));
+    // our light's map: the same blocks with texels twice the size
+    lmBlocks2_ = lmBlocks_;
+    size_t off2 = 0;
+    lmMaxW2_ = lmMaxH2_ = 0;
+    for (LightMapBlock& b : lmBlocks2_) {
+        b.offset = int(off2);
+        b.w = (b.w + 1) / 2;
+        b.h = (b.h + 1) / 2;
+        b.ts *= 2.0f;
+        off2 += size_t(b.w) * b.h;
+        lmMaxW2_ = std::max(lmMaxW2_, b.w);
+        lmMaxH2_ = std::max(lmMaxH2_, b.h);
+    }
+    lm_.gw2 = lmBlocks2_[0].w;
+    lm_.gh2 = lmBlocks2_[0].h;
+    lm_.floorOff2 = lmBlocks2_[0].offset;
+    lm_.ceilOff2 = lmBlocks2_[1].offset;
+    dLm2_ = devAlloc<float4>(off2);
+    cudaMemset(dLm2_, 0, off2 * sizeof(float4));
+    dLmBlocks2_ = devAlloc<LightMapBlock>(lmBlocks2_.size());
+    cudaMemcpy(dLmBlocks2_, lmBlocks2_.data(), lmBlocks2_.size() * sizeof(LightMapBlock), cudaMemcpyHostToDevice);
+    lm_.blocks2 = dLmBlocks2_;
     dLmBlocks_ = devAlloc<LightMapBlock>(lmBlocks_.size());
     cudaMemcpy(dLmBlocks_, lmBlocks_.data(), lmBlocks_.size() * sizeof(LightMapBlock), cudaMemcpyHostToDevice);
     dLmFace_ = devAlloc<int>(lmFace_.size());
@@ -399,6 +423,8 @@ void AynaApp::release() {
     cudaFree(dLm_);
     cudaFree(dLm2_);
     dLm2_ = nullptr;
+    cudaFree(dLmBlocks2_);
+    dLmBlocks2_ = nullptr;
     cudaFree(dLmBlocks_);
     cudaFree(dLmFace_);
     cudaFree(dLmRev_);
@@ -467,6 +493,8 @@ View AynaApp::makeView() const {
     v.coneScale = cfg.f("cone.scale", 0.5f);
     v.subX = subX;
     v.subY = subY;
+    v.ghosts = cfg.i("ghost.mirrors", 1);
+    v.ghostCells = cfg.i("ghost.cells", 10);
     v.testMirror = testMirror;
     v.tmN = tmN;
     v.tmD = tmD;
@@ -484,11 +512,15 @@ View AynaApp::makeView() const {
         Light& L = v.light[v.nLights++];
         L.pos = cam.pos + v.camFwd * (R + 0.002f);
         L.axis = v.camFwd;
-        L.radius = 0.01f;
+        L.radius = cfg.f("spot.radius", 0.03f);   // the slit's size: the mist's glow round it is no sharper than this
         L.color = paletteColor(colorIndex) * levelValue(levelIndex);
         L.cosOuter = std::cos(cfg.f("spot.outer", 28.0f) * 3.14159265f / 180.0f);
         L.cosInner = std::cos(cfg.f("spot.inner", 12.0f) * 3.14159265f / 180.0f);
         L.object = -1;
+        v.spotLight = v.nLights - 1;
+        int si, sj, su;
+        locate(maze.g, L.pos.x, L.pos.z, si, sj, su);
+        v.spotCell = cellIndex(maze.g, si, sj, su);
     }
     // the lamps left behind
     const float lampR = cfg.f("lamp.radius", 0.03f), lampK = cfg.f("lamp.share", 0.03f);
@@ -681,7 +713,8 @@ void AynaApp::render() {
         cudaEventRecord(d0, 0);
         View bv = v;
         bv.bake = 2;
-        bakeDynamicMap(bv, dLmBlocks_, int(lmBlocks_.size()), lmMaxW_, lmMaxH_, 0);
+        bv.skipRoot = v.spotLight >= 0 ? 1 : 0;
+        bakeDynamicMap(bv, dLmBlocks2_, int(lmBlocks2_.size()), lmMaxW2_, lmMaxH2_, 0);
         cudaEventRecord(d1, 0);
         cudaEventSynchronize(d1);
         cudaEventElapsedTime(&dynMs, d0, d1);

@@ -61,6 +61,7 @@ struct LightMapBlock {
     int offset = 0;      // first texel
     int w = 0, h = 0;    // texels
     int fam = 0, i = 0, j = 0, side = 1;   // faces and reveals: the edge and the side's cell; columns: i, j the vertex
+    float ts = 0.01f;    // its texel's size (m): finer on the reveals and columns, seen from a hand's breadth away
 };
 struct LightMap {
     float texel = 0.01f;
@@ -72,7 +73,9 @@ struct LightMap {
     const int* colBlock = nullptr;   // per vertexIndex
     const LightMapBlock* blocks = nullptr;
     float4* E = nullptr;             // rgb irradiance, w the straight-visible lamps' bits
-    float4* E2 = nullptr;            // our own light's, baked again every frame (it moves with us)
+    float4* E2 = nullptr;            // our own light's, baked again every frame (it moves with us), at half resolution:
+    const LightMapBlock* blocks2 = nullptr;   //   its blocks (each texel twice the size; the same order)
+    int gw2 = 0, gh2 = 0, floorOff2 = 0, ceilOff2 = 0;
     float perimeter = 1.0f;          // a reveal's length round the window
     int on = 0;
 };
@@ -123,6 +126,12 @@ struct View {
     int plainMat = 0;                // the tools: plain colours instead of the materials (their cost)
     float coneScale = 0.5f;          // the footprint: this many pixels a metre (half: four samples share a pixel)
     float subX = 0.0f, subY = 0.0f;  // the tools: every sample shifted by this (pixels), for references of many renders
+    // our light straight in its own cell (and the doorways' far halves) is worked out per pixel, sharp; the rest of its
+    // light is in the light map E2
+    int spotLight = -1, spotCell = -1;
+    int skipRoot = 0;                // the bake of E2: our light's straight light in its own cell is not baked
+    int ghosts = 1;                  // the mirrors' front-surface ghosts of the lights, for the path's first this many mirrors
+    int ghostCells = 10;             // how far a ghost's ray is followed
     // the tools (Ö1): a mirror plane in front of the eye, met before anything else; 1 ideal (all reflected, no glass),
     // 2 the maze's own mirror (glass and silver); the samples are mirrored with it
     int testMirror = 0;

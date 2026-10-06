@@ -117,7 +117,10 @@ private:
     int* dLmRev_ = nullptr;
     int* dLmCol_ = nullptr;
     float4* dLm_ = nullptr;
-    float4* dLm2_ = nullptr;   // our light's, every frame
+    float4* dLm2_ = nullptr;   // our light's, every frame (half resolution, its own blocks)
+    std::vector<ayna::LightMapBlock> lmBlocks2_;
+    ayna::LightMapBlock* dLmBlocks2_ = nullptr;
+    int lmMaxW2_ = 0, lmMaxH2_ = 0;
     bool lm2Clear_ = false;
     size_t lmTexels_ = 0;
     int lmMaxW_ = 0, lmMaxH_ = 0;
