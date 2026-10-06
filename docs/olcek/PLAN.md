@@ -42,7 +42,7 @@ yalnız tekerlekle.
 | Zaman oranı | İnsan ölçeğinde 1 sn = 1 sn; dışarı her onlukta ×4,8, içeri her onlukta ÷17 (iki sabit oran, tek çizgi) |
 | Yazı | **Görüntünün üstünde hiç yazı yok.** Panelde ortadaki cismin adı (*"şu an bu ölçekte şuna bakıyorsun"*) ve ekranın genişliği. **Zamanın hızı gösterilmez** |
 | Kalite | Net, temiz, kararlı: gren yok, kıpraşma yok. Ada düzeyinde zirve değil; hedef ölçeğin hissi |
-| Seçenekler | Laboratuvar'daki malzeme seçimi gibi. Şimdi **Adres**. İleride **Merdiven** (adres yok, büyükten küçüğe boy kıyası) ve **Zaman** (Özcan'ın izafiyet ve hızlanma fikri; ayrı sahne de olabilir) |
+| Seçenekler | Laboratuvar'daki malzeme seçimi gibi. **Adres** ve **Hız** (Zaman fikri, `hiz/PLAN.md`). Bu iki seçenekle sahne tamam. ~~Merdiven~~ **YOK** (Özcan, 2026-10-06; §11) |
 | Ad | **Ölçek** (kimlik `olcek`, galeride 07) |
 
 ## 2 · Yolculuk: onluk onluk
@@ -232,7 +232,9 @@ Sıra değişebilir; her taşın sonunda Özcan baştan sona kaydırabileceği b
 
 ## 11 · İleride (bu planın dışında)
 
-- **Merdiven:** aynı sahnede ikinci seçenek; adres yok, her ölçekte bir örnek büyükten küçüğe (VY Canis Majoris,
-  süpernova, kuasar, kara delik diski gibi Özcan'ın istediği estetik duraklar).
-- **Zaman:** Özcan'ın izafiyet ve hızlanma fikri. **Yapılıyor:** ikinci seçenek "Hız" (2026-10-05 akşamı planlandı, `docs/olcek/hiz/PLAN.md`). Gerçek gelecek (Güneş'in ölümü,
-  Samanyolu-Andromeda) orada olabilir.
+- ~~**Merdiven:** aynı sahnede ikinci seçenek; adres yok, her ölçekte bir örnek büyükten küçüğe (VY Canis Majoris,
+  süpernova, kuasar, kara delik diski gibi Özcan'ın istediği estetik duraklar).~~ **Vazgeçildi (Özcan, 2026-10-06):**
+  *"O mouse tekerleği kaydırmalı ölçek hissini vermeyecek çünkü. Ölçek grafik tarafında değil, fizik tarafında bir sahne
+  oldu. Onun o gerçekçi havasını bozmayalım."* Sahne 7 iki seçenekle (Adres, Hız) tamam.
+- **Zaman:** Özcan'ın izafiyet ve hızlanma fikri. **Yapıldı:** ikinci seçenek "Hız" (🏁 10-06, `docs/olcek/hiz/PLAN.md`).
+  Gerçek gelecek (Güneş'in ölümü, Samanyolu-Andromeda) bu planın dışında kaldı.
