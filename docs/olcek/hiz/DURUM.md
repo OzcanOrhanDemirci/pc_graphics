@@ -2,6 +2,9 @@
 
 > Tek kaynak durum panosu. Plan `docs/olcek/hiz/PLAN.md`. En yeni en üstte.
 
+**Özcan (10-06 sabahı, dışarıdan):** *"Bu sahneyi tamamladık, eve gelince test ederim ve gerekirse küçük bir revize
+yaparız. Bunlar dışında gördüğüm bir hata da yoktu zaten."* Sırada: akşamki testi.
+
 ## 10-06 sabahı (2) · Özcan'ın iki revizesi: savrulan etiketler, yana bakınca bembeyaz ekran
 
 Özcan'ın yolculuğu: 21 dokuz, Proxima'nın 156.000 ışık yılı ötesi, görüş 120°, enerji gözü açık.
