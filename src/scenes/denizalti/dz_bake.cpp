@@ -550,7 +550,7 @@ bool bake(const Mesh& m, const Atlas& a, const std::vector<DzLight>& lights, con
                 prm.probeOut = dOut;
                 prm.probeRes = unsigned(r);
                 prm.probeRough = float(m) / float(mips - 1);
-                const unsigned int total = unsigned(m == 0 ? o.probeSamples / 2 : o.probeSamples);
+                const unsigned int total = unsigned(m == 0 ? o.probeSamples * 2 : o.probeSamples);   // the sharp mip shows its noise on glass
                 unsigned int s = 0;
                 while (s < total) {
                     prm.sampleBase = s;

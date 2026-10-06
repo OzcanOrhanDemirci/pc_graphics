@@ -52,6 +52,7 @@ void DzApp::build() {
     std::string derr;
     if (!decals.draw(root, derr)) std::fprintf(stderr, "denizalti: %s\n", derr.c_str());
     atlas = buildAtlas(mesh, bakeOpt.texel);
+    buildCollision(cfg.f("cam.radius", 0.1f));
     std::fprintf(stderr, "denizalti: %zu ucgen, %u parca (chart), atlas %dx%d\n", mesh.tris(), mesh.charts, atlas.width, atlas.height);
     home();
 }
@@ -71,6 +72,69 @@ bool DzApp::ensureLight(std::string& err, const std::function<void(float, const 
                 light.bakeSeconds);
     if (!saveLightMap(lightPath(), light)) std::printf("isik haritasi yazilamadi: %s\n", lightPath().c_str());
     return true;
+}
+
+void DzApp::buildCollision(float radius) {
+    const float hi[3] = {2.5f, 2.7f, 8.3f};
+    for (int a = 0; a < 3; ++a) solidDim[a] = int(std::ceil((hi[a] - solidLo[a]) / solidCell));
+    std::vector<uint8_t> occ(size_t(solidDim[0]) * solidDim[1] * solidDim[2], 0);
+    auto mark = [&](float3 p) {
+        const int x = int((p.x - solidLo[0]) / solidCell), y = int((p.y - solidLo[1]) / solidCell), z = int((p.z - solidLo[2]) / solidCell);
+        if (x < 0 || y < 0 || z < 0 || x >= solidDim[0] || y >= solidDim[1] || z >= solidDim[2]) return;
+        occ[(size_t(z) * solidDim[1] + y) * solidDim[0] + x] = 1;
+    };
+    // every triangle sampled densely enough that no 5 cm cell it crosses is missed
+    for (size_t k = 0; k + 2 < mesh.idx.size(); k += 3) {
+        const float3 a = mesh.v[mesh.idx[k]].p, b = mesh.v[mesh.idx[k + 1]].p, c = mesh.v[mesh.idx[k + 2]].p;
+        if (mesh.v[mesh.idx[k]].mat == MAT_GLASS) continue;
+        const float L = std::max(length(b - a), std::max(length(c - b), length(a - c)));
+        const int n = std::max(1, int(std::ceil(L / (0.5f * solidCell))));
+        for (int i = 0; i <= n; ++i)
+            for (int j = 0; j <= n - i; ++j) {
+                const float u = float(i) / n, v = float(j) / n;
+                mark(a + (b - a) * u + (c - a) * v);
+            }
+    }
+    // grown by the radius (a sphere of cells)
+    const int R = int(std::ceil(radius / solidCell));
+    solid.assign(occ.size(), 0);
+    for (int z = 0; z < solidDim[2]; ++z)
+        for (int y = 0; y < solidDim[1]; ++y)
+            for (int x = 0; x < solidDim[0]; ++x) {
+                if (!occ[(size_t(z) * solidDim[1] + y) * solidDim[0] + x]) continue;
+                for (int dz = -R; dz <= R; ++dz)
+                    for (int dy = -R; dy <= R; ++dy)
+                        for (int dx = -R; dx <= R; ++dx) {
+                            if (dx * dx + dy * dy + dz * dz > R * R) continue;
+                            const int xx = x + dx, yy = y + dy, zz = z + dz;
+                            if (xx < 0 || yy < 0 || zz < 0 || xx >= solidDim[0] || yy >= solidDim[1] || zz >= solidDim[2]) continue;
+                            solid[(size_t(zz) * solidDim[1] + yy) * solidDim[0] + xx] = 1;
+                        }
+            }
+}
+
+bool DzApp::blocked(float3 p) const {
+    if (solid.empty()) return false;
+    const int x = int(std::floor((p.x - solidLo[0]) / solidCell)), y = int(std::floor((p.y - solidLo[1]) / solidCell)),
+              z = int(std::floor((p.z - solidLo[2]) / solidCell));
+    if (x < 0 || y < 0 || z < 0 || x >= solidDim[0] || y >= solidDim[1] || z >= solidDim[2]) return true;
+    return solid[(size_t(z) * solidDim[1] + y) * solidDim[0] + x] != 0;
+}
+
+void DzApp::moveCamera(float3 d) {
+    // in small steps (a cell is 5 cm: never jump one), each axis on its own so the camera slides along walls
+    const float len = length(d);
+    const int n = std::max(1, int(std::ceil(len / 0.01f)));
+    const float3 s = d * (1.0f / n);
+    for (int i = 0; i < n; ++i) {
+        const float3 p = cam.pos;
+        float3 q = make_float3(p.x + s.x, p.y, p.z);
+        if (!blocked(q)) cam.pos = q;
+        q = make_float3(cam.pos.x, cam.pos.y, cam.pos.z + s.z);
+        if (!blocked(q)) cam.pos = q;
+        q = make_float3(cam.pos.x, cam.pos.y + s.y, cam.pos.z);
+        if (!blocked(q)) cam.pos = q;
+    }
 }
 
 void DzApp::home() {
@@ -212,6 +276,9 @@ int runCli(int argc, char** argv) {
             if (kSsaa[k] == n) a.ssaaIndex = k;
     }
     a.set.tess = std::stoi(argValue(argc, argv, "--tess", "2"));
+    a.set.gfx = std::stoi(argValue(argc, argv, "--grafik", "2"));
+    a.set.light = std::stoi(argValue(argc, argv, "--isik", "2"));
+    a.set.fx = std::stoi(argValue(argc, argv, "--efekt", "2"));
     a.set.debug = std::stoi(argValue(argc, argv, "--debug", "0"));
     a.set.displacement = argValue(argc, argv, "--yerdegistirme", "1") != "0";
     a.set.tessOff = hasArg(argc, argv, "--bolmesiz");
@@ -242,6 +309,36 @@ int runCli(int argc, char** argv) {
                 std::printf("  %-6s %2dx (%d ornek x %dx%d) : %7.2f ms  (%6.2f / %5.2f / %5.2f)\n", tn[t], kSsaa[s], a.renderer.msaa, a.renderer.sx,
                             a.renderer.sy, g.total, g.scene, g.resolve, g.post + g.final);
             }
+        return 0;
+    }
+    if (hasArg(argc, argv, "--foto")) {
+        // the photo as F12 makes it: tiles of 1920 x 1080 with a 192 px guard band
+        const std::string name = argValue(argc, argv, "--foto");
+        const int W = a.set.width, H = a.set.height, nx = (W + 1919) / 1920, ny = (H + 1079) / 1080, guard = nx * ny > 1 ? 192 : 0;
+        std::vector<uint8_t> img(size_t(W) * H * 4);
+        const auto t0 = std::chrono::steady_clock::now();
+        for (int t = 0; t < nx * ny; ++t) {
+            const int tx = t % nx, ty = t / nx;
+            const int x0 = tx * W / nx, x1 = (tx + 1) * W / nx, y0 = ty * H / ny, y1 = (ty + 1) * H / ny;
+            Settings s = a.set;
+            s.fullW = W;
+            s.fullH = H;
+            s.tileX = x0 - guard;
+            s.tileY = y0 - guard;
+            s.width = (x1 - x0) + 2 * guard;
+            s.height = (y1 - y0) + 2 * guard;
+            a.renderer.draw(a.cam, s, s.width, s.height, 0.0);
+            std::vector<uint8_t> px;
+            a.renderer.readOutput(px);
+            for (int y = y0; y < y1; ++y)
+                std::memcpy(&img[(size_t(y) * W + x0) * 4], &px[(size_t(y - y0 + guard) * s.width + guard) * 4], size_t(x1 - x0) * 4);
+        }
+        glFinish();
+        const double sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+        std::filesystem::create_directories(out);
+        setPNGCompression(1);
+        writePNG(out + name + ".png", W, H, img.data());
+        std::printf("foto %s: %dx%d %dx, %d parca, %.1f sn\n", name.c_str(), W, H, a.set.ssaa, nx * ny, sec);
         return 0;
     }
     if (hasArg(argc, argv, "--kare")) {

@@ -119,6 +119,8 @@ struct FrameUBO {
     float probeLo[4];      // the probe grid's first probe; w: mips (0: no probes)
     float probeStep[4];    // its spacing; w: how many probes a sample blends (1 nearest, 8 trilinear)
     float probeDims[4];
+    float levels[4];       // tessellation, graphics, light, effects (0 low .. 2 high)
+    float renderSize[4];   // this draw's pixels (a photo tile's own, not the whole picture's)
 };
 
 // column-major 4x4 products for the camera
@@ -544,9 +546,22 @@ void Renderer::draw(const Camera& cam, const Settings& s, int ow, int oh, double
 
     // ---- the camera: reverse depth (1 at the near plane, 0 at infinity) for precision from 2 cm to the far wall
     const float zNear = 0.01f;   // ('near' is a Windows macro)
-    const float aspect = float(s.width) / float(s.height);
+    const bool tiled = s.fullW > 0;
+    const int fw0 = tiled ? s.fullW : s.width, fh0 = tiled ? s.fullH : s.height;
+    const float aspect = float(fw0) / float(fh0);
     const float f = 1.0f / std::tan(0.5f * cam.fovY);
-    const float proj[16] = {f / aspect, 0, 0, 0, 0, f, 0, 0, 0, 0, 0, -1, 0, 0, zNear, 0};
+    // a tile: the full picture's NDC mapped onto the tile (scale, then shift its centre to the origin); y from the top
+    float sxT = 1.0f, syT = 1.0f, oxT = 0.0f, oyT = 0.0f;
+    if (tiled) {
+        sxT = float(fw0) / float(s.width);
+        syT = float(fh0) / float(s.height);
+        const float cx = (s.tileX + 0.5f * s.width) / fw0 * 2.0f - 1.0f;          // the tile's centre in full NDC
+        const float cy = 1.0f - (s.tileY + 0.5f * s.height) / fh0 * 2.0f;
+        oxT = -cx * sxT;
+        oyT = -cy * syT;
+    }
+    // clip.x' = sx * clip.x + ox * clip.w (and y); clip.w = -z_view
+    const float proj[16] = {sxT * f / aspect, 0, 0, 0, 0, syT * f, 0, 0, -oxT, -oyT, 0, -1, 0, 0, zNear, 0};
     const float3 fw = cam.forward();
     float3 rt = cross(fw, make_float3(0, 1, 0));
     rt = length(rt) > 1e-6f ? normalize(rt) : make_float3(1, 0, 0);
@@ -568,8 +583,9 @@ void Renderer::draw(const Camera& cam, const Settings& s, int ow, int oh, double
     u.target[1] = float(std::min(64, maxTessLevel));
     u.target[2] = finestTriangle;
     u.target[3] = s.displacement ? 1.0f : 0.0f;
+    // the tessellation's sample size is the full picture's (a tile is cut as finely as the whole)
     u.viewport[0] = float(s.width) * samplesPerPixel;
-    u.viewport[1] = float(s.height) * samplesPerPixel;
+    u.viewport[1] = float(tiled ? fh0 : s.height) * samplesPerPixel;
     u.viewport[2] = 1.0f / samplesPerPixel;
     u.viewport[3] = float(s.tess);
     u.misc[0] = float(time);
@@ -595,6 +611,12 @@ void Renderer::draw(const Camera& cam, const Settings& s, int ow, int oh, double
     }
     u.probeLo[3] = (probeTex_ && s.light > 0) ? float(probeMips_) : 0.0f;
     u.probeStep[3] = s.light == 2 ? 8.0f : 1.0f;
+    u.levels[0] = float(s.tess);
+    u.levels[1] = float(s.gfx);
+    u.levels[2] = float(s.light);
+    u.levels[3] = float(s.fx);
+    u.renderSize[0] = float(s.width);
+    u.renderSize[1] = float(s.height);
     glNamedBufferSubData(ubo_, 0, sizeof(u), &u);
     if (hazeOn) {
         const int* fd = fxDims[s.fx];
@@ -624,6 +646,7 @@ void Renderer::draw(const Camera& cam, const Settings& s, int ow, int oh, double
         glProgramUniform3f(progFroxel_, loc("camUp"), up.x, up.y, up.z);
         glProgramUniform1f(progFroxel_, loc("tanY"), std::tan(0.5f * cam.fovY));
         glProgramUniform1f(progFroxel_, loc("aspect"), aspect);
+        glProgramUniform4f(progFroxel_, loc("tile"), 1.0f / sxT, 1.0f / syT, -oxT / sxT, -oyT / syT);
         glProgramUniform1f(progFroxel_, loc("zNear"), u.haze[0]);
         glProgramUniform1f(progFroxel_, loc("zFar"), u.haze[1]);
         glProgramUniform1f(progFroxel_, loc("density"), s.hazeDensity);

@@ -126,6 +126,12 @@ bool App::consume(int key) {
     return true;
 }
 
+void App::loadProgress(float fraction, const std::string& label) {
+    std::lock_guard<std::mutex> lock(loadMx_);
+    loadShared_.fraction = fraction;
+    loadShared_.label = label;
+}
+
 void App::toast(const std::string& text) {
     std::lock_guard<std::mutex> lock(toastMx_);
     toasts_.push_back({text, nowSec()});
@@ -581,6 +587,21 @@ int App::run(const Options& opt) {
                 control("buyukluk", 5); wait(0.3); key(GLFW_KEY_SPACE); wait(14.0); log("yikim sismik deprem 8"); shot("yikim_sismik_deprem");
                 key(GLFW_KEY_SPACE); wait(2.0);
                 control("yapi", 0); wait(6.0);
+            }
+            if (infos_[s].id == "denizalti") {
+                // walk forward along the diving station, look about with the mouse (Tab), the binoculars, the panel
+                hold(GLFW_KEY_W, true); wait(1.2); hold(GLFW_KEY_W, false); wait(0.3); shot("denizalti_yuru");
+                key(GLFW_KEY_TAB); wait(0.2);
+                for (int k = 1; k <= 12; ++k) { mouse(0.50f - 0.012f * k, 0.50f); wait(0.03); }
+                wait(0.3); shot("denizalti_bakis");
+                key(GLFW_KEY_TAB); wait(0.2);
+                mouse(0.5f, 0.5f); right(true); wait(0.8); shot("denizalti_durbun"); right(false); wait(0.5);
+                control("tess", 0); control("gfx", 0); control("light", 0); control("fx", 0); wait(1.0); shot("denizalti_low");
+                control("tess", 2); control("gfx", 2); control("light", 2); control("fx", 2); wait(1.0); shot("denizalti_high");
+                control("ssaa", 4); wait(1.5); shot("denizalti_16x");
+                control("ssaa", 2); wait(0.5);
+                key(GLFW_KEY_F12); wait(0.3); shot("denizalti_foto"); wait(2.0);
+                hold(GLFW_KEY_S, true); wait(3.0); hold(GLFW_KEY_S, false); shot("denizalti_geri_carpisma");
             }
             if (infos_[s].id == "heykel") {
                 // still (accumulating), the wheel towards the middle (10 and 1,000 times, then 10,000), the light by a

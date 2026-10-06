@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 
 namespace {
 
@@ -71,15 +72,30 @@ public:
             st.fraction = 0.1f;
             ++st.step;
             return;
-        default:
+        case 1:
             a_.root = host.root();
             a_.overrides = host.overrides();
             a_.loadConfig();
             a_.build();
             a_.applyChoices();
+            st.label = L("Önceden pişirilmiş ışık okunuyor (ilk açılışta pişirilir: birkaç dakika)",
+                         "Reading the baked light (baked on the first opening: a few minutes)");
+            st.fraction = 0.15f;
+            ++st.step;
+            return;
+        default: {
+            std::string err;
+            const bool ok = a_.ensureLight(err, [&](float f, const std::string& what) {
+                host.loadProgress(0.15f + 0.85f * f, L("İlk açılış, ışık pişiriliyor: ", "First opening, baking the light: ") + what);
+            });
+            if (!ok) {
+                st.error = err;
+                return;
+            }
             st.fraction = 1.0f;
             st.done = true;
             return;
+        }
         }
     }
 
@@ -129,12 +145,19 @@ public:
         const float3 f = make_float3(std::sin(a_.cam.yaw), 0, std::cos(a_.cam.yaw));
         const float3 r = make_float3(std::cos(a_.cam.yaw), 0, -std::sin(a_.cam.yaw));
         float3 v = (f * fwd + r * right) * speed + make_float3(0, up * speed * 0.7f, 0);
-        float3 p = a_.cam.pos + v * dt;
-        // D0: the room's box (the collision with the parts comes with the room, D3)
-        p.x = std::clamp(p.x, -2.0f, 1.5f);
-        p.y = std::clamp(p.y, 0.35f, 2.3f);
-        p.z = std::clamp(p.z, -1.2f, 1.2f);
-        a_.cam.pos = p;
+        a_.moveCamera(v * dt);   // the room's solid cells (10 cm round the camera) stop it, it slides along
+        if (photo_.active) {   // the photo's next tile; the live picture waits (held)
+            photoStep(host);
+            return;
+        }
+        // 8K 16x is the photo's only (a live frame would take seconds and the card's memory): live at 8K 4x
+        if (a_.resIndex == 4 && a_.ssaaIndex == 4) {
+            if (!warned16_) host.toast(L("8K 16x yalnız fotoğrafta (F12): canlı görüntü 8K 4x", "8K 16x is for the photo only (F12): the live picture is 8K 4x"));
+            warned16_ = true;
+            a_.set.ssaa = 4;
+        } else {
+            warned16_ = false;
+        }
         // the window's size for the output
         int ow = 0, oh = 0;
         glfwGetFramebufferSize(glfwGetCurrentContext(), &ow, &oh);
@@ -148,6 +171,11 @@ public:
     }
     unsigned texture(int& w, int& h) override {
         if (!a_.glReady) return 0;
+        if (photo_.active && heldTex_) {
+            w = heldW_;
+            h = heldH_;
+            return heldTex_;
+        }
         w = a_.renderer.outW();
         h = a_.renderer.outH();
         return a_.renderer.output();
@@ -175,14 +203,71 @@ public:
         choice("light", L("Işık", "Light"), lmh, a_.set.light, "");
         choice("fx", L("Efekt", "Effects"), lmh, a_.set.fx, "");
         if (!error_.empty()) s.chips.push_back({error_, true});
+        if (photo_.active) {
+            s.busy = float(photo_.done) / float(photo_.nx * photo_.ny);
+            s.busyTitle = L("Fotoğraf hesaplanıyor", "Computing the photo");
+            s.busyLabel = std::string(dz::kResNames[a_.resIndex]) + " · " + std::to_string(photo_.set.ssaa) + "x · " + L("parça ", "tile ") +
+                          std::to_string(photo_.done + 1) + "/" + std::to_string(photo_.nx * photo_.ny);
+        }
     }
 
+    // F12: a photo at the panel's resolution and supersampling (8K 16x too): in tiles of 1920 x 1080 with a guard band
+    // round each (the bloom and the haze see past the tile's edge), one tile a frame, the live picture held meanwhile
     void screenshot(app::Host& host) override {
-        if (!a_.glReady) return;
+        if (!a_.glReady || photo_.active) return;
+        photo_ = Photo();
+        photo_.active = true;
+        photo_.path = host.capturePath() + ".png";
+        photo_.set = a_.set;
+        photo_.set.ssaa = dz::kSsaa[a_.ssaaIndex];   // the photo takes what was chosen (8K 16x included)
+        photo_.W = dz::kResW[a_.resIndex];
+        photo_.H = dz::kResH[a_.resIndex];
+        photo_.cam = a_.cam;
+        photo_.nx = (photo_.W + 1919) / 1920;
+        photo_.ny = (photo_.H + 1079) / 1080;
+        photo_.rgba.assign(size_t(photo_.W) * photo_.H * 4, 0);
+        // hold the live picture
+        if (!heldTex_) {
+            dzgl::glCreateTextures(GL_TEXTURE_2D, 1, &heldTex_);
+        } else {
+            glDeleteTextures(1, &heldTex_);
+            dzgl::glCreateTextures(GL_TEXTURE_2D, 1, &heldTex_);
+        }
+        heldW_ = a_.renderer.outW();
+        heldH_ = a_.renderer.outH();
+        dzgl::glTextureStorage2D(heldTex_, 1, GL_RGBA8, heldW_, heldH_);
+        dzgl::glCopyImageSubData(a_.renderer.output(), GL_TEXTURE_2D, 0, 0, 0, 0, heldTex_, GL_TEXTURE_2D, 0, 0, 0, 0, heldW_, heldH_, 1);
+        dzgl::restoreDefaults();
+        host.toast(L("Fotoğraf hesaplanıyor: ", "Computing the photo: ") + std::string(dz::kResNames[a_.resIndex]) + " " +
+                   std::to_string(photo_.set.ssaa) + "x");
+    }
+
+    // one tile of the photo
+    void photoStep(app::Host& host) {
+        const int guard = (photo_.nx * photo_.ny > 1) ? 192 : 0;
+        const int t = photo_.done;
+        const int tx = t % photo_.nx, ty = t / photo_.nx;
+        const int x0 = tx * photo_.W / photo_.nx, x1 = (tx + 1) * photo_.W / photo_.nx;
+        const int y0 = ty * photo_.H / photo_.ny, y1 = (ty + 1) * photo_.H / photo_.ny;
+        dz::Settings s = photo_.set;
+        s.fullW = photo_.W;
+        s.fullH = photo_.H;
+        s.tileX = x0 - guard;
+        s.tileY = y0 - guard;
+        s.width = (x1 - x0) + 2 * guard;
+        s.height = (y1 - y0) + 2 * guard;
+        a_.renderer.draw(photo_.cam, s, s.width, s.height, 0.0);
         std::vector<uint8_t> px;
         a_.renderer.readOutput(px);
-        writePNG(host.capturePath() + ".png", a_.renderer.outW(), a_.renderer.outH(), px.data());
-        host.toast(L("Ekran görüntüsü kaydedildi", "Screenshot saved"));
+        for (int y = y0; y < y1; ++y)
+            std::memcpy(&photo_.rgba[(size_t(y) * photo_.W + x0) * 4], &px[(size_t(y - y0 + guard) * s.width + guard) * 4], size_t(x1 - x0) * 4);
+        ++photo_.done;
+        if (photo_.done >= photo_.nx * photo_.ny) {
+            setPNGCompression(1);
+            writePNG(photo_.path, photo_.W, photo_.H, photo_.rgba.data());
+            host.toast(L("Fotoğraf kaydedildi: ", "Photo saved: ") + photo_.path);
+            photo_ = Photo();
+        }
     }
 
     void reload(app::Host& host) override {
@@ -197,6 +282,9 @@ public:
     }
 
     void unload() override {
+        if (heldTex_) glDeleteTextures(1, &heldTex_);
+        heldTex_ = 0;
+        photo_ = Photo();
         if (a_.glReady) {
             a_.renderer.release();
             dzgl::restoreDefaults();
@@ -206,8 +294,20 @@ public:
     ~DenizaltiLive() override { unload(); }
 
 private:
+    struct Photo {
+        bool active = false;
+        std::string path;
+        dz::Settings set;
+        dz::Camera cam;
+        int W = 0, H = 0, nx = 1, ny = 1, done = 0;
+        std::vector<uint8_t> rgba;
+    };
     app::SceneInfo info_ = describe();
     dz::DzApp a_;
+    Photo photo_;
+    unsigned heldTex_ = 0;
+    int heldW_ = 0, heldH_ = 0;
+    bool warned16_ = false;
     bool look_ = false;
     std::string error_;
 };

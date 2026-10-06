@@ -154,6 +154,12 @@ bool painted(uint m) {
 // baked occlusion, the edge weight the kit wrote; every threshold softened by the sample's footprint (no aliasing).
 void weather(inout M m, uint mat, vec3 p, inout vec3 N, float edge, float ao, float size) {
     float fw = max(size * 40.0, 0.02);   // the width of a threshold in noise units at this footprint
+    // the graphics level: Low keeps the grime only (clean, few details), Medium drops the finest noise, High all
+    if (levels.y < 0.5) {
+        if (painted(mat)) m.base *= mix(1.0, 0.7, clamp((1.0 - ao) * 1.4 - 0.2, 0.0, 1.0));
+        return;
+    }
+    if (levels.y < 1.5) size = max(size, 0.0015);
     vec3 d;
     if (painted(mat)) {
         // chips: where the edge is exposed and the noise says so
@@ -240,7 +246,7 @@ void main() {
     vec3 T = normalize(i.t.xyz - N * dot(N, i.t.xyz));
     vec3 B = cross(N, T) * (i.t.w < 0.0 ? -1.0 : 1.0);
     // the feature's normal detail, band-limited at this sample's footprint
-    if (i.feat != FEAT_NONE && misc.w > 0.0) {
+    if (i.feat != FEAT_NONE && misc.w > 0.0 && levels.y > 0.5) {
         float d = max(distance(i.p, camPos.xyz), 0.02);
         Surf s;
         s.p = i.p;
@@ -260,7 +266,7 @@ void main() {
     // the printed faces: a dial's or a plate's colour from the atlas (filtered: anisotropic, mipmapped)
     if (i.feat == FEAT_DIAL || i.feat == FEAT_LABEL) {
         int id = int(i.fp.x + 0.5);
-        vec4 dc = texture(decalTex, decalUV(id, i.uv, i.fp.y));
+        vec4 dc = texture(decalTex, decalUV(id, i.uv, i.fp.y), levels.y < 0.5 ? 1.5 : 0.0);
         float style = decInfo[id].w;
         if (i.feat == FEAT_DIAL) {
             m.base = dc.rgb;
@@ -288,6 +294,9 @@ void main() {
     vec3 c0 = texture(lmL0, i.uv2).rgb;
     vec3 sr = texture(lmR, i.uv2).xyz, sg = texture(lmG, i.uv2).xyz, sb = texture(lmB, i.uv2).xyz;
     vec4 vis = texture(lmVis, i.uv2);
+    if (levels.z < 0.5) {   // the light level Low: the light's amount only, no direction (flatter, still right)
+        sr = sg = sb = vec3(0);
+    }
     vec3 E = irradianceL1(c0, sr, sg, sb, N);
     vec3 f0 = mix(vec3(0.04), m.base, m.metal);
     float nv = max(dot(N, V), 1e-4);
@@ -308,7 +317,7 @@ void main() {
     float specOcc = clamp(pow(nv + ao, exp2(-16.0 * m.rough - 1.0)) - 1.0 + ao, 0.0, 1.0);   // Lagarde
     c += Lr * envF * specOcc;
     // the key lamps' highlights: sphere lights, their shadow baked (visibility per texel)
-    for (int k = 0; k < 4; ++k) {
+    for (int k = 0; k < 4 && levels.z > 0.5; ++k) {
         if (lampL[k].w <= 0.0) continue;
         vec3 Lv = lampPos[k].xyz - i.p;
         float d2 = dot(Lv, Lv), d = sqrt(d2);
@@ -325,16 +334,16 @@ void main() {
         c += D_GGX(nh, a2) * V_Smith(nv, nl, a2) * F * norm * illum * vis[k];
     }
     // a gauge's glass over its face: Fresnel reflection of the room and the lamps, the face seen through it
-    if (i.feat == FEAT_DIAL) {
+    if (i.feat == FEAT_DIAL && levels.y > 0.5) {
         vec3 Ng = normalize(i.n);
         float ng = max(dot(Ng, V), 1e-3);
         float Fg = 0.04 + 0.96 * pow(1.0 - ng, 5.0);
         vec3 Rg = reflect(-V, Ng);
         bool okG;
-        vec3 Lg = probeReflection(i.p, Ng, Rg, 0.03, okG);
+        vec3 Lg = probeReflection(i.p, Ng, Rg, 0.07, okG);   // old glass: a little haze (and the probe's sharpest mip's noise averaged)
         if (!okG) Lg = max(vec3(0.282095 * c0.r + 0.488603 * dot(sr, Rg), 0.282095 * c0.g + 0.488603 * dot(sg, Rg), 0.282095 * c0.b + 0.488603 * dot(sb, Rg)), vec3(0));
         vec3 glints = vec3(0);
-        for (int k = 0; k < 4; ++k) {
+        for (int k = 0; k < 4 && levels.y > 1.5; ++k) {
             if (lampL[k].w <= 0.0) continue;
             vec3 Lv = lampPos[k].xyz - i.p;
             float d2 = dot(Lv, Lv), d = sqrt(d2);
@@ -352,7 +361,7 @@ void main() {
     if (haze.w > 0.5) {
         float dv = max(dot(i.p - camPos.xyz, camFwd.xyz), haze.x);
         float tz = log(dv / haze.x) / log(haze.y / haze.x) * haze.z;
-        vec3 uvw = vec3(gl_FragCoord.xy / viewport.xy * viewport.z * 0.0 + gl_FragCoord.xy / (viewport.xy * viewport.z), (tz - 0.5) / haze.z);
+        vec3 uvw = vec3(gl_FragCoord.xy / renderSize.xy, (tz - 0.5) / haze.z);   // the froxels cover this draw (a tile: its own)
         vec4 fr = texture(froxels, clamp(uvw, vec3(0), vec3(1)));
         c = c * fr.a + fr.rgb;
     }

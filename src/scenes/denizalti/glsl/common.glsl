@@ -13,6 +13,8 @@ layout(std140, binding = 0) uniform Frame {
     vec4 probeLo;       // the probe grid's first probe; w: mips (0: none)
     vec4 probeStep;     // its spacing; w: probes blended (1 or 8)
     vec4 probeDims;
+    vec4 levels;        // tessellation, graphics, light, effects (0 low .. 2 high)
+    vec4 renderSize;    // this draw's pixels (a photo tile's own)
 };
 
 const uint MAT_PAINT_HULL = 0u, MAT_PAINT_PIPE = 1u, MAT_PAINT_DARK = 2u, MAT_BRASS = 3u, MAT_STEEL = 4u, MAT_CHROME = 5u,

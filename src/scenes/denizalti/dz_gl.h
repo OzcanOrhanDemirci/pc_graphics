@@ -105,7 +105,8 @@ namespace dzgl {
     X(PFNGLDELETESYNCPROC, glDeleteSync)                                 \
     X(PFNGLCLIPCONTROLPROC, glClipControl)                               \
     X(PFNGLBLENDFUNCSEPARATEPROC, glBlendFuncSeparate)                   \
-    X(PFNGLACTIVETEXTUREPROC, glActiveTexture)
+    X(PFNGLACTIVETEXTUREPROC, glActiveTexture)                           \
+    X(PFNGLCOPYIMAGESUBDATAPROC, glCopyImageSubData)
 
 #define DZ_GL_DECLARE(type, name) extern type name;
 DZ_GL_FUNCS(DZ_GL_DECLARE)

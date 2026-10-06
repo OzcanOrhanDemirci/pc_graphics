@@ -12,6 +12,7 @@ uniform vec3 volLo, volSize;  // the baked volume's box
 uniform vec3 camFw, camRt, camUp;
 uniform float tanY, aspect, zNear, zFar;
 uniform float density;        // the haze's scale (0: off)
+uniform vec4 tile;            // a photo tile: full NDC = tile NDC * xy + zw (1, 1, 0, 0 for a whole frame)
 
 float sliceDepth(float t) { return zNear * pow(zFar / zNear, t); }
 
@@ -27,6 +28,7 @@ void main() {
     ivec2 xy = ivec2(gl_GlobalInvocationID.xy);
     if (xy.x >= dims.x || xy.y >= dims.y) return;
     vec2 ndc = (vec2(xy) + 0.5) / vec2(dims.xy) * 2.0 - 1.0;
+    ndc = ndc * tile.xy + tile.zw;
     vec3 dir = normalize(camFw + camRt * ndc.x * tanY * aspect + camUp * ndc.y * tanY);
     float cosF = dot(dir, camFw);   // depth is along the view axis
     vec3 acc = vec3(0);

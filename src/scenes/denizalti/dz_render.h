@@ -29,6 +29,9 @@ struct Settings {
     bool displacement = true;
     bool tessOff = false;             // measurement: every factor 1 (the base mesh as it is)
     float hazeDensity = 1.0f;         // the air's haze (scale)
+    // a tile of a bigger picture (the photo): the full picture's size; this tile's pixel rectangle inside it, guard
+    // band included (width x height above are the tile's). full 0: an ordinary frame
+    int fullW = 0, fullH = 0, tileX = 0, tileY = 0;
 };
 
 struct GpuTimes {   // ms, from the GPU's timestamps (the frame before last: no stall)

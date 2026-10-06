@@ -45,6 +45,14 @@ struct DzApp {
     bool initGL(std::string& err);              // the GL side (the thread with the context)
     void applyChoices();                        // resIndex/ssaaIndex -> settings
     void home();
+    // the camera's collision: every 5 cm cell a surface passes through, grown by the camera's radius
+    std::vector<uint8_t> solid;
+    int solidDim[3] = {0, 0, 0};
+    float solidLo[3] = {-2.5f, -0.05f, -0.05f}, solidCell = 0.05f;
+    void buildCollision(float radius);
+    bool blocked(float3 p) const;
+    // moves the camera by d, sliding along what it meets (axis by axis)
+    void moveCamera(float3 d);
 };
 
 int runCli(int argc, char** argv);

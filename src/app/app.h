@@ -36,6 +36,7 @@ public:
 
     // Host
     void toast(const std::string& text) override;
+    void loadProgress(float fraction, const std::string& label) override;
     void captureMouse(bool on) override;
     const std::string& root() const override { return opt_.root; }
     std::string capturePath() override;

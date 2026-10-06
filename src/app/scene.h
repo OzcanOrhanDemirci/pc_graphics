@@ -119,6 +119,9 @@ public:
     virtual void pace(float fps) { (void)fps; }
     // a test run (--autotest): the user's own saved state is neither read nor written
     virtual bool testing() const { return false; }
+    // from inside one long loading step (on the loader thread): what it does now and how far it is, for the loading
+    // screen (scene 8's first-time oven)
+    virtual void loadProgress(float fraction, const std::string& label) { (void)fraction; (void)label; }
 };
 
 // what a scene may draw over its own picture with the interface kit, after the picture and under the application's
