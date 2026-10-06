@@ -3,6 +3,10 @@
 > Sürüm 1 · 2026-10-07 gece · Özcan'la konuşulup yazıldı. Bir sonraki oturumda Özcan "grafik devam" yazınca **otonom**
 > çalışılır, sahne bitene kadar (Özcan: *"Yeni oturumda grafik devam yazarım ve sahneyi bitirene kadar çalışırsın. Ben
 > de sabah uyanınca test ederim."*). Bu plan yön verir; daha iyi bir yol görülürse değişir, değişiklik DURUM.md'ye yazılır.
+> **Yetki (Özcan, aynı gece):** *"her sahnede her zaman söylediğim gibi tamamen özgürsün ve tam yetkilisin. Eğer planda
+> bir sorun görürsen planı değiştirebilirsin. İstersen bir şeyler ekle-çıkar yapabilirsin. Önemli olan en iyi sonuca
+> ulaşmak. O sonuca ulaşmak için gerekenleri yap."* · *"Paralel agent kullanma, kendin çalış. Gereksiz kontrollere de
+> gerek yok."* · Zaman: sabah 9'a kadar 8 saatten fazla. *"Haftalık kotayı dert etme [...] görevi bitirene kadar devam et."*
 
 ## 0 · Tek amaç
 
@@ -104,19 +108,43 @@ Bizim seçimlerimiz (dünya kurmak, hile değil): labirent, ışıkların yeri/r
 | **A5** | Kalite: ışın konisi süzme, derin tünel ek örnek, hayalet görüntü, bütçe | **Ö1, Ö3, Ö5** |
 | **A6** | Sanat: kemerler, desenler, zemin, fenerler, renk; Denizaltı ölçüsü | Özcan'a kareler |
 | **A7** | **Kırılma (kapılı: Ö1-Ö6 tutmadan başlanmaz):** hızla çarpınca **çatlama** (darbe noktasından örümcek ağı çatlak, her parça hafif farklı açıda: yansıma parça parça kayar; çatlak kenarında camın yeşil parıltısı); çatlamış aynaya ikinci darbede **dökülme** (7-8 keskin parça Yıkım'ın katı cisim çözücüsüyle düşer, yerde her biri kendi açısıyla yansıtır; arkada çerçevenin tahtası görünür); R ile onarım | Ö1-Ö6 kırık hâlde de |
-| **A8** | Tek bağımsız gözden geçirme (kod + görsel, kısa); bulunanlar düzeltilir | |
+| **A8** | Kendi gözden geçirmem (ajan yok): kodu ve dört-beş bakış karesini baştan bir kez, Ö1-Ö6'yı son hâlde yeniden koş | |
 | **A9** | DURUM.md başında sonuç + NE DOĞRULANMADI, galeri resmi, autotest, README sahne bölümü, hafıza hasadı, commit/push | |
 
 Denizaltı dersi (Özcan 10-06): emeğin %30-40'ı doğrulamaya ve son %20'ye gitti. Burada **doğrulama = Ö1-Ö6 ölçümleri**;
-ajan ordusu yok, A8'de tek göz. Kalite yansımaya harcanır; labirent süsünde azalan verime girilmez.
+**ajan yok** (Özcan: "paralel agent kullanma, kendin çalış"), gereksiz kontrol yok. Kalite yansımaya harcanır; labirent
+süsünde azalan verime girilmez.
 
 ## 7 · Çalışma kuralları (otonom oturum)
 
 - Önce oku: [[gpu-ve-grafik]] (§6, §7, §13-14, §19, §27, §30, §31), [[grafik-netlik-kurali]], bu plan.
 - Her aşamada ölç, sayıyı DURUM.md'ye yaz; "temiz görünüyor" yetmez. Görüntü değişikliği kareye bakılmadan bitmiş sayılmaz.
 - Önemli kareleri SendUserFile ile gönder (Özcan uyuyor; sabah bakar): kısa, Türkçe, ne gördüğünü söyle. Az ve anlamlı.
-- Kota: 5 saatlik %90+ → sıfırlanmaya dek bekle (arka planda `sleep`), turu bitir, sürdür. Haftalık %85'i geçerse dur,
-  DURUM.md'yi güncelle, Özcan'a yaz (haftanın geri kalanı onun).
+- **Ajan yok, kendin çalış.** Ölçümler Ö1-Ö6 dışında ek denetim katmanı kurma.
+- Kota: 5 saatlik %90+ → sıfırlanmaya dek bekle (arka planda bekleme, sıfırlanma + 1 dk), sonra kaldığın yerden sürdür.
+  **Haftalık kota bu görevde durma sebebi DEĞİL** (Özcan 10-07: "Haftalık kotayı dert etme [...] görevi bitirene kadar
+  devam et"). Bitene kadar çalış.
 - Sıra: hafıza → `claude_memory` commit/push → proje commit/push; her aşama sonunda commit.
 - Ters bölü/`$` içeren yama: Edit aracı ya da Write ile .py (heredoc tuzağı). Derlemenin çıkış kodunu oku.
 - Bitince: DURUM.md başı = Özcan'ın sabah bakacağı yer (nasıl açılır, tuşlar, ölçümler, NE DOĞRULANMADI).
+
+## 8 · Başlangıç varsayılanları (oturumu hızlandırmak için; ölçünce değişebilir)
+
+- **Yeniden kullanılacak kod:** kapalı biçimli pus ve parıltı (`fogDepth`, `lightGlow`, huzme `erf`), sabit örnek deseni,
+  `--headless`/`--cam` kare aracı, NaN bekçisi ve "bozuk piksel" sayacı: Isı taslağında, silindikten sonra da git'te
+  (`git show 9ef627e:src/scenes/isi/isi_kernels.cu`, `isi_app.cpp`). Canlı OptiX hattı ve NVRTC: `src/scenes/fener/`.
+  Her karede değişen geometri ve katı cisim: `src/scenes/yikim/` (A7).
+- **Tuşlar:** W A S D, Boşluk/C, Shift; fare bakış (Tab bırakır) · **Q / E** ışığımızın rengi (palet: sıcak beyaz 2700 K,
+  gün ışığı 6500 K, kırmızı, turuncu, yeşil, camgöbeği, mavi, mor) · **tekerlek** şiddet (log ölçek, ~8 kademe) · **F**
+  ışığımız aç/kapa · **Sol tık** ya da **G** buraya lamba bırak (o anki renk ve şiddet) · **X** lambaları topla · **R**
+  başa dön (A7'den sonra aynaları da onarır) · F12 ekran görüntüsü (uygulamanın).
+- **Panel:** ayar yok (karar 6). Yalnız durum: ışığımızın rengi/şiddeti, bırakılan lamba sayısı, kare süresi; kısa bir
+  "nasıl" satırı. Ölçüm paneli yok.
+- **Labirent ölçüleri (ilk hâl):** pano 1,2 m × 2,4 m, cam 6 mm, panolar arası 2 cm ahşap çıta; kemerler panoların
+  üstünde 2,4-3,0 m; tavan 3,2 m; zemin cilalı koyu taş. 60° ızgarada 5-6 hücre, bir giriş, ortada bir boşluk.
+- **Örnek bütçesi (ilk hâl):** pikselde 4 sabit örnek; koni genişliği > yerel ayrıntı ya da sekme > 8 ise 16'ya kadar.
+  Kare bütçesi 2K'da ≤ 30 ms; aşılırsa önce ek örnek eşiği, sonra hüzme ağacının derecesi ölçülerek kısılır.
+- **Ayna sabitleri:** gümüş, cam ve demir soğurması için değerler bir kaynaktan (cam üreticisi ya da optik tablosu)
+  alınıp DURUM.md'ye kaynağıyla yazılır; tahminle değer girilmez.
+- **Autotest adımları:** sahneyi aç, ileri uç, ışık rengini değiştir, iki lamba bırak, en derin tünel bakışı, pus
+  huzmesi bakışı; her biri ekran görüntüsü + kare süresi.
