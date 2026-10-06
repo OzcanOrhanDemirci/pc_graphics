@@ -1,7 +1,7 @@
 // Scene 8 "Denizaltı" inside the application: a fleet submarine's control room, its light baked beforehand, every
 // sample of the picture shaded on its own, the surfaces tessellated and displaced every frame.
-// W/A/S/D walk, Space/C up and down, Shift slow (looking closely), Tab mouse look (or drag with the left button), the
-// right button the binoculars.
+// As the lighthouse's walk: the mouse looks (captured, no button), W/A/S/D walk, Space/C up and down, Shift slow (looking
+// closely), the right button the binoculars; Tab frees the cursor for the panel (and back), with it free a left drag looks.
 #include "app/scene.h"
 #include "app/theme.h"
 #include "core/image_io.h"
@@ -53,8 +53,8 @@ public:
                     {L("Boşluk", "Space"), L("Yüksel", "Rise")},
                     {"C", L("Alçal", "Lower")},
                     {"Shift", L("Yavaş (yakından incele)", "Slow (look closely)")},
-                    {"Tab", L("Fareyle bak (aç/kapa)", "Mouse look (on/off)")},
-                    {L("Sol tık", "Left button"), L("Sürükle: bak", "Drag: look")},
+                    {L("Fare", "Mouse"), L("Bak", "Look")},
+                    {"Tab", L("İmleç (panel için) / geri bakış", "Cursor (for the panel) / back to looking")},
                     {L("Sağ tık", "Right button"), L("Dürbün (basılı tut)", "Binoculars (hold)")},
                     {"R", L("Başa dön", "Back to the start")}}},
                   {L("Görüntü", "Picture"), {{"↑|↓", L("Pozlama", "Exposure")}}}};
@@ -107,6 +107,7 @@ public:
                 return;
             }
             host.pace(0.0f);
+            host.captureMouse(look_);   // the mouse looks from the start (as the lighthouse's walk)
         }
         const float dt = float(std::min(0.1, in.dt));
         // the panel
@@ -134,7 +135,9 @@ public:
         const float sens = 0.0022f * std::tan(0.5f * a_.cam.fovY) / std::tan(0.5f * fov0);
         const bool dragging = in.leftDown && in.view.contains(in.mouseX, in.mouseY);
         if (look_ || dragging) {
-            a_.cam.yaw += in.mouseDX * sens;
+            // the mouse to the right turns the view right: yaw grows towards +x, and +x is the picture's left (right =
+            // forward x up)
+            a_.cam.yaw -= in.mouseDX * sens;
             a_.cam.pitch = std::clamp(a_.cam.pitch - in.mouseDY * sens, -1.45f, 1.45f);
         }
         auto key = [&](int kc) { return in.isDown(kc) ? 1.0f : 0.0f; };
@@ -142,7 +145,7 @@ public:
         const float up = key(GLFW_KEY_SPACE) - key(GLFW_KEY_C);
         const float speed = in.shift ? 0.3f : 1.3f;
         const float3 f = make_float3(std::sin(a_.cam.yaw), 0, std::cos(a_.cam.yaw));
-        const float3 r = make_float3(std::cos(a_.cam.yaw), 0, -std::sin(a_.cam.yaw));
+        const float3 r = make_float3(-std::cos(a_.cam.yaw), 0, std::sin(a_.cam.yaw));   // the picture's right (forward x up)
         float3 v = (f * fwd + r * right) * speed + make_float3(0, up * speed * 0.7f, 0);
         a_.moveCamera(v * dt);   // the room's solid cells (10 cm round the camera) stop it, it slides along
         if (photo_.active) {   // the photo's next tile; the live picture waits (held)
@@ -307,7 +310,7 @@ private:
     unsigned heldTex_ = 0;
     int heldW_ = 0, heldH_ = 0;
     bool warned16_ = false;
-    bool look_ = false;
+    bool look_ = true;   // the mouse looks (captured); Tab frees the cursor for the panel
     std::string error_;
 };
 

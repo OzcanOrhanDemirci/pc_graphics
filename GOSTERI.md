@@ -194,7 +194,7 @@ pişirilir (yükleme ekranında ilerlemesiyle, ~5 dakika); sonraki açılışlar
 | Tuş | Ne yapar |
 |---|---|
 | **W A S D** | yürü · **Boşluk / C** yüksel, alçal · **Shift** yavaş (yakından incele) |
-| **Tab** | fareyle bak (aç/kapa) · **sol tık sürükle:** bak |
+| **Fare** | bak (tıklamadan; Fener'deki yürüyüş gibi) · **Tab:** imleç serbest (paneli kullanmak için), tekrar Tab bakışa döner |
 | **Sağ tık** | dürbün (basılı tut): görüş dört kat dar |
 | **F12** | fotoğraf, paneldeki çözünürlük ve SSAA ile (8K 16x dahil; "hesaplanıyor" kartıyla) |
 | **R** | başa dön · **↑ / ↓** pozlama |
