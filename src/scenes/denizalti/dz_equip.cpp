@@ -830,7 +830,8 @@ void hullServices(Kit& k) {
     // the high band, both sides: behind the boards, below the overhead's cable runs
     for (const HullRun& r : kHighRuns) serviceRun(k, rng, r.aDeg * kPiF / 180.0f, r.in, r.r, r.mat, 0.06f, kLength - 0.06f, r.valve);
     // the low band at the deck's edge, both sides: the 3" trim lines and drains
-    const HullRun low[] = {{186.0f, 0.17f, 0.0445f, MAT_CREAM, true}, {190.0f, 0.2f, 0.016f, MAT_CREAM, false}, {-6.0f, 0.17f, 0.0445f, MAT_CREAM, true},
+    // (under the deck plates: no valves on them; a handwheel's rim rose through the deck, Ozcan saw it in the room)
+    const HullRun low[] = {{186.0f, 0.17f, 0.0445f, MAT_CREAM, false}, {190.0f, 0.2f, 0.016f, MAT_CREAM, false}, {-6.0f, 0.17f, 0.0445f, MAT_CREAM, false},
                            {-10.0f, 0.19f, 0.019f, MAT_CREAM, false}};
     for (const HullRun& r : low) serviceRun(k, rng, r.aDeg * kPiF / 180.0f, r.in, r.r, r.mat, 0.06f, kLength - 0.06f, r.valve);
     // conduits with junction boxes

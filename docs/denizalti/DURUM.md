@@ -15,6 +15,14 @@ sancak panoları (döner şalterler, devre etiketleri), kafesli kırmızı lamba
 **Durum: görev kapandı (10-06 akşamüstü).** Bağımsız gözden geçirmenin bulguları düzeltildi, son pişirme ve ölçümler
 aşağıda. Açık kalanlar "D7 (2)" sonunda.
 
+## Revize 2 · Güverteden çıkan çark (Özcan, 2026-10-06 akşam, sahneyi kendi ekranında gezerek)
+
+Özcan: *"Çok güzel olmuş. En iyi sahnelerimizden biri oldu. Tek bir küçücük hata bulabildim [...] Zeminde bir vana
+kalıntısı kalmış yarım."* (Ekran görüntüsü panodan.) Güverte altındaki alt boru şeridinin hat üstü vanası: mili içeri
+yatay, ~20 cm'lik kırmızı çarkının üst yayı levhanın 2 cm üstüne çıkıyordu. Alt şeritte vana yok artık (levhaların
+altına erişilmez); öbür alt parçaların tepesi hesapla levhanın altında (boru −7, flanş −0,6 cm). Işık yeniden pişirildi
+(512, 318 sn). Kontroller de bu akşam değişti: fare tıklamadan bakar, kamera bir beden (zıpla, eğil), Fener gibi.
+
 ## Revize 1 · Harita lambasının halesi (Özcan, 2026-10-06 akşam)
 
 Özcan (fotoğraflara bakıp): *"Lamba ışık verirken altına veriyor ya, kendi etrafında ışık haresi böyle sızma ışık var
