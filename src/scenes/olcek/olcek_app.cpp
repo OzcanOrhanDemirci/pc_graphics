@@ -541,13 +541,15 @@ olcek::hiz::Eye OlcekApp::eyeAt(const olcek::hiz::Ship& s, double yaw, double pi
     e.tanHalfX = tanHalfX;
     e.tanHalfY = tanHalfX * sc.height / sc.width;
     // a point's light spread over the first option's pixel (fov 40): the same star looks the same in both, and the
-    // binoculars do not brighten it; the eye adapts over the unzoomed field (75 degrees across)
+    // binoculars do not brighten it; the eye adapts over the unzoomed field (75 degrees across), or over the whole frame
+    // where it is wider (to 120: a bright point between the two, on the screen but out of the measure, flooded the frame
+    // with its glare at the dark field's exposure, Özcan 2026-10-06)
     const double pa0 = 2.0 * std::tan(20.0 * 3.14159265358979323846 / 180.0) / sc.width;
     e.omegaPx = pa0 * pa0;
     e.worldT = s.departT.hi < 0.0 ? 0.0 : hz::add(s.t, hz::neg(s.departT)).value();
     const double t0 = std::tan(37.5 * 3.14159265358979323846 / 180.0), t0y = t0 * sc.height / sc.width;
-    e.adaptX = t0;
-    e.adaptY = t0y;
+    e.adaptX = std::max(t0, e.tanHalfX);
+    e.adaptY = std::max(t0y, e.tanHalfY);
     return e;
 }
 
@@ -585,9 +587,19 @@ void OlcekApp::renderEye(const olcek::hiz::Eye& eIn, olcek::hiz::EyeSum& sum) {
     st.flux = &sc.starLight();
     st.temp = &sc.starTemp();
     const double panoW = skyPanoWeight(e);
-    // the world's clocks at the rest frame's time: the planets, the Moon, Proxima's b where the eye sees them
+    // the world's clocks where the eye sees it: each system at the time its light now reaching the rocket left it (the
+    // retarded time: the rest frame's now less the way over c; the planets, the Moon, Proxima's b). Leaving near c the
+    // rocket outruns the Earth's later light: the Earth behind stands still as it was soon after the departure (its light's
+    // clock D times the passenger's), where the rest frame's now threw it round its orbit every frame (11 years a frame at
+    // 21 nines; its label with it). Two rounds: the Earth moves 30 km/s, its light's time by its way
     sc.hizClocks(e.worldT);
     sc.place();
+    for (int round = 0; round < 2; ++round) {
+        const double tSun = e.worldT - length(sc.nodeFromSun(olcek::kEarth) - e.pos) / hz::kC;
+        const double tProxima = e.worldT - length(sc.nodeFromSun(olcek::kProximaB) - e.pos) / hz::kC;
+        sc.hizClocks(tSun, tProxima);
+        sc.place();
+    }
     // the lights besides the catalogue's stars: [0, 3) the galaxies as wholes, [3, 3 + 16) the bodies, then the survey's
     constexpr size_t kBodySlots = 16;
     const size_t fixed = 3 + kBodySlots;
@@ -634,6 +646,9 @@ void OlcekApp::renderEye(const olcek::hiz::Eye& eIn, olcek::hiz::EyeSum& sum) {
             l.LV = LV[i] * present;
             l.T = TG[i];
             l.weight = float(1.0 - w);
+            // its light's disc for the window's share: the inner 0.35 of the visible radius, where an exponential disc
+            // and its bulge keep most of their light (all of it as an even disc undercounted a centred Andromeda)
+            l.angR = std::atan(0.35 * R[i] * kpcM / d);
             const double rs = std::min(rpx, 6.0);
             l.sigma = float(std::sqrt(0.5625 + 0.25 * rs * rs));
             gal[i].T = float(TG[i]);
@@ -662,6 +677,7 @@ void OlcekApp::renderEye(const olcek::hiz::Eye& eIn, olcek::hiz::EyeSum& sum) {
             l.T = b.T;
             l.weight = b.weight;
             l.sigma = b.sigma;
+            l.angR = b.angR;
         }
         for (; slot < fixed; ++slot) galLights[slot].LV = 0.0;
     }
@@ -689,12 +705,22 @@ void OlcekApp::renderEye(const olcek::hiz::Eye& eIn, olcek::hiz::EyeSum& sum) {
             // the share it holds of the eye's adaptation: a degree or more wide, the field's middle on it
             const double c = ss(0.0035, 0.0175, seen) * (1.0 - ss(a + 0.05, 1.6 * a + 0.3, off));
             if (c <= 0.0) continue;
-            const double L = b.peak;   // its face's brightest radiance
-            if (!(L > 0.0) || L > 1e5) continue;   // beyond what an eye adapts to (the Sun): it dazzles
+            // a face no eye adapts to even at rest (the Sun's 2e7 against a lamp's 1e5): it dazzles at every speed
+            if (!(b.peak > 0.0) || b.peak > 1e5) continue;
+            // its face's brightest radiance as the rocket sees it: D^4 its light in every band (the temperature D times),
+            // the visible share at D T (at rest the face's own; behind the rocket near c a red ghost whose face, spread
+            // over the sky by the rear point's magnification, set the exposure as though at rest: EV -10 at 21 nines).
+            // The eye adapts up to its most, 1e5, and no further: a face blueshifted past it dazzles while the measure
+            // stays put (cut off there instead, Proxima ahead on the arrival left the measure at 0.45 c and came back
+            // into it at 0.11 c, nearly 8 stops in one frame: the independent review)
+            const double D4 = D * D * D * D;
+            const double Lv = b.peak * D4 * std::pow(10.0, bb.logShare(b.T * D) - bb.logShare(b.T));
+            const double Lb = b.peak * D4 * std::pow(10.0, -bb.logShare(b.T));                     // ... in every band
+            const double most = Lv > 1e5 ? 1e5 / Lv : 1.0;   // (both eyes held by the same share: at rest as before)
             // the measure that brings it to ~0.5 of the display in the daylight eye (there the display of L is
             // ~0.97 L / measure: full adaptation, hiz.ev 17.5 and hiz.gun 16), where a colour keeps its saturation
-            const double Lw = 2.0 * L;
-            const double Le = Lw * std::pow(10.0, -bb.logShare(b.T));                         // ... in every band
+            const double Lw = 2.0 * Lv * most;
+            const double Le = 2.0 * Lb * most;
             sum.adaptVisible = std::max(sum.adaptVisible, (1.0 - c) * (sum.visibleView / share) + c * Lw);
             sum.adaptEnergy = std::max(sum.adaptEnergy, (1.0 - c) * (sum.energyView / share) + c * Le);
         }
@@ -751,14 +777,23 @@ void OlcekApp::renderEye(const olcek::hiz::Eye& eIn, olcek::hiz::EyeSum& sum) {
         // the glowing balls. A sunshade: only from what is in the field (the Sun 61 degrees off the bow at the start
         // would otherwise veil the whole sky white; a hood over the eye's window, as a camera's over its lens)
         {
-            auto inField = [&](float3 c) {   // on the screen (its edge's few pixels too)
+            // its share on the screen: fading out over the frame's last 6% (the hood's edge; a hard edge took a white veil
+            // off in one frame). Gone at the edge itself: a star's glare comes from its drawn point, and the points end
+            // a few pixels past the edge
+            auto inField = [&](float3 c) {
                 const double z = c.z;
-                return z > 0.0 && std::fabs(c.x / z) < e.tanHalfX * 1.01 && std::fabs(c.y / z) < e.tanHalfY * 1.01;
+                if (!(z > 0.0)) return 0.0;
+                auto edge = [](double u) {
+                    const double t = std::clamp((1.0 - u) / 0.06, 0.0, 1.0);
+                    return t * t * (3.0 - 2.0 * t);
+                };
+                return edge(std::fabs(c.x / z) / e.tanHalfX) * edge(std::fabs(c.y / z) / e.tanHalfY);
             };
             auto add = [&](float3 dirCam, float3 E) {
-                if (g.nGlare >= 8 || !(E.x + E.y + E.z > 0.0f) || !inField(dirCam)) return;
+                const double w = inField(dirCam);
+                if (g.nGlare >= 8 || !(E.x + E.y + E.z > 0.0f) || !(w > 0.0)) return;
                 g.glareDir[g.nGlare] = dirCam;
-                g.glareE[g.nGlare] = E;
+                g.glareE[g.nGlare] = E * float(w);
                 ++g.nGlare;
             };
             const float parlama = cfg.f("hiz.parlama", 1.0f);

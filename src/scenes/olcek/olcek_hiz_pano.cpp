@@ -472,7 +472,8 @@ Cost costOf(double phi) {
 
 // ---------------------------------------------------------------------------------------------------------------------
 
-void drawPanels(const Pano& p, PanoState& st, const ui::Rect& view, float Sapp, unsigned show, const std::vector<ui::Rect>& avoid) {
+void drawPanels(const Pano& p, PanoState& st, const ui::Rect& view, float Sapp, unsigned show, const std::vector<ui::Rect>& avoid,
+                std::vector<ui::Rect>* placed) {
     if (!p.ship || !p.route) return;
     // laid out for 1440 lines and scaled with the picture (the application's own panels keep a readable minimum; these
     // keep their places, smaller in a small window)
@@ -482,6 +483,7 @@ void drawPanels(const Pano& p, PanoState& st, const ui::Rect& view, float Sapp, 
     // one panel at (x, y), its sizes times Sk (h: its height for 1440)
     auto one = [&](unsigned bit, float x, float y, float Sk, float h, float w) {
         const float wk = Sk * w, hk = Sk * h;
+        if (placed) placed->push_back({x, y, wk, hk});
         switch (bit) {
         case 1:
             drawSpeed(p, st, panel(x, y, wk, hk, Sk, L("HIZ", "SPEED"), theme::num(std::max(p.k.nines, 0.0), 2) + L(" dokuz", " nines")), Sk);
@@ -551,12 +553,13 @@ void drawPanels(const Pano& p, PanoState& st, const ui::Rect& view, float Sapp, 
 
 void drawEyeLabels(const std::vector<EyeLabel>& labels, const ui::Rect& view, float Sapp, const std::vector<ui::Rect>& avoid) {
     const float S = std::min(Sapp, view.h / 1440.0f);
-    const ui::TextStyle nameT = theme::small(theme::Scale{S}, white(0.88f));
-    const ui::TextStyle distT = theme::mono(theme::Scale{S}, 12.5f, white(0.62f));
     std::vector<ui::Rect> taken = avoid;
     for (const EyeLabel& l : labels) {
         const float m = S * 24.0f;
+        if (!(l.alpha > 0.01f)) continue;
         if (l.x < view.x + m || l.x > view.x + view.w - m || l.y < view.y + m || l.y > view.y + view.h - m) continue;
+        const ui::TextStyle nameT = theme::small(theme::Scale{S}, white(0.88f * l.alpha));
+        const ui::TextStyle distT = theme::mono(theme::Scale{S}, 12.5f, white(0.62f * l.alpha));
         const std::string d = distText(l.dist);
         // up and to the right of its disc, a short line to it
         const float off = std::max(l.r, S * 3.0f) * 0.7071f + S * 8.0f;
@@ -567,15 +570,16 @@ void drawEyeLabels(const std::vector<EyeLabel>& labels, const ui::Rect& view, fl
         for (const ui::Rect& r : taken)
             if (r.w > 0.0f && box.x < r.x + r.w && box.x + box.w > r.x && box.y < r.y + r.h && box.y + box.h > r.y) clash = true;
         if (clash) continue;
-        taken.push_back(box);
+        if (l.alpha > 0.5f) taken.push_back(box);   // (one going: the place given up to the next)
         ui::line(l.x + (std::max(l.r, S * 3.0f) + S * 3.0f) * 0.7071f, l.y - (std::max(l.r, S * 3.0f) + S * 3.0f) * 0.7071f, tx - S * 2.0f,
-                 ty + S * 2.0f, std::max(1.0f, S), white(0.45f));
+                 ty + S * 2.0f, std::max(1.0f, S), white(0.45f * l.alpha));
         ui::text(tx, ty - S * 36.0f, l.name, nameT);
         ui::text(tx, ty - S * 17.0f, d, distT);
     }
 }
 
-void drawEnergyKey(const ui::Rect& view, float Sapp, double phi, const Blackbody& bb, const std::vector<ui::Rect>& avoid) {
+void drawEnergyKey(const ui::Rect& view, float Sapp, double phi, const Blackbody& bb, const std::vector<ui::Rect>& avoid,
+                   std::vector<ui::Rect>* placed) {
     const float S = std::min(Sapp, view.h / 1440.0f);
     // the bands by their peak's temperature (Wien: lambda = 2.898e-3 / T): microwaves (from 1 m), infrared (from 1 mm),
     // visible (750 to 380 nm), ultraviolet (to 10 nm), X-rays (to 10 pm), gamma rays; each a sixth of the bar
@@ -599,6 +603,7 @@ void drawEnergyKey(const ui::Rect& view, float Sapp, double phi, const Blackbody
     for (const ui::Rect& r : avoid)   // below an application panel it would cover
         if (r.w > 0.0f && r.h > 0.0f && r.x < x + w && r.x + r.w > x && r.y < y + h && r.y + r.h > y) y = r.y + r.h + S * 16.0f;
     const ui::Rect box{x, y, w, h};
+    if (placed) placed->push_back(box);
     ui::shadow(box, S * 18.0f, S * 24.0f, ui::hex(0x000000, 0.30f));
     ui::panel(box, theme::glass(), theme::glassBorder(), S * 16.0f, std::max(1.0f, S));
     const ui::TextStyle cap = theme::caption(theme::Scale{S}, theme::faint());

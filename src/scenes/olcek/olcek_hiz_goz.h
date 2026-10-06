@@ -9,6 +9,7 @@
 #include "scenes/olcek/olcek_hiz.h"
 #include "scenes/olcek/olcek_types.h"
 
+#include <algorithm>
 #include <cmath>
 #include <string>
 #include <vector>
@@ -46,6 +47,8 @@ struct Light {
     double T = 5772.0;       // its colour temperature (K)
     float weight = 1.0f;     // the share drawn as a point (all of it counts in the sums: the models draw the rest)
     float sigma = 0.75f;     // the point's radius (pixels)
+    double angR = 0.0;       // its disc's angular radius (rest frame, radians): the share of the disc in the eye's window
+                             // counts (a wide body half out of it: its centre's point alone left the other half unmeasured)
 };
 
 // one frame of the rocket's eye
@@ -61,7 +64,8 @@ struct Eye {
                                 // view narrowed by the wheel does not brighten the points)
     // the eye adapts to the light in the unzoomed window (75 x 42 degrees: its half tangents), so the binoculars change
     // neither the points nor the exposure; a source just outside the window neither dims the eye nor is seen (H6: the
-    // Sun, aberrated forward at half light's speed, sat outside the screen and darkened it)
+    // Sun, aberrated forward at half light's speed, sat outside the screen and darkened it). A frame wider than it (to
+    // 120 degrees) is the window: all that is on the screen is measured
     double adaptX = 0.7673, adaptY = 0.4316;
     bool energy = false;        // the energy eye: every band's light (bolometric), the band in false colour
     double worldT = 0.0;        // the rest frame's time since the journey's first thrust (s): the world's clocks
@@ -101,5 +105,14 @@ void skySums(const SkyCoarse& sky, const Blackbody& bb, const Eye& e, double pan
 // the stars as splats (camera space with z = 1: x and y are the tangents, so a 1e-11 rad field keeps its digits)
 void buildEye(const StarSet& st, const Blackbody& bb, const Eye& e, std::vector<GSplat>& out, EyeSum& sum,
               const std::vector<Light>* extra = nullptr);
+
+// the eye's exposure (EV) following its measure's (target) as the passenger's clock runs. A bright light come into the
+// field, over 3 stops too bright: at once to 3 stops over (the pupil, the cones' own gain: a dazzle, not a white frame;
+// the scene draws that frame again at it); then light adaptation in 0.3 s, dark adaptation in 1.2 s
+inline double eyeDazzle(double ev, double target) { return std::min(ev, target + 3.0); }
+inline double eyeAdapt(double ev, double target, double dtau) {
+    ev = eyeDazzle(ev, target);
+    return ev + (target - ev) * (1.0 - std::exp(-dtau / (target < ev ? 0.3 : 1.2)));
+}
 
 }   // namespace olcek::hiz

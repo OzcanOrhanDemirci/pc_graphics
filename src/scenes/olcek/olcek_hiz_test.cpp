@@ -758,6 +758,92 @@ int runHizTests(OlcekApp& app) {
         const double ev0 = app.eyeEv(sum0.adaptVisible);
         std::printf("    kalkista arkaya: Dunya top %d, goz EV %.2f (gece goku %.2f)\n", int(earthBall), ev0, app.eyeEv(app.nightSky));
         check(earthBall && ev0 < 2.0, "duraklar: kalkista arkada Dunya (fotogercekci top), goz gunduze uyar");
+        // ... turned till only a sliver of its limb is on the screen (its centre 0.80 rad off, out of the window): the
+        // sliver is measured (the disc's share, not its centre's point: the white sliver at the night sky's exposure)
+        hz::Eye e1 = app.eyeAt(s0, kPi - 0.80, 0.0, std::tan(37.5 * kPi / 180.0));
+        e1.k = e0.k;
+        hz::EyeSum sum1;
+        app.renderEye(e1, sum1);
+        const double ev1 = app.eyeEv(sum1.adaptVisible), night = app.eyeEv(app.nightSky);
+        std::printf("    kalkista Dunya'nin yalniz kenari ekranda: goz EV %.2f (gece goku %.2f)\n", ev1, night);
+        check(ev1 < night - 3.0, "goz: ekranda kalan parlak bir kenar olculur (Dunya'nin diskinin payi, merkezi degil)");
+        // the arrival at Proxima looking ahead, down the stopping curve from 0.6 c: the eye's measure moves smoothly. The
+        // face blueshifted past the eye's most once left the measure and came back at 0.11 c, nearly 8 stops in a frame
+        double worst = 0.0, worstBeta = 0.0, prevEv = 0.0;
+        int steps = 0;
+        for (double beta = 0.6; beta > 0.005; beta *= 0.97, ++steps) {
+            hz::Ship sa = hz::depart(R);
+            sa.phi = std::atanh(beta);
+            sa.x = hz::dd(-hz::stopDistance(sa.phi));
+            sa.sense = 1;
+            sa.heading = R.dir[0];
+            hz::Eye ea = app.eyeAt(sa, 0.0, 0.0, std::tan(37.5 * kPi / 180.0));
+            ea.worldT = 2.0 * hz::driveEarthTime(hz::peakFrom(0.0, R.length[0]));
+            ea.k = 3e-3;
+            hz::EyeSum suma;
+            app.renderEye(ea, suma);
+            const double eva = app.eyeEv(suma.adaptVisible);
+            if (steps > 0 && std::fabs(eva - prevEv) > worst) {
+                worst = std::fabs(eva - prevEv);
+                worstBeta = beta;
+            }
+            prevEv = eva;
+        }
+        std::printf("    Proxima'ya varis, one bakarak (%d adim, beta 0,6 -> 0,005): olcunun en buyuk adimi %.2f kademe (beta %.3f)\n", steps,
+                    worst, worstBeta);
+        check(worst < 1.0, "goz: Proxima'ya variste one bakan gozun olcusu yumusak (yuzun isigi olcuden kopmaz)");
+    }
+
+    // ---- 11. Özcan's two of 2026-10-06, at his journey's place: 21 nines, 156,000 ly past Proxima
+    {
+        const hz::Route& R = app.route;
+        hz::Ship s = hz::depart(R);
+        s.phi = hz::phiCap();
+        s.x = hz::dd(1.4761554137282181e21);
+        s.sense = 1;
+        s.heading = R.dir[0];
+        s.departT = hz::dd(0.0);
+        s.t = hz::dd(4.924058433357e12);
+        // the widest view (120 degrees): the bright point ahead 0.8 rad off the middle, on the screen but outside the
+        // unzoomed window, was out of the measure and its glare at the dark field's exposure flooded the frame white
+        auto evAt = [&](double yaw) {
+            hz::Eye e = app.eyeAt(s, yaw, 0.0, std::tan(60.0 * kPi / 180.0));
+            e.energy = true;
+            e.k = 3e-3;
+            hz::EyeSum sum;
+            app.renderEye(e, sum);
+            return app.eyeEvEnergy(sum.adaptEnergy);
+        };
+        const double ahead = evAt(0.0), aside = evAt(0.8);
+        std::printf("    120 derece gorus, 21 dokuz: one bakarken EV %.2f, 0,8 rad yana bakarken %.2f\n", ahead, aside);
+        check(std::fabs(aside - ahead) < 1.0, "goz: genis gorus ekrandaki parlak noktayi olcer (yana bakinca ekran beyaza bogulmaz)");
+        // the labels' bodies where the eye sees them, at their light's time: a frame later (11.7 years on the Earth, the
+        // rocket 11.7 ly on) the Earth and b behind stand still; at the rest frame's now they were thrown round their orbits
+        auto bodiesAt = [&](const hz::Ship& sh, V3& earth, V3& b) {
+            hz::Eye e = app.eyeAt(sh, 0.0, 0.0, std::tan(37.5 * kPi / 180.0));
+            e.k = 3e-3;
+            hz::EyeSum sum;
+            app.renderEye(e, sum);
+            earth = app.sc.nodeFromSun(olcek::kEarth);
+            b = app.sc.nodeFromSun(olcek::kProximaB);
+            return e.worldT;
+        };
+        hz::Ship s2 = s;
+        const hz::Kin k = hz::kin(s.phi);
+        s2.x = hz::add(s.x, hz::dd(hz::kC * k.gb / 60.0));
+        s2.t = hz::add(s.t, hz::dd(k.gamma / 60.0));
+        V3 e1, b1, e2, b2;
+        const double t1 = bodiesAt(s, e1, b1), t2 = bodiesAt(s2, e2, b2);
+        app.sc.hizClocks(t1);
+        app.sc.place();
+        const V3 eNow1 = app.sc.nodeFromSun(olcek::kEarth);
+        app.sc.hizClocks(t2);
+        app.sc.place();
+        const V3 eNow2 = app.sc.nodeFromSun(olcek::kEarth);
+        std::printf("    bir kare sonra (Dunya'da %.1f yil): goze gorunen Dunya %.3g m, b %.3g m kaydi; simdiki an Dunya'yi %.3g m atardi\n",
+                    (t2 - t1) / hz::kYear, length(e2 - e1), length(b2 - b1), length(eNow2 - eNow1));
+        check(length(e2 - e1) < 1e6 && length(b2 - b1) < 1e6 && length(eNow2 - eNow1) > 1e10,
+              "goz: arkadaki Dunya ve b isiklarinin zamaninda durur (etiketleri savrulmaz)");
     }
 
     std::printf("hiz: %s (%d kalan)\n", fails == 0 ? "GECTI" : "KALDI", fails);
@@ -767,7 +853,7 @@ int runHizTests(OlcekApp& app) {
 // the headless frames of the second option
 // the whole journey through the eye (H6): the automatic arrival to Proxima and on to Andromeda, the physics frame by
 // frame (60 a second); the eye drawn every 10 s of the passenger's clock, twice a frame apart (a flicker would show
-// between them), with its exposure adapted as the scene adapts it (1.2 s): no pixel not finite, the light's change
+// between them), with its exposure adapted as the scene adapts it (hz::eyeAdapt): no pixel not finite, the light's change
 // between two frames, the frame's time. Every 60 s the side view too
 int runHizJourney(OlcekApp& app) {
     const hz::Route& R = app.route;
@@ -786,9 +872,9 @@ int runHizJourney(OlcekApp& app) {
         e.energy = app.cfg.f("hiz.enerji", 1.0f) > 0.5f;
         e.k = std::exp2(ev) * 3e-3;
         app.renderEye(e, sum);
-        if (adapt) {   // the scene's: towards the measure, a second or so
+        if (adapt) {   // the scene's: towards the measure (hz::eyeAdapt)
             const double target = e.energy ? app.eyeEvEnergy(sum.adaptEnergy) : app.eyeEv(sum.adaptVisible);
-            if (std::isfinite(target)) ev += (target - ev) * (1.0 - std::exp(-dt / 1.2));
+            if (std::isfinite(target)) ev = hz::eyeAdapt(ev, target, dt);
         }
         app.luminanceQuarter(lum);
         double m = 0.0;
@@ -816,7 +902,7 @@ int runHizJourney(OlcekApp& app) {
                 const double target = (sum.adaptVisible > 0.0 || sum.adaptEnergy > 0.0)
                                           ? ((app.cfg.f("hiz.enerji", 1.0f) > 0.5f) ? app.eyeEvEnergy(sum.adaptEnergy) : app.eyeEv(sum.adaptVisible))
                                           : ev;
-                if (std::isfinite(target)) ev += (target - ev) * (1.0 - std::exp(-dt / 1.2));
+                if (std::isfinite(target)) ev = hz::eyeAdapt(ev, target, dt);
                 if (i % 60 == 0) eyeFrame(false, m0);
             }
             eyeFrame(true, m0);

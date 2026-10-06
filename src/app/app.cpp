@@ -597,7 +597,7 @@ int App::run(const Options& opt) {
                 wait(10.0); log("heykel tur 10000"); shot("heykel_tur_10000");
                 key(GLFW_KEY_T); wait(0.5); key(GLFW_KEY_R); wait(1.0);
             }
-            if (infos_[s].id == "olcek" && part != "hiz" && part != "hizvaris" && part != "hizyuksek") {
+            if (infos_[s].id == "olcek" && part != "hiz" && part != "hizvaris" && part != "hizyuksek" && part != "hizkayit") {
                 // the beach, the wheel out (a notch is x1.5: ~5.7 a decade) to the Earth, the Solar System, the Galaxy and
                 // the edge, R home, in to the grain, the atom, the nucleus and the desert, then the tour from the panel
                 wait(2.0); log("olcek sahil"); shot("olcek_sahil");
@@ -624,7 +624,20 @@ int App::run(const Options& opt) {
                 // "olcek/hizvaris" (with --set hiz.test.varis=1): the scene starts a minute before Proxima braking on the
                 // stopping curve: the arrival, the turn, both views there.
                 control("secenek", 1); wait(0.15); click(); wait(1.35); log("olcek hiz (cift tik: yolculuk baslamaz, Hiz 0)"); shot("olcek_hiz_kalkis");
-                if (part != "hizvaris" && part != "hizyuksek") {
+                if (part == "hizkayit") {
+                    // (with --set hiz.test.kayit=path) a journey's file in the eye: the labels four times a tenth of a second
+                    // apart (they must stand), then the head turned about (and ahead again with R)
+                    wait(3.0); log("olcek hiz kayit");
+                    for (int k = 1; k <= 4; ++k) { shot("olcek_hiz_kayit_" + std::to_string(k)); wait(0.1); }
+                    mouse(0.50f, 0.50f); left(true); wait(0.1);
+                    for (int k = 1; k <= 12; ++k) { mouse(0.50f - 0.025f * k, 0.50f); wait(0.03); }
+                    left(false); wait(2.5);
+                    for (int k = 1; k <= 3; ++k) { shot("olcek_hiz_kayit_donuk_" + std::to_string(k)); wait(0.1); }
+                    // ahead again: the bright point comes into the field on the way (no white frame: the eye's dazzle)
+                    key(GLFW_KEY_R);
+                    for (int k = 1; k <= 24; ++k) { wait(0.05); shot(std::string("olcek_hiz_kayit_donus_") + (k < 10 ? "0" : "") + std::to_string(k)); }
+                    wait(2.0); shot("olcek_hiz_kayit_ileri");
+                } else if (part != "hizvaris" && part != "hizyuksek") {
                     key(GLFW_KEY_E); wait(1.5); log("olcek hiz gercek goz (E)"); shot("olcek_hiz_gercek_goz"); key(GLFW_KEY_E); wait(1.5);
                     key(GLFW_KEY_TAB); wait(1.5); shot("olcek_hiz_yandan");
                     hold(GLFW_KEY_W, true); wait(5.0); log("olcek hiz W 5 sn (yandan, motor isigi)"); shot("olcek_hiz_yandan_itis");

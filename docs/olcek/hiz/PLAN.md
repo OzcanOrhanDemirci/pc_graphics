@@ -159,7 +159,10 @@ Tab ile yandan bakışa geçilir.
   parlama ve kırınım halkaları), dürbün, kadraj, zamanlama. Aracın bir parçası (pencere kenarı, burun) **görünmez**
   (H3 kararı: öndeki tek ışığın çevresini kapatır, roket yandan görünüşte var).
 - **Göz uyumu (H3):** karanlıkta yarım uyum (parlak gök parlak görünür), gündüz düzeyinde tam uyum (Weber); yaygın
-  ışığın alan toplaması kazancı gündüzde söner. Önde doğan "güneş" φ 7'den 16'ya aynı parlaklıkta kalır.
+  ışığın alan toplaması kazancı gündüzde söner. Önde doğan "güneş" φ 7'den 16'ya aynı parlaklıkta kalır. **10-06
+  revizesi:** ölçü penceresi ekrandan dar olmaz (120°'de ekranın tamamı), ışığa 0,3 sn'de (kamaşma en çok 3 kademe),
+  karanlığa 1,2 sn'de uyar (`hz::eyeAdapt`); bakılan yüze en çok 10⁵'e kadar, Doppler'li parlaklığıyla. Göz dünyayı
+  ışığın yola çıktığı anda görür (gecikmeli zaman).
 - **Pozlama:** tasarlanmış, görüntüden okunmaz (kıpraşma yok). Gökyüzünün toplam ışığı φ'nin ve yerin bilinen bir
   işlevi (fon ışımasının γ²'si, yıldızların toplamı): göz uyumu bu hesaptan, yumuşak. AgX ton eşleme.
 - **Kalite:** gren yok, kıpraşma yok; nokta kaynaklar ışığını koruyarak (Ölçek'in noktaları gibi), deterministik.

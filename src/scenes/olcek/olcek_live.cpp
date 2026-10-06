@@ -383,9 +383,15 @@ public:
             L.dt = lastDtau_;
             hz::drawSide(L, side_, std::min(o.scale, o.view.h / 1440.0f));
         }
-        if (view_ == 0 && energy_ && o.hud) hz::drawEnergyKey(o.view, o.scale, a_.ship.phi, a_.bb, o.panels);
-        if (view_ == 0 && o.hud) eyeLabels(o);
-        if (!o.hud || !graphs_) return;
+        // the eye's labels last, clear of every panel: the application's, the energy key and the graphs (one under a graph's
+        // glass was half read)
+        std::vector<ui::Rect> taken = o.panels;
+        if (view_ == 0 && energy_ && o.hud) hz::drawEnergyKey(o.view, o.scale, a_.ship.phi, a_.bb, o.panels, &taken);
+        if (o.hud && graphs_) graphPanels(o, taken);
+        if (view_ == 0 && o.hud) eyeLabels(o, taken);
+    }
+
+    void graphPanels(const app::Overlay& o, std::vector<ui::Rect>& taken) {
         const hz::Ship& s = a_.ship;
         hz::Pano p;
         p.ship = &s;
@@ -406,7 +412,7 @@ public:
         p.earthSeenRate = D;
         p.dt = lastDtau_;
         p.now = o.now;
-        hz::drawPanels(p, pano_, o.view, o.scale, hz::kPanoAll, o.panels);
+        hz::drawPanels(p, pano_, o.view, o.scale, hz::kPanoAll, o.panels, &taken);
     }
 
 private:
@@ -445,6 +451,15 @@ private:
             s.legT = hz::dd(0.0);
             s.departT = hz::dd(0.0);
             fixtureDone_ = true;
+        }
+        // ... or (--set hiz.test.kayit=path) a journey's file as it was, in the eye (Özcan's of 2026-10-06: 21 nines,
+        // 156,000 ly past Proxima, the widest view; its labels ran across the screen)
+        if (testing_ && !fixtureDone_) {
+            if (const auto it = a_.cfg.values.find("hiz.test.kayit"); it != a_.cfg.values.end()) {
+                if (!readJourney(it->second, false)) std::printf("autotest: hiz.test.kayit okunamadi: %s\n", it->second.c_str());
+                view_ = 0;
+                fixtureDone_ = true;
+            }
         }
         persist();
     }
@@ -625,7 +640,13 @@ private:
                     evInit_ = true;
                     continue;   // once more at the adapted exposure
                 }
-                eyeEv_ += (target - eyeEv_) * (1.0 - std::exp(-dtau / 1.2));
+                // a bright light come into the field: at once to 3 stops over, and this frame drawn again at that (no
+                // white frame); then light adaptation in a fraction of a second, dark adaptation in a second or so
+                if (const double dazzled = hz::eyeDazzle(eyeEv_, target); pass == 0 && dazzled < eyeEv_) {
+                    eyeEv_ = dazzled;
+                    continue;
+                }
+                eyeEv_ = hz::eyeAdapt(eyeEv_, target, dtau);
                 break;
             }
         } else {
@@ -742,56 +763,98 @@ private:
         st.controls.push_back(r);
     }
 
-    // the eye's labels (H5): where the eye sees each named thing (aberrated as its light), the distance to it
-    void eyeLabels(const app::Overlay& o) {
+    // the eye's labels (H5): where the eye sees each named thing (aberrated as its light), the distance to it. The bodies
+    // stand where renderEye placed them, each at its light's time (still behind the rocket near c). A label that would run
+    // across the screen faster than it reads (over 2 to 5 pixels in a sixtieth of a second) fades out: near c the rocket's
+    // own way turns the directions behind it fast (the rear point magnifies them), and when zoomed in a body's orbit at
+    // its light's clock (D times the passenger's: fast ahead) jumps
+    void eyeLabels(const app::Overlay& o, const std::vector<ui::Rect>& avoid) {
         const olcek::Scale& sc = a_.sc;
         const hz::Eye e = a_.eyeAt(a_.ship, yaw_, pitch_, std::pow(10.0, zoom_));
         const hz::Kin k = hz::kin(e.phi);
         const double emp = std::exp(-e.phi);
+        const float S = std::min(o.scale, o.view.h / 1440.0f);
+        const double dTau = 1.0 / 60.0;
+        const olcek::V3 step = e.motion * (hz::kC * k.gb * dTau);   // the rocket's way in it (the rest frame's metres)
+        // ... and its speed then (the drive turns the aberration: at 20 nines ~3 pixels a frame), and whether the world
+        // runs yet (before the first thrust its clock stands at the departure's)
+        const hz::Ship& sh = a_.ship;
+        const double push = sh.drive == hz::Drive::Thrust ? 1.0 : sh.drive == hz::Drive::Brake ? -1.0 : 0.0;
+        const hz::Kin k1 = hz::kin(std::max(e.phi + push * hz::driveRate(e.phi) * dTau, 0.0));
+        const double emp1 = std::exp(-k1.phi);
+        const bool still = sh.departT.hi < 0.0;
+        // where the eye sees a thing (from the eye, rest frame) on the view (-1 .. 1 across) at a speed, and its light's D
+        auto onViewAt = [&](olcek::V3 rel, const hz::Kin& kk, double empk, double& x, double& y, double* Dout) {
+            const double d = olcek::length(rel);
+            double D = 1.0;
+            const olcek::V3 np = kk.phi > 0.0 ? hz::aberrateDirFast(rel * (1.0 / d), e.motion, kk, empk, D) : rel * (1.0 / d);
+            if (Dout) *Dout = D;
+            const double z = olcek::dot(np, e.fwd);
+            if (!(z > 0.0)) return false;
+            x = olcek::dot(np, e.right) / z / e.tanHalfX;
+            y = olcek::dot(np, e.up) / z / e.tanHalfY;
+            return true;
+        };
         std::vector<hz::EyeLabel> labels;
-        auto at = [&](const std::string& name, olcek::V3 p, double radius, hz::EyeLabel* out = nullptr) {
+        // v, a: its orbit's speed and radius (m/s, m) round what carries it (0: it stands still)
+        auto at = [&](const std::string& name, olcek::V3 p, double radius, double v, double a, hz::EyeLabel* out = nullptr) {
             const olcek::V3 rel = p - e.pos;
             const double d = olcek::length(rel);
             if (!(d > radius)) return false;
-            double D = 1.0;
-            const olcek::V3 np = e.phi > 0.0 ? hz::aberrateDirFast(rel * (1.0 / d), e.motion, k, emp, D) : rel * (1.0 / d);
-            const double z = olcek::dot(np, e.fwd);
-            if (z <= 0.0) return false;
-            const double x = olcek::dot(np, e.right) / z / e.tanHalfX, y = olcek::dot(np, e.up) / z / e.tanHalfY;
-            if (std::fabs(x) > 1.0 || std::fabs(y) > 1.0) return false;
+            double x, y, D = 1.0;
+            if (!onViewAt(rel, k, emp, x, y, &D) || std::fabs(x) > 1.0 || std::fabs(y) > 1.0) return false;
+            // its way on the screen in that sixtieth (pixels): the rocket's step at its speed then, and the body's own
+            // along its orbit (never more than across it) the worst way across the line of sight
+            auto px = [&](olcek::V3 r2, const hz::Kin& kk, double empk) {
+                double x2, y2;
+                if (!onViewAt(r2, kk, empk, x2, y2, nullptr)) return 1e9;
+                return std::hypot((x2 - x) * 0.5 * o.view.w, (y2 - y) * 0.5 * o.view.h);
+            };
+            double run = e.phi > 0.0 || k1.phi > 0.0 ? px(rel - step, k1, emp1) : 0.0;
+            if (v > 0.0 && !still) {
+                const double h = std::min(v * D * dTau, 2.0 * a);
+                const olcek::V3 n = rel * (1.0 / d);
+                const olcek::V3 u1 = olcek::normalize(olcek::cross(n, std::fabs(n.z) < 0.9 ? olcek::v3(0.0, 0.0, 1.0) : olcek::v3(1.0, 0.0, 0.0)));
+                const olcek::V3 u2 = olcek::cross(n, u1);
+                run += std::hypot(px(rel + u1 * h, k, emp), px(rel + u2 * h, k, emp));
+            }
             hz::EyeLabel l;
             l.name = name;
             l.x = o.view.x + float((x + 1.0) * 0.5) * o.view.w;
             l.y = o.view.y + float((1.0 - y) * 0.5) * o.view.h;
             l.r = float(std::asin(std::min(1.0, radius / d)) / std::max(D, 1e-300) / (2.0 * e.tanHalfX) * o.view.w);
             l.dist = d;
+            const double u = std::clamp((run - 2.0 * S) / (3.0 * S), 0.0, 1.0);
+            l.alpha = float(1.0 - u * u * (3.0 - 2.0 * u));
             if (out) *out = l;
             else labels.push_back(l);
             return true;
         };
         // the Sun: from Proxima's neighbourhood a star of Cassiopeia (the sky's other side from the Earth's Proxima)
         const bool nearProxima = olcek::length(e.pos - a_.route.proxima) < 0.5 * hz::kLy;
-        at(nearProxima ? L("Güneş · Kraliçe takımyıldızında", "the Sun · in Cassiopeia") : L("Güneş", "the Sun"), olcek::V3{}, 6.957e8);
-        at(L("Dünya", "the Earth"), sc.nodeFromSun(olcek::kEarth), 6.371e6);
-        at(L("Ay", "the Moon"), sc.nodeFromSun(olcek::kMoon), 1.7374e6);
-        at("Proxima Centauri", a_.route.proxima, 1.0728e8);
-        at("Proxima b", sc.nodeFromSun(olcek::kProximaB), 6.5e6);
+        at(nearProxima ? L("Güneş · Kraliçe takımyıldızında", "the Sun · in Cassiopeia") : L("Güneş", "the Sun"), olcek::V3{}, 6.957e8, 0.0, 0.0);
+        // (the Moon with the Earth round the Sun: its month's 1 km/s inside the year's 30)
+        at(L("Dünya", "the Earth"), sc.nodeFromSun(olcek::kEarth), 6.371e6, 29.8e3, 1.496e11);
+        at(L("Ay", "the Moon"), sc.nodeFromSun(olcek::kMoon), 1.7374e6, 30.8e3, 1.496e11);
+        at("Proxima Centauri", a_.route.proxima, 1.0728e8, 0.0, 0.0);
+        at("Proxima b", sc.nodeFromSun(olcek::kProximaB), 6.5e6, 47.2e3, 0.04857 * 1.496e11);
         if (a_.alphaCenStar[0] >= 0 && a_.alphaCenStar[1] >= 0) {   // one label while the pair is one point
             hz::EyeLabel A, B;
-            const bool a = at(L("Alfa Erboğa A", "Alpha Centauri A"), sc.stars()[size_t(a_.alphaCenStar[0])], 8.5e8, &A);
-            const bool b = at(L("Alfa Erboğa B", "Alpha Centauri B"), sc.stars()[size_t(a_.alphaCenStar[1])], 6.0e8, &B);
+            const bool a = at(L("Alfa Erboğa A", "Alpha Centauri A"), sc.stars()[size_t(a_.alphaCenStar[0])], 8.5e8, 0.0, 0.0, &A);
+            const bool b = at(L("Alfa Erboğa B", "Alpha Centauri B"), sc.stars()[size_t(a_.alphaCenStar[1])], 6.0e8, 0.0, 0.0, &B);
             if (a && b && std::hypot(A.x - B.x, A.y - B.y) < 40.0f * o.scale) {
                 A.name = L("Alfa Erboğa A ve B", "Alpha Centauri A and B");
+                A.alpha = std::min(A.alpha, B.alpha);
                 labels.push_back(A);
             } else {
                 if (a) labels.push_back(A);
                 if (b) labels.push_back(B);
             }
         }
-        at("Andromeda (M31)", sc.nodeFromSun(olcek::kM31), 30e3 * hz::kPc);
-        at(L("Üçgen (M33)", "Triangulum (M33)"), sc.nodeFromSun(olcek::kM33), 8e3 * hz::kPc);
-        at(L("Samanyolu'nun merkezi", "the Galaxy's centre"), sc.nodeFromSun(olcek::kGalCentre), 1.0);
-        hz::drawEyeLabels(labels, o.view, std::min(o.scale, o.view.h / 1440.0f), o.panels);
+        at("Andromeda (M31)", sc.nodeFromSun(olcek::kM31), 30e3 * hz::kPc, 0.0, 0.0);
+        at(L("Üçgen (M33)", "Triangulum (M33)"), sc.nodeFromSun(olcek::kM33), 8e3 * hz::kPc, 0.0, 0.0);
+        at(L("Samanyolu'nun merkezi", "the Galaxy's centre"), sc.nodeFromSun(olcek::kGalCentre), 1.0, 0.0, 0.0);
+        hz::drawEyeLabels(labels, o.view, S, avoid);
     }
 
     // ---- the journey on disk: "key = value" lines next to the project (user.cfg's neighbour, not in git)
@@ -821,11 +884,16 @@ private:
     void restore() {
         loaded_ = true;
         if (savePath_.empty()) return;
-        std::ifstream f(savePath_);
-        if (!f) return;
-        {   // the last good journey kept aside once a session (a bad write can never lose it)
+        readJourney(savePath_, true);
+    }
+    // a journey's file: the rocket and the view. own: the user's (the last good one kept aside, what became of it told).
+    // false: no journey in it
+    bool readJourney(const std::string& path, bool own) {
+        std::ifstream f(path);
+        if (!f) return false;
+        if (own) {   // the last good journey kept aside once a session (a bad write can never lose it)
             std::error_code ec;
-            std::filesystem::copy_file(savePath_, savePath_ + ".yedek", std::filesystem::copy_options::overwrite_existing, ec);
+            std::filesystem::copy_file(path, path + ".yedek", std::filesystem::copy_options::overwrite_existing, ec);
         }
         std::map<std::string, std::string> kv;
         std::string line;
@@ -840,10 +908,11 @@ private:
             kv[trim(line.substr(0, eq))] = trim(line.substr(eq + 1));
         }
         hz::Ship s;
-        if (hz::parse(s, kv)) {
+        const bool ok = hz::parse(s, kv);
+        if (ok) {
             a_.ship = s;
-            if (s.departT.hi >= 0.0) restoreNote_ = 1;   // a journey under way: said when Hız opens, kept on the panel
-        } else {
+            if (own && s.departT.hi >= 0.0) restoreNote_ = 1;   // a journey under way: said when Hız opens, kept on the panel
+        } else if (own) {
             // not continued: a journey that had departed is told of when Hız opens (older or newer version, or damaged),
             // its file kept aside for good (the .yedek turns over every session)
             double departed = -1.0, version = 0.0;
@@ -852,7 +921,7 @@ private:
             if (departed >= 0.0) {
                 restoreNote_ = version >= 1.0 && version < double(hz::kSaveVersion) ? 2 : version > double(hz::kSaveVersion) ? 3 : 4;
                 std::error_code ec;
-                std::filesystem::copy_file(savePath_, savePath_ + ".eski-surum", std::filesystem::copy_options::overwrite_existing, ec);
+                std::filesystem::copy_file(path, path + ".eski-surum", std::filesystem::copy_options::overwrite_existing, ec);
             }
         }
         auto num = [&](const char* key, int n, double* v) {
@@ -874,6 +943,7 @@ private:
         if (num("hiz.grafik", 1, v)) graphs_ = v[0] != 0.0;
         if (num("hiz.enerji", 1, v)) energy_ = v[0] != 0.0;
         // (the scene always opens on its first option: the journey waits in the second, where it was left)
+        return ok;
     }
 
     app::SceneInfo info_ = describe();

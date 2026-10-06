@@ -71,13 +71,16 @@ constexpr unsigned kPanoAll = 31;
 struct PanoState {
     double gammaTop = -1.0;       // the gamma curve's axis top (log10), eased
 };
-// `avoid`: the application's panels; each column keeps to the room between them, smaller if it must
-void drawPanels(const Pano& p, PanoState& state, const ui::Rect& view, float S, unsigned show, const std::vector<ui::Rect>& avoid = {});
+// `avoid`: the application's panels; each column keeps to the room between them, smaller if it must. `placed`: where
+// each was drawn, added (the eye's labels keep off them)
+void drawPanels(const Pano& p, PanoState& state, const ui::Rect& view, float S, unsigned show, const std::vector<ui::Rect>& avoid = {},
+                std::vector<ui::Rect>* placed = nullptr);
 
 // the energy eye's key (top middle of the eye's view): its name, the bands in its false colours (each band as wide as
 // the next: microwaves to gamma rays) and where the light dead ahead peaks now (Wien), the cosmic background's and a
 // Sun-like star's: both move up the bands as the speed grows (D = e^phi)
-void drawEnergyKey(const ui::Rect& view, float S, double phi, const Blackbody& bb, const std::vector<ui::Rect>& avoid = {});
+void drawEnergyKey(const ui::Rect& view, float S, double phi, const Blackbody& bb, const std::vector<ui::Rect>& avoid = {},
+                   std::vector<ui::Rect>* placed = nullptr);
 
 // the eye's labels (H5): a named thing where the eye sees it (window pixels, aberrated), its disc's radius there and its
 // distance; drawn in the given order (the first wins where two would meet), none over the application's panels
@@ -86,6 +89,7 @@ struct EyeLabel {
     float x = 0.0f, y = 0.0f;
     float r = 0.0f;
     double dist = 0.0;   // m
+    float alpha = 1.0f;  // 0 .. 1: a label that would run across the screen faster than it reads fades out
 };
 void drawEyeLabels(const std::vector<EyeLabel>& labels, const ui::Rect& view, float S, const std::vector<ui::Rect>& avoid = {});
 

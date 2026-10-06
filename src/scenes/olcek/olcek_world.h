@@ -136,7 +136,10 @@ public:
         double ev = 23.5;         // the exposure (EV against the sunlit world's)
         float3 mark{0, 0, 0};     // the rocket's point (display-referred light, after the exposure); 0: none
     } hiz;
-    void hizClocks(double t);     // every clock at the rest frame's time t (s since today): planets, Moon, spin, Galaxy
+    // every clock at the rest frame's time t (s since today): planets, Moon, spin, Galaxy; Proxima's b and its flares at
+    // tProxima (the eye: each system at the time its light now reaching the rocket left it)
+    void hizClocks(double t, double tProxima);
+    void hizClocks(double t) { hizClocks(t, t); }
     void hizOff();                // back to the first option: the fixed camera, today's clocks
     // the catalogue's stars (from the Sun), their luminosity and colour, their temperature
     const std::vector<V3>& stars() const { return starPos_; }
@@ -250,7 +253,7 @@ private:
     void ballOrPoint(OlcekView& v, std::vector<GSplat>& splats, const Body& b, double k, const float* wEye = nullptr) const;
     bool proximaSet_ = false;
     V3 proximaFromSun_, proximaU_{1, 0, 0}, proximaV_{0, 1, 0};
-    double proximaT0_ = 0.0, hizT_ = 0.0;
+    double proximaT0_ = 0.0, hizT_ = 0.0;   // hizT_: Proxima's system's clock (b's orbit, the flares)
     int proximaStar_ = -1;        // the catalogue's Proxima: the body draws it in the side view (not twice)
     float3 proximaColour_{1.0f, 0.75f, 0.45f};
     void addProxima();

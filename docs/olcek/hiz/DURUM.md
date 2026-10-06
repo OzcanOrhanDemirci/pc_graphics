@@ -2,6 +2,73 @@
 
 > Tek kaynak durum panosu. Plan `docs/olcek/hiz/PLAN.md`. En yeni en üstte.
 
+## 10-06 sabahı (2) · Özcan'ın iki revizesi: savrulan etiketler, yana bakınca bembeyaz ekran
+
+Özcan'ın yolculuğu: 21 dokuz, Proxima'nın 156.000 ışık yılı ötesi, görüş 120°, enerji gözü açık.
+
+**1) "Yüksek hızlarda yazılar sağa sola, yukarı aşağı savruluyor, okunmuyor."**
+
+- **Sebep:** gözün dünyası galaksinin "şimdi"siyle yerleşiyordu. 21 dokuzda bir karede Dünya'da 11,7 yıl geçer: Dünya,
+  Ay ve Proxima b her kare yörüngelerinin rastgele bir yerine atlıyordu. Roketin arkasındaki tekil nokta bu kaymayı
+  büyütür: 156.000 ışık yılından 1 AU 1e-10 rad'dır, 21 dokuzda ise göğün 47°'si. Bir etiket zıplayınca çakışma kuralı
+  yüzünden ötekiler de yanıp sönüyordu.
+- **Düzeltme (fizik):** göz her sistemi ışığının yola çıktığı anda görür (gecikmeli zaman: şimdi eksi uzaklık bölü c).
+  Işık hızına yakın uzaklaşan roket Dünya'nın sonraki ışığını geride bırakır: arkadaki Dünya kalkıştan kısa süre
+  sonraki hâlinde donar. Önde Proxima b hızlı oynar ama küçülmüş görünür. Panolardaki "görünen Dünya" saati zaten
+  böyleydi, göz de artık aynı (`renderEye`, `Scale::hizClocks(t, tProxima)`).
+- **Düzeltme (okunurluk):** bir etiketin sonraki karede ekranda ne kadar kayacağı önceden hesaplanır: roketin kendi
+  yolu, itiş ya da frenin değiştirdiği sapınç ve cismin yörüngesi (kalkıştan önce dünya durur, yörünge sayılmaz). Bir
+  karede 2-5 pikselden hızlı kayan etiket yumuşakça söner. Örneğin Proxima'yı 21 dokuzda yeni geçmişken arkadaki
+  etiketler çizgi gibi kayar, okunmaz.
+- **Ek:** etiketler grafik panellerinin ve enerji anahtarının altına girmez. Biri bir panelin camının altında yarım
+  okunuyordu.
+- **Ölçüm:** Özcan'ın kaydının bir kopyasıyla canlı test (`--autotest-only olcek/hizkayit --set hiz.test.kayit=<dosya>`),
+  0,1 sn arayla dört kare: "Proxima b" yerinde, yalnız uzaklığı 159 binden 160 bin ışık yılına ilerliyor. Aynı test
+  eski saatle: etiket 0,1 sn'de ~66 piksel sıçrıyor, bazı karelerde kayboluyor. Sınama: bir kare sonra göze görünen
+  Dünya 233 m kayar; eski "şimdi" onu 1,76 × 10¹¹ m (1,2 AU) atardı.
+
+**2) "Parlak bir şeyin biraz yanına bakınca ekran bembeyaz oluyor, daha çevirince tak diye geçiyor."**
+
+- **Sebep:** göz pozlamayı sabit 75°'lik orta pencereden ölçüyordu, Özcan'ın görüşü 120°'ydi. Parlak nokta (21 dokuzda
+  öndeki tek nokta) pencerenin dışında ama ekranın içinde kalınca ölçüye girmiyordu. Parıltısı karanlık alanın
+  pozlamasıyla bütün ekranı boğuyordu. Ekranın kenarından çıkınca parıltı sert kesildiği için beyazlık bir anda
+  geçiyordu. Başsız tarama: bakış 0,70-1,04 rad arasında ekranın %100'ü beyaz, 1,10'da siyah.
+- **Düzeltme:**
+  - Ölçü penceresi ekrandan dar olamaz: geniş görüşte ekranın tamamı ölçülür. Dürbünle daralınca pencere 75°'de kalır.
+  - Büyük cisimlerin ışığı merkez noktasıyla değil, diskinin pencereye düşen payıyla sayılır (dört halka). Kalkışta
+    Dünya'nın yalnız ince kenarı ekranda kalınca da ölçülür; önce gece göğüne uyup beyaz bir şerit oluyordu. Galaksilerde
+    disk, ışığın çoğunu taşıyan iç bölge (görünür yarıçapın 0,35'i): düzgün disk sayılınca ortadaki Andromeda eksik
+    ölçülürdü.
+  - Parıltı ekranın kenarına yaklaşırken son %6'da söner (güneşlik gibi), sert kesilmez. Kenarda sıfır: bir yıldızın
+    parıltısı çizilen noktasından gelir, noktalar kenardan birkaç piksel sonra biter.
+  - Göz uyumu: parlak bir şey görüş alanına girince göz bir anda en çok 3 kademe fazlasına iner ve o kare yeniden
+    çizilir (beyaz kare yok). Sonra 0,3 sn'de ışığa, 1,2 sn'de karanlığa uyar. Kural tek yerde: `hz::eyeAdapt`, sahne
+    ve yolculuk sınaması aynısını kullanır (sınama kareyi yeniden çizmez, yani sahneden katıdır).
+  - Bakılan yüze uyumda Doppler eksikti: roketin arkasındaki kızıla kaymış bir hayaletin yüzü durgunmuş gibi
+    sayılıyor, 21 dokuzda pozlamayı EV -10'a çekiyordu. Artık yüzün parlaklığı D⁴ katı, görünür payı D·T'de. Göz en
+    çok 10⁵'e uyar, ötesinde ölçü yerinde durur (yüz kamaştırır). Duruşta bile 10⁵'i aşan yüz (Güneş) hiç ölçülmez,
+    eskisi gibi.
+- **Bağımsız inceleme** (salt okuma, ayrı ajan) bir gerçek hata buldu: ilk düzeltmem eski sert eşiği Doppler'li
+  parlaklığa uyguluyordu. Proxima'ya otomatik varışta öne bakarken yüz 0,45 c'de ölçüden düşüyor, 0,11 c'de geri
+  giriyordu: tek karede 7,8 kademe. Tavanla düzeltildi; sınaması eklendi ve hatalı sürümde KALDI (7,79 kademe, β 0,106),
+  düzeltilmişte en büyük adım 0,51 kademe. Üç küçük bulgu da düzeltildi: yıldız parıltısının kenarı, itişte sapınç
+  değişimi ve kalkıştan önce duran dünya etiket kestiriminde, okunamayan test kaydı artık söylenir.
+- **Ölçüm:** aynı tarama düzeltmeden sonra beyaz piksel yok (parlak piksel en çok %0,8), kenardan çıkış yumuşak.
+  Görünür gözde, 75°'de, kalkışta Dünya'nın çevresinde ve Proxima durağında da tarandı: beyaz en çok %1,1 (parlak
+  bulutlar). Canlı testte R ile öne dönerken parlak nokta ekrana giriyor: 24 kare (0,05 sn arayla), beyaz piksel en
+  çok %0,06, ortalama 20,9'a çıkıp (kamaşma) 0,3 sn'de 8'e oturuyor.
+- **Eski/yeni kıyası** (başsız, 11 durum × 2 göz; HEAD ile bu değişiklik): 17 kare bit bit aynı. Değişenler: kalkışta
+  arkaya bakış (%0,9 piksel, en çok 37 seviye: Dünya 0,14 sn önceki hâliyle, ~0,2 piksel); Proxima durağı (%0,001: b'nin
+  ışık zamanı, parlama saati); 21 dokuzda görünür göz (EV -1,18 → 12,29: eski kare simsiyahtı, göz arkadaki hayalet
+  Dünya'ya uyuyordu; yenisinde tasarımdaki gibi öndeki tek nokta görünüyor).
+- **Ek:** Proxima'nın parlamaları float saatle 8 saniyelik adımlarla atlıyordu (4 yılda float'ın adımı). Saat
+  70.000 sn'de sarılır, artık akıcı.
+
+**Sınamalar:** `--test olcek-hiz` 54/54 GEÇTİ, dördü yeni: "geniş görüş ekrandaki parlak noktayı ölçer", "ekranda kalan
+parlak bir kenar ölçülür", "Proxima'ya varışta öne bakan gözün ölçüsü yumuşak", "arkadaki Dünya ve b ışıklarının
+zamanında durur". Tam yolculuk (`--test olcek-hiz-yolculuk`): GEÇTİ: Andromeda'ya varıldı, 3.682 göz karesi, ortalama 11,0 ms (en uzun 21,7),
+sonlu olmayan kare 0, iki kare arası ışık en çok %1,14 (önce %1,02).
+
 ## 10-06 sabahı · Özcan'ın ilk denemesi: "direk ışık hızına yakın başladı"
 
 - **Sebep:** fizik değil, kayıt. Sahne dünkü yolculuğu `hiz_yolculuk.txt`'ten kaldığı yerden açtı.

@@ -164,6 +164,25 @@ double fieldWeight(const Eye& e, V3 n) {
     return edge(x) * edge(y);
 }
 
+// ... a disc's (the centre n, the angular radius a): the share of its area in the window, from four rings (each the
+// middle of its annulus, 0 .. 0.25 .. 0.55 .. 0.85 .. 1 of the radius, weighed by its area; the last one the limb: a
+// sliver of a bright Earth left on the screen counts); a point where it is under a pixel or so
+double discWeight(const Eye& e, V3 n, double a) {
+    if (!(a > 2e-4)) return fieldWeight(e, n);
+    a = std::min(a, 1.2);
+    const V3 u1 = normalize(cross(n, std::fabs(n.z) < 0.9 ? V3{0.0, 0.0, 1.0} : V3{1.0, 0.0, 0.0}));
+    const V3 u2 = cross(n, u1);
+    auto ring = [&](double r, int m) {
+        double s = 0.0;
+        for (int j = 0; j < m; ++j) {
+            const double psi = 2.0 * kPi * (j + 0.5) / m;
+            s += fieldWeight(e, n * std::cos(r) + (u1 * std::cos(psi) + u2 * std::sin(psi)) * std::sin(r));
+        }
+        return s / m;
+    };
+    return 0.0625 * fieldWeight(e, n) + 0.24 * ring(0.4 * a, 6) + 0.42 * ring(0.7 * a, 10) + 0.2775 * ring(0.93 * a, 14);
+}
+
 // ... its solid angle over 4 pi (a pinhole's rectangle: 4 asin(tx ty / sqrt((1 + tx^2)(1 + ty^2))))
 double fieldShare(const Eye& e) {
     const double tx = e.adaptX, ty = e.adaptY;
@@ -196,7 +215,7 @@ void buildEye(const StarSet& st, const Blackbody& bb, const Eye& e, std::vector<
         std::vector<GSplat>& P = part[size_t(w)];
         for (size_t i = a; i < b; ++i) {
             V3 p;
-            double LV, T;
+            double LV, T, angR = 0.0;
             float weight = 1.0f, sigma = 0.75f;
             if (i == n) {
                 p = V3{};
@@ -210,6 +229,7 @@ void buildEye(const StarSet& st, const Blackbody& bb, const Eye& e, std::vector<
                 T = l.T;
                 weight = l.weight;
                 sigma = l.sigma;
+                angR = l.angR;
                 if (!(LV > 0.0)) continue;
             } else {
                 p = (*st.pos)[i];
@@ -237,7 +257,7 @@ void buildEye(const StarSet& st, const Blackbody& bb, const Eye& e, std::vector<
             S.maxD = std::max(S.maxD, D);
             S.minD = std::min(S.minD, D);
             const double z = dot(np, e.fwd);
-            if (const double w = fieldWeight(e, np); w > 0.0) {
+            if (const double w = angR > 0.0 ? discWeight(e, np, angR / std::max(D, 1e-300)) : fieldWeight(e, np); w > 0.0) {
                 S.visibleView += vis * w;
                 S.bolometricView += bol * w;
                 S.energyView += bol * w;

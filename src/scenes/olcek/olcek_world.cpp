@@ -538,7 +538,7 @@ void Scale::moveStar(int i, V3 p) {
     if (i >= 0 && i < int(starPos_.size())) starPos_[size_t(i)] = p;
 }
 
-void Scale::hizClocks(double t) {
+void Scale::hizClocks(double t, double tProxima) {
     // the rest frame's time drives the world (the passenger's clock is the screen's): no designed rate, no way home
     clk.spin = wrapPi(std::fmod(today::kEarthOmega * t, 2.0 * kPi));
     const double yearP = planetOrbit_[2].period;
@@ -552,7 +552,7 @@ void Scale::hizClocks(double t) {
     clk.galaxy = 0.0;
     clk.arms = 0.0;
     clk.beach = wrapTo(t, 8000.0);
-    hizT_ = t;
+    hizT_ = tProxima;
 }
 
 void Scale::setProxima(V3 fromSun, double t0, int catalogueIndex, float3 colour) {
@@ -1092,7 +1092,9 @@ void Scale::ballOrPoint(OlcekView& v, std::vector<GSplat>& splats, const Body& b
         g.pattern = b.pattern;
         g.spinBlur = 0.0f;
         g.T = float(b.T);
-        g.time = float(hizT_);
+        // (Proxima's flares, one each 70 s: the clock kept below 70,000 s, a thousand of them, where a float still holds
+        // a hundredth of a second; at 4 years a float's step was 8 s and a flare jumped)
+        g.time = float(std::fmod(hizT_, 70000.0));
         // the side view's map: Proxima and b in deep space's exposure, their colour kept (the eye has its own)
         g.cap = !wEye && (b.node == kProxima || b.node == kProximaB) ? 1.2f : 0.0f;
         if (b.pattern == 1) {   // the Earth's body axes, turned by its clock; its turn while the shutter is open
