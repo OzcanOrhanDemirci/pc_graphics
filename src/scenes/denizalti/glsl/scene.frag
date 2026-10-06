@@ -166,7 +166,10 @@ void weather(inout M m, uint mat, vec3 p, inout vec3 N, float edge, float ao, fl
         float n1 = fbm(p, 0.018, 3, 0.55, size, d);
         float n2 = fbm(p + 11.3, 0.0045, 2, 0.5, size, d);
         // chips need an edge: a face alone never chips (else specks everywhere, read as grain)
-        float worn = edge * 1.3 + n1 * 0.7 + n2 * 0.25 - 1.05 - (1.0 - smoothstep(0.2, 0.55, edge)) * 2.0;
+        // on an edge's crown about a quarter of its length chips (n1's sigma ~0.35), to bare steel under a tenth; more
+        // in the boots' reach by the deck. At 1.3 / 0.7 / -1.05 nearly every edge chipped end to end, a rusty seam
+        float kick = 0.15 * (1.0 - smoothstep(0.05, 0.6, p.y));
+        float worn = edge * 1.0 + n1 * 0.9 + n2 * 0.3 - 1.2 + kick - (1.0 - smoothstep(0.2, 0.55, edge)) * 2.0;
         if (mat == MAT_DECK_GREEN || mat == MAT_DECK) {
             // the walkway: boots scuff the paint along the centre line and in front of the stations
             float walk = 1.0 - smoothstep(0.35, 0.9, abs(p.x)) + 0.5 * (1.0 - smoothstep(0.2, 0.6, abs(abs(p.x) - 1.3)));
