@@ -626,7 +626,8 @@ int App::run(const Options& opt) {
                 wait(10.0); log("heykel tur 10000"); shot("heykel_tur_10000");
                 key(GLFW_KEY_T); wait(0.5); key(GLFW_KEY_R); wait(1.0);
             }
-            if (infos_[s].id == "olcek" && part != "hiz" && part != "hizvaris" && part != "hizyuksek" && part != "hizkayit") {
+            if (infos_[s].id == "olcek" && part != "hiz" && part != "hizvaris" && part != "hizyuksek" && part != "hizkayit" &&
+                part != "hizhedef") {
                 // the beach, the wheel out (a notch is x1.5: ~5.7 a decade) to the Earth, the Solar System, the Galaxy and
                 // the edge, R home, in to the grain, the atom, the nucleus and the desert, then the tour from the panel
                 wait(2.0); log("olcek sahil"); shot("olcek_sahil");
@@ -653,7 +654,16 @@ int App::run(const Options& opt) {
                 // "olcek/hizvaris" (with --set hiz.test.varis=1): the scene starts a minute before Proxima braking on the
                 // stopping curve: the arrival, the turn, both views there.
                 control("secenek", 1); wait(0.15); click(); wait(1.35); log("olcek hiz (cift tik: yolculuk baslamaz, Hiz 0)"); shot("olcek_hiz_kalkis");
-                if (part == "hizkayit") {
+                if (part == "hizhedef") {
+                    // (with --set hiz.test.kayit=path) the target chosen on the panel: Andromeda from wherever the journey
+                    // is, Space (it stops and turns first), the way from the side; then Proxima again
+                    wait(3.0); log("olcek hiz hedef"); shot("olcek_hiz_hedef_once");
+                    control("hedef", 1); wait(0.6); shot("olcek_hiz_hedef_andromeda");
+                    key(GLFW_KEY_SPACE); wait(2.0); shot("olcek_hiz_hedef_bosluk");
+                    wait(32.0); log("olcek hiz hedef: dondu"); shot("olcek_hiz_hedef_dondu");
+                    key(GLFW_KEY_TAB); wait(2.0); shot("olcek_hiz_hedef_yandan"); key(GLFW_KEY_TAB); wait(1.0);
+                    control("hedef", 0); wait(0.6); shot("olcek_hiz_hedef_proxima");
+                } else if (part == "hizkayit") {
                     // (with --set hiz.test.kayit=path) a journey's file in the eye: the labels four times a tenth of a second
                     // apart (they must stand), then the head turned about (and ahead again with R)
                     wait(3.0); log("olcek hiz kayit");
@@ -697,7 +707,8 @@ int App::run(const Options& opt) {
                     key(GLFW_KEY_TAB); wait(1.5); shot("olcek_hiz_yuksek_goz");
                 } else {
                     wait(58.0); log("olcek hiz proxima"); shot("olcek_hiz_proxima");
-                    wait(4.0); shot("olcek_hiz_donus");
+                    // Andromeda chosen once it rests there (the arrival comes ~0.5 s after the shot): the rocket turns to it
+                    wait(2.0); control("hedef", 1); wait(4.0); shot("olcek_hiz_donus");
                     key(GLFW_KEY_TAB); wait(1.5); shot("olcek_hiz_proxima_yandan");
                     key(GLFW_KEY_4); wait(4.0); shot("olcek_hiz_proxima_yildizlar"); key(GLFW_KEY_1); wait(5.0); key(GLFW_KEY_TAB);
                 }

@@ -359,7 +359,8 @@ Plan, decisions, departures from the plan and measurements in `docs/olcek/` (Tur
 By rocket from the Earth to Proxima Centauri, and on to Andromeda: special relativity complete, nothing teleported, time
 always real (no speeding up: the length of the journey is the distance).
 
-- **The journey:** W thrust, S brake, Space the automatic arrival. Proxima, 4.25 light years: 15.2 minutes on your
+- **The journey:** W thrust, S brake, Space the automatic arrival at the target chosen on the panel (Proxima or
+  Andromeda, at any time; under way elsewhere it stops and turns first). Proxima, 4.25 light years: 15.2 minutes on your
   clock, 4.25 years on the Earth's. Andromeda, 2.4 million light years: 72 minutes, 2.4 million years.
 - **The drive:** 1 g at rest and always rising: 1% of light's speed in a minute, 10% in two, 99% in five and a half,
   21 nines (1 − β = 10⁻²¹) in eight, at 11 million g. Held constant in 1,638 slices with the closed forms of constant

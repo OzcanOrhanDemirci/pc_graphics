@@ -113,7 +113,7 @@ void gaussLegendre(int n, std::vector<double>& x, std::vector<double>& w) {
     }
 }
 
-// a whole journey by the automatic arrival: Space at the start and again on reaching Proxima
+// a whole journey by the automatic arrival: Space at the start; on reaching Proxima, Andromeda chosen and Space again
 struct Journey {
     double legTau[2] = {}, legEarth[2] = {};
     double tau = 0.0, earth = 0.0;
@@ -127,15 +127,19 @@ Journey fly(const hz::Route& r, const std::function<double(long long)>& dtOf, do
     hz::Command go;
     go.toggleAuto = true;
     hz::step(s, r, 0.0, go);
-    while (s.tau < maxTau && s.leg < hz::kLegDone) {
+    while (s.tau < maxTau && !(hz::atTarget(s) && s.target == hz::kTargetAndromeda)) {
         const hz::Events ev = hz::step(s, r, dtOf(J.steps), hz::Command{});
         ++J.steps;
         J.pin = std::max(J.pin, ev.pinJump);
         if (ev.arrived) {
-            J.arrived[ev.arrivedLeg] = true;
-            J.legTau[ev.arrivedLeg] = ev.legTau;
-            J.legEarth[ev.arrivedLeg] = ev.legEarth;
-            if (s.leg == hz::kLegAndromeda) hz::step(s, r, 0.0, go);   // on to Andromeda (it turns first)
+            J.arrived[ev.arrivedAt] = true;
+            J.legTau[ev.arrivedAt] = ev.legTau;
+            J.legEarth[ev.arrivedAt] = ev.legEarth;
+            if (ev.arrivedAt == hz::kTargetProxima) {   // on to Andromeda (it turns first)
+                hz::Command next = go;
+                next.choose = hz::kTargetAndromeda;
+                hz::step(s, r, 0.0, next);
+            }
         }
     }
     J.tau = s.tau;
@@ -252,21 +256,22 @@ int runHizTests(OlcekApp& app) {
         check(std::fabs(R.turnDeg - 153.0) < 1.0 && std::fabs(R.sunPass / hz::kLy - 1.9) < 0.1, "Proxima'da ~153 derece donus, Gunes'in ~1,9 isik yili yanindan");
     }
 
+    // what the perfect drive takes over a way L, from the formulas alone (from rest to rest: thrust to the peak, coast at
+    // the cap, brake on the stopping curve)
+    auto ideal = [&](double L, double& tau, double& earth) {
+        const double phiStar = hz::peakFrom(0.0, L);
+        if (phiStar <= cap) {
+            tau = 2.0 * hz::driveTime(phiStar);
+            earth = 2.0 * hz::driveEarthTime(phiStar);
+        } else {
+            const double coast = (L - 2.0 * hz::stopDistance(cap)) / (kC * std::sinh(cap));
+            tau = 2.0 * hz::driveTime(cap) + coast;
+            earth = 2.0 * hz::driveEarthTime(cap) + coast * std::cosh(cap);
+        }
+    };
+
     // ---- 4. the journeys: the automatic arrival, at 60 frames a second, at uneven frames, at long frames
     {
-        // what the perfect drive takes, from the formulas alone (from rest to rest: thrust to the peak, coast at the cap,
-        // brake on the stopping curve)
-        auto ideal = [&](double L, double& tau, double& earth) {
-            const double phiStar = hz::peakFrom(0.0, L);
-            if (phiStar <= cap) {
-                tau = 2.0 * hz::driveTime(phiStar);
-                earth = 2.0 * hz::driveEarthTime(phiStar);
-            } else {
-                const double coast = (L - 2.0 * hz::stopDistance(cap)) / (kC * std::sinh(cap));
-                tau = 2.0 * hz::driveTime(cap) + coast;
-                earth = 2.0 * hz::driveEarthTime(cap) + coast * std::cosh(cap);
-            }
-        };
         double it[2], ie[2];
         ideal(R.length[0], it[0], ie[0]);
         ideal(R.length[1], it[1], ie[1]);
@@ -325,7 +330,8 @@ int runHizTests(OlcekApp& app) {
         }
         std::printf("    elle: %.1f s itis (durma mesafesi > kalan: %s), Bosluk: gecti %s, dondu %s, vardi %s (%.1f s sonra)\n", mid + 2.0, past ? "evet" : "hayir",
                     overshoot ? "evet" : "hayir", turned ? "evet" : "hayir", arrived ? "evet" : "hayir", s.tau - tau0);
-        check(past && overshoot && turned && arrived && s.leg == hz::kLegAndromeda, "hedefi gecince: durur, doner, geri gelir, tam hedefte durur");
+        check(past && overshoot && turned && arrived && hz::atTarget(s) && s.at == hz::kTargetProxima,
+              "hedefi gecince: durur, doner, geri gelir, tam hedefte durur");
 
         hz::Ship c = hz::depart(r);
         for (int i = 0; i < 60 * 500; ++i) hz::step(c, r, 1.0 / 60.0, w);   // 500 s of W from rest: the cap at 480 s
@@ -524,7 +530,7 @@ int runHizTests(OlcekApp& app) {
             kv[k] = v;
         }
         hz::Ship b;
-        const bool ok = hz::parse(b, kv);
+        const bool ok = hz::parse(b, kv, R);
         const bool same = ok && hz::serialize(b) == a && b.phi == s.phi && b.x.hi == s.x.hi && b.x.lo == s.x.lo && b.t.hi == s.t.hi && b.tau == s.tau;
         // and the two then fly on identically
         bool still = same;
@@ -538,8 +544,225 @@ int runHizTests(OlcekApp& app) {
         std::map<std::string, std::string> old = kv;
         old["hiz.surum"] = "1";
         hz::Ship c;
-        const bool refused = !hz::parse(c, old) && hz::kSaveVersion == 2 && a.find("hiz.surum = 2") != std::string::npos;
+        const bool refused = !hz::parse(c, old, R) && hz::kSaveVersion == 3 && a.find("hiz.surum = 3") != std::string::npos;
         check(refused, "kayit dosyasi: eski surumun (eski ivmenin) yolculugu surdurulmez");
+        // the new fields away from their defaults: Andromeda chosen under way on Proxima's course, and resting at Proxima
+        auto roundTrip = [&](const hz::Ship& x0) {
+            std::map<std::string, std::string> m;
+            std::istringstream in(hz::serialize(x0));
+            std::string ln;
+            while (std::getline(in, ln)) {
+                const size_t eq = ln.find('=');
+                if (eq == std::string::npos) continue;
+                std::string kk = ln.substr(0, eq), vv = ln.substr(eq + 1);
+                kk.erase(kk.find_last_not_of(' ') + 1);
+                vv.erase(0, vv.find_first_not_of(' '));
+                m[kk] = vv;
+            }
+            hz::Ship y;
+            return hz::parse(y, m, R) && y.target == x0.target && y.course.target == x0.course.target && y.at == x0.at &&
+                   y.course.length == x0.course.length && y.course.to.x == x0.course.to.x && hz::serialize(y) == hz::serialize(x0);
+        };
+        hz::Ship w1 = s;
+        hz::Command pick;
+        pick.choose = hz::kTargetAndromeda;
+        hz::step(w1, R, 1.0 / 60.0, pick);
+        hz::Ship w2 = hz::depart(R);
+        hz::step(w2, R, 0.0, sp);
+        for (int i = 0; i < 60 * 3600 && !hz::atTarget(w2); ++i) hz::step(w2, R, 1.0 / 60.0, hz::Command{});
+        check(w1.target == 1 && w1.course.target == 0 && w2.at == 0 && roundTrip(w1) && roundTrip(w2),
+              "kayit dosyasi: hedef, rota ve varilan yer de geri gelir (varsayilan olmayan degerlerle)");
+        // version 2 at Andromeda, and going away from its target (yon -1 before it): carried over in place and way
+        std::map<std::string, std::string> v2 = kv;
+        v2["hiz.surum"] = "2";
+        v2["hiz.ayak"] = "2";
+        v2["hiz.yon"] = "1";
+        v2["hiz.x"] = "0 0";
+        v2["hiz.phi"] = "0";
+        hz::Ship d2;
+        const bool okDone = hz::parse(d2, v2, R) && hz::atTarget(d2) && d2.target == hz::kTargetAndromeda && length(hz::position(d2) - R.target[1]) < 1e-3;
+        v2["hiz.ayak"] = "0";
+        v2["hiz.yon"] = "-1";
+        v2["hiz.x"] = "-1e15 0";
+        v2["hiz.phi"] = "0.5";
+        hz::Ship d3;
+        const bool okAway = hz::parse(d3, v2, R) && length(hz::position(d3) - (R.target[0] - R.dir[0] * 1e15)) < 1e3 &&
+                            dot(hz::motionDir(d3), R.dir[0]) < -1.0 + 1e-12 && d3.x.value() > 0.0;
+        check(okDone && okAway, "kayit dosyasi: iki ayakli surumun Andromeda'daki ve hedefinden uzaklasan yolculugu da gecer");
+    }
+
+    // ---- 8b. the target chosen at any time (Özcan 2026-10-06 evening: Proxima or Andromeda, Space flies to the chosen one)
+    {
+        hz::Command sp;
+        sp.toggleAuto = true;
+        // fly by the automatic arrival until it rests at the chosen target (or the time runs out); what happened on the way
+        struct Trip { bool arrivedProxima = false, arrivedAndromeda = false, stopFirst = false, turned = false; double legTau = 0.0, minProxima = 1e300; };
+        auto flyOn = [&](hz::Ship& s, double maxTau) {
+            Trip T;
+            while (s.tau < maxTau && !hz::atTarget(s)) {
+                const hz::Events e = hz::step(s, R, 1.0 / 60.0, hz::Command{});
+                T.arrivedProxima = T.arrivedProxima || (e.arrived && e.arrivedAt == hz::kTargetProxima);
+                T.arrivedAndromeda = T.arrivedAndromeda || (e.arrived && e.arrivedAt == hz::kTargetAndromeda);
+                T.stopFirst = T.stopFirst || e.stopFirst;
+                T.turned = T.turned || e.turnStarted;
+                if (e.arrived) T.legTau = e.legTau;
+                T.minProxima = std::min(T.minProxima, length(hz::position(s) - R.proxima));
+            }
+            return T;
+        };
+        // from the start, Andromeda chosen: straight there (not by Proxima), in the time the formulas give for that way
+        hz::Ship a = hz::depart(R);
+        hz::Command ca = sp;
+        ca.choose = hz::kTargetAndromeda;
+        const hz::Events ea = hz::step(a, R, 0.0, ca);
+        const double way = length(hz::stopPoint(R, hz::kTargetAndromeda, R.start[0]) - R.start[0]);
+        const Trip ta = flyOn(a, 3.0 * 3600.0);
+        double itA, ieA;
+        ideal(way, itA, ieA);
+        std::printf("    Dunya'dan dogrudan Andromeda: donus %.1f derece, %.3f dk (formul %.3f dk), Proxima'ya ugradi %s\n", ea.turnDeg, ta.legTau / 60.0,
+                    itA / 60.0, ta.arrivedProxima ? "evet" : "hayir");
+        check(ea.chosen && ea.turnStarted && ta.arrivedAndromeda && !ta.arrivedProxima && std::fabs(ta.legTau - itA) < 1e-6 &&
+                  std::fabs(length(hz::position(a) - R.m31) - R.before) < 1e7,
+              "hedef: Dunya'dan Andromeda secilince dogrudan oraya gider, formuldeki surede, tam durakta durur");
+        // under way to Proxima (5 minutes, 0.9 c), Andromeda chosen: the automatic arrival stops, turns and goes there
+        hz::Ship m = hz::depart(R);
+        hz::step(m, R, 0.0, sp);
+        for (int i = 0; i < 60 * 300; ++i) hz::step(m, R, 1.0 / 60.0, hz::Command{});
+        const double phiThen = m.phi;
+        hz::Command cm;
+        cm.choose = hz::kTargetAndromeda;
+        hz::step(m, R, 0.0, cm);
+        const Trip tm = flyOn(m, 4.0 * 3600.0);
+        std::printf("    yolda (phi %.2f) Andromeda secildi: once durdu %s, dondu %s, Andromeda'ya vardi %s, Proxima'ya ugradi %s\n", phiThen,
+                    tm.stopFirst ? "evet" : "hayir", tm.turned ? "evet" : "hayir", tm.arrivedAndromeda ? "evet" : "hayir", tm.arrivedProxima ? "evet" : "hayir");
+        check(phiThen > 1.0 && tm.stopFirst && tm.turned && tm.arrivedAndromeda && !tm.arrivedProxima,
+              "hedef: yolda degistirilince otomatik varis once durur, doner, yeni hedefe varir");
+        // at rest at the start: chosen back and forth, the rocket only turns (no thrust, the journey not begun)
+        hz::Ship r0 = hz::depart(R);
+        hz::Command c1, c2;
+        c1.choose = hz::kTargetAndromeda;
+        c2.choose = hz::kTargetProxima;
+        const bool t1 = hz::step(r0, R, 0.0, c1).turnStarted;
+        for (int i = 0; i < 60; ++i) hz::step(r0, R, 1.0 / 60.0, hz::Command{});
+        const bool t2 = hz::step(r0, R, 0.0, c2).turnStarted;
+        for (int i = 0; i < 60 * 20; ++i) hz::step(r0, R, 1.0 / 60.0, hz::Command{});
+        check(t1 && t2 && r0.phi == 0.0 && r0.departT.hi < 0.0 && length(hz::position(r0) - R.start[0]) < 1e-3 && dot(r0.heading, R.dir[0]) > 1.0 - 1e-12,
+              "hedef: dururken secmek yalniz dondurur (itis yok, yolculuk baslamaz)");
+        // ... chosen and chosen back before the turn has moved it: the turn is called off, it keeps facing Proxima
+        hz::Ship r1 = hz::depart(R);
+        hz::step(r1, R, 0.0, c1);
+        hz::step(r1, R, 0.0, c2);
+        for (int i = 0; i < 60 * 20; ++i) hz::step(r1, R, 1.0 / 60.0, hz::Command{});
+        check(r1.turnAt < 0.0 && dot(r1.heading, R.dir[0]) > 1.0 - 1e-12, "hedef: secip hemen geri secince roket donmeye devam etmez");
+        // at the target: Space has nothing to fly; choosing it again after the other, it is still there
+        hz::Ship p = hz::depart(R);
+        hz::step(p, R, 0.0, sp);
+        const Trip tp = flyOn(p, 3600.0);
+        const hz::Events ep = hz::step(p, R, 0.0, sp);
+        hz::step(p, R, 0.0, c1);
+        hz::step(p, R, 1.0 / 60.0, hz::Command{});
+        hz::step(p, R, 0.0, c2);
+        const hz::Events ep2 = hz::step(p, R, 1.0 / 60.0, sp);
+        check(tp.arrivedProxima && ep.alreadyThere && !p.autopilot && hz::atTarget(p) && ep2.alreadyThere && p.phi == 0.0,
+              "hedef: hedefteyken Bosluk bos, digerini secip geri secince yine orada");
+        // ... and the turn towards the other, begun, is undone (the independent review: it ran on to Andromeda)
+        hz::Ship u = hz::depart(R);
+        hz::step(u, R, 0.0, sp);
+        flyOn(u, 3600.0);
+        const V3 h0 = u.heading;
+        hz::step(u, R, 0.0, c1);
+        for (int i = 0; i < 120; ++i) hz::step(u, R, 1.0 / 60.0, hz::Command{});
+        const double midTurn = dot(u.heading, h0);
+        hz::step(u, R, 0.0, c2);
+        for (int i = 0; i < 60 * 20; ++i) hz::step(u, R, 1.0 / 60.0, hz::Command{});
+        check(midTurn < 0.999 && dot(u.heading, h0) > 1.0 - 1e-9 && u.turnAt < 0.0 && u.course.target == hz::kTargetProxima && hz::atTarget(u),
+              "hedef: hedefteyken obur yone donerken geri secince roket geri doner, rotasi yine kendi hedefi");
+        // a choice made and taken back under way keeps the trip's clocks (the arrival tells the whole trip)
+        hz::Ship k = hz::depart(R);
+        hz::step(k, R, 0.0, sp);
+        for (int i = 0; i < 60 * 180; ++i) hz::step(k, R, 1.0 / 60.0, hz::Command{});
+        hz::step(k, R, 0.0, c1);
+        hz::step(k, R, 0.0, c2);
+        double tripTau = 0.0;
+        for (int i = 0; i < 60 * 3600 && !hz::atTarget(k); ++i)
+            if (const hz::Events e = hz::step(k, R, 1.0 / 60.0, hz::Command{}); e.arrived) tripTau = e.legTau;
+        double itP, ieP;
+        ideal(R.length[0], itP, ieP);
+        check(hz::atTarget(k) && std::fabs(tripTau - itP) < 1e-6, "hedef: yolda secip geri secmek yolculugun saatini sifirlamaz");
+        // the distance as the rocket measures it, the target off its line of motion: only the share along it contracted
+        hz::Ship g = hz::depart(R);
+        hz::step(g, R, 0.0, sp);
+        for (int i = 0; i < 60 * 300; ++i) hz::step(g, R, 1.0 / 60.0, hz::Command{});
+        hz::step(g, R, 0.0, c1);
+        const double flat = hz::toTarget(g, R), seen = hz::toTargetMeasured(g, R), gam = hz::kin(g.phi).gamma;
+        std::printf("    yolda Andromeda secili (gamma %.2f): Dunya'nin olctugu %.4g ly, roketin olctugu %.4g ly (1/gamma'si %.4g)\n", gam, flat / hz::kLy,
+                    seen / hz::kLy, flat / gam / hz::kLy);
+        check(gam > 2.0 && seen > 0.4 * flat && seen < flat, "hedef: cizgi disindaki hedefe roketin olctugu yol yalniz hareket yonunde kisalir");
+        // a hand stop past a stop: within what a double can tell there, it is arrived in place (no turn, no flight);
+        // further, on the same line back to the same stop, exactly
+        auto pastStop = [&](int leg, double past) {
+            hz::Ship q = hz::depart(R);
+            q.target = leg == 0 ? hz::kTargetProxima : hz::kTargetAndromeda;
+            q.course = hz::legCourse(R, leg);
+            q.heading = R.dir[leg];
+            q.x = hz::dd(past);
+            return q;
+        };
+        hz::Ship a1 = pastStop(1, 1e5), p1 = pastStop(0, 10.0), p2 = pastStop(0, 1e9);
+        const hz::Events ea1 = hz::step(a1, R, 1.0 / 60.0, sp), ep1 = hz::step(p1, R, 1.0 / 60.0, sp);
+        hz::step(p2, R, 0.0, sp);
+        const Trip tb = flyOn(p2, 3600.0);
+        std::printf("    duragin otesinde elle durmus: Andromeda'da 100 km %s, Proxima'da 10 m %s; 1e6 km: dondu %s, ayni duraga %.3g m\n",
+                    ea1.arrived ? "yerinde vardi" : "VARMADI", ep1.arrived ? "yerinde vardi" : "VARMADI", tb.turned ? "evet" : "hayir",
+                    length(hz::position(p2) - R.target[0]));
+        check(ea1.arrived && !ea1.turnStarted && ep1.arrived && !ep1.turnStarted && tb.turned && tb.arrivedProxima &&
+                  length(hz::position(p2) - R.target[0]) < 1e-3,
+              "hedef: duragin otesinde durunca cozunurluk icinde yerinde varir, otesinde ayni cizgiden ayni duraga doner");
+        // beyond the target's centre the distance shown is to the stop the rocket would set off to (the far side's)
+        hz::Ship b2 = pastStop(1, 1.5e5 * hz::kLy);
+        check(std::fabs(hz::toTarget(b2, R) / hz::kLy - 0.5e5) < 1.0, "hedef: hedefin merkezinin otesinde kalan yol uzak yuzdeki duraga");
+
+        // Özcan's journey of the evening, as saved by the two legs' version (2): 168,700 ly beyond Proxima, coming back at
+        // 212 m/s. Carried over: its place, speed and way; its stop is Proxima's far side (the near one lay through the star)
+        const std::map<std::string, std::string> v2 = {
+            {"hiz.surum", "2"},
+            {"hiz.ayak", "0"},
+            {"hiz.phi", "7.0689361602503468e-07"},
+            {"hiz.yon", "-1"},
+            {"hiz.x", "1.5956482886104286e+21 122087.93133523178"},
+            {"hiz.tau", "1913.3043517999758"},
+            {"hiz.t", "5322643760621.0244 -0.0001644489420921547"},
+            {"hiz.burun", "0.36484115236543119 0.2786142283467426 0.88840590120924656"},
+            {"hiz.donus", "-0.36484115236543119 -0.2786142283467426 -0.88840590120924656 0.36484115236543119 0.2786142283467426 0.88840590120924656 -1 8.6772183127462466"},
+            {"hiz.oto", "0 0"},
+            {"hiz.ayak_basi", "47.056324000004679 47.056324000004679 0"},
+            {"hiz.kalkis", "47.056324000004679 0"},
+        };
+        hz::Ship o;
+        const bool carried = hz::parse(o, v2, R);
+        const V3 was = R.target[0] + R.dir[0] * 1.5956482886104286e21;
+        const V3 stop = o.course.to;
+        std::printf("    Ozcan'in v2 yolculugu: okundu %s, yer farki %.3g m, yon %.15f, durak Proxima'dan %.6f AU (uzak yuzde %s)\n", carried ? "evet" : "hayir",
+                    length(hz::position(o) - was), dot(hz::motionDir(o), R.dir[0]), length(stop - R.proxima) / 1.495978707e11,
+                    dot(stop - R.proxima, R.dir[0]) > 0.0 ? "evet" : "hayir");
+        check(carried && length(hz::position(o) - was) < 1e-9 * length(was) && o.phi == 7.0689361602503468e-07 && dot(hz::motionDir(o), R.dir[0]) < -1.0 + 1e-12 &&
+                  o.target == hz::kTargetProxima && o.x.value() < 0.0 && std::fabs(length(stop - R.proxima) - R.orbitB) < 1e3 &&
+                  dot(stop - R.proxima, R.dir[0]) > 0.0,
+              "kayit: iki ayakli surumun yolculugu yeni bicime gecer (yer, hiz, yon ayni; durak Proxima'nin geldigi yuzunde)");
+        // ... from there: Space to Proxima (never through the star), or Andromeda chosen and Space
+        hz::Ship o1 = o, o2 = o;
+        hz::step(o1, R, 0.0, sp);
+        const Trip back = flyOn(o1, 3.0 * 3600.0);
+        hz::Command cA = sp;
+        cA.choose = hz::kTargetAndromeda;
+        hz::step(o2, R, 0.0, cA);
+        const Trip on = flyOn(o2, 4.0 * 3600.0);
+        std::printf("    oradan Bosluk: Proxima'ya vardi %s (%.1f dk, yildizin merkezine en cok %.4f AU yaklasti); Andromeda secilince vardi %s (%.1f dk)\n",
+                    back.arrivedProxima ? "evet" : "hayir", back.legTau / 60.0, back.minProxima / 1.495978707e11, on.arrivedAndromeda ? "evet" : "hayir",
+                    on.legTau / 60.0);
+        check(back.arrivedProxima && back.minProxima > 0.999 * R.orbitB && on.arrivedAndromeda && !on.arrivedProxima &&
+                  std::fabs(length(hz::position(o2) - R.m31) - R.before) < 1e7,
+              "hedef: Proxima'nin otesinden ikisine de varilir, Proxima'ya donuste yildizin icinden gecilmez");
     }
 
     {   // BEDEL: the plan's numbers (PLAN §4), and the plate's light against the boosted stress-energy tensor
@@ -678,15 +901,15 @@ int runHizTests(OlcekApp& app) {
         const hz::Route& R = app.route;
         auto eyeAt = [&](double frac, double phi, hz::EyeSum& sum) {
             hz::Ship s = hz::depart(R);
-            s.leg = 1;
+            s.target = hz::kTargetAndromeda;
+            s.course = hz::legCourse(R, hz::kLegAndromeda);
             s.x = hz::dd(-R.length[1] * (1.0 - frac));
             s.phi = phi;
-            s.sense = 1;
             s.heading = R.dir[1];
             hz::Eye e = app.eyeAt(s, 0.0, 0.0, std::tan(37.5 * kPi / 180.0));
             e.k = std::exp2(17.0) * 3e-3;
             app.renderEye(e, sum);
-            return hz::position(s, R);
+            return hz::position(s);
         };
         // at the arrival (100,000 ly before Andromeda's centre): its light is the sky's, L / 4 pi d^2 (M_V -21.5)
         hz::EyeSum a;
@@ -775,7 +998,6 @@ int runHizTests(OlcekApp& app) {
             hz::Ship sa = hz::depart(R);
             sa.phi = std::atanh(beta);
             sa.x = hz::dd(-hz::stopDistance(sa.phi));
-            sa.sense = 1;
             sa.heading = R.dir[0];
             hz::Eye ea = app.eyeAt(sa, 0.0, 0.0, std::tan(37.5 * kPi / 180.0));
             ea.worldT = 2.0 * hz::driveEarthTime(hz::peakFrom(0.0, R.length[0]));
@@ -800,7 +1022,6 @@ int runHizTests(OlcekApp& app) {
         hz::Ship s = hz::depart(R);
         s.phi = hz::phiCap();
         s.x = hz::dd(1.4761554137282181e21);
-        s.sense = 1;
         s.heading = R.dir[0];
         s.departT = hz::dd(0.0);
         s.t = hz::dd(4.924058433357e12);
@@ -890,10 +1111,14 @@ int runHizJourney(OlcekApp& app) {
         if (!finite) ++bad;
     };
     std::printf("tam yolculuk: otomatik varisla Proxima'ya ve Andromeda'ya, goz her 10 sn'de (bir kare arayla iki kez)\n");
-    while (s.leg < hz::kLegDone && s.tau < 6.0 * 3600.0) {
+    while (!(hz::atTarget(s) && s.target == hz::kTargetAndromeda) && s.tau < 6.0 * 3600.0) {
         // the eye's exposure follows every frame (its measure from the last drawn frame)
         const hz::Events evs = hz::step(s, R, dt, hz::Command{});
-        if (evs.arrived && s.leg == hz::kLegAndromeda) hz::step(s, R, 0.0, go);   // on to Andromeda
+        if (evs.arrived && evs.arrivedAt == hz::kTargetProxima) {   // on to Andromeda: chosen, and Space
+            hz::Command next = go;
+            next.choose = hz::kTargetAndromeda;
+            hz::step(s, R, 0.0, next);
+        }
         if (s.tau >= nextEye) {
             nextEye += 10.0;
             // settle the eye on this place (the scene's eye has been adapting all the way: a few seconds of it)
@@ -916,7 +1141,7 @@ int runHizJourney(OlcekApp& app) {
             }
             const hz::Kin k = hz::kin(s.phi);
             if (int(s.tau) % 60 < 10 || frames < 4)
-                std::printf("  %7.1f s  yol %d  %5.2f dokuz  EV %6.2f  ortalama isik %.4f  iki kare farki %%%.2f  kare %.1f ms\n", s.tau, s.leg,
+                std::printf("  %7.1f s  hedef %d  %5.2f dokuz  EV %6.2f  ortalama isik %.4f  iki kare farki %%%.2f  kare %.1f ms\n", s.tau, s.target,
                             k.nines, ev, m1, 100.0 * jump, app.frameMs + app.hostMs);
         }
         if (s.tau >= nextSide) {   // the side view: the map at the rocket and at the stops' scales
@@ -924,7 +1149,7 @@ int runHizJourney(OlcekApp& app) {
             for (double sv : {1.75, 13.08, 21.2}) {
                 Scale& sc = app.sc;
                 sc.hiz.on = true;
-                sc.hiz.rocket = hz::position(s, R);
+                sc.hiz.rocket = hz::position(s);
                 sc.hiz.motion = s.heading;
                 const hz::Kin k = hz::kin(s.phi);
                 sc.hiz.rate = k.gamma;
@@ -940,7 +1165,7 @@ int runHizJourney(OlcekApp& app) {
             }
         }
     }
-    const bool arrived = s.leg == hz::kLegDone;
+    const bool arrived = hz::atTarget(s) && s.at == hz::kTargetAndromeda;
     std::printf("tam yolculuk: %s, yolcunun saati %.1f dk, Dunya'da %.4g yil; goz %d kare (en uzun %.1f ms, ortalama %.1f), yandan %d kare "
                 "(en uzun %.1f ms); sonlu olmayan kare %d; iki kare arasinda isik en cok %%%.2f (%.0f. saniyede)\n",
                 arrived ? "Andromeda'ya varildi" : "VARILMADI", s.tau / 60.0, s.t.value() / hz::kYear, frames, maxMs, sumMs / std::max(frames, 1),
@@ -957,22 +1182,23 @@ int runHizFrames(OlcekApp& app, const std::vector<double>& phis, int leg, double
     std::printf("hiz kareleri: gece goku %.3e W/m^2 (gorunur, Gunes'in tayfinin wattlari)\n", app.nightSky);
     for (double phi : phis) {
         hz::Ship s = hz::depart(R);
-        s.leg = std::clamp(leg, 0, 1);
-        s.x = hz::dd(-R.length[s.leg] * (1.0 - frac));
+        const int Lg = std::clamp(leg, 0, 1);
+        s.target = Lg == 0 ? hz::kTargetProxima : hz::kTargetAndromeda;
+        s.course = hz::legCourse(R, Lg);
+        s.x = hz::dd(-R.length[Lg] * (1.0 - frac));
         s.phi = std::clamp(phi, 0.0, hz::phiCap());
         // (--set hiz.test.fren=1) on the stopping curve: as far from the target as it takes to stop from that speed
-        if (app.cfg.f("hiz.test.fren", 0.0f) > 0.5f) s.x = hz::dd(-std::min(hz::stopDistance(s.phi), R.length[s.leg]));
+        if (app.cfg.f("hiz.test.fren", 0.0f) > 0.5f) s.x = hz::dd(-std::min(hz::stopDistance(s.phi), R.length[Lg]));
         // (--set hiz.test.itis=1) on the thrust from the leg's start: as far as it takes to reach that speed
-        if (app.cfg.f("hiz.test.itis", 0.0f) > 0.5f) s.x = hz::dd(-R.length[s.leg] + std::min(hz::stopDistance(s.phi), R.length[s.leg]));
-        s.sense = 1;
-        s.heading = R.dir[s.leg];
-        const V3 pos = hz::position(s, R);
+        if (app.cfg.f("hiz.test.itis", 0.0f) > 0.5f) s.x = hz::dd(-R.length[Lg] + std::min(hz::stopDistance(s.phi), R.length[Lg]));
+        s.heading = R.dir[Lg];
+        const V3 pos = hz::position(s);
         const hz::Kin k = hz::kin(s.phi);
         if (sides.empty()) {
             hz::Eye e = app.eyeAt(s, yaw, pitch, std::tan(0.5 * fovDeg * kPi / 180.0));
             e.energy = app.cfg.f("hiz.enerji", 1.0f) > 0.5f;
             // the world's clock: the automatic arrival's at Proxima (the leg's end), otherwise the start's
-            if (s.leg == 0 && frac >= 1.0) e.worldT = 2.0 * hz::driveEarthTime(hz::peakFrom(0.0, R.length[0]));
+            if (Lg == 0 && frac >= 1.0) e.worldT = 2.0 * hz::driveEarthTime(hz::peakFrom(0.0, R.length[0]));
             hz::EyeSum sum;
             e.k = std::exp2(app.eyeEv(0.0)) * 3e-3;
             app.renderEye(e, sum);   // a dry run for the sky's light: the adapted exposure
@@ -980,7 +1206,7 @@ int runHizFrames(OlcekApp& app, const std::vector<double>& phis, int leg, double
             e.k = std::exp2(ev) * 3e-3;
             app.renderEye(e, sum);
             char name[96];
-            std::snprintf(name, sizeof(name), "goz_ayak%d_phi%06.3f_gorus%g%s", s.leg, s.phi, fovDeg, e.energy ? "_enerji" : "");
+            std::snprintf(name, sizeof(name), "goz_ayak%d_phi%06.3f_gorus%g%s", Lg, s.phi, fovDeg, e.energy ? "_enerji" : "");
             app.save(app.root + "/" + out + "/" + name);
             std::printf("phi %7.3f (%5.2f dokuz, gamma %.3e)  EV %.2f  gokyuzu %.3e (Gunes %.2e, butun bantlar %.3e)  gorus alaninda %d yildiz  "
                         "D %.3e .. %.3e  gun %.2f  kare %.2f ms (ana %.2f)\n",
@@ -994,10 +1220,9 @@ int runHizFrames(OlcekApp& app, const std::vector<double>& phis, int leg, double
                 sc.hiz.motion = s.heading;
                 sc.hiz.rate = k.gamma;
                 sc.hiz.shutterMove = hz::kC * k.gb * hz::kEyeShutter;
-                {   // the scene's framing: at the Local Group's scale the leg's middle (olcek_live.cpp)
-                    const int Lg = std::min(s.leg, 1);
+                {   // the scene's framing: at the Local Group's scale the course's middle (olcek_live.cpp)
                     const double u = std::clamp((sv - 21.6) / 0.8, 0.0, 1.0);
-                    sc.hiz.focus = R.dir[Lg] * ((-s.x.value() - 0.5 * R.length[Lg]) * u * u * (3.0 - 2.0 * u));
+                    sc.hiz.focus = s.course.dir * ((-s.x.value() - 0.5 * s.course.length) * u * u * (3.0 - 2.0 * u));
                 }
                 sc.hiz.ev = app.sideEv(sv, pos);
                 sc.hiz.mark = make_float3(1.0f, 0.93f, 0.86f) * 30.0f;
@@ -1020,7 +1245,7 @@ int runHizFrames(OlcekApp& app, const std::vector<double>& phis, int leg, double
                     std::printf("      splats %zu, the brightest %.3g\n", app.splats.size(), fmax);
                 }
                 char name[96];
-                std::snprintf(name, sizeof(name), "yan_ayak%d_yer%.3f_s%+06.2f", s.leg, frac, sv);
+                std::snprintf(name, sizeof(name), "yan_ayak%d_yer%.3f_s%+06.2f", Lg, frac, sv);
                 app.save(app.root + "/" + out + "/" + name);
                 std::printf("yan s %+6.2f  ev %.2f  kare %.2f ms  %zu nokta\n", sv, sc.hiz.ev, app.frameMs, app.splats.size());
             }

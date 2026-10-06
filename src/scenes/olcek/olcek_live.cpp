@@ -130,7 +130,10 @@ public:
                    {{"W", L("İtiş: 1 g'den başlar, hızlandıkça artar (%1 c 1 dk, 21 dokuz 8 dk)",
                             "Thrust: from 1 g, rising with the speed (1% c in 1 min, 21 nines in 8)")},
                     {"S", L("Fren (aynı güçle; geri vites yok)", "Brake (the same power; no reverse)")},
-                    {L("Boşluk", "Space"), L("Otomatik varış: doğru anda frenleyip durur", "Automatic arrival: brakes at the right moment")},
+                    {L("Boşluk", "Space"), L("Otomatik varış: seçili hedefe (panelde Hedef: Proxima ya da Andromeda, istediğin an), "
+                                             "doğru anda frenleyip durur",
+                                             "Automatic arrival at the chosen target (the panel's Target: Proxima or Andromeda, at any "
+                                             "time), braking at the right moment")},
                     {"Tab", L("Roketin gözü ↔ yandan", "The rocket's eye ↔ from the side")},
                     {"G", L("Grafikler: aç, kapat", "The graphs: on, off")},
                     {"E", L("Enerji gözü: bütün bantlar, sahte renkle (açık başlar)", "The energy eye: every band, in false colour (on at first)")},
@@ -199,16 +202,18 @@ public:
                                               : L("Ölçek: tekerlekle uzaklaş, yaklaş", "Scale: move out and in with the wheel");
                 // the first time in: what became of the saved journey (resumed where it was left, or not continued and
                 // why); a resumed one also keeps a chip on the panel until the first W, S or Space (a toast fades in 3 s)
-                if (mode_ == 1 && restoreNote_ == 1) {
+                if (mode_ == 1 && (restoreNote_ == 1 || restoreNote_ == 5)) {
                     const hz::Ship& s = a_.ship;
                     const hz::Kin k = hz::kin(s.phi);
-                    const std::string legs[3] = {L("Dünya → Proxima", "Earth → Proxima"), L("Proxima → Andromeda", "Proxima → Andromeda"),
-                                                 L("Andromeda'da", "at Andromeda")};
                     const std::string pace = s.phi <= 0.0   ? L("duruyorsun", "at rest")
                                              : k.nines < 1.0 ? "β " + theme::num(k.beta, 2)
                                                              : theme::num(k.nines, 1) + L(" dokuz", " nines");
-                    note = L("Kaldığın yerden: ", "Where you left it: ") + legs[std::clamp(s.leg, 0, 2)] + ", " + pace +
+                    note = std::string(L("Kaldığın yerden: hedef ", "Where you left it: target ")) + hz::targetName(s.target) + ", " + pace +
                            L(". Baştan başlatmak için: panelde \"Yolculuğu baştan başlat\"", ". To start over: \"Start the journey over\" in the panel");
+                    // (a journey of the two legs, carried over: the choice told once)
+                    if (restoreNote_ == 5)
+                        note += L(". Yeni: hedefi panelden seçiyorsun (Proxima ya da Andromeda), Boşluk seçilene gider",
+                                  ". New: you choose the target on the panel (Proxima or Andromeda), Space flies to it");
                     resumeChip_ = true;
                     resumeChipUntil_ = in.now + 20.0;
                 } else if (mode_ == 1 && restoreNote_ >= 2) {
@@ -357,7 +362,7 @@ public:
     }
 
     void unload() override {
-        if (loaded_) persist();
+        if (loaded_ && entered_) persist();   // (never in Hız this session: the file as it was, its notes still to tell)
         a_.release();
         if (pinned_) cudaFreeHost(pinned_);
         pinned_ = nullptr;
@@ -399,11 +404,11 @@ public:
         p.bb = &a_.bb;
         p.k = hz::kin(s.phi);
         // the Earth: "now" in the rocket's frame (its simultaneity), and the Earth seen (its light, delayed, Doppler-shifted)
-        const olcek::V3 pos = hz::position(s, a_.route);
+        const olcek::V3 pos = hz::position(s);
         const olcek::V3 rel = pos - a_.route.earth;
         const double d = olcek::length(rel);
         const double t = s.t.value();
-        const olcek::V3 m = hz::motionDir(s, a_.route);
+        const olcek::V3 m = hz::motionDir(s);
         p.earthDist = d;
         p.earthNow = s.phi > 0.0 ? t - p.k.beta * olcek::dot(rel, m) / hz::kC : t;
         p.earthSeen = t - d / hz::kC;
@@ -420,6 +425,7 @@ private:
     // ---- the second option: Hız ---------------------------------------------------------------------------------------
 
     void enterHiz() {
+        entered_ = true;
         olcekClk_ = a_.sc.clk;
         olcekS_ = a_.sc.s;
         mode_ = 1;
@@ -485,6 +491,7 @@ private:
         bool reset = false;
         for (const app::ControlEvent& e : in.events) {
             if (e.id == "oto") cmd.toggleAuto = true;
+            if (e.id == "hedef" && e.item >= 0) cmd.choose = e.item;
             if (e.id == "goruntu" && e.item >= 0 && e.item != view_) {
                 view_ = e.item;
                 evInit_ = false;
@@ -515,11 +522,10 @@ private:
             evInit_ = false;
             host.toast(L("Yolculuk baştan: Dünya'nın yanındasın", "The journey starts over: you are beside the Earth"));
         }
-        const int legBefore = a_.ship.leg;
         if (resumeChip_ && (in.now > resumeChipUntil_ || cmd.thrustPressed || cmd.brakePressed || cmd.toggleAuto || reset)) resumeChip_ = false;
         const hz::Events ev = hz::step(a_.ship, a_.route, dtau, cmd);
-        notices(host, ev, legBefore);
-        if (a_.ship.leg != legBefore) pano_ = hz::PanoState{};   // a new leg: the graphs' axes afresh
+        notices(host, ev);
+        if (ev.chosen || ev.arrived) pano_ = hz::PanoState{};   // a new trip: the graphs' axes afresh
         lastDtau_ = dtau;
 
         // the view's own input
@@ -564,14 +570,39 @@ private:
     static double sideDefault() { return 1.75; }
     static constexpr double kSideStops[6] = {1.75, 9.08, 13.08, 17.4, 21.2, 22.63};   // (the last: the leg in the graphs' gap)
 
-    void notices(app::Host& host, const hz::Events& ev, int legBefore) {
+    void notices(app::Host& host, const hz::Events& ev) {
         const hz::Ship& s = a_.ship;
+        const std::string name = hz::targetName(s.target);
+        if (ev.chosen) {   // the choice answered: where, how far, and what flies there (the physics' own rule)
+            const double far = hz::toTarget(s, a_.route);
+            std::string note = L("Hedef: ", "Target: ") + name + " (" + distText(far) + ")";
+            // moving along a line laid for the other target, or away from this one: the autopilot stops first
+            const bool stopsFirst = s.phi > 0.0 && (s.course.target != s.target || !hz::approaching(s));
+            if (hz::atTarget(s)) note += L(": buradasın", ": you are here");
+            else if (s.autopilot)
+                note += stopsFirst ? L(". Otomatik varış önce duruyor, sonra dönüp gidiyor", ". The automatic arrival stops first, then turns and goes")
+                                   : L(". Otomatik varış oraya gidiyor", ". The automatic arrival goes there");
+            else if (s.phi <= 0.0 && far <= hz::captureRadius(a_.route, s.target))
+                note += L(". Yakınsın: son kısmı otomatik varış uçuyor", ". Close by: the automatic arrival flies the last stretch");
+            else
+                note += stopsFirst ? L(". Boşluk oraya götürür (önce durur, döner)", ". Space takes you there (it stops and turns first)")
+                                   : L(". Boşluk oraya götürür", ". Space takes you there");
+            host.toast(note);
+        }
+        const bool andromeda = s.target == hz::kTargetAndromeda;
+        if (ev.turnStarted && s.phi <= 0.0 && !ev.arrived)
+            host.toast((andromeda ? L("Roket Andromeda'ya dönüyor (", "The rocket turns towards Andromeda (")
+                                  : L("Roket Proxima Centauri'ye dönüyor (", "The rocket turns towards Proxima Centauri (")) +
+                       theme::num(ev.turnDeg, 0) + "°)");
+        if (ev.alreadyThere)
+            host.toast(andromeda ? L("Zaten Andromeda'dasın: panelden başka bir hedef seç", "Already at Andromeda: choose another target on the panel")
+                                 : L("Zaten Proxima Centauri'desin: panelden başka bir hedef seç",
+                                     "Already at Proxima Centauri: choose another target on the panel"));
         if (ev.autoOn)
             host.toast(L("Otomatik varış: en kısa yoldan (gerekirse hızlanır), doğru anda frenleyip tam hedefte durur",
                          "Automatic arrival: the quickest way (speeding up if it helps), braking at the right moment, stopping right at the target"));
         if (ev.captured)
             host.toast(L("Hedefin yakınında durdun: son kısmı otomatik varış uçuyor", "You stopped near the target: the automatic arrival flies the last stretch"));
-        (void)s;
         if (ev.autoOff) host.toast(L("Otomatik varış kapandı", "Automatic arrival off"));
         if (ev.autoCancelled) host.toast(L("Otomatik varış kapandı: kumanda sende", "Automatic arrival off: you are flying"));
         if (ev.overshoot && !overshootShown_)   // (reported every step of that brake: told once)
@@ -581,12 +612,16 @@ private:
             host.toast(L("Hız tavanı: 21 dokuz. Işık hızına bundan fazla yaklaşmıyoruz (tasarım kararı)",
                          "The speed cap: 21 nines. We go no closer to the speed of light (a design choice)"));
         if (ev.arrived) {
-            const std::string where = ev.arrivedLeg == hz::kLegProxima ? L("Proxima Centauri'ye vardın", "You have reached Proxima Centauri")
-                                                                       : L("Andromeda'ya vardın", "You have reached Andromeda");
-            host.toast(where + L(": senin saatinle ", ": by your clock ") + clockText(ev.legTau) + L(", Dünya'da ", ", on the Earth ") +
-                       spanText(ev.legEarth) + L(" geçti", " passed"));
-            if (s.leg == hz::kLegAndromeda && legBefore == hz::kLegProxima && ev.turnStarted)
-                host.toast(L("Roket Andromeda'ya dönüyor (", "The rocket turns towards Andromeda (") + theme::num(ev.turnDeg, 0) + "°)");
+            const std::string where = ev.arrivedAt == hz::kTargetProxima ? L("Proxima Centauri'ye vardın", "You have reached Proxima Centauri")
+                                                                         : L("Andromeda'ya vardın", "You have reached Andromeda");
+            std::string note = where;
+            if (ev.legTau > 0.0)
+                note += L(": senin saatinle ", ": by your clock ") + clockText(ev.legTau) + L(", Dünya'da ", ", on the Earth ") +
+                        spanText(ev.legEarth) + L(" geçti", " passed");
+            // what next: the other target is a choice on the panel
+            note += ev.arrivedAt == hz::kTargetProxima ? L(". Andromeda için panelde Hedef: Andromeda", ". For Andromeda: Target: Andromeda on the panel")
+                                                       : L(". Geri dönmek için panelde Hedef: Proxima", ". To go back: Target: Proxima on the panel");
+            host.toast(note);
         }
     }
 
@@ -623,7 +658,7 @@ private:
                 lookAhead_ = false;
             }
         }
-        const olcek::V3 pos = hz::position(s, a_.route);
+        const olcek::V3 pos = hz::position(s);
         const hz::Kin k = hz::kin(s.phi);
         if (view_ == 0) {
             hz::Eye e = a_.eyeAt(s, yaw_, pitch_, std::pow(10.0, zoom_));
@@ -656,11 +691,10 @@ private:
             sc.hiz.motion = s.heading;
             sc.hiz.rate = k.gamma;
             sc.hiz.shutterMove = hz::kC * k.gb * hz::kEyeShutter;
-            {   // at the Local Group's scale the leg's middle (the rocket crawls between its two stops); nearer, the rocket
-                const int Lg = std::min(s.leg, 1);
-                const double tMid = -s.x.value() - 0.5 * a_.route.length[Lg];
+            {   // at the Local Group's scale the course's middle (the rocket crawls between its ends); nearer, the rocket
+                const double tMid = -s.x.value() - 0.5 * s.course.length;
                 const double u = std::clamp((sideS_ - 21.6) / 0.8, 0.0, 1.0);
-                sc.hiz.focus = a_.route.dir[Lg] * (tMid * u * u * (3.0 - 2.0 * u));
+                sc.hiz.focus = s.course.dir * (tMid * u * u * (3.0 - 2.0 * u));
             }
             sc.hiz.ev = a_.sideEv(sideS_, pos);
             sc.hiz.mark = make_float3(0.0f, 0.0f, 0.0f);   // (the rocket: the side layer draws it)
@@ -682,15 +716,16 @@ private:
         case hz::Drive::Brake: drive = L("Fren", "Braking"); break;
         case hz::Drive::Coast: drive = L("Süzülüyor", "Coasting"); break;
         case hz::Drive::Turn: drive = L("Dönüyor", "Turning"); break;
-        case hz::Drive::Done: drive = L("Vardın", "Arrived"); break;
-        default: drive = s.leg == hz::kLegProxima && s.legTau < 0.0 ? L("Kalkışta", "Ready") : L("Duruyor", "At rest"); break;
+        default:
+            drive = hz::atTarget(s) ? (s.at == hz::kTargetAndromeda ? L("Andromeda'da", "At Andromeda") : L("Proxima'da", "At Proxima"))
+                    : s.departT.hi < 0.0 ? L("Kalkışta", "Ready")
+                                         : L("Duruyor", "At rest");
+            break;
         }
         st.chips.push_back({drive, s.drive == hz::Drive::Thrust || s.drive == hz::Drive::Brake});
         if (resumeChip_) st.chips.push_back({L("Kaldığın yerden", "Resumed"), true});
         if (s.autopilot) st.chips.push_back({L("Otomatik varış", "Automatic arrival"), true});
-        const std::string legs[3] = {L("Dünya → Proxima", "Earth → Proxima"), L("Proxima → Andromeda", "Proxima → Andromeda"),
-                                     L("Andromeda'dasın", "At Andromeda")};
-        st.metrics.push_back({L("Yol", "Leg"), legs[std::clamp(s.leg, 0, 2)]});
+        st.metrics.push_back({L("Hedef", "Target"), hz::targetName(s.target)});
         st.metrics.push_back({L("Hız", "Speed"), speedText(k)});
         if (graphs_) {   // the graphs carry the rest; the numbers they do not show
             st.metrics.push_back({L("β (ışık hızına oranı)", "β (of light's speed)"), betaText(k)});
@@ -706,10 +741,9 @@ private:
         const double t = s.t.value();
         st.metrics.push_back({L("Dünya'da geçen", "Passed on the Earth"), spanText(t)});
         if (t < 1e4 * hz::kYear) st.metrics.push_back({L("Dünya'da tarih", "The date on the Earth"), dateText(t)});
-        if (s.leg < hz::kLegDone) {
-            const double rem = hz::remaining(s);
-            st.metrics.push_back({L("Kalan (Dünya'nın ölçtüğü)", "Left (as the Earth measures)"), distText(rem)});
-            st.metrics.push_back({L("Kalan (senin ölçtüğün)", "Left (as you measure)"), distText(rem / k.gamma)});
+        if (!hz::atTarget(s)) {
+            st.metrics.push_back({L("Kalan (Dünya'nın ölçtüğü)", "Left (as the Earth measures)"), distText(hz::toTarget(s, a_.route))});
+            st.metrics.push_back({L("Kalan (senin ölçtüğün)", "Left (as you measure)"), distText(hz::toTargetMeasured(s, a_.route))});
             st.metrics.push_back({L("Durma mesafesi", "Stopping distance"), distText(hz::stopDistance(s.phi))});
         }
         if (view_ == 0) st.metrics.push_back({L("Görüş açısı", "Field of view"), fovText(std::pow(10.0, zoom_))});
@@ -743,17 +777,25 @@ private:
             en.detail = "E";
             st.controls.push_back(en);
         }
+        // where to (Özcan 2026-10-06: chosen at any time, Proxima at the start), and the automatic arrival there
+        app::Control h;
+        h.kind = app::Control::Kind::Choice;
+        h.id = "hedef";
+        h.section = true;
+        h.title = L("Hedef", "Target");
+        h.items = {"Proxima", "Andromeda"};
+        h.active = s.target;
+        st.controls.push_back(h);
+        const bool here = hz::atTarget(s);
         app::Control a;
         a.kind = app::Control::Kind::Button;
         a.id = "oto";
-        a.section = true;
         a.text = s.autopilot ? L("Otomatik varışı kapat", "Automatic arrival off") : L("Otomatik varış", "Automatic arrival");
         a.keys = L("Boşluk", "Space");
-        a.strong = !s.autopilot && s.leg < hz::kLegDone;
-        a.enabled = s.leg < hz::kLegDone;
-        a.detail = s.leg == hz::kLegProxima ? L("Proxima Centauri: 4,25 ışık yılı", "Proxima Centauri: 4.25 light years")
-                 : s.leg == hz::kLegAndromeda ? L("Andromeda: 2,4 milyon ışık yılı", "Andromeda: 2.4 million light years")
-                                              : L("Yolculuk tamamlandı", "The journey is complete");
+        a.strong = !s.autopilot && !here;
+        a.enabled = !here || s.autopilot;
+        a.detail = here ? L("Buradasın: başka bir hedef seç", "You are here: choose another target")
+                        : hz::targetName(s.target) + std::string(": ") + distText(hz::toTarget(s, a_.route));
         st.controls.push_back(a);
         app::Control r;
         r.kind = app::Control::Kind::Button;
@@ -908,10 +950,14 @@ private:
             kv[trim(line.substr(0, eq))] = trim(line.substr(eq + 1));
         }
         hz::Ship s;
-        const bool ok = hz::parse(s, kv);
+        const bool ok = hz::parse(s, kv, a_.route);
         if (ok) {
             a_.ship = s;
-            if (own && s.departT.hi >= 0.0) restoreNote_ = 1;   // a journey under way: said when Hız opens, kept on the panel
+            // a journey under way: said when Hız opens, kept on the panel (one of the two legs', carried over: the new
+            // choice of target told with it)
+            const auto ver = kv.find("hiz.surum");
+            const bool carried = ver != kv.end() && std::atof(ver->second.c_str()) < double(hz::kSaveVersion);
+            if (own && s.departT.hi >= 0.0) restoreNote_ = carried ? 5 : 1;
         } else if (own) {
             // not continued: a journey that had departed is told of when Hız opens (older or newer version, or damaged),
             // its file kept aside for good (the .yedek turns over every session)
@@ -919,7 +965,7 @@ private:
             if (const auto it = kv.find("hiz.kalkis"); it != kv.end()) departed = std::atof(it->second.c_str());
             if (const auto it = kv.find("hiz.surum"); it != kv.end()) version = std::atof(it->second.c_str());
             if (departed >= 0.0) {
-                restoreNote_ = version >= 1.0 && version < double(hz::kSaveVersion) ? 2 : version > double(hz::kSaveVersion) ? 3 : 4;
+                restoreNote_ = version >= 1.0 && version < 2.0 ? 2 : version > double(hz::kSaveVersion) ? 3 : 4;   // (2 carries over)
                 std::error_code ec;
                 std::filesystem::copy_file(path, path + ".eski-surum", std::filesystem::copy_options::overwrite_existing, ec);
             }
@@ -958,7 +1004,7 @@ private:
     // the second option
     int mode_ = 0;                      // 0 Ölçek (the address), 1 Hız
     int view_ = 0;                      // 0 the rocket's eye, 1 from the side
-    bool loaded_ = false;
+    bool loaded_ = false, entered_ = false;   // the journey read; Hız opened this session
     std::string savePath_;
     double lastNow_ = -1.0;             // the scene's clock at the last frame of the journey
     double saveAt_ = 0.0;

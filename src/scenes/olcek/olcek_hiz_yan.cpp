@@ -93,10 +93,9 @@ constexpr double kPeriod = 1024;  // the lattice's period along the leg, in cell
 
 void drawMedium(const SideLayer& L, const Cam& cam, float S) {
     const Ship& s = *L.ship;
-    const int leg = std::min(s.leg, 1);
-    const V3 dir = L.route->dir[leg];
+    const V3 dir = s.course.dir;
     const double move = kC * std::sinh(std::max(s.phi, 0.0)) * kShutter;   // m, in the shutter
-    const V3 mv = dir * double(s.sense);
+    const V3 mv = dir;
     const double hView = L.W * L.view.h / std::max(L.view.w, 1.0f);
     const double ppm = cam.pxPerM();
     const double lw = std::log10(L.W / 5.0);
@@ -136,13 +135,10 @@ void drawMedium(const SideLayer& L, const Cam& cam, float S) {
         double ph = std::fmod(s.x.hi, P);
         ph = std::fmod(ph + s.x.lo, P);
         if (ph < 0.0) ph += P;
-        // the streak ends (now) along the motion that reach the screen: [-span - ahead, span]; along dir by the sense
+        // the streak ends (now) along the motion that reach the screen: [-span - ahead, span] (the course runs the way it
+        // moves)
         const double ahead = std::min(move, 3.0 * L.W);
-        double dmin = -span - ahead, dmax = span;
-        if (s.sense < 0) {
-            dmin = -span;
-            dmax = span + ahead;
-        }
+        const double dmin = -span - ahead, dmax = span;
         const long long c0 = (long long)std::floor((dmin + ph) / h) - 1, c1 = (long long)std::ceil((dmax + ph) / h);
         if (c1 - c0 > 4000) continue;   // (never: the lattice follows the screen's scale)
         for (long long c = c0; c <= c1; ++c) {
@@ -186,19 +182,20 @@ void drawMedium(const SideLayer& L, const Cam& cam, float S) {
 void drawWay(const SideLayer& L, const Cam& cam, float S) {
     const Ship& s = *L.ship;
     const Route& R = *L.route;
-    const int leg = std::min(s.leg, 1);
-    const V3 dir = R.dir[leg];
-    const double x = s.x.value();                 // from the target (< 0 before it)
-    // along the leg from the rocket: t > 0 towards the target. The far ends are brought in before projecting: a point
+    const Course& C = s.course;
+    const V3 dir = C.dir;
+    const double x = s.x.value();                 // from the course's end (< 0 before it)
+    const bool here = atTarget(s);
+    // along the course from the rocket: t > 0 towards its end. The far ends are brought in before projecting: a point
     // 10^16 m away seen from tens of metres moves by metres for a 1e-16 turn of the axes (the screen's edge is near)
     const double far = 40.0 * std::max(L.W, L.D);
     auto near = [&](double t) { return dir * (t >= 0.0 ? std::min(t, far) : std::max(t, -far)); };
-    const double tTarget = -x, tStart = -x - R.length[leg];
+    const double tTarget = -x, tStart = -x - C.length;
     const ui::Color glow = ui::hex(0xCFE0FF);
     double ax, ay, bx, by, rx, ry;
     const bool hasA = cam.at(near(tStart), ax, ay), hasB = cam.at(near(tTarget), bx, by);
     cam.at(V3{}, rx, ry);
-    if (s.leg < kLegDone && hasA && hasB) {
+    if (!here && hasA && hasB) {
         // behind the rocket fainter, ahead brighter: a soft glow and a fine core
         segment(ax, ay, rx, ry, L.view, S * 5.0f, ui::withAlpha(glow, 0.035f));
         segment(ax, ay, rx, ry, L.view, S * 1.1f, ui::withAlpha(glow, 0.16f));
@@ -236,13 +233,21 @@ void drawWay(const SideLayer& L, const Cam& cam, float S) {
         ui::text(toRight ? ex - wName : ex, ey - S * 34.0f, arrowName, nameT);
         ui::text(toRight ? ex - wDist : ex, ey - S * 16.0f, d, distT);
     };
-    if (s.leg < kLegDone) {
-        const std::string from = leg == kLegProxima ? app::L("Kalkış · Dünya", "Departure · the Earth") : "Proxima Centauri";
-        const std::string to = leg == kLegProxima ? "Proxima Centauri" : "Andromeda";
-        stop(hasA, tStart, ax, ay, std::fabs(x + R.length[leg]), from);
-        stop(hasB, tTarget, bx, by, std::fabs(x), to);
-    } else {
-        stop(true, 0.0, rx, ry, 0.0, app::L("Andromeda: vardın", "Andromeda: you have arrived"));
+    if (!here) {
+        // the course's ends: where it was laid (the start beside the Earth, a stop, or wherever the rocket stood) and its
+        // target
+        std::string from = app::L("Durduğun yer", "Where you stood");
+        if (length(C.from - R.start[0]) < 1e3) from = app::L("Kalkış · Dünya", "Departure · the Earth");
+        else if (length(C.from - R.proxima) < 2.0 * R.orbitB) from = "Proxima Centauri";
+        else if (length(C.from - R.m31) < 1.01 * R.before) from = "Andromeda";
+        stop(hasA, tStart, ax, ay, std::fabs(x + C.length), from);
+        stop(hasB, tTarget, bx, by, std::fabs(x), targetName(C.target));
+    } else {   // arrived: the stop's name under the rocket (where its speed is shown under way)
+        const double half = std::max(2.4 * cam.pxPerM(), double(S * 10.0f));
+        const float lx = float(rx) + S * 18.0f, ly = float(std::min(ry + half + S * 16.0f, double(L.view.y + L.view.h - S * 90.0f)));
+        ui::text(lx, ly, s.at == kTargetAndromeda ? app::L("Andromeda: vardın", "Andromeda: you have arrived")
+                                                  : app::L("Proxima Centauri: vardın", "Proxima Centauri: you have arrived"),
+                 nameT);
     }
 }
 
@@ -376,7 +381,7 @@ void drawRocket(const SideLayer& L, const SideState& st, const Cam& cam, float S
 // the speed beside the rocket (Özcan's reference: v and beta along the way), and the way made in one of your seconds
 void drawSpeedLabel(const SideLayer& L, const Cam& cam, float S) {
     const Ship& s = *L.ship;
-    if (s.phi <= 0.0 || s.leg >= kLegDone) return;
+    if (s.phi <= 0.0) return;
     const Kin k = kin(s.phi);
     double cx, cy;
     cam.at(V3{}, cx, cy);

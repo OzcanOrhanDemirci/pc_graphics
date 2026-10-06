@@ -185,9 +185,10 @@ void drawRoad(const Pano& p, PanoState&, Box b, float S) {
     const Kin& k = p.k;
     const Ship& s = *p.ship;
     const Route& R = *p.route;
-    const int Lg = std::min(s.leg, 1);
-    const double Lm = R.length[Lg];
-    const double rem = remaining(s), stop = stopDistance(s.phi);
+    // the trip to the chosen target: along the course while it leads there (its length the whole ruler), else the
+    // straight way from here (none of it made yet: the rocket stops and turns first)
+    const double rem = toTarget(s, R), remSeen = toTargetMeasured(s, R), stop = stopDistance(s.phi);
+    const double Lm = std::max(s.course.target == s.target ? std::max(s.course.length, rem) : rem, 1.0);
     const ui::TextStyle lab = theme::small(theme::Scale{S}, white(0.62f));
     const ui::TextStyle val = theme::mono(theme::Scale{S}, 14.0f, white(0.92f));
     const float gridW = S * 120.0f;
@@ -217,10 +218,10 @@ void drawRoad(const Pano& p, PanoState&, Box b, float S) {
     // your ruler: the same scale, the way left contracted by gamma (it melts)
     y += S * 70.0f;
     ui::text(x0, y - S * 28.0f, L("Senin ölçtüğün", "As you measure"), lab);
-    const std::string d2 = distText(rem / k.gamma);
+    const std::string d2 = distText(remSeen);
     ui::text(x1 - ui::measure(d2, val), y - S * 28.0f, d2, val);
     const float rx = RX(travelled);
-    const float rEnd = std::min(x1, rx + float(rem / k.gamma / Lm) * (x1 - x0));
+    const float rEnd = std::min(x1, rx + float(remSeen / Lm) * (x1 - x0));
     ui::line(rx, y, std::max(rEnd, rx + S * 2.0f), y, S * 2.4f, white(0.95f));
     ui::line(rEnd, y - S * 8.0f, rEnd, y + S * 8.0f, S * 1.6f, white(0.9f));
     // the stopping distance in words
@@ -490,7 +491,7 @@ void drawPanels(const Pano& p, PanoState& st, const ui::Rect& view, float Sapp, 
             break;
         case 2: drawSpacetime(p, panel(x, y, wk, hk, Sk, L("UZAY-ZAMAN", "SPACETIME")), Sk); break;
         case 4: {
-            const std::string to = p.ship->leg == kLegProxima ? "→ Proxima" : p.ship->leg == kLegAndromeda ? "→ Andromeda" : "";
+            const std::string to = p.ship->target == kTargetAndromeda ? "→ Andromeda" : "→ Proxima";
             drawRoad(p, st, panel(x, y, wk, hk, Sk, L("YOL", "THE WAY"), to), Sk);
             break;
         }

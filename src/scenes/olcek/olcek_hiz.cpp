@@ -13,10 +13,10 @@ namespace {
 
 constexpr double kPi = 3.14159265358979323846;
 constexpr double kDeg = kPi / 180.0;
-// a leg's target is reached only by stopping on it: the automatic arrival lands exactly (x = 0); a hand on the brake
-// never does, and is never snapped there (no teleport: PLAN §1)
+// a target is reached only by stopping on it: the automatic arrival lands exactly (x = 0); a hand on the brake never
+// does, and is never snapped there (no teleport: PLAN §1)
 constexpr double kArriveTol = 1e-3;
-// stopped by hand within this share of the leg from its target, the automatic arrival takes over the last stretch
+// stopped by hand within this share of a classic leg from the target, the automatic arrival takes over the last stretch
 constexpr double kCapture = 1e-3;
 
 V3 icrsDir(double raDeg, double decDeg) {
@@ -318,63 +318,97 @@ Route makeRoute() {
     return r;
 }
 
-const char* legName(int leg) {
-    switch (leg) {
-    case kLegProxima: return "Dünya → Proxima";
-    case kLegAndromeda: return "Proxima → Andromeda";
-    default: return "Andromeda";
-    }
+const char* targetName(int target) { return target == kTargetAndromeda ? "Andromeda" : "Proxima Centauri"; }
+
+namespace {
+V3 centreOf(const Route& r, int target) { return target == kTargetAndromeda ? r.m31 : r.proxima; }
+double standoff(const Route& r, int target) { return target == kTargetAndromeda ? r.before : r.orbitB; }
+// how near a place a double can tell from the Sun's origin: ~10^-15 of its distance (at Andromeda's stop 2.4e22 m, a
+// few 10^7 m), never under the arrival's millimetre
+double resolution(V3 p) { return std::max(kArriveTol, 1e-15 * length(p)); }
+}   // namespace
+
+V3 stopPoint(const Route& r, int target, V3 from) {
+    const V3 c = centreOf(r, target);
+    const V3 d = c - from;
+    const double n = length(d);
+    // (from its centre itself: in front as seen from the Earth)
+    const V3 u = n > 0.0 ? d * (1.0 / n) : normalize(c - r.earth);
+    return c - u * standoff(r, target);
+}
+
+double captureRadius(const Route& r, int target) { return kCapture * r.length[target == kTargetAndromeda ? 1 : 0]; }
+
+Course course(const Route& r, int target, V3 from) {
+    Course c;
+    c.from = from;
+    c.to = stopPoint(r, target, from);
+    c.target = target;
+    const V3 d = c.to - c.from;   // (as makeRoute's legs: the classic ones come out the same, bit for bit)
+    c.length = length(d);
+    c.dir = c.length > 0.0 ? d * (1.0 / c.length) : normalize(centreOf(r, target) - r.earth);
+    return c;
+}
+
+Course legCourse(const Route& r, int leg) {
+    Course c;
+    c.from = r.start[leg];
+    c.to = r.target[leg];
+    c.dir = r.dir[leg];
+    c.length = r.length[leg];
+    c.target = leg == kLegAndromeda ? kTargetAndromeda : kTargetProxima;
+    return c;
 }
 
 Ship depart(const Route& r) {
     Ship s;
-    s.leg = kLegProxima;
+    s.target = kTargetProxima;
+    s.course = legCourse(r, kLegProxima);
     s.x = dd(-r.length[0]);
     s.heading = r.dir[0];
     s.turnFrom = s.turnTo = s.heading;
     return s;
 }
 
-V3 position(const Ship& s, const Route& r) {
-    const int L = std::min(s.leg, 1);
-    if (s.leg >= kLegDone) return r.target[1];
+V3 position(const Ship& s) {
+    const Course& c = s.course;
     // from whichever end is nearer: the far end's rounding (~ulp of 10^22 m) never shows next to the near one
-    const DD fromStart = add(s.x, r.length[L]);
-    if (fromStart.value() < 0.5 * r.length[L]) return r.start[L] + r.dir[L] * fromStart.value();
-    return r.target[L] + r.dir[L] * s.x.value();
+    const DD fromStart = add(s.x, c.length);
+    if (fromStart.value() < 0.5 * c.length) return c.from + c.dir * fromStart.value();
+    return c.to + c.dir * s.x.value();
 }
 
-V3 motionDir(const Ship& s, const Route& r) {
-    const int L = std::min(s.leg, 1);
-    if (s.phi > 0.0) return r.dir[L] * double(s.sense);
-    return r.dir[L] * (s.x.value() <= 0.0 ? 1.0 : -1.0);
-}
+V3 motionDir(const Ship& s) { return s.course.dir; }
 
-bool approaching(const Ship& s) {
-    if (s.phi <= 0.0) return true;
-    const double x = s.x.value();
-    return (x < 0.0 && s.sense > 0) || (x > 0.0 && s.sense < 0);
-}
+bool approaching(const Ship& s) { return s.phi <= 0.0 || s.x.value() < 0.0; }
 
 double remaining(const Ship& s) { return std::fabs(s.x.value()); }
+
+double toTarget(const Ship& s, const Route& r) {
+    // along the course while it leads there with its end ahead; else straight from here (past the end and beyond the
+    // target's centre, the stop is the far side's: where the rocket would set off to)
+    if (s.course.target == s.target && s.x.value() <= 0.0) return -s.x.value();
+    const V3 here = position(s);
+    return length(stopPoint(r, s.target, here) - here);
+}
+
+double toTargetMeasured(const Ship& s, const Route& r) {
+    const Kin k = kin(s.phi);
+    if (s.course.target == s.target && s.x.value() <= 0.0) return -s.x.value() / k.gamma;
+    const V3 here = position(s);
+    const V3 d = stopPoint(r, s.target, here) - here;
+    // (only the share along the motion is contracted)
+    const double par = dot(d, s.course.dir), perp2 = std::max(dot(d, d) - par * par, 0.0);
+    return std::sqrt(par * par / (k.gamma * k.gamma) + perp2);
+}
+
+bool atTarget(const Ship& s) { return s.at >= 0 && s.at == s.target && s.phi <= 0.0; }
 
 // ---------------------------------------------------------------------------------------------------------------------
 
 Events step(Ship& s, const Route& r, double dtau, const Command& c) {
     Events ev;
     const double cap = phiCap();
-
-    if (c.toggleAuto && s.leg < kLegDone) {
-        s.autopilot = !s.autopilot;
-        (s.autopilot ? ev.autoOn : ev.autoOff) = true;
-        s.handOver = !s.autopilot;
-    } else if (s.autopilot && (c.thrustPressed || c.brakePressed)) {   // a hand on W or S takes over
-        s.autopilot = false;
-        s.handOver = true;
-        ev.autoCancelled = true;
-    }
-    // the keys only count by hand (the automatic arrival flies alone, whatever is held)
-    const bool thrust = !s.autopilot && c.thrust && !c.brake, brake = !s.autopilot && c.brake;
 
     auto startTurn = [&](V3 to) {
         s.turnFrom = s.heading;
@@ -389,9 +423,38 @@ Events step(Ship& s, const Route& r, double dtau, const Command& c) {
         s.tau += h;
         s.t = add(s.t, h);
     };
+    // the course from here to the chosen target (at rest: it sets off there, or turns to it). One laid for another target
+    // than the last is a new trip (its clocks from its first thrust). Back from a short way past the same target's stop
+    // (still on its side of the target): along the same line reversed, to the same stop (its place not worked out again
+    // from a rounded position: near Andromeda a double's step is ~10^6 m)
+    auto layCourse = [&]() {
+        if (s.course.target != s.target) {
+            s.legTau = -1.0;
+            s.legT = dd(-1.0);
+        }
+        const double past = s.x.value();
+        if (s.course.target == s.target && past > 0.0 && past < standoff(r, s.target)) {
+            s.course.dir = s.course.dir * -1.0;
+            s.course.length = past;
+            s.course.from = s.course.to - s.course.dir * past;
+            s.x = neg(s.x);
+            return;
+        }
+        s.course = course(r, s.target, position(s));
+        s.x = dd(-s.course.length);
+    };
+    // the course's end where the rocket already is, within what a double can tell there: it has arrived (no turn, no
+    // flight of a few rounding steps; nothing seen moves)
+    auto within = [&]() { return std::fabs(s.x.value()) <= resolution(s.course.to); };
+    // a turn under way at rest called off: back to where it began (or stopped where it is, if it had not moved)
+    auto undoTurn = [&]() {
+        if (s.turnAt < 0.0) return;
+        if (dot(s.heading, s.turnFrom) < 1.0 - 1e-12) startTurn(s.turnFrom);
+        else s.turnAt = -1.0;
+    };
     auto arrive = [&]() {
         ev.arrived = true;
-        ev.arrivedLeg = s.leg;
+        ev.arrivedAt = s.course.target;
         if (s.legTau >= 0.0) {
             ev.legTau = s.tau - s.legTau;
             ev.legEarth = add(s.t, neg(s.legT)).value();
@@ -399,28 +462,57 @@ Events step(Ship& s, const Route& r, double dtau, const Command& c) {
         s.autopilot = false;
         s.handOver = false;
         s.phi = 0.0;
-        if (s.leg == kLegProxima) {
-            s.leg = kLegAndromeda;
-            s.x = dd(-r.length[1]);
-            s.sense = 1;
-            s.legTau = -1.0;
-            s.legT = dd(-1.0);
-            startTurn(r.dir[1]);   // it turns towards Andromeda by itself
-        } else {
-            s.leg = kLegDone;
-            s.x = dd(0.0);
-        }
+        s.at = s.course.target;
+        s.legTau = -1.0;   // the next trip's clocks from its first thrust
+        s.legT = dd(-1.0);
     };
+
+    // another target chosen (the hand's claim gone). At rest the rocket lays its course there and turns to it at once (the
+    // choice answered on the screen); moving, it keeps to its line (no turning under way: the automatic arrival stops
+    // first). Choosing back the target it rests at: the turn towards the other undone, its own course again
+    if (c.choose >= 0 && c.choose <= 1 && c.choose != s.target) {
+        s.target = c.choose;
+        ev.chosen = true;
+        s.handOver = false;
+        if (s.phi <= 0.0) {
+            const V3 here = position(s);
+            if (s.at == s.target) {
+                undoTurn();
+                s.course = Course{here, here, s.course.dir, 0.0, s.target};
+                s.x = dd(0.0);
+            } else {
+                layCourse();
+                if (within()) {   // already there
+                    undoTurn();
+                    s.x = dd(0.0);
+                    s.at = s.target;
+                } else if (dot(s.heading, s.course.dir) < 1.0 - 1e-12) {
+                    startTurn(s.course.dir);   // (from where a turn under way has got to)
+                } else {
+                    s.turnAt = -1.0;           // already facing it: a turn under way towards the other is called off
+                }
+            }
+        }
+    }
+    if (c.toggleAuto) {
+        if (!s.autopilot && atTarget(s)) {
+            ev.alreadyThere = true;   // nothing to fly
+        } else {
+            s.autopilot = !s.autopilot;
+            (s.autopilot ? ev.autoOn : ev.autoOff) = true;
+            s.handOver = !s.autopilot;
+        }
+    } else if (s.autopilot && (c.thrustPressed || c.brakePressed)) {   // a hand on W or S takes over
+        s.autopilot = false;
+        s.handOver = true;
+        ev.autoCancelled = true;
+    }
+    if (c.thrustPressed && atTarget(s)) ev.alreadyThere = true;
+    // the keys only count by hand (the automatic arrival flies alone, whatever is held)
+    const bool thrust = !s.autopilot && c.thrust && !c.brake, brake = !s.autopilot && c.brake;
 
     double left = std::max(dtau, 0.0);
     for (int iter = 0; iter < 64 && left > 0.0; ++iter) {
-        if (s.leg >= kLegDone) {
-            rest(left);
-            left = 0.0;
-            s.drive = Drive::Done;
-            break;
-        }
-        const int L = s.leg;
         // a turn under way (at rest)
         if (s.turnAt >= 0.0) {
             const double end = s.turnAt + s.turnDur;
@@ -439,17 +531,25 @@ Events step(Ship& s, const Route& r, double dtau, const Command& c) {
         // at rest
         if (s.phi <= 0.0) {
             s.phi = 0.0;
-            if (std::fabs(s.x.value()) <= kArriveTol) {
+            const bool onCourse = s.course.target == s.target;
+            if (onCourse && s.at != s.target && std::fabs(s.x.value()) <= kArriveTol) {
                 arrive();
                 continue;
             }
+            if (atTarget(s)) {   // resting at the chosen target: nothing to fly (another target is chosen on the panel)
+                s.autopilot = false;
+                rest(left);
+                left = 0.0;
+                s.drive = Drive::Rest;
+                break;
+            }
             // stopped by hand close to the target: the last stretch by the automatic arrival, flown (never snapped)
-            if (std::fabs(s.x.value()) > kCapture * r.length[L]) s.handOver = false;   // (outside the zone: forgotten)
-            if (!s.autopilot && !s.handOver && !c.thrust && !c.brake && std::fabs(s.x.value()) <= kCapture * r.length[L]) {
+            const double toGo = toTarget(s, r), zone = captureRadius(r, s.target);
+            if (toGo > zone) s.handOver = false;   // (outside the zone: forgotten)
+            if (!s.autopilot && !s.handOver && !c.thrust && !c.brake && toGo <= zone) {
                 s.autopilot = true;
                 ev.captured = true;
             }
-            const V3 want = r.dir[L] * (s.x.value() < 0.0 ? 1.0 : -1.0);
             const bool go = s.autopilot || thrust;
             if (!go) {
                 rest(left);
@@ -457,12 +557,19 @@ Events step(Ship& s, const Route& r, double dtau, const Command& c) {
                 s.drive = Drive::Rest;
                 break;
             }
-            if (dot(s.heading, want) < 1.0 - 1e-12) {   // facing elsewhere: turn first (no reverse gear)
-                startTurn(want);
+            // setting off: on a course to the chosen target from here (laid anew unless the one it rests on still leads
+            // there, its end ahead), facing it (no reverse gear: it turns first)
+            if (!onCourse || s.x.value() > -kArriveTol) layCourse();
+            if (within()) {
+                s.x = dd(0.0);
+                arrive();
                 continue;
             }
-            s.sense = s.x.value() < 0.0 ? 1 : -1;
-            s.heading = want;
+            if (dot(s.heading, s.course.dir) < 1.0 - 1e-12) {
+                startTurn(s.course.dir);
+                continue;
+            }
+            s.heading = s.course.dir;
         }
 
         // moving, or about to: which drive, and until when
@@ -472,11 +579,13 @@ Events step(Ship& s, const Route& r, double dtau, const Command& c) {
         double hCoast = left;
         const double rem = std::fabs(s.x.value());
         if (s.autopilot) {
-            // the quickest arrival from wherever it is (one rule for every state): going away, stop first; then thrust
-            // while the peak it can still stop from is higher (and under the cap), coast at the cap, brake on the
-            // stopping curve. Already as fast as the peak: it only coasts, then brakes at the right moment (PLAN §2).
-            if (!approaching(s)) {
+            // the quickest arrival from wherever it is (one rule for every state): going away, or along a line laid for
+            // another target, stop first (then it turns and sets off from there); then thrust while the peak it can
+            // still stop from is higher (and under the cap), coast at the cap, brake on the stopping curve. Already as
+            // fast as the peak: it only coasts, then brakes at the right moment (PLAN §2).
+            if (s.course.target != s.target || !approaching(s)) {
                 mode = Brake;
+                ev.stopFirst = true;
             } else {
                 // within the rounding of rem - d (a few ulps of ~10^22 m): on the curve
                 const double slack = rem - stopDistance(s.phi);
@@ -517,6 +626,7 @@ Events step(Ship& s, const Route& r, double dtau, const Command& c) {
             }
             if (s.departT.hi < 0.0) s.departT = s.t;
             if (!s.autopilot) s.handOver = false;   // the hand thrusting again: it may be captured later
+            s.at = -1;                              // (it has left the stop it rested at)
             if (phi1 >= cap) ev.capReached = true;
         } else if (mode == Brake) {
             const DriveStep d = driveBrake(phi0, left);
@@ -535,9 +645,9 @@ Events step(Ship& s, const Route& r, double dtau, const Command& c) {
             dT = std::cosh(phi0) * h;
             dX = kC * std::sinh(phi0) * h;
         }
-        s.x = add(s.x, double(s.sense) * dX);
+        s.x = add(s.x, dX);
         if (pinned) {   // the brake that lands: on the stopping curve, so the stop is at the target exactly
-            const DD on = dd(-double(s.sense) * stopDistance(phi1));
+            const DD on = dd(-stopDistance(phi1));
             ev.pinJump = std::max(ev.pinJump, std::fabs(add(s.x, neg(on)).value()));
             s.x = on;
         }
@@ -545,11 +655,11 @@ Events step(Ship& s, const Route& r, double dtau, const Command& c) {
         s.tau += h;
         s.phi = phi1;
         left -= h;
-        if (s.phi > 0.0) s.heading = r.dir[L] * double(s.sense);
+        if (s.phi > 0.0) s.heading = s.course.dir;
         s.drive = mode == Thrust ? Drive::Thrust : mode == Brake ? Drive::Brake : Drive::Coast;
         if (mode == Brake && s.phi <= 0.0) {
             s.phi = 0.0;
-            if (std::fabs(s.x.value()) <= kArriveTol) arrive();
+            if (s.course.target == s.target && std::fabs(s.x.value()) <= kArriveTol) arrive();
         }
     }
     return ev;
@@ -558,18 +668,21 @@ Events step(Ship& s, const Route& r, double dtau, const Command& c) {
 // ---------------------------------------------------------------------------------------------------------------------
 
 std::string serialize(const Ship& s) {
-    char b[1024];
+    const Course& c = s.course;
+    char b[2048];
     std::snprintf(b, sizeof(b),
-                  "hiz.surum = %d\nhiz.ayak = %d\nhiz.phi = %.17g\nhiz.yon = %d\nhiz.x = %.17g %.17g\nhiz.tau = %.17g\nhiz.t = %.17g %.17g\n"
+                  "hiz.surum = %d\nhiz.hedef = %d\nhiz.rota = %.17g %.17g %.17g %.17g %.17g %.17g %.17g %.17g %.17g %.17g %d\n"
+                  "hiz.phi = %.17g\nhiz.x = %.17g %.17g\nhiz.tau = %.17g\nhiz.t = %.17g %.17g\n"
                   "hiz.burun = %.17g %.17g %.17g\nhiz.donus = %.17g %.17g %.17g %.17g %.17g %.17g %.17g %.17g\n"
-                  "hiz.oto = %d %d\nhiz.ayak_basi = %.17g %.17g %.17g\nhiz.kalkis = %.17g %.17g\n",
-                  kSaveVersion, s.leg, s.phi, s.sense, s.x.hi, s.x.lo, s.tau, s.t.hi, s.t.lo, s.heading.x, s.heading.y, s.heading.z,
-                  s.turnFrom.x, s.turnFrom.y, s.turnFrom.z, s.turnTo.x, s.turnTo.y, s.turnTo.z, s.turnAt, s.turnDur,
-                  s.autopilot ? 1 : 0, s.handOver ? 1 : 0, s.legTau, s.legT.hi, s.legT.lo, s.departT.hi, s.departT.lo);
+                  "hiz.oto = %d %d\nhiz.ayak_basi = %.17g %.17g %.17g\nhiz.kalkis = %.17g %.17g\nhiz.varis = %d\n",
+                  kSaveVersion, s.target, c.from.x, c.from.y, c.from.z, c.to.x, c.to.y, c.to.z, c.dir.x, c.dir.y, c.dir.z, c.length,
+                  c.target, s.phi, s.x.hi, s.x.lo, s.tau, s.t.hi, s.t.lo, s.heading.x, s.heading.y, s.heading.z, s.turnFrom.x,
+                  s.turnFrom.y, s.turnFrom.z, s.turnTo.x, s.turnTo.y, s.turnTo.z, s.turnAt, s.turnDur, s.autopilot ? 1 : 0,
+                  s.handOver ? 1 : 0, s.legTau, s.legT.hi, s.legT.lo, s.departT.hi, s.departT.lo, s.at);
     return b;
 }
 
-bool parse(Ship& out, const std::map<std::string, std::string>& kv) {
+bool parse(Ship& out, const std::map<std::string, std::string>& kv, const Route& r) {
     auto nums = [&](const char* key, int n, double* v) {
         const auto it = kv.find(key);
         if (it == kv.end()) return false;
@@ -579,18 +692,67 @@ bool parse(Ship& out, const std::map<std::string, std::string>& kv) {
         return true;
     };
     Ship s;
-    double a[8];
+    double a[11];
     // version 2: the drive of H2 (1 g at rest, always rising; 2026-10-06). A journey flown under the old drive (0.4 c/s)
-    // is not continued: its times and places came from another schedule
-    if (!nums("hiz.surum", 1, a) || a[0] != double(kSaveVersion)) return false;
-    if (!nums("hiz.ayak", 1, a) || a[0] < 0 || a[0] > 2) return false;
-    s.leg = int(a[0]);
+    // is not continued: its times and places came from another schedule. Version 3: the chosen target and the course
+    if (!nums("hiz.surum", 1, a) || (a[0] != 2.0 && a[0] != double(kSaveVersion))) return false;
+    const bool v2 = a[0] == 2.0;
     if (!nums("hiz.phi", 1, a) || a[0] < 0.0 || a[0] > phiCap() + 1e-9) return false;
     s.phi = std::min(a[0], phiCap());
-    if (!nums("hiz.yon", 1, a) || std::fabs(std::fabs(a[0]) - 1.0) > 0.0) return false;
-    s.sense = int(a[0]);
     if (!nums("hiz.x", 2, a)) return false;
     s.x = {a[0], a[1]};
+    if (v2) {
+        // the two legs' journey carried over as it was: its place, speed and way. At rest, or moving along its leg: the
+        // leg itself (Andromeda's leg begins at Proxima's stop). Moving back against it: the line it flies, to the stop
+        // on the side it comes from when that lies ahead (back from beyond Proxima: its far side), else past the one
+        // behind (going away from it)
+        if (!nums("hiz.ayak", 1, a) || a[0] < 0 || a[0] > 2) return false;
+        const int leg = int(a[0]);
+        if (!nums("hiz.yon", 1, a) || std::fabs(std::fabs(a[0]) - 1.0) > 0.0) return false;
+        const int sense = int(a[0]);
+        s.target = leg == 0 ? kTargetProxima : kTargetAndromeda;
+        s.course = legCourse(r, std::min(leg, 1));
+        if (leg >= 2) {   // at Andromeda
+            s.x = dd(0.0);
+            s.phi = 0.0;
+            s.at = kTargetAndromeda;
+        } else if (s.phi > 0.0 && sense < 0) {
+            const Course L = s.course;
+            const V3 p = position(s);
+            const V3 m = L.dir * -1.0;
+            Course c = course(r, s.target, p);
+            const double toOld = dot(L.to - p, m);   // its old stop: ahead along the way it goes when > 0
+            if (dot(c.dir, m) > 0.0 && stopDistance(s.phi) <= c.length) {
+                s.course = c;
+                s.x = dd(-c.length);
+            } else if (toOld > 0.0) {
+                // too fast for that nearer stop (saved during the old brake on to its own): on to the old stop, as it flew
+                c.to = L.to;
+                c.dir = m;
+                c.length = toOld;
+                c.from = L.to - m * toOld;
+                s.course = c;
+                s.x = dd(-toOld);
+            } else {
+                c.dir = m;
+                c.from = c.to - m * c.length;
+                s.course = c;
+                s.x = dd(dot(p - c.to, m));
+            }
+        }
+    } else {
+        if (!nums("hiz.hedef", 1, a) || (a[0] != 0.0 && a[0] != 1.0)) return false;
+        s.target = int(a[0]);
+        if (!nums("hiz.rota", 11, a) || a[9] < 0.0 || (a[10] != 0.0 && a[10] != 1.0)) return false;
+        s.course.from = v3(a[0], a[1], a[2]);
+        s.course.to = v3(a[3], a[4], a[5]);
+        s.course.dir = v3(a[6], a[7], a[8]);
+        s.course.length = a[9];
+        s.course.target = int(a[10]);
+        if (std::fabs(length(s.course.dir) - 1.0) > 1e-6) return false;
+        if (!nums("hiz.varis", 1, a) || a[0] < -1.0 || a[0] > 1.0) return false;
+        s.at = int(a[0]);
+    }
     if (!nums("hiz.tau", 1, a) || a[0] < 0.0) return false;
     s.tau = a[0];
     if (!nums("hiz.t", 2, a)) return false;

@@ -99,6 +99,9 @@ Güneş-Proxima-Andromeda, aralarındaki yüzlerce km/s yok sayılabilir; belged
   ~47 km/s; Andromeda'da galaksiye göre durgun); H0'da roket hedefte durgun çerçevede durur. Panelde **d_dur** ve **kalan**
   canlı: kendin de frenleyebilirsin. Geçersen durduktan sonra W hedefe geri götürür (roket döner; geri vites değil, yön).
 - **Dönüş:** bir ayaktan ötekine geçerken roket yeni yöne döner (Proxima'da 153°), FPS'de gökyüzü yavaşça döner (~8 s).
+- **KARAR, hedef seçimi (Özcan, 10-06 akşamı):** iki sabit ayak yerine panelde **Hedef: Proxima | Andromeda**, başta
+  Proxima, her an değişir; Boşluk seçilene gider, W duruyorken ona çevirir. *"hedefe gitmek seçim olur, zahmet olmaz"*,
+  *"kullanıcının kafası karışmasın"*. Durak gelinen yüzde. Klasik ayaklar tablodaki sayılar için kalır. Ayrıntı DURUM.
 - **Yolculuk** (roketin saatiyle, kusursuz sürüşte; **H0'ın sabit ivmesiyle**, yeni ivmenin ölçümleri DURUM'da: tahmin
   Proxima ~14 dk ve en çok ~14 dokuz, Andromeda ~1 sa 12 dk):
 

@@ -171,15 +171,16 @@ the screen's width.
   the bottom foam bubbles and a golden string.
 
 ### The second option: Speed
-**Option: Speed** in the panel. By rocket from the Earth to Proxima, and on to Andromeda: special relativity complete,
-nothing teleported, time always real. Proxima is 15 minutes on your clock (4.25 years on the Earth's), Andromeda 72
-minutes (2.4 million years).
+**Option: Speed** in the panel. By rocket from the Earth to Proxima or to Andromeda: special relativity complete, nothing
+teleported, time always real. Proxima is 15 minutes on your clock (4.25 years on the Earth's), Andromeda 72 minutes
+(2.4 million years). The target is chosen on the panel at any time (**Target: Proxima | Andromeda**, Proxima at first):
+Space takes you to the chosen one, W at rest turns the rocket to it. Fly past it and the chosen target is still there.
 
 | Key | What it does |
 |---|---|
 | **W** | thrust: from 1 g, rising with the speed (1% c in a minute, 21 nines in eight) |
 | **S** | brake |
-| **Space** | the automatic arrival: brakes at the right moment and stops at the target |
+| **Space** | the automatic arrival at the chosen target: brakes at the right moment and stops there (under way elsewhere it stops and turns first) |
 | **Tab** | the rocket's eye ↔ from the side |
 | **Drag** | turn your head (the rocket's eye) · **R** look ahead |
 | **Wheel** | binoculars (eye), scale (side) · **1-6** the side view's scales |
@@ -194,8 +195,8 @@ minutes (2.4 million years).
   energy eye shows it.
 - Tab to the side view and 1-6 for the scale: the rocket, the Earth and Moon, the Solar System, the nearby stars, the
   Milky Way, the Local Group.
-- At Proxima look around: the spotted red dwarf, Alpha Centauri A and B, b, and behind you the Sun in Cassiopeia. Braking
-  into Andromeda, look ahead.
+- At Proxima look around: the spotted red dwarf, Alpha Centauri A and B, b, and behind you the Sun in Cassiopeia. Then
+  Target: Andromeda on the panel, and Space. Braking into Andromeda, look ahead.
 
 Plan and status in `docs/olcek/`, Speed's in `docs/olcek/hiz/` (Turkish). Settings `scenes/olcek.cfg` (F5).
 

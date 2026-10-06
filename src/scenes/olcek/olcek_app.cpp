@@ -530,8 +530,8 @@ olcek::hiz::Eye OlcekApp::eyeAt(const olcek::hiz::Ship& s, double yaw, double pi
     const V3 f1 = rotate(f0, up0, yaw);
     const V3 r1 = normalize(cross(f1, up0));
     hz::Eye e;
-    e.pos = hz::position(s, route);
-    e.motion = s.phi > 0.0 ? hz::motionDir(s, route) : s.heading;
+    e.pos = hz::position(s);
+    e.motion = s.phi > 0.0 ? hz::motionDir(s) : s.heading;
     e.phi = s.phi;
     e.fwd = rotate(f1, r1, pitch);
     e.up = rotate(up0, r1, pitch);

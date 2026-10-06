@@ -129,8 +129,12 @@ inline V3 aberrateDirFast(V3 n, V3 m, const Kin& k, double emp, double& D) {
     return m * ((1.0 - tp * tp) * q) + perp * (2.0 * tp * q / sp);
 }
 
-// ---- the route (PLAN §1-§3): real positions from the Sun, ICRS axes, metres
-enum Leg : int { kLegProxima = 0, kLegAndromeda = 1, kLegDone = 2 };
+// ---- the route (PLAN §1-§3): real positions from the Sun, ICRS axes, metres. Two destinations, the target chosen at any
+// time (Özcan 2026-10-06: "Rota seçelim [...] Varsayılan proxima [...] İstediğimiz zaman [...] andromedaya dönebilelim";
+// the two fixed legs, Andromeda only after stopping at Proxima, had confused him). The classic legs Earth → Proxima →
+// Andromeda stay as the plan's numbers, the tests' and the frames' journeys
+enum Target : int { kTargetProxima = 0, kTargetAndromeda = 1 };
+enum Leg : int { kLegProxima = 0, kLegAndromeda = 1 };
 struct Route {
     V3 earth;          // the Earth "today" (olcek_bugun.h)
     V3 proxima;        // Proxima Centauri (Gaia DR3)
@@ -144,36 +148,60 @@ struct Route {
     double sunPass = 0.0;         // leg 2's closest approach to the Sun (m)
 };
 Route makeRoute();
-const char* legName(int leg);     // "Dünya → Proxima" etc. (Turkish; the scene picks its language)
+const char* targetName(int target);   // "Proxima Centauri", "Andromeda"
+// where the rocket stops for a target coming from `from`: on Proxima b's orbit radius in front of Proxima, 100,000 ly in
+// front of Andromeda's centre; in front as seen from where it comes (back from beyond Proxima its line ran through the
+// star). From the start beside the Earth and from Proxima's stop these are the classic legs' ends exactly
+V3 stopPoint(const Route& r, int target, V3 from);
+// stopped by hand this near a target's stop, the automatic arrival flies the last stretch: a thousandth of its classic
+// leg (Proxima 268 AU, Andromeda 2,395 ly)
+double captureRadius(const Route& r, int target);
+
+// the line the rocket flies: laid at rest from where it is to the chosen target's stop (no reverse gear: it turns at
+// rest, then keeps to the line); x is measured along it from its end
+struct Course {
+    V3 from, to;              // its start, its end (the stop), from the Sun (m)
+    V3 dir{0, 0, 1};          // from -> to (unit)
+    double length = 0.0;      // |to - from| (m)
+    int target = kTargetProxima;   // the target it was laid for
+};
+Course course(const Route& r, int target, V3 from);   // from `from` to the target's stop
+Course legCourse(const Route& r, int leg);           // the classic legs: from the start, and from Proxima's stop
 
 // ---- the rocket
-enum class Drive : int { Rest, Thrust, Coast, Brake, Turn, Done };
+enum class Drive : int { Rest, Thrust, Coast, Brake, Turn };
 struct Ship {
-    int leg = kLegProxima;
-    double phi = 0.0;       // rapidity, >= 0, along sense * dir[leg]
-    int sense = 1;          // +1: moving along the leg's dir (towards its target while before it); -1: against it
-    DD x;                   // along the leg's line, from its target (m): < 0 before it, > 0 past it
+    int target = kTargetProxima;   // the chosen destination (the panel's "Hedef"): Proxima at the start
+    Course course;          // the line it flies, or last flew (re-laid at rest when it sets off elsewhere)
+    double phi = 0.0;       // rapidity, >= 0, along course.dir
+    DD x;                   // along the course, from its end (m): < 0 before it, > 0 past it
     double tau = 0.0;       // the passenger's proper time since departure (s)
     DD t;                   // the rest frame's time since "today" (s): the Earth's clock
     V3 heading{0, 0, 1};    // the nose (unit, rest frame): the motion's way while moving; turned at rest
-    // a turn at rest (the next leg at Proxima, or back after passing a target): from, to, start (proper time), length
+    // a turn at rest (towards a chosen target, or back after passing one): from, to, start (proper time), length
     V3 turnFrom{0, 0, 1}, turnTo{0, 0, 1};
     double turnAt = -1.0, turnDur = 0.0;
-    bool autopilot = false; // Space: automatic arrival, the quickest from wherever it is (thrust while the peak it can
-                            // still stop from is ahead, coast at the cap, brake on the stopping curve)
+    bool autopilot = false; // Space: automatic arrival at the chosen target, the quickest from wherever it is (moving
+                            // elsewhere: stop first; then thrust while the peak it can still stop from is ahead, coast at
+                            // the cap, brake on the stopping curve)
     bool handOver = false;  // the hand took over near the target (S, or Space off): no capturing it back until the hand
-                            // thrusts again, or the ship leaves the capture zone, or a leg is reached
+                            // thrusts again, or the ship leaves the capture zone, or a target is reached or chosen
     Drive drive = Drive::Rest;   // what the last step did (the panel)
-    double legTau = -1.0;   // the leg's first thrust: proper time (s); < 0 not yet
+    int at = -1;            // the target it rests at, arrived (-1: none)
+    double legTau = -1.0;   // this trip's first thrust (since the last arrival or choice): proper time (s); < 0 not yet
     DD legT = {-1.0, 0.0};  // ... and the Earth's time then
     DD departT = {-1.0, 0.0};   // the rest frame's time at the journey's first thrust (< 0: still at the start): the
                                 // world runs from "today" from then on (waiting beside the Earth, the rocket goes with it)
 };
-Ship depart(const Route& r);                   // at rest at the start of leg 1, facing Proxima
-V3 position(const Ship& s, const Route& r);    // from the Sun (m); doubles (for the stars and the far world)
-V3 motionDir(const Ship& s, const Route& r);   // sense * dir: the way it moves (or would, at rest: towards the target)
-bool approaching(const Ship& s);               // moving towards the target (or at rest before/at it)
-double remaining(const Ship& s);               // the distance to the leg's target (rest frame, m)
+Ship depart(const Route& r);        // at rest at the start beside the Earth, facing Proxima (the chosen target)
+V3 position(const Ship& s);         // from the Sun (m); doubles (for the stars and the far world)
+V3 motionDir(const Ship& s);        // course.dir: the way it moves (or would, at rest)
+bool approaching(const Ship& s);    // moving towards the course's end (or at rest)
+double remaining(const Ship& s);    // the distance to the course's end (rest frame, m)
+// the distance to the chosen target's stop (rest frame): along the course while it leads there, else straight from here
+double toTarget(const Ship& s, const Route& r);
+double toTargetMeasured(const Ship& s, const Route& r);   // ... as the rocket measures it (its share along the motion 1/γ)
+bool atTarget(const Ship& s);       // resting at the chosen target, arrived
 
 struct Command {
     bool thrust = false;    // W held
@@ -181,17 +209,21 @@ struct Command {
     bool thrustPressed = false, brakePressed = false;   // ... pressed this frame: a hand on them takes over from the
                                                         // automatic arrival (held keys do not: Space pressed with W down)
     bool toggleAuto = false;   // Space pressed
+    int choose = -1;        // a target chosen this frame (the panel), -1 none
 };
 // what happened in a step, for the scene's notices
 struct Events {
     bool autoOn = false, autoOff = false, autoCancelled = false;
-    bool arrived = false;   // a leg's target reached (at rest, exactly)
-    int arrivedLeg = -1;
-    double legTau = 0.0, legEarth = 0.0;   // ... the leg from its first thrust: the passenger's seconds, the Earth's
+    bool alreadyThere = false;   // Space at the chosen target: nothing to fly
+    bool chosen = false;    // another target chosen
+    bool arrived = false;   // a target reached (at rest, exactly)
+    int arrivedAt = -1;
+    double legTau = 0.0, legEarth = 0.0;   // ... the trip from its first thrust: the passenger's seconds, the Earth's
     bool capReached = false;
     bool turnStarted = false;
-    double turnDeg = 0.0;   // ... by how much (the turn at Proxima is 153 degrees from the way in; after passing it, less)
+    double turnDeg = 0.0;   // ... by how much (from Proxima towards Andromeda 153 degrees; after passing a target, 180)
     bool overshoot = false; // the autopilot found it cannot stop in time: it brakes, will pass and come back
+    bool stopFirst = false; // the autopilot brakes to turn (moving away from the chosen target, or along another line)
     bool captured = false;  // stopped by hand near the target: the automatic arrival takes the last stretch (no snapping)
     double pinJump = 0.0;   // the largest correction made when the brake was pinned to the stopping curve (m; tests)
 };
@@ -199,8 +231,10 @@ struct Events {
 Events step(Ship& s, const Route& r, double dtau, const Command& c);
 
 // ---- persistence: "key = value" lines (doubles round-trip: %.17g)
-constexpr int kSaveVersion = 2;   // the save's version (2: the drive of H2); parse refuses any other
+// version 3: the chosen target and the course (2026-10-06 evening). A version 2 journey (the two legs) is carried over
+// as it was: its place, speed and way; older versions are refused
+constexpr int kSaveVersion = 3;
 std::string serialize(const Ship& s);
-bool parse(Ship& s, const std::map<std::string, std::string>& kv);
+bool parse(Ship& s, const std::map<std::string, std::string>& kv, const Route& r);
 
 }   // namespace olcek::hiz

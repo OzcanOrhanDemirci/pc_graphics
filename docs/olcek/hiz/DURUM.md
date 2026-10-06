@@ -2,6 +2,54 @@
 
 > Tek kaynak durum panosu. Plan `docs/olcek/hiz/PLAN.md`. En yeni en üstte.
 
+## 10-06 akşamı · Hedef seçimi (Özcan'ın son revizesi)
+
+Özcan akşam evde denedi. Proxima'yı 21 dokuzla geçip 168.700 ışık yılı ötede durdu, W'ye bastı; panel "Dünya → Proxima"
+dedi, Andromeda demedi. Sebep: iki sabit ayak. Andromeda ayağı ancak Proxima'da durunca başlıyordu, W de roketi 168.700
+ışık yılı geriye, Proxima'ya çeviriyordu. Özcan: *"Rota seçelim. Daha dünyadayken. Proxima mı Andromeda mı. Varsayılan
+proxima seçili olur. İstediğimiz zaman ona basarak andromedaya dönebilelim [...] Space de hangisi seçiliyse oraya doğru
+şekilde varır. Yine geçip gidilebilir [...] ama hedefe gitmek seçim olur, zahmet olmaz."* Ardından: *"benim amacım illa
+öyle olsun değil, kullanıcının kafası karışmasın."*
+
+- **Panelde Hedef: Proxima | Andromeda.** Başta Proxima, her an değişir. Boşluk seçili hedefe gider. W duruyorken roketi
+  ona çevirip iter. Duruyorken seçmek roketi hemen o yöne döndürür (seçimin ekrandaki cevabı). Başka yöne giderken
+  seçilirse otomatik varış önce durur, döner, sonra gider. Elle uçarken çizgisinde kalır (dönüş yalnız dururken).
+  Hedefe varınca ötekine geçmek panelden: "Andromeda için panelde Hedef: Andromeda".
+- **Fizik:** iki ayak yerine bir rota çizgisi (`Course`): dururken bulunduğun yerden seçili hedefin durağına döşenir,
+  roket ona döner (geri vites yok), hareket hep bu çizgi boyunca, kapalı biçimler ve kare içi bölme aynı. Klasik
+  yolculuk (Dünya → Proxima → Andromeda) bit bit aynı: kalkıştan ve Proxima'nın durağından döşenen çizgiler eski
+  ayakların ta kendisi.
+- **Durak gelinen yüzde:** Proxima'da b'nin yörünge yarıçapında, Andromeda'da merkezinin 100.000 ışık yılı önünde,
+  ikisi de gelinen yönden bakınca önde. Eski durak hep Dünya yüzündeydi; Proxima'nın ötesinden dönüşte çizgi yıldızın
+  tam içinden geçerdi.
+- **Kayıt sürüm 3** (hedef, rota çizgisi, varılan yer). Sürüm 2'nin yolculuğu yeni biçime aktarılır: yeri, hızı, yönü
+  aynı. Özcan'ın kaydı (Proxima'nın 168.700 ışık yılı ötesi, Proxima'ya 212 m/sn) yer farkı 0 m ile geçti. İlk açılışta
+  notu: "Yeni: hedefi panelden seçiyorsun (Proxima ya da Andromeda), Boşluk seçilene gider".
+- **Sınamalar** (`--test olcek-hiz` 68/68, 14'ü yeni):
+  - Dünya'dan doğrudan Andromeda 72,241 dk, formülle aynı; Proxima'ya uğramaz.
+  - Yolda (φ 1,69) Andromeda seçilince önce durur, döner, Andromeda'ya varır.
+  - Dururken ileri geri seçmek yalnız döndürür (itiş yok, yolculuk başlamaz).
+  - Hedefteyken Boşluk boş, ötekini seçip geri seçince yine orada.
+  - Özcan'ın v2 kaydı aktarılır; oradan Boşluk Proxima'ya ~20 dk'da, yıldızın merkezine en çok 0,0486 AU (durak)
+    yaklaşarak; Andromeda seçilince oraya varır.
+- **Tam yolculuk** (Proxima'ya varınca Hedef: Andromeda ve Boşluk) GEÇTİ: 87,6 dk, eskisiyle aynı. Klasik ayaklardaki
+  22 başsız kare (11 durum × 2 göz) değişiklikten önceki kareyle bit bit aynı.
+- **Canlı test** (`--autotest-only olcek/hizhedef --set hiz.test.kayit=<dosya>`): Özcan'ın kaydıyla Andromeda seçildi,
+  Boşluk; roket durdu, döndü, itiyor; YOL "→ Andromeda", yandan "Andromeda →".
+- Rehberler (GÖSTERİ, DEMO, README), F1 yardımı ve otomatik testin Proxima adımı (artık Hedef: Andromeda ile döner)
+  güncellendi.
+- **Bağımsız inceleme** (iş akışı: fizik, arayüz, sınama mercekleri; her bulguyu ayrı bir çürütücü sınadı) 6 gerçek
+  bulgu verdi, hepsi düzeltildi:
+  - hedefteyken ötekini seçip hemen geri seçince başlamış dönüş sürüyordu (artık geri döner, rota yine kendi hedefi);
+  - seçim bildiriminin tavsiyesi ("önce durur, döner") fizikten ayrı bir koşuldandı, hedef geri seçilince çelişiyordu
+    (artık fiziğin kendi kuralından);
+  - "senin ölçtüğün" kalan yol, hedef hareket çizgisinde değilken bütünüyle 1/γ kısalıyordu (yalnız hareket yönü);
+  - durağın biraz ötesinde elle durunca durak yuvarlanmış yerden yeniden hesaplanıyordu (Andromeda'da 10^6 m'lik
+    gürültü yönünde dönüş, dakikalarca uçuş): artık aynı çizgiden aynı durağa, konumun çözünürlüğü altında yerinde varış;
+  - her tıklama yolculuğun saatini sıfırlıyordu (artık yalnız başka hedefe rota döşenince);
+  - eski kaydın frende alındığı kenar durumu, otomatik testte bir zamanlama yarışı, zayıf kayıt sınaması.
+  Bu beş düzeltme birlikte geri alınınca tam onların beş sınaması KALDI, başka hiçbiri değil.
+
 **Özcan (10-06 sabahı, dışarıdan):** *"Bu sahneyi tamamladık, eve gelince test ederim ve gerekirse küçük bir revize
 yaparız. Bunlar dışında gördüğüm bir hata da yoktu zaten."* Sırada: akşamki testi.
 
