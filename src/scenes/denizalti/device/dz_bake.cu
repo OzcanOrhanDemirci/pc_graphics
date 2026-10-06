@@ -200,8 +200,10 @@ extern "C" __global__ void __raygen__probe() {
     const uint3 li = optixGetLaunchIndex();
     const unsigned int res = params.probeRes;
     if (li.x >= res || li.y >= res) return;
-    const unsigned int face = li.z;
-    const unsigned int idx = (face * res + li.y) * res + li.x;
+    const unsigned int face = li.z % 6u, probe = li.z / 6u;
+    const unsigned int idx = (li.z * res + li.y) * res + li.x;
+    const uint3 pd = params.probeDims;
+    const float3 pos = params.probePos + make_float3(float(probe % pd.x), float((probe / pd.x) % pd.y), float(probe / (pd.x * pd.y))) * params.probeStep;
     float3 sum = make_float3(0, 0, 0);
     float wsum = 0.0f, backs = 0.0f;
     const float a = fmaxf(params.probeRough * params.probeRough, 1e-4f);
@@ -225,7 +227,7 @@ extern "C" __global__ void __raygen__probe() {
             if (w <= 0.0f) continue;
         }
         bool back;
-        float3 Li = probeRadiance(params.probePos, L, rng, back);
+        float3 Li = probeRadiance(pos, L, rng, back);
         const float lum = 0.2126f * Li.x + 0.7152f * Li.y + 0.0722f * Li.z;
         if (lum > params.clampLum) Li *= params.clampLum / lum;
         sum += Li * w;

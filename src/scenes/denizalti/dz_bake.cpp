@@ -144,7 +144,7 @@ uint64_t bakeKey(const Mesh& m, const std::vector<DzLight>& lights, const BakeOp
     h = fnv(h, m.idx.data(), m.idx.size() * sizeof(uint32_t));
     h = fnv(h, lights.data(), lights.size() * sizeof(DzLight));
     h = fnv(h, &o, sizeof(o));
-    const int version = 9;   // 9: samples spread over the texel's footprint
+    const int version = 11;   // 9: samples spread over the texel's footprint; 10-11: rough probe mips sampled more, a mip's probes in one launch
     h = fnv(h, &version, sizeof(version));
     return h;
 }
@@ -545,55 +545,58 @@ bool bake(const Mesh& m, const Atlas& a, const std::vector<DzLight>& lights, con
         for (int m = 0; m < mips; ++m) perProbe += size_t(6) * std::max(1, res >> m) * std::max(1, res >> m);
         const int np = nx * ny * nz;
         out.probes.assign(perProbe * np * 4, toHalf(0.0f));
+        // one launch a mip for every probe (z = probe * 6 + face): a probe's small mips alone were a few hundred
+        // threads, the card idle; samples a launch so a launch stays well under the driver's 2 s watchdog
         float4* dOut = nullptr;
-        CK(cudaMalloc(reinterpret_cast<void**>(&dOut), size_t(6) * res * res * sizeof(float4)));
-        std::vector<float4> hOut(size_t(6) * res * res);
+        CK(cudaMalloc(reinterpret_cast<void**>(&dOut), size_t(6) * np * res * res * sizeof(float4)));
+        std::vector<float4> hOut(size_t(6) * np * res * res);
         sbt.raygenRecord = rec[4];
-        int invalid = 0;
-        for (int p = 0; p < np; ++p) {
-            const int ix = p % nx, iy = (p / nx) % ny, iz = p / (nx * ny);
-            prm.probePos = make_float3(out.probeLo[0] + ix * out.probeStep[0], out.probeLo[1] + iy * out.probeStep[1], out.probeLo[2] + iz * out.probeStep[2]);
-            size_t off = perProbe * p;
-            float valid = 1.0f;
-            for (int m = 0; m < mips; ++m) {
-                const int r = std::max(1, res >> m);
-                const size_t n = size_t(6) * r * r;
-                CK(cudaMemset(dOut, 0, n * sizeof(float4)));
-                prm.probeOut = dOut;
-                prm.probeRes = unsigned(r);
-                prm.probeRough = float(m) / float(mips - 1);
-                const unsigned int total = unsigned(m == 0 ? o.probeSamples * 2 : o.probeSamples);   // the sharp mip shows its noise on glass
-                unsigned int s = 0;
-                while (s < total) {
-                    prm.sampleBase = s;
-                    prm.samples = std::min(total - s, 64u);
-                    CK(cudaMemcpyAsync(dPrm, &prm, sizeof(prm), cudaMemcpyHostToDevice, stream));
-                    OK(optixLaunch(pipe, stream, CUdeviceptr(dPrm), sizeof(DzBakeParams), &sbt, unsigned(r), unsigned(r), 6));
-                    CK(cudaStreamSynchronize(stream));
-                    s += prm.samples;
-                }
-                CK(cudaMemcpy(hOut.data(), dOut, n * sizeof(float4), cudaMemcpyDeviceToHost));
+        prm.probePos = make_float3(out.probeLo[0], out.probeLo[1], out.probeLo[2]);
+        prm.probeStep = make_float3(out.probeStep[0], out.probeStep[1], out.probeStep[2]);
+        prm.probeDims = make_uint3(unsigned(nx), unsigned(ny), unsigned(nz));
+        std::vector<float> valid(np, 1.0f);
+        size_t mipOff = 0;
+        for (int m = 0; m < mips; ++m) {
+            const int r = std::max(1, res >> m);
+            const size_t n = size_t(6) * r * r, all = n * np;
+            CK(cudaMemset(dOut, 0, all * sizeof(float4)));
+            prm.probeOut = dOut;
+            prm.probeRes = unsigned(r);
+            prm.probeRough = float(m) / float(mips - 1);
+            // the sharp mip shows its noise on glass; the rough ones are few texels but each a wide lobe (at 128 a
+            // satin aluminium door wore blotches): 2x, 4x, 8x
+            const unsigned int total = unsigned(o.probeSamples * (m == 0 ? 2 : (m == 1 ? 4 : 8)));
+            const unsigned int per = unsigned(std::clamp(64.0 * 393216.0 / double(all), 1.0, 64.0));
+            for (unsigned int s = 0; s < total;) {
+                prm.sampleBase = s;
+                prm.samples = std::min(total - s, per);
+                CK(cudaMemcpyAsync(dPrm, &prm, sizeof(prm), cudaMemcpyHostToDevice, stream));
+                OK(optixLaunch(pipe, stream, CUdeviceptr(dPrm), sizeof(DzBakeParams), &sbt, unsigned(r), unsigned(r), unsigned(6 * np)));
+                CK(cudaStreamSynchronize(stream));
+                s += prm.samples;
+            }
+            CK(cudaMemcpy(hOut.data(), dOut, all * sizeof(float4), cudaMemcpyDeviceToHost));
+            for (int p = 0; p < np; ++p) {
+                const float4* src = &hOut[n * p];
                 if (m == 0) {   // a probe inside a part sees mostly back faces: it is not used
                     double backs = 0.0;
-                    for (size_t i = 0; i < n; ++i) backs += hOut[i].w;
-                    if (backs / (double(n) * total) > 0.2) valid = 0.0f;
+                    for (size_t i = 0; i < n; ++i) backs += src[i].w;
+                    if (backs / (double(n) * total) > 0.2) valid[p] = 0.0f;
                 }
                 for (size_t i = 0; i < n; ++i) {
-                    const float inv = m == 0 ? 1.0f / float(total) : (hOut[i].w > 0.0f ? 1.0f / hOut[i].w : 0.0f);
-                    uint16_t* d = &out.probes[(off + i) * 4];
-                    d[0] = toHalf(hOut[i].x * inv);
-                    d[1] = toHalf(hOut[i].y * inv);
-                    d[2] = toHalf(hOut[i].z * inv);
-                    d[3] = toHalf(valid);
+                    const float inv = m == 0 ? 1.0f / float(total) : (src[i].w > 0.0f ? 1.0f / src[i].w : 0.0f);
+                    uint16_t* d = &out.probes[(perProbe * p + mipOff + i) * 4];
+                    d[0] = toHalf(src[i].x * inv);
+                    d[1] = toHalf(src[i].y * inv);
+                    d[2] = toHalf(src[i].z * inv);
+                    d[3] = toHalf(valid[p]);
                 }
-                off += n;
             }
-            if (valid == 0.0f) {   // its earlier mips were written before it was known
-                ++invalid;
-                for (size_t i = perProbe * p; i < perProbe * (p + 1); ++i) out.probes[i * 4 + 3] = toHalf(0.0f);
-            }
-            say(0.99f, "yansima yoklamalari");
+            mipOff += n;
+            say(0.97f + 0.02f * float(m + 1) / mips, "yansima yoklamalari");
         }
+        int invalid = 0;
+        for (float v : valid) invalid += v == 0.0f ? 1 : 0;
         cudaFree(dOut);
         std::printf("yoklama: %d (%d gecersiz: bir parcanin icinde), %d px, %d mip, %d ornek\n", np, invalid, res, mips, o.probeSamples);
     }

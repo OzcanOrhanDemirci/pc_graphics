@@ -269,27 +269,53 @@ void trimManifold(Kit& k) {
 }
 
 void radioRoom(Kit& k) {
-    // the partition: aluminium panels on a frame, from the port hull to x = -0.35, the after port corner (frames
-    // 55.3 to the after bulkhead); a door in its forward wall
+    // the partition: painted sheet panels on a frame (cream as everything aboard), from the port hull to x = -0.35, the
+    // after port corner (frames 55.3 to the after bulkhead); a sliding door in its forward wall. Rows of screws hold
+    // the panels to the frame; the door has a louvre low down, a small window, the room's name stencilled
     const float zf = frameZ(55.3f), xw = -0.35f;
     const float top = kAxisY + std::sqrt(kRCork * kRCork - xw * xw) - 0.02f;
+    auto screws = [&](float3 a, float3 b, float3 out, float pitch) {
+        const int n = std::max(1, int(length(b - a) / pitch));
+        for (int i = 0; i <= n; ++i)
+            with(k, Xform::frame(a + (b - a) * (float(i) / n), out, f3(0, 1, 0)), MAT_CREAM, FEAT_NONE, [&] { k.dome(0.0045f, 0.0016f); });
+    };
     // the side wall (along z, facing starboard)
     for (int p = 0; p < 3; ++p) {
         const float za = p * zf / 3.0f + 0.01f, zb = (p + 1) * zf / 3.0f - 0.01f;
-        box(k, Xform(), f3(xw, 0.5f * top, 0.5f * (za + zb)), f3(0.006f, 0.5f * top - 0.01f, 0.5f * (zb - za)), 0.003f, MAT_ALU, FEAT_NONE);
+        box(k, Xform(), f3(xw, 0.5f * top, 0.5f * (za + zb)), f3(0.006f, 0.5f * top - 0.01f, 0.5f * (zb - za)), 0.003f, MAT_CREAM, FEAT_PLATE);
+        const float xs = xw + 0.006f;
+        screws(f3(xs, 0.04f, za + 0.03f), f3(xs, top - 0.06f, za + 0.03f), f3(1, 0, 0), 0.16f);
+        screws(f3(xs, 0.04f, zb - 0.03f), f3(xs, top - 0.06f, zb - 0.03f), f3(1, 0, 0), 0.16f);
+        screws(f3(xs, 0.04f, za + 0.03f), f3(xs, 0.04f, zb - 0.03f), f3(1, 0, 0), 0.16f);
     }
     box(k, Xform(), f3(xw + 0.01f, 0.5f * top, zf), f3(0.02f, 0.5f * top, 0.02f), 0.004f, MAT_CREAM, FEAT_PLATE);
     // the forward wall (across, facing the bow) with a door
     const float xh = hullX(1.0f, -1, 0.0f);
     const float doorX0 = xw - 0.72f, doorX1 = xw - 0.06f;
     auto wallPart = [&](float x0, float x1, float y0, float y1) {
-        box(k, Xform(), f3(0.5f * (x0 + x1), 0.5f * (y0 + y1), zf), f3(0.5f * (x1 - x0), 0.5f * (y1 - y0), 0.006f), 0.003f, MAT_ALU, FEAT_NONE);
+        box(k, Xform(), f3(0.5f * (x0 + x1), 0.5f * (y0 + y1), zf), f3(0.5f * (x1 - x0), 0.5f * (y1 - y0), 0.006f), 0.003f, MAT_CREAM, FEAT_PLATE);
     };
     wallPart(xh + 0.25f, doorX0, 0.0f, 1.9f);
     wallPart(doorX1, xw, 0.0f, 1.9f);
     wallPart(doorX0, doorX1, 1.88f, 2.1f);
-    // the door: a sliding aluminium leaf half open, a handle
-    box(k, Xform(), f3(doorX0 + 0.12f, 0.94f, zf + 0.03f), f3(0.33f, 0.92f, 0.008f), 0.004f, MAT_ALU, FEAT_NONE);
+    const float zs = zf + 0.006f;
+    screws(f3(doorX0 - 0.03f, 0.04f, zs), f3(doorX0 - 0.03f, 1.84f, zs), f3(0, 0, 1), 0.16f);
+    screws(f3(doorX1 + 0.025f, 0.04f, zs), f3(doorX1 + 0.025f, 1.84f, zs), f3(0, 0, 1), 0.16f);
+    screws(f3(xh + 0.4f, 1.84f, zs), f3(doorX0 - 0.03f, 1.84f, zs), f3(0, 0, 1), 0.16f);
+    // the door: a sliding leaf half open; its louvre, window, name, handle
+    const float dx = doorX0 + 0.12f, dzz = zf + 0.03f;
+    box(k, Xform(), f3(dx, 0.94f, dzz), f3(0.33f, 0.92f, 0.008f), 0.004f, MAT_CREAM, FEAT_PLATE);
+    const Xform door = Xform::at(f3(dx, 0.0f, dzz + 0.008f));
+    box(k, door, f3(0, 0.27f, 0.0005f), f3(0.22f, 0.12f, 0.0005f), 0.0004f, MAT_PAINT_DARK, FEAT_NONE);
+    for (int sl = 0; sl < 9; ++sl)
+        with(k, door * Xform::at(f3(0, 0.165f + sl * 0.026f, 0.004f)) * Xform::rotX(0.75f), MAT_CREAM, FEAT_NONE, [&] { k.roundedBox(f3(0.215f, 0.012f, 0.0011f), 0.0006f); });
+    for (int sd = -1; sd <= 1; sd += 2) box(k, door, f3(sd * 0.228f, 0.27f, 0.004f), f3(0.008f, 0.128f, 0.004f), 0.002f, MAT_CREAM, FEAT_NONE);
+    for (int sd = -1; sd <= 1; sd += 2) box(k, door, f3(0, 0.27f + sd * 0.128f, 0.004f), f3(0.236f, 0.008f, 0.004f), 0.002f, MAT_CREAM, FEAT_NONE);
+    with(k, door * Xform::at(f3(0, 1.5f, 0.0f)), MAT_CHROME, FEAT_NONE, [&] {
+        k.lathe({{0.075f, -0.001f}, {0.092f, 0.0f}, {0.094f, 0.006f}, {0.084f, 0.009f}, {0.075f, 0.007f}});
+    });
+    with(k, door * Xform::at(f3(0, 1.5f, 0.004f)), MAT_BLACK_PLATE, FEAT_NONE, [&] { k.ring(0.0f, 0.077f, 0.0f, true); });
+    plateAt(k, door, f3(0, 1.22f, 0.0f), 0.44f, 0.1f, "TELS\xC4\xB0Z ODASI", PLATE_STENCIL);
     with(k, Xform::frame(f3(doorX0 + 0.38f, 1.0f, zf + 0.045f), f3(0, 1, 0), f3(1, 0, 0)), MAT_CHROME, FEAT_NONE, [&] { k.roundedCylinder(0.01f, -0.08f, 0.08f, 0.004f); });
 }
 
