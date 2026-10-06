@@ -144,7 +144,7 @@ uint64_t bakeKey(const Mesh& m, const std::vector<DzLight>& lights, const BakeOp
     h = fnv(h, m.idx.data(), m.idx.size() * sizeof(uint32_t));
     h = fnv(h, lights.data(), lights.size() * sizeof(DzLight));
     h = fnv(h, &o, sizeof(o));
-    const int version = 8;
+    const int version = 9;   // 9: samples spread over the texel's footprint
     h = fnv(h, &version, sizeof(version));
     return h;
 }
@@ -348,7 +348,18 @@ bool bake(const Mesh& m, const Atlas& a, const std::vector<DzLight>& lights, con
         const size_t cnt = std::min(batch, nt - b0);
         for (size_t i = 0; i < cnt; ++i) {
             const Texel& t = ras.texels[b0 + i];
-            hp[i] = make_float4(t.p.x, t.p.y, t.p.z, 0.0f);
+            // the texel's footprint on the surface (m): its triangle's area in the world over its area in the atlas
+            float ts = 0.0f;
+            {
+                const uint32_t* id = &m.idx[size_t(t.tri) * 3];
+                const Vtx &va = m.v[id[0]], &vb = m.v[id[1]], &vc = m.v[id[2]];
+                const float aw = length(cross(vb.p - va.p, vc.p - va.p));
+                const float d1x = (vb.uv2.x - va.uv2.x) * a.width, d1y = (vb.uv2.y - va.uv2.y) * a.height;
+                const float d2x = (vc.uv2.x - va.uv2.x) * a.width, d2y = (vc.uv2.y - va.uv2.y) * a.height;
+                const float aT = std::fabs(d1x * d2y - d1y * d2x);
+                if (aT > 1e-9f) ts = std::sqrt(aw / aT);
+            }
+            hp[i] = make_float4(t.p.x, t.p.y, t.p.z, ts);
             hn[i] = make_float4(t.n.x, t.n.y, t.n.z, 0.0f);
         }
         CK(cudaMemcpy(dP, hp.data(), cnt * sizeof(float4), cudaMemcpyHostToDevice));

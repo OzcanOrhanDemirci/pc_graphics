@@ -14,12 +14,14 @@ Atlas buildAtlas(Mesh& m, float texel, int maxWidth) {
         float2 lo{FLT_MAX, FLT_MAX}, hi{-FLT_MAX, -FLT_MAX};
         float tex = 0.0f;
         int w = 0, h = 0, x = 0, y = 0;
+        bool focus = false;   // a surface the eye rests on closely: the chart, the table's laminate
     };
     std::vector<C> ch(m.charts);
     for (const Vtx& v : m.v) {
         C& c = ch[v.chart];
         c.lo = make_float2(std::min(c.lo.x, v.uv.x), std::min(c.lo.y, v.uv.y));
         c.hi = make_float2(std::max(c.hi.x, v.uv.x), std::max(c.hi.y, v.uv.y));
+        if ((v.mat == MAT_PAPER && v.feat == FEAT_LABEL) || v.mat == MAT_WOOD) c.focus = true;
     }
     for (C& c : ch) {
         if (c.lo.x > c.hi.x) {   // a chart with no vertex
@@ -29,7 +31,7 @@ Atlas buildAtlas(Mesh& m, float texel, int maxWidth) {
         // small parts are looked at closely: up to twice as fine
         // small parts are looked at closely (twice as fine); the big plain surfaces (lining, deck, bulkheads) carry
         // smooth light: half as coarse again
-        c.tex = std::max(sx, sy) < 0.06f ? texel * 0.5f : (sx * sy > 0.5f ? texel * 1.5f : texel);
+        c.tex = std::max(sx, sy) < 0.06f || c.focus ? texel * 0.5f : (sx * sy > 0.5f ? texel * 1.5f : texel);
         c.w = int(std::ceil(sx / c.tex)) + 1 + 2 * a.pad;
         c.h = int(std::ceil(sy / c.tex)) + 1 + 2 * a.pad;
         if (c.w > maxWidth) {   // too wide for the atlas: coarser

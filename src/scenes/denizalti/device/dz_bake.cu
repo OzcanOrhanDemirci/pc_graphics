@@ -243,6 +243,9 @@ extern "C" __global__ void __raygen__bake() {
     const float4 P = params.texP[i], N = params.texN[i];
     const float3 p = make_float3(P.x, P.y, P.z), n = normalize(make_float3(N.x, N.y, N.z));
     const float3 o = p + n * 2e-4f;
+    const float ts = P.w;   // the texel's footprint (m)
+    float3 tt, bb;
+    frame(n, tt, bb);
     const unsigned int gi = params.texelBase + i;
     float3 L0 = make_float3(0, 0, 0), L1r = L0, L1g = L0, L1b = L0;
     float vis[4] = {0, 0, 0, 0};
@@ -253,13 +256,22 @@ extern "C" __global__ void __raygen__bake() {
     for (unsigned int s = 0; s < params.samples; ++s) {
         const unsigned int k = params.sampleBase + s;
         Rng rng{pcg(gi * 9781u + k * 6271u + 17u)};
+        // the sample's origin: anywhere on the texel's footprint, so the texel holds the footprint's mean (a shadow's
+        // edge running across the texels comes out graded, not in steps: a ruler's contact shadow on the chart was a
+        // saw); back at the centre where something stands between
+        float3 os = o;
+        if (ts > 0.0f) {
+            const float3 off = tt * ((rng.next() - 0.5f) * ts) + bb * ((rng.next() - 0.5f) * ts);
+            const float jl = length(off);
+            if (jl > 1e-7f && visible(o, off / jl, jl)) os = o + off;
+        }
         // direct: every lamp
         for (unsigned int l = 0; l < params.lightCount; ++l) {
             float3 w, L;
             float pdf, dist;
-            if (!sampleLamp(params.lights[l], o, rng.next(), rng.next(), w, L, pdf, dist)) continue;
+            if (!sampleLamp(params.lights[l], os, rng.next(), rng.next(), w, L, pdf, dist)) continue;
             if (dot(w, n) <= 0.0f) continue;
-            if (!visible(o, w, dist * 0.999f)) continue;
+            if (!visible(os, w, dist * 0.999f)) continue;
             if (l < 4) vis[l] += 1.0f;
             const float3 c = L * (1.0f / pdf);
             L0 += c * Y0;
@@ -272,14 +284,12 @@ extern "C" __global__ void __raygen__bake() {
         float u1 = sx + 0.7548776662f * float(k), u2 = sy + 0.5698402910f * float(k);
         u1 -= floorf(u1);
         u2 -= floorf(u2);
-        float3 tt, bb;
-        frame(n, tt, bb);
         const float cz = u1, sz = sqrtf(fmaxf(0.0f, 1.0f - cz * cz)), ph = 2.0f * M_PIf * u2;
         const float3 w = normalize(tt * (sz * cosf(ph)) + bb * (sz * sinf(ph)) + n * cz);
         const float cw = fmaxf(dot(w, n), 0.0f);
         aoW += cw;
-        if (visible(o, w, 0.25f)) aoVis += cw;
-        float3 Li = incoming(o, w, rng);
+        if (visible(os, w, 0.25f)) aoVis += cw;
+        float3 Li = incoming(os, w, rng);
         // a firefly clamp on the indirect light (0.06: ~2.5 times the brightest surface in the room, the chart under
         // its lamp ~0.025); a path that found a hot spot by a lamp no longer speckles the room. At 0.5 it did: one such
         // path in 64 was a texel's whole light, the cork stood dotted in the Christmas tree's green

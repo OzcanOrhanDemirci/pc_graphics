@@ -239,6 +239,257 @@ void drawPlate(Canvas& cv, const DecalSpec& s, const Font& bold) {
     }
 }
 
+// ---- the sea chart: an Aegean coast at 1:50 000 (made up: a wrong copy of a real coast would read as a mistake),
+// printed in buff, blue and black with a magenta compass rose, worked over in pencil on watch
+
+uint32_t hashI(int x, int y, int s) {
+    uint32_t h = uint32_t(x) * 374761393u + uint32_t(y) * 668265263u + uint32_t(s) * 2246822519u;
+    h = (h ^ (h >> 13)) * 1274126177u;
+    return h ^ (h >> 16);
+}
+float hashF(int x, int y, int s) { return float(hashI(x, y, s) & 0xffffffu) / 16777215.0f; }
+float vnoise(float x, float y, int s) {
+    const int xi = int(std::floor(x)), yi = int(std::floor(y));
+    float fx = x - xi, fy = y - yi;
+    fx = fx * fx * (3.0f - 2.0f * fx);
+    fy = fy * fy * (3.0f - 2.0f * fy);
+    const float a = hashF(xi, yi, s), b = hashF(xi + 1, yi, s), c = hashF(xi, yi + 1, s), d = hashF(xi + 1, yi + 1, s);
+    return a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy;
+}
+float fbm2(float x, float y, int oct, int s) {
+    float v = 0.0f, a = 0.5f, n = 0.0f;
+    for (int o = 0; o < oct; ++o) {
+        v += a * vnoise(x, y, s + o * 17);
+        n += a;
+        x = x * 2.03f + 7.1f;
+        y = y * 2.03f + 3.7f;
+        a *= 0.5f;
+    }
+    return v / n;
+}
+
+void drawChart(Canvas& cv, const Font& bold, const Font& reg) {
+    const int W = cv.w, H = cv.h;
+    const float ppm = W / 0.56f;   // pixels a metre of paper
+    // the land: positive towards the upper right, a ragged coast, an island off it
+    auto land = [&](float u, float v) {
+        float f = u * 0.95f + (1.0f - v) * 0.55f - 1.0f;
+        f += 0.24f * (fbm2(u * 3.0f, v * 3.0f, 3, 11) - 0.5f) + 0.07f * (fbm2(u * 14.0f, v * 14.0f, 3, 23) - 0.5f);
+        f += 0.43f * std::exp(-((u - 0.34f) * (u - 0.34f) + (v - 0.4f) * (v - 0.4f) * 0.6f) / 0.0035f);
+        f += 0.4f * std::exp(-((u - 0.25f) * (u - 0.25f) + (v - 0.47f) * (v - 0.47f)) / 0.0005f);
+        return f;
+    };
+    // the field at a quarter of the resolution, read bilinearly (smooth contours, quick)
+    const int fw = W / 4 + 2, fh = H / 4 + 2;
+    std::vector<float> field(size_t(fw) * fh);
+    for (int j = 0; j < fh; ++j)
+        for (int i = 0; i < fw; ++i) field[size_t(j) * fw + i] = land((i * 4.0f) / W, (j * 4.0f) / H);
+    auto F = [&](float x, float y) {
+        const float gx = std::clamp(x / 4.0f, 0.0f, fw - 1.001f), gy = std::clamp(y / 4.0f, 0.0f, fh - 1.001f);
+        const int i = int(gx), j = int(gy);
+        const float tx = gx - i, ty = gy - j;
+        const float* r0 = &field[size_t(j) * fw + i];
+        const float* r1 = r0 + fw;
+        return (r0[0] * (1 - tx) + r0[1] * tx) * (1 - ty) + (r1[0] * (1 - tx) + r1[1] * tx) * ty;
+    };
+    auto depth = [&](float f) { return f >= 0.0f ? 0.0f : 380.0f * std::pow(-f, 1.35f); };
+    const Col buff{0.95f, 0.86f, 0.60f}, blue{0.68f, 0.82f, 0.93f}, pale{0.84f, 0.91f, 0.96f}, black{0.08f, 0.08f, 0.09f};
+    const Col magenta{0.66f, 0.12f, 0.46f}, pencil{0.20f, 0.20f, 0.22f};
+    const float contours[] = {2.0f, 5.0f, 10.0f, 20.0f, 50.0f, 100.0f, 200.0f};
+    for (int y = 0; y < H; ++y)
+        for (int x = 0; x < W; ++x) {
+            const float f = F(x + 0.5f, y + 0.5f);
+            const float gx = F(x + 1.5f, y + 0.5f) - F(x - 0.5f, y + 0.5f), gy = F(x + 0.5f, y + 1.5f) - F(x + 0.5f, y - 0.5f);
+            const float g = std::max(0.5f * std::hypot(gx, gy), 1e-7f);   // per pixel
+            const float onLand = std::clamp(f / g + 0.5f, 0.0f, 1.0f);
+            const float d = depth(f);
+            if (onLand > 0.0f) cv.blend(x, y, buff, 0.9f * onLand);
+            if (onLand < 1.0f) {
+                if (d < 10.0f) cv.blend(x, y, blue, 0.8f * (1.0f - onLand));
+                else if (d < 20.0f) cv.blend(x, y, pale, 0.7f);
+            }
+            // the coast, heavier; the depth contours, fine (the depth's own gradient in metres a pixel)
+            cv.blend(x, y, black, std::clamp(1.4f - std::fabs(f) / g + 0.5f, 0.0f, 1.0f));
+            if (f > 0.0f)
+                for (float c : {0.035f, 0.075f, 0.12f, 0.17f})
+                    cv.blend(x, y, Col{0.55f, 0.38f, 0.2f}, 0.6f * std::clamp(0.45f - std::fabs(f - c) / g + 0.5f, 0.0f, 1.0f));
+            if (f < 0.0f) {
+                const float dd = 380.0f * 1.35f * std::pow(-f, 0.35f) * g;
+                for (float c : contours) {
+                    const float cov = std::clamp(0.55f - std::fabs(d - c) / std::max(dd, 1e-6f) + 0.5f, 0.0f, 1.0f);
+                    if (cov > 0.0f) cv.blend(x, y, Col{0.25f, 0.42f, 0.6f}, cov * 0.9f);
+                }
+            }
+        }
+    // the graticule every 5' (latitude 926 px, longitude at 38 degrees 730 px), the border's minute bars, the labels
+    const float m = 0.03f * ppm, latStep = 0.1852f * ppm, lonStep = 0.1460f * ppm;
+    const float x0 = m, x1 = W - m, y0 = m, y1 = H - m;
+    for (float x = x0 + 0.37f * lonStep; x < x1; x += lonStep) cv.line(x, y0, x, y1, 0.7f, black);
+    for (float y = y1 - 0.29f * latStep; y > y0; y -= latStep) cv.line(x0, y, x1, y, 0.7f, black);
+    for (float t : {0.0f, 0.004f * ppm}) {
+        cv.line(x0 - t, y0 - t, x1 + t, y0 - t, 1.1f, black);
+        cv.line(x0 - t, y1 + t, x1 + t, y1 + t, 1.1f, black);
+        cv.line(x0 - t, y0 - t, x0 - t, y1 + t, 1.1f, black);
+        cv.line(x1 + t, y0 - t, x1 + t, y1 + t, 1.1f, black);
+    }
+    {
+        const float bw = 0.004f * ppm;
+        int k = 0;
+        for (float x = x0 + 0.37f * lonStep - 5.0f * lonStep / 5.0f * 1.0f; x < x1; x += lonStep / 5.0f, ++k)
+            if (k % 2 && x > x0 && x + lonStep / 5.0f < x1)
+                for (float t = 0.0f; t < bw; t += 1.0f) {
+                    cv.line(x, y0 - bw + t + 0.5f, x + lonStep / 5.0f, y0 - bw + t + 0.5f, 0.6f, black);
+                    cv.line(x, y1 + t + 0.5f, x + lonStep / 5.0f, y1 + t + 0.5f, 0.6f, black);
+                }
+        k = 0;
+        for (float y = y1 - 0.29f * latStep + latStep; y > y0; y -= latStep / 5.0f, ++k)
+            if (k % 2 && y < y1 && y - latStep / 5.0f > y0)
+                for (float t = 0.0f; t < bw; t += 1.0f) {
+                    cv.line(x0 - bw + t + 0.5f, y, x0 - bw + t + 0.5f, y - latStep / 5.0f, 0.6f, black);
+                    cv.line(x1 + t + 0.5f, y, x1 + t + 0.5f, y - latStep / 5.0f, 0.6f, black);
+                }
+    }
+    {
+        int i = 0;
+        for (float x = x0 + 0.37f * lonStep; x < x1; x += lonStep, ++i) {
+            char b[32];
+            std::snprintf(b, sizeof(b), "26\xC2\xB0%02d'", 35 + 5 * i);
+            text(cv, reg, b, 0.0045f * ppm, x, y1 + 0.021f * ppm, black);
+        }
+        i = 0;
+        for (float y = y1 - 0.29f * latStep; y > y0 + 0.02f * ppm; y -= latStep, ++i) {
+            char b[32];
+            std::snprintf(b, sizeof(b), "38\xC2\xB0%02d'", 10 + 5 * i);
+            text(cv, reg, b, 0.0045f * ppm, x0 + 0.032f * ppm, y - 0.006f * ppm, black);
+        }
+    }
+    // the title, on the land
+    {
+        const float cx = W * 0.74f, cy = H * 0.12f;
+        text(cv, bold, "EGE DEN\xC4\xB0Z\xC4\xB0", 0.016f * ppm, cx, cy, black, 0.003f * ppm);
+        text(cv, reg, "SEY\xC4\xB0R HAR\xC4\xB0TASI", 0.0085f * ppm, cx, cy + 0.024f * ppm, black, 0.0012f * ppm);
+        text(cv, reg, "\xC3\x96L\xC3\x87" "EK 1 : 50 000  (38\xC2\xB0" "20' ENLEM\xC4\xB0NDE)", 0.0055f * ppm, cx, cy + 0.04f * ppm, black);
+        text(cv, reg, "DER\xC4\xB0NL\xC4\xB0KLER METRE \xC4\xB0LE", 0.0055f * ppm, cx, cy + 0.052f * ppm, black);
+        text(cv, reg, "MERCATOR PROJEKS\xC4\xB0YONU", 0.0045f * ppm, cx, cy + 0.063f * ppm, black);
+    }
+    // the compass rose, magenta: true outside, magnetic inside (variation 5 degrees east)
+    const float rcx = W * 0.27f, rcy = H * 0.74f, R = 0.068f * ppm;
+    auto rose = [&](float r, float rot, bool numbers) {
+        cv.ring(rcx, rcy, r - 1.0f, r + 1.0f, magenta);
+        for (int a = 0; a < 360; ++a) {
+            const float th = (a + rot) * kPi / 180.0f;
+            const float len = a % 10 == 0 ? 0.11f * r : (a % 5 == 0 ? 0.07f * r : 0.035f * r);
+            const float s = std::sin(th), c = -std::cos(th);
+            cv.line(rcx + s * r, rcy + c * r, rcx + s * (r - len), rcy + c * (r - len), a % 10 == 0 ? 1.0f : 0.6f, magenta);
+            if (numbers && a % 30 == 0) {
+                char b[8];
+                std::snprintf(b, sizeof(b), "%d", a);
+                text(cv, reg, b, 0.11f * r, rcx + s * (r - 0.2f * r), rcy + c * (r - 0.2f * r), magenta);
+            }
+        }
+    };
+    rose(R, 0.0f, true);
+    rose(R * 0.68f, 5.0f, true);
+    cv.ring(rcx, rcy, R * 0.43f - 0.8f, R * 0.43f + 0.8f, magenta);
+    for (int i = 0; i < 4; ++i) {   // the star at north and the arms
+        const float th = i * 0.5f * kPi;
+        const float s = std::sin(th), c = -std::cos(th);
+        cv.line(rcx, rcy, rcx + s * R * 0.4f, rcy + c * R * 0.4f, i == 0 ? 2.2f : 1.0f, magenta);
+    }
+    text(cv, reg, "VAR. 5\xC2\xB0" "00'E (1968)", 0.0042f * ppm, rcx, rcy + 0.2f * R, magenta);
+    // soundings on a jittered grid in the water, clear of the rose and the title
+    {
+        const float step = 0.017f * ppm;
+        int n = 0;
+        for (float y = y0 + step; y < y1 - step * 0.5f; y += step)
+            for (float x = x0 + step; x < x1 - step * 0.5f; x += step, ++n) {
+                const float jx = x + (hashF(int(x), int(y), 5) - 0.5f) * step * 0.7f, jy = y + (hashF(int(x), int(y), 6) - 0.5f) * step * 0.7f;
+                const float f = F(jx, jy);
+                if (f > -0.004f) continue;
+                if (std::hypot(jx - rcx, jy - rcy) < R * 1.15f) continue;
+                const float d = depth(f);
+                char b[16];
+                std::snprintf(b, sizeof(b), "%d", int(d));
+                text(cv, reg, b, 0.0024f * ppm, jx, jy, black);
+            }
+        (void)n;
+    }
+    // rocks awash (+ with dots) and sunken (+) off the coast, a wreck, the bottom's quality here and there
+    {
+        int placed = 0;
+        for (int k = 0; k < 4000 && placed < 26; ++k) {
+            const float x = x0 + hashF(k, 1, 91) * (x1 - x0), y = y0 + hashF(k, 2, 91) * (y1 - y0);
+            const float f = F(x, y);
+            if (f > -0.003f || f < -0.035f) continue;
+            const float s = 0.0022f * ppm;
+            cv.line(x - s, y, x + s, y, 0.9f, black);
+            cv.line(x, y - s, x, y + s, 0.9f, black);
+            if (placed % 3 == 0)
+                for (int q = 0; q < 4; ++q) cv.ring(x + (q % 2 ? 0.6f : -0.6f) * s, y + (q < 2 ? 0.6f : -0.6f) * s, 0.0f, 1.3f, black);
+            ++placed;
+        }
+        const float wx = W * 0.47f, wy = H * 0.3f;   // a wreck: the hull's line with three masts, "Wk"
+        cv.line(wx - 0.006f * ppm, wy, wx + 0.006f * ppm, wy, 1.0f, black);
+        for (int q = -1; q <= 1; ++q) cv.line(wx + q * 0.003f * ppm, wy - 0.0025f * ppm, wx + q * 0.003f * ppm, wy + 0.0025f * ppm, 0.9f, black);
+        text(cv, reg, "Wk", 0.0026f * ppm, wx, wy + 0.006f * ppm, black);
+        const char* q[] = {"S", "M", "Sh", "S.M", "R", "fS"};
+        for (int k = 0, n = 0; k < 600 && n < 18; ++k) {
+            const float x = x0 + hashF(k, 3, 93) * (x1 - x0), y = y0 + hashF(k, 4, 93) * (y1 - y0);
+            if (F(x, y) > -0.01f || std::hypot(x - rcx, y - rcy) < R * 1.2f) continue;
+            text(cv, reg, q[n % 6], 0.0022f * ppm, x, y, black);
+            ++n;
+        }
+    }
+    // a lighthouse on the island's cape: the magenta flare and its characteristics
+    {
+        float bx = W * 0.34f, by = H * 0.4f;
+        for (int k = 0; k < 400; ++k) {   // walk out to the coast from the island's middle (to the south west)
+            if (F(bx, by) < 0.0f) break;
+            bx -= 1.4f;
+            by += 1.6f;
+        }
+        cv.line(bx, by, bx + 0.008f * ppm, by - 0.016f * ppm, 2.6f, magenta);
+        cv.ring(bx, by, 0.0f, 3.0f, black);
+        text(cv, reg, "Fl(2)10s 21m 12M", 0.0042f * ppm, bx - 0.03f * ppm, by + 0.008f * ppm, black);
+    }
+    // the watch's pencil: the course line, fixes in circles with their times, a dead-reckoning half circle; an older
+    // track rubbed out
+    {
+        const float px[] = {0.12f, 0.2f, 0.29f, 0.4f, 0.52f, 0.6f}, py[] = {0.94f, 0.84f, 0.73f, 0.6f, 0.52f, 0.47f};
+        const char* times[] = {"0352", "0410", "0428", "0446", "0504", ""};
+        for (int i = 0; i + 1 < 6; ++i) cv.line(px[i] * W, py[i] * H, px[i + 1] * W, py[i + 1] * H, 1.1f, pencil);
+        for (int i = 0; i < 5; ++i) {
+            const float cx = px[i] * W, cy = py[i] * H;
+            cv.ring(cx, cy, 13.0f, 15.0f, pencil);
+            cv.ring(cx, cy, 0.0f, 2.2f, pencil);
+            text(cv, reg, times[i], 0.0045f * ppm, cx + 0.02f * ppm, cy - 0.004f * ppm, pencil);
+        }
+        // the half circle of a dead-reckoning position ahead, its time
+        {
+            const float cx = px[5] * W, cy = py[5] * H;
+            for (int a = 0; a < 18; ++a) {
+                const float t0 = kPi * a / 18.0f, t1 = kPi * (a + 1) / 18.0f;
+                cv.line(cx + 14.0f * std::cos(t0), cy - 14.0f * std::sin(t0), cx + 14.0f * std::cos(t1), cy - 14.0f * std::sin(t1), 0.9f, pencil);
+            }
+            text(cv, reg, "0520 DR", 0.0045f * ppm, cx + 0.024f * ppm, cy - 0.006f * ppm, pencil);
+        }
+        text(cv, reg, "C 047  S 8", 0.0055f * ppm, 0.3f * W + 0.04f * ppm, 0.66f * H, pencil, 0.001f * ppm);
+        cv.line(0.08f * W, 0.7f * H, 0.33f * W, 0.42f * H, 1.0f, Col{0.45f, 0.45f, 0.45f});   // rubbed out: a ghost
+    }
+    // a coffee ring by the edge, a crease where the chart was folded
+    {
+        const float cx = W * 0.9f, cy = H * 0.28f, r = 0.039f * ppm;
+        for (int y = int(cy - r - 12); y <= int(cy + r + 12); ++y)
+            for (int x = int(cx - r - 12); x <= int(cx + r + 12); ++x) {
+                const float d = std::hypot(x - cx, y - cy);
+                const float w = 3.0f + 4.0f * vnoise(std::atan2(y - cy, x - cx) * 3.0f + 10.0f, 0.5f, 77);
+                const float a = std::clamp(1.0f - std::fabs(d - r) / w, 0.0f, 1.0f) * 0.35f + (d < r ? 0.05f : 0.0f);
+                cv.blend(x, y, Col{0.48f, 0.30f, 0.15f}, a);
+            }
+        for (int x = 0; x < W; ++x) cv.blend(x, H / 2, Col{0.5f, 0.48f, 0.42f}, 0.12f);
+    }
+}
+
 }   // namespace
 
 bool Decals::draw(const std::string& root, std::string& err) {
@@ -258,8 +509,8 @@ bool Decals::draw(const std::string& root, std::string& err) {
             const int S = s.kind == DIAL_DEPTH16 ? 2048 : (s.kind == DIAL_DEPTH_DEEP || s.kind == DIAL_COMPASS ? 1024 : 768);
             items[i] = {S, S};
         } else {
-            const float pxPerM = 6000.0f;   // ~0.17 mm a pixel
-            items[i] = {std::min(4096, std::max(64, int(s.w * pxPerM))), std::min(2048, std::max(32, int(s.h * pxPerM)))};
+            const float pxPerM = s.style == PLATE_CHART ? 5000.0f : 6000.0f;   // ~0.17 mm a pixel (the chart 0.2 mm)
+            items[i] = {std::min(4096, std::max(64, int(s.w * pxPerM))), std::min(s.style == PLATE_CHART ? 4096 : 2048, std::max(32, int(s.h * pxPerM)))};
         }
     }
     // shelf packing, tallest first
@@ -288,6 +539,7 @@ bool Decals::draw(const std::string& root, std::string& err) {
                                    : (s.style == PLATE_BLACK ? Col{0.03f, 0.03f, 0.03f} : (s.style == PLATE_BRASS ? Col{0.80f, 0.66f, 0.36f} : Col{0, 0, 0}));
         Canvas cv(items[i].w, items[i].h, bg);
         if (s.kind >= 0) drawDial(cv, s.kind, bold, reg);
+        else if (s.style == PLATE_CHART) drawChart(cv, bold, reg);
         else drawPlate(cv, s, bold);
         for (int yy = 0; yy < cv.h; ++yy)
             for (int xx = 0; xx < cv.w; ++xx) {

@@ -260,6 +260,12 @@ void main() {
         N = normalize(N - (gw - N * dot(N, gw)));
     }
     vec3 V = normalize(camPos.xyz - i.p);
+    if (i.mat == MAT_RED_GLASS) {
+        // a frosted globe with the bulb inside: brightest where the eye looks through to the bulb, deep red towards the
+        // limb (more glass, the bulb aslant). One radiance all over drew a flat disc, blown to pink
+        float nvg = max(dot(N, V), 0.0);
+        m.emit *= 0.02 + 0.5 * pow(nvg, 4.0);
+    }
     if (dot(N, V) < 0.0) N = normalize(N + V * (-dot(N, V) + 0.01));
     float ao = texture(lmL0, i.uv2).a;
     if (i.feat == FEAT_CORK) m.rough = max(m.rough, 0.6);   // enamel over cork dries satin (no glitter on the granules)
@@ -280,9 +286,11 @@ void main() {
             m.base = mix(vec3(0.87, 0.72, 0.42), dc.rgb, dc.a);
             m.metal = 1.0 - dc.a;
             m.rough = mix(0.22, 0.55, dc.a);
-        } else {                          // a stencil: paint on paint
+        } else if (style < 2.5) {         // a stencil: paint on paint
             m.base = mix(m.base, dc.rgb, dc.a);
             m.rough = mix(m.rough, 0.45, dc.a);
+        } else {                          // the chart: ink printed into the paper (matte as the paper)
+            m.base = mix(m.base, dc.rgb, dc.a);
         }
     }
     {

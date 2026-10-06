@@ -43,6 +43,14 @@ float hullX(float y, int side, float in = 0.0f) {
     const float dy = y - kAxisY;
     return side * std::sqrt(std::max(0.0f, r * r - dy * dy));
 }
+// a board on the hull at height y (side), its face `in` inboard of the cork, square to the hull there (facing the
+// axis; x along the room as Xform::frame makes it): a flat board tangent to the curve keeps clear of the frames, whose
+// inner flanges stand 12.5 cm in from the cork
+Xform hullBoard(float y, int side, float in, float z) {
+    const float a = std::asin(std::clamp((y - kAxisY) / kRCork, -1.0f, 1.0f));
+    const float r = kRCork - in;
+    return Xform::frame(f3(side * r * std::cos(a), kAxisY + r * std::sin(a), z), f3(-side * std::cos(a), -std::sin(a), 0), f3(0, 1, 0));
+}
 // a frame facing inboard from a side (side -1 port: facing +x), z along the room, y up: x = along z, y = up, z = out
 Xform facing(float3 o, int side) {
     const float s = float(side);
@@ -110,10 +118,10 @@ void divingStation(Kit& k) {
     const int side = -1;
     const float zS = frameZ(52.8f), zB = frameZ(50.9f);   // stern and bow plane wheels
     const float z0 = frameZ(53.3f), z1 = frameZ(49.8f);
-    // the panel: a flat board leaning back with the hull, from 0.55 m to 2.05 m, its face 0.42 m inboard of the hull at
-    // the bottom
+    // the panel: a flat board leaning back with the hull, from 0.55 m to 2.05 m, its back clear of the frames' inner
+    // flanges (12.5 cm in from the cork) all the way up
     const float yb = 0.55f, yt = 2.05f;
-    const float xb = hullX(yb, side, 0.30f), xt = hullX(yt, side, 0.08f);
+    const float xb = hullX(yb, side, 0.30f), xt = hullX(yt, side, 0.21f);
     const float3 pb = f3(xb, yb, 0.5f * (z0 + z1)), pt = f3(xt, yt, 0.5f * (z0 + z1));
     const float3 up = normalize(pt - pb);
     const float3 along = f3(0, 0, -1);                // the board's x runs aft (right-handed with z into the room)
@@ -175,9 +183,7 @@ void christmasTreeAndManifold(Kit& k, std::vector<DzLight>& minor) {
     const float z0 = frameZ(49.7f), z1 = frameZ(47.6f);
     const float zc = 0.5f * (z0 + z1);
     // the Christmas tree: a grey box leaning with the hull, a grid of red and green lenses behind white rules
-    const float y = 1.78f;
-    const float x = hullX(y, side, 0.12f);
-    const Xform tree = Xform::frame(f3(x, y, zc), f3(0.9f, -0.44f, 0), f3(0, 1, 0));
+    const Xform tree = hullBoard(1.74f, side, 0.30f, zc);
     const float3 hs = f3(0.36f, 0.42f, 0.06f);
     box(k, tree, f3(0, 0, -0.06f), hs, 0.008f, MAT_GREY, FEAT_NONE);
     box(k, tree, f3(0, 0, 0.002f), f3(hs.x - 0.02f, hs.y - 0.02f, 0.002f), 0.002f, MAT_PAINT_DARK, FEAT_NONE);
@@ -223,7 +229,7 @@ void christmasTreeAndManifold(Kit& k, std::vector<DzLight>& minor) {
     for (int s = 0; s < 2; ++s)
         with(k, Xform::frame(tc + f3(-0.08f + s * 0.16f, -0.2f, -0.125f), f3(0, 1, 0), f3(1, 0, 0)), MAT_GLASS, FEAT_NONE, [&] { k.tube(0.011f, 0.0f, 0.5f); });
     // the main oil pressure and accumulator gauges above the manifold
-    const Xform gb = Xform::frame(f3(hullX(1.45f, side, 0.10f), 1.45f, zc - 0.62f), f3(0.95f, -0.3f, 0), f3(0, 1, 0));
+    const Xform gb = hullBoard(1.45f, side, 0.2f, zc - 0.62f);
     box(k, gb, f3(0, 0, -0.02f), f3(0.16f, 0.22f, 0.02f), 0.005f, MAT_CREAM, FEAT_PLATE);
     gaugeAt(k, gb, f3(0, 0.1f, 0.01f), 0.065f, 0.05f, MAT_BRASS, DIAL_WHITE);
     gaugeAt(k, gb, f3(0, -0.08f, 0.01f), 0.065f, 0.05f, MAT_BRASS, DIAL_WHITE);
@@ -254,7 +260,7 @@ void trimManifold(Kit& k) {
         }
     // the gauge board directly above
     const float yb = 1.55f;
-    const Xform gb = Xform::frame(f3(hullX(yb, side, 0.10f), yb, zc), f3(0.92f, -0.38f, 0), f3(0, 1, 0));
+    const Xform gb = hullBoard(yb, side, 0.2f, zc);
     box(k, gb, f3(0, 0, -0.02f), f3(0.5f * (z1 - z0) - 0.04f, 0.24f, 0.02f), 0.006f, MAT_CREAM, FEAT_PLATE);
     for (int g = 0; g < 4; ++g) gaugeAt(k, gb, f3(-0.36f + g * 0.24f, 0.07f, 0.01f), 0.07f, 0.05f, MAT_BRASS, DIAL_SMALL);
     gaugeAt(k, gb, f3(-0.2f, -0.14f, 0.01f), 0.05f, 0.04f, MAT_CHROME, DIAL_SMALL);
@@ -305,12 +311,61 @@ void chartTable(Kit& k, float3& top) {
     }
     // the top: laminate in a steel band, a chart on it, the gyro's window
     box(k, Xform(), f3(0.5f * (x0 + x1), h + 0.015f, 0.5f * (z0 + z1)), f3(0.5f * (x1 - x0) + 0.02f, 0.015f, 0.5f * (z1 - z0) + 0.02f), 0.004f, MAT_WOOD, FEAT_NONE);
-    with(k, Xform::at(f3(0.5f * (x0 + x1) - 0.04f, h + 0.0305f, 0.5f * (z0 + z1) + 0.05f)) * Xform::rotX(-0.5f * kPi) * Xform::rotZ(0.06f), MAT_PAPER, FEAT_NONE,
-         [&] { k.quad(0.56f, 0.78f); });
+    // the chart: printed, worked in pencil (the decal atlas draws it), north away from the navigator at the table's
+    // after side. Paper once rolled lies in soft waves a millimetre or two high, its far corner lifting; a back face
+    // under it (the lifted corner is seen from below too)
+    {
+        const int id = activeDecals ? activeDecals->plate("CHART", 0.56f, 0.78f, PLATE_CHART) : 0;
+        const float cw = 0.56f, ch = 0.78f;
+        auto hgt = [&](float x, float y) {
+            float hh = 0.0011f * (0.5f + 0.5f * std::sin(x * 11.0f + 0.7f) * std::sin(y * 7.0f + 1.3f)) + 0.0006f * (0.5f + 0.5f * std::sin(y * 17.0f + x * 3.0f));
+            const float cx = std::max(0.0f, x - (0.5f * cw - 0.1f)), cy = std::max(0.0f, y - (0.5f * ch - 0.13f));
+            return hh + 0.55f * (cx * cx + cy * cy);
+        };
+        const Xform ct = Xform::at(f3(0.5f * (x0 + x1) - 0.04f, h + 0.0302f, 0.5f * (z0 + z1) + 0.05f)) * Xform::rotX(-0.5f * kPi) * Xform::rotZ(0.06f + kPi);
+        const int nu = k.segs(cw), nv = k.segs(ch);
+        for (int side = 0; side < 2; ++side)
+            with(k, ct, MAT_PAPER, side ? FEAT_NONE : FEAT_LABEL, [&] {
+                k.fp = make_float2(float(id), 0.0f);
+                k.grid(nu, nv, [&](int i, int j) {
+                    Kit::GridPt g;
+                    const float x = -0.5f * cw + cw * float(side ? nu - i : i) / nu, y = -0.5f * ch + ch * float(j) / nv;
+                    const float e = 1e-4f;
+                    const float3 n = normalize(f3(-(hgt(x + e, y) - hgt(x - e, y)) / (2.0f * e), -(hgt(x, y + e) - hgt(x, y - e)) / (2.0f * e), 1.0f));
+                    g.p = f3(x, y, hgt(x, y) - (side ? 0.0003f : 0.0f));
+                    g.n = side ? -n : n;
+                    g.s = make_float2(x, y);
+                    return g;
+                });
+            });
+    }
     top = f3(0.5f * (x0 + x1), h + 0.03f, 0.5f * (z0 + z1));
     // dividers on the chart: two thin legs
     for (int s = -1; s <= 1; s += 2)
-        with(k, Xform::frame(top + f3(0.08f, 0.004f, -0.12f), f3(s * 0.25f, 0.0f, 0.97f), f3(0, 1, 0)), MAT_STEEL, FEAT_NONE, [&] { k.roundedCylinder(0.0025f, 0.0f, 0.14f, 0.001f); });
+        with(k, Xform::frame(top + f3(0.08f, 0.0055f, -0.12f), f3(s * 0.25f, 0.0f, 0.97f), f3(0, 1, 0)), MAT_STEEL, FEAT_NONE, [&] { k.roundedCylinder(0.0025f, 0.0f, 0.14f, 0.001f); });
+    // a parallel rule on the chart: two black rules on brass links, brass knobs to walk it
+    {
+        const Xform pr = Xform::at(top + f3(-0.12f, 0.0022f, -0.04f)) * Xform::rotY(0.55f);
+        for (int s = 0; s < 2; ++s) box(k, pr, f3(0, 0.003f, s * 0.035f), f3(0.19f, 0.003f, 0.016f), 0.0015f, MAT_WRINKLE, FEAT_NONE);
+        for (int l = -1; l <= 1; l += 2) {
+            box(k, pr, f3(l * 0.12f, 0.0068f, 0.0175f), f3(0.006f, 0.0008f, 0.025f), 0.0005f, MAT_BRASS, FEAT_NONE);
+            for (int s = 0; s < 2; ++s)
+                with(k, pr * Xform::at(f3(l * 0.12f, 0.0076f, s * 0.035f)) * Xform::rotX(-0.5f * kPi), MAT_BRASS, FEAT_NONE, [&] { k.dome(0.004f, 0.0015f); });
+            for (int s = 0; s < 2; ++s)
+                with(k, pr * Xform::frame(f3(l * 0.06f, 0.006f, s * 0.035f), f3(0, 1, 0), f3(1, 0, 0)), MAT_BRASS, FEAT_NONE,
+                     [&] { k.lathe({{0.0f, 0.0f}, {0.0062f, 0.0f}, {0.0066f, 0.004f}, {0.0048f, 0.011f}, {0.0058f, 0.016f}, {0.0f, 0.0185f}}); });
+        }
+    }
+    // a pencil across the track: red lacquer on six flats (the tape's red: no chipped enamel on a pencil), the cut
+    // wood, the lead
+    with(k, Xform::frame(top + f3(0.06f, 0.0062f, -0.19f), f3(std::cos(2.3f), 0.0f, std::sin(2.3f)), f3(0, 1, 0)), MAT_TAPE, FEAT_NONE, [&] {
+        k.hexPrism(0.0072f, 0.0f, 0.15f, 0.0006f);
+        k.mat = MAT_WOOD;
+        k.lathe({{0.0036f, 0.15f}, {0.0011f, 0.168f}, {0.0f, 0.1683f}});
+        k.mat = MAT_PAINT_DARK;
+        k.t = k.t * Xform::at(f3(0, 0, 0.1675f));
+        k.lathe({{0.00105f, 0.0f}, {0.0002f, 0.0045f}, {0.0f, 0.0046f}});
+    });
     // a coffee mug (cream china) by the chart
     with(k, Xform::frame(top + f3(0.24f, 0.0f, 0.2f), f3(0, 1, 0), f3(1, 0, 0)), MAT_CREAM, FEAT_NONE, [&] {
         k.lathe({{0.0f, 0.0f}, {0.036f, 0.0f}, {0.04f, 0.004f}, {0.042f, 0.09f}, {0.039f, 0.092f}, {0.037f, 0.012f}, {0.0f, 0.012f}});
@@ -397,7 +452,7 @@ void airManifold(Kit& k) {
     const float z0 = frameZ(54.0f), z1 = frameZ(52.0f), zc = 0.5f * (z0 + z1);
     // the gauge board (polished aluminium) leaning with the hull, two rows of gauges
     const float y = 1.55f;
-    const Xform gb = Xform::frame(f3(hullX(y, side, 0.12f), y, zc), f3(-0.92f, -0.38f, 0), f3(0, 1, 0));
+    const Xform gb = hullBoard(y, side, 0.21f, zc);
     box(k, gb, f3(0, 0, -0.02f), f3(0.5f * (z1 - z0) - 0.03f, 0.32f, 0.02f), 0.006f, MAT_ALU, FEAT_NONE);
     for (int row = 0; row < 2; ++row)
         for (int g = 0; g < 9; ++g) gaugeAt(k, gb, f3(-0.62f + g * 0.155f, 0.13f - row * 0.2f, 0.01f), 0.062f, 0.05f, MAT_BRASS, DIAL_AIR);
@@ -563,7 +618,23 @@ void electricalPanels(Kit& k) {
         const float xBack = hullX(c.h, side, 0.02f);   // the top is limited by the hull's curve
         const float xFront = std::min(xBack, hullX(0.3f, side, 0.0f)) - c.d;
         const float x0 = xFront, x1 = xBack;
-        box(k, Xform(), f3(0.5f * (x0 + x1), 0.5f * c.h, 0.5f * (z0 + z1)), f3(0.5f * (x1 - x0), 0.5f * c.h, 0.5f * (z1 - z0) - 0.01f), 0.01f, MAT_GREY, FEAT_PLATE);
+        // the body: its back corner at the top cut along the hull, clear of the frames' inner flanges (a cabinet stands on
+        // its foundation, the frames run on behind it)
+        std::vector<float2> prof = {{x0, 0.0f}, {x1, 0.0f}};
+        const float rf = kRPlate - 0.15f - 0.012f;   // the flanges' inner face, less a clearance (from the hull's axis)
+        const float yc = kAxisY + std::sqrt(std::max(0.0f, rf * rf - x1 * x1));
+        if (yc < c.h) {
+            const float xc = std::sqrt(std::max(0.0f, rf * rf - (c.h - kAxisY) * (c.h - kAxisY)));
+            prof.push_back(make_float2(x1, yc));
+            prof.push_back(make_float2(std::max(xc, x0 + 0.1f), c.h));
+        } else {
+            prof.push_back(make_float2(x1, c.h));
+        }
+        prof.push_back(make_float2(x0, c.h));
+        float area = 0.0f;
+        for (size_t i = 0; i < prof.size(); ++i) area += prof[i].x * prof[(i + 1) % prof.size()].y - prof[(i + 1) % prof.size()].x * prof[i].y;
+        if (area < 0.0f) std::reverse(prof.begin(), prof.end());
+        with(k, Xform::at(f3(0, 0, z0 + 0.01f)), MAT_GREY, FEAT_PLATE, [&] { k.slab(Kit::roundOutline(prof, 0.01f, 3), z1 - z0 - 0.02f, 0.008f); });
         const int ci = int(&c - cabs);
         cabinetFace(k, axes(f3(x0, 0.0f, 0.5f * (z0 + z1)), f3(0, 0, 1), f3(0, 1, 0), f3(-1, 0, 0)), 0.5f * (z1 - z0) - 0.01f, c.h, ci);
     }

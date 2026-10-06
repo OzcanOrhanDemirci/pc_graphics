@@ -420,9 +420,33 @@ void Kit::extrude(const std::vector<float2>& outline, float z0, float z1, bool c
     }
 }
 
-void Kit::lathe(const std::vector<float2>& rz, float a0, float a1, const std::vector<float>& edgeW) {
+void Kit::lathe(const std::vector<float2>& rz0, float a0, float a1, const std::vector<float>& edgeW0) {
+    if (rz0.size() < 2) return;
+    // a sharp corner in the profile becomes a small round (0.6 mm, at most a quarter of the shorter side): one normal
+    // at a corner made Phong bulge both faces (a lamp's flat collar dished down into its globe). No edge is a knife's.
+    std::vector<float2> rz;
+    std::vector<float> edgeW;
+    for (size_t k = 0; k < rz0.size(); ++k) {
+        const float w = edgeW0.empty() ? 0.0f : edgeW0[k];
+        if (k > 0 && k + 1 < rz0.size()) {
+            const float2 a = rz0[k - 1], p = rz0[k], b = rz0[k + 1];
+            const float2 d0 = make_float2(p.x - a.x, p.y - a.y), d1 = make_float2(b.x - p.x, b.y - p.y);
+            const float l0 = std::hypot(d0.x, d0.y), l1 = std::hypot(d1.x, d1.y);
+            if (l0 > 1e-6f && l1 > 1e-6f && (d0.x * d1.x + d0.y * d1.y) / (l0 * l1) < 0.906f) {   // turns over 25 degrees
+                const float f = std::min(0.0006f, 0.25f * std::min(l0, l1));
+                const float2 s0 = make_float2(p.x - d0.x / l0 * f, p.y - d0.y / l0 * f), s1 = make_float2(p.x + d1.x / l1 * f, p.y + d1.y / l1 * f);
+                for (const float2& q : {s0, make_float2(0.25f * s0.x + 0.5f * p.x + 0.25f * s1.x, 0.25f * s0.y + 0.5f * p.y + 0.25f * s1.y), s1}) {
+                    rz.push_back(q);
+                    edgeW.push_back(w);
+                }
+                continue;
+            }
+        }
+        rz.push_back(rz0[k]);
+        edgeW.push_back(w);
+    }
+    if (edgeW0.empty()) edgeW.clear();
     const int n = int(rz.size());
-    if (n < 2) return;
     float rmax = 0.0f;
     for (const float2& q : rz) rmax = std::max(rmax, q.x);
     const bool closed = std::fabs(a1 - a0 - 2.0f * kPi) < 1e-4f;

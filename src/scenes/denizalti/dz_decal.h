@@ -23,6 +23,7 @@ enum PlateStyle : int {
     PLATE_BLACK = 0,    // black plate, white engraving (filled)
     PLATE_BRASS,        // polished brass, engraving filled black (and cut into the metal)
     PLATE_STENCIL,      // paint stencilled straight onto the surface (no plate)
+    PLATE_CHART,        // a printed sea chart on paper, worked in pencil (the text is unused; drawn at 0.2 mm a pixel)
 };
 
 struct DecalSpec {

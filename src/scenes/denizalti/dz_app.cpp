@@ -52,6 +52,8 @@ void DzApp::build() {
     activeDecals = nullptr;
     std::string derr;
     if (!decals.draw(root, derr)) std::fprintf(stderr, "denizalti: %s\n", derr.c_str());
+    // the printed faces as drawn, for looking at them flat (DZ_CIKARTMA=path.png)
+    if (const char* dump = std::getenv("DZ_CIKARTMA"); dump && !decals.rgba.empty()) writePNG(dump, decals.width, decals.height, decals.rgba.data());
     atlas = buildAtlas(mesh, bakeOpt.texel);
     buildCollision(cfg.f("cam.radius", 0.1f));
     std::fprintf(stderr, "denizalti: %zu ucgen, %u parca (chart), atlas %dx%d\n", mesh.tris(), mesh.charts, atlas.width, atlas.height);

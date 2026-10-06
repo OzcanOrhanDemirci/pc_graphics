@@ -323,15 +323,20 @@ void redLamp(Kit& k, std::vector<DzLight>& lights, float3 p) {
     const float rg = 0.055f;
     const float3 c = p + f3(0, -rg - 0.004f, 0);
     with(k, Xform::at(c), MAT_RED_GLASS, FEAT_NONE, [&] { k.sphere(rg); });
+    // the guard: a ring under the collar's rim, four rods arcing round the globe (circles about its centre), a ring
+    // joining their ends below the equator
+    const float yTop = -0.006f;                              // the top ring, below p
+    const float rTop = 0.05f, dyTop = yTop + rg + 0.004f;    // its radius, its height over the globe's centre
+    const float rr = std::sqrt(rTop * rTop + dyTop * dyTop);  // the rods' radius about the centre
+    const float ph0 = std::atan2(rTop, dyTop), ph1 = 2.2f;    // from the top ring round to 126 degrees
+    with(k, axes(p + f3(0, yTop, 0), f3(1, 0, 0), f3(0, 0, -1), f3(0, 1, 0)), MAT_CREAM, FEAT_NONE, [&] { k.torus(rTop, 0.003f); });
+    with(k, axes(c + f3(0, rr * std::cos(ph1), 0), f3(1, 0, 0), f3(0, 0, -1), f3(0, 1, 0)), MAT_CREAM, FEAT_NONE,
+         [&] { k.torus(rr * std::sin(ph1), 0.003f); });
     for (int i = 0; i < 4; ++i) {
         const float th = (i + 0.5f) * 0.5f * kPi;
-        std::vector<float3> pts;
-        for (int s = 0; s <= 8; ++s) {
-            const float ph = -0.05f + (kPi * 0.62f) * float(s) / 8;   // from the collar round the globe
-            const float rr = rg + 0.012f;
-            pts.push_back(c + f3(std::cos(th) * rr * std::sin(ph), rr * std::cos(ph), std::sin(th) * rr * std::sin(ph)));
-        }
-        with(k, Xform(), MAT_CREAM, FEAT_NONE, [&] { pipeRun(k, pts, 0.0035f, 0.01f); });
+        const float3 out = f3(std::cos(th), 0, std::sin(th));
+        // the torus's angle runs from its x (up) towards its y (out): the meridian through `out`
+        with(k, axes(c, f3(0, 1, 0), out, cross(f3(0, 1, 0), out)), MAT_CREAM, FEAT_NONE, [&] { k.torus(rr, 0.0025f, ph0, ph1); });
     }
     // the light: the globe glows red (a filtered bulb inside)
     lights.push_back(DzLight{c, rg * 0.98f, make_float3(1.0f, 0.02f, 0.006f) * (0.55f / 0.2126f), 0.0f});
@@ -398,9 +403,10 @@ Start buildRoom(Mesh& m, float maxEdge, std::vector<DzLight>& lights) {
     std::vector<DzLight> minor;
     buildEquipment(k, chartTop, minor);
     // the night lamps over the port side's stations and the passage
-    redLamp(k, lights, onHull(0.5f * kPi + 0.42f, frameZ(52.0f), 0.08f));
-    redLamp(k, lights, onHull(0.5f * kPi + 0.42f, frameZ(49.4f), 0.08f));
-    redLamp(k, lights, onHull(0.5f * kPi - 0.5f, frameZ(53.0f), 0.08f));
+    // in the bays between the frames (on frame 52 and 53 the frame's web cut through the globes)
+    redLamp(k, lights, onHull(0.5f * kPi + 0.42f, frameZ(52.5f), 0.08f));
+    redLamp(k, lights, onHull(0.5f * kPi + 0.42f, frameZ(49.5f), 0.08f));
+    redLamp(k, lights, onHull(0.5f * kPi - 0.5f, frameZ(53.5f), 0.08f));
     chartLamp(k, lights, onHull(0.5f * kPi + 0.16f, chartTop.z, 0.12f), chartTop + f3(0.0f, 0.62f, 0.0f));
     // the key lamps first (their highlights are drawn, dz_render), then the small glows
     lights.insert(lights.end(), minor.begin(), minor.end());
