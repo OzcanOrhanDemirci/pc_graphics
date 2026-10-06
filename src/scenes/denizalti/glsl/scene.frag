@@ -18,6 +18,7 @@ layout(binding = 2) uniform sampler2D lmR;
 layout(binding = 3) uniform sampler2D lmG;
 layout(binding = 4) uniform sampler2D lmB;
 layout(binding = 5) uniform sampler2D lmVis;
+layout(binding = 10) uniform sampler3D froxels;   // the haze along the view (froxel.comp): in-scatter so far, transmittance
 
 // irradiance from L1 harmonics, one direction for all three channels (the luminance's): a weak channel's own direction
 // is mostly noise and would tint a bumpy surface in specks. Each channel keeps its own mean and its own share of the
@@ -257,6 +258,14 @@ void main() {
         vec3 F = F_Schlick(f0, vh);
         vec3 illum = lampL[k].rgb * (PI * r * r / d2) * nl;
         c += D_GGX(nh, a2) * V_Smith(nv, nl, a2) * F * norm * illum * vis[k];
+    }
+    // the haze between the eye and this sample
+    if (haze.w > 0.5) {
+        float dv = max(dot(i.p - camPos.xyz, camFwd.xyz), haze.x);
+        float tz = log(dv / haze.x) / log(haze.y / haze.x) * haze.z;
+        vec3 uvw = vec3(gl_FragCoord.xy / viewport.xy * viewport.z * 0.0 + gl_FragCoord.xy / (viewport.xy * viewport.z), (tz - 0.5) / haze.z);
+        vec4 fr = texture(froxels, clamp(uvw, vec3(0), vec3(1)));
+        c = c * fr.a + fr.rgb;
     }
     if (misc.z == 1.0) c = N * 0.5 + 0.5;
     if (misc.z == 2.0) c = vec3(fract(i.uv * 10.0), 0.0);

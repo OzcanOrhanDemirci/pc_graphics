@@ -44,6 +44,8 @@ void DzApp::build() {
     bakeOpt.bounces = cfg.i("bake.bounces", 12);
     bakeOpt.texel = cfg.f("bake.texel", 0.002f);
     bakeOpt.filter = cfg.i("bake.filter", 2);
+    bakeOpt.volCell = cfg.f("bake.volCell", 0.04f);
+    bakeOpt.volSamples = cfg.i("bake.volSamples", 256);
     activeDecals = nullptr;
     std::string derr;
     if (!decals.draw(root, derr)) std::fprintf(stderr, "denizalti: %s\n", derr.c_str());
@@ -75,6 +77,7 @@ void DzApp::home() {
     cam.pitch = start.pitch;
     cam.fovY = cfg.f("cam.fov", 60.0f) * 3.14159265f / 180.0f;
     set.exposure = cfg.f("cam.ev", 4.7f);
+    set.hazeDensity = cfg.f("fx.haze", 1.0f);
 }
 
 bool DzApp::initGL(std::string& err) {

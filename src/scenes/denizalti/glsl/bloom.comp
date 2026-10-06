@@ -1,0 +1,49 @@
+#version 460 core
+// Scene 8 · the lens's bloom: a mip pyramid of the resolved HDR picture, down with a 13-tap filter (the first level
+// weighted against fireflies), up with a 3x3 tent added level by level. Deterministic: the same picture gives the same
+// glow, a still view a still glow.
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(binding = 0) uniform sampler2D src;           // the level read from
+layout(binding = 2, rgba16f) uniform image2D dst;    // the level written
+uniform int mode;            // 0: down (first, Karis-weighted), 1: down, 2: up (add)
+uniform float srcLod;
+uniform ivec2 dstSize;
+
+float luma(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
+
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    if (p.x >= dstSize.x || p.y >= dstSize.y) return;
+    vec2 uv = (vec2(p) + 0.5) / vec2(dstSize);
+    vec2 ts = 1.0 / vec2(textureSize(src, int(srcLod)));
+    if (mode < 2) {
+        // the 13 taps (Jimenez, Call of Duty: Advanced Warfare)
+        vec3 a = textureLod(src, uv + ts * vec2(-2, -2), srcLod).rgb, b = textureLod(src, uv + ts * vec2(0, -2), srcLod).rgb;
+        vec3 c = textureLod(src, uv + ts * vec2(2, -2), srcLod).rgb, d = textureLod(src, uv + ts * vec2(-2, 0), srcLod).rgb;
+        vec3 e = textureLod(src, uv, srcLod).rgb, f = textureLod(src, uv + ts * vec2(2, 0), srcLod).rgb;
+        vec3 g = textureLod(src, uv + ts * vec2(-2, 2), srcLod).rgb, h = textureLod(src, uv + ts * vec2(0, 2), srcLod).rgb;
+        vec3 i = textureLod(src, uv + ts * vec2(2, 2), srcLod).rgb, j = textureLod(src, uv + ts * vec2(-1, -1), srcLod).rgb;
+        vec3 k = textureLod(src, uv + ts * vec2(1, -1), srcLod).rgb, l = textureLod(src, uv + ts * vec2(-1, 1), srcLod).rgb;
+        vec3 m = textureLod(src, uv + ts * vec2(1, 1), srcLod).rgb;
+        vec3 o;
+        if (mode == 0) {   // groups weighted by 1/(1+luma): one bright texel cannot flicker the glow
+            vec3 g0 = (j + k + l + m) * 0.25, g1 = (a + b + d + e) * 0.25, g2 = (b + c + e + f) * 0.25, g3 = (d + e + g + h) * 0.25,
+                 g4 = (e + f + h + i) * 0.25;
+            float w0 = 0.5 / (1.0 + luma(g0)), w1 = 0.125 / (1.0 + luma(g1)), w2 = 0.125 / (1.0 + luma(g2)), w3 = 0.125 / (1.0 + luma(g3)),
+                  w4 = 0.125 / (1.0 + luma(g4));
+            o = (g0 * w0 + g1 * w1 + g2 * w2 + g3 * w3 + g4 * w4) / (w0 + w1 + w2 + w3 + w4);
+        } else {
+            o = (j + k + l + m) * 0.125 + (a + c + g + i) * 0.03125 + (b + d + f + h) * 0.0625 + e * 0.125;
+        }
+        imageStore(dst, p, vec4(o, 1.0));
+    } else {
+        // up: a 3x3 tent of the smaller level added to this one
+        vec3 s = textureLod(src, uv + ts * vec2(-1, -1), srcLod).rgb + 2.0 * textureLod(src, uv + ts * vec2(0, -1), srcLod).rgb +
+                 textureLod(src, uv + ts * vec2(1, -1), srcLod).rgb + 2.0 * textureLod(src, uv + ts * vec2(-1, 0), srcLod).rgb +
+                 4.0 * textureLod(src, uv, srcLod).rgb + 2.0 * textureLod(src, uv + ts * vec2(1, 0), srcLod).rgb +
+                 textureLod(src, uv + ts * vec2(-1, 1), srcLod).rgb + 2.0 * textureLod(src, uv + ts * vec2(0, 1), srcLod).rgb +
+                 textureLod(src, uv + ts * vec2(1, 1), srcLod).rgb;
+        vec3 cur = imageLoad(dst, p).rgb;
+        imageStore(dst, p, vec4(cur + s / 16.0, 1.0));
+    }
+}

@@ -144,7 +144,7 @@ uint64_t bakeKey(const Mesh& m, const std::vector<DzLight>& lights, const BakeOp
     h = fnv(h, m.idx.data(), m.idx.size() * sizeof(uint32_t));
     h = fnv(h, lights.data(), lights.size() * sizeof(DzLight));
     h = fnv(h, &o, sizeof(o));
-    const int version = 6;
+    const int version = 7;
     h = fnv(h, &version, sizeof(version));
     return h;
 }
@@ -213,24 +213,27 @@ bool bake(const Mesh& m, const Atlas& a, const std::vector<DzLight>& lights, con
         err = std::string("optixModuleCreate: ") + olog;
         return false;
     }
-    OptixProgramGroupDesc d[3] = {};
+    OptixProgramGroupDesc d[4] = {};
     d[0].kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
     d[0].raygen.module = module;
     d[0].raygen.entryFunctionName = "__raygen__bake";
     d[1].kind = OPTIX_PROGRAM_GROUP_KIND_MISS;
     d[2].kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;
-    OptixProgramGroup groups[3];
+    d[3].kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
+    d[3].raygen.module = module;
+    d[3].raygen.entryFunctionName = "__raygen__volume";
+    OptixProgramGroup groups[4];
     OptixProgramGroupOptions go{};
     olen = sizeof(olog);
-    OK(optixProgramGroupCreate(ctx, d, 3, &go, olog, &olen, groups));
+    OK(optixProgramGroupCreate(ctx, d, 4, &go, olog, &olen, groups));
     OptixPipelineLinkOptions lo{};
     lo.maxTraceDepth = 1;
     OptixPipeline pipe = nullptr;
     olen = sizeof(olog);
-    OK(optixPipelineCreate(ctx, &pco, &lo, groups, 3, olog, &olen, &pipe));
+    OK(optixPipelineCreate(ctx, &pco, &lo, groups, 4, olog, &olen, &pipe));
     OK(optixPipelineSetStackSizeFromCallDepths(pipe, 1, 0, 0, 0, 1));
-    CUdeviceptr rec[3] = {};
-    for (int i = 0; i < 3; ++i) {
+    CUdeviceptr rec[4] = {};
+    for (int i = 0; i < 4; ++i) {
         Record r{};
         OK(optixSbtRecordPackHeader(groups[i], &r));
         CK(cudaMalloc(reinterpret_cast<void**>(&rec[i]), sizeof(Record)));
@@ -444,7 +447,69 @@ bool bake(const Mesh& m, const Atlas& a, const std::vector<DzLight>& lights, con
         dilate(dst, 4, a, ras.index);
         for (size_t i = 0; i < atlasN * 4; ++i) out.plane[k][i] = toHalf(dst[i]);
     }
-    say(0.98f, "kenarlar dolduruldu");
+    say(0.96f, "kenarlar dolduruldu");
+
+    // ---- the haze volume: the room's bounds in 4 cm cells
+    {
+        const float cell = o.volCell;
+        const float3 lo = make_float3(-2.46f, 0.0f, 0.0f), hi = make_float3(2.46f, 2.62f, 8.23f);
+        const uint3 dim = make_uint3(unsigned(std::ceil((hi.x - lo.x) / cell)), unsigned(std::ceil((hi.y - lo.y) / cell)),
+                                     unsigned(std::ceil((hi.z - lo.z) / cell)));
+        const size_t nv = size_t(dim.x) * dim.y * dim.z;
+        out.volDim[0] = int(dim.x);
+        out.volDim[1] = int(dim.y);
+        out.volDim[2] = int(dim.z);
+        out.volLo[0] = lo.x;
+        out.volLo[1] = lo.y;
+        out.volLo[2] = lo.z;
+        out.volCell = cell;
+        out.vol[0].assign(nv * 4, toHalf(0.0f));
+        out.vol[1].assign(nv * 4, toHalf(0.0f));
+        prm.volLo = lo;
+        prm.volCell = cell;
+        prm.volDim = dim;
+        sbt.raygenRecord = rec[3];
+        unsigned int perV = 4;
+        for (size_t b0 = 0; b0 < nv; b0 += batch) {
+            const size_t cnt = std::min(batch, nv - b0);
+            CK(cudaMemset(acc[0], 0, cnt * sizeof(float4)));
+            CK(cudaMemset(acc[1], 0, cnt * sizeof(float4)));
+            prm.acc0 = acc[0];
+            prm.acc1 = acc[1];
+            prm.count = unsigned(cnt);
+            prm.texelBase = unsigned(b0);
+            unsigned int s = 0;
+            while (s < unsigned(o.volSamples)) {
+                prm.sampleBase = s;
+                prm.samples = std::min(perV, unsigned(o.volSamples) - s);
+                CK(cudaMemcpyAsync(dPrm, &prm, sizeof(prm), cudaMemcpyHostToDevice, stream));
+                const auto l0 = std::chrono::steady_clock::now();
+                OK(optixLaunch(pipe, stream, CUdeviceptr(dPrm), sizeof(DzBakeParams), &sbt, unsigned(cnt), 1, 1));
+                CK(cudaStreamSynchronize(stream));
+                const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - l0).count();
+                s += prm.samples;
+                if (ms < 120.0 && perV < 1024) perV *= 2;
+                else if (ms > 500.0 && perV > 1) perV /= 2;
+            }
+            CK(cudaMemcpy(h0.data(), acc[0], cnt * sizeof(float4), cudaMemcpyDeviceToHost));
+            CK(cudaMemcpy(h1.data(), acc[1], cnt * sizeof(float4), cudaMemcpyDeviceToHost));
+            for (size_t i = 0; i < cnt; ++i) {
+                const float inv = 1.0f / std::max(1.0f, h0[i].w);
+                uint16_t* a0 = &out.vol[0][(b0 + i) * 4];
+                uint16_t* a1 = &out.vol[1][(b0 + i) * 4];
+                a0[0] = toHalf(h0[i].x * inv);
+                a0[1] = toHalf(h0[i].y * inv);
+                a0[2] = toHalf(h0[i].z * inv);
+                a0[3] = toHalf(1.0f);
+                a1[0] = toHalf(h1[i].x * inv);
+                a1[1] = toHalf(h1[i].y * inv);
+                a1[2] = toHalf(h1[i].z * inv);
+                a1[3] = toHalf(0.0f);
+            }
+            say(0.96f + 0.03f * float(b0 + cnt) / float(nv), "pus pisiriliyor");
+        }
+        std::printf("pus: %ux%ux%u hucre (%.0f mm), %d ornek\n", dim.x, dim.y, dim.z, cell * 1000.0f, o.volSamples);
+    }
 
     cudaFree(dP);
     cudaFree(dN);
@@ -479,6 +544,10 @@ bool saveLightMap(const std::string& path, const LightMap& lm) {
     const uint64_t texels = lm.texels;
     f.write(reinterpret_cast<const char*>(&texels), 8);
     for (int k = 0; k < 5; ++k) f.write(reinterpret_cast<const char*>(lm.plane[k].data()), std::streamsize(lm.plane[k].size() * 2));
+    f.write(reinterpret_cast<const char*>(lm.volDim), sizeof(lm.volDim));
+    f.write(reinterpret_cast<const char*>(lm.volLo), sizeof(lm.volLo));
+    f.write(reinterpret_cast<const char*>(&lm.volCell), sizeof(lm.volCell));
+    for (int k = 0; k < 2; ++k) f.write(reinterpret_cast<const char*>(lm.vol[k].data()), std::streamsize(lm.vol[k].size() * 2));
     return bool(f);
 }
 
@@ -498,6 +567,14 @@ bool loadLightMap(const std::string& path, uint64_t key, LightMap& lm) {
     for (int p = 0; p < 5; ++p) {
         lm.plane[p].resize(size_t(lm.atlas.width) * lm.atlas.height * 4);
         f.read(reinterpret_cast<char*>(lm.plane[p].data()), std::streamsize(lm.plane[p].size() * 2));
+    }
+    f.read(reinterpret_cast<char*>(lm.volDim), sizeof(lm.volDim));
+    f.read(reinterpret_cast<char*>(lm.volLo), sizeof(lm.volLo));
+    f.read(reinterpret_cast<char*>(&lm.volCell), sizeof(lm.volCell));
+    const size_t nv = size_t(lm.volDim[0]) * lm.volDim[1] * lm.volDim[2];
+    for (int k = 0; k < 2; ++k) {
+        lm.vol[k].resize(nv * 4);
+        f.read(reinterpret_cast<char*>(lm.vol[k].data()), std::streamsize(lm.vol[k].size() * 2));
     }
     return bool(f);
 }

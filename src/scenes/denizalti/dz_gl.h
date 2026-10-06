@@ -37,6 +37,7 @@ namespace dzgl {
     X(PFNGLPROGRAMUNIFORM3FPROC, glProgramUniform3f)                     \
     X(PFNGLPROGRAMUNIFORM4FPROC, glProgramUniform4f)                     \
     X(PFNGLPROGRAMUNIFORM2IPROC, glProgramUniform2i)                     \
+    X(PFNGLPROGRAMUNIFORM3IPROC, glProgramUniform3i)                     \
     X(PFNGLPROGRAMUNIFORMMATRIX4FVPROC, glProgramUniformMatrix4fv)       \
     X(PFNGLCREATEBUFFERSPROC, glCreateBuffers)                           \
     X(PFNGLNAMEDBUFFERSTORAGEPROC, glNamedBufferStorage)                 \

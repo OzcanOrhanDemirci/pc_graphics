@@ -3,7 +3,10 @@
 // pattern every frame: no grain, no shimmer, only the 8-bit steps broken).
 in vec2 vUV;
 layout(binding = 0) uniform sampler2D hdr;
+layout(binding = 1) uniform sampler2D bloomTex;   // bloom.comp's result in its level 0 (half size)
 uniform float exposure;   // multiplier
+uniform float bloomMix;   // the glow's share (energy kept: a mix, not an add)
+uniform float bloomLevels;
 layout(location = 0) out vec4 outColor;
 
 vec3 agxContrast(vec3 x) {
@@ -38,7 +41,10 @@ uint hash2(uvec2 p) {
 
 void main() {
     ivec2 px = ivec2(gl_FragCoord.xy);
-    vec3 c = texelFetch(hdr, px, 0).rgb * exposure;
+    vec3 c = texelFetch(hdr, px, 0).rgb;
+    vec2 uv = (vec2(px) + 0.5) / vec2(textureSize(hdr, 0));
+    vec3 b = textureLod(bloomTex, uv, 0.0).rgb / max(bloomLevels, 1.0);
+    c = mix(c, b, bloomMix) * exposure;
     vec3 d = srgb(agx(c));
     // triangular dither, fixed per pixel
     uint h = hash2(uvec2(px));

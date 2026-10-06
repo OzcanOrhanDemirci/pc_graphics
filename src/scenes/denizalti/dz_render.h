@@ -28,6 +28,7 @@ struct Settings {
     bool normalDetail = true;
     bool displacement = true;
     bool tessOff = false;             // measurement: every factor 1 (the base mesh as it is)
+    float hazeDensity = 1.0f;         // the air's haze (scale)
 };
 
 struct GpuTimes {   // ms, from the GPU's timestamps (the frame before last: no stall)
@@ -89,6 +90,11 @@ private:
     unsigned msColor_ = 0, msDepth_ = 0, msFbo_ = 0;
     unsigned lightTex_[5] = {};
     unsigned noiseTex_ = 0, decalTex_ = 0, decalUbo_ = 0;
+    unsigned hazeTex_[2] = {}, froxelTex_ = 0, progFroxel_ = 0;
+    unsigned bloomTex_ = 0, progBloom_ = 0;
+    int bloomLevels_ = 0;
+    int froxDims_[3] = {0, 0, 0};
+    float volLo_[3] = {0, 0, 0}, volSize_[3] = {1, 1, 1};
     float lampPos_[4][4] = {}, lampL_[4][4] = {};
     unsigned hdrTex_ = 0, ldrTex_ = 0, ldrFbo_ = 0, outTex_ = 0, outFbo_ = 0;
     int rw_ = 0, rh_ = 0, ssaa_ = 0, outW_ = 0, outH_ = 0;

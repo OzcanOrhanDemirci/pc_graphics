@@ -18,6 +18,8 @@ struct BakeOptions {
     int bounces = 12;
     float texel = 0.002f;    // metres per texel (the base density)
     int filter = 2;          // the edge-keeping filter's radius in texels (0: none)
+    float volCell = 0.04f;   // the haze volume's cell (m)
+    int volSamples = 256;
 };
 
 // what the live picture reads: five RGBA16F planes over the atlas (L0 rgb + the occlusion within 25 cm; L1 of red,
@@ -25,6 +27,11 @@ struct BakeOptions {
 struct LightMap {
     Atlas atlas;
     std::vector<uint16_t> plane[5];   // half floats, 4 per texel, row 0 = atlas row 0
+    // the haze: the light arriving in the air, a grid over the room (two RGBA16F planes: mean rgb; luminance L1 xyz)
+    int volDim[3] = {0, 0, 0};
+    float volLo[3] = {0, 0, 0};
+    float volCell = 0.04f;
+    std::vector<uint16_t> vol[2];
     uint64_t key = 0;
     double bakeSeconds = 0.0;
     size_t texels = 0;

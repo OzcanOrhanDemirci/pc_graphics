@@ -114,6 +114,8 @@ struct FrameUBO {
     float misc[4];
     float lampPos[4][4];   // xyz, radius
     float lampL[4][4];     // radiance rgb, w: 1 if present
+    float camFw[4];        // the view axis
+    float haze[4];         // near, far, slices, on
 };
 
 // column-major 4x4 products for the camera
@@ -139,6 +141,14 @@ bool Renderer::buildPrograms(std::string& err) {
     if (!po) { glDeleteProgram(sc); glDeleteProgram(rs); return false; }
     unsigned fi = program(dir, {{GL_VERTEX_SHADER, "fullscreen.vert"}, {GL_FRAGMENT_SHADER, "final.frag"}}, err);
     if (!fi) { glDeleteProgram(sc); glDeleteProgram(rs); glDeleteProgram(po); return false; }
+    unsigned fx = program(dir, {{GL_COMPUTE_SHADER, "froxel.comp"}}, err);
+    if (!fx) { glDeleteProgram(sc); glDeleteProgram(rs); glDeleteProgram(po); glDeleteProgram(fi); return false; }
+    if (progFroxel_) glDeleteProgram(progFroxel_);
+    progFroxel_ = fx;
+    unsigned bl = program(dir, {{GL_COMPUTE_SHADER, "bloom.comp"}}, err);
+    if (!bl) return false;
+    if (progBloom_) glDeleteProgram(progBloom_);
+    progBloom_ = bl;
     if (progScene_) glDeleteProgram(progScene_);
     if (progResolve_) glDeleteProgram(progResolve_);
     if (progPost_) glDeleteProgram(progPost_);
@@ -386,6 +396,26 @@ void Renderer::uploadLight(const LightMap& lm) {
         glTextureParameteri(lightTex_[k], GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     }
     glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+    for (unsigned& t : hazeTex_) {
+        if (t) glDeleteTextures(1, &t);
+        t = 0;
+    }
+    if (lm.volDim[0] > 0 && !lm.vol[0].empty()) {
+        for (int k = 0; k < 2; ++k) {
+            glCreateTextures(GL_TEXTURE_3D, 1, &hazeTex_[k]);
+            glTextureStorage3D(hazeTex_[k], 1, GL_RGBA16F, lm.volDim[0], lm.volDim[1], lm.volDim[2]);
+            glTextureSubImage3D(hazeTex_[k], 0, 0, 0, 0, lm.volDim[0], lm.volDim[1], lm.volDim[2], GL_RGBA, GL_HALF_FLOAT, lm.vol[k].data());
+            glTextureParameteri(hazeTex_[k], GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTextureParameteri(hazeTex_[k], GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTextureParameteri(hazeTex_[k], GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTextureParameteri(hazeTex_[k], GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glTextureParameteri(hazeTex_[k], GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+        }
+        for (int a = 0; a < 3; ++a) {
+            volLo_[a] = lm.volLo[a];
+            volSize_[a] = lm.volDim[a] * lm.volCell;
+        }
+    }
 }
 
 void Renderer::setLamps(const ::DzLight* l, int n) {
@@ -404,13 +434,13 @@ void Renderer::setLamps(const ::DzLight* l, int n) {
 }
 
 void Renderer::freeTargets() {
-    unsigned tex[] = {msColor_, msDepth_, hdrTex_, ldrTex_, outTex_};
+    unsigned tex[] = {msColor_, msDepth_, hdrTex_, ldrTex_, outTex_, bloomTex_};
     for (unsigned t : tex)
         if (t) glDeleteTextures(1, &t);
     unsigned fb[] = {msFbo_, ldrFbo_, outFbo_};
     for (unsigned f : fb)
         if (f) glDeleteFramebuffers(1, &f);
-    msColor_ = msDepth_ = hdrTex_ = ldrTex_ = outTex_ = msFbo_ = ldrFbo_ = outFbo_ = 0;
+    msColor_ = msDepth_ = hdrTex_ = ldrTex_ = outTex_ = msFbo_ = ldrFbo_ = outFbo_ = bloomTex_ = 0;
     rw_ = rh_ = ssaa_ = outW_ = outH_ = 0;
 }
 
@@ -442,6 +472,15 @@ void Renderer::targets(int w, int h, int ssaa, int ow, int oh) {
         std::printf("denizalti: cok ornekli hedef eksik (%dx%d, %d ornek)\n", w * sx, h * sy, msaa);
     glCreateTextures(GL_TEXTURE_2D, 1, &hdrTex_);
     glTextureStorage2D(hdrTex_, 1, GL_RGBA16F, w, h);
+    // the bloom's pyramid: half the render size, down to a few texels
+    bloomLevels_ = 1;
+    while (bloomLevels_ < 7 && ((w / 2) >> bloomLevels_) >= 8 && ((h / 2) >> bloomLevels_) >= 8) ++bloomLevels_;
+    glCreateTextures(GL_TEXTURE_2D, 1, &bloomTex_);
+    glTextureStorage2D(bloomTex_, bloomLevels_, GL_RGBA16F, std::max(1, w / 2), std::max(1, h / 2));
+    glTextureParameteri(bloomTex_, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_NEAREST);
+    glTextureParameteri(bloomTex_, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTextureParameteri(bloomTex_, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(bloomTex_, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glCreateTextures(GL_TEXTURE_2D, 1, &ldrTex_);
     glTextureStorage2D(ldrTex_, 1, GL_RGBA8, w, h);
     glTextureParameteri(ldrTex_, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -512,7 +551,51 @@ void Renderer::draw(const Camera& cam, const Settings& s, int ow, int oh, double
     u.misc[3] = s.normalDetail ? 1.0f : 0.0f;
     std::memcpy(u.lampPos, lampPos_, sizeof(lampPos_));
     std::memcpy(u.lampL, lampL_, sizeof(lampL_));
+    u.camFw[0] = fw.x;
+    u.camFw[1] = fw.y;
+    u.camFw[2] = fw.z;
+    // the haze's froxels: High 160 x 90 x 64, Medium half each way; Low none
+    const int fxDims[3][3] = {{0, 0, 0}, {80, 45, 32}, {160, 90, 64}};
+    const bool hazeOn = s.fx > 0 && hazeTex_[0] && s.hazeDensity > 0.0f;
+    u.haze[0] = 0.05f;
+    u.haze[1] = 12.0f;
+    u.haze[2] = hazeOn ? float(fxDims[s.fx][2]) : 0.0f;
+    u.haze[3] = hazeOn ? 1.0f : 0.0f;
     glNamedBufferSubData(ubo_, 0, sizeof(u), &u);
+    if (hazeOn) {
+        const int* fd = fxDims[s.fx];
+        if (fd[0] != froxDims_[0] || fd[1] != froxDims_[1] || fd[2] != froxDims_[2]) {
+            if (froxelTex_) glDeleteTextures(1, &froxelTex_);
+            glCreateTextures(GL_TEXTURE_3D, 1, &froxelTex_);
+            glTextureStorage3D(froxelTex_, 1, GL_RGBA16F, fd[0], fd[1], fd[2]);
+            glTextureParameteri(froxelTex_, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTextureParameteri(froxelTex_, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTextureParameteri(froxelTex_, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTextureParameteri(froxelTex_, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glTextureParameteri(froxelTex_, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+            for (int a = 0; a < 3; ++a) froxDims_[a] = fd[a];
+        }
+        glUseProgram(progFroxel_);
+        glBindBufferBase(GL_UNIFORM_BUFFER, 0, ubo_);
+        glBindTextureUnit(6, noiseTex_);
+        glBindTextureUnit(8, hazeTex_[0]);
+        glBindTextureUnit(9, hazeTex_[1]);
+        glBindImageTexture(1, froxelTex_, 0, GL_TRUE, 0, GL_WRITE_ONLY, GL_RGBA16F);
+        auto loc = [&](const char* n) { return glGetUniformLocation(progFroxel_, n); };
+        glProgramUniform3i(progFroxel_, loc("dims"), fd[0], fd[1], fd[2]);
+        glProgramUniform3f(progFroxel_, loc("volLo"), volLo_[0], volLo_[1], volLo_[2]);
+        glProgramUniform3f(progFroxel_, loc("volSize"), volSize_[0], volSize_[1], volSize_[2]);
+        glProgramUniform3f(progFroxel_, loc("camFw"), fw.x, fw.y, fw.z);
+        glProgramUniform3f(progFroxel_, loc("camRt"), rt.x, rt.y, rt.z);
+        glProgramUniform3f(progFroxel_, loc("camUp"), up.x, up.y, up.z);
+        glProgramUniform1f(progFroxel_, loc("tanY"), std::tan(0.5f * cam.fovY));
+        glProgramUniform1f(progFroxel_, loc("aspect"), aspect);
+        glProgramUniform1f(progFroxel_, loc("zNear"), u.haze[0]);
+        glProgramUniform1f(progFroxel_, loc("zFar"), u.haze[1]);
+        glProgramUniform1f(progFroxel_, loc("density"), s.hazeDensity);
+        glDispatchCompute((fd[0] + 7) / 8, (fd[1] + 7) / 8, 1);
+        glMemoryBarrier(GL_TEXTURE_FETCH_BARRIER_BIT | GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+    }
 
     // ---- the samples
     glBindFramebuffer(GL_FRAMEBUFFER, msFbo_);
@@ -539,6 +622,7 @@ void Renderer::draw(const Camera& cam, const Settings& s, int ow, int oh, double
     for (int k = 0; k < 5; ++k) glBindTextureUnit(1 + k, lightTex_[k]);
     glBindTextureUnit(6, noiseTex_);
     glBindTextureUnit(7, decalTex_);
+    glBindTextureUnit(10, hazeOn ? froxelTex_ : 0);
     if (decalUbo_) glBindBufferBase(GL_UNIFORM_BUFFER, 1, decalUbo_);
     {   // the clusters inside the view (each box against the clip planes, the projection's rows)
         const float* M = u.viewProj;
@@ -594,6 +678,33 @@ void Renderer::draw(const Camera& cam, const Settings& s, int ow, int oh, double
     glProgramUniform2i(progResolve_, glGetUniformLocation(progResolve_, "size"), s.width, s.height);
     glDispatchCompute((s.width + 7) / 8, (s.height + 7) / 8, 1);
     glMemoryBarrier(GL_TEXTURE_FETCH_BARRIER_BIT | GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+    // ---- the bloom: down the pyramid from the resolved picture, then up adding each level
+    const float bloomStrength = s.fx == 2 ? 0.045f : (s.fx == 1 ? 0.03f : 0.018f);
+    {
+        glUseProgram(progBloom_);
+        auto lc = [&](const char* n) { return glGetUniformLocation(progBloom_, n); };
+        auto size = [&](int l) { return std::array<int, 2>{std::max(1, (s.width / 2) >> l), std::max(1, (s.height / 2) >> l)}; };
+        for (int l = 0; l < bloomLevels_; ++l) {
+            const auto sz = size(l);
+            glBindTextureUnit(0, l == 0 ? hdrTex_ : bloomTex_);
+            glBindImageTexture(2, bloomTex_, l, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA16F);
+            glProgramUniform1i(progBloom_, lc("mode"), l == 0 ? 0 : 1);
+            glProgramUniform1f(progBloom_, lc("srcLod"), l == 0 ? 0.0f : float(l - 1));
+            glProgramUniform2i(progBloom_, lc("dstSize"), sz[0], sz[1]);
+            glDispatchCompute((sz[0] + 7) / 8, (sz[1] + 7) / 8, 1);
+            glMemoryBarrier(GL_TEXTURE_FETCH_BARRIER_BIT | GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+        }
+        for (int l = bloomLevels_ - 1; l >= 1; --l) {
+            const auto sz = size(l - 1);
+            glBindTextureUnit(0, bloomTex_);
+            glBindImageTexture(2, bloomTex_, l - 1, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA16F);
+            glProgramUniform1i(progBloom_, lc("mode"), 2);
+            glProgramUniform1f(progBloom_, lc("srcLod"), float(l));
+            glProgramUniform2i(progBloom_, lc("dstSize"), sz[0], sz[1]);
+            glDispatchCompute((sz[0] + 7) / 8, (sz[1] + 7) / 8, 1);
+            glMemoryBarrier(GL_TEXTURE_FETCH_BARRIER_BIT | GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+        }
+    }
     glQueryCounter(queries_[qi][2], GL_TIMESTAMP);
 
     // ---- display
@@ -602,7 +713,10 @@ void Renderer::draw(const Camera& cam, const Settings& s, int ow, int oh, double
     glViewport(0, 0, s.width, s.height);
     glUseProgram(progPost_);
     glBindTextureUnit(0, hdrTex_);
+    glBindTextureUnit(1, bloomTex_);
     glProgramUniform1f(progPost_, glGetUniformLocation(progPost_, "exposure"), std::exp2(s.exposure));
+    glProgramUniform1f(progPost_, glGetUniformLocation(progPost_, "bloomMix"), bloomStrength);
+    glProgramUniform1f(progPost_, glGetUniformLocation(progPost_, "bloomLevels"), float(bloomLevels_));
     glDrawArrays(GL_TRIANGLES, 0, 3);
     glQueryCounter(queries_[qi][3], GL_TIMESTAMP);
 
@@ -661,6 +775,17 @@ void Renderer::release() {
     if (decalTex_) glDeleteTextures(1, &decalTex_);
     if (decalUbo_) glDeleteBuffers(1, &decalUbo_);
     decalTex_ = decalUbo_ = 0;
+    for (unsigned& t : hazeTex_) {
+        if (t) glDeleteTextures(1, &t);
+        t = 0;
+    }
+    if (froxelTex_) glDeleteTextures(1, &froxelTex_);
+    froxelTex_ = 0;
+    froxDims_[0] = froxDims_[1] = froxDims_[2] = 0;
+    if (progFroxel_) glDeleteProgram(progFroxel_);
+    progFroxel_ = 0;
+    if (progBloom_) glDeleteProgram(progBloom_);
+    progBloom_ = 0;
     for (auto& f : queries_)
         if (f[0]) glDeleteQueries(5, f);
     std::memset(queries_, 0, sizeof(queries_));

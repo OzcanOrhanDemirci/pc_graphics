@@ -131,6 +131,44 @@ static __forceinline__ __device__ float3 incoming(float3 o, float3 d, Rng& rng) 
     return sum;
 }
 
+// The haze: the light arriving at a point of the air from every direction (its mean, and the luminance's L1 for a
+// little forward scattering), lamps sampled directly with their shadows (the shafts), the rest by paths.
+extern "C" __global__ void __raygen__volume() {
+    const unsigned int i = optixGetLaunchIndex().x;
+    if (i >= params.count) return;
+    const unsigned int gi = params.texelBase + i;
+    const unsigned int nx = params.volDim.x, ny = params.volDim.y;
+    const unsigned int ux = gi % nx, uy = (gi / nx) % ny, uz = gi / (nx * ny);
+    const float3 p = params.volLo + make_float3(ux + 0.5f, uy + 0.5f, uz + 0.5f) * params.volCell;
+    float3 L0 = make_float3(0, 0, 0), L1 = make_float3(0, 0, 0);
+    const float Y0 = 0.282095f, Y1 = 0.488603f;
+    for (unsigned int s = 0; s < params.samples; ++s) {
+        const unsigned int k = params.sampleBase + s;
+        Rng rng{pcg(gi * 7919u + k * 3301u + 91u)};
+        for (unsigned int l = 0; l < params.lightCount; ++l) {
+            float3 w, L;
+            float pdf, dist;
+            if (!sampleLamp(params.lights[l], p, rng.next(), rng.next(), w, L, pdf, dist)) continue;
+            if (!visible(p, w, dist * 0.999f)) continue;
+            const float3 c = L * (1.0f / pdf);
+            L0 += c * Y0;
+            L1 += w * ((0.2126f * c.x + 0.7152f * c.y + 0.0722f * c.z) * Y1);
+        }
+        // indirect: a uniform direction over the sphere (pdf 1/4pi)
+        const float z = 1.0f - 2.0f * rng.next(), ph = 2.0f * M_PIf * rng.next(), r = sqrtf(fmaxf(0.0f, 1.0f - z * z));
+        const float3 w = make_float3(r * cosf(ph), r * sinf(ph), z);
+        float3 Li = incoming(p, w, rng);
+        const float lum = 0.2126f * Li.x + 0.7152f * Li.y + 0.0722f * Li.z;
+        if (lum > 0.5f) Li *= 0.5f / lum;
+        const float3 c = Li * (4.0f * M_PIf);
+        L0 += c * Y0;
+        L1 += w * ((0.2126f * c.x + 0.7152f * c.y + 0.0722f * c.z) * Y1);
+    }
+    const float4 a0 = params.acc0[i], a1 = params.acc1[i];
+    params.acc0[i] = make_float4(a0.x + L0.x, a0.y + L0.y, a0.z + L0.z, a0.w + float(params.samples));
+    params.acc1[i] = make_float4(a1.x + L1.x, a1.y + L1.y, a1.z + L1.z, 0.0f);
+}
+
 extern "C" __global__ void __raygen__bake() {
     const unsigned int i = optixGetLaunchIndex().x;
     if (i >= params.count) return;

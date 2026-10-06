@@ -37,4 +37,8 @@ struct DzBakeParams {
     unsigned int texelBase;    // the batch's first texel (its global index seeds the sequence)
     float3 albedo[DZ_MAX_MATS];
     unsigned int emissiveMat, glassMat;
+    // the haze volume: its lower corner, cell size, cells (the voxel pass)
+    float3 volLo;
+    float volCell;
+    uint3 volDim;
 };
