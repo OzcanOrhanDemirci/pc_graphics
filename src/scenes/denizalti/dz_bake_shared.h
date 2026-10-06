@@ -6,7 +6,7 @@
 #include <optix_types.h>
 #endif
 
-#define DZ_MAX_MATS 16
+#define DZ_MAX_MATS 32
 
 // a lamp: a glowing sphere (a bulb's filament glow seen through its glass, spread over the bulb)
 struct DzLight {

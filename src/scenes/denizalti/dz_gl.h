@@ -89,6 +89,7 @@ namespace dzgl {
     X(PFNGLDRAWELEMENTSBASEVERTEXPROC, glDrawElementsBaseVertex)         \
     X(PFNGLDRAWARRAYSINSTANCEDPROC, glDrawArraysInstanced)               \
     X(PFNGLMULTIDRAWELEMENTSINDIRECTPROC, glMultiDrawElementsIndirect)   \
+    X(PFNGLMULTIDRAWELEMENTSPROC, glMultiDrawElements)                   \
     X(PFNGLDISPATCHCOMPUTEPROC, glDispatchCompute)                       \
     X(PFNGLMEMORYBARRIERPROC, glMemoryBarrier)                           \
     X(PFNGLCREATEQUERIESPROC, glCreateQueries)                           \

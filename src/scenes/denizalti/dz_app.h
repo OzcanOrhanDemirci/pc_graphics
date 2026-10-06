@@ -5,6 +5,7 @@
 #include "scenes/denizalti/dz_bake.h"
 #include "scenes/denizalti/dz_geom.h"
 #include "scenes/denizalti/dz_render.h"
+#include "scenes/denizalti/dz_room.h"
 #include "scenes/denizalti/dz_world.h"
 
 #include <functional>

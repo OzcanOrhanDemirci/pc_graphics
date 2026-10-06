@@ -36,7 +36,8 @@ void DzApp::loadConfig() {
 void DzApp::build() {
     mesh = Mesh();
     lights.clear();
-    start = buildTestWall(mesh, cfg.f("geom.maxEdge", 0.012f), lights);
+    if (cfg.i("world.testWall", 0)) start = buildTestWall(mesh, cfg.f("geom.maxEdge", 0.012f), lights);
+    else start = buildRoom(mesh, cfg.f("geom.maxEdge", 0.012f), lights);
     bakeOpt.samples = cfg.i("bake.samples", 1024);
     bakeOpt.bounces = cfg.i("bake.bounces", 12);
     bakeOpt.texel = cfg.f("bake.texel", 0.002f);

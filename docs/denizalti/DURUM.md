@@ -3,7 +3,29 @@
 > Tek kaynak durum panosu. Plan `docs/denizalti/PLAN.md`, kaynaklar `docs/denizalti/REFERANS.md`. En yeni en üstte.
 > Otonom görev (Özcan, 2026-10-06 sabahı): soru sormadan, bitene kadar; kareler SendUserFile ile.
 
-**Sıradaki taş: D3 · Oda** (gerçek ölçülerle kontrol odası, REFERANS §0-§3), sonra D1'in kalanı (yoklamalar, pus).
+**Sıradaki taş: D4 · Malzeme ve ayrıntı** (kadran yazıları, etiket levhaları, aşınma, cam), sonra D5 (pus, yoklamalar,
+ışık dengesi) ve teçhizatın ikinci geçişi.
+
+## D3 (1. geçiş) · Oda ve teçhizat (2026-10-06 öğle)
+
+- `dz_room.*`: gerçek ölçülerle kabuk (REFERANS §0): 8,23 m, gövde ekseni güvertenin 12 cm üstünde, sacın içi 2,421 m,
+  **1" mantar** (FEAT_CORK: boyanın yuvarlattığı taneler), 11 T posta (6×4, 76,2 cm), iki perde ve **oval su geçmez
+  kapılar** (51×97 cm, eşik 48 cm, eksenin 1,1 m sancağı; döküm çerçeve, 8 köpek, çift topuzlu kol, pirinç çerçeveli
+  pencere), yeşil boyalı güverte levhaları (gömme vidalı), tavanda 6 kablo demeti (örgü yüzey, kuşaklar), 24 cm
+  havalandırma kanalı (flanş, askı), borular; 3 kırmızı gece lambası (buhar geçirmez, kafesli küre), harita lambası
+  (emaye abajur, tek beyaz kaynak).
+- `dz_equip.*`: dalış istasyonu (eğik pano, iki 16" ve bir 8,5" derinlik göstergesi, eğim göstergesi, dümen açısı
+  göstergeleri, 70 cm 8 kollu çıplak çelik çarklar, değiştirme valfi kolları, turkuaz vinil oturaklar), Christmas tree
+  (9×7 kırmızı/yeşil mercek; iki açıklık hâlâ kırmızı), 6 kollu ana vent manifoldu, hidrolik yağ tankı, trim manifoldu
+  (2×8 kırmızı el çarkı + gösterge panosu), telsiz odası bölmesi (alüminyum, sürgülü kapı), harita masası (çekmeceler,
+  harita, pergel, kupa), dümen standı (kırmızı bantlı çark, gyro tekrarlayıcı, dümen açısı göstergesi), kule merdiveni ve
+  oval kaporta boğazı, iki periskop kuyusu, HP hava manifoldu (18 gösterge, 3 kat valf), elektrik panoları.
+- **Hata (bulundu, düzeltildi): oda aynaydı.** "x sancak, y yukarı, z baş" adlandırması baş tarafa bakan biri için sol
+  elli: sağ elli dünyada +z'ye bakınca +x solda kalır. Dalış istasyonu (iskele) karede sağda çıktı. Bütün dünya x'te
+  aynalanıp üçgen sırası çevrildi (`mirrorX`); bitmiş dünyada x iskeleye.
+- **Ölçüm:** 4,69 milyon taban üçgeni, 2,49 milyon köşe, kurulum 1,1 sn. Atlas 8192×13156, **86,8 milyon teksel**;
+  pişirme 256 örnek 144 sn, 1024 örnek ~10 dk. Kare 1440p 4x High: 51,5 ms → **küme ayıklaması** (0,5 m hücreler,
+  çerçeve dışı kümeler çizilmez, komşu aralıklar birleşir) + kontrol aşamasında arkası dönük yamalar: **36,0 ms**.
 
 ## D1 (1. kısım) · Fırın: yönlü ışık haritası (2026-10-06 öğle)
 

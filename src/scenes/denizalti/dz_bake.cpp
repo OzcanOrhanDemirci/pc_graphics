@@ -75,6 +75,20 @@ void albedos(float3* a) {
     a[MAT_DIAL] = make_float3(0.80f, 0.79f, 0.74f);
     a[MAT_RED] = make_float3(0.45f, 0.035f, 0.025f);
     a[MAT_EMISSIVE] = make_float3(0.8f, 0.8f, 0.8f);
+    a[MAT_CREAM] = make_float3(0.72f, 0.68f, 0.56f);
+    a[MAT_GREY] = make_float3(0.40f, 0.42f, 0.42f);
+    a[MAT_DECK_GREEN] = make_float3(0.10f, 0.20f, 0.13f);
+    a[MAT_VINYL] = make_float3(0.08f, 0.38f, 0.40f);
+    a[MAT_ALU] = make_float3(0.91f, 0.92f, 0.92f) * 0.5f;
+    a[MAT_WRINKLE] = make_float3(0.03f, 0.03f, 0.03f);
+    a[MAT_RED_GLASS] = make_float3(0.5f, 0.02f, 0.01f);
+    a[MAT_TAPE] = make_float3(0.42f, 0.04f, 0.03f);
+    a[MAT_BLACK_PLATE] = make_float3(0.03f, 0.03f, 0.03f);
+    a[MAT_LAMP_SHADE] = make_float3(0.05f, 0.11f, 0.07f);
+    a[MAT_WOOD] = make_float3(0.36f, 0.22f, 0.12f);
+    a[MAT_PAPER] = make_float3(0.80f, 0.78f, 0.70f);
+    a[MAT_INDICATOR_RED] = make_float3(0.3f, 0.02f, 0.02f);
+    a[MAT_INDICATOR_GREEN] = make_float3(0.02f, 0.3f, 0.05f);
 }
 
 }   // namespace

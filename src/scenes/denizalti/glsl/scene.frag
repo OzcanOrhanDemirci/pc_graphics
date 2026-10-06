@@ -66,7 +66,21 @@ M material(uint m) {
     else if (m == MAT_GLASS) { r.base = vec3(0.02); r.rough = 0.02; }
     else if (m == MAT_DIAL) { r.base = vec3(0.80, 0.79, 0.74); r.rough = 0.45; }
     else if (m == MAT_RED) { r.base = vec3(0.45, 0.035, 0.025); r.rough = 0.36; }
-    else if (m == MAT_EMISSIVE) { r.base = vec3(0.8); r.emit = vec3(60.0, 42.0, 22.0); }
+    else if (m == MAT_EMISSIVE) { r.base = vec3(0.8); r.emit = vec3(1.0, 0.72, 0.42) * (40.0 / 0.758); }
+    else if (m == MAT_CREAM) { r.base = vec3(0.72, 0.68, 0.56); r.rough = 0.38; }
+    else if (m == MAT_GREY) { r.base = vec3(0.40, 0.42, 0.42); r.rough = 0.42; }
+    else if (m == MAT_DECK_GREEN) { r.base = vec3(0.10, 0.20, 0.13); r.rough = 0.45; }
+    else if (m == MAT_VINYL) { r.base = vec3(0.08, 0.38, 0.40); r.rough = 0.35; }
+    else if (m == MAT_ALU) { r.base = vec3(0.91, 0.92, 0.92); r.rough = 0.40; r.metal = 1.0; }
+    else if (m == MAT_WRINKLE) { r.base = vec3(0.03); r.rough = 0.70; }
+    else if (m == MAT_RED_GLASS) { r.base = vec3(0.5, 0.02, 0.01); r.rough = 0.1; r.emit = vec3(1.0, 0.02, 0.006) * (1.2 / 0.2126); }
+    else if (m == MAT_TAPE) { r.base = vec3(0.42, 0.04, 0.03); r.rough = 0.75; }
+    else if (m == MAT_BLACK_PLATE) { r.base = vec3(0.03); r.rough = 0.3; }
+    else if (m == MAT_LAMP_SHADE) { r.base = vec3(0.05, 0.11, 0.07); r.rough = 0.3; }
+    else if (m == MAT_WOOD) { r.base = vec3(0.36, 0.22, 0.12); r.rough = 0.4; }
+    else if (m == MAT_PAPER) { r.base = vec3(0.80, 0.78, 0.70); r.rough = 0.8; }
+    else if (m == MAT_INDICATOR_RED) { r.base = vec3(0.3, 0.02, 0.02); r.rough = 0.15; r.emit = vec3(0.12, 0.004, 0.003); }
+    else if (m == MAT_INDICATOR_GREEN) { r.base = vec3(0.02, 0.3, 0.05); r.rough = 0.15; r.emit = vec3(0.004, 0.10, 0.018); }
     return r;
 }
 

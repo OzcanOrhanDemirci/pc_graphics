@@ -69,42 +69,6 @@ void Mesh::append(const Mesh& m, const Xform& t) {
 // ---- the kit
 int Kit::segs(float length, int lo) const { return std::max(lo, int(std::ceil(std::fabs(length) / maxEdge - 1e-4f))); }
 
-template <class F>
-void Kit::grid(int nu, int nv, F f) {
-    const uint32_t base = uint32_t(m.v.size());
-    const uint32_t chart = m.charts++;
-    for (int j = 0; j <= nv; ++j)
-        for (int i = 0; i <= nu; ++i) {
-            const GridPt g = f(i, j);
-            Vtx a{};
-            a.p = t.point(g.p);
-            a.n = normalize(t.dir(g.n));
-            a.dn = a.n;
-            a.t = make_float4(1, 0, 0, 1);
-            a.uv = g.s;
-            a.uv2 = make_float2(0, 0);
-            a.mat = mat;
-            a.feat = feat;
-            a.fp = fp;
-            a.edge = g.edge;
-            a.fmask = g.fmask;
-            a.chart = chart;
-            m.v.push_back(a);
-        }
-    const int row = nu + 1;
-    for (int j = 0; j < nv; ++j)
-        for (int i = 0; i < nu; ++i) {
-            const uint32_t a = base + j * row + i, b = a + 1, c = a + row, d = c + 1;
-            // split along the shorter diagonal (no long thin slivers on curved grids)
-            const float ad = length(m.v[a].p - m.v[d].p), bc = length(m.v[b].p - m.v[c].p);
-            if (ad <= bc) {
-                m.idx.insert(m.idx.end(), {a, b, d, a, d, c});
-            } else {
-                m.idx.insert(m.idx.end(), {a, b, c, b, d, c});
-            }
-        }
-}
-
 void Kit::tube(float r, float z0, float z1, float uOffset) {
     const float C = 2.0f * kPi * r;
     const int nu = std::max(16, segs(C)), nv = segs(z1 - z0);
@@ -488,6 +452,82 @@ void Kit::lathe(const std::vector<float2>& rz, float a0, float a1, const std::ve
         return g;
     });
     fp = keep;
+}
+
+void Kit::slab(const std::vector<float2>& outline, float t, float e) {
+    // rows of the outline: the back face's rim (inset e), the side's two rows, the front face's rim (inset e); a
+    // quarter-round from face to side made of the inset rows (e: the rounding)
+    const int n = int(outline.size());
+    float2 cen = make_float2(0, 0);
+    for (const float2& q : outline) cen = make_float2(cen.x + q.x / n, cen.y + q.y / n);
+    std::vector<float3> side(n);
+    for (int k = 0; k < n; ++k) {
+        const float2 a = outline[(k + n - 1) % n], p = outline[k], b = outline[(k + 1) % n];
+        float3 n0 = normalize(make_float3(p.y - a.y, -(p.x - a.x), 0)), n1 = normalize(make_float3(b.y - p.y, -(b.x - p.x), 0));
+        side[k] = normalize(n0 + n1);
+    }
+    e = std::min(e, 0.45f * t);
+    const int nb = 3;
+    struct Row { float inset, z; float nz; float edge; };
+    std::vector<Row> rows;
+    for (int i = 0; i <= nb; ++i) {   // back rounding: from facing -z to facing out
+        const float th = 0.5f * 3.14159265f * float(i) / nb;
+        rows.push_back({e - e * std::sin(th), e - e * std::cos(th), -std::cos(th), std::sin(2.0f * th)});
+    }
+    for (int i = 0; i <= nb; ++i) {   // front rounding
+        const float th = 0.5f * 3.14159265f * float(i) / nb;
+        rows.push_back({e - e * std::cos(th), t - e + e * std::sin(th), std::sin(th), std::sin(2.0f * th)});
+    }
+    std::vector<float> arc(n + 1, 0.0f);
+    for (int k = 1; k <= n; ++k) arc[k] = arc[k - 1] + std::hypot(outline[k % n].x - outline[k - 1].x, outline[k % n].y - outline[k - 1].y);
+    grid(n, int(rows.size()) - 1, [&](int i, int j) {
+        GridPt g;
+        const int kk = i % n;
+        const float2 q = outline[kk];
+        const Row& r = rows[j];
+        g.p = make_float3(q.x - side[kk].x * r.inset, q.y - side[kk].y * r.inset, r.z);
+        g.n = normalize(side[kk] * std::sqrt(std::max(0.0f, 1.0f - r.nz * r.nz)) + make_float3(0, 0, r.nz));
+        g.s = make_float2(arc[i], r.z);
+        g.edge = r.edge;
+        return g;
+    });
+    // the two faces: fans from the centre to the inset outline
+    for (int top = 0; top < 2; ++top) {
+        const float z = top ? t : 0.0f;
+        const int nr = std::max(1, segs(0.3f * t + 0.0f, 1));
+        (void)nr;
+        grid(n, 1, [&](int i, int j) {
+            GridPt g;
+            const int kk = (top ? n - i : i) % n;
+            const float2 q = outline[kk];
+            const float2 qi = make_float2(q.x - side[kk].x * e, q.y - side[kk].y * e);
+            g.p = j ? make_float3(qi.x, qi.y, z) : make_float3(cen.x, cen.y, z);
+            g.n = make_float3(0, 0, top ? 1.0f : -1.0f);
+            g.s = make_float2(g.p.x, g.p.y);
+            return g;
+        });
+    }
+}
+
+std::vector<float2> Kit::superellipse(float a, float b, float p, int n) {
+    std::vector<float2> o;
+    for (int i = 0; i < n; ++i) {
+        const float th = 2.0f * 3.14159265f * float(i) / n;
+        const float c = std::cos(th), s = std::sin(th);
+        const float r = std::pow(std::pow(std::fabs(c) / a, p) + std::pow(std::fabs(s) / b, p), -1.0f / p);
+        o.push_back(make_float2(r * c, r * s));
+    }
+    return o;
+}
+
+void mirrorX(Mesh& m) {
+    for (Vtx& v : m.v) {
+        v.p.x = -v.p.x;
+        v.n.x = -v.n.x;
+        v.dn.x = -v.dn.x;
+        v.t.x = -v.t.x;
+    }
+    for (size_t k = 0; k + 2 < m.idx.size(); k += 3) std::swap(m.idx[k + 1], m.idx[k + 2]);
 }
 
 // ---- finishing

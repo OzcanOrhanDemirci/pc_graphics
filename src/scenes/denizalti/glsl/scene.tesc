@@ -31,6 +31,8 @@ float edgeFactor(vec3 a, vec3 b) {
     return clamp(f, 1.0, target.y);
 }
 
+bool debugCull() { return misc.z != 3.0; }   // the crack view draws back faces (magenta)
+
 bool outside(vec4 c[3], int axis, float sgn) {
     for (int k = 0; k < 3; ++k)
         if (sgn * c[k][axis] <= c[k].w) return false;
@@ -66,6 +68,14 @@ void main() {
         }
         // behind the eye entirely
         if (c[0].w < -margin && c[1].w < -margin && c[2].w < -margin) cull = true;
+        // facing away: every corner's (smooth) normal points away from the eye by a margin (the bulge and the
+        // displacement stay within a few millimetres)
+        bool away = true;
+        for (int k = 0; k < 3 && away; ++k) {
+            vec3 toEye = camPos.xyz - i[k].p;
+            if (dot(i[k].dn, toEye) > -0.004 * length(toEye) - 0.004) away = false;
+        }
+        if (away && debugCull()) cull = true;
         if (cull) {
             gl_TessLevelOuter[0] = gl_TessLevelOuter[1] = gl_TessLevelOuter[2] = 0.0;
             gl_TessLevelInner[0] = 0.0;

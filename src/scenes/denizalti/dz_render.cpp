@@ -3,6 +3,7 @@
 #include "scenes/denizalti/dz_gl.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -178,8 +179,47 @@ void Renderer::upload(const Mesh& m) {
     if (ibo_) glDeleteBuffers(1, &ibo_);
     glCreateBuffers(1, &vbo_);
     glNamedBufferStorage(vbo_, m.v.size() * sizeof(Vtx), m.v.data(), 0);
+    // the triangles by cell (0.5 m), so a cell is one contiguous range
+    std::vector<uint32_t> idx;
+    {
+        const size_t nt = m.idx.size() / 3;
+        std::vector<std::pair<uint64_t, uint32_t>> key(nt);
+        for (size_t t = 0; t < nt; ++t) {
+            const float3 a = m.v[m.idx[t * 3]].p, b = m.v[m.idx[t * 3 + 1]].p, c = m.v[m.idx[t * 3 + 2]].p;
+            const float3 g = (a + b + c) * (1.0f / 3.0f);
+            const uint64_t cx = uint64_t(int64_t(std::floor(g.x / 0.5f)) + 1024), cy = uint64_t(int64_t(std::floor(g.y / 0.5f)) + 1024),
+                           cz = uint64_t(int64_t(std::floor(g.z / 0.5f)) + 1024);
+            key[t] = {(cx << 40) | (cy << 20) | cz, uint32_t(t)};
+        }
+        std::sort(key.begin(), key.end());
+        idx.reserve(m.idx.size());
+        clusters_.clear();
+        for (size_t i = 0; i < nt; ++i) {
+            if (i == 0 || key[i].first != key[i - 1].first) {
+                Cluster c{};
+                for (int k = 0; k < 3; ++k) {
+                    c.lo[k] = 1e30f;
+                    c.hi[k] = -1e30f;
+                }
+                c.first = uint32_t(idx.size());
+                clusters_.push_back(c);
+            }
+            Cluster& c = clusters_.back();
+            for (int v = 0; v < 3; ++v) {
+                const uint32_t vi = m.idx[size_t(key[i].second) * 3 + v];
+                idx.push_back(vi);
+                const float3 p = m.v[vi].p;
+                const float q[3] = {p.x, p.y, p.z};
+                for (int k = 0; k < 3; ++k) {
+                    c.lo[k] = std::min(c.lo[k], q[k] - 0.01f);   // the displacement's and the bulge's margin
+                    c.hi[k] = std::max(c.hi[k], q[k] + 0.01f);
+                }
+            }
+            c.count += 3;
+        }
+    }
     glCreateBuffers(1, &ibo_);
-    glNamedBufferStorage(ibo_, m.idx.size() * sizeof(uint32_t), m.idx.data(), 0);
+    glNamedBufferStorage(ibo_, idx.size() * sizeof(uint32_t), idx.data(), 0);
     indexCount_ = m.idx.size();
     baseTris = m.tris();
     glCreateVertexArrays(1, &vao_);
@@ -378,7 +418,45 @@ void Renderer::draw(const Camera& cam, const Settings& s, int ow, int oh, double
     glBindVertexArray(vao_);
     glPatchParameteri(GL_PATCH_VERTICES, 3);
     for (int k = 0; k < 5; ++k) glBindTextureUnit(1 + k, lightTex_[k]);
-    if (indexCount_) glDrawElements(GL_PATCHES, GLsizei(indexCount_), GL_UNSIGNED_INT, nullptr);
+    {   // the clusters inside the view (each box against the clip planes, the projection's rows)
+        const float* M = u.viewProj;
+        auto row = [&](int r) { return std::array<float, 4>{M[r], M[4 + r], M[8 + r], M[12 + r]}; };
+        const auto r0 = row(0), r1 = row(1), r3 = row(3);
+        std::array<float, 4> planes[5];
+        for (int k = 0; k < 4; ++k) {
+            planes[0][k] = r3[k] + r0[k];
+            planes[1][k] = r3[k] - r0[k];
+            planes[2][k] = r3[k] + r1[k];
+            planes[3][k] = r3[k] - r1[k];
+            planes[4][k] = r3[k];   // in front of the eye (w > 0)
+        }
+        drawCounts_.clear();
+        drawOffsets_.clear();
+        drawnTris = 0;
+        for (const Cluster& c : clusters_) {
+            bool in = true;
+            for (const auto& pl : planes) {
+                // the box's corner furthest along the plane's normal
+                const float px = pl[0] >= 0 ? c.hi[0] : c.lo[0], py = pl[1] >= 0 ? c.hi[1] : c.lo[1], pz = pl[2] >= 0 ? c.hi[2] : c.lo[2];
+                if (pl[0] * px + pl[1] * py + pl[2] * pz + pl[3] < 0.0f) {
+                    in = false;
+                    break;
+                }
+            }
+            if (!in) continue;
+            // neighbouring clusters merge into one range
+            if (!drawCounts_.empty() && reinterpret_cast<uintptr_t>(drawOffsets_.back()) / 4 + drawCounts_.back() == c.first) {
+                drawCounts_.back() += int(c.count);
+            } else {
+                drawCounts_.push_back(int(c.count));
+                drawOffsets_.push_back(reinterpret_cast<const void*>(uintptr_t(c.first) * 4));
+            }
+            drawnTris += c.count / 3;
+        }
+        drawnClusters = drawCounts_.size();
+        if (!drawCounts_.empty())
+            glMultiDrawElements(GL_PATCHES, drawCounts_.data(), GL_UNSIGNED_INT, drawOffsets_.data(), GLsizei(drawCounts_.size()));
+    }
     glDisable(GL_SAMPLE_SHADING);
     glDisable(GL_CULL_FACE);
     glDisable(GL_DEPTH_TEST);

@@ -71,6 +71,18 @@ private:
     unsigned progScene_ = 0, progResolve_ = 0, progPost_ = 0, progFinal_ = 0;
     unsigned vao_ = 0, vbo_ = 0, ibo_ = 0, ubo_ = 0, emptyVao_ = 0;
     size_t indexCount_ = 0;
+    // clusters: the triangles sorted by a 0.5 m grid cell, each cell a contiguous range with its bounds; culled
+    // against the view every frame and drawn with one multi-draw
+    struct Cluster {
+        float lo[3], hi[3];
+        uint32_t first, count;
+    };
+    std::vector<Cluster> clusters_;
+    std::vector<int> drawCounts_;
+    std::vector<const void*> drawOffsets_;
+public:
+    size_t drawnClusters = 0, drawnTris = 0;
+private:
     // targets
     unsigned msColor_ = 0, msDepth_ = 0, msFbo_ = 0;
     unsigned lightTex_[5] = {};

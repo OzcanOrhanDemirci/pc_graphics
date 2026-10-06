@@ -11,9 +11,12 @@ layout(std140, binding = 0) uniform Frame {
 };
 
 const uint MAT_PAINT_HULL = 0u, MAT_PAINT_PIPE = 1u, MAT_PAINT_DARK = 2u, MAT_BRASS = 3u, MAT_STEEL = 4u, MAT_CHROME = 5u,
-           MAT_RUBBER = 6u, MAT_DECK = 7u, MAT_GLASS = 8u, MAT_DIAL = 9u, MAT_RED = 10u, MAT_EMISSIVE = 11u;
+           MAT_RUBBER = 6u, MAT_DECK = 7u, MAT_GLASS = 8u, MAT_DIAL = 9u, MAT_RED = 10u, MAT_EMISSIVE = 11u, MAT_CREAM = 12u,
+           MAT_GREY = 13u, MAT_DECK_GREEN = 14u, MAT_VINYL = 15u, MAT_ALU = 16u, MAT_WRINKLE = 17u, MAT_RED_GLASS = 18u,
+           MAT_TAPE = 19u, MAT_BLACK_PLATE = 20u, MAT_LAMP_SHADE = 21u, MAT_WOOD = 22u, MAT_PAPER = 23u,
+           MAT_INDICATOR_RED = 24u, MAT_INDICATOR_GREEN = 25u;
 const uint FEAT_NONE = 0u, FEAT_PLATE = 1u, FEAT_WELD = 2u, FEAT_RIVETS = 3u, FEAT_THREAD = 4u, FEAT_KNURL = 5u, FEAT_TREAD = 6u,
-           FEAT_CAST = 7u, FEAT_BRAID = 8u;
+           FEAT_CAST = 7u, FEAT_BRAID = 8u, FEAT_CORK = 9u, FEAT_DIAL = 10u;
 const float PI = 3.14159265358979;
 
 // ---- noise: gradient noise in 3D (deterministic: a hash of the lattice, no random state anywhere)
@@ -137,6 +140,30 @@ float featureHeight(Surf s, vec3 T, vec3 B, out vec3 gw) {
         vec2 dr = vec2(2.0 * ex / 0.36, 2.0 * ey / 0.075) * dpd;      // d(h)/d(r)
         vec2 df = vec2(cr * dr.x + sr * dr.y, -sr * dr.x + cr * dr.y);  // d(h)/d(f) = R^T d(h)/d(r)
         gw = (T * df.x + B * df.y) / p;
+    } else if (s.feat == FEAT_BRAID) {
+        // braided cable under paint: two families of strands crossing, a diamond every pitch along, a whole number of
+        // them round the circumference (the pattern closes on the seam)
+        float p = max(s.fp.x, 0.001), C = max(s.fp.y, 1e-4);
+        float K = max(1.0, floor(C / p + 0.5));
+        float a1 = s.uv.y / p + s.uv.x * K / C, a2 = s.uv.y / p - s.uv.x * K / C;
+        float f1 = fract(a1) - 0.5, f2 = fract(a2) - 0.5;
+        float bw = bandWeight(p, s.size);
+        float b1 = 0.25 - f1 * f1, b2 = 0.25 - f2 * f2;   // a rounded strand profile
+        h = 0.0005 * (b1 + b2) * bw;
+        vec2 g = 0.0005 * bw * vec2(-2.0 * f1 * K / C + 2.0 * f2 * K / C, -2.0 * f1 / p - 2.0 * f2 / p);
+        gw = T * g.x + B * g.y;
+    } else if (s.feat == FEAT_CORK) {
+        // granulated cork sheet under several coats of enamel: rounded granules 2-5 mm, the paint fills the gaps
+        vec3 d1, d2;
+        float n1 = fbm(s.p, 0.0045, 2, 0.5, s.size, d1);
+        float n2 = fbm(s.p * 1.0 + 3.7, 0.0018, 2, 0.5, s.size, d2);
+        float g = n1 + 0.45 * n2;
+        // the paint rounds the tops: a soft clamp
+        float k = 0.6;
+        float sg = g / (1.0 + abs(g) / k);
+        float dsg = 1.0 / ((1.0 + abs(g) / k) * (1.0 + abs(g) / k));
+        h = 0.0007 * sg;
+        gw = 0.0007 * dsg * (d1 + 0.45 * d2);
     } else if (s.feat == FEAT_CAST) {
         // a sand casting under paint: soft, fine pitting
         vec3 d;

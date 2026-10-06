@@ -31,6 +31,20 @@ enum Mat : uint32_t {
     MAT_DIAL,              // gauge faces (printed)
     MAT_RED,               // red handwheels (the vents' colour code)
     MAT_EMISSIVE,          // lamp bulbs
+    MAT_CREAM,             // the Turkish boat's cream enamel: hull lining, frames, piping, bulkheads
+    MAT_GREY,              // electrical boxes, switchboards (light machinery grey)
+    MAT_DECK_GREEN,        // the painted deck (green)
+    MAT_VINYL,             // turquoise vinyl seats
+    MAT_ALU,               // bare aluminium (radio room partition, label backs)
+    MAT_WRINKLE,           // black wrinkle finish (radio sets, instrument cases)
+    MAT_RED_GLASS,         // the night lamps' red globes (lit from inside)
+    MAT_TAPE,              // cloth tape on a wheel rim (red)
+    MAT_BLACK_PLATE,       // black label plates (white engraving)
+    MAT_LAMP_SHADE,        // the chart lamp's enamelled shade (dark green outside)
+    MAT_WOOD,              // chart table top (laminate), drawer fronts
+    MAT_PAPER,             // charts, the diving book
+    MAT_INDICATOR_RED,     // the Christmas tree's lenses (lit)
+    MAT_INDICATOR_GREEN,
     MAT_COUNT
 };
 
@@ -44,6 +58,8 @@ enum Feat : uint32_t {
     FEAT_TREAD,     // diamond tread plate (deck)
     FEAT_CAST,      // sand-cast metal (valve bodies)
     FEAT_BRAID,     // braided / served cable
+    FEAT_CORK,      // granulated cork lining under paint
+    FEAT_DIAL,      // a gauge's face: ticks and numerals (fp: kind, radius)
     FEAT_COUNT
 };
 
@@ -133,9 +149,53 @@ struct Kit {
     // turned about z from a0 to a1. Normals from the profile's direction (outward when walking it with the solid on the
     // left... i.e. walk up the outside). edgeW: per point edge weight (or empty)
     void lathe(const std::vector<float2>& rz, float a0 = 0.0f, float a1 = 6.2831853f, const std::vector<float>& edgeW = {});
+    // a flat slab: a convex outline (counter-clockwise, xy) from z = 0 to z = t, its face edges rounded by e (doors,
+    // plates, panels' faces)
+    void slab(const std::vector<float2>& outline, float t, float e);
+    // a superellipse outline |x/a|^p + |y/b|^p = 1, n points counter-clockwise (p 2: an ellipse, 4: a rounded oblong)
+    static std::vector<float2> superellipse(float a, float b, float p, int n = 96);
     // a 2D outline with rounded corners (radius e) from a polygon (counter-clockwise), n segments per corner
     static std::vector<float2> roundOutline(const std::vector<float2>& poly, float e, int n = 4);
 };
+
+template <class F>
+inline void Kit::grid(int nu, int nv, F f) {
+    const uint32_t base = uint32_t(m.v.size());
+    const uint32_t chart = m.charts++;
+    for (int j = 0; j <= nv; ++j)
+        for (int i = 0; i <= nu; ++i) {
+            const GridPt g = f(i, j);
+            Vtx a{};
+            a.p = t.point(g.p);
+            a.n = normalize(t.dir(g.n));
+            a.dn = a.n;
+            a.t = make_float4(1, 0, 0, 1);
+            a.uv = g.s;
+            a.uv2 = make_float2(0, 0);
+            a.mat = mat;
+            a.feat = feat;
+            a.fp = fp;
+            a.edge = g.edge;
+            a.fmask = g.fmask;
+            a.chart = chart;
+            m.v.push_back(a);
+        }
+    const int row = nu + 1;
+    for (int j = 0; j < nv; ++j)
+        for (int i = 0; i < nu; ++i) {
+            const uint32_t a = base + j * row + i, b = a + 1, c = a + row, d = c + 1;
+            // split along the shorter diagonal (no long thin slivers on curved grids)
+            const float ad = length(m.v[a].p - m.v[d].p), bc = length(m.v[b].p - m.v[c].p);
+            if (ad <= bc) {
+                m.idx.insert(m.idx.end(), {a, b, d, a, d, c});
+            } else {
+                m.idx.insert(m.idx.end(), {a, b, c, b, d, c});
+            }
+        }
+}
+
+// x -> -x for everything (positions, normals), the triangles' winding turned so they still face out
+void mirrorX(Mesh& m);
 
 // After building: the displacement normals (average over coincident positions) and the tangents
 void finishMesh(Mesh& m);
