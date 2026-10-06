@@ -148,7 +148,15 @@ extern "C" __global__ void __raygen__volume() {
         for (unsigned int l = 0; l < params.lightCount; ++l) {
             float3 w, L;
             float pdf, dist;
-            if (!sampleLamp(params.lights[l], p, rng.next(), rng.next(), w, L, pdf, dist)) continue;
+            // the air inside a lamp's shade: unseen from the room, but a few cm from the bulb hundreds of times brighter
+            // than the beam; read between cells and along the froxels' columns it leaked round the shade as a halo
+            const DzLight& lt = params.lights[l];
+            if (lt.shade > 0.0f && p.y > lt.p.y - 0.035f && p.y < lt.p.y + 0.2f && (p.x - lt.p.x) * (p.x - lt.p.x) + (p.z - lt.p.z) * (p.z - lt.p.z) < lt.shade * lt.shade) {
+                rng.next();
+                rng.next();
+                continue;
+            }
+            if (!sampleLamp(lt, p, rng.next(), rng.next(), w, L, pdf, dist)) continue;
             if (!visible(p, w, dist * 0.999f)) continue;
             const float3 c = L * (1.0f / pdf);
             L0 += c * Y0;

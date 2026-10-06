@@ -13,7 +13,7 @@ struct DzLight {
     float3 p;
     float r;
     float3 L;      // radiance (the scene's units: cd/m^2 / 1000)
-    float pad;
+    float shade;   // a shade's radius about it, open below (0: none): the haze inside it gets none of its direct light
 };
 
 struct DzBakeParams {

@@ -15,6 +15,16 @@ sancak panoları (döner şalterler, devre etiketleri), kafesli kırmızı lamba
 **Durum: görev kapandı (10-06 akşamüstü).** Bağımsız gözden geçirmenin bulguları düzeltildi, son pişirme ve ölçümler
 aşağıda. Açık kalanlar "D7 (2)" sonunda.
 
+## Revize 1 · Harita lambasının halesi (Özcan, 2026-10-06 akşam)
+
+Özcan (fotoğraflara bakıp): *"Lamba ışık verirken altına veriyor ya, kendi etrafında ışık haresi böyle sızma ışık var
+ve yapay duruyor."* Kaynak pus (ışıltı değil: pussuz karede yok). Pus pişirmesinde abajurun içindeki hücreler ampule
+birkaç santim: ışık konisinden yüzlerce kat parlak. Hücreler arası okuma ve froxel sütunlarının birikimi (sütun abajurun
+içinden geçer, silüetin hemen dışındaki piksel onu karıştırır) bu parlaklığı abajurun yanlarına ve üstüne taşıyordu:
+abajur kendisi de parlıyordu. Işığın abajuru (`DzLight::shade`, 12 cm, ağız ampulün 3 cm altında) tanımlandı; içindeki
+pus o lambanın doğrudan ışığını almaz (görünmüyor zaten). Abajur artık koyu yeşil, koni ağızdan başlar. Son pişirme
+yenilendi (512, 306 sn), görseller ve galeri resmi yenilendi.
+
 ## D7 (2) · Bağımsız gözden geçirme ve kapanış (2026-10-06 akşamüstü)
 
 Bir ajan kodu (a4ba730'dan bu yana) ve kareleri kendi gözüyle denetledi (12 kod, 13 görsel bulgu). Düzeltilenler:

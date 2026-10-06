@@ -355,7 +355,7 @@ void chartLamp(Kit& k, std::vector<DzLight>& lights, float3 mount, float3 bulb) 
     });
     with(k, Xform::at(bulb), MAT_EMISSIVE, FEAT_NONE, [&] { k.sphere(0.024f); });
     const float3 warm = make_float3(1.0f, 0.72f, 0.42f) * (1.0f / 0.758f);
-    lights.push_back(DzLight{bulb, 0.025f, warm * 40.0f, 0.0f});
+    lights.push_back(DzLight{bulb, 0.025f, warm * 40.0f, 0.12f});   // in its shade (the mouth 3 cm below the bulb)
 }
 
 }   // namespace
