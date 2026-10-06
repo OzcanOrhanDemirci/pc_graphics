@@ -588,6 +588,13 @@ int App::run(const Options& opt) {
                 key(GLFW_KEY_SPACE); wait(2.0);
                 control("yapi", 0); wait(6.0);
             }
+            if (infos_[s].id == "isi") {
+                // the draft: wake the three parts (keys), fly forward, the tower's top, back to the balcony by the panel
+                key(GLFW_KEY_5); key(GLFW_KEY_6); key(GLFW_KEY_7); wait(3.0); log("isi uyanik"); shot("isi_uyanik");
+                hold(GLFW_KEY_W, true); wait(1.5); hold(GLFW_KEY_W, false); wait(0.3); shot("isi_ucus");
+                key(GLFW_KEY_3); wait(3.2); shot("isi_kule");
+                control("bakis", 0); wait(3.2); shot("isi_balkon");
+            }
             if (infos_[s].id == "denizalti") {
                 // walk forward along the diving station, look about with the mouse (Tab), the binoculars, the panel
                 hold(GLFW_KEY_W, true); wait(1.2); hold(GLFW_KEY_W, false); wait(0.3); shot("denizalti_yuru");

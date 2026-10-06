@@ -99,6 +99,9 @@ add_library(pc_core OBJECT
     src/scenes/denizalti/dz_bake.cpp
     src/scenes/denizalti/dz_app.cpp
     src/scenes/denizalti/dz_live.cpp
+    src/scenes/isi/isi_app.cpp
+    src/scenes/isi/isi_live.cpp
+    src/scenes/isi/isi_kernels.cu
     ${TP}/tinyexr/miniz.c)
 add_executable(pc_graphics src/app/main.cpp $<TARGET_OBJECTS:pc_core>)
 

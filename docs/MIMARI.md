@@ -39,6 +39,8 @@ src/
                 olcek_hiz_pano.* (beş grafik panosu ve enerji gözünün açıklaması, arayüz takımıyla resmin üstüne), olcek_hiz_yan.* (yandan
                 haritanın 2B katmanı: ortam noktaları, yol, roket, motor ışığı), olcek_hiz_test.cpp
                 (--test olcek-hiz, --hiz kareleri)
+    isi/        sahne 9 · Isı (TASLAK: bilgisayarın içi bir manzara boyunda; SDF, sabit örnekli CUDA çizici, pus/parıltı/
+                huzmeler ışın boyunca kapalı biçimde; isi_app.* durum ve --headless kareler, isi_live.cpp sahne)
       particles.*       tanecik çözücüsü (PBF, XPBD bağlar, şekil eşleme, taneler)  surface.* sıvı yüzeyi
       lab_world.*       beş deneyin kurulumu ve adımı (kaba ya da ince)  lab_record.* ince kayıt, işçi iş parçacığı
       lab_kernels.cu    çözücü, kayıt ve çizici arası küçük çekirdekler  weapons.* gerçek yükler, balistik

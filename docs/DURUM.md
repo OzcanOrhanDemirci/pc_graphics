@@ -1,10 +1,11 @@
 # DURUM · pc_graphics uygulaması
 
 > Uygulamanın tek kaynak durum panosu. Mimari ve yeni sahne ekleme: `docs/MIMARI.md`. Sahnelerin kendi panoları:
-> `docs/altinsaat/`, `docs/fener/`, `docs/yikim/`, `docs/laboratuvar/`, `docs/koy/`, `docs/heykel/`, `docs/olcek/` (PLAN.md ve DURUM.md);
+> `docs/altinsaat/`, `docs/fener/`, `docs/yikim/`, `docs/laboratuvar/`, `docs/koy/`, `docs/heykel/`, `docs/olcek/`, `docs/denizalti/`, `docs/isi/` (PLAN.md ve DURUM.md);
 > `docs/tanecik/` arşiv.
 
 ## Şu an
+- **2026-10-06 (akşam) · Sahne 9 "Isı": kaba 3B taslak.** Bilgisayarın içi bir manzara boyunda (ekran kartı fan duvarı, RAM kuleleri, pompa tapınağı, delikli gök); balkon + dört bestelenmiş bakış + W A S D uçuş. Özcan bakıp karar verecek: ayrıntılı kurulum ya da iptal. Canlı 44,6 fps. `docs/isi/DURUM.md`.
 - **2026-10-05 (akşam) · Sahne 7 "Ölçek": ilk seçenek kabul, ikinci seçenek "Hız" planlandı.** Özcan: *"Evet bu sefer güzel olmuş, artık her aşama netleşti."* İkinci seçenek: bir roket ve manken, özel göreliliğin bütün etkileri tam formüllerle, roketin saatiyle gerçek zaman, 21 dokuz, Dünya → Proxima (89 sn) → Andromeda (~1 saat; Dünya'da 2,4 milyon yıl). Plan `docs/olcek/hiz/PLAN.md`.
 - **2026-10-05 (gece) · Sahne 7 "Ölçek": bütün yol gerçek içerikle.** Dışarısı gerçek veriyle: Sentinel-2 Çandarlı,
   Blue Marble ve o günlerin bulutları (deniz parıltısı VIIRS bulut ürünüyle ayıklandı), HYG yıldızları, Samanyolu

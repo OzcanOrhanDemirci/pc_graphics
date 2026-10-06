@@ -42,6 +42,11 @@ app::SceneInfo info();
 std::unique_ptr<app::Scene> make();
 int cli(int argc, char** argv);
 }
+namespace isi {
+app::SceneInfo info();
+std::unique_ptr<app::Scene> make();
+int cli(int argc, char** argv);
+}
 
 namespace app {
 
@@ -55,6 +60,7 @@ const std::vector<Entry>& registry() {
         {heykel::info, heykel::make, heykel::cli},
         {olcek::info, olcek::make, olcek::cli},
         {denizalti::info, denizalti::make, denizalti::cli},
+        {isi::info, isi::make, isi::cli},
     };
     return scenes;
 }
