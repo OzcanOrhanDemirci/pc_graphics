@@ -122,9 +122,23 @@ void App::drawGallery(double now) {
         entryRects_.push_back(r);
         const float sel = std::max(0.0f, 1.0f - std::fabs(selAnim_ - float(i)));
         const float on = (0.5f + 0.5f * sel + (hovered_ == i ? 0.12f : 0.0f)) * appear;
-        ui::text(r.x + S_(30), r.y + S_(34), si.number, theme::mono(S_, 17.0f, ui::mix(theme::faint(), accentText(si), sel)));
-        ui::text(r.x + S_(84), r.y + S_(20), si.title, theme::serif(S_, 44.0f, ui::withAlpha(theme::text(), std::min(1.0f, on))));
-        ui::text(r.x + S_(86), r.y + S_(86), si.subtitle, theme::small(S_, ui::withAlpha(theme::text(), std::min(1.0f, 0.42f + 0.3f * sel) * appear)));
+        // a shorter entry (many scenes) draws its name smaller and the line under it just below: at eight scenes the
+        // design's fixed sizes ran each entry's line into the next one's name
+        // (and in a small window, where not even that fits, the name alone, as large as the entry allows)
+        const float k = std::clamp(itemH / S_(164), 0.5f, 1.0f);
+        float size = 44.0f * (0.45f + 0.55f * k);
+        ui::TextStyle ts = theme::serif(S_, size, ui::withAlpha(theme::text(), std::min(1.0f, on)));
+        const ui::TextStyle ss = theme::small(S_, ui::withAlpha(theme::text(), std::min(1.0f, 0.42f + 0.3f * sel) * appear));
+        const float room = itemH - S_(14);
+        bool sub = true;
+        if (k < 1.0f && ui::lineHeight(ts) + S_(4) + ui::lineHeight(ss) > room) {
+            sub = false;
+            if (ui::lineHeight(ts) > room) ts = theme::serif(S_, size * room / ui::lineHeight(ts), ts.color);
+        }
+        const float ty = k < 1.0f ? r.y + (sub ? S_(20) * k : 0.5f * (room - ui::lineHeight(ts))) : r.y + S_(20);
+        ui::text(r.x + S_(30), k < 1.0f ? ty + 0.5f * (ui::lineHeight(ts) - S_(17)) : r.y + S_(34), si.number, theme::mono(S_, 17.0f, ui::mix(theme::faint(), accentText(si), sel)));
+        ui::text(r.x + S_(84), ty, si.title, ts);
+        if (sub) ui::text(r.x + S_(86), k < 1.0f ? ty + ui::lineHeight(ts) + S_(4) : r.y + S_(86), si.subtitle, ss);
     }
 
     // right: the picture, large, with its name and tags over it

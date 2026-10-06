@@ -198,3 +198,33 @@ minutes (2.4 million years).
   into Andromeda, look ahead.
 
 Plan and status in `docs/olcek/`, Speed's in `docs/olcek/hiz/` (Turkish). Settings `scenes/olcek.cfg` (F5).
+
+## 08 · The Submarine — a fleet submarine's control room under night red
+The scene of atmosphere: the light, the haze and the reflections are baked beforehand, the graphics card only draws the
+picture. On the first opening the light is baked (with its progress on the loading screen, ~5 minutes); later
+openings come from the cache.
+
+| Key | What it does |
+|---|---|
+| **W A S D** | walk · **Space / C** up, down · **Shift** slow (look closely) |
+| **Tab** | mouse look (on/off) · **left drag:** look |
+| **Right button** | binoculars (hold): a view four times narrower |
+| **F12** | photograph at the panel's resolution and SSAA (8K 16x included; with a "computing" card) |
+| **R** | back to the start · **↑ / ↓** exposure |
+
+On the panel **Resolution** (720p-8K), **SSAA** (1x-16x), **Tessellation**, **Graphics**, **Light**, **Effects** (Low,
+Medium, High). 8K 16x is drawn live at 8K 4x; the photograph is 16x.
+
+**Try:**
+- Walk forward from the start: the diving station to port (two 70 cm wheels, 16" depth gauges), the Christmas tree's
+  green lights at its end, the chart lamp's white pool in the middle.
+- Lean over the chart table: an Aegean sea chart, the watch's course and timed fixes in pencil, the compass rose, a
+  parallel rule, dividers. The paper lies in waves, one corner lifting.
+- Go close to the starboard switchboards with Shift: under every rotary switch its circuit's name ("STERN PLANE IND.",
+  "1MC ANNOUNCING"), OFF/ON marks on its chrome escutcheon.
+- Go close to a gauge: the dial's lettering, the room in its glass, the red lamp in the wheel's steel.
+- Switch tessellation between Low and High; look at a nut's thread, the cork lining, an engraved brass plate.
+- Switch SSAA between 1x and 16x; compare 720p 16x with 1440p 4x (the same number of samples).
+- Take an 8K 16x photograph with F12 and zoom into the file.
+
+Plan and status in `docs/denizalti/` (Turkish). Settings in `scenes/denizalti.cfg` (F5).

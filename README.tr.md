@@ -36,11 +36,12 @@ kendi yazdığımız bir katı cisim ve kırılma çözücüsü; sade bir günd�
 olarak saklanır. Sahne 5 su altında: ışığı yüzeyin üstünde havada da süren deterministik, tayfsal bir ışın izleyici;
 küçük bir adanın iskelesinden bir batığa ve maviye inen bir halata uzanan bir yol. Sahne 6 yalnız geometri: bir
 kaidede duran, on bin kat yakınına inilen bir Menger süngeri. Sahne 7 ölçek: Çandarlı'da bir kumsaldan, gerçek
-veriyle evrenin kenarına ve ışığın altında aletin gözüyle Planck uzunluğuna, 62 onluk.
+veriyle evrenin kenarına ve ışığın altında aletin gözüyle Planck uzunluğuna, 62 onluk. Sahne 8 bir denizaltının
+kontrol odası: bütün ışığı önceden ışın izlemeyle pişirilmiş, ekran kartının bütün gücü görüntüye gidiyor.
 
 ## Uygulama
 
-Yedi sahne tek bir programda yaşıyor. Program bir galeriyle açılır; sahne bir yükleme ekranının arkasında yüklenir
+Sekiz sahne tek bir programda yaşıyor. Program bir galeriyle açılır; sahne bir yükleme ekranının arkasında yüklenir
 (programları derlenir, dünyası kurulur; bunlar ayrı bir iş parçacığında yapıldığı için pencere canlı kalır) ve sonra hepsi
 için aynı olan bir arayüzün altında çalışır: kim ve ne sol altta, süreler sağ üstte, çıkış yolu sağ altta, tuşlar F1'de.
 Sol alttaki panel fareyle kullanılır: sahne oraya seçenek sıraları, kaydırma çubukları ve düğmeler koyabilir (Yıkım'da
@@ -56,7 +57,7 @@ Esc her zaman geri götürür; kapanan sahne ekran kartını bütünüyle geri v
 
 Görünüm tek bir yazı ailesiyle kurulu, IBM Plex: adlar için Serif, sözcükler için Sans, sayılar ve tuşlar için Mono.
 Resimlerin üstünde koyu cam paneller ve her sahneye ışığından alınmış tek bir vurgu rengi: sıcak altın, soğuk mavi,
-güvenlik turuncusu, deniz yeşili, deniz mavisi, lavanta, gül. Bir sahne; renderer'ı, ayarları ve OptiX programlarıyla bir klasör ve sahne kaydında tek bir
+güvenlik turuncusu, deniz yeşili, deniz mavisi, lavanta, gül, gece kırmızısı. Bir sahne; renderer'ı, ayarları ve OptiX programlarıyla bir klasör ve sahne kaydında tek bir
 satırdır; sözleşme ve yeni sahne eklemek [docs/MIMARI.md](docs/MIMARI.md)'de.
 
 ## Sahneler
@@ -335,6 +336,41 @@ yaklaşırsın: dışarı evrenin kenarına, içeri Planck uzunluğuna. 62 onluk
 
 Plan, kararlar, plandan ayrılanlar ve ölçümler `docs/olcek/`'te.
 
+### 8 · Denizaltı · Ekim 2026
+
+| ![Kontrol odası gece kırmızısında: iskelede dalış istasyonunun çarkları ve derinlik göstergeleri, ortada harita masası ve lambasının beyaz havuzu, kule merdiveni, periskop kuyuları](docs/images/denizalti-oda.jpg) | ![Kıça bakış: sancakta döner şalterli iç haberleşme panoları, ortada harita masası, iskelede dalış istasyonu, tavanda boru ve kablo hatları](docs/images/denizalti-kic.jpg) |
+|---|---|
+| ![Harita masasına yakından: Ege seyir haritası, kurşun kalemle rota ve mevki daireleri, pusula gülü, paralel cetvel, kalem, pergel](docs/images/denizalti-harita.jpg) | ![İç haberleşme panosuna yakından: döner şalterler, krom kalkanları, devre adlarıyla siyah etiketler, kapak menteşesi](docs/images/denizalti-salter.jpg) |
+
+Ada'nın kardeşi; odağı atmosfer. Bir Tench sınıfı filo denizaltısının kontrol odası (örnek TCG Uluçalireis, eski USS
+Thornback), Türk hizmetindeki hâliyle, gece kırmızısı altında: görevdeki bir tekne, bakımlı ama yaşanmış. Ada güncel
+teknolojiyi doğrudan kullanıyordu; burada dolaylı: **bütün ışık önceden pişirilir, canlıda ışık hesabı yok**, ekran
+kartının bütün gücü görüntüye gidiyor. Dar bir odada yürünür, her şeye 10-15 cm'den bakılır.
+
+- **Gerçek ölçüler:** 8,23 m (posta 47 + 9" ile 58 + 3" arası), en geniş yerinde 4,886 m basınç gövdesi, sacın içinde 1" mantar,
+  76,2 cm'de bir T posta, güverte eksenin 12 cm altında, 51 × 97 cm'lik oval su geçmez kapılar. Yerleşim Thornback'in
+  1953/68 genel planlarından ve ABD Donanması'nın 1946 eğitim kitabından (NAVPERS 16160). Kaynaklar `docs/denizalti/REFERANS.md`.
+- **Kodla yapılmış her parça:** borular ve dirsekler, flanşlar, somun ve dişli saplamalar, glob vanalar, el çarkları,
+  göstergeler, döner şalterler, sigortalar, kafesli lambalar, menteşe ve kilitler. Keskin kenar yok: her köşe
+  yuvarlatılmış. Panolar postaların iç yüzüne oturur; bir denetim aracı hiçbir istasyonun postalara girmediğini ölçer.
+- **Basılı yüzler:** kadranlar, etiketler ve harita bir çıkartma atlasına çizilir. 16" derinlik göstergesinde
+  0,2 mm/piksel, pirinç etiketlerde yazı 0,25 mm oyulur. Masada uydurma bir kıyının **seyir haritası** var: derinlik
+  eğrileri, iskandiller, pusula gülü, fener, kayalıklar, batık, nöbetçinin kurşun kalemle çizdiği rota, bir kahve halkası.
+- **Önceden pişirilmiş ışık (OptiX):** her yüzey noktasına gelen ışık yönüyle birlikte yazılır (L1 küresel harmonik),
+  bir örnek 12 sekmeye kadar izlenir. Her örnek texel'in alanında başka bir noktadan çıkar, gölge kenarları basamaksız
+  olur. Lambaların parlamaları canlıda çizilir, gölgeleri pişmiş görünürlükten okunur (2010'ların "sabit ışık" yolu).
+  Havadaki pus 4 cm'lik hücrelerde, lamba gölgeleriyle pişirilir. 54 yansıma yoklaması var, her pürüzlülük ayrı izlenir.
+  İlk açılışta yaklaşık 5 dakika sürer, sonra önbellekten açılır.
+- **Tessellation:** yüzeyler her karede kameraya göre bölünüp kabartılır. High'da kabartmalı yüzeylerde (diş, kaynak
+  dikişi, mantar taneleri, oyma yazı) bir üçgen bir örnek kadardır. Eğriler Phong ile yuvarlanır; çatlak yoktur, altı
+  açıdan siyah piksel sayılarak ölçülür.
+- **Süper örnekleme:** her piksel 16 örneğe kadar ayrı ayrı gölgelendirilir. Rastgele sayı yok, her karede aynı desen
+  kullanılır. 8K 16x yalnız fotoğrafta (F12): 1920 × 1080'lik parçalar, kenarlarında koruma bandıyla.
+- **Ayarlar:** Tessellation, Grafik, Işık ve Efekt için ayrı ayrı Low/Medium/High; çözünürlük 720p-8K, SSAA 1x-16x.
+  1440p'de High, SSAA kapalı ~11,5 ms; 4x SSAA ile ~30 ms.
+
+Plan, kararlar ve ölçümler `docs/denizalti/`.
+
 ## Sahne 1: neyi hesaplıyor
 
 | | |
@@ -590,6 +626,7 @@ src/
     koy/              sahne 5: deterministik tayfsal ışın izleyici, ada, su altı, batık, amforalar; device/
     heykel/           sahne 6: Menger süngeri, pertürbasyonla on bin kat yakınlaşma (CUDA)
     olcek/            sahne 7: çapa ağacı, katman saatleri, CUDA çizici, haritalar, yoğunluk haritaları, çöl ve dip
+    denizalti/        sahne 8: oda ve teçhizat kiti, çıkartma atlası, OptiX fırını (device/), OpenGL 4.6 tessellation hattı (glsl/)
 scenes/               sahnelerin ayarları (<sahne>.cfg)
 assets/               yazı tipleri (IBM Plex), galeri resimleri, mavi gürültü dokusu, deprem kayıtları (ESM, AFAD TADAS)
 tools/                EXR istatistikleri, FLIP ve RMSE karşılaştırması, gürültü haritaları, temas tabakaları, prizma planlayıcı, değer etütleri;

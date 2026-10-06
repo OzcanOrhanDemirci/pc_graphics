@@ -36,11 +36,12 @@ kept as physics, not video. Scene 5 is under water: a deterministic spectral ray
 the air above the surface, along a lane from a small island's pier to a wreck and a rope into the blue. Scene 6 is
 geometry alone: a Menger sponge on a plinth, zoomed into ten thousand times. Scene 7 is scale: from a beach at
 Çandarlı out to the edge of the universe with real data, and in, below the light, through the instrument's eye to the
-Planck length, 62 decades.
+Planck length, 62 decades. Scene 8 is a submarine's control room: all its light traced and baked beforehand, the
+graphics card's whole strength going to the picture.
 
 ## The application
 
-The seven scenes live in one program. It opens on a gallery; a scene loads behind a loading screen (its programs
+The eight scenes live in one program. It opens on a gallery; a scene loads behind a loading screen (its programs
 compile and its world is built on a worker thread, so the window stays alive) and then runs under an interface that is
 the same for all of them: who and what at the bottom left, timings at the top right, the way out at the bottom right,
 the keys on F1. The panel at the bottom left takes the mouse: a scene can put rows of choices, sliders and buttons there
@@ -56,7 +57,7 @@ speaks Turkish or English (TR | EN at the top right of the gallery, or L); the c
 
 The look is one family for everything, IBM Plex: Serif for names, Sans for words, Mono for numbers and keys. Dark glass
 panels over the pictures, and one accent colour per scene, taken from its light: warm gold, cold blue, safety orange,
-sea green, sea blue, lavender, rose.
+sea green, sea blue, lavender, rose, night red.
 A scene is a folder with its renderer, its settings and its OptiX programs, plus one line in the scene registry;
 [docs/MIMARI.md](docs/MIMARI.md) (Turkish) describes the contract and how to add one.
 
@@ -389,6 +390,44 @@ always real (no speeding up: the length of the journey is the distance).
 
 Plan and measurements in `docs/olcek/hiz/` (Turkish).
 
+### 8 · The Submarine *(Denizaltı)* · October 2026
+
+| ![The control room under night red: the diving station's wheels and depth gauges to port, the chart table and its lamp's white pool in the middle, the conning tower ladder, the periscope wells](docs/images/denizalti-oda.jpg) | ![Looking aft: the interior communications switchboards with rotary switches to starboard, the chart table, the diving station to port, pipe and cable runs overhead](docs/images/denizalti-kic.jpg) |
+|---|---|
+| ![The chart table up close: an Aegean sea chart, the course and fixes in pencil, the compass rose, a parallel rule, a pencil, dividers](docs/images/denizalti-harita.jpg) | ![A switchboard up close: rotary switches, their chrome escutcheons, black labels with the circuits' names, a door hinge](docs/images/denizalti-salter.jpg) |
+
+The Island's sibling; its focus is atmosphere. The control room of a Tench-class fleet submarine (after TCG
+Uluçalireis, ex USS Thornback) as she was in Turkish service, under night red: a boat in commission, kept up but
+lived in. The Island used current technology directly; here it is used indirectly: **all the light is baked beforehand,
+none is computed live**, and the graphics card's whole strength goes to the picture. You walk a narrow room and can
+look at anything from 10 to 15 cm.
+
+- **Real measurements:** 8.23 m (frame 47 + 9" to 58 + 3"), a pressure hull 4.886 m across at its widest, 1" of cork inside the plating, a T
+  frame every 76.2 cm, the deck 12 cm below the axis, 51 × 97 cm oval watertight doors. The layout follows Thornback's
+  1953/68 general arrangement plans and the US Navy's 1946 training manual (NAVPERS 16160). Sources in
+  `docs/denizalti/REFERANS.md`.
+- **Every part made in code:** pipes and bends, flanges, nuts and threaded studs, globe valves, handwheels, gauges, rotary
+  switches, fuses, caged lamps, hinges and latches. No knife edges: every corner is rounded. The boards sit on the
+  frames' inner faces; a check measures that no station cuts into a frame.
+- **Printed faces:** the dials, the labels and the chart are drawn into a decal atlas, 0.2 mm a pixel on the 16" depth
+  gauge, the lettering cut 0.25 mm into the brass plates. On the table lies a **sea chart** of a made-up coast:
+  depth contours, soundings, a compass rose, a lighthouse, rocks, a wreck, the watch's course in pencil, a coffee ring.
+- **Baked light (OptiX):** the light arriving at every point of every surface is written with its direction (L1
+  spherical harmonics), each path followed up to 12 bounces, each sample leaving from another point of its texel (shadow
+  edges come out graded, without steps). The lamps' highlights are drawn live, their shadows read from baked visibility
+  (the 2010s' "stationary light" path). The haze is baked in 4 cm cells with the lamps' shadows. There are 54
+  reflection probes, each roughness traced on its own. About five minutes on the first opening, from the cache after
+  that.
+- **Tessellation:** the surfaces are cut and raised for the camera every frame. On High a triangle on relief (threads,
+  weld beads, cork granules, engraving) is as small as a sample. Curves are rounded by Phong; there are no cracks,
+  measured by counting black pixels from six viewpoints.
+- **Supersampling:** each pixel is shaded up to 16 times. There are no random numbers; the pattern is the same every
+  frame. 8K at 16x is for photographs only (F12), taken in 1920 × 1080 tiles with guard bands.
+- **Settings:** Low/Medium/High each for tessellation, graphics, light and effects; resolution 720p to 8K, SSAA 1x to
+  16x. At 1440p, High without SSAA takes ~11.5 ms, with 4x SSAA ~30 ms.
+
+Plan, decisions and measurements in `docs/denizalti/` (Turkish).
+
 ## What scene 1 computes
 
 | | |
@@ -655,6 +694,7 @@ src/
     koy/              scene 5: deterministic spectral ray tracer, the island, under water, the wreck, amphorae; device/
     heykel/           scene 6: the Menger sponge, ten thousand times closer by perturbation (CUDA)
     olcek/            scene 7: tree of anchors, layer clocks, CUDA renderer, maps, density maps, the desert and the bottom
+    denizalti/        scene 8: room and equipment kit, decal atlas, OptiX oven (device/), OpenGL 4.6 tessellation pipeline (glsl/)
 scenes/               the scenes' settings (<scene>.cfg)
 assets/               fonts (IBM Plex), gallery pictures, blue-noise texture, earthquake records (ESM, AFAD TADAS)
 tools/                EXR statistics, FLIP and RMSE comparison, noise maps, contact sheets, prism planner, value studies;

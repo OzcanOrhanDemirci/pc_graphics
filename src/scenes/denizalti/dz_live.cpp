@@ -23,13 +23,12 @@ public:
         i.id = "denizalti";
         i.number = "08";
         i.title = L("Denizaltı", "The Submarine");
-        i.subtitle = L("Bir filo denizaltısının kontrol odası, ışığı önceden pişirilmiş",
-                       "A fleet submarine's control room, its light baked beforehand");
-        i.description = L("Tench sınıfı bir denizaltının kontrol odası, gece kırmızısı altında. Işık önceden, bir gece boyunca "
-                          "izlenip pişirildi; ekran kartının bütün gücü görüntüye gidiyor: her örnek ayrı gölgelendirilir, "
+        i.subtitle = L("Gece kırmızısında bir kontrol odası", "A control room under night red");
+        i.description = L("Tench sınıfı bir denizaltının kontrol odası, gece kırmızısı altında. Işık önceden, ilk açılışta "
+                          "birkaç dakika boyunca izlenip pişirilir; ekran kartının bütün gücü görüntüye gidiyor: her örnek ayrı gölgelendirilir, "
                           "yüzeyler her karede yeniden bölünüp kabartılır.",
-                          "The control room of a Tench-class submarine under its night red. The light was traced and baked "
-                          "beforehand, a night long; the graphics card's whole strength goes to the picture: every sample shaded "
+                          "The control room of a Tench-class submarine under its night red. The light is traced and baked "
+                          "beforehand, for a few minutes on the first opening; the graphics card's whole strength goes to the picture: every sample shaded "
                           "on its own, the surfaces cut and raised again every frame.");
         i.details = {
             {L("Önceden pişirilmiş ışık", "Baked light"),

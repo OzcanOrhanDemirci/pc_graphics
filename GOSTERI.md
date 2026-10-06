@@ -184,3 +184,32 @@ yok, zaman hep gerçek. Proxima senin saatinle 15 dakika (Dünya'da 4,25 yıl), 
   yaklaşırken öne bak.
 
 Plan ve durum `docs/olcek/`, Hız'ınki `docs/olcek/hiz/`. Ayarlar `scenes/olcek.cfg` (F5 ile).
+
+## 08 · Denizaltı — bir filo denizaltısının kontrol odası, gece kırmızısında
+Atmosferin sahnesi: ışık, pus ve yansımalar önceden pişirilir, ekran kartı yalnız görüntüyü çizer. İlk açılışta ışık
+pişirilir (yükleme ekranında ilerlemesiyle, ~5 dakika); sonraki açılışlar önbellekten.
+
+| Tuş | Ne yapar |
+|---|---|
+| **W A S D** | yürü · **Boşluk / C** yüksel, alçal · **Shift** yavaş (yakından incele) |
+| **Tab** | fareyle bak (aç/kapa) · **sol tık sürükle:** bak |
+| **Sağ tık** | dürbün (basılı tut): görüş dört kat dar |
+| **F12** | fotoğraf, paneldeki çözünürlük ve SSAA ile (8K 16x dahil; "hesaplanıyor" kartıyla) |
+| **R** | başa dön · **↑ / ↓** pozlama |
+
+Panelde **Çözünürlük** (720p-8K), **SSAA** (1x-16x), **Tessellation**, **Grafik**, **Işık**, **Efekt** (Low, Medium,
+High). 8K 16x canlıda 8K 4x çizilir; fotoğraf 16x'tir.
+
+**Dene:**
+- Başlangıçta öne yürü: iskelede dalış istasyonu (iki 70 cm çark, 16" derinlik göstergeleri), uçta Christmas tree'nin
+  yeşil ışıkları, ortada harita lambasının beyaz havuzu.
+- Harita masasına eğil: Ege seyir haritası, nöbetçinin kurşun kalemle çizdiği rota ve saatli mevkileri, pusula gülü,
+  paralel cetvel, pergel. Kâğıt dalgalı, bir köşesi kalkık.
+- Sancaktaki panolara Shift ile yaklaş: her döner şalterin altında devresinin adı ("STERN PLANE IND.", "1MC
+  ANNOUNCING"), krom kalkanında OFF/ON çizgileri.
+- Bir göstergeye yaklaş: kadranın yazısı, camında odanın yansıması, çarkın çeliğinde kırmızı lamba.
+- Tessellation'ı Low ve High arasında çevir; bir somunun dişine, mantar kaplamaya, oyma pirinç levhaya bak.
+- SSAA'yı 1x ve 16x arasında çevir; 720p 16x'i 1440p 4x'le karşılaştır (aynı örnek sayısı).
+- F12 ile 8K 16x fotoğraf al ve dosyada yaklaş.
+
+Plan ve durum `docs/denizalti/`. Ayarlar `scenes/denizalti.cfg` (F5 ile).
