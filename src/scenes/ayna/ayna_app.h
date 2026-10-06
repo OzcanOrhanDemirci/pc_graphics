@@ -43,6 +43,7 @@ public:
     ayna::BeamBuildStats beamStats;   // the last frame's (all lights)
     double beamMs = 0.0;
     double bakeMs = 0.0;     // the last lamp's bake
+    float dynMs = 0.0f;      // our light's bake this frame
     uchar4* output = nullptr;   // device: the last picture
 
     static int paletteCount();
@@ -99,6 +100,8 @@ private:
     int* dLmRev_ = nullptr;
     int* dLmCol_ = nullptr;
     float4* dLm_ = nullptr;
+    float4* dLm2_ = nullptr;   // our light's, every frame
+    bool lm2Clear_ = false;
     size_t lmTexels_ = 0;
     int lmMaxW_ = 0, lmMaxH_ = 0;
     ayna::LightMap lm_;

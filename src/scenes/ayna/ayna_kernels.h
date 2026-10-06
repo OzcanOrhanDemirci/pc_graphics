@@ -72,6 +72,7 @@ struct LightMap {
     const int* colBlock = nullptr;   // per vertexIndex
     const LightMapBlock* blocks = nullptr;
     float4* E = nullptr;             // rgb irradiance, w the straight-visible lamps' bits
+    float4* E2 = nullptr;            // our own light's, baked again every frame (it moves with us)
     float perimeter = 1.0f;          // a reveal's length round the window
     int on = 0;
 };
@@ -119,11 +120,12 @@ struct View {
     float hazeMinWeight = 0.03f;     // a path's mist glow stops being looked for under this weight
     float4* hazeBuf = nullptr;       // device: the glow at half resolution
     int hazeOnly = 0;                // the tools: only the glow pass
+    int plainMat = 0;                // the tools: plain colours instead of the materials (their cost)
     LightMap lm;                     // the lamps' baked light
     int nLamps = 0;
     float4 lamp[kMaxLamps];          // xyz the lamp, w its glass's radius (for our sphere's shadow)
     float3 lampI[kMaxLamps];
-    int bake = 0;                    // 1 while baking: no sphere, no light map
+    int bake = 0;                    // 1 while baking the lamps: no sphere, no light map (2: our light's map: the sphere counts)
     int firstLamp = 0;               // light[firstLamp ..] are the lamps (their glass is an object too)
     int beams = 1;                   // 0: straight light only (shadow rays), the tools' comparison
     unsigned int* badCount = nullptr;
@@ -138,6 +140,8 @@ void setOptics(const Optics& o);
 // bakes the lights in v (their nodes in v.nodes) into v.lm.E, adding; `bit` is or-ed into the texels that see light 0
 // straight. nBlocks blocks, the largest maxW x maxH texels.
 void bakeLightMap(const View& v, const LightMapBlock* blocksHost, int nBlocks, int maxW, int maxH, unsigned bit, cudaStream_t s);
+// our light into v.lm.E2, every frame: written (not added), our sphere's shadows in it
+void bakeDynamicMap(const View& v, const LightMapBlock* blocksDev, int nBlocks, int maxW, int maxH, cudaStream_t s);
 void renderFrame(const View& v, float4* hdr, cudaStream_t s);
 void resolveFrame(const View& v, const float4* hdr, const float4* bloomHalf, uchar4* out, cudaStream_t s);
 

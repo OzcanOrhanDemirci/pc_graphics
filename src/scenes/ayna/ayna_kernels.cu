@@ -30,6 +30,11 @@ struct Hit {
 };
 
 __device__ __forceinline__ float2 f2(float x, float y) { return make_float2(x, y); }
+}   // namespace
+}   // namespace ayna
+#include "scenes/ayna/ayna_material.h"
+namespace ayna {
+namespace {
 __device__ __forceinline__ float dot2(float2 a, float2 b) { return a.x * b.x + a.y * b.y; }
 __device__ __forceinline__ float3 lift(float2 a) { return make_float3(a.x, 0.0f, a.y); }
 
@@ -245,7 +250,7 @@ __device__ float3 evalCell(const View& v, const Cell& c, float3 q, float3 n, flo
     float vk[3];
     for (int k = 0; k < 3; ++k) vk[k] = dot2(f2(p2.x - c.A[k].x, p2.y - c.A[k].y), c.n[k]);
     bool sphereHere = false;
-    for (int s = 0; s < kCellObjects && !v.bake; ++s) {
+    for (int s = 0; s < kCellObjects && v.bake != 1; ++s) {
         const int id = v.cellObj[c.idx * kCellObjects + s];
         if (id < 0) break;
         if (id == 0) sphereHere = true;
@@ -368,6 +373,7 @@ __device__ float3 evalCell(const View& v, const Cell& c, float3 q, float3 n, flo
                 const BeamNode& an = v.nodes[at];
                 if (an.entryK == 3) break;
                 const float den = dl.x * an.ed.y - dl.y * an.ed.x;
+                bool low = true;
                 if (fabsf(den) > 1e-12f) {
                     // the window through the slab's depth: at both faces
                     for (int f = -1; f <= 1 && !blocked; f += 2) {
@@ -376,9 +382,13 @@ __device__ float3 evalCell(const View& v, const Cell& c, float3 q, float3 n, flo
                         const float sc = (e0.x * an.ed.y - e0.y * an.ed.x) / den;
                         const float2 X = f2(SL.x + dl.x * sc - em.x, SL.y + dl.y * sc - em.y);
                         const float y = L.pos.y + (q.y - L.pos.y) * sc;
+                        if (y > g.yk - 1e-3f) low = false;
                         if (!inWindow(g, X.x * an.ed.x + X.y * an.ed.y, y)) blocked = true;
                     }
                 }
+                // the way's height falls towards the light: once a window is crossed under the jambs' top, every earlier
+                // one is too, and the plan beams already hold those (exact; a bulge's beams walk on)
+                if (low && !nd.high && q.y > L.pos.y) break;
                 at = an.parent;
                 if (at < 0) break;
                 if (at >= v.nNodes) {
@@ -491,7 +501,7 @@ __device__ int texelOf(const View& v, const Cell& c, int kind, int k, float3 p, 
     }
 }
 
-__device__ float4 fetchMap(const View& v, int block, float tx, float ty) {
+__device__ float4 fetchMapE(const View& v, const float4* E, int block, float tx, float ty) {
     const LightMap& lm = v.lm;
     int off, w, h;
     bool wrapX = false;
@@ -516,7 +526,7 @@ __device__ float4 fetchMap(const View& v, int block, float tx, float ty) {
         x1 = (x1 % w + w) % w;
     }
     const int y1 = min(y0 + 1, h - 1);
-    const float4 a = lm.E[off + y0 * w + x0], b = lm.E[off + y0 * w + x1], c = lm.E[off + y1 * w + x0], d = lm.E[off + y1 * w + x1];
+    const float4 a = E[off + y0 * w + x0], b = E[off + y0 * w + x1], c = E[off + y1 * w + x0], d = E[off + y1 * w + x1];
     float4 r;
     r.x = (a.x * (1 - fx) + b.x * fx) * (1 - fy) + (c.x * (1 - fx) + d.x * fx) * fy;
     r.y = (a.y * (1 - fx) + b.y * fx) * (1 - fy) + (c.y * (1 - fx) + d.y * fx) * fy;
@@ -526,6 +536,9 @@ __device__ float4 fetchMap(const View& v, int block, float tx, float ty) {
     r.w = nn.w;
     return r;
 }
+
+__device__ __forceinline__ float4 fetchMap(const View& v, int block, float tx, float ty) { return fetchMapE(v, v.lm.E, block, tx, ty); }
+__device__ __forceinline__ float4 fetchMap2(const View& v, int block, float tx, float ty) { return fetchMapE(v, v.lm.E2, block, tx, ty); }
 
 // how much of a lamp's glowing ball our sphere hides, seen from p (two discs on the sky, their overlap)
 __device__ float sphereHides(const View& v, float3 p, float3 lp, float lr) {
@@ -546,16 +559,23 @@ __device__ float sphereHides(const View& v, float3 p, float3 lp, float lr) {
     return fminf(1.0f, lens / (M_PIf * r1 * r1));
 }
 
+template <bool Beams>
 __device__ float3 lightAt(const View& v, const Cell& c, int kind, int k, float3 p, float3 n, float pathW, int* counts = nullptr) {
     float3 E = make_float3(0, 0, 0);
-    if (v.beams > 0) E = beamLight(v, c, p, n, pathW, v.beams == 2, counts);
-    else E = directLight(v, p, n);
+    if constexpr (Beams) {
+        if (v.beams > 0 && v.beams < 3) E = beamLight(v, c, p, n, pathW, v.beams == 2, counts);
+        else if (v.beams == 0) E = directLight(v, p, n);
+    }
     if (v.lm.on && !v.bake) {
         float tx, ty;
         const int blk = texelOf(v, c, kind, k, p, tx, ty);
         if (blk != -1) {
             const float4 m = fetchMap(v, blk, tx, ty);
             E += make_float3(m.x, m.y, m.z);
+            if ((!Beams || v.beams == 3) && v.lm.E2) {
+                const float4 m2 = fetchMap2(v, blk, tx, ty);
+                E += make_float3(m2.x, m2.y, m2.z);
+            }
             // our sphere's shadow on the lamps this point sees straight
             const unsigned bits = __float_as_uint(m.w) & 0xFFFFu;
             for (int i = 0; i < v.nLamps; ++i) {
@@ -675,6 +695,34 @@ __global__ void kBake(View v, const LightMapBlock* blocks, unsigned bit) {
     t.w = __uint_as_float(__float_as_uint(t.w) | (straight ? bit : 0u) | kTexelValid);
 }
 
+__global__ void kBakeDyn(View v, const LightMapBlock* blocks) {
+    const LightMapBlock& b = blocks[blockIdx.z];
+    const int x = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y;
+    if (x >= b.w || y >= b.h) return;
+    float4& t = v.lm.E2[b.offset + y * b.w + x];
+    float3 p, n;
+    if (!texelPoint(v, b, x, y, p, n)) {
+        t = make_float4(0, 0, 0, 0);
+        return;
+    }
+    const float3 q = p + n * 0.002f;
+    int i, j, up;
+    locate(v.g, q.x, q.z, i, j, up);
+    const int ci = cellIndex(v.g, i, j, up);
+    float3 E = make_float3(0, 0, 0);
+    if (ci >= 0 && v.cellStart[ci * kBins * kBins + kBins * kBins] > v.cellStart[ci * kBins * kBins]) {
+        Cell c;
+        loadCell(v, i, j, up, c);
+        E = beamLight(v, c, p, n, 1.0f, 0, nullptr, nullptr);
+    } else if (ci >= 0) {
+        // a cell without our light's beams: but a point in a passage's window takes its neighbour's too
+        Cell c;
+        loadCell(v, i, j, up, c);
+        E = beamLight(v, c, p, n, 1.0f, 0, nullptr, nullptr);
+    }
+    t = make_float4(E.x, E.y, E.z, __uint_as_float(kTexelValid));
+}
+
 // texels on no surface (in a window, under a slab, inside a column) take their valid neighbours' mean: the bilinear
 // fetch at a surface's rim then reads its own light, not the dark beyond it (reads only valid texels: no order)
 __global__ void kDilate(View v, const LightMapBlock* blocks) {
@@ -789,18 +837,52 @@ __device__ float3 albedoAt(const View& v, int kind, float3 p) {
     }
 }
 
+// a hit's surface: which part of the labyrinth, where on it, and the footprint fw (metres on the surface)
+__device__ mat::Surface surfaceAt(const View& v, const Cell& c, int kind, int k, float3 p, float fw) {
+    const Lattice& g = v.g;
+    switch (kind) {
+    case HFloor: return mat::floorSurface(p.x, p.z, fw);
+    case HCeil: return mat::ceilingSurface(p.x, p.z, fw);
+    case HColumn: {
+        float phi = atan2f(p.z - c.corner[k].y, p.x - c.corner[k].x);
+        if (phi < 0.0f) phi += 2.0f * M_PIf;
+        const float seed = mat::hash2(int(floorf(c.corner[k].x * 10.0f)), int(floorf(c.corner[k].y * 10.0f)));
+        return mat::columnSurface(g, phi, p.y, fw, seed);
+    }
+    case HFace: {
+        const float2 rel = f2(p.x - c.A[k].x, p.z - c.A[k].y);
+        return mat::faceSurface(g, dot2(rel, c.e[k]) - 0.5f * g.L, p.y, lift(c.e[k]), fw);
+    }
+    case HJamb:
+    case HArc: {
+        const float2 rel = f2(p.x - c.A[k].x, p.z - c.A[k].y);
+        return mat::revealSurface(g, dot2(rel, c.e[k]) - 0.5f * g.L, p.y, 0.5f * g.t - dot2(rel, c.n[k]), kind == HArc, fw);
+    }
+    default: {
+        mat::Surface s;
+        s.albedo = v.albedoPlaster;
+        return s;
+    }
+    }
+}
+
+template <bool Beams>
 __device__ float3 tracePath(const View& v, float3 o, float3 d, int& bounces, int& steps, int* counts, bool haze = false, bool glowOnly = false) {
     int i, j, up;
     locate(v.g, o.x, o.z, i, j, up);
     Cell c;
     loadCell(v, i, j, up, c);
     float3 L = make_float3(0, 0, 0), thr = make_float3(1, 1, 1);
+    // the ray's footprint: its width grows with the way (half a pixel's angle a metre: four samples share a pixel);
+    // a flat mirror leaves it, our sphere widens its spread
+    float coneW = 0.0f, coneS = 0.5f * v.pixAngle;
     bounces = 0;
     for (steps = 0; steps < v.maxSteps; ++steps) {
         Hit h;
         nearest(v, c, o, d, h);
         if (h.kind == HNone) break;
         float3 p = o + d * h.t;
+        coneW += coneS * h.t;
         if (v.hazeSigma > 0.0f && v.hazeOnly != 3) {
             if (haze && maxc(thr) > v.hazeMinWeight) L += thr * hazeSegment(v, c, o, d, h.t);
             thr *= __expf(-(v.hazeSigma + v.hazeAbsorb) * h.t);
@@ -827,7 +909,7 @@ __device__ float3 tracePath(const View& v, float3 o, float3 d, int& bounces, int
                 // the shifted exit must still be in the window (at its very rim it would be in the frame's groove)
                 const float2 rel = f2(q.x - c.A[h.k].x, q.z - c.A[h.k].y);
                 if (!inWindow(v.g, dot2(rel, c.e[h.k]) - 0.5f * v.g.L, q.y)) {
-                    if (!glowOnly) L += thr * albedoAt(v, HJamb, p) * INV_PIf * lightAt(v, c, HJamb, h.k, p, h.n, maxc(thr), counts);
+                    if (!glowOnly) L += thr * albedoAt(v, HJamb, p) * INV_PIf * lightAt<Beams>(v, c, HJamb, h.k, p, h.n, maxc(thr), counts);
                     break;
                 }
                 p = q;
@@ -850,17 +932,34 @@ __device__ float3 tracePath(const View& v, float3 o, float3 d, int& bounces, int
             thr *= chromeW(ci);
             d = d + h.n * (2.0f * ci);
             o = p;
+            coneS += 2.0f * coneW / ob.r;   // a convex mirror spreads the beam
             ++bounces;
             if (maxc(thr) < v.minWeight) break;
             continue;
         }
         if (h.kind == HFloor) p.y = 0.0f;   // exactly on it: the windows start at y = 0
-        const float3 alb = albedoAt(v, h.kind, p);
-        if (h.kind == HFloor || h.kind == HColumn) {
+        const float ci = -dot(d, h.n);
+        const float fw = coneW / fmaxf(fabsf(ci), 0.2f);
+        if (glowOnly) {
+            // the mist's ray only follows the polished surfaces' reflections
+            if (h.kind == HFloor || h.kind == HColumn) {
+                thr *= tabLerp(cOpt.stone, ci);
+                d = d + h.n * (2.0f * ci);
+                o = p;
+                if (maxc(thr) < v.hazeMinWeight) break;
+                continue;
+            }
+            break;
+        }
+        mat::Surface sf;
+        if (v.plainMat) { sf.albedo = albedoAt(v, h.kind, p); sf.glossy = (h.kind == HFloor || h.kind == HColumn) ? 1.0f : 0.0f; }
+        else sf = surfaceAt(v, c, h.kind, h.k, p, fw);
+        float3 ns = h.n;
+        if (sf.bump.x != 0.0f || sf.bump.y != 0.0f || sf.bump.z != 0.0f) ns = normalize(h.n + sf.bump);
+        if (sf.glossy > 0.0f) {
             // polished stone: the Fresnel part reflects, the rest is diffuse
-            const float ci = -dot(d, h.n);
-            const float F = tabLerp(cOpt.stone, ci);
-            if (!glowOnly) L += thr * alb * ((1.0f - F) * INV_PIf) * lightAt(v, c, h.kind, h.k, p, h.n, maxc(thr) * (1.0f - F), counts);
+            const float F = tabLerp(cOpt.stone, ci) * sf.glossy;
+            L += thr * sf.albedo * ((1.0f - F) * INV_PIf) * lightAt<Beams>(v, c, h.kind, h.k, p, ns, maxc(thr) * (1.0f - F), counts);
             thr *= F;
             d = d + h.n * (2.0f * ci);
             o = p;
@@ -868,7 +967,7 @@ __device__ float3 tracePath(const View& v, float3 o, float3 d, int& bounces, int
             if (maxc(thr) < v.minWeight) break;
             continue;
         }
-        if (!glowOnly) L += thr * alb * INV_PIf * lightAt(v, c, h.kind, h.k, p, h.n, maxc(thr), counts);
+        L += thr * sf.albedo * INV_PIf * lightAt<Beams>(v, c, h.kind, h.k, p, ns, maxc(thr), counts);
         break;
     }
     return L;
@@ -887,6 +986,7 @@ __constant__ signed char kPat8[8][2] = {{1, -3}, {-1, 3}, {5, 1}, {-3, -5}, {-5,
 __constant__ signed char kPat16[16][2] = {{1, 1}, {-1, -3}, {-3, 2}, {4, -1}, {-5, -2}, {2, 5}, {5, 3}, {3, -5},
                                           {-2, 6}, {0, -7}, {-4, -6}, {-6, 4}, {-8, 0}, {7, -4}, {6, 7}, {-7, -8}};
 
+template <bool Beams>
 __global__ void kFrame(View v, float4* hdr) {
     const int x = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y;
     if (x >= v.width || y >= v.height) return;
@@ -901,7 +1001,7 @@ __global__ void kFrame(View v, float4* hdr) {
         const float3 d = rayDir(v, x + 0.5f + ox / 16.0f, y + 0.5f + oy / 16.0f);
         int b, st;
         int counts[2] = {0, 0};
-        sum += tracePath(v, v.camPos, d, b, st, counts);
+        sum += tracePath<Beams>(v, v.camPos, d, b, st, counts);
         bsum += float(b);
         ssum += float(st);
         tsum += float(counts[0]);
@@ -946,7 +1046,7 @@ __global__ void kHaze(View v, float4* out) {
     const int x = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y;
     if (x >= hw || y >= hh) return;
     int b, st;
-    float3 g = tracePath(v, v.camPos, rayDir(v, 2.0f * x + 1.0f, 2.0f * y + 1.0f), b, st, nullptr, true, true);
+    float3 g = tracePath<false>(v, v.camPos, rayDir(v, 2.0f * x + 1.0f, 2.0f * y + 1.0f), b, st, nullptr, true, true);
     if (!(isfinite(g.x) && isfinite(g.y) && isfinite(g.z))) g = make_float3(0, 0, 0);
     out[y * hw + x] = make_float4(g.x, g.y, g.z, 0.0f);
 }
@@ -1057,6 +1157,14 @@ __global__ void kMirrorPoints(View v, float3 o, float3 d, int maxHits, float3* h
 
 void setOptics(const Optics& o) { cudaMemcpyToSymbol(cOpt, &o, sizeof(Optics)); }
 
+void bakeDynamicMap(const View& v, const LightMapBlock* blocksDev, int nBlocks, int maxW, int maxH, cudaStream_t s) {
+    const dim3 b(16, 16);
+    kBakeDyn<<<dim3((maxW + 15) / 16, (maxH + 15) / 16, nBlocks), b, 0, s>>>(v, blocksDev);
+    View w = v;
+    w.lm.E = v.lm.E2;
+    kDilate<<<dim3((maxW + 15) / 16, (maxH + 15) / 16, nBlocks), b, 0, s>>>(w, blocksDev);
+}
+
 void bakeLightMap(const View& v, const LightMapBlock* blocksDev, int nBlocks, int maxW, int maxH, unsigned bit, cudaStream_t s) {
     const dim3 b(16, 16);
     kBake<<<dim3((maxW + 15) / 16, (maxH + 15) / 16, nBlocks), b, 0, s>>>(v, blocksDev, bit);
@@ -1070,7 +1178,9 @@ void renderFrame(const View& v, float4* hdr, cudaStream_t s) {
         kHaze<<<dim3((hw + b.x - 1) / b.x, (hh + b.y - 1) / b.y), b, 0, s>>>(v, v.hazeBuf);
     }
     if (v.hazeOnly == 1) return;   // (the tools)
-    kFrame<<<dim3((v.width + b.x - 1) / b.x, (v.height + b.y - 1) / b.y), b, 0, s>>>(v, hdr);
+    // everything from the light maps (ours baked this frame): the lean kernel; the tools' other ways: the full one
+    if (v.beams == 3) kFrame<false><<<dim3((v.width + b.x - 1) / b.x, (v.height + b.y - 1) / b.y), b, 0, s>>>(v, hdr);
+    else kFrame<true><<<dim3((v.width + b.x - 1) / b.x, (v.height + b.y - 1) / b.y), b, 0, s>>>(v, hdr);
 }
 
 void resolveFrame(const View& v, const float4* hdr, const float4* bloomHalf, uchar4* out, cudaStream_t s) {

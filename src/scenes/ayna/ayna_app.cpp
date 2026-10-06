@@ -277,6 +277,8 @@ void AynaApp::buildLightMap() {
     }
     dLm_ = devAlloc<float4>(lmTexels_);
     cudaMemset(dLm_, 0, lmTexels_ * sizeof(float4));
+    dLm2_ = devAlloc<float4>(lmTexels_);
+    cudaMemset(dLm2_, 0, lmTexels_ * sizeof(float4));
     dLmBlocks_ = devAlloc<LightMapBlock>(lmBlocks_.size());
     cudaMemcpy(dLmBlocks_, lmBlocks_.data(), lmBlocks_.size() * sizeof(LightMapBlock), cudaMemcpyHostToDevice);
     dLmFace_ = devAlloc<int>(lmFace_.size());
@@ -290,6 +292,7 @@ void AynaApp::buildLightMap() {
     lm_.colBlock = dLmCol_;
     lm_.blocks = dLmBlocks_;
     lm_.E = dLm_;
+    lm_.E2 = dLm2_;
     lm_.on = 1;
     baked_ = 0;
 }
@@ -375,6 +378,8 @@ void AynaApp::release() {
     cudaFree(dColumns_);
     cudaFree(dCellObj_);
     cudaFree(dLm_);
+    cudaFree(dLm2_);
+    dLm2_ = nullptr;
     cudaFree(dLmBlocks_);
     cudaFree(dLmFace_);
     cudaFree(dLmRev_);
@@ -439,6 +444,7 @@ View AynaApp::makeView() const {
     v.hazeMinWeight = cfg.f("haze.min.weight", 0.03f);
     v.hazeBuf = haze_;
     v.hazeOnly = cfg.i("debug.hazeonly", 0);
+    v.plainMat = cfg.i("debug.plain", 0);
     v.badCount = bad_;
     v.oob = oob_;
     v.stats = statsDev;
@@ -626,6 +632,21 @@ void AynaApp::render() {
     const auto tb = std::chrono::high_resolution_clock::now();
     if (v.beams > 0) uploadBeams(v);
     if (!stageCheck(chk, "huzme yukleme")) return;
+    if (v.beams == 3 && lm_.on) {
+        cudaEvent_t d0, d1;
+        cudaEventCreate(&d0);
+        cudaEventCreate(&d1);
+        cudaEventRecord(d0, 0);
+        View bv = v;
+        bv.bake = 2;
+        bakeDynamicMap(bv, dLmBlocks_, int(lmBlocks_.size()), lmMaxW_, lmMaxH_, 0);
+        cudaEventRecord(d1, 0);
+        cudaEventSynchronize(d1);
+        cudaEventElapsedTime(&dynMs, d0, d1);
+        cudaEventDestroy(d0);
+        cudaEventDestroy(d1);
+    }
+    if (!stageCheck(chk, "isigimizin haritasi")) return;
     if (chk) {
         // the haze pass and the frame apart
         View hz = v;
@@ -923,9 +944,15 @@ int runAynaCli(int argc, char** argv) {
         if (hasFree ? i > 0 : (which != "all" && std::stoi(which) != i)) continue;
         a.cam = hasFree ? freeCam : AynaApp::view(i);
         a.frameMs = 0.0f;
-        a.render();   // the first launch carries the kernels' loading; time the second
-        a.frameMs = 0.0f;
-        a.render();
+        a.render();   // the first launch carries the kernels' loading; then the median of several
+        std::vector<float> times;
+        for (int r = 0; r < std::max(1, a.cfg.i("bench", 7)); ++r) {
+            a.frameMs = 0.0f;
+            a.render();
+            times.push_back(a.frameMs);
+        }
+        std::sort(times.begin(), times.end());
+        a.frameMs = times[times.size() / 2];
         for (const float2& pr : probes) a.probe(pr.x, pr.y);
         if (a.debug == 3 || a.debug == 4) {
             unsigned long long* st = nullptr;
@@ -942,7 +969,7 @@ int runAynaCli(int argc, char** argv) {
         }
         const std::string path = out + "/ayna_bakis" + std::to_string(i);
         const bool ok = a.save(path);
-        std::printf("pisirme %.1f ms, %zu texel, dizin ihlali %u\n", a.bakeMs, a.lmTexelCount(), a.oobCount());
+        std::printf("pisirme %.1f ms, isigimiz %.2f ms, %zu texel, dizin ihlali %u\n", a.bakeMs, a.dynMs, a.lmTexelCount(), a.oobCount());
         std::printf("bakis %d: %s  %.1f ms  (%dx%d, %d ornek)  bozuk piksel %u  huzme %d dugum (kesilen %d, derinlik %d, %.2f ms)\n", i,
                     ok ? (path + ".png").c_str() : "YAZILAMADI", a.frameMs, a.width, a.height, a.cfg.i("samples", 4), a.lastBad, a.beamStats.nodes,
                     a.beamStats.cut, a.beamStats.maxDepth, a.beamMs);
