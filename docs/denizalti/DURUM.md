@@ -22,7 +22,7 @@
 - **Bulunan hata:** ilk pişirmede duvarda tek tük parlak teksel. Sebep: yarım küreyi kosinüsle örnekleyip RADYANSI
   harmoniğe izdüşürürken ağırlık π/cos sıyırma açısında patlıyor. Düzgün yarım küre örneklemesi (ağırlık 2π, sınırlı):
   benekler gitti. Kalan: 1024 örnekte ince lekelenme → son pişirme daha çok örnekle.
-- Çatlak: `dilate` 16 kanallık geçici diziyle 20 kanalı yazıyordu → yığın taşması (0xC0000409, çıktısız). Düzeltildi.
+- Hata: `dilate` 16 kanallık geçici diziyle 20 kanalı yazıyordu → yığın taşması (0xC0000409, çıktısız). Düzeltildi.
 
 ## D0 · Hat ve test duvarı (2026-10-06 öğle)
 
