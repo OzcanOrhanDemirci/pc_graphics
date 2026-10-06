@@ -2,6 +2,27 @@
 
 > Tek kaynak durum panosu. Plan `docs/olcek/hiz/PLAN.md`. En yeni en üstte.
 
+## 10-06 sabahı · Özcan'ın ilk denemesi: "direk ışık hızına yakın başladı"
+
+- **Sebep:** fizik değil, kayıt. Sahne dünkü yolculuğu `hiz_yolculuk.txt`'ten kaldığı yerden açtı.
+  - O yolculuk eski ivmeyle (0,4 c/s) uçulmuştu: Proxima ayağı 148 sn sürmüş. Yeni ivmede 913 sn.
+  - Kayıt sabahın ikinci açılışında Andromeda yolunda φ 21,27'ydi (18 dokuz). İlk açılışta da yolculuk ışık hızına
+    yakındı: 59 saniyelik ilk oturumda yeni ivme 21,27'ye ancak φ ≥ 8,85'ten (7 dokuz) çıkabilir. Andromeda ayağının
+    t − x/c kaydı da eski ivmenin izini taşıyor (bağımsız inceleme, dosya zamanlarıyla).
+- **Düzeltme:**
+  - Kayıt biçimine sürüm geldi (`hz::kSaveVersion` = 2: H2'nin ivmesi). Başka sürümün yolculuğu sürdürülmez,
+    yolculuk Dünya'nın yanından başlar. Yola çıkmış eski bir yolculuğun dosyası `hiz_yolculuk.txt.eski-surum`
+    olarak saklanır (`.yedek` her oturum döner, orada kalmaz).
+  - Hız'a ilk girişte ne olduğu söylenir:
+    - sürdürülen bir yolculukta "Kaldığın yerden: <ayak>, <hız>. Baştan başlatmak için: panelde 'Yolculuğu baştan
+      başlat'". Hız duruyorsa "duruyorsun", yavaşsa "β 0,88", hızlıysa "18,2 dokuz". Panelde de ilk W, S ya da Boşluk'a
+      (en çok 20 sn) kadar **"Kaldığın yerden"** işareti kalır: bildirim 3 sn'de söner, kaçabilir.
+    - sürdürülmeyen bir yolculukta nedeni: eski sürüm (ivme değişti), daha yeni sürüm ya da okunamayan kayıt.
+  - Sınama: aynı kayıt "hiz.surum = 1" ile reddedilir.
+- **Doğrulama:** iki bağımsız inceleme (teşhisi çürütme, düzeltmeyi kırma). Normal bir açılışta hızlı başlamanın başka
+  yolu bulunmadı (test düzenekleri yalnız `--autotest`'te, kayda dokunmuyor). Özcan düzeltilmiş derlemeyi 06:50'de
+  açtı: eski kayıt reddedildi, yolculuk Dünya'dan başladı, otomatik varışla Proxima'ya uçtu.
+
 ## 🏁 Özet (10-06 sabaha karşı): H0-H6 bitti, otonom gece
 
 **Özcan'ın bakacağı yer:** uygulamayı aç, Ölçek, panelde **Seçenek: Hız**, ardından **Boşluk** (otomatik varış).

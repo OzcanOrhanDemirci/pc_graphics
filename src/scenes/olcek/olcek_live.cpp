@@ -195,8 +195,31 @@ public:
             if (e.id == "secenek" && e.item >= 0 && e.item != mode_) {
                 if (e.item == 1) enterHiz();
                 else leaveHiz();
-                host.toast(mode_ == 1 ? L("Hız: W itiş, S fren, Boşluk otomatik varış, Tab görüntü", "Speed: W thrust, S brake, Space automatic arrival, Tab view")
-                                      : L("Ölçek: tekerlekle uzaklaş, yaklaş", "Scale: move out and in with the wheel"));
+                std::string note = mode_ == 1 ? L("Hız: W itiş, S fren, Boşluk otomatik varış, Tab görüntü", "Speed: W thrust, S brake, Space automatic arrival, Tab view")
+                                              : L("Ölçek: tekerlekle uzaklaş, yaklaş", "Scale: move out and in with the wheel");
+                // the first time in: what became of the saved journey (resumed where it was left, or not continued and
+                // why); a resumed one also keeps a chip on the panel until the first W, S or Space (a toast fades in 3 s)
+                if (mode_ == 1 && restoreNote_ == 1) {
+                    const hz::Ship& s = a_.ship;
+                    const hz::Kin k = hz::kin(s.phi);
+                    const std::string legs[3] = {L("Dünya → Proxima", "Earth → Proxima"), L("Proxima → Andromeda", "Proxima → Andromeda"),
+                                                 L("Andromeda'da", "at Andromeda")};
+                    const std::string pace = s.phi <= 0.0   ? L("duruyorsun", "at rest")
+                                             : k.nines < 1.0 ? "β " + theme::num(k.beta, 2)
+                                                             : theme::num(k.nines, 1) + L(" dokuz", " nines");
+                    note = L("Kaldığın yerden: ", "Where you left it: ") + legs[std::clamp(s.leg, 0, 2)] + ", " + pace +
+                           L(". Baştan başlatmak için: panelde \"Yolculuğu baştan başlat\"", ". To start over: \"Start the journey over\" in the panel");
+                    resumeChip_ = true;
+                    resumeChipUntil_ = in.now + 20.0;
+                } else if (mode_ == 1 && restoreNote_ >= 2) {
+                    const std::string why = restoreNote_ == 2 ? L("eski bir sürümden (ivme değişti)", "from an older version (the drive changed)")
+                                          : restoreNote_ == 3 ? L("daha yeni bir sürümden", "from a newer version")
+                                                              : L("okunamadı", "could not be read");
+                    note = L("Kayıtlı yolculuk ", "The saved journey is ") + why + L(": yolculuk Dünya'nın yanından başlıyor",
+                                                                                     ": the journey starts beside the Earth");
+                }
+                if (mode_ == 1) restoreNote_ = 0;
+                host.toast(note);
             }
         if (mode_ == 1) {
             hizFrame(host, in);
@@ -478,6 +501,7 @@ private:
             host.toast(L("Yolculuk baştan: Dünya'nın yanındasın", "The journey starts over: you are beside the Earth"));
         }
         const int legBefore = a_.ship.leg;
+        if (resumeChip_ && (in.now > resumeChipUntil_ || cmd.thrustPressed || cmd.brakePressed || cmd.toggleAuto || reset)) resumeChip_ = false;
         const hz::Events ev = hz::step(a_.ship, a_.route, dtau, cmd);
         notices(host, ev, legBefore);
         if (a_.ship.leg != legBefore) pano_ = hz::PanoState{};   // a new leg: the graphs' axes afresh
@@ -641,6 +665,7 @@ private:
         default: drive = s.leg == hz::kLegProxima && s.legTau < 0.0 ? L("Kalkışta", "Ready") : L("Duruyor", "At rest"); break;
         }
         st.chips.push_back({drive, s.drive == hz::Drive::Thrust || s.drive == hz::Drive::Brake});
+        if (resumeChip_) st.chips.push_back({L("Kaldığın yerden", "Resumed"), true});
         if (s.autopilot) st.chips.push_back({L("Otomatik varış", "Automatic arrival"), true});
         const std::string legs[3] = {L("Dünya → Proxima", "Earth → Proxima"), L("Proxima → Andromeda", "Proxima → Andromeda"),
                                      L("Andromeda'dasın", "At Andromeda")};
@@ -815,7 +840,21 @@ private:
             kv[trim(line.substr(0, eq))] = trim(line.substr(eq + 1));
         }
         hz::Ship s;
-        if (hz::parse(s, kv)) a_.ship = s;
+        if (hz::parse(s, kv)) {
+            a_.ship = s;
+            if (s.departT.hi >= 0.0) restoreNote_ = 1;   // a journey under way: said when Hız opens, kept on the panel
+        } else {
+            // not continued: a journey that had departed is told of when Hız opens (older or newer version, or damaged),
+            // its file kept aside for good (the .yedek turns over every session)
+            double departed = -1.0, version = 0.0;
+            if (const auto it = kv.find("hiz.kalkis"); it != kv.end()) departed = std::atof(it->second.c_str());
+            if (const auto it = kv.find("hiz.surum"); it != kv.end()) version = std::atof(it->second.c_str());
+            if (departed >= 0.0) {
+                restoreNote_ = version >= 1.0 && version < double(hz::kSaveVersion) ? 2 : version > double(hz::kSaveVersion) ? 3 : 4;
+                std::error_code ec;
+                std::filesystem::copy_file(savePath_, savePath_ + ".eski-surum", std::filesystem::copy_options::overwrite_existing, ec);
+            }
+        }
         auto num = [&](const char* key, int n, double* v) {
             const auto it = kv.find(key);
             if (it == kv.end()) return false;
@@ -858,6 +897,9 @@ private:
     bool lookAhead_ = false;            // R: the head turning back to the bow
     bool overshootShown_ = false;       // the "too fast to stop" notice given (once per such brake)
     bool graphs_ = true;                // the five panels of graphs (G)
+    int restoreNote_ = 0;               // the saved journey: 1 resumed; not continued: 2 older, 3 newer, 4 damaged (told once)
+    bool resumeChip_ = false;           // "Kaldığın yerden" on the panel: until the first W, S or Space, or 20 s
+    double resumeChipUntil_ = 0.0;
     bool energy_ = true;                // the energy eye (E): every band, in false colour (Özcan 2026-10-06: on at first)
     hz::PanoState pano_;
     hz::SideState side_;

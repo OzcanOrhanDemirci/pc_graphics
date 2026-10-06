@@ -199,6 +199,7 @@ struct Events {
 Events step(Ship& s, const Route& r, double dtau, const Command& c);
 
 // ---- persistence: "key = value" lines (doubles round-trip: %.17g)
+constexpr int kSaveVersion = 2;   // the save's version (2: the drive of H2); parse refuses any other
 std::string serialize(const Ship& s);
 bool parse(Ship& s, const std::map<std::string, std::string>& kv);
 

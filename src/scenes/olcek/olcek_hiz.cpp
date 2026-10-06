@@ -560,10 +560,10 @@ Events step(Ship& s, const Route& r, double dtau, const Command& c) {
 std::string serialize(const Ship& s) {
     char b[1024];
     std::snprintf(b, sizeof(b),
-                  "hiz.surum = 1\nhiz.ayak = %d\nhiz.phi = %.17g\nhiz.yon = %d\nhiz.x = %.17g %.17g\nhiz.tau = %.17g\nhiz.t = %.17g %.17g\n"
+                  "hiz.surum = %d\nhiz.ayak = %d\nhiz.phi = %.17g\nhiz.yon = %d\nhiz.x = %.17g %.17g\nhiz.tau = %.17g\nhiz.t = %.17g %.17g\n"
                   "hiz.burun = %.17g %.17g %.17g\nhiz.donus = %.17g %.17g %.17g %.17g %.17g %.17g %.17g %.17g\n"
                   "hiz.oto = %d %d\nhiz.ayak_basi = %.17g %.17g %.17g\nhiz.kalkis = %.17g %.17g\n",
-                  s.leg, s.phi, s.sense, s.x.hi, s.x.lo, s.tau, s.t.hi, s.t.lo, s.heading.x, s.heading.y, s.heading.z,
+                  kSaveVersion, s.leg, s.phi, s.sense, s.x.hi, s.x.lo, s.tau, s.t.hi, s.t.lo, s.heading.x, s.heading.y, s.heading.z,
                   s.turnFrom.x, s.turnFrom.y, s.turnFrom.z, s.turnTo.x, s.turnTo.y, s.turnTo.z, s.turnAt, s.turnDur,
                   s.autopilot ? 1 : 0, s.handOver ? 1 : 0, s.legTau, s.legT.hi, s.legT.lo, s.departT.hi, s.departT.lo);
     return b;
@@ -580,7 +580,9 @@ bool parse(Ship& out, const std::map<std::string, std::string>& kv) {
     };
     Ship s;
     double a[8];
-    if (!nums("hiz.surum", 1, a) || a[0] != 1.0) return false;
+    // version 2: the drive of H2 (1 g at rest, always rising; 2026-10-06). A journey flown under the old drive (0.4 c/s)
+    // is not continued: its times and places came from another schedule
+    if (!nums("hiz.surum", 1, a) || a[0] != double(kSaveVersion)) return false;
     if (!nums("hiz.ayak", 1, a) || a[0] < 0 || a[0] > 2) return false;
     s.leg = int(a[0]);
     if (!nums("hiz.phi", 1, a) || a[0] < 0.0 || a[0] > phiCap() + 1e-9) return false;

@@ -534,6 +534,12 @@ int runHizTests(OlcekApp& app) {
             still = s.phi == b.phi && s.x.hi == b.x.hi && s.x.lo == b.x.lo && s.t.hi == b.t.hi;
         }
         check(same && still, "kayit dosyasi: yolculuk bit bit geri gelir ve ayni surer");
+        // an older version's journey (the old drive's) is not continued: the same text with "hiz.surum = 1" is refused
+        std::map<std::string, std::string> old = kv;
+        old["hiz.surum"] = "1";
+        hz::Ship c;
+        const bool refused = !hz::parse(c, old) && hz::kSaveVersion == 2 && a.find("hiz.surum = 2") != std::string::npos;
+        check(refused, "kayit dosyasi: eski surumun (eski ivmenin) yolculugu surdurulmez");
     }
 
     {   // BEDEL: the plan's numbers (PLAN §4), and the plate's light against the boosted stress-energy tensor
