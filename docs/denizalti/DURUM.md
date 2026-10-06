@@ -5,8 +5,88 @@
 > **İlk yükleme bütçesi (Özcan, 10-06 öğle):** önden hesaplama + yükleme tavanı 6 dk, ~5 dk kabul; daha kısa sürede en
 > yüksek kaliteye varılıyorsa daha kısa.
 
-**Sıradaki taş: D5 (3) · yansıma yoklamaları ve gösterge camları**, sonra performans, ayar merdiveni (D6), fotoğraf,
-son pişirme (≤ 5 dk), kalite turu (D7).
+> **Canlı kare bütçesi (Özcan, 10-06 öğleden sonra):** 1440p High, SSAA kapalı 30-40 FPS'e kadar (kare ~25-33 ms).
+
+**Özcan için (10-06 akşamüstü):** sahne galeride 08. İlk açılış ~5 dk (yükleme ekranında ilerlemesiyle), sonra
+önbellekten. Bakılacak yerler `GOSTERI.md` §08'de: dalış istasyonu, harita masası (Ege seyir haritası, kalemle rota),
+sancak panoları (döner şalterler, devre etiketleri), kafesli kırmızı lambalar, telsiz odasının kapısı. Görseller
+`docs/images/denizalti-*.jpg`.
+
+**Sıradaki taş: D7 (2) · bağımsız gözden geçirmenin bulguları**, sonra kapanış (hasat).
+
+## D5 (3)-D7 · Teçhizat, yoklamalar, ayarlar, fotoğraf, kalite turu (2026-10-06 öğleden sonra)
+
+- **Yansıma yoklamaları:** 54 küp harita (3×2×9 ızgara, 128², 6 mip), her pürüzlülük fırında ayrı izlenir (GGX; sonradan
+  süzme yok). Bir parçanın içinde kalan 5 yoklama geçersiz sayılır. Canlıda üç doğrusal okuma, paralaks düzeltmeli,
+  yalnız metal ve parlak yüzeyde. **Bir mip'in 54 yoklaması tek başlatmada:** yoklama başına başlatmada küçük mip'ler
+  birkaç yüz iş parçacığıydı, kart boştu (pürüzlü mip'leri 4-8 kat örnekle 64 örnekli fırın 75 → 113 sn; tek başlatmayla
+  76 sn). Saten alüminyumdaki lekeler pürüzlü mip'in gürültüsüydü, gitti.
+- **Gösterge camı** ayrı katman (Fresnel + parlamalar, pürüzlülük 0,07).
+- **Yüzeye göre tessellation hedefi:** kabartmalı yüzeyler (diş, kaynak, mantar, oyma) 1×, boya ve döküm 6×, kabartmasız
+  8× kaba. Siyah etiketler (oyma yok) de 8×. 1440p 4x High 51 → 25,5 ms.
+- **Ayar merdiveni (D6):** Tessellation, Grafik, Işık, Efekt ayrı ayrı Low/Medium/High; çözünürlük 720p-8K, SSAA
+  1x-16x. **Fotoğraf** (F12): 1920×1080 parçalar, 192 px koruma bandı, alt çerçeve izdüşümü; pus için parçanın gerçek
+  boyutu (ilk denemede parça sınırlarında pus dikişleri). 8K 16x 16 parça ~1 sn. **Kamera çarpışması:** 5 cm doluluk
+  ızgarası, 10 cm yarıçap, eksen eksen kayma. **İlk açılışta fırın ilerlemesi** yükleme ekranında (`Host::loadProgress`).
+- **Hata (bulundu, düzeltildi): en ince üçgen tabanı 14,8 mm idi.** Bant sınırının tabanı (`finestTriangle`) en uzun
+  taban kenarından türetiliyordu; levhaların yelpaze üçgenlerinin uzun kenarları onu 14,8 mm'ye çekmiş, High'da bütün
+  ince kabartma sessizce süzülüyordu. Sabit 0,1 mm (kare süresi değişmedi).
+- **Oda kapalı kabuk:** canlıda ışık hesabı yok, her yüzey en az pusu alır: tam siyah piksel = hiçbir şeye çarpmayan
+  bakış. `--test oda-catlak` altı açıdan High'ı bölmesiz tabanla karşılaştırır, `--siyah-maske` deliği boyar. Bulunanlar
+  modelleme boşluklarıydı: güverte kenarında 2 cm şerit (köşebent eklendi), levha aralıklarından güverte altına bakış
+  (pompa dairesi tabanı ve duvarları, perdeler güverte altına iner), perdenin gövde-güverte köşesini kirişle kesen
+  açı örneği (köşeye tam köşe noktası). 6874 → 251 → 53 → **0** (6 kamera, 1x ve 4x, High ve bölmesiz).
+- **Ateş böceği sınırı 0,5 → 0,06** (`bake.clamp`): dolaylı bir yolun parlaklığı odanın en parlak yüzeyinin ~2,5 katıyla
+  sınırlı. 0,5'te Christmas tree'nin yanındaki sıcak noktayı bulan tek yol 64 örnekte bir texel'in bütün ışığıydı: mantar
+  yeşil benekliydi (512'de de silik kalıyordu).
+- **Phong çarpanı 0,75 → 0,5:** bir kenarın ortası x = r cos t (1 + a sin² t); a = 0,5 çember yayına ikinci dereceden
+  oturur, 0,75 yarım sagitta dışarı itiyordu (20 kenarlı disk tırtıklıydı). **Düz yüzü yuvarlakla buluşan parçalarda
+  (silindir kapakları, torna profilleri, halkalar, kubbeler) 0,05 mm yay sapması:** düz yüzün kenarındaki normaller
+  eksenel, Phong o çokgeni yuvarlayamaz. Borular, kablolar, simitler, küreler eskisi gibi (normalleri hep radyal; hepsine
+  uygulamak 7 → 8,1 milyon üçgen ve +5 ms'ydi).
+- **Torna profillerinde keskin köşeye 0,6 mm yay:** köşede tek normal Phong'la iki yüzü de şişiriyordu (lamba yakasının
+  düz tabanı küreye gömülüyordu). **Etiket ve dış hat normalleri kenar uzunluğuyla ağırlıklı:** yay ile doğrunun
+  buluştuğu nokta doğrunun normalini alır; etiketler yastık gibi şişiyordu.
+- **Panolar (iç haberleşme, cayro, DC dağıtım, dış pano):** kapaklara bölünmüş ön yüz (4 mm çıkık, 2,5 mm aralık), üç
+  menteşe topuzu, çeyrek dönüş kilitler, sayaç paneli (bakalit kutuda amper/volt metreler, etiketleriyle), sıra sıra
+  döner şalterler (krom kalkan, OFF/ON çizgileri, bakalit kol, beyaz işaret çizgisi), altında devre adıyla siyah etiket
+  (78 devre adı, REFERANS'tan), en alt sırada sigortalar, panjur, tekme levhası. Üst-arka köşe gövdeye uyan pahla
+  kesildi (postalar arkadan geçer).
+- **Postalar:** geçici bir denetim her istasyonun posta gövdesine ve iç flanşına giren köşelerini saydı. Panolar
+  gövdeden 10-12 cm içerdeydi, flanş 12,5 cm: hepsi gövdeye teğet (yüzü eksene) 18-30 cm içeri alındı. Kalan üçü tavandaki
+  geçişler (kuyular, kaporta, bölmenin üstü), gerçekte de postayı keser.
+- **Kırmızı lambalar** posta 52 ve 53'ün tam üstündeydi (postanın gövdesi küreyi kesiyordu); posta aralarına alındı. Kafes
+  gerçek yaylarla (üst halka, dört kol, alt halka); küre ampulün sıcak noktasından kenara koyu kırmızı (düz pembe disk idi).
+- **Seyir haritası:** çıkartma atlasında yeni tür, 0,2 mm/piksel (2800×3900). Uydurma Ege kıyısı (gerçek bir kıyının
+  yanlış kopyası hata gibi okunurdu): kara, sığlık mavisi, 2-200 m derinlik eğrileri, kıyı, karada yükselti eğrileri, ada
+  ve fener (Fl(2)10s), kayalıklar, batık, iskandiller ve dip cinsi, 5'lik enlem-boylam ağı ve dakika çubukları, eflatun
+  pusula gülü (sapma 5°E), Türkçe künye, nöbetçinin kurşun kalem rotası (saatli mevkiler, DR yarım dairesi, silinmiş eski
+  rota), kahve halkası, kat izi. Kâğıt geometride milimetrelik dalgalı, bir köşesi kalkık. Masada paralel cetvel ve kalem.
+- **Fırında örnekler texel'in alanına yayılır:** her örnek texel'in ayak izinde başka bir noktadan çıkar (araya bir şey
+  giriyorsa merkezden); texel ayak izinin ortalamasını tutar. Cetvelin temas gölgesi haritanın texel ızgarasında testere
+  dişiydi; şimdi basamaksız. **Harita ve masa 1 mm texel.**
+- **Telsiz odası bölmesi:** alüminyum yerine boyalı levha (Türk teknesinde her yer krem), vida sıraları, kapıda panjur,
+  gözetleme camı, "TELSİZ ODASI" şablonu.
+- **Boya yongaları:** kenarın tepesinde gürültünün ~%85'i yonga açıyordu (bütün kenar paslı bir dikiş); şimdi ~dörtte
+  bir, çeliğe inen onda birin altında, güverte yanında biraz fazla.
+- **Ölçümler (son durum, 512 örnek):**
+  - Taban ağı 7,27 milyon üçgen, 11.337 chart; ışık atlası 8192×10383, 62,0 milyon texel (%73 dolu).
+  - **İlk açılış 5 dk 15 sn** (512 örnek, pişirme 308 sn; Özcan'ın tavanı 6 dk). Sonraki açılışlar önbellekten.
+  - Kare süresi, 1440p, başlangıç görünümü (GPU zaman damgası, 8 kare; Grafik/Işık/Efekt High):
+
+| Tess | 1x | 2x | 4x | 8x | 16x |
+|---|---|---|---|---|---|
+| Low | 7,9 | 8,7 | 13,4 | 22,9 | 30,9 |
+| Medium | 8,7 | 9,4 | 15,0 | 26,2 | 34,6 |
+| High | **12,6** | 15,4 | **30,7** | 68,9 | 109,8 |
+
+    High 1x başka çözünürlüklerde (taş ortasında): 1080p 8,6 ms, 4K 20,4 ms. Odada 1440p High 1x 7,5-13,3 ms.
+    Özcan'ın canlı bütçesi 1440p High 1x'te 25-33 ms: pay var.
+  - Canlı uygulama (`--autotest-only denizalti`, 1440p 4x High): 34 FPS, 28,5 ms, kart belleği 5,4 / 16 GB.
+  - Oda çatlak testi: 6 kamera × 1x/4x × High/bölmesiz, **siyah piksel 0**.
+  - Kararlılık (48 kare yürüyüş + dönüş, canlı 4x / referans 16x; `tools/kararlilik.py`): başlangıç yolu piksel
+    kıpırtısı 0,00073 → **0,00056** (blok 0,00017 → 0,00014), FLIP 0,0044 → **0,0037**; yakın yol (trim görünümü)
+    0,00032 → **0,00030**, blok 0,0001, FLIP 0,0020 → **0,0018**. Karşılaştırma: Ada ~0,001.
 
 ## D4-D5 · Malzeme, ayrıntı, ışık ve atmosfer (2026-10-06 öğleden sonra)
 
