@@ -87,6 +87,13 @@ add_library(pc_core OBJECT
     src/scenes/olcek/olcek_hiz_yan.cpp
     src/scenes/olcek/olcek_hiz_test.cpp
     src/scenes/olcek/olcek_kernels.cu
+    src/scenes/denizalti/dz_gl.cpp
+    src/scenes/denizalti/dz_geom.cpp
+    src/scenes/denizalti/dz_parts.cpp
+    src/scenes/denizalti/dz_world.cpp
+    src/scenes/denizalti/dz_render.cpp
+    src/scenes/denizalti/dz_app.cpp
+    src/scenes/denizalti/dz_live.cpp
     ${TP}/tinyexr/miniz.c)
 add_executable(pc_graphics src/app/main.cpp $<TARGET_OBJECTS:pc_core>)
 
@@ -98,7 +105,8 @@ foreach(t pc_core pc_graphics)
         ${TP}/optix/include
         ${TP}/glfw/include
         ${TP}/stb
-        ${TP}/tinyexr)
+        ${TP}/tinyexr
+        ${TP}/gl)
     target_compile_definitions(${t} PRIVATE
         PROJECT_ROOT="${CMAKE_SOURCE_DIR}"
         NOMINMAX

@@ -147,6 +147,9 @@ public:
     virtual void load(Host& host, LoadState& state) = 0;
     virtual void frame(Host& host, const Input& in) = 0;
     virtual const void* image(int& width, int& height) = 0;   // RGBA8, top row first, valid until the next frame
+    // optional: the picture as an OpenGL texture the scene drew itself (scene 8's raster path), its top row at texture
+    // coordinate v = 0 like image()'s upload; valid until the next frame. 0: the application takes image() instead
+    virtual unsigned texture(int& width, int& height) { (void)width; (void)height; return 0; }
     virtual void status(Status& s) = 0;
     virtual void screenshot(Host& host) = 0;
     virtual void reload(Host&) {}

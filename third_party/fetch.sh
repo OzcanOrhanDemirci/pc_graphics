@@ -40,4 +40,8 @@ mkdir -p stb tinyexr
 [ -f tinyexr/tinyexr.h ] || curl -sSL -o tinyexr/tinyexr.h https://raw.githubusercontent.com/syoyo/tinyexr/release/tinyexr.h
 for f in exr_reader.hh streamreader.hh; do [ -f tinyexr/$f ] || curl -sSL -o tinyexr/$f https://raw.githubusercontent.com/syoyo/tinyexr/release/$f; done
 [ -f tinyexr/miniz.h ] || { curl -sSL -o tinyexr/miniz.c https://raw.githubusercontent.com/syoyo/tinyexr/release/deps/miniz/miniz.c; curl -sSL -o tinyexr/miniz.h https://raw.githubusercontent.com/syoyo/tinyexr/release/deps/miniz/miniz.h; }
+# OpenGL 4.6 enums and function types for scene 8's raster path (Khronos registry)
+mkdir -p gl/GL gl/KHR
+[ -f gl/GL/glext.h ] || curl -sSL -o gl/GL/glext.h https://registry.khronos.org/OpenGL/api/GL/glext.h
+[ -f gl/KHR/khrplatform.h ] || curl -sSL -o gl/KHR/khrplatform.h https://registry.khronos.org/EGL/api/KHR/khrplatform.h
 echo "done"

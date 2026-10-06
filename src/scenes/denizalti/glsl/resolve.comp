@@ -1,0 +1,32 @@
+#version 460 core
+// Scene 8 · the samples become pixels: every sample of a pixel (sx x sy texels of the multisampled target, m samples
+// each).
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(binding = 0) uniform sampler2DMS src;
+layout(binding = 0, rgba16f) uniform writeonly image2D dst;
+uniform ivec2 scale;     // texels of the multisampled target per pixel
+uniform int samples;     // samples per texel
+uniform ivec2 size;      // the destination's size
+
+float luma(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
+
+void main() {
+    ivec2 px = ivec2(gl_GlobalInvocationID.xy);
+    if (px.x >= size.x || px.y >= size.y) return;
+    // the average of c/(1+L(c)) (each sample tone-compressed, so its weight on the edge is what the eye sees), then
+    // the compression undone: a bright lamp's sample cannot paint a staircase onto a dark edge
+    vec3 sum = vec3(0);
+    int n = 0;
+    for (int y = 0; y < scale.y; ++y)
+        for (int x = 0; x < scale.x; ++x) {
+            ivec2 q = px * scale + ivec2(x, y);
+            for (int s = 0; s < samples; ++s) {
+                vec3 c = max(texelFetch(src, q, s).rgb, vec3(0));
+                sum += c / (1.0 + luma(c));
+                ++n;
+            }
+        }
+    vec3 r = sum / float(max(n, 1));
+    r = r / max(1.0 - luma(r), 1e-4);
+    imageStore(dst, px, vec4(r, 1.0));
+}

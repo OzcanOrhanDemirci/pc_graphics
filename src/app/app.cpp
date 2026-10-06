@@ -339,17 +339,25 @@ void App::frameRunning(double now, double dt) {
     if (shot) scene_->screenshot(*this);
 
     int iw = 0, ih = 0;
-    const void* px = scene_->image(iw, ih);
-    if (px && iw > 0) ui::updateImage(frame_, px, iw, ih);
+    ui::Image own;   // a texture the scene drew itself (not ours to free)
+    own.tex = scene_->texture(iw, ih);
+    if (own.tex) {
+        own.w = iw;
+        own.h = ih;
+    } else {
+        const void* px = scene_->image(iw, ih);
+        if (px && iw > 0) ui::updateImage(frame_, px, iw, ih);
+    }
+    const ui::Image& pic = own.tex ? own : frame_;
 
     Status st;
     scene_->status(st);
     ui::begin(fbw_, fbh_);
     ui::clear(ui::Color{0, 0, 0, 1.0f});
-    if (frame_.valid()) {
-        const float s = std::min(float(fbw_) / frame_.w, float(fbh_) / frame_.h);
-        view_ = ui::Rect{0.5f * (fbw_ - frame_.w * s), 0.5f * (fbh_ - frame_.h * s), frame_.w * s, frame_.h * s};
-        ui::image(frame_, view_);
+    if (pic.valid()) {
+        const float s = std::min(float(fbw_) / pic.w, float(fbh_) / pic.h);
+        view_ = ui::Rect{0.5f * (fbw_ - pic.w * s), 0.5f * (fbh_ - pic.h * s), pic.w * s, pic.h * s};
+        ui::image(pic, view_);
         {   // the scene's own 2D drawing over its picture, under the panels (and the fade-in over both)
             Overlay o;
             o.hud = hud_;
