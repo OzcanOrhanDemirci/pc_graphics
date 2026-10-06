@@ -10,6 +10,9 @@
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 
+#include <windows.h>
+#include <GL/gl.h>
+#include <cuda_gl_interop.h>
 #include <cuda_runtime.h>
 
 #include <algorithm>
@@ -77,6 +80,7 @@ public:
                     {"C", L("Alçal", "Sink")},
                     {"Shift", L("Hızlı", "Fast")},
                     {"Tab", L("İmleci bırak / al", "Release / take the cursor")},
+                    {"1 2 3 4", L("Bakışlar: koridor, ayna, salon, zemin", "Views: the corridor, the mirror, the hall, the floor")},
                     {"R", L("Başa dön", "Back to the start")}}},
                   {L("Işık", "Light"),
                    {{"Q E", L("Işığın rengi", "The light's colour")},
@@ -127,6 +131,11 @@ public:
             a_.cam = AynaApp::view(0);
             vel_ = make_float3(0, 0, 0);
         }
+        for (int k = 0; k < AynaApp::viewCount(); ++k)
+            if (in.pressed(GLFW_KEY_1 + k)) {
+                a_.cam = AynaApp::view(k);
+                vel_ = make_float3(0, 0, 0);
+            }
         if (in.pressed(GLFW_KEY_Q)) a_.colorIndex = (a_.colorIndex + AynaApp::paletteCount() - 1) % AynaApp::paletteCount();
         if (in.pressed(GLFW_KEY_E)) a_.colorIndex = (a_.colorIndex + 1) % AynaApp::paletteCount();
         if (in.pressed(GLFW_KEY_F)) a_.lightOn = !a_.lightOn;
@@ -176,13 +185,44 @@ public:
 
         a_.evScale = std::exp2(ev_);
         a_.render();
-        cudaMemcpy(pinned_, a_.output, size_t(a_.width) * a_.height * sizeof(uchar4), cudaMemcpyDeviceToHost);
+        // the picture straight into an OpenGL texture, on the card (no trip through main memory)
+        if (!tex_) {
+            glGenTextures(1, &tex_);
+            glBindTexture(GL_TEXTURE_2D, tex_);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, 0x812F);   // GL_CLAMP_TO_EDGE
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, 0x812F);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, a_.width, a_.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+            glBindTexture(GL_TEXTURE_2D, 0);
+            if (cudaGraphicsGLRegisterImage(&res_, tex_, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsWriteDiscard) != cudaSuccess) {
+                cudaGetLastError();
+                res_ = nullptr;
+            }
+        }
+        if (res_ && cudaGraphicsMapResources(1, &res_, 0) == cudaSuccess) {
+            cudaArray_t arr = nullptr;
+            cudaGraphicsSubResourceGetMappedArray(&arr, res_, 0, 0);
+            cudaMemcpy2DToArray(arr, 0, 0, a_.output, size_t(a_.width) * sizeof(uchar4), size_t(a_.width) * sizeof(uchar4), a_.height,
+                                cudaMemcpyDeviceToDevice);
+            cudaGraphicsUnmapResources(1, &res_, 0);
+            texReady_ = true;
+        } else {
+            cudaMemcpy(pinned_, a_.output, size_t(a_.width) * a_.height * sizeof(uchar4), cudaMemcpyDeviceToHost);
+            texReady_ = false;
+        }
     }
 
     const void* image(int& w, int& h) override {
         w = a_.width;
         h = a_.height;
         return pinned_;
+    }
+    unsigned texture(int& w, int& h) override {
+        if (!texReady_) return 0;
+        w = a_.width;
+        h = a_.height;
+        return tex_;
     }
 
     void status(app::Status& s) override {
@@ -201,6 +241,11 @@ public:
     }
 
     void reload(app::Host& host) override {
+        if (res_) cudaGraphicsUnregisterResource(res_);
+        res_ = nullptr;
+        if (tex_) glDeleteTextures(1, &tex_);
+        tex_ = 0;
+        texReady_ = false;
         a_.release();
         if (pinned_) cudaFreeHost(pinned_);
         a_.loadConfig();
@@ -210,6 +255,11 @@ public:
     }
 
     void unload() override {
+        if (res_) cudaGraphicsUnregisterResource(res_);
+        res_ = nullptr;
+        if (tex_ && glfwGetCurrentContext()) glDeleteTextures(1, &tex_);
+        tex_ = 0;
+        texReady_ = false;
         a_.release();
         if (pinned_) cudaFreeHost(pinned_);
         pinned_ = nullptr;
@@ -237,6 +287,9 @@ private:
     app::SceneInfo info_ = describe();
     AynaApp a_;
     uchar4* pinned_ = nullptr;
+    GLuint tex_ = 0;
+    cudaGraphicsResource_t res_ = nullptr;
+    bool texReady_ = false;
     bool started_ = false, look_ = true;
     float3 vel_{0, 0, 0};
     float ev_ = 0.0f;

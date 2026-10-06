@@ -229,9 +229,9 @@ __device__ Surface floorSurface(float x, float z, float fw) {
     Surface s;
     // turned 35 degrees, stretched along the veins: their iso-lines run long and gently bent
     const float u = x * 0.819f + z * 0.574f, w = -x * 0.574f + z * 0.819f;
-    const float warp = fbm(u * 0.25f, w * 0.25f, fw * 0.25f, 3);
-    const float n1 = fbm(u * 0.18f + 3.0f * warp, w * 1.1f, fw * 1.1f, 4);
-    const float n2 = fbm(u * 0.5f - 7.0f, w * 2.6f + 2.0f * warp, fw * 2.6f, 4);
+    const float warp = fbm(u * 0.25f, w * 0.25f, fw * 0.25f, 2);
+    const float n1 = fbm(u * 0.18f + 3.0f * warp, w * 1.1f, fw * 1.1f, 3);
+    const float n2 = fbm(u * 0.5f - 7.0f, w * 2.6f + 2.0f * warp, fw * 2.6f, 3);
     const float big = line(n1 - 0.5f, 0.006f, fw * 1.1f * 0.25f);
     const float fine = line(n2 - 0.52f, 0.004f, fw * 2.6f * 0.25f);
     s.albedo = rgb(0.020f, 0.019f, 0.021f) + rgb(0.62f, 0.61f, 0.58f) * (0.75f * big + 0.28f * fine);

@@ -596,6 +596,11 @@ int App::run(const Options& opt) {
                 key(GLFW_KEY_G); wait(0.2); hold(GLFW_KEY_S, true); wait(0.8); hold(GLFW_KEY_S, false); wait(0.5); log("ayna iki lamba");
                 shot("ayna_lambalar");
                 key(GLFW_KEY_X); key(GLFW_KEY_R); wait(0.5); shot("ayna_basa");
+                // the four composed views, each timed (the mirror and the floor are the heaviest)
+                key(GLFW_KEY_1); wait(2.0); log("ayna bakis 1 koridor"); shot("ayna_bakis1");
+                key(GLFW_KEY_2); wait(2.0); log("ayna bakis 2 ayna"); shot("ayna_bakis2");
+                key(GLFW_KEY_3); wait(2.0); log("ayna bakis 3 salon"); shot("ayna_bakis3");
+                key(GLFW_KEY_4); wait(2.0); log("ayna bakis 4 zemin"); shot("ayna_bakis4");
             }
             if (infos_[s].id == "denizalti") {
                 // walk forward along the diving station, look about with the mouse (Tab), the binoculars, the panel

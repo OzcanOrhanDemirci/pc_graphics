@@ -986,13 +986,13 @@ __device__ float3 hazeNode(const View& v, const BeamNode& nd, float3 o, float3 d
     const float k = v.hazeSigma / h * trans;
     // the phase (Henyey-Greenstein, forward g) and a spot's cone and the mirrors vary along the way: six Gauss-Legendre
     // points of the angle
-    const float gx[6] = {-0.9324695142f, -0.6612093865f, -0.2386191861f, 0.2386191861f, 0.6612093865f, 0.9324695142f};
-    const float gw[6] = {0.1713244924f, 0.3607615730f, 0.4679139346f, 0.4679139346f, 0.3607615730f, 0.1713244924f};
+    const float gx[4] = {-0.8611363116f, -0.3399810436f, 0.3399810436f, 0.8611363116f};
+    const float gw[4] = {0.3478548451f, 0.6521451549f, 0.6521451549f, 0.3478548451f};
     const float gg = v.hazeG;
     float3 acc = make_float3(0, 0, 0);
     const float mid = 0.5f * (pa + pb), half = 0.5f * (pb - pa);
     const bool hasMirrors = (nd.m[0] | nd.m[1] | nd.m[2]) != 0;
-    for (int q = 0; q < 6; ++q) {
+    for (int q = 0; q < 4; ++q) {
         const float ph = mid + half * gx[q];
         const float3 x = o + d * (t0 + h * tanf(ph));
         float3 w = x - S3;   // the light's way at x (from its image)
@@ -1128,6 +1128,7 @@ __device__ float3 tracePath(const View& v, float3 o, float3 d, int& bounces, int
     // the ray's footprint: its width grows with the way (half a pixel's angle a metre: four samples share a pixel);
     // a flat mirror leaves it, our sphere widens its spread
     float coneW = 0.0f, coneS = v.coneScale * v.pixAngle;
+    float glossyBlur = 1.0f;
     bounces = 0;
     if (v.testMirror) {
         // Ö1: the test mirror first (the way to it meets nothing), then the maze from where it reflects
@@ -1264,7 +1265,7 @@ __device__ float3 tracePath(const View& v, float3 o, float3 d, int& bounces, int
         }
         if (h.kind == HFloor) p.y = 0.0f;   // exactly on it: the windows start at y = 0
         const float ci = -dot(d, h.n);
-        const float fw = coneW / fmaxf(fabsf(ci), 0.2f);
+        const float fw = coneW / fmaxf(fabsf(ci), 0.2f) * glossyBlur;
         if (glowOnly) {
             // the mist's ray only follows the polished surfaces' reflections
             if (h.kind == HFloor || h.kind == HColumn) {
@@ -1285,6 +1286,7 @@ __device__ float3 tracePath(const View& v, float3 o, float3 d, int& bounces, int
             // polished stone: the Fresnel part reflects, the rest is diffuse; a column, convex, spreads the cone
             if (h.kind == HColumn) coneS += 2.0f * coneW / v.g.rc;
             const float F = tabLerp(cOpt.stone, ci) * sf.glossy;
+            glossyBlur = v.glossyBlur;   // what this weak reflection shows, its patterns' fine detail is lost in it
             L += thr * sf.albedo * ((1.0f - F) * INV_PIf) * lightAt<Beams>(v, c, h.kind, h.k, p, ns, maxc(thr) * (1.0f - F), counts);
             thr *= F;
             d = d + h.n * (2.0f * ci);

@@ -492,6 +492,7 @@ View AynaApp::makeView() const {
     v.hazeOnly = cfg.i("debug.hazeonly", 0);
     v.plainMat = cfg.i("debug.plain", 0);
     v.coneScale = cfg.f("cone.scale", 0.5f);
+    v.glossyBlur = cfg.f("glossy.blur", 6.0f);
     v.subX = subX;
     v.subY = subY;
     v.ghosts = cfg.i("ghost.mirrors", 1);
