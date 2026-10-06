@@ -465,6 +465,8 @@ View AynaApp::makeView() const {
     v.hazeOnly = cfg.i("debug.hazeonly", 0);
     v.plainMat = cfg.i("debug.plain", 0);
     v.coneScale = cfg.f("cone.scale", 0.5f);
+    v.subX = subX;
+    v.subY = subY;
     v.testMirror = testMirror;
     v.tmN = tmN;
     v.tmD = tmD;
@@ -725,6 +727,26 @@ void AynaApp::probe(float x, float y) {
     uploadObjects(v);
     if (v.beams > 0) uploadBeams(v);
     probePixel(v, x, y);
+}
+
+bool AynaApp::saveReference(const std::string& pathNoExt) {
+    // the four renders' light averaged before the display transform (as one render of 64 samples would be)
+    std::vector<float4> acc(size_t(width) * height, make_float4(0, 0, 0, 0));
+    const float offs[4][2] = {{-0.25f, -0.25f}, {0.25f, -0.25f}, {-0.25f, 0.25f}, {0.25f, 0.25f}};
+    for (int k = 0; k < 4; ++k) {
+        subX = offs[k][0];
+        subY = offs[k][1];
+        render();
+        const std::vector<float4> h = hdrHost();
+        for (size_t i = 0; i < acc.size(); ++i) acc[i] = acc[i] + h[i] * 0.25f;
+    }
+    subX = subY = 0.0f;
+    cudaMemcpy(hdr_, acc.data(), acc.size() * sizeof(float4), cudaMemcpyHostToDevice);
+    const View v = makeView();
+    launchBloom(hdr_, width, height, levels_, accum_, kLevels, 0);
+    resolveFrame(v, hdr_, accum_[0], output, 0);
+    cudaDeviceSynchronize();
+    return save(pathNoExt);
 }
 
 bool AynaApp::save(const std::string& pathNoExt) {
@@ -1147,9 +1169,13 @@ int runAynaCli(int argc, char** argv) {
                 a.loadConfig();
                 a.width = w > 0 ? w : 1280;
                 a.height = h > 0 ? h : 720;
-                a.render();
                 std::snprintf(name, sizeof(name), "/%s_%04d", pass == 0 ? "live" : "ref", f);
-                a.save(dir + name);
+                if (pass == 1 && a.cfg.i("o3.ref64", 1)) {
+                    a.saveReference(dir + name);
+                } else {
+                    a.render();
+                    a.save(dir + name);
+                }
                 a.overrides.pop_back();
             }
         }

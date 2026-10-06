@@ -1113,7 +1113,7 @@ __global__ void kFrame(View v, float4* hdr) {
         else if (n == 8) { ox = kPat8[s][0]; oy = kPat8[s][1]; }
         else if (n == 16) { ox = kPat16[s][0]; oy = kPat16[s][1]; }
         if (v.testMirror) ox = -ox;   // the mirrored picture's samples, mirrored
-        const float3 d = rayDir(v, x + 0.5f + ox / 16.0f, y + 0.5f + oy / 16.0f);
+        const float3 d = rayDir(v, x + 0.5f + ox / 16.0f + v.subX, y + 0.5f + oy / 16.0f + v.subY);
         int b, st;
         int counts[2] = {0, 0};
         sum += tracePath<Beams>(v, v.camPos, d, b, st, counts);

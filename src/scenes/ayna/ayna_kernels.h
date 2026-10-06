@@ -122,6 +122,7 @@ struct View {
     int hazeOnly = 0;                // the tools: only the glow pass
     int plainMat = 0;                // the tools: plain colours instead of the materials (their cost)
     float coneScale = 0.5f;          // the footprint: this many pixels a metre (half: four samples share a pixel)
+    float subX = 0.0f, subY = 0.0f;  // the tools: every sample shifted by this (pixels), for references of many renders
     // the tools (Ö1): a mirror plane in front of the eye, met before anything else; 1 ideal (all reflected, no glass),
     // 2 the maze's own mirror (glass and silver); the samples are mirrored with it
     int testMirror = 0;

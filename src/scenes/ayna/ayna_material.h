@@ -118,9 +118,8 @@ __device__ float stucco(float x, float y, float fw, float& gx, float& gy) {
 
 // dark walnut, its grain along `a` (the frames round the windows below the arches)
 __device__ float3 walnut(float a, float b, float fw) {
-    const float g = fbm(a * 3.0f, b * 90.0f, fw * 90.0f, 3);
-    const float rings = lines(b + 0.004f * __sinf(a * 7.0f), 0.0035f, 0.0006f, fw);
-    return rgb(0.105f, 0.060f, 0.035f) * (0.75f + 0.5f * g) * (1.0f - 0.25f * rings);
+    const float g = fbm(a * 2.0f, b * 40.0f, fw * 40.0f, 3);
+    return rgb(0.070f, 0.040f, 0.024f) * (0.85f + 0.3f * g);
 }
 
 // a slab's face (the side of the wall the cell sees): du from the window's middle, y up, e the edge's direction
@@ -135,7 +134,6 @@ __device__ Surface faceSurface(const Lattice& g, float du, float y, float3 e, fl
     // beside the window, below the arch: the frame's wood, with a gold fillet at the window's edge
     if (y < g.yk - 0.02f && fabsf(du) > g.wHalf - 0.001f) {
         s.albedo = walnut(y, du, fw);
-        s.albedo = lerp3(s.albedo, gold(), line(fabsf(du) - g.wHalf - 0.006f, 0.0025f, fw));
         return s;
     }
     // the voussoir ring round the arch
@@ -180,9 +178,6 @@ __device__ Surface revealSurface(const Lattice& g, float du, float y, float dept
     } else {
         s.albedo = walnut(y, depthFromFace, fw);
     }
-    // a gold fillet along the face's edge
-    const float rim = line(depthFromFace - 0.012f, 0.004f, fw);
-    s.albedo = lerp3(s.albedo, gold(), rim);
     return s;
 }
 
