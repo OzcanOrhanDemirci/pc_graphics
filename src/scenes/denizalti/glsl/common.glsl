@@ -112,10 +112,15 @@ struct Surf {
 // welds, cork granules, braid, knurls, engraving) a triangle per sample on High; where its relief is below a pixel
 // anyway (the paint's orange peel, a casting's pitting: the normal carries it) six times coarser; where there is none,
 // only enough to round the curves. One function for the control and the evaluation stage (the band limit follows it:
-// a shared edge always gets one size).
-float featureTessScale(uint feat) {
+// a shared edge always gets one size). A label is relief only on brass (the engraving); black plates and stencils are
+// flat print (fp.x: the decal; one value over a plate, it shares no edge with anything else).
+float featureTessScale(uint feat, vec2 fp) {
     if (feat == FEAT_NONE || feat == FEAT_DIAL) return 8.0;
     if (feat == FEAT_PLATE || feat == FEAT_CAST) return 6.0;
+    if (feat == FEAT_LABEL) {
+        float st = decInfo[int(fp.x + 0.5)].w;
+        return st > 0.5 && st < 1.5 ? 1.0 : 8.0;
+    }
     return 1.0;
 }
 

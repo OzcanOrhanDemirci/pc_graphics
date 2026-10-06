@@ -68,10 +68,15 @@ void Mesh::append(const Mesh& m, const Xform& t) {
 
 // ---- the kit
 int Kit::segs(float length, int lo) const { return std::max(lo, int(std::ceil(std::fabs(length) / maxEdge - 1e-4f))); }
+int Kit::arcSegs(float r, float angle, int lo) const {
+    // the sagitta r (1 - cos(phi / 2)) ~ r phi^2 / 8 <= 5e-5 m: phi <= sqrt(4e-4 / r)
+    const float a = std::fabs(angle);
+    return std::max(segs(r * a, lo), int(std::ceil(a * std::sqrt(std::max(r, 0.0f) / 4e-4f) - 1e-4f)));
+}
 
 void Kit::tube(float r, float z0, float z1, float uOffset) {
     const float C = 2.0f * kPi * r;
-    const int nu = std::max(16, segs(C)), nv = segs(z1 - z0);
+    const int nu = std::max(16, segs(C)), nv = segs(z1 - z0);   // radial normals all round: Phong rounds it
     const float2 keep = fp;
     if (fp.y == 0.0f) fp.y = C;   // a closed surface's features need its circumference
     grid(nu, nv, [&](int i, int j) {
@@ -110,7 +115,7 @@ void Kit::bend(float r, float R, float a, float vOffset) {
 }
 
 void Kit::ring(float r0, float r1, float z, bool up) {
-    const int nu = std::max(16, segs(2.0f * kPi * r1)), nv = segs(r1 - r0);
+    const int nu = arcSegs(r1, 2.0f * kPi, 16), nv = segs(r1 - r0);
     grid(nu, nv, [&](int i, int j) {
         GridPt g;
         const float a = 2.0f * kPi * float(i % nu) / nu * (up ? -1.0f : 1.0f);   // the winding faces +z when up
@@ -125,7 +130,7 @@ void Kit::ring(float r0, float r1, float z, bool up) {
 void Kit::roundedCylinder(float r, float z0, float z1, float e, bool cap0, bool cap1) {
     e = std::min(e, std::min(r * 0.5f, 0.5f * (z1 - z0)));
     const float C = 2.0f * kPi * r;
-    const int nu = std::max(20, segs(C));
+    const int nu = arcSegs(r, 2.0f * kPi, 20);
     const int nb = std::max(3, int(std::ceil(0.5f * kPi * e / (0.25f * maxEdge))));   // rounding: fine (it catches the light)
     // one grid over the profile: bottom cap centre -> rounding -> side -> rounding -> top cap centre
     struct P { float rr, z, nr, nz, s, edge, fm = 0.0f; };
@@ -295,7 +300,7 @@ void Kit::dome(float r, float hb) {
     // a spherical cap of base radius r and height hb, sitting on z = 0
     const float Rs = (r * r + hb * hb) / (2.0f * hb);   // the sphere's radius
     const float amax = std::asin(std::min(1.0f, r / Rs));
-    const int nu = std::max(12, segs(2.0f * kPi * r)), nv = std::max(4, segs(Rs * amax) * 2);
+    const int nu = arcSegs(r, 2.0f * kPi, 12), nv = std::max(4, arcSegs(Rs, amax) * 2);
     grid(nu, nv, [&](int i, int j) {
         GridPt g;
         const float a = 2.0f * kPi * float(i % nu) / nu;
@@ -381,14 +386,12 @@ void Kit::extrude(const std::vector<float2>& outline, float z0, float z1, bool c
     const int n = int(outline.size());
     std::vector<float> arc(n + 1, 0.0f);
     for (int k = 1; k <= n; ++k) arc[k] = arc[k - 1] + std::hypot(outline[k % n].x - outline[k - 1].x, outline[k % n].y - outline[k - 1].y);
-    // normals: averaged neighbouring edge normals (rounded corners come out smooth, straight runs flat)
+    // normals: the neighbouring edge normals weighted by their lengths (rounded corners come out smooth, straight runs
+    // flat: where an arc meets a straight its end takes the straight's normal, so the run does not bow under Phong)
     std::vector<float3> nrm(n);
     for (int k = 0; k < n; ++k) {
         const float2 a = outline[(k + n - 1) % n], p = outline[k], b = outline[(k + 1) % n];
-        float3 n0 = f3(p.y - a.y, -(p.x - a.x), 0), n1 = f3(b.y - p.y, -(b.x - p.x), 0);
-        n0 = normalize(n0);
-        n1 = normalize(n1);
-        nrm[k] = normalize(n0 + n1);
+        nrm[k] = normalize(f3(p.y - a.y, -(p.x - a.x), 0) + f3(b.y - p.y, -(b.x - p.x), 0));
     }
     // split the side into strips at sharp corners would need vertex duplication; the outline is rounded, so one grid
     const int nv = segs(z1 - z0);
@@ -423,7 +426,7 @@ void Kit::lathe(const std::vector<float2>& rz, float a0, float a1, const std::ve
     float rmax = 0.0f;
     for (const float2& q : rz) rmax = std::max(rmax, q.x);
     const bool closed = std::fabs(a1 - a0 - 2.0f * kPi) < 1e-4f;
-    const int nu = std::max(closed ? 20 : 4, segs(rmax * (a1 - a0)));
+    const int nu = arcSegs(rmax, a1 - a0, closed ? 20 : 4);
     // profile normals: perpendicular to the averaged neighbouring segments, pointing away from the solid (the profile
     // runs bottom to top along the outside: the outward normal is (dz, -dr) normalised)
     std::vector<float2> nrm(n);
@@ -463,8 +466,8 @@ void Kit::slab(const std::vector<float2>& outline, float t, float e) {
     std::vector<float3> side(n);
     for (int k = 0; k < n; ++k) {
         const float2 a = outline[(k + n - 1) % n], p = outline[k], b = outline[(k + 1) % n];
-        float3 n0 = normalize(make_float3(p.y - a.y, -(p.x - a.x), 0)), n1 = normalize(make_float3(b.y - p.y, -(b.x - p.x), 0));
-        side[k] = normalize(n0 + n1);
+        // weighted by the edges' lengths (as extrude): a straight run's ends keep its normal, the plate does not pillow
+        side[k] = normalize(make_float3(p.y - a.y, -(p.x - a.x), 0) + make_float3(b.y - p.y, -(b.x - p.x), 0));
     }
     e = std::min(e, 0.45f * t);
     const int nb = 3;

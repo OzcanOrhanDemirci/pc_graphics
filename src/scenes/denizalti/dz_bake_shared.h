@@ -32,6 +32,7 @@ struct DzBakeParams {
     unsigned int sampleBase;   // the first sample's index (the sequence continues across launches)
     unsigned int samples;      // samples per texel in this launch
     unsigned int maxBounces;
+    float clampLum;            // one indirect path's luminance at most (the firefly clamp)
     const DzLight* lights;
     unsigned int lightCount;
     unsigned int texelBase;    // the batch's first texel (its global index seeds the sequence)

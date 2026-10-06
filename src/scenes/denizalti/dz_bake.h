@@ -22,6 +22,7 @@ struct BakeOptions {
     int volSamples = 256;
     int probeRes = 128;      // reflection probes' face size
     int probeSamples = 128;
+    float clamp = 0.06f;     // the indirect light's firefly clamp (luminance of one path)
 };
 
 // what the live picture reads: five RGBA16F planes over the atlas (L0 rgb + the occlusion within 25 cm; L1 of red,

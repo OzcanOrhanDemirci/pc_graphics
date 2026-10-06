@@ -36,7 +36,9 @@ void main() {
     precise vec3 q1 = p - dot(p - i[k1].p, i[k1].dn) * i[k1].dn;
     precise vec3 q2 = p - dot(p - i[k2].p, i[k2].dn) * i[k2].dn;
     precise vec3 ph = w0 * q0 + w1 * q1 + w2 * q2;
-    p = p + (ph - p) * 0.75;
+    // the shape factor: 0.5 puts an edge's midpoint back on a circular arc through its ends (x = r cos t (1 + a sin^2 t)
+    // = r to second order); the usual 0.75 pushed it a half sagitta beyond, a 20-gon disc came out scalloped
+    p = p + (ph - p) * 0.5;
     precise vec3 dn = normalize(w0 * i[k0].dn + w1 * i[k1].dn + w2 * i[k2].dn);
     vec2 uv = w.x * i[0].uv + w.y * i[1].uv + w.z * i[2].uv;
     o.n = normalize(w.x * i[0].n + w.y * i[1].n + w.z * i[2].n);
@@ -51,7 +53,7 @@ void main() {
     // the sampling size here, a function of the position alone (so a point on a shared edge gets the same height from
     // both triangles: no cracks): the target triangle size at this distance, floored by what the base mesh can reach
     // (its longest edge over the largest factor)
-    float sz = max(target.x * featureTessScale(i[0].feat) * 2.0 * camPos.w * max(distance(p, camPos.xyz), 0.02) / viewport.y, target.z);
+    float sz = max(target.x * featureTessScale(i[0].feat, i[0].fp) * 2.0 * camPos.w * max(distance(p, camPos.xyz), 0.02) / viewport.y, target.z);
     o.size = sz;
     if (target.w > 0.5 && i[0].feat != FEAT_NONE) {
         Surf s;

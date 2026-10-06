@@ -427,6 +427,130 @@ void airManifold(Kit& k) {
     }
 }
 
+// a rotary snap switch on a face (frame f, its +z out) at c: a chrome escutcheon with its OFF and ON marks, a
+// bakelite boss and the bar handle turned to `angle` (0: up), a white line along the handle's pointing end
+void rotarySwitch(Kit& k, const Xform& f, float3 c, float angle) {
+    with(k, f * Xform::at(c), MAT_CHROME, FEAT_NONE, [&] {
+        k.roundedCylinder(0.024f, 0.0f, 0.0025f, 0.001f, false, true);
+        const Xform t0 = k.t;
+        k.mat = MAT_PAINT_DARK;
+        for (int m = -1; m <= 1; m += 2) {
+            k.t = t0 * Xform::rotZ(m * 0.785f) * Xform::at(f3(0, 0.019f, 0.0025f));
+            k.roundedBox(f3(0.0008f, 0.0035f, 0.0003f), 0.0002f);
+        }
+        k.mat = MAT_WRINKLE;
+        k.t = t0;
+        k.roundedCylinder(0.0105f, 0.0025f, 0.011f, 0.002f, false, true);
+        k.t = t0 * Xform::rotZ(angle) * Xform::at(f3(0, 0, 0.0165f));
+        k.roundedBox(f3(0.0065f, 0.021f, 0.0062f), 0.0028f);
+        k.mat = MAT_CREAM;
+        k.t = k.t * Xform::at(f3(0, 0.011f, 0.0061f));
+        k.roundedBox(f3(0.0011f, 0.0075f, 0.0004f), 0.0003f);
+        k.t = t0;
+    });
+}
+
+// the circuits on each board's labels (REFERANS §3: a fleet boat's control room switchboards)
+const std::vector<std::vector<const char*>> kCircuits = {
+    {"GYRO MOTOR", "FOLLOW UP", "REPEATERS 1", "REPEATERS 2", "COMPENSATOR", "GYRO ALARM", "SPEED UNIT", "LATITUDE CORR.", "D.R. TRACER",
+     "SUPPLY No.1", "SUPPLY No.2", "HEATERS", "STARTING", "RUNNING"},
+    {"1MC ANNOUNCING", "GENERAL ALARM", "COLLISION ALARM", "DIVING ALARM", "RUDDER ANGLE IND.", "BOW PLANE IND.", "STERN PLANE IND.",
+     "ENGINE ORDER TEL.", "SHAFT REV. IND.", "HULL OPENING IND.", "DEPTH GAUGE LTS.", "SOUND POWERED TEL.", "TORPEDO READY",
+     "FIRING CIRCUITS", "WHISTLE", "UNDERWATER LOG", "STEERING REP.", "MAGNETIC COMPASS LT.", "SALINITY IND.", "BATTERY VENT IND.",
+     "MOTOR ORDER", "EMERG. LIGHTS", "AIR ALARM", "FLOOD ALARM"},
+    {"AUX. GYRO MOTOR", "AUX. FOLLOW UP", "AUX. REPEATERS", "TRANSFER", "AUX. ALARM", "INVERTER", "INVERTER FIELD", "SUPPLY", "TEST"},
+    {"LIGHTING FWD.", "LIGHTING AFT", "EMERG. LIGHTING", "HYDRAULIC PUMP", "TRIM PUMP", "DRAIN PUMP", "AIR COMPRESSOR No.1",
+     "AIR COMPRESSOR No.2", "VENT FAN SUPPLY", "VENT FAN EXHAUST", "GALLEY", "RADIO", "RADAR", "SONAR", "PERISCOPE HOIST No.1",
+     "PERISCOPE HOIST No.2", "ANCHOR WINDLASS", "CAPSTAN", "BOW PLANE TILT", "REFRIGERATION", "AIR CONDITIONING", "DISTILLER",
+     "BATTERY FANS", "SPARE"},
+    {"SHORE POWER", "BATTERY CHARGE", "GROUND DETECTOR", "BUS TIE", "FWD. BATTERY", "AFT BATTERY", "SPARE"},
+};
+
+// a switchboard's front (frame f: x across, y up from the deck, z out of the face; half width hw, height h, board ci):
+// a frame round hinged doors 4 mm proud, the meter panel at the top under the board's name, rows of rotary snap
+// switches each over its circuit's label, fuses on the lowest row, a louvre low down, a dark kick plate at the deck
+void cabinetFace(Kit& k, const Xform& f, float hw, float h, int ci) {
+    static const char* names[] = {"GYRO CONTROL", "I.C. SWITCHBOARD", "AUX. GYRO", "FWD. D.C. DISTRIBUTION", "EXT. SWITCHBOARD"};
+    const float dz = 0.004f;   // the doors' face
+    const float m = 0.025f;    // the frame round them
+    const float gap = 0.0025f;
+    auto door = [&](float xa, float xb, float ya, float yb) {
+        box(k, f, f3(0.5f * (xa + xb), 0.5f * (ya + yb), 0.5f * dz), f3(0.5f * (xb - xa) - gap, 0.5f * (yb - ya) - gap, 0.5f * dz), 0.0015f, MAT_GREY, FEAT_PLATE);
+        // three hinge knuckles on the left, a quarter-turn latch (or two) on the right
+        for (int i = 0; i < 3; ++i) {
+            const float yk = ya + 0.1f + (yb - ya - 0.2f) * 0.5f * i;
+            with(k, f * Xform::frame(f3(xa + 0.002f, yk, dz), f3(0, 1, 0), f3(1, 0, 0)), MAT_GREY, FEAT_NONE, [&] { k.roundedCylinder(0.0055f, -0.028f, 0.028f, 0.0015f); });
+        }
+        const int nl = yb - ya > 0.8f ? 2 : 1;
+        for (int i = 0; i < nl; ++i) {
+            const float yl = nl == 1 ? 0.5f * (ya + yb) : ya + (yb - ya) * (i ? 0.72f : 0.28f);
+            with(k, f * Xform::at(f3(xb - 0.03f, yl, dz)), MAT_CHROME, FEAT_NONE, [&] {
+                k.roundedCylinder(0.014f, 0.0f, 0.003f, 0.001f, false, true);
+                k.roundedCylinder(0.0045f, 0.003f, 0.011f, 0.001f, false, false);
+                k.t = k.t * Xform::at(f3(0, 0, 0.0145f));
+                k.roundedBox(f3(0.0055f, 0.02f, 0.0045f), 0.002f);
+            });
+        }
+    };
+    // the kick plate
+    box(k, f, f3(0, 0.05f, 0.002f), f3(hw - 0.012f, 0.045f, 0.003f), 0.0015f, MAT_PAINT_DARK, FEAT_PLATE);
+    // the meter panel: the name, meters in their bakelite cases, each over its label
+    const float yt0 = h - 0.4f, yt1 = h - m;
+    door(-hw + m, hw - m, yt0, yt1);
+    plateAt(k, f, f3(0, h - 0.07f, dz), std::min(2.0f * hw * 0.75f, 0.46f), 0.036f, names[ci], PLATE_BLACK);
+    const int nm = std::max(2, int((2.0f * hw - 0.12f) / 0.16f));
+    static const char* meters[] = {"D.C. VOLTS", "AMPERES", "A.C. VOLTS", "FREQUENCY", "FIELD AMP.", "AMPERES"};
+    for (int i = 0; i < nm; ++i) {
+        const float xm = -hw + 0.06f + (2.0f * hw - 0.12f) * (i + 0.5f) / nm;
+        box(k, f, f3(xm, h - 0.215f, dz + 0.012f), f3(0.052f, 0.052f, 0.012f), 0.004f, MAT_WRINKLE, FEAT_NONE);
+        gaugeAt(k, f, f3(xm, h - 0.215f, dz + 0.0245f), 0.041f, 0.008f, MAT_CHROME, DIAL_METER);
+        plateAt(k, f, f3(xm, h - 0.292f, dz), 0.07f, 0.014f, meters[(i + ci) % 6], PLATE_BLACK);
+    }
+    // the switch doors
+    const float ya = 0.12f, yb = h - 0.4f - 0.005f;
+    const float W = 2.0f * (hw - m);
+    const int nd = W > 0.75f ? 2 : 1;
+    const std::vector<const char*>& circ = kCircuits[ci];
+    int label = 0;
+    uint32_t hs = 0x9e3779b9u * uint32_t(ci + 1);
+    for (int d = 0; d < nd; ++d) {
+        const float xa = -hw + m + W * d / nd, xb = xa + W / nd;
+        door(xa, xb, ya, yb);
+        const int cols = std::max(1, int((xb - xa - 0.05f) / 0.105f));
+        const float sp = (xb - xa - 0.05f) / cols;
+        int rows = 0;
+        while (yb - 0.085f - rows * 0.13f > 0.47f) ++rows;
+        for (int r = 0; r < rows; ++r)
+            for (int cc = 0; cc < cols; ++cc) {
+                const float x = xa + 0.02f + sp * (cc + 0.5f), y = yb - 0.085f - r * 0.13f;
+                hs = hs * 1664525u + 1013904223u;
+                if (r == rows - 1) {
+                    // a pair of cartridge fuses in their clips on a bakelite base
+                    box(k, f, f3(x, y, dz + 0.005f), f3(0.034f, 0.024f, 0.005f), 0.002f, MAT_WRINKLE, FEAT_NONE);
+                    for (int fz = -1; fz <= 1; fz += 2) {
+                        const Xform ft = f * Xform::frame(f3(x - 0.026f, y + fz * 0.011f, dz + 0.019f), f3(1, 0, 0), f3(0, 0, 1));
+                        with(k, ft, MAT_WRINKLE, FEAT_NONE, [&] { k.roundedCylinder(0.0062f, 0.008f, 0.044f, 0.001f); });
+                        for (float e : {0.0f, 0.044f})
+                            with(k, ft, MAT_BRASS, FEAT_NONE, [&] { k.roundedCylinder(0.007f, e, e + 0.008f, 0.0012f); });
+                    }
+                    plateAt(k, f, f3(x, y - 0.042f, dz), 0.075f, 0.015f, "FUSES", PLATE_BLACK);
+                    continue;
+                }
+                const bool on = (hs >> 24) % 7 != 0;
+                rotarySwitch(k, f, f3(x, y, dz), on ? -0.785f : 0.785f);
+                plateAt(k, f, f3(x, y - 0.042f, dz), 0.08f, 0.016f, circ[label++ % circ.size()], PLATE_BLACK);
+            }
+        // the louvre: a dark opening behind slats turned down
+        const float lw = 0.5f * (xb - xa) - 0.06f;
+        with(k, f * Xform::at(f3(0.5f * (xa + xb), 0.27f, dz + 0.0005f)), MAT_PAINT_DARK, FEAT_NONE, [&] { k.quad(2.0f * lw, 0.18f); });
+        for (int s = 0; s < 7; ++s)
+            with(k, f * Xform::at(f3(0.5f * (xa + xb), 0.195f + s * 0.025f, dz + 0.005f)) * Xform::rotX(0.75f), MAT_GREY, FEAT_NONE,
+                 [&] { k.roundedBox(f3(lw, 0.011f, 0.0011f), 0.0006f); });
+        for (int s = -1; s <= 1; s += 2)
+            box(k, f, f3(0.5f * (xa + xb) + s * (lw + 0.004f), 0.27f, dz + 0.004f), f3(0.004f, 0.095f, 0.004f), 0.0015f, MAT_GREY, FEAT_NONE);
+    }
+}
+
 void electricalPanels(Kit& k) {
     const int side = 1;
     // grey switchboards and cabinets standing on the deck against the hull: forward (aux gyro, IC board, gyro control)
@@ -440,29 +564,8 @@ void electricalPanels(Kit& k) {
         const float xFront = std::min(xBack, hullX(0.3f, side, 0.0f)) - c.d;
         const float x0 = xFront, x1 = xBack;
         box(k, Xform(), f3(0.5f * (x0 + x1), 0.5f * c.h, 0.5f * (z0 + z1)), f3(0.5f * (x1 - x0), 0.5f * c.h, 0.5f * (z1 - z0) - 0.01f), 0.01f, MAT_GREY, FEAT_PLATE);
-        // the face: switch handles and small meters in rows
-        const Xform face = axes(f3(x0, 0.0f, 0.5f * (z0 + z1)), f3(0, 0, 1), f3(0, 1, 0), f3(-1, 0, 0));
-        const float w = 0.5f * (z1 - z0) - 0.08f;
-        for (int r = 0; r < 3; ++r) {
-            const float yy = 1.45f - r * 0.32f;
-            if (yy > c.h - 0.1f) continue;
-            for (int s = 0; s < 4; ++s) {
-                const float xx = -w + s * (2.0f * w / 3.0f);
-                if (r == 0) gaugeAt(k, face, f3(xx, yy, 0.01f), 0.045f, 0.03f, MAT_CHROME, DIAL_METER);
-                else {
-                    with(k, face * Xform::at(f3(xx, yy, 0.0f)), MAT_PAINT_DARK, FEAT_NONE, [&] {
-                        k.roundedCylinder(0.022f, 0.0f, 0.02f, 0.004f);
-                        k.t = k.t * Xform::at(f3(0, 0, 0.02f)) * Xform::rotX(-0.35f);
-                        k.roundedCylinder(0.006f, 0.0f, 0.06f, 0.002f);
-                        k.t = k.t * Xform::at(f3(0, 0, 0.06f));
-                        k.mat = (s + r) % 2 ? MAT_RED : MAT_PAINT_DARK;
-                        k.sphere(0.012f);
-                    });
-                }
-            }
-        }
-        static const char* names[] = {"GYRO CONTROL", "I.C. SWITCHBOARD", "AUX. GYRO", "FWD. D.C. DISTRIBUTION", "EXT. SWITCHBOARD"};
-        plateAt(k, face, f3(0, c.h - 0.12f, 0.002f), 2.0f * w * 0.9f, 0.04f, names[&c - cabs], PLATE_BLACK);
+        const int ci = int(&c - cabs);
+        cabinetFace(k, axes(f3(x0, 0.0f, 0.5f * (z0 + z1)), f3(0, 0, 1), f3(0, 1, 0), f3(-1, 0, 0)), 0.5f * (z1 - z0) - 0.01f, c.h, ci);
     }
 }
 

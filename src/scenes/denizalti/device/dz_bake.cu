@@ -159,7 +159,7 @@ extern "C" __global__ void __raygen__volume() {
         const float3 w = make_float3(r * cosf(ph), r * sinf(ph), z);
         float3 Li = incoming(p, w, rng);
         const float lum = 0.2126f * Li.x + 0.7152f * Li.y + 0.0722f * Li.z;
-        if (lum > 0.5f) Li *= 0.5f / lum;
+        if (lum > params.clampLum) Li *= params.clampLum / lum;
         const float3 c = Li * (4.0f * M_PIf);
         L0 += c * Y0;
         L1 += w * ((0.2126f * c.x + 0.7152f * c.y + 0.0722f * c.z) * Y1);
@@ -227,7 +227,7 @@ extern "C" __global__ void __raygen__probe() {
         bool back;
         float3 Li = probeRadiance(params.probePos, L, rng, back);
         const float lum = 0.2126f * Li.x + 0.7152f * Li.y + 0.0722f * Li.z;
-        if (lum > 0.5f) Li *= 0.5f / lum;
+        if (lum > params.clampLum) Li *= params.clampLum / lum;
         sum += Li * w;
         wsum += w;
         backs += back ? 1.0f : 0.0f;
@@ -280,10 +280,11 @@ extern "C" __global__ void __raygen__bake() {
         aoW += cw;
         if (visible(o, w, 0.25f)) aoVis += cw;
         float3 Li = incoming(o, w, rng);
-        // a firefly clamp on the indirect light: 0.5 is ~20 times the brightest surface in the room (the chart under its
-        // lamp ~0.025); a path that found a hot spot no longer speckles the room
+        // a firefly clamp on the indirect light (0.06: ~2.5 times the brightest surface in the room, the chart under
+        // its lamp ~0.025); a path that found a hot spot by a lamp no longer speckles the room. At 0.5 it did: one such
+        // path in 64 was a texel's whole light, the cork stood dotted in the Christmas tree's green
         const float lum = 0.2126f * Li.x + 0.7152f * Li.y + 0.0722f * Li.z;
-        if (lum > 0.5f) Li *= 0.5f / lum;
+        if (lum > params.clampLum) Li *= params.clampLum / lum;
         const float3 c = Li * (2.0f * M_PIf);
         L0 += c * Y0;
         L1r += w * (c.x * Y1);

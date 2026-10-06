@@ -325,6 +325,7 @@ bool bake(const Mesh& m, const Atlas& a, const std::vector<DzLight>& lights, con
     prm.lights = dLights;
     prm.lightCount = unsigned(lights.size());
     prm.maxBounces = unsigned(o.bounces);
+    prm.clampLum = o.clamp;
     prm.emissiveMat = MAT_EMISSIVE;
     prm.glassMat = MAT_GLASS;
     albedos(prm.albedo);

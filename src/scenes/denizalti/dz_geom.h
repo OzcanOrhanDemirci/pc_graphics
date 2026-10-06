@@ -118,6 +118,11 @@ struct Kit {
     void grid(int nu, int nv, F f);
     // segments for a length at the kit's maxEdge (at least lo)
     int segs(float length, int lo = 1) const;
+    // segments round an arc of radius r through `angle`: the edge length's, or more where a chord would stand off the
+    // arc by over 0.05 mm. For the shapes with a flat face meeting the round (caps, lathe profiles, rings, domes): that
+    // face's rim is a polygon Phong cannot round (its normals are axial). Tubes, bends, tori, spheres need not: their
+    // normals are radial all round and Phong (factor 0.5) puts their edges back on the arc
+    int arcSegs(float r, float angle, int lo = 1) const;
 
     // ---- primitives (in the kit's frame t; z is an axis where there is one)
     // a straight tube from z0 to z1, radius r, ends open

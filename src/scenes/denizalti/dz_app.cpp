@@ -43,6 +43,7 @@ void DzApp::build() {
     bakeOpt.samples = cfg.i("bake.samples", 1024);
     bakeOpt.bounces = cfg.i("bake.bounces", 12);
     bakeOpt.texel = cfg.f("bake.texel", 0.002f);
+    bakeOpt.clamp = cfg.f("bake.clamp", 0.06f);
     bakeOpt.filter = cfg.i("bake.filter", 2);
     bakeOpt.volCell = cfg.f("bake.volCell", 0.04f);
     bakeOpt.volSamples = cfg.i("bake.volSamples", 256);
