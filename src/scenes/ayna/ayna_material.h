@@ -116,6 +116,13 @@ __device__ float stucco(float x, float y, float fw, float& gx, float& gy) {
     return h * fade;
 }
 
+// dark walnut, its grain along `a` (the frames round the windows below the arches)
+__device__ float3 walnut(float a, float b, float fw) {
+    const float g = fbm(a * 3.0f, b * 90.0f, fw * 90.0f, 3);
+    const float rings = lines(b + 0.004f * __sinf(a * 7.0f), 0.0035f, 0.0006f, fw);
+    return rgb(0.105f, 0.060f, 0.035f) * (0.75f + 0.5f * g) * (1.0f - 0.25f * rings);
+}
+
 // a slab's face (the side of the wall the cell sees): du from the window's middle, y up, e the edge's direction
 __device__ Surface faceSurface(const Lattice& g, float du, float y, float3 e, float fw) {
     Surface s;
@@ -125,6 +132,12 @@ __device__ Surface faceSurface(const Lattice& g, float du, float y, float3 e, fl
     const float ringW = 0.15f;
     const float ax = g.ra + ringW + 0.05f;                    // the alfiz's sides
     const float atop = g.yc + g.ra + ringW + 0.07f;           // its top
+    // beside the window, below the arch: the frame's wood, with a gold fillet at the window's edge
+    if (y < g.yk - 0.02f && fabsf(du) > g.wHalf - 0.001f) {
+        s.albedo = walnut(y, du, fw);
+        s.albedo = lerp3(s.albedo, gold(), line(fabsf(du) - g.wHalf - 0.006f, 0.0025f, fw));
+        return s;
+    }
     // the voussoir ring round the arch
     if (r <= g.ra + ringW && y >= g.yk - 0.02f) {
         float joint;
@@ -165,7 +178,7 @@ __device__ Surface revealSurface(const Lattice& g, float du, float y, float dept
         float joint;
         s.albedo = voussoir(g, du, y, fw, joint) * (1.0f - 0.55f * joint);
     } else {
-        s.albedo = rgb(0.68f, 0.62f, 0.51f) * (0.93f + 0.14f * fbm(y * 3.0f, depthFromFace * 30.0f, fw * 3.0f, 3));
+        s.albedo = walnut(y, depthFromFace, fw);
     }
     // a gold fillet along the face's edge
     const float rim = line(depthFromFace - 0.012f, 0.004f, fw);
@@ -215,15 +228,18 @@ __device__ Surface ceilingSurface(float x, float z, float fw) {
     return s;
 }
 
-// the floor: polished black marble with white veins, in square slabs
+// the floor: polished black marble (Nero Marquina): a few long white veins running slant, a net of fine ones, in
+// square slabs
 __device__ Surface floorSurface(float x, float z, float fw) {
     Surface s;
-    const float w = fbm(x * 0.9f, z * 0.9f, fw * 0.9f, 4);
-    const float d = fabsf(__sinf((x * 0.8f + z * 0.5f + 4.0f * w) * 3.1f));
-    const float sharp = saturate(1.0f - fw * 25.0f);
-    const float vein = saturate(1.0f - d * 14.0f) * sharp + 0.04f * (1.0f - sharp);
-    const float fine = saturate(1.0f - fabsf(__sinf((x * 1.7f - z * 1.3f + 6.0f * fbm(x * 2.1f + 5.0f, z * 2.1f, fw * 2.1f, 4)) * 5.0f)) * 25.0f) * sharp;
-    s.albedo = rgb(0.022f, 0.021f, 0.022f) + rgb(0.55f, 0.55f, 0.53f) * (0.55f * vein + 0.25f * fine);
+    // turned 35 degrees, stretched along the veins: their iso-lines run long and gently bent
+    const float u = x * 0.819f + z * 0.574f, w = -x * 0.574f + z * 0.819f;
+    const float warp = fbm(u * 0.25f, w * 0.25f, fw * 0.25f, 3);
+    const float n1 = fbm(u * 0.18f + 3.0f * warp, w * 1.1f, fw * 1.1f, 4);
+    const float n2 = fbm(u * 0.5f - 7.0f, w * 2.6f + 2.0f * warp, fw * 2.6f, 4);
+    const float big = line(n1 - 0.5f, 0.006f, fw * 1.1f * 0.25f);
+    const float fine = line(n2 - 0.52f, 0.004f, fw * 2.6f * 0.25f);
+    s.albedo = rgb(0.020f, 0.019f, 0.021f) + rgb(0.62f, 0.61f, 0.58f) * (0.75f * big + 0.28f * fine);
     const float joint = fmaxf(lines(x, 0.8f, 0.0015f, fw), lines(z, 0.8f, 0.0015f, fw));
     s.albedo = s.albedo * (1.0f - 0.6f * joint);
     s.glossy = 1.0f - 0.8f * joint;

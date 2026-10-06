@@ -161,6 +161,22 @@ void AynaApp::init() {
     lat.glass = cfg.f("maze.glass", 0.006f);
     maze.build(lat, cfg.i("maze.radius", 3), unsigned(cfg.i("maze.seed", 7)), cfg.i("maze.loops", 4), cfg.i("maze.layout", 1));
     computeOptics();
+    // the brass lanterns: hung over the middles of a few cells (cfg "lantern.cells": i j up, ...)
+    lanterns.clear();
+    {
+        const float level = cfg.f("lantern.level", 6.0f), h = cfg.f("lantern.height", 2.55f);
+        const int cellsList[4][3] = {{-1, 0, 1}, {-2, 1, 0}, {1, -2, 1}, {2, 0, 0}};
+        for (int q = 0; q < cfg.i("lantern.count", 4) && q < 4; ++q) {
+            if (!maze.inside(cellsList[q][0], cellsList[q][1], cellsList[q][2])) continue;
+            const float2 cc = maze.cellCentre(cellsList[q][0], cellsList[q][1], cellsList[q][2]);
+            AynaLamp lp;
+            lp.pos = make_float3(cc.x, h, cc.y);
+            // a candle's flame behind brass: about 1900 K
+            lp.color = make_float3(1.0f, 0.33f, 0.06f) * (1.0f / luminance709(make_float3(1.0f, 0.33f, 0.06f)));
+            lp.level = level;
+            lanterns.push_back(lp);
+        }
+    }
     cudaDeviceSetLimit(cudaLimitStackSize, size_t(cfg.i("debug.stack", 1024)));
 
     hdr_ = devAlloc<float4>(size_t(width) * height);
@@ -299,12 +315,14 @@ void AynaApp::buildLightMap() {
 
 // the lamps not yet in the map: each one's beams, baked into it (gathered lamps: the map starts again)
 void AynaApp::bakeLamps() {
-    if (int(lamps.size()) < baked_) {
+    std::vector<AynaLamp> all = lanterns;
+    for (const AynaLamp& l : lamps) all.push_back(l);
+    if (int(all.size()) < baked_) {
         cudaMemset(dLm_, 0, lmTexels_ * sizeof(float4));
         baked_ = 0;
         lampStraight_.clear();
     }
-    if (int(lamps.size()) == baked_) return;
+    if (int(all.size()) == baked_) return;
     const auto t0 = std::chrono::high_resolution_clock::now();
     View base = makeView();
     const float lampR = cfg.f("lamp.radius", 0.03f), lampK = cfg.f("lamp.share", 0.03f);
@@ -312,14 +330,15 @@ void AynaApp::bakeLamps() {
     std::vector<BeamNode> nodes;
     std::vector<int> cs, cn;
     std::vector<signed char> none(size_t(cellCount(maze.g)) * kCellObjects, -1);
-    for (; baked_ < int(lamps.size()) && baked_ < kMaxLamps; ++baked_) {
-        const AynaLamp& lp = lamps[baked_];
+    const int nLant = int(lanterns.size());
+    for (; baked_ < int(all.size()) && baked_ < kMaxLamps; ++baked_) {
+        const AynaLamp& lp = all[baked_];
         View v = base;
         v.nLights = 1;
         v.light[0] = Light();
         v.light[0].pos = lp.pos;
-        v.light[0].radius = lampR;
-        v.light[0].color = lp.color * (lp.level * lampK);
+        v.light[0].radius = baked_ < nLant ? cfg.f("lantern.radius", 0.07f) : lampR;
+        v.light[0].color = lp.color * (baked_ < nLant ? lp.level : lp.level * lampK);
         v.light[0].object = -1;
         v.nObjects = 0;
         v.bake = 1;
@@ -468,12 +487,29 @@ View AynaApp::makeView() const {
     // the lamps left behind
     const float lampR = cfg.f("lamp.radius", 0.03f), lampK = cfg.f("lamp.share", 0.03f);
     v.lm = lm_;
-    v.nLamps = std::min(int(lamps.size()), std::min(baked_, kMaxLamps));
+    const int nLant = int(lanterns.size());
+    const float lantR = cfg.f("lantern.radius", 0.07f);
+    v.nLamps = std::min(nLant + int(lamps.size()), std::min(baked_, kMaxLamps));
     for (int i = 0; i < v.nLamps; ++i) {
-        v.lamp[i] = make_float4(lamps[i].pos.x, lamps[i].pos.y, lamps[i].pos.z, lampR);
-        v.lampI[i] = lamps[i].color * (lamps[i].level * lampK);
+        const bool lant = i < nLant;
+        const AynaLamp& l = lant ? lanterns[i] : lamps[i - nLant];
+        v.lamp[i] = make_float4(l.pos.x, l.pos.y, l.pos.z, lant ? lantR : lampR);
+        v.lampI[i] = l.color * (lant ? l.level : l.level * lampK);
     }
     v.firstLamp = v.nLights;
+    for (const AynaLamp& lp : lanterns) {
+        if (v.nLights >= kMaxLights || v.nObjects >= kMaxObjects) break;
+        Object& ob = v.obj[v.nObjects];
+        ob.c = lp.pos;
+        ob.r = lantR;
+        ob.kind = 2;
+        ob.light = v.nLights;
+        Light& L = v.light[v.nLights++];
+        L.pos = lp.pos;
+        L.radius = lantR;
+        L.color = lp.color * lp.level;
+        L.object = v.nObjects++;
+    }
     for (const AynaLamp& lp : lamps) {
         if (v.nLights >= kMaxLights || v.nObjects >= kMaxObjects) break;
         Object& ob = v.obj[v.nObjects];
@@ -538,7 +574,7 @@ void AynaApp::uploadBeams(View& v) {
     setBeamBulge(cfg.i("beam.bulge", 1) != 0);
     double ms = 0.0;
     for (int l = 0; l < v.nLights; ++l) {
-        if (lm_.on && l >= v.firstLamp && l - v.firstLamp < baked_) continue;   // baked into the light map
+        if (lm_.on && l >= v.firstLamp && l - v.firstLamp < baked_) continue;   // baked into the light map (lanterns, lamps)
         BeamBuildStats st;
         buildBeams(maze, optics, v.light[l], l, eps, maxNodes, nodes_, &st);
         beamStats.nodes += st.nodes;

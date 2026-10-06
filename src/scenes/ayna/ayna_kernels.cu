@@ -172,6 +172,26 @@ __device__ void nearest(const View& v, const Cell& c, float3 o, float3 d, Hit& h
             const float t = -b - sqrtf(disc);
             if (t > 0.0f && t < h.t) take(h, t, HObject, id, (w + d * t) * (1.0f / ob.r));
         }
+        // the lanterns' chains
+        for (int s = 0; s < kCellObjects; ++s) {
+            const int id = v.cellObj[c.idx * kCellObjects + s];
+            if (id < 0) break;
+            const Object& ob = v.obj[id];
+            if (ob.kind != 2) continue;
+            const float rr = 0.006f;
+            const float2 w2 = f2(o.x - ob.c.x, o.z - ob.c.z);
+            const float b2 = dot2(w2, d2);
+            if (b2 >= 0.0f || a2 < 1e-12f) continue;
+            const float cc2 = dot2(w2, w2) - rr * rr;
+            const float disc2 = b2 * b2 - a2 * cc2;
+            if (disc2 <= 0.0f) continue;
+            const float t = (-b2 - sqrtf(disc2)) / a2;
+            const float y = o.y + d.y * t;
+            if (t > 0.0f && t < h.t && y > ob.c.y + ob.r * 0.9f && y < g.Hc) {
+                const float2 q = f2(w2.x + d2.x * t, w2.y + d2.y * t);
+                take(h, t, HObject, id + 64, make_float3(q.x / rr, 0.0f, q.y / rr));
+            }
+        }
     }
 }
 
@@ -920,6 +940,25 @@ __device__ float3 tracePath(const View& v, float3 o, float3 d, int& bounces, int
             ++bounces;
             if (maxc(thr) < v.minWeight) break;
             continue;
+        }
+        if (h.kind == HObject && h.k >= 64) {   // a lantern's chain: dark brass
+            if (!glowOnly) L += thr * make_float3(0.20f, 0.13f, 0.05f) * INV_PIf * lightAt<Beams>(v, c, HNone, 0, p, h.n, maxc(thr), counts);
+            break;
+        }
+        if (h.kind == HObject && v.obj[h.k].kind == 2) {
+            // a brass lantern: a pierced shell glowing from within (eight-pointed stars), dark brass between
+            const Object& ob = v.obj[h.k];
+            const float3 q = (p - ob.c) * (1.0f / ob.r);
+            const float lon = atan2f(q.z, q.x), lat = asinf(clampf(q.y, -1.0f, 1.0f));
+            const float fwl = coneW / ob.r;
+            const float holes = mat::starLattice(lon * 1.6f, lat * 3.2f, 1.0f, 0.12f, fwl * 3.0f);
+            const float open = 1.0f - holes;   // the lattice is the brass, the rest is open
+            if (!glowOnly) {
+                const Light& Lt = v.light[ob.light];
+                L += thr * Lt.color * (open * 2.0f / (M_PIf * ob.r * ob.r));
+                L += thr * make_float3(0.30f, 0.20f, 0.08f) * holes * INV_PIf * lightAt<Beams>(v, c, HNone, 0, p, h.n, maxc(thr), counts);
+            }
+            break;
         }
         if (h.kind == HObject) {
             const Object& ob = v.obj[h.k];

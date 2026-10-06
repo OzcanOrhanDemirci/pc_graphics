@@ -35,6 +35,7 @@ public:
     int levelIndex = 4;
     bool lightOn = true;
     std::vector<AynaLamp> lamps;
+    std::vector<AynaLamp> lanterns;   // the brass lanterns, fixed (baked first)
     float frameMs = 0.0f;
     unsigned int lastBad = 0;
     int debug = 0;

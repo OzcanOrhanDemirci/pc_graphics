@@ -11,7 +11,7 @@
 namespace ayna {
 
 constexpr int kMaxLights = 16;
-constexpr int kMaxObjects = 16;     // our sphere (0) and the lamps
+constexpr int kMaxObjects = 16;     // our sphere (0), the lanterns and the lamps
 constexpr int kCellObjects = 4;     // objects listed per cell
 constexpr int kOpticsN = 128;       // the optics tables' samples over cos(theta)
 
@@ -29,7 +29,7 @@ struct Light {
 struct Object {
     float3 c{0, 0, 0};
     float r = 0.0f;
-    int kind = 0;                    // 0 chrome (us), 1 a lamp (emits: light index in `light`)
+    int kind = 0;                    // 0 chrome (us), 1 a lamp (emits: light index in `light`), 2 a brass lantern on its chain
     int light = -1;
 };
 
@@ -76,7 +76,7 @@ struct LightMap {
     float perimeter = 1.0f;          // a reveal's length round the window
     int on = 0;
 };
-constexpr int kMaxLamps = 8;
+constexpr int kMaxLamps = 12;       // the brass lanterns first, then the lamps left behind
 
 // optics from measured constants (filled on the host, see ayna_app.cpp): per channel, over cos(theta) at the
 // glass's front surface: the mirror's main reflection (Fresnel in and out of the glass, silver behind it, the glass's
