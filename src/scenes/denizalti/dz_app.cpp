@@ -140,7 +140,68 @@ void DzApp::moveCamera(float3 d) {
     }
 }
 
+float DzApp::eyeHeight() const {
+    const float down = 1.2f;   // crouched: a little bent (the eye 42 cm lower)
+    return eyeStand() + (down - eyeStand()) * walker.crouch;
+}
+bool DzApp::bodyBlocked(float3 feet, float eye) const {
+    for (float h : {0.35f, 0.9f})
+        if (h < eye - 0.1f && blocked(feet + make_float3(0, h, 0))) return true;
+    return blocked(feet + make_float3(0, eye, 0));
+}
+void DzApp::walk(float fwd, float right, bool slow, bool jump, bool crouch, float dt) {
+    Walker& w = walker;
+    if (!w.placed) {   // from the camera: its point over the deck
+        w.feet = make_float3(cam.pos.x, 0.0f, cam.pos.z);
+        w.vy = 0.0f;
+        w.crouch = 0.0f;
+        w.grounded = true;
+        w.placed = true;
+    }
+    // the crouch eases down and back up (up only where the head fits)
+    const float target = crouch ? 1.0f : 0.0f;
+    const float next = w.crouch + (target - w.crouch) * (1.0f - std::exp(-dt * 12.0f));
+    if (next < w.crouch) {
+        const float keep = w.crouch;
+        w.crouch = next;
+        if (bodyBlocked(w.feet, eyeHeight())) w.crouch = keep;
+    } else {
+        w.crouch = next;
+    }
+    const float eye = eyeHeight();
+    // across the deck: in centimetre steps, each axis on its own (sliding along what it meets)
+    const float speed = (slow ? 0.3f : 1.3f) * (1.0f - 0.45f * w.crouch);
+    const float3 f = make_float3(std::sin(cam.yaw), 0, std::cos(cam.yaw));
+    const float3 r = make_float3(-std::cos(cam.yaw), 0, std::sin(cam.yaw));   // the picture's right (forward x up)
+    const float3 d = (f * fwd + r * right) * (speed * dt);
+    const int n = std::max(1, int(std::ceil(length(d) / 0.01f)));
+    for (int i = 0; i < n; ++i) {
+        float3 q = w.feet + make_float3(d.x / n, 0, 0);
+        if (!bodyBlocked(q, eye)) w.feet = q;
+        q = w.feet + make_float3(0, 0, d.z / n);
+        if (!bodyBlocked(q, eye)) w.feet = q;
+    }
+    // up and down: a jump of about 35 cm, gravity, the deck; the head stops a rise under the overhead
+    if (jump && w.grounded) {
+        w.vy = 2.6f;
+        w.grounded = false;
+    }
+    w.vy -= 9.81f * dt;
+    const float y = w.feet.y + w.vy * dt;
+    if (y <= 0.0f) {
+        w.feet.y = 0.0f;
+        w.vy = 0.0f;
+        w.grounded = true;
+    } else if (w.vy > 0.0f && blocked(make_float3(w.feet.x, y + eye + 0.08f, w.feet.z))) {
+        w.vy = 0.0f;
+    } else {
+        w.feet.y = y;
+        w.grounded = false;
+    }
+    cam.pos = w.feet + make_float3(0, eye, 0);
+}
 void DzApp::home() {
+    walker.placed = false;
     cam.pos = start.pos;
     cam.yaw = start.yaw;
     cam.pitch = start.pitch;
@@ -394,6 +455,37 @@ int runCli(int argc, char** argv) {
             std::printf("siyah piksel: %d\n", n);
         }
         std::printf("kare %s: %s %dx tess %d, %.2f ms\n", name.c_str(), kResNames[a.resIndex], kSsaa[a.ssaaIndex], a.set.tess, g.total);
+        return 0;
+    }
+    if (argValue(argc, argv, "--test") == "yuruyus") {
+        // the walker by the live view's own call: from the start forward, a jump, a crouch held and let go, then
+        // towards the chart table (the body must stop at it); the eye's height and the feet printed as it goes
+        a.home();
+        const float dt = 1.0f / 60.0f;
+        auto run = [&](const char* what, int frames, float fwd, float right, bool jumpFirst, bool crouch) {
+            float top = 0.0f, low = 9.0f;
+            for (int i = 0; i < frames; ++i) {
+                a.walk(fwd, right, false, jumpFirst && i == 0, crouch, dt);
+                top = std::max(top, a.cam.pos.y);
+                low = std::min(low, a.cam.pos.y);
+            }
+            std::printf("  %-26s ayak (%.2f %.2f %.2f) goz %.2f m (en yuksek %.2f, en alcak %.2f)\n", what, a.walker.feet.x, a.walker.feet.y,
+                        a.walker.feet.z, a.cam.pos.y, top, low);
+        };
+        run("durus", 30, 0, 0, false, false);
+        run("ileri 1 sn", 60, 1, 0, false, false);
+        run("ziplama", 90, 0, 0, true, false);
+        run("egil (basili)", 45, 0, 0, false, true);
+        run("birak", 45, 0, 0, false, false);
+        run("saga 0,5 sn", 30, 0, 1, false, false);
+        // to the chart table: face it and walk on for 4 s
+        const float3 table = make_float3(0.40f, 0.0f, 5.98f);
+        const float3 to = table - a.walker.feet;
+        a.cam.yaw = std::atan2(to.x, to.z);
+        run("masaya dogru 4 sn", 240, 1, 0, false, false);
+        const float3 left = table - a.walker.feet;
+        std::printf("yuruyus testi: masanin merkezine yatay uzaklik %.2f m (masa yari genisligi ~0,4-0,5 m: >0,4 ise durdu)\n",
+                    std::sqrt(left.x * left.x + left.z * left.z));
         return 0;
     }
     if (argValue(argc, argv, "--test") == "oda-catlak") {

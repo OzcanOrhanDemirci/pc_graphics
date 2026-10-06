@@ -207,7 +207,7 @@ openings come from the cache.
 
 | Key | What it does |
 |---|---|
-| **W A S D** | walk · **Space / C** up, down · **Shift** slow (look closely) |
+| **W A S D** | walk · **Space** jump · **C** crouch (hold) · **Shift** slow (look closely) |
 | **Mouse** | look (no button; as the lighthouse's walk) · **Tab:** frees the cursor (for the panel), Tab again goes back to looking |
 | **Right button** | binoculars (hold): a view four times narrower |
 | **F12** | photograph at the panel's resolution and SSAA (8K 16x included; with a "computing" card) |

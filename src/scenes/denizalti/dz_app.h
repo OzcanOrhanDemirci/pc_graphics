@@ -53,6 +53,17 @@ struct DzApp {
     bool blocked(float3 p) const;
     // moves the camera by d, sliding along what it meets (axis by axis)
     void moveCamera(float3 d);
+    // the walker (the live view): a person, feet on the deck, gravity; Space jumps, C crouches a little while held.
+    // The body is three points (knee, waist, eye) against the solid cells, so a table stops it as a wall does
+    struct Walker {
+        float3 feet{0, 0, 0};
+        float vy = 0.0f, crouch = 0.0f;   // crouch 0 standing .. 1 down
+        bool grounded = true, placed = false;
+    } walker;
+    float eyeStand() const { return start.pos.y; }
+    float eyeHeight() const;
+    bool bodyBlocked(float3 feet, float eye) const;
+    void walk(float fwd, float right, bool slow, bool jump, bool crouch, float dt);
 };
 
 int runCli(int argc, char** argv);

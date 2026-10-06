@@ -1,7 +1,8 @@
 // Scene 8 "Denizaltı" inside the application: a fleet submarine's control room, its light baked beforehand, every
 // sample of the picture shaded on its own, the surfaces tessellated and displaced every frame.
-// As the lighthouse's walk: the mouse looks (captured, no button), W/A/S/D walk, Space/C up and down, Shift slow (looking
-// closely), the right button the binoculars; Tab frees the cursor for the panel (and back), with it free a left drag looks.
+// As the lighthouse's walk: the mouse looks (captured, no button), W/A/S/D walk, Space jumps, C crouches a little (held),
+// Shift slow (looking closely), the right button the binoculars; Tab frees the cursor for the panel (and back), with it
+// free a left drag looks.
 #include "app/scene.h"
 #include "app/theme.h"
 #include "core/image_io.h"
@@ -50,8 +51,8 @@ public:
         i.accent = 0xD9583F;
         i.keys = {{L("Hareket", "Moving"),
                    {{"W|A|S|D", L("Yürü", "Walk")},
-                    {L("Boşluk", "Space"), L("Yüksel", "Rise")},
-                    {"C", L("Alçal", "Lower")},
+                    {L("Boşluk", "Space"), L("Zıpla", "Jump")},
+                    {"C", L("Eğil (basılı tut)", "Crouch (hold)")},
                     {"Shift", L("Yavaş (yakından incele)", "Slow (look closely)")},
                     {L("Fare", "Mouse"), L("Bak", "Look")},
                     {"Tab", L("İmleç (panel için) / geri bakış", "Cursor (for the panel) / back to looking")},
@@ -142,12 +143,8 @@ public:
         }
         auto key = [&](int kc) { return in.isDown(kc) ? 1.0f : 0.0f; };
         const float fwd = key(GLFW_KEY_W) - key(GLFW_KEY_S), right = key(GLFW_KEY_D) - key(GLFW_KEY_A);
-        const float up = key(GLFW_KEY_SPACE) - key(GLFW_KEY_C);
-        const float speed = in.shift ? 0.3f : 1.3f;
-        const float3 f = make_float3(std::sin(a_.cam.yaw), 0, std::cos(a_.cam.yaw));
-        const float3 r = make_float3(-std::cos(a_.cam.yaw), 0, std::sin(a_.cam.yaw));   // the picture's right (forward x up)
-        float3 v = (f * fwd + r * right) * speed + make_float3(0, up * speed * 0.7f, 0);
-        a_.moveCamera(v * dt);   // the room's solid cells (10 cm round the camera) stop it, it slides along
+        // a person: feet on the deck, Space jumps (and falls back), C crouches a little while held
+        a_.walk(fwd, right, in.shift, in.pressed(GLFW_KEY_SPACE), in.isDown(GLFW_KEY_C), dt);
         if (photo_.active) {   // the photo's next tile; the live picture waits (held)
             photoStep(host);
             return;
