@@ -1,11 +1,12 @@
 # DURUM · pc_graphics uygulaması
 
 > Uygulamanın tek kaynak durum panosu. Mimari ve yeni sahne ekleme: `docs/MIMARI.md`. Sahnelerin kendi panoları:
-> `docs/altinsaat/`, `docs/fener/`, `docs/yikim/`, `docs/laboratuvar/`, `docs/koy/`, `docs/heykel/`, `docs/olcek/`, `docs/denizalti/`, `docs/isi/` (PLAN.md ve DURUM.md);
+> `docs/altinsaat/`, `docs/fener/`, `docs/yikim/`, `docs/laboratuvar/`, `docs/koy/`, `docs/heykel/`, `docs/olcek/`, `docs/denizalti/`, `docs/ayna/` (PLAN.md ve DURUM.md);
 > `docs/tanecik/` arşiv.
 
 ## Şu an
-- **2026-10-06 (akşam) · Sahne 9 "Isı": kaba 3B taslak.** Bilgisayarın içi bir manzara boyunda (ekran kartı fan duvarı, RAM kuleleri, pompa tapınağı, delikli gök); balkon + dört bestelenmiş bakış + W A S D uçuş. Özcan bakıp karar verecek: ayrıntılı kurulum ya da iptal. Canlı 44,6 fps. `docs/isi/DURUM.md`.
+- **2026-10-07 (gece, otonom) · Sahne 9 "Ayna": ayna labirenti, en iyi yansıma.** Isı taslağı silindi, yerine galeride **09 Ayna**. Elhamra / Kurtuba kemerli, 60° üçgen ızgarada kompakt bir ayna labirenti; biz krom bir küreyiz, ışığımız renkli ve şiddeti ayarlı, lamba bırakılır, pirinç fenerler, hafif pus. Aynalar ölçülmüş değerlerle (6 mm float cam + gümüş: dik gelişte 0,79 / 0,84 / 0,84, tünelin derini camgöbeği-yeşile döner). Kendi analitik ızgara izleyicimiz (OptiX değil), aynadan duvara ışık için plan görünümünde hüzme ağacı, ışık haritaları. 1440p 6 örnek 30-41 FPS. Ölçümler: tünelin 40. kopyası 0,0001 px, ideal aynadan görüntü doğrudan görüntüyle aynı, aynadan ışık fotonlara karşı 0,990-0,994; kıpırtının mutlak hedefi tutmadı (bu yüzden kırılma başlatılmadı). Ayrıntı, kararlar ve NE DOĞRULANMADI `docs/ayna/DURUM.md` başında.
+- **2026-10-06 (akşam) · Sahne 9 "Isı": kaba 3B taslak (sonra iptal edildi, 10-07'de silindi).** Bilgisayarın içi bir manzara boyunda (ekran kartı fan duvarı, RAM kuleleri, pompa tapınağı, delikli gök); balkon + dört bestelenmiş bakış + W A S D uçuş. Özcan bakıp karar verecek: ayrıntılı kurulum ya da iptal. Canlı 44,6 fps. `docs/isi/DURUM.md`.
 - **2026-10-05 (akşam) · Sahne 7 "Ölçek": ilk seçenek kabul, ikinci seçenek "Hız" planlandı.** Özcan: *"Evet bu sefer güzel olmuş, artık her aşama netleşti."* İkinci seçenek: bir roket ve manken, özel göreliliğin bütün etkileri tam formüllerle, roketin saatiyle gerçek zaman, 21 dokuz, Dünya → Proxima (89 sn) → Andromeda (~1 saat; Dünya'da 2,4 milyon yıl). Plan `docs/olcek/hiz/PLAN.md`.
 - **2026-10-05 (gece) · Sahne 7 "Ölçek": bütün yol gerçek içerikle.** Dışarısı gerçek veriyle: Sentinel-2 Çandarlı,
   Blue Marble ve o günlerin bulutları (deniz parıltısı VIIRS bulut ürünüyle ayıklandı), HYG yıldızları, Samanyolu

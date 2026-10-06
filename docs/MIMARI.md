@@ -39,8 +39,9 @@ src/
                 olcek_hiz_pano.* (beş grafik panosu ve enerji gözünün açıklaması, arayüz takımıyla resmin üstüne), olcek_hiz_yan.* (yandan
                 haritanın 2B katmanı: ortam noktaları, yol, roket, motor ışığı), olcek_hiz_test.cpp
                 (--test olcek-hiz, --hiz kareleri)
-    isi/        sahne 9 · Isı (TASLAK: bilgisayarın içi bir manzara boyunda; SDF, sabit örnekli CUDA çizici, pus/parıltı/
-                huzmeler ışın boyunca kapalı biçimde; isi_app.* durum ve --headless kareler, isi_live.cpp sahne)
+    ayna/       sahne 9 · Ayna (analitik ızgara izleyici: ayna_geom.h üçgen ızgara ve pencere biçimi, ayna_maze.* labirent ve
+                kürenin çarpışması, ayna_beams.* aynadan ışığın hüzme ağacı, ayna_kernels.* izleyici, ışık haritaları, pus,
+                ayna_material.h görünüş, ayna_app.* durum ve araçlar (--test o1 o2 o3 o4 fuzz), ayna_live.cpp sahne)
       particles.*       tanecik çözücüsü (PBF, XPBD bağlar, şekil eşleme, taneler)  surface.* sıvı yüzeyi
       lab_world.*       beş deneyin kurulumu ve adımı (kaba ya da ince)  lab_record.* ince kayıt, işçi iş parçacığı
       lab_kernels.cu    çözücü, kayıt ve çizici arası küçük çekirdekler  weapons.* gerçek yükler, balistik
@@ -130,7 +131,7 @@ değişince uygulama bütün sahnelerin `info()`'sunu yeniden ister. Komut satı
 ## Tasarım dili
 
 - **Koyu, sessiz bir çerçeve, parlak resimler.** Arayüz nötr gri tonlarda; her sahne tek bir vurgu rengi getirir:
-  01 altın (`#E6B566`), 02 soğuk mavi (`#86B3DA`), 03 güvenlik turuncusu (`#E5764A`), 04 deniz yeşili (`#6FC2B4`), 05 deniz mavisi (`#4FB8C8`), 06 lavanta (`#9D8CE0`), 07 gül (`#E08BAE`). Galeri düğmesi, seçili öğe,
+  01 altın (`#E6B566`), 02 soğuk mavi (`#86B3DA`), 03 güvenlik turuncusu (`#E5764A`), 04 deniz yeşili (`#6FC2B4`), 05 deniz mavisi (`#4FB8C8`), 06 lavanta (`#9D8CE0`), 07 gül (`#E08BAE`), 09 ayna camı (`#7FC8C2`). Galeri düğmesi, seçili öğe,
   seçici ve ilerleme çubukları o rengi alır.
 - **Tek yazı ailesi, üç ses:** IBM Plex Serif adlar ve başlıklar, Plex Sans metin, Plex Mono sayılar ve tuş kapakları.
   Küçük başlıklar büyük harf ve harf aralıklı (Türkçe büyük harf: i → İ).
