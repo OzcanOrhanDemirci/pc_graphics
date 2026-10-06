@@ -2,9 +2,38 @@
 
 > Tek kaynak durum panosu. Plan `docs/denizalti/PLAN.md`, kaynaklar `docs/denizalti/REFERANS.md`. En yeni en üstte.
 > Otonom görev (Özcan, 2026-10-06 sabahı): soru sormadan, bitene kadar; kareler SendUserFile ile.
+> **İlk yükleme bütçesi (Özcan, 10-06 öğle):** önden hesaplama + yükleme tavanı 6 dk, ~5 dk kabul; daha kısa sürede en
+> yüksek kaliteye varılıyorsa daha kısa.
 
-**Sıradaki taş: D4 · Malzeme ve ayrıntı** (kadran yazıları, etiket levhaları, aşınma, cam), sonra D5 (pus, yoklamalar,
-ışık dengesi) ve teçhizatın ikinci geçişi.
+**Sıradaki taş: D5 (3) · yansıma yoklamaları ve gösterge camları**, sonra performans, ayar merdiveni (D6), fotoğraf,
+son pişirme (≤ 5 dk), kalite turu (D7).
+
+## D4-D5 · Malzeme, ayrıntı, ışık ve atmosfer (2026-10-06 öğleden sonra)
+
+- **Aşınma (yerinde, deterministik):** kenarlarda boya kırığı (kırmızı astar, en kötü yerde çıplak çelik; yalnız kenar
+  ağırlığı olan yerde: yüzde kırık = gren gibi benek, ilk denemede görüldü), oyukta kir (fırının 25 cm AO'su), yukarı
+  bakanda toz, pirinçte kararma, güvertede yürüme yolu sürtünmesi. Mantar boyası saten (taneler parıldamasın).
+- **Önceden hesaplanmış gürültü hacmi** (128³, gradyanıyla, mip'li): fbm her oktavı tek süzgeçli okuma. Kare 56 → 38,7 ms.
+- **Çıkartma atlası** (`dz_decal.*`): kadran yüzleri CPU'da (16" derinlik göstergesi 2048 px = 0,2 mm/px; 0-165 ft,
+  "SALT WATER DEPTH TO KEEL"; 0-600 derin; 0-4000 hava; beyaz yüzlü 0-3000/0-300; amper metre; pusula kartı), siyah ve
+  oyma pirinç etiket levhaları (pirinçte yazı High'da 0,25 mm oyulur), şablon boya yazılar: **Türkçe** "SU GEÇMEZ KAPI /
+  SEYİRDE KAPALI TUTULACAK" ve tatbikat kartı (sanat kararı: Türk hizmetinin eli; kaynakta yok, uydurma olduğunu biliyoruz),
+  posta numaraları. Aynada yüzey koordinatları da aynalanır (ilk karede yazılar tersti; diş de sol el olmuştu).
+- **Işık dengesi:** kırmızı gece lambaları kısıldı; harita lambası tek beyaz havuz (odak); Christmas tree'nin yeşili üç
+  küçük ışıkla (fırında; parlamasız). Ateş böceği sınırı (dolaylı ışık parlaklığı ≤ 0,5 ≈ odanın en parlak yüzeyinin 20
+  katı): panele çok yakın küçük ışıklar odaya yeşil benek saçıyordu. SH okuması tek yönle (parlaklığın): zayıf kanalın
+  kendi yönü gürültü, tümsekli yüzeyi beneklere boyuyordu.
+- **Atlas içinde kenar koruyan süzgeç** (5×5, aynı chart, ışık benzerliği), büyük düz yüzeyler 3 mm teksel; fırın
+  sonucu doğrudan yarım duyarlıklı düzlemlere (RAM ~13 → ~6 GB). Atlas 50 milyon teksel; 256 örnek 118 sn.
+- **Pus:** fırında 4 cm hücreli hacim (124×66×206), her hücre lambalara gölgeli doğrudan örnekleme + dolaylı (256 örnek,
+  birkaç sn). Canlıda 160×90×64 froxel, logaritmik derinlik, Frostbite integrali, tavana doğru yoğunlaşan duman/nem
+  katmanı (sanat: 1970'ler, kapalı tekne), ileri saçılım g = 0,35. Yoğunluk ×3,5 (×6 fazla bulanık, ×1 görünmüyordu).
+- **Bloom:** 13 dokunuşlu aşağı (ilk seviye Karis ağırlıklı), çadır yukarı, %4,5 karışım (enerji korunur). Kırmızı
+  küreler beyaz disk değil kırmızı ışık.
+- **Gövde servisleri:** üst ve alt şeritlerde 12 boru hattı (postaların önünden, her postada kelepçe + askı, flanş/rakor,
+  hat üstü vanalar), 4 kablo borusu + buat kutuları. **Eşyalar:** CO2 söndürücü, savaş feneri, askıda iki kulaklık,
+  gemi saati, tatbikat kartı, kafesli vantilatör.
+- Ölçüm: 5,45 milyon taban üçgeni; kare 1440p 4x High 45-47 ms (iyileştirme sırada).
 
 ## D3 (1. geçiş) · Oda ve teçhizat (2026-10-06 öğle)
 

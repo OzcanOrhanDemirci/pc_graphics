@@ -466,6 +466,172 @@ void electricalPanels(Kit& k) {
     }
 }
 
+// ---------------------------------------------------------------------------------------------------
+// the hull's services: the piping and conduit that line a submarine's compartment, run fore and aft inboard of the
+// frames, clamped at every frame, with flanged joints, unions, the odd valve and drops to the stations
+
+struct Rng {
+    uint32_t s;
+    float next() {
+        s = s * 747796405u + 2891336453u;
+        uint32_t w = ((s >> ((s >> 28u) + 4u)) ^ s) * 277803737u;
+        return float((w >> 22u) ^ w) * (1.0f / 4294967296.0f);
+    }
+};
+
+// a point on the run: at angle a on the hull (0 starboard, pi/2 up), moved `in` inboard of the cork, at z
+float3 runAt(float a, float in, float z) {
+    const float r = kRCork - in;
+    return f3(r * std::cos(a), kAxisY + r * std::sin(a), z);
+}
+
+void serviceRun(Kit& k, Rng& rng, float a, float in, float r, uint32_t mat, float z0, float z1, bool valves) {
+    const float3 p0 = runAt(a, in, z0), p1 = runAt(a, in, z1);
+    with(k, Xform(), mat, FEAT_NONE, [&] { pipeRun(k, {p0, p1}, r, 0.1f); });
+    const float3 radial = normalize(f3(std::cos(a), std::sin(a), 0));   // outwards
+    const float3 tang = f3(-std::sin(a), std::cos(a), 0);
+    // a clamp at every frame the run crosses: a band round the pipe and a strap out to the frame's flange
+    for (int f = 48; f <= 58; ++f) {
+        const float z = frameZ(float(f));
+        if (z < z0 + 0.05f || z > z1 - 0.05f) continue;
+        const float3 c = runAt(a, in, z + 0.06f);
+        with(k, Xform::frame(c, f3(0, 0, 1), radial), MAT_CREAM, FEAT_NONE, [&] { k.roundedCylinder(r + 0.004f, -0.012f, 0.012f, 0.002f, false, false); });
+        const float strap = std::max(0.0f, in - 0.15f) + r + 0.01f;   // to the frame's inner flange (15 cm inboard)
+        with(k, axes(c + radial * (0.5f * strap), tang, radial, f3(0, 0, 1)), MAT_CREAM, FEAT_NONE, [&] { k.roundedBox(f3(0.012f, 0.5f * strap, 0.004f), 0.0015f); });
+    }
+    // joints: a flanged joint or a union every couple of metres
+    for (float z = z0 + 0.9f + rng.next() * 0.8f; z < z1 - 0.4f; z += 1.6f + rng.next() * 1.2f) {
+        const float3 c = runAt(a, in, z);
+        if (r > 0.014f) {
+            with(k, Xform::frame(c, f3(0, 0, 1), radial), mat, FEAT_NONE, [&] { flangePair(k, r, r * 2.4f, 0.008f, 4); });
+        } else {
+            with(k, Xform::frame(c, f3(0, 0, 1), radial), MAT_BRASS, FEAT_NONE, [&] { k.hexPrism(r * 2.9f, -0.015f, 0.03f, 0.0012f); });
+        }
+    }
+    if (valves) {
+        // an in-line valve, its stem inboard
+        const float z = z0 + 0.3f + rng.next() * (z1 - z0 - 0.6f);
+        Xform vt;
+        vt.o = runAt(a, in, z);
+        vt.x = f3(0, 0, 1);            // the pipe's axis
+        vt.z = -radial;                // the stem inboard
+        vt.y = cross(vt.z, vt.x);
+        with(k, vt, mat, FEAT_NONE, [&] { globeValve(k, r, std::max(0.07f, r * 6.0f), rng.next() < 0.5f ? MAT_RED : MAT_BRASS); });
+    }
+}
+
+void conduitRun(Kit& k, Rng& rng, float a, float in, float z0, float z1) {
+    const float3 radial = normalize(f3(std::cos(a), std::sin(a), 0));
+    const float3 tang = f3(-std::sin(a), std::cos(a), 0);
+    with(k, Xform(), MAT_STEEL, FEAT_NONE, [&] { pipeRun(k, {runAt(a, in, z0), runAt(a, in, z1)}, 0.009f, 0.05f); });
+    for (float z = z0 + 0.5f + rng.next(); z < z1 - 0.2f; z += 1.8f + rng.next() * 1.5f) {
+        // a junction box: grey, a screwed lid
+        const float3 c = runAt(a, in - 0.005f, z);
+        const Xform t = axes(c, f3(0, 0, 1), tang, -radial);
+        with(k, t, MAT_GREY, FEAT_NONE, [&] { k.roundedBox(f3(0.05f, 0.045f, 0.03f), 0.004f); });
+        for (int sx = -1; sx <= 1; sx += 2)
+            for (int sy = -1; sy <= 1; sy += 2)
+                with(k, t * Xform::at(f3(sx * 0.038f, sy * 0.033f, 0.03f)), MAT_STEEL, FEAT_NONE, [&] { k.dome(0.004f, 0.0018f); });
+    }
+}
+
+void hullServices(Kit& k) {
+    Rng rng{20260606u};
+    const float kPiF = kPi;
+    // the high band, both sides: above the stations, below the overhead's cable runs
+    struct Run { float aDeg; float in, r; uint32_t mat; bool valve; };
+    const Run high[] = {{132.0f, 0.18f, 0.016f, MAT_CREAM, true},  {128.0f, 0.2f, 0.011f, MAT_BRASS, false}, {137.0f, 0.19f, 0.0095f, MAT_CREAM, false},
+                        {124.0f, 0.22f, 0.022f, MAT_RED, true},    {48.0f, 0.18f, 0.016f, MAT_CREAM, true},  {52.0f, 0.2f, 0.011f, MAT_BRASS, false},
+                        {43.0f, 0.19f, 0.0095f, MAT_BRASS, false}, {56.0f, 0.22f, 0.019f, MAT_CREAM, true}};
+    for (const Run& r : high) serviceRun(k, rng, r.aDeg * kPiF / 180.0f, r.in, r.r, r.mat, 0.06f, kLength - 0.06f, r.valve);
+    // the low band at the deck's edge, both sides: the 3" trim lines and drains
+    const Run low[] = {{186.0f, 0.17f, 0.0445f, MAT_CREAM, true}, {190.0f, 0.2f, 0.016f, MAT_CREAM, false}, {-6.0f, 0.17f, 0.0445f, MAT_CREAM, true},
+                       {-10.0f, 0.19f, 0.019f, MAT_CREAM, false}};
+    for (const Run& r : low) serviceRun(k, rng, r.aDeg * kPiF / 180.0f, r.in, r.r, r.mat, 0.06f, kLength - 0.06f, r.valve);
+    // conduits with junction boxes
+    for (float aDeg : {140.0f, 40.0f, 118.0f, 62.0f}) conduitRun(k, rng, aDeg * kPiF / 180.0f, 0.165f, 0.08f, kLength - 0.08f);
+}
+
+// ---------------------------------------------------------------------------------------------------
+// the things a crew leaves about
+
+void props(Kit& k) {
+    // a CO2 extinguisher on the after bulkhead, starboard of the door (built with x to starboard)
+    {
+        const float3 b = f3(1.68f, 0.0f, 0.07f + 0.09f);
+        with(k, Xform::frame(b + f3(0, 0.62f, 0), f3(0, 1, 0), f3(0, 0, 1)), MAT_RED, FEAT_NONE, [&] {
+            k.lathe({{0.0f, 0.0f}, {0.075f, 0.0f}, {0.08f, 0.01f}, {0.08f, 0.52f}, {0.06f, 0.58f}, {0.022f, 0.6f}, {0.0f, 0.6f}});
+        });
+        with(k, Xform::frame(b + f3(0, 1.22f, 0), f3(0, 1, 0), f3(0, 0, 1)), MAT_BRASS, FEAT_CAST, [&] {
+            k.roundedCylinder(0.022f, 0.0f, 0.06f, 0.005f);
+            k.t = k.t * Xform::at(f3(0, 0, 0.06f)) * Xform::rotX(0.5f * kPi);
+            k.mat = MAT_STEEL;
+            k.roundedBox(f3(0.012f, 0.004f, 0.06f), 0.003f);
+        });
+        with(k, Xform(), MAT_RUBBER, FEAT_NONE, [&] { pipeRun(k, {b + f3(0.02f, 1.26f, 0), b + f3(0.09f, 1.22f, 0.0f), b + f3(0.1f, 0.85f, 0.0f), b + f3(0.06f, 0.75f, 0.0f)}, 0.008f, 0.04f); });
+        // the bracket band
+        with(k, Xform::frame(b + f3(0, 1.0f, 0), f3(0, 1, 0), f3(0, 0, 1)), MAT_STEEL, FEAT_NONE, [&] { k.roundedCylinder(0.084f, -0.02f, 0.02f, 0.003f, false, false); });
+    }
+    // a battle lantern (navy grey box, a round lens) on a bracket over the diving station's aft end
+    {
+        const float3 c = f3(-hullX(1.95f, 1, 0.22f), 1.95f, frameZ(53.4f));
+        with(k, Xform::frame(c, f3(1, -0.2f, 0), f3(0, 1, 0)), MAT_GREY, FEAT_PLATE, [&] {
+            k.roundedBox(f3(0.07f, 0.09f, 0.08f), 0.01f);
+            k.t = k.t * Xform::at(f3(0, 0.02f, 0.08f));
+            k.mat = MAT_CHROME;
+            k.lathe({{0.055f, -0.004f}, {0.06f, 0.0f}, {0.06f, 0.012f}, {0.05f, 0.014f}});
+            k.mat = MAT_DIAL;
+            k.ring(0.0f, 0.05f, 0.006f, true);
+        });
+    }
+    // headsets hanging on hooks by the diving station: a band, two earphones, the cord in a loop
+    for (int h = 0; h < 2; ++h) {
+        const float z = frameZ(51.85f) + h * 0.16f;
+        const float3 hook = f3(-hullX(1.72f, 1, 0.31f) + 0.02f, 1.72f, z);
+        with(k, Xform::frame(hook, f3(1, 0, 0), f3(0, 1, 0)), MAT_STEEL, FEAT_NONE, [&] { k.roundedCylinder(0.004f, 0.0f, 0.04f, 0.002f, false, true); });
+        const float3 c = hook + f3(0.03f, -0.1f, 0);
+        with(k, Xform::frame(c, f3(0, 0, 1), f3(0, 1, 0)), MAT_PAINT_DARK, FEAT_NONE, [&] { k.torus(0.085f, 0.006f, 0.15f, kPi - 0.15f); });
+        for (int s = -1; s <= 1; s += 2)
+            with(k, Xform::frame(c + f3(0, -0.01f, s * 0.085f), f3(0, 0, float(s)), f3(0, 1, 0)), MAT_PAINT_DARK, FEAT_NONE, [&] { k.roundedCylinder(0.035f, 0.0f, 0.03f, 0.008f); });
+        std::vector<float3> cord;
+        for (int i = 0; i <= 16; ++i) {
+            const float t = float(i) / 16.0f;
+            cord.push_back(c + f3(0.01f * std::sin(t * 9.0f), -0.04f - 0.42f * std::sin(t * kPi) , 0.085f - 0.12f * t));
+        }
+        with(k, Xform(), MAT_RUBBER, FEAT_NONE, [&] { pipeRun(k, cord, 0.0035f, 0.02f); });
+    }
+    // the ship's clock on the forward bulkhead (port of the door), a brass case
+    {
+        const Xform t = Xform::frame(f3(-0.55f, 1.85f, kLength - 0.03f), f3(0, 0, -1), f3(0, 1, 0));
+        gaugeAt(k, t, f3(0, 0, 0.0f), 0.11f, 0.05f, MAT_BRASS, DIAL_COMPASS);
+    }
+    // the compartment bill holder: a chrome frame with its typed card, on the forward bulkhead
+    {
+        const Xform t = Xform::frame(f3(-1.35f, 1.35f, kLength - 0.008f), f3(0, 0, -1), f3(0, 1, 0));
+        with(k, t, MAT_CHROME, FEAT_NONE, [&] { k.slab(Kit::roundOutline({{-0.11f, -0.15f}, {0.11f, -0.15f}, {0.11f, 0.15f}, {-0.11f, 0.15f}}, 0.006f, 2), 0.004f, 0.0015f); });
+        plateAt(k, t, f3(0, 0.0f, 0.0042f), 0.2f, 0.28f, "KONTROL DAİRESİ\nTATBİKAT KARTI\n\nYANGIN · SU ALMA\nTERK · GÖREV YERLERİ", PLATE_STENCIL);
+    }
+    // an oscillating fan in its wire cage, on a bracket off the overhead over the chart table
+    {
+        const float3 base = f3(0.25f, 2.28f, frameZ(50.6f));
+        with(k, Xform(), MAT_GREY, FEAT_NONE, [&] { pipeRun(k, {base, base + f3(0, -0.18f, 0), base + f3(-0.06f, -0.24f, -0.02f)}, 0.008f, 0.04f); });
+        const Xform fan = Xform::frame(base + f3(-0.08f, -0.27f, -0.03f), f3(-0.6f, -0.5f, -0.6f), f3(0, 1, 0));
+        with(k, fan, MAT_GREY, FEAT_CAST, [&] { k.roundedCylinder(0.05f, -0.1f, 0.0f, 0.01f); });
+        for (int b = 0; b < 4; ++b)
+            with(k, fan * Xform::at(f3(0, 0, 0.035f)) * Xform::rotZ(b * 0.5f * kPi + 0.3f) * Xform::rotX(0.35f), MAT_ALU, FEAT_NONE,
+                 [&] { k.roundedBox(f3(0.045f, 0.022f, 0.0015f), 0.0012f); k.t = k.t; });
+        for (int w = 0; w < 10; ++w) {   // the cage's wires
+            const float ang = w * kPi / 10.0f;
+            std::vector<float3> pts;
+            for (int i = 0; i <= 10; ++i) {
+                const float t = -0.5f * kPi + kPi * float(i) / 10.0f;
+                pts.push_back(fan.point(f3(0.13f * std::cos(t) * std::cos(ang), 0.13f * std::cos(t) * std::sin(ang), 0.04f + 0.05f * std::sin(t))));
+            }
+            with(k, Xform(), MAT_CHROME, FEAT_NONE, [&] { pipeRun(k, pts, 0.0013f, 0.004f); });
+        }
+    }
+}
+
 }   // namespace
 
 void buildEquipment(Kit& k, float3& chartTop, std::vector<DzLight>& minor) {
@@ -479,6 +645,8 @@ void buildEquipment(Kit& k, float3& chartTop, std::vector<DzLight>& minor) {
     periscopeWells(k);
     airManifold(k);
     electricalPanels(k);
+    hullServices(k);
+    props(k);
 }
 
 }   // namespace dz
