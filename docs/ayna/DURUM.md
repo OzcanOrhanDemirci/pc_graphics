@@ -83,7 +83,7 @@
 | --- | --- | --- | --- |
 | Ö1 | Netlik: aynı görüntü doğrudan ↔ gözün 5 cm önündeki analitik bir aynadan (göz ve örnek deseni aynalanmış) | piksel piksel aynı | **İdeal ayna: aynı** (8 bitte ortalama 0,47/255 fark: titreşim deseni aynalanmıyor; keskinlik ölçüsü 0,1756 ↔ 0,1756). Labirentin aynası (cam + gümüş): W kadar kararır, cam görüntüyü birkaç piksel kaydırır, **bulanıklık yok** (keskinlik 0,1846). `--test o1` |
 | Ö2 | İki paralel aynada tünelin n'inci kopyası analitik yerinde | < 0,1 px, n ≤ 40 | **≤ 0,0001 px** (n = 40'ta yol 55 m; analitik hesap camın n kez kırılmasıyla). `--test o2` |
-| Ö3 | Kararlılık, `tools/kararlilik.py` | Ada/Denizaltı (~0,001) | **Tutmadı (mutlak):** piksel kıpırtısı 0,0017 (16 örnek referansa), 0,0029 (64 örnek HDR referansa); blok 0,0006 / 0,0008 (gece boyunca 0,0046'dan indi: küçük ışıklar koniyle, ileri saçan pus, sade çerçeveler, 6 örnek). Harekete göre **bağıl** 0,058 / 0,10: Koy (0,084-0,096) düzeyinde, Fener'den (0,45-1,24) iyi. Kalan kaynak: sütun ve çerçevelerin dikey kenarları ve derin tünelde piksel altına inen kemerler (sonsuz ayrıntı kaçış noktasına yakınsar); ancak daha çok örnekle iner (8 örnek en ağır bakışta 40 ms). `--test o3` |
+| Ö3 | Kararlılık, `tools/kararlilik.py` | Ada/Denizaltı (~0,001) | **Tutmadı (mutlak), yaklaştı:** piksel kıpırtısı 0,0014 (16 örnek referansa), 0,0020 (64 örnek HDR referansa); blok 0,0005 / 0,0007. Gece boyunca 0,0046'dan indi: küçük ışıklar koniyle, ileri saçan pus, sade çerçeveler, 6 örnek, komşu piksellere hafif taşan yeniden yapılandırma (`recon` 0,12: keskinlik −%10). Koy'un yakın yolunun (0,0016) altında, yakınsamış referansla Ada'nın ~iki katı. Harekete göre bağıl 0,049 / 0,072. Kalan kaynak: sütun ve çerçevelerin dikey kenarları, derin tünelde piksel altına inen kemerler. `--test o3` |
 | Ö4 | Aynadan ışık: hüzme haritası ↔ aynı izleyiciyle foton (1 milyar, Fibonacci yönleri, aynada cam ve gümüş, yan kayma dahil) | ≥ 0,99 | **0,994** (hücre ortasındaki lamba; doğrudan 0,997, aynalardan 0,984), **0,990** (kapı aralığındaki lamba; doğrudan 0,995, aynalardan 0,978). Aynalardan gelen ışığın payı %22-28. Kalan %2: hüzmeler camın yan kaymasını ve şişkin kemer bölgesini saymaz. `--test o4` |
 | Ö5 | 1440p, büyütmesiz | 30-40 FPS, en kötü bakışta da | Başsız: kare 21-28 ms + 1,8 ms. **Canlı uygulamada 29,5-44 FPS**; en kötü bakış (krom küremiz aynada ekranı doldururken) ~29,5: hedefin sınırında. Çıktı CUDA-GL ortak dokuya gider (ana bellek gidiş-dönüşü yok). |
 | Ö6 | Bozuk piksel (NaN), sekme noktası lekesi | 0 | **0** (bütün çizimlerde sayaç 0; 1000 rastgele pozda CUDA temiz, `--test fuzz`). |
@@ -99,7 +99,9 @@ başlatılmadı.**
 2. **Işık haritaları** (planda yoktu). Piksel başına hüzme değerlendirmesi lamba başına ~9 ms tutuyordu (her yöne yayılan
    lambanın yüzlerce görüntüsü var); 8 lambayla bütçe patlıyordu. Lambalar durduğu için pişirildi; ışığımız da her kare
    pişiyor, kendi hücresindeki doğrudan ışığı piksel başına.
-3. **6 örnek.** 4 örnek kıpırtı 0,0029, 8 örnek 0,0024 ama en kötü bakışta 40 ms; 6 kale deseni 0,0024 ve 31 ms.
+3. **6 örnek + hafif geniş yeniden yapılandırma.** 4 örnek kıpırtı 0,0029, 8 örnek 0,0024 ama en kötü bakışta 40 ms; 6 kale
+   deseni 0,0024 ve 31 ms. Pikselin örneklerinin komşulara hafifçe taşması (`recon` 0,12, Blackman-Harris'in kuyruğu gibi)
+   kıpırtıyı %30 azaltır, keskinliği %10; 0,18 daha sakin ama ince filetolar yumuşuyordu.
    Uyarlamalı ek örnek denendi: iraksama yüzünden 8 sabitten yavaş (40-61 ms), bırakıldı.
 4. **Hayalet görüntü** (camın ön yüzünün yansıması) yazıldı, ölçüldü: görünür etkisi piksellerin %0,001'i, maliyeti
    +%40. Kapalı (`ghost.mirrors = 1` açar).

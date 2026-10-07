@@ -1414,8 +1414,28 @@ __global__ void kResolve(View v, const float4* hdr, const float4* bloomHalf, uch
     const int x = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y;
     if (x >= v.width || y >= v.height) return;
     const int i = y * v.width + x;
-    const float4 a = hdr[i];
-    float3 c = make_float3(a.x, a.y, a.z);
+    float3 c;
+    if (v.recon > 0.0f) {
+        // the reconstruction: the pixel's own samples (a box) widened by a small separable kernel over its neighbours
+        // (side weight `recon`): a pixel's light leaks a little into the next, as a Blackman-Harris filter's tail does;
+        // edges stop crawling from one frame to the next
+        const float wsd = v.recon, wc = 1.0f - 2.0f * v.recon;
+        float3 acc = make_float3(0, 0, 0);
+        for (int dy = -1; dy <= 1; ++dy) {
+            const int yy = min(max(y + dy, 0), v.height - 1);
+            const float wy = dy == 0 ? wc : wsd;
+            for (int dx = -1; dx <= 1; ++dx) {
+                const int xx = min(max(x + dx, 0), v.width - 1);
+                const float wx = dx == 0 ? wc : wsd;
+                const float4 q = hdr[yy * v.width + xx];
+                acc += make_float3(q.x, q.y, q.z) * (wx * wy);
+            }
+        }
+        c = acc;
+    } else {
+        const float4 a = hdr[i];
+        c = make_float3(a.x, a.y, a.z);
+    }
     if (bloomHalf) {
         const int hw = max(1, v.width / 2), hh = max(1, v.height / 2);
         const float4 b = tapHalf(bloomHalf, hw, hh, (x + 0.5f) * 0.5f, (y + 0.5f) * 0.5f);

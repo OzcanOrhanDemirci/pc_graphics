@@ -492,6 +492,7 @@ View AynaApp::makeView() const {
     v.hazeOnly = cfg.i("debug.hazeonly", 0);
     v.plainMat = cfg.i("debug.plain", 0);
     v.coneScale = cfg.f("cone.scale", 0.5f);
+    v.recon = cfg.f("recon", 0.0f);
     v.glossyBlur = cfg.f("glossy.blur", 6.0f);
     v.grazeClamp = cfg.f("graze.clamp", 0.05f);
     v.subX = subX;
