@@ -47,6 +47,11 @@ app::SceneInfo info();
 std::unique_ptr<app::Scene> make();
 int cli(int argc, char** argv);
 }
+namespace kuyu {
+app::SceneInfo info();
+std::unique_ptr<app::Scene> make();
+int cli(int argc, char** argv);
+}
 
 namespace app {
 
@@ -61,6 +66,7 @@ const std::vector<Entry>& registry() {
         {olcek::info, olcek::make, olcek::cli},
         {denizalti::info, denizalti::make, denizalti::cli},
         {ayna::info, ayna::make, ayna::cli},
+        {kuyu::info, kuyu::make, kuyu::cli},
     };
     return scenes;
 }

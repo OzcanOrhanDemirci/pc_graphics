@@ -104,6 +104,9 @@ add_library(pc_core OBJECT
     src/scenes/ayna/ayna_app.cpp
     src/scenes/ayna/ayna_live.cpp
     src/scenes/ayna/ayna_kernels.cu
+    src/scenes/kuyu/kuyu_app.cpp
+    src/scenes/kuyu/kuyu_live.cpp
+    src/scenes/kuyu/kuyu_kernels.cu
     ${TP}/tinyexr/miniz.c)
 add_executable(pc_graphics src/app/main.cpp $<TARGET_OBJECTS:pc_core>)
 
