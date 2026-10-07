@@ -201,7 +201,7 @@ __device__ bool segClosest(float3 p, float3 d, float tEnd, float3 A, float3 B, f
 }
 
 __device__ float3 roomInterior(const View& v, int var, float phase, float3 p, float3 d, float3 w, float fp, float coneS, int& bounces,
-                             int maxBounces, bool tail) {
+                             int maxBounces, bool tail, float2* trace = nullptr) {
     const RoomVariant& rv = sVariants[var];
     const float h = v.g.h, fr = h - v.g.frame;
     float3 L = make_float3(0, 0, 0);
@@ -261,6 +261,10 @@ __device__ float3 roomInterior(const View& v, int var, float phase, float3 p, fl
                 kind = 2;
                 idx = q;
             }
+        }
+        if (trace) {   // the tools (Ö1): this piece's closest approach to bulb 0, and the way so far to it
+            const float tc = dot(rv.L[0].p - p, d);
+            trace[bounces] = make_float2(length(p + d * tc - rv.L[0].p), tc);
         }
         // the bulbs by the footprint (a bulb below a pixel stays a steady dot), their wires
         for (int l = 0; l < rv.nL; ++l) {
@@ -475,10 +479,13 @@ __device__ __forceinline__ float glowShapeAt(const View& v, float c) {
     return v.glowShape[i] + (v.glowShape[i + 1] - v.glowShape[i]) * f;
 }
 
-// the table, one texel a thread: for every room face round the cell, its exact projected solid angle times the share
-// of it the texel sees (shadow rays to a grid of points on its window, weighted by cos cos / d^2 and the glow's angular
-// shape); the rooms beyond and the mist by cosine-weighted rays (a Fibonacci spiral: no random numbers)
-__global__ void kLightTable(View v, unsigned char* outIdx, float* outG, float2* outFar, int ns, int farRays) {
+// the table, one texel a thread: cosine-weighted rays from the texel (a Fibonacci spiral round its normal: no random
+// numbers, and the same rays for every texel of a face, so the light changes in tiny steps, never in grain), each
+// walked through the lattice to the first thing it meets. A ray meeting a room's glass (not its frame) gives that room
+// face its share pi / M, times the glow's angular shape at that angle and the mist's transmission: within the 27
+// rooms round the cell into that face's entry, beyond them into the far term (at the mean glow); every ray gives the
+// mist its in-scattered share (1 - transmission). A bundle or a frame gives nothing (no light between bundles).
+__global__ void kLightTable(View v, unsigned char* outIdx, float* outG, float2* outFar, int ns, int rays) {
     const int total = 48 * v.ltNa * v.ltNw;
     const int texel = blockIdx.x * blockDim.x + threadIdx.x;
     if (texel >= total) return;
@@ -496,77 +503,13 @@ __global__ void kLightTable(View v, unsigned char* outIdx, float* outG, float2* 
     const float3 n = axisVec(nAx, sN);
     const float3 o = P + n * 2e-4f;
     const float sigT = v.hazeSigma + v.hazeAbsorb;
-    unsigned char ki[kLtK];
-    float kg[kLtK];
-    int nk = 0;
-    float spill = 0.0f;
-    for (int r = 0; r < 27; ++r) {
-        const int ox = r / 9 - 1, oy = (r / 3) % 3 - 1, oz = r % 3 - 1;
-        const float3 rc = make_float3(ox * g.C, oy * g.C, oz * g.C) - P;
-        for (int fa = 0; fa < 3; ++fa) {
-            const float x = -comp(rc, fa);
-            if (fabsf(x) <= H) continue;
-            const float sg = x > 0.0f ? 1.0f : -1.0f;
-            const int a1 = (fa + 1) % 3, a2 = (fa + 2) % 3;
-            const float e1 = g.h - g.b, e2 = g.h - g.frame;
-            float3 fc = rc;
-            setComp(fc, fa, comp(rc, fa) + sg * H);
-            float3 poly[4];
-            const float sgn[4][2] = {{-1, -1}, {1, -1}, {1, 1}, {-1, 1}};
-            for (int k = 0; k < 4; ++k) {
-                poly[k] = fc;
-                setComp(poly[k], a1, comp(fc, a1) + sgn[k][0] * e1);
-                setComp(poly[k], a2, comp(fc, a2) + sgn[k][1] * e2);
-            }
-            const float om = projectedSolidAngle(poly, 4, n);
-            if (om <= 1e-7f) continue;
-            float sumAll = 0.0f, sumVis = 0.0f;
-            for (int py = 0; py < ns; ++py)
-                for (int px = 0; px < ns; ++px) {
-                    float3 Q = fc;
-                    setComp(Q, a1, comp(fc, a1) + e1 * (2.0f * (px + 0.5f) / ns - 1.0f));
-                    setComp(Q, a2, comp(fc, a2) + e2 * (2.0f * (py + 0.5f) / ns - 1.0f));
-                    const float dist = length(Q);
-                    const float3 dir = Q * (1.0f / dist);
-                    const float cp = dot(n, dir);
-                    if (cp <= 0.0f) continue;
-                    const float cf = fabsf(comp(dir, fa));
-                    const float w = cp * cf / (dist * dist);
-                    sumAll += w;
-                    Hit hh;
-                    int cx, cy, cz;
-                    walkFirst(v, o, dir, dist - 2e-3f, 8, hh, cx, cy, cz);
-                    if (hh.kind == 0) sumVis += w * glowShapeAt(v, cf) * __expf(-sigT * dist);
-                }
-            if (sumAll <= 0.0f) continue;
-            const float G = om * sumVis / sumAll;
-            if (G <= 0.0f) continue;
-            const unsigned char id = (unsigned char)(r * 6 + fa * 2 + (sg > 0.0f ? 0 : 1));
-            // keep the kLtK largest, the rest to the rooms beyond (at the mean glow)
-            if (nk < kLtK) {
-                ki[nk] = id;
-                kg[nk] = G;
-                ++nk;
-            } else {
-                int mi = 0;
-                for (int k = 1; k < kLtK; ++k)
-                    if (kg[k] < kg[mi]) mi = k;
-                if (kg[mi] < G) {
-                    spill += kg[mi];
-                    ki[mi] = id;
-                    kg[mi] = G;
-                } else {
-                    spill += G;
-                }
-            }
-        }
-    }
-    // the rooms beyond the 27 and the mist: cosine-weighted directions round n
+    float acc[162];
+    for (int k = 0; k < 162; ++k) acc[k] = 0.0f;
     const float3 t1 = fabsf(n.x) < 0.9f ? normalize(cross(n, make_float3(1, 0, 0))) : normalize(cross(n, make_float3(0, 1, 0)));
     const float3 t2 = cross(n, t1);
     float farRoom = 0.0f, mist = 0.0f;
-    for (int k = 0; k < farRays; ++k) {
-        const float u = (float(k) + 0.5f) / float(farRays);
+    for (int k = 0; k < rays; ++k) {
+        const float u = (float(k) + 0.5f) / float(rays);
         const float ph = float(k) * 2.39996323f;
         const float rr = sqrtf(u);
         const float3 dir = normalize(t1 * (rr * cosf(ph)) + t2 * (rr * sinf(ph)) + n * sqrtf(fmaxf(0.0f, 1.0f - u)));
@@ -575,14 +518,44 @@ __global__ void kLightTable(View v, unsigned char* outIdx, float* outG, float2* 
         walkFirst(v, o, dir, 1200.0f, 150, hh, cx, cy, cz);
         const float tr = __expf(-sigT * hh.t);
         mist += 1.0f - tr;
-        if (hh.kind == 2 && (abs(cx) > 1 || abs(cy) > 1 || abs(cz) > 1)) {
-            const float cf = fabsf(comp(dir, hh.q));
-            const float3 qq = o + dir * hh.t - make_float3(cx * g.C, cy * g.C, cz * g.C);
-            const int b1 = (hh.q + 1) % 3, b2 = (hh.q + 2) % 3;
-            if (fmaxf(fabsf(comp(qq, b1)), fabsf(comp(qq, b2))) <= H - g.frame) farRoom += tr * glowShapeAt(v, cf);
+        if (hh.kind != 2) continue;
+        const float3 qq = o + dir * hh.t - make_float3(cx * g.C, cy * g.C, cz * g.C);
+        const int b1 = (hh.q + 1) % 3, b2 = (hh.q + 2) % 3;
+        if (fmaxf(fabsf(comp(qq, b1)), fabsf(comp(qq, b2))) > H - g.frame) continue;
+        const float share = tr * glowShapeAt(v, fabsf(comp(dir, hh.q)));
+        if (abs(cx) <= 1 && abs(cy) <= 1 && abs(cz) <= 1) {
+            const int r = (cx + 1) * 9 + (cy + 1) * 3 + (cz + 1);
+            acc[r * 6 + hh.q * 2 + (hh.face > 0 ? 0 : 1)] += share;
+        } else {
+            farRoom += share;
         }
     }
-    const float scale = M_PIf / float(farRays);
+    const float scale = M_PIf / float(rays);
+    // the kLtK largest entries; the rest go to the far term (at the mean glow)
+    unsigned char ki[kLtK];
+    float kg[kLtK];
+    int nk = 0;
+    float spill = 0.0f;
+    for (int e = 0; e < 162; ++e) {
+        const float G = acc[e] * scale;
+        if (G <= 0.0f) continue;
+        if (nk < kLtK) {
+            ki[nk] = (unsigned char)e;
+            kg[nk] = G;
+            ++nk;
+            continue;
+        }
+        int mi = 0;
+        for (int k = 1; k < kLtK; ++k)
+            if (kg[k] < kg[mi]) mi = k;
+        if (kg[mi] < G) {
+            spill += kg[mi];
+            ki[mi] = (unsigned char)e;
+            kg[mi] = G;
+        } else {
+            spill += G;
+        }
+    }
     for (int k = 0; k < kLtK; ++k) {
         outIdx[size_t(texel) * kLtK + k] = k < nk ? ki[k] : 255;
         outG[size_t(texel) * kLtK + k] = k < nk ? kg[k] : 0.0f;
@@ -1194,6 +1167,91 @@ __global__ void kTail(View v, float4* out, int perSide) {
     }
 }
 
+// Ö1: one ray from E (outside the room of cell 0, relative to its centre) along d, through the glass of face (fa, fs)
+// into variant var (unturned), by the scene's own code; per bounce the closest approach to bulb 0
+__global__ void kImageTest(View v, int var, float3 E, float3 d, int fa, float fs, int maxB, float2* trace, float* entry) {
+    loadShared(v);
+    const Lattice& g = v.g;
+    const float H = g.h + g.glass;
+    const float t = (fs * H - comp(E, fa)) / comp(d, fa);
+    const float3 p = E + d * t;
+    const float3 nOut = axisVec(fa, fs);
+    const float ci = -dot(d, nOut);
+    const float eta = 1.0f / cOpt.glassN;
+    const float ct = sqrtf(fmaxf(1.0f - eta * eta * (1.0f - ci * ci), 1e-6f));
+    const float3 dt = d * eta + nOut * (eta * ci - ct);
+    float3 pin = p + dt * (g.glass / ct);
+    setComp(pin, fa, fs * g.h);
+    *entry = t + g.glass / ct;
+    int b = 0;
+    roomInterior(v, var, 0.0f, pin, d, make_float3(1, 1, 1), 1e-6f, 0.0f, b, maxB, false, trace);
+}
+
+// Ö4: the structure's light at point P (relative to the centre of cell (0, 0, 0), on bundle bq's face f) from the
+// table, and by brute force: cosine-weighted rays (a Fibonacci spiral) through the lattice, into the rooms they meet
+// with the scene's own room code at full depth, each ray's footprint the cone of its share of the hemisphere; the mist
+// as the table has it (the same model), the bundles giving nothing (no light between them in either)
+__global__ void kO4Table(View v, int bq, int f, float3 P, float3* out) {
+    loadShared(v);
+    out[0] = tableLight(v, v.camI, v.camJ, v.camK, bq, f, P);
+}
+__global__ void kO4Brute(View v, float3 P, float3 n, int total, float3* acc, int model) {
+    loadShared(v);
+    const int k = blockIdx.x * blockDim.x + threadIdx.x;
+    __shared__ float3 sh[256];
+    float3 L = make_float3(0, 0, 0);
+    if (k < total) {
+        const float3 t1 = fabsf(n.x) < 0.9f ? normalize(cross(n, make_float3(1, 0, 0))) : normalize(cross(n, make_float3(0, 1, 0)));
+        const float3 t2 = cross(n, t1);
+        const float u = (float(k) + 0.5f) / float(total);
+        const float ph = float(k) * 2.39996323f;
+        const float rr = sqrtf(u);
+        const float3 d = normalize(t1 * (rr * cosf(ph)) + t2 * (rr * sinf(ph)) + n * sqrtf(fmaxf(0.0f, 1.0f - u)));
+        const float3 o = P + n * 2e-4f;
+        Hit h;
+        int cx, cy, cz;
+        walkFirst(v, o, d, 1200.0f, 150, h, cx, cy, cz);
+        const float sigT = v.hazeSigma + v.hazeAbsorb;
+        const float tr = __expf(-sigT * h.t);
+        L = v.hazeAmbient * (sigT > 0.0f ? v.hazeSigma / sigT : 0.0f) * (1.0f - tr);
+        if (h.kind == 2) {
+            const Lattice& g = v.g;
+            const float H = g.h + g.glass;
+            const float3 ctr = make_float3(cx * g.C, cy * g.C, cz * g.C);
+            const float3 p = o + d * h.t - ctr;
+            const int a1 = (h.q + 1) % 3, a2 = (h.q + 2) % 3;
+            if (fmaxf(fabsf(comp(p, a1)), fabsf(comp(p, a2))) <= H - g.frame) {
+                const float3 nOut = axisVec(h.q, float(h.face));
+                const float ci = -dot(d, nOut);
+                const float cone = sqrtf(2.0f / float(total));   // the half-angle of a ray's share of the hemisphere
+                if (model == 2) {   // the variant's own directional glow (its glow table, turned)
+                    const RoomRef rr = roomAt(v, v.camI + cx, v.camJ + cy, v.camK + cz);
+                    L += glowLookup(v, rr.var, symApply(rr.sym, d)) * tr;
+                } else if (model) {   // the table's own emitter: the face's mean glow times the mean angular shape
+                    const RoomRef rr = roomAt(v, v.camI + cx, v.camJ + cy, v.camK + cz);
+                    const int face = h.q * 2 + (h.face > 0 ? 0 : 1);
+                    const float4 Lf = sFaceGlow[rr.var * 6 + sSymFace[rr.sym * 6 + face]];
+                    L += make_float3(Lf.x, Lf.y, Lf.z) * (glowShapeAt(v, ci) * tr);
+                } else {
+                    int b = 0;
+                    L += glassRoom(v, v.camI + cx, v.camJ + cy, v.camK + cz, p, d, h.q, float(h.face), tab3(cOpt.T, ci) * tr, cone * h.t, cone, b);
+                }
+            }
+        }
+    }
+    sh[threadIdx.x] = L;
+    __syncthreads();
+    for (int st = blockDim.x / 2; st > 0; st >>= 1) {
+        if (threadIdx.x < st) sh[threadIdx.x] += sh[threadIdx.x + st];
+        __syncthreads();
+    }
+    if (threadIdx.x == 0) {
+        atomicAdd(&acc->x, sh[0].x);
+        atomicAdd(&acc->y, sh[0].y);
+        atomicAdd(&acc->z, sh[0].z);
+    }
+}
+
 __global__ void kProbe(View v, float px, float py) {
     loadShared(v);
     const float3 d = rayDir(v, px, py);
@@ -1215,8 +1273,7 @@ void buildLightTable(const View& v, unsigned char* idx, float* G, float2* far, i
     const int total = 48 * v.ltNa * v.ltNw;
     float2* tmp = nullptr;
     cudaMalloc(reinterpret_cast<void**>(&tmp), sizeof(float2) * total);
-    kLightTable<<<(total + 63) / 64, 64>>>(v, idx, G, tmp, samplesSide, farRays);
-    kBlurFar<<<(total + 255) / 256, 256>>>(v, tmp, far, 4, 2);
+    kLightTable<<<(total + 63) / 64, 64>>>(v, idx, G, far, samplesSide, farRays);
     cudaDeviceSynchronize();
     cudaFree(tmp);
 }
@@ -1233,6 +1290,32 @@ void renderFrame(const View& v, float4* hdr, cudaStream_t s) {
 void resolveFrame(const View& v, const float4* hdr, const float4* bloomHalf, uchar4* out, cudaStream_t s) {
     const dim3 b(16, 8);
     kResolve<<<dim3((v.width + b.x - 1) / b.x, (v.height + b.y - 1) / b.y), b, 0, s>>>(v, hdr, bloomHalf, out);
+}
+
+void imageTest(const View& v, int var, float3 E, float3 d, int fa, float fs, int maxB, float2* traceHost, float* entryHost) {
+    float2* tr = nullptr;
+    float* en = nullptr;
+    cudaMalloc(reinterpret_cast<void**>(&tr), sizeof(float2) * maxB);
+    cudaMalloc(reinterpret_cast<void**>(&en), sizeof(float));
+    cudaMemset(tr, 0, sizeof(float2) * maxB);
+    kImageTest<<<1, 1>>>(v, var, E, d, fa, fs, maxB, tr, en);
+    cudaMemcpy(traceHost, tr, sizeof(float2) * maxB, cudaMemcpyDeviceToHost);
+    cudaMemcpy(entryHost, en, sizeof(float), cudaMemcpyDeviceToHost);
+    cudaFree(tr);
+    cudaFree(en);
+}
+
+void o4Point(const View& v, int bq, int f, float3 P, float3 n, int rays, float3& table, float3& brute, int model) {
+    float3* d = nullptr;
+    cudaMalloc(reinterpret_cast<void**>(&d), sizeof(float3) * 2);
+    cudaMemset(d, 0, sizeof(float3) * 2);
+    kO4Table<<<1, 1>>>(v, bq, f, P, d);
+    kO4Brute<<<(rays + 255) / 256, 256>>>(v, P, n, rays, d + 1, model);
+    float3 h[2];
+    cudaMemcpy(h, d, sizeof(h), cudaMemcpyDeviceToHost);
+    cudaFree(d);
+    table = h[0];
+    brute = h[1] * (M_PIf / float(rays));
 }
 
 void probePixel(const View& v, float px, float py) {

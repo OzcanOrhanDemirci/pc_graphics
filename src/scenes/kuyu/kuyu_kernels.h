@@ -125,6 +125,10 @@ void buildLightTable(const View& v, unsigned char* idx, float* G, float2* far, i
 void renderFrame(const View& v, float4* hdr, cudaStream_t s);
 void resolveFrame(const View& v, const float4* hdr, const float4* bloomHalf, uchar4* out, cudaStream_t s);
 void probePixel(const View& v, float px, float py);
+// Ö4: the structure's light at P (cell (0, 0, 0), bundle bq's face f, normal n) from the table and by brute force
+void o4Point(const View& v, int bq, int f, float3 P, float3 n, int rays, float3& table, float3& brute, int model);
+// Ö1: a ray into a room through face (fa, fs); per bounce its closest approach to bulb 0 (x) and where along that piece (y)
+void imageTest(const View& v, int var, float3 E, float3 d, int fa, float fs, int maxB, float2* traceHost, float* entryHost);
 size_t viewSizeCu();
 
 }   // namespace kuyu

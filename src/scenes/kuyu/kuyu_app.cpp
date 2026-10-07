@@ -400,14 +400,14 @@ void KuyuApp::init() {
     // the structure's light: once, over one cell's bundles (the lattice repeats)
     {
         const auto t0 = std::chrono::high_resolution_clock::now();
-        ltNa_ = std::max(8, int(std::lround(lat.C / cfg.f("light.texel.along", 0.04f))));
-        ltNw_ = std::max(2, int(std::lround(lat.b / cfg.f("light.texel.across", 0.05f))));
+        ltNa_ = std::max(8, int(std::lround(lat.C / cfg.f("light.texel.along", 0.02f))));
+        ltNw_ = std::max(2, int(std::lround(lat.b / cfg.f("light.texel.across", 0.025f))));
         const size_t texels = size_t(48) * ltNa_ * ltNw_;
         dLtIdx_ = devAlloc<unsigned char>(texels * kLtK);
         dLtG_ = devAlloc<float>(texels * kLtK);
         dLtFar_ = devAlloc<float2>(texels);
         View v = makeView();
-        buildLightTable(v, dLtIdx_, dLtG_, dLtFar_, cfg.i("light.shadow.grid", 8), cfg.i("light.far.rays", 256));
+        buildLightTable(v, dLtIdx_, dLtG_, dLtFar_, 0, cfg.i("light.rays", 4096));
         const cudaError_t e = cudaGetLastError();
         if (e != cudaSuccess) std::fprintf(stderr, "kuyu: isik tablosu kurulamadi: %s\n", cudaGetErrorString(e));
         if (cfg.i("light.dump", 0)) {   // the tools: a few texels' entries
@@ -427,7 +427,7 @@ void KuyuApp::init() {
             }
             std::printf("isik tablosu: %zu texel, ortalama giris %.2f, ortalama G toplami %.4f, uzak %.4f, pus %.4f\n", texels, double(used) / texels,
                         sumG / texels, sumFar / texels, sumMist / texels);
-            for (size_t t : {size_t(1000), size_t(20000), size_t(60000)}) {
+            for (size_t t : {size_t(1000), size_t(20000), size_t(cfg.i("light.dump.texel", 60000))}) {
                 std::printf("  texel %zu:", t);
                 for (int k = 0; k < kLtK && ix[t * kLtK + k] != 255; ++k) std::printf(" %d:%.4f", ix[t * kLtK + k], gg[t * kLtK + k]);
                 std::printf("  uzak %.4f pus %.4f\n", ff[t].x, ff[t].y);
@@ -706,6 +706,172 @@ int runKuyuCli(int argc, char** argv) {
                 hasFree = true;
             }
         }
+    }
+    if (test == "o4") {
+        // Ö4: points on the bundles of cell (0, 0, 0) (several bundles, faces, along and across), table <-> brute force
+        a.loadConfig();
+        a.width = 64;
+        a.height = 36;
+        a.init();
+        View v = a.makeView();
+        v.camI = v.camJ = v.camK = 0;
+        v.exactBounces = 2000;   // the reference: every bounce
+        v.cutEps = 1e-9f;
+        v.minWeight = 1e-7f;
+        const int rays = a.cfg.i("o4.rays", 1 << 20);
+        const Lattice& g = a.lat;
+        double sumT = 0, sumB = 0, sumAbs = 0, sumM = 0, sumAbsM = 0, sumG2 = 0, sumAbsG2 = 0;
+        int nPts = 0;
+        std::printf("O4: tablo <-> kaba kuvvet (%d isin, oda ici tam derinlik), yesil kanal\n", rays);
+        std::printf("   demet yuz   boyunca  enine     tablo        kaba kuvvet   oran\n");
+        for (int k = 0; k < 24; ++k) {
+            const int bq = (k * 5) % 12, f = (k * 7 + k / 12) % 4;
+            const BundleShape bs = bundleShape(g, bq);
+            const int nAx = f < 2 ? bs.u : bs.v, wAx = f < 2 ? bs.v : bs.u;
+            const float sN = (f & 1) ? -1.0f : 1.0f;
+            const float cN = f < 2 ? bs.cu : bs.cv, cW = f < 2 ? bs.cv : bs.cu;
+            const float along = -0.5f * g.C + g.C * (0.07f + 0.86f * float((k * 37) % 24) / 23.0f);
+            const float across = 0.5f * g.b * (-0.8f + 1.6f * float((k * 11) % 7) / 6.0f);
+            float3 P;
+            setComp(P, bs.a, along);
+            setComp(P, nAx, cN + sN * 0.5f * g.b);
+            setComp(P, wAx, cW + across);
+            float3 Et, Eb, Et2, Em;
+            o4Point(v, bq, f, P, axisVec(nAx, sN), rays, Et, Eb, 0);
+            o4Point(v, bq, f, P, axisVec(nAx, sN), rays, Et2, Em, 1);
+            float3 Eg;
+            o4Point(v, bq, f, P, axisVec(nAx, sN), rays, Et2, Eg, 2);
+            sumG2 += Eg.y;
+            sumAbsG2 += std::fabs(Eg.y - Eb.y);
+            sumM += Em.y;
+            sumAbsM += std::fabs(Et.y - Em.y);
+            sumT += Et.y;
+            sumB += Eb.y;
+            sumAbs += std::fabs(Et.y - Eb.y);
+            ++nPts;
+            std::printf("   %5d %3d   %6.2f   %6.2f   %.6f   %.6f   %.3f   model %.6f %.3f\n", bq, f, along, across, Et.y, Eb.y, Eb.y > 0 ? Et.y / Eb.y : 0.0,
+                        Em.y, Em.y > 0 ? Et.y / Em.y : 0.0);
+        }
+        std::printf("O4: toplam tablo / kaba kuvvet %.4f, uyum 1 - sum|fark| / sum %.4f (hedef >= 0,99)\n", sumT / sumB, 1.0 - sumAbs / sumB);
+        std::printf("O4 (yayici modeli: oda turunun yone bagli paritisi <-> fizik): toplam %.4f, uyum %.4f\n", sumG2 / sumB, 1.0 - sumAbsG2 / sumB);
+        std::printf("O4 (tablonun makinesi: kaba kuvvet ayni yayici modelle): toplam %.4f, uyum %.4f\n", sumT / sumM, 1.0 - sumAbsM / sumM);
+        a.release();
+        return 0;
+    }
+    if (test == "fuzz") {   // random poses (fixed seed) over a few cells, the clock running: CUDA and the pixels must stay clean
+        a.loadConfig();
+        a.width = w > 0 ? w : 640;
+        a.height = h > 0 ? h : 360;
+        a.init();
+        unsigned st = 12345u;
+        auto rnd = [&]() {
+            st ^= st << 13;
+            st ^= st >> 17;
+            st ^= st << 5;
+            return float(st >> 8) * (1.0f / 16777216.0f);
+        };
+        int fails = 0, badFrames = 0;
+        const int poses = a.cfg.i("fuzz.poses", 1000);
+        for (int k = 0; k < poses && fails < 3; ++k) {
+            a.cam.x = (rnd() * 2.0 - 1.0) * 12.0;
+            a.cam.y = (rnd() * 2.0 - 1.0) * 400.0;
+            a.cam.z = (rnd() * 2.0 - 1.0) * 12.0;
+            a.cam.yaw = rnd() * 6.2832f;
+            a.cam.pitch = (rnd() * 2.0f - 1.0f) * 1.5708f;
+            a.time = rnd() * 1000.0;
+            a.render();
+            const cudaError_t e = cudaGetLastError();
+            if (a.lastBad) ++badFrames;
+            if (e != cudaSuccess) {
+                ++fails;
+                std::printf("HATA %d: %s  kamera \"%.4f %.4f %.4f %.4f %.4f 62\"\n", k, cudaGetErrorString(e), a.cam.x, a.cam.y, a.cam.z, a.cam.yaw,
+                            a.cam.pitch);
+                break;
+            }
+        }
+        std::printf("fuzz: %s, bozuk pikselli kare %d (%d poz)\n", fails ? "HATA BULUNDU" : "temiz", badFrames, poses);
+        a.release();
+        return fails || badFrames ? 1 : 0;
+    }
+    if (test == "o2") {   // the wall's tables for tools/kuyu_o2.py (an independent calculation)
+        a.loadConfig();
+        a.lat.glass = a.cfg.f("wall.glass", 0.0127f);
+        a.computeOptics();
+        const std::string path = out + "/o2_tablolar.csv";
+        std::filesystem::create_directories(out);
+        FILE* f = std::fopen(path.c_str(), "w");
+        if (!f) return 1;
+        std::fprintf(f, "cos,inR0,inR1,inR2,outR0,outR1,outR2,T0,T1,T2,cu0,cu1,cu2,cr0,cr1,cr2,au0,au1,au2,varnish\n");
+        for (int k = 0; k < kOpticsN; ++k) {
+            const Optics& o = a.optics;
+            std::fprintf(f, "%.6f", double(k) / (kOpticsN - 1));
+            for (int ch = 0; ch < 3; ++ch) std::fprintf(f, ",%.7f", o.inR[ch][k]);
+            for (int ch = 0; ch < 3; ++ch) std::fprintf(f, ",%.7f", o.outR[ch][k]);
+            for (int ch = 0; ch < 3; ++ch) std::fprintf(f, ",%.7f", o.T[ch][k]);
+            for (int ch = 0; ch < 3; ++ch) std::fprintf(f, ",%.7f", o.copper[ch][k]);
+            for (int ch = 0; ch < 3; ++ch) std::fprintf(f, ",%.7f", o.chrome[ch][k]);
+            for (int ch = 0; ch < 3; ++ch) std::fprintf(f, ",%.7f", o.gold[ch][k]);
+            std::fprintf(f, ",%.7f\n", o.varnish[k]);
+        }
+        std::fclose(f);
+        std::printf("O2: %s (python tools/kuyu_o2.py %s)\n", path.c_str(), path.c_str());
+        return 0;
+    }
+    if (test == "o1") {
+        // Ö1: a room with one bulb (variant "tek"), seen from the shaft through its glass; for images n = 1..30 (a, b, c
+        // walls crossed) the direction from the eye that should meet the bulb's n-th image is worked out analytically
+        // (the image lattice: x_a = 2 a h + (-1)^a x; the glass slab's sideways shift in closed form), the ray traced by
+        // the scene's own room code, its miss at the n-th bounce turned into pixels at 1440p, 62 degrees
+        a.loadConfig();
+        a.width = 64;
+        a.height = 36;
+        a.init();
+        int var = -1;
+        for (int k = 0; k < int(a.variantNames.size()); ++k)
+            if (a.variantNames[k] == "tek") { var = k; break; }
+        const RoomVariant& rv = a.variants[var];
+        const float h = a.lat.h, gl = a.lat.glass, H = h + gl;
+        const float3 P = rv.L[0].p;
+        const float3 E = make_float3(0.31f, 0.27f, 2.62f);   // in the shaft, before the +z face
+        const double pixAngle = 2.0 * std::tan(31.0 * 3.14159265358979 / 180.0) / 1440.0;
+        const View v = a.makeView();
+        auto mirror = [&](float x, int k) { return float(k) * 2.0f * h + ((k & 1) ? -x : x); };
+        const float ng = a.optics.glassN;
+        double worst = 0.0;
+        int tested = 0;
+        const int combos[][3] = {{0, 0, -1}, {1, 0, -1}, {0, -1, -1}, {1, 1, -2}, {-2, 1, -2}, {2, -2, -3}, {3, 1, -4}, {-3, 3, -4}, {4, -2, -6},
+                                 {5, 3, -6}, {-4, 6, -7}, {6, -5, -8}, {-7, 4, -9}, {8, 6, -10}, {9, -7, -12}, {-10, 8, -12}};
+        std::printf("O1: tek lambali oda, goz camin %.2f m onunde\n", double(E.z - H));
+        std::printf("   (a b c)    n   iz [mm]   yol [m]   hata [px]\n");
+        for (const auto& cb : combos) {
+            const int n = std::abs(cb[0]) + std::abs(cb[1]) + std::abs(cb[2]);
+            const float3 I = make_float3(mirror(P.x, cb[0]), mirror(P.y, cb[1]), mirror(P.z, cb[2]));
+            // the direction: d proportional to I - E - shift(d), the slab's shift found by iterating
+            float3 d = normalize(I - E);
+            for (int it = 0; it < 30; ++it) {
+                const float ci = d.z * -1.0f < 0.0f ? 0.0f : -d.z;   // the +z face's outward normal is +z: cos = -d.z
+                const float eta = 1.0f / ng;
+                const float ct = std::sqrt(std::max(1.0f - eta * eta * (1.0f - ci * ci), 1e-6f));
+                const float3 nOut = make_float3(0, 0, 1);
+                const float3 dt = d * eta + nOut * (eta * ci - ct);
+                const float3 shift = dt * (gl / ct) - d * (gl / ci);   // both to the inner face
+                d = normalize(I - E - shift);
+            }
+            std::vector<float2> tr(n + 2);
+            float entry = 0.0f;
+            imageTest(v, var, E, d, 2, 1.0f, n + 1, tr.data(), &entry);
+            // the way to the n-th piece's closest point: the entry, the pieces before it, this piece's part
+            double way = entry;
+            // (the pieces' lengths are not kept: the straight unfolded line's length to the image is the way)
+            way = length(I - E);
+            const double px = double(tr[n].x) / way / pixAngle;
+            worst = std::max(worst, px);
+            ++tested;
+            std::printf("  (%3d %3d %3d) %3d   %8.4f   %7.2f   %.5f\n", cb[0], cb[1], cb[2], n, double(tr[n].x) * 1000.0, way, px);
+        }
+        std::printf("O1: %d goruntu, en kotu %.5f px (hedef < 0,1)\n", tested, worst);
+        a.release();
+        return worst < 0.1 ? 0 : 1;
     }
     if (!headless) {
         std::printf("kuyu: --headless --out <klasor> [--view 0..n|all] [--cam \"x y z yaw pitch fov\"] [--w --h] [--set k=v] [--time s]\n");
