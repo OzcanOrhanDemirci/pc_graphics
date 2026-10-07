@@ -29,6 +29,7 @@ public:
     float3 meanFace{0, 0, 0};
     float glowShape[kuyu::kShapeN] = {};
     std::vector<float4> faceGlow;       // per variant 6 faces: the glow leaving (cosine-weighted)
+    std::vector<float4> faceGlowRest;   // ... without the bulbs seen straight
     double tableMs = 0.0;
     float frameMs = 0.0f;
     unsigned int lastBad = 0;
@@ -71,12 +72,15 @@ private:
     unsigned char* dVariantOf_ = nullptr;
     float4* dGlow_ = nullptr;
     float4* dFaceGlow_ = nullptr;
+    float4* dFaceGlowRest_ = nullptr;
+    std::vector<float4> glowRestHost_;
     float4* dTail_ = nullptr;
     unsigned char* dLtIdx_ = nullptr;
     float* dLtG_ = nullptr;
     float2* dLtFar_ = nullptr;
     int ltNa_ = 0, ltNw_ = 0;
     void buildFaceGlow();
+    std::vector<float4> faceMeans(const std::vector<float4>& table, double* shapeSum, double* shapeW) const;
     std::vector<float4> glowHost_;
     unsigned int* bad_ = nullptr;
     cudaEvent_t ev0_ = nullptr, ev1_ = nullptr;

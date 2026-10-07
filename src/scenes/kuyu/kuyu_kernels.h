@@ -108,6 +108,8 @@ struct View {
     const float2* ltFar = nullptr;          // per texel: the rooms beyond (x meanFace), the mist (x its source)
     int ltNa = 0, ltNw = 0;                 // texels along a bundle in one cell, across a face
     const float4* faceGlow = nullptr;       // per variant, its 6 faces (its frame, +x -x +y -y +z -z): the glow leaving
+    const float4* faceGlowRest = nullptr;   // the same without the bulbs seen straight (the own room's: exact)
+    int ownDirect = 1;                      // the own room's bulbs straight, exactly (0: all in the table, the tools)
     float glowShape[kShapeN];               // the glow's angular shape over cos (the cosine-weighted mean is 1)
     float3 meanFace{0, 0, 0};
     int useTable = 1;
@@ -119,7 +121,7 @@ struct View {
 };
 
 void setOptics(const Optics& o);
-void buildGlowTable(const View& v, float4* glowOut, int perSide);
+void buildGlowTable(const View& v, float4* glowOut, int perSide, int skipDirect);
 void buildTailTable(const View& v, float4* tailOut, int perSide);
 void buildLightTable(const View& v, unsigned char* idx, float* G, float2* far, int samplesSide, int farRays);
 void renderFrame(const View& v, float4* hdr, cudaStream_t s);

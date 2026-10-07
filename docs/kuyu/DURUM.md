@@ -100,6 +100,11 @@ ampullerin kendisi ve ilk görüntüleri camın bir yerini daha parlak yapar; ca
 %10-28. Oda türünün yöne bağlı parıltısını kullanmak düzeltmedi (0,93: hata açısal değil mekânsal). Düzeltmek her
 gölgelendirmede ampul başına gölge ışını ister (27 odayı piksel başına hesaplamak 70 ms tutuyordu). Görünür etkisi:
 ampule yakın demetlerde yumuşak parlak lekeler yok; toplam ışık seviyesi %1 içinde doğru (tablo / kaba kuvvet 1,009).
+Denendi: demetin üzerinde yattığı odanın ampullerinin doğrudan ışığını her gölgelendirmede kesin hesaplamak (noktasal
+ışık, camdan geçiş, içerideki küre ve aynaların, dışarıdaki demetlerin örtmesi; tablo o oda için "doğrudan hariç"
+parıltıyı kullanır). Cama yakın noktalarda hata %25-28'den %4-5'e indi, toplam uyum 0,935 → 0,941 (kalan hata komşu
+odaların ampulleri); görüntüde etkisi piksellerin en çok %0,08'inde 3 kod değeri, bedeli kare başına 6-9 ms. Kapalı
+(`light.own.direct = 1` açar; kapalıyken görüntü bit bit önceki).
 
 ## Kararlar ve plandan sapmalar
 
@@ -126,6 +131,7 @@ ampule yakın demetlerde yumuşak parlak lekeler yok; toplam ışık seviyesi %1
 10. **Referanslardan (Özcan'ın üç tesseract karesi):** çizgiler ince ve çok, aralarında parlak ve koyu iplikler, çoğu
     ışığı yansıtıyor, renk nötr-sıcak. İlk turdaki turuncu-kahve tek renklilik bu yüzden bırakıldı: ışıklar 3300-4300 K,
     çerçeve krom (bakır aynalarda sonsuza tekrarlanınca her şeyi turuncuya boyuyordu), iplikler daha nötr.
+11. **Kendi odanın ampulleri kesin: denendi, kapalı** (Ö4'ün altında): fiziği iyileştiriyor, görünmüyor, 6-9 ms.
 
 ## Gece boyunca bulunan ve düzeltilen hatalar (kısa)
 

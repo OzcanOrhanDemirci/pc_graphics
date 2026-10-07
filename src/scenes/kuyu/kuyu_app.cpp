@@ -374,7 +374,16 @@ void KuyuApp::init() {
         v.glow = nullptr;
         v.maxBounces = cfg.i("tail.bounces", 600);   // the tables: the whole way
         v.minWeight = cfg.f("tail.min.weight", 1e-5f);
-        buildGlowTable(v, dGlow_, cfg.i("glow.grid", 64));
+        buildGlowTable(v, dGlow_, cfg.i("glow.grid", 64), 0);
+        // and again without the bulbs seen straight: a cell's bundles take their own room's straight light exactly
+        {
+            float4* dRest = devAlloc<float4>(variants.size() * kGlowN * kGlowN);
+            buildGlowTable(v, dRest, cfg.i("glow.grid", 64), 1);
+            cudaDeviceSynchronize();
+            glowRestHost_.resize(variants.size() * kGlowN * kGlowN);
+            cudaMemcpy(glowRestHost_.data(), dRest, glowRestHost_.size() * sizeof(float4), cudaMemcpyDeviceToHost);
+            cudaFree(dRest);
+        }
         if (cfg.i("tail", 0)) {   // (tried and left off: see DURUM)
             dTail_ = devAlloc<float4>(variants.size() * kGlowN * kGlowN);
             buildTailTable(v, dTail_, cfg.i("tail.grid", 12));
@@ -440,14 +449,14 @@ void KuyuApp::init() {
 // the glow leaving each face of each variant (its own frame), cosine-weighted over the directions that enter it, and
 // the glow's angular shape over cos (the mean of all faces, normalised to a cosine-weighted mean of 1): the faces as
 // emitters of the structure's light. From the glow table on an even spiral of directions.
-void KuyuApp::buildFaceGlow() {
+std::vector<float4> KuyuApp::faceMeans(const std::vector<float4>& table, double* shapeSum, double* shapeW) const {
     const int N = kGlowN, nv = int(variants.size());
     auto lookup = [&](int var, float3 w) {
         const float2 e = octEncode(w);
         const float x = std::clamp(e.x * N - 0.5f, 0.0f, N - 1.001f), y = std::clamp(e.y * N - 0.5f, 0.0f, N - 1.001f);
         const int x0 = int(x), y0 = int(y);
         const float fx = x - x0, fy = y - y0;
-        const float4* t = glowHost_.data() + size_t(var) * N * N;
+        const float4* t = table.data() + size_t(var) * N * N;
         const float4 m = (t[y0 * N + x0] * (1.0f - fx) + t[y0 * N + x0 + 1] * fx) * (1.0f - fy) + (t[(y0 + 1) * N + x0] * (1.0f - fx) + t[(y0 + 1) * N + x0 + 1] * fx) * fy;
         return make_float3(m.x, m.y, m.z);
     };
@@ -457,8 +466,7 @@ void KuyuApp::buildFaceGlow() {
         const double z = 1.0 - 2.0 * (k + 0.5) / M, r = std::sqrt(std::max(0.0, 1.0 - z * z)), ph = k * 2.39996322972865332;
         dirs[k] = make_float3(float(r * std::cos(ph)), float(z), float(r * std::sin(ph)));
     }
-    faceGlow.assign(size_t(nv) * 6, make_float4(0, 0, 0, 0));
-    double shapeSum[kShapeN] = {}, shapeW[kShapeN] = {};
+    std::vector<float4> out(size_t(nv) * 6, make_float4(0, 0, 0, 0));
     for (int vi = 0; vi < nv; ++vi) {
         for (int face = 0; face < 6; ++face) {
             const int ax = face >> 1;
@@ -474,8 +482,8 @@ void KuyuApp::buildFaceGlow() {
                 wsum += c;
             }
             const float4 Lf = make_float4(float(acc[0] / wsum), float(acc[1] / wsum), float(acc[2] / wsum), 0.0f);
-            faceGlow[size_t(vi) * 6 + face] = Lf;
-            if (Lf.y <= 0.0f) continue;
+            out[size_t(vi) * 6 + face] = Lf;
+            if (!shapeSum || Lf.y <= 0.0f) continue;
             for (const float3& w : dirs) {
                 const float c = -comp(w, ax) * sg;
                 if (c <= 0.0f) continue;
@@ -485,6 +493,17 @@ void KuyuApp::buildFaceGlow() {
             }
         }
     }
+    return out;
+}
+
+// the glow leaving each face of each variant (its own frame), cosine-weighted over the directions that enter it, and
+// the glow's angular shape over cos (the mean of all faces, normalised to a cosine-weighted mean of 1): the faces as
+// emitters of the structure's light. From the glow tables on an even spiral of directions; the same without the bulbs
+// seen straight (a cell's own room: those are worked out exactly).
+void KuyuApp::buildFaceGlow() {
+    double shapeSum[kShapeN] = {}, shapeW[kShapeN] = {};
+    faceGlow = faceMeans(glowHost_, shapeSum, shapeW);
+    faceGlowRest = faceMeans(glowRestHost_, nullptr, nullptr);
     double norm = 0.0;
     for (int b = 0; b < kShapeN; ++b) {
         glowShape[b] = shapeW[b] > 0.0 ? float(shapeSum[b] / shapeW[b]) : 1.0f;
@@ -503,6 +522,8 @@ void KuyuApp::buildFaceGlow() {
     meanFace = make_float3(float(acc[0] / 1536.0), float(acc[1] / 1536.0), float(acc[2] / 1536.0));
     dFaceGlow_ = devAlloc<float4>(faceGlow.size());
     cudaMemcpy(dFaceGlow_, faceGlow.data(), faceGlow.size() * sizeof(float4), cudaMemcpyHostToDevice);
+    dFaceGlowRest_ = devAlloc<float4>(faceGlowRest.size());
+    cudaMemcpy(dFaceGlowRest_, faceGlowRest.data(), faceGlowRest.size() * sizeof(float4), cudaMemcpyHostToDevice);
 }
 
 void KuyuApp::release() {
@@ -517,6 +538,8 @@ void KuyuApp::release() {
     cudaFree(dVariantOf_);
     cudaFree(dGlow_);
     cudaFree(dFaceGlow_);
+    cudaFree(dFaceGlowRest_);
+    dFaceGlowRest_ = nullptr;
     cudaFree(dTail_);
     dTail_ = nullptr;
     cudaFree(dLtIdx_);
@@ -667,6 +690,8 @@ View KuyuApp::makeView() const {
     v.ltNa = ltNa_;
     v.ltNw = ltNw_;
     v.faceGlow = dFaceGlow_;
+    v.faceGlowRest = dFaceGlowRest_;
+    v.ownDirect = cfg.i("light.own.direct", 0);
     for (int k = 0; k < kShapeN; ++k) v.glowShape[k] = glowShape[k];
     v.meanFace = meanFace;
     v.useTable = cfg.i("light.table", 1);

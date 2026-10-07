@@ -41,6 +41,7 @@ __device__ __forceinline__ unsigned int pcg(unsigned int v) {
 // Read straight from global memory they made chains of dependent loads (room -> variant -> glow) the warps could not hide.
 __shared__ unsigned char sVariantOf[256];
 __shared__ float4 sFaceGlow[kMaxVariants * 6];
+__shared__ float4 sFaceGlowRest[kMaxVariants * 6];   // the same without the bulbs seen straight (n = 0)
 __shared__ unsigned char sSymFace[48 * 6];
 __shared__ RoomVariant sVariants[kMaxVariants];
 
@@ -49,6 +50,7 @@ __device__ void loadShared(const View& v) {
     for (int i = tid; i < 256; i += nt) sVariantOf[i] = v.variantOf[i];
     const int nv = min(v.nVariants, kMaxVariants);
     for (int i = tid; i < nv * 6; i += nt) sFaceGlow[i] = v.faceGlow ? v.faceGlow[i] : make_float4(0, 0, 0, 0);
+    for (int i = tid; i < nv * 6; i += nt) sFaceGlowRest[i] = v.faceGlowRest ? v.faceGlowRest[i] : make_float4(0, 0, 0, 0);
     for (int i = tid; i < 48 * 6; i += nt) {
         const int g = i / 6, face = i % 6;
         const float3 vn = symApply(g, axisVec(face >> 1, (face & 1) ? -1.0f : 1.0f));
@@ -201,7 +203,7 @@ __device__ bool segClosest(float3 p, float3 d, float tEnd, float3 A, float3 B, f
 }
 
 __device__ float3 roomInterior(const View& v, int var, float phase, float3 p, float3 d, float3 w, float fp, float coneS, int& bounces,
-                             int maxBounces, bool tail, float2* trace = nullptr) {
+                             int maxBounces, bool tail, float2* trace = nullptr, bool skipDirect = false) {
     const RoomVariant& rv = sVariants[var];
     const float h = v.g.h, fr = h - v.g.frame;
     float3 L = make_float3(0, 0, 0);
@@ -282,7 +284,7 @@ __device__ float3 roomInterior(const View& v, int var, float phase, float3 p, fl
                     const float cd = dist < Lt.r + R ? fminf(1.0f, discOverlap(Lt.r, R, dist) / (M_PIf * R * R)) : 0.0f;
                     const float cg = (Lt.r * Lt.r) / (R * R) * __expf(-dist * dist / (R * R));
                     const float cover = fminf(1.0f, lerpf(cd, cg, smoothstepf(Lt.r, 2.0f * Lt.r, R)));
-                    L += w * Lt.I * (cover / (M_PIf * Lt.r * Lt.r));
+                    if (!(skipDirect && bounces == 0)) L += w * Lt.I * (cover / (M_PIf * Lt.r * Lt.r));
                     w *= (1.0f - cover);
                 }
             }
@@ -444,6 +446,78 @@ __device__ __forceinline__ void faceFrame(const BundleShape& s, int f, int& nAx,
     cW = f < 2 ? s.cv : s.cu;
 }
 
+// the light of the bulbs of cell (I, J, K)'s room straight through its glass at q (relative to the cell's centre, normal
+// n): point lights, through the window they are seen by (not the frame), the glass's transmission at that angle, unless
+// a sphere or a free mirror inside stands between. The bundles of a cell lie on its room: at a few centimetres from the
+// glass the bulbs' own light is anything but even over the face (Ö4), so it is worked out here, not in the table.
+__device__ float3 ownRoomDirect(const View& v, long long I, long long J, long long K, float3 q, float3 n) {
+    const RoomRef rr = roomAt(v, I, J, K);
+    const RoomVariant& rv = sVariants[rr.var];
+    float3 E = make_float3(0, 0, 0);
+    if (rv.nL == 0) return E;
+    const Lattice& g = v.g;
+    const float H = g.h + g.glass;
+    const float3 qv = symApply(rr.sym, q), nv = symApply(rr.sym, n);
+    float3 sc[kMaxRoomSpheres];
+    for (int s2 = 0; s2 < rv.nS; ++s2) sc[s2] = pendulumCentre(rv.S[s2], v.time, rr.phase);
+    for (int l = 0; l < rv.nL; ++l) {
+        float3 w = rv.L[l].p - qv;
+        const float d2 = dot(w, w), d = sqrtf(d2);
+        w = w * (1.0f / d);
+        const float cp = dot(nv, w);
+        if (cp <= 0.0f) continue;
+        // the face the way enters the room by
+        float tn = -1e30f;
+        int ax = 0;
+        bool miss = false;
+        for (int a = 0; a < 3; ++a) {
+            const float o = comp(qv, a), da = comp(w, a);
+            if (fabsf(da) < 1e-9f) {
+                if (fabsf(o) > H) miss = true;
+                continue;
+            }
+            const float t0 = (-H - o) / da, t1 = (H - o) / da;
+            const float near = fminf(t0, t1);
+            if (near > tn) {
+                tn = near;
+                ax = a;
+            }
+        }
+        if (miss || tn <= 0.0f || tn >= d) continue;
+        const float3 pe = qv + w * tn;
+        const int a1 = (ax + 1) % 3, a2 = (ax + 2) % 3;
+        if (fmaxf(fabsf(comp(pe, a1)), fabsf(comp(pe, a2))) > H - g.frame) continue;
+        // outside, up to the glass: the cell's bundles (the way stays in the cell)
+        {
+            Hit hh;
+            cellNearest(v, q, symInverse(rr.sym, w), 1e-4f, tn - 1e-4f, hh);
+            if (hh.kind == 1) continue;
+        }
+        // inside: the spheres and the free mirrors between the glass and the bulb
+        bool blocked = false;
+        for (int s2 = 0; s2 < rv.nS && !blocked; ++s2) {
+            const float3 o = qv - sc[s2];
+            const float b = dot(o, w), cc = dot(o, o) - rv.S[s2].r * rv.S[s2].r;
+            const float disc = b * b - cc;
+            if (disc <= 0.0f) continue;
+            const float t = -b - sqrtf(disc);
+            if (t > tn && t < d) blocked = true;
+        }
+        for (int k = 0; k < rv.nP && !blocked; ++k) {
+            const RoomPanel& P = rv.P[k];
+            const float dn = dot(w, P.n);
+            if (fabsf(dn) < 1e-8f) continue;
+            const float t = dot(P.c - qv, P.n) / dn;
+            if (t <= tn || t >= d) continue;
+            const float3 x = qv + w * t - P.c;
+            if (fabsf(dot(x, P.u)) <= P.hu && fabsf(dot(x, P.w)) <= P.hw) blocked = true;
+        }
+        if (blocked) continue;
+        E += rv.L[l].I * tab3(cOpt.T, fabsf(comp(w, ax))) * (cp / d2);
+    }
+    return E;
+}
+
 // the structure's light from the table at point q (relative to the centre of cell (I, J, K)) on bundle bq's face f
 __device__ float3 tableLight(const View& v, long long I, long long J, long long K, int bq, int f, float3 q) {
     const Lattice& g = v.g;
@@ -469,9 +543,11 @@ __device__ float3 tableLight(const View& v, long long I, long long J, long long 
         const float G = (k & 3) == 0 ? gq.x : (k & 3) == 1 ? gq.y : (k & 3) == 2 ? gq.z : gq.w;
         const int r = idx / 6, face = idx % 6;
         const RoomRef rr = roomAt(v, I + r / 9 - 1, J + (r / 3) % 3 - 1, K + r % 3 - 1);
-        const float4 Lf = sFaceGlow[rr.var * 6 + sSymFace[rr.sym * 6 + face]];
+        // the own room (13): its glow without the bulbs seen straight; those come exactly below
+        const float4 Lf = r == 13 && v.ownDirect ? sFaceGlowRest[rr.var * 6 + sSymFace[rr.sym * 6 + face]] : sFaceGlow[rr.var * 6 + sSymFace[rr.sym * 6 + face]];
         E += make_float3(Lf.x, Lf.y, Lf.z) * G;
     }
+    if (v.ownDirect) E += ownRoomDirect(v, I, J, K, q, axisVec(nAx, sN));
     const float2 far = __ldg(v.ltFar + texel);
     const float sigT = v.hazeSigma + v.hazeAbsorb;
     E += v.meanFace * far.x + v.hazeAmbient * (sigT > 0.0f ? v.hazeSigma / sigT : 0.0f) * far.y;
@@ -1049,7 +1125,7 @@ __global__ void kResolve(View v, const float4* hdr, const float4* bloomHalf, uch
 // a variant's mean glow, looking into it along each of the table's directions: parallel rays on a grid across the
 // room's outline, each with a footprint the size of its grid square (so every bulb's image is counted by its share,
 // not hit or missed), through the glass (not the frame) and into the room; the mean over the glass
-__global__ void kGlow(View v, float4* out, int perSide) {
+__global__ void kGlow(View v, float4* out, int perSide, int skipDirect) {
     loadShared(v);
     const int var = blockIdx.y, dirIdx = blockIdx.x;
     const int N = kGlowN;
@@ -1094,7 +1170,7 @@ __global__ void kGlow(View v, float4* out, int perSide) {
         float3 pin = p + dt * (g.glass / ct);
         setComp(pin, ax, fs * g.h);
         int b = 0;
-        a += roomInterior(v, var, 0.0f, pin, w, tab3(cOpt.T, ci), step * 0.5642f, 0.0f, b, v.maxBounces, false);   // a disc of the square's area
+        a += roomInterior(v, var, 0.0f, pin, w, tab3(cOpt.T, ci), step * 0.5642f, 0.0f, b, v.maxBounces, false, nullptr, skipDirect != 0);   // a disc of the square's area
         c += 1.0f;
     }
     acc[threadIdx.x] = a;
@@ -1177,9 +1253,10 @@ __global__ void kImageTest(View v, int var, float3 E, float3 d, int fa, float fs
 // table, and by brute force: cosine-weighted rays (a Fibonacci spiral) through the lattice, into the rooms they meet
 // with the scene's own room code at full depth, each ray's footprint the cone of its share of the hemisphere; the mist
 // as the table has it (the same model), the bundles giving nothing (no light between them in either)
-__global__ void kO4Table(View v, int bq, int f, float3 P, float3* out) {
+__global__ void kO4Table(View v, int bq, int f, float3 P, float3 n, float3* out) {
     loadShared(v);
     out[0] = tableLight(v, v.camI, v.camJ, v.camK, bq, f, P);
+    out[2] = v.ownDirect ? ownRoomDirect(v, v.camI, v.camJ, v.camK, P, n) : make_float3(0, 0, 0);
 }
 __global__ void kO4Brute(View v, float3 P, float3 n, int total, float3* acc, int model) {
     loadShared(v);
@@ -1216,7 +1293,8 @@ __global__ void kO4Brute(View v, float3 P, float3 n, int total, float3* acc, int
                 } else if (model) {   // the table's own emitter: the face's mean glow times the mean angular shape
                     const RoomRef rr = roomAt(v, v.camI + cx, v.camJ + cy, v.camK + cz);
                     const int face = h.q * 2 + (h.face > 0 ? 0 : 1);
-                    const float4 Lf = sFaceGlow[rr.var * 6 + sSymFace[rr.sym * 6 + face]];
+                    const bool own = cx == 0 && cy == 0 && cz == 0 && v.ownDirect;
+                    const float4 Lf = own ? sFaceGlowRest[rr.var * 6 + sSymFace[rr.sym * 6 + face]] : sFaceGlow[rr.var * 6 + sSymFace[rr.sym * 6 + face]];
                     L += make_float3(Lf.x, Lf.y, Lf.z) * (glowShapeAt(v, ci) * tr);
                 } else {
                     int b = 0;
@@ -1251,8 +1329,8 @@ __global__ void kProbe(View v, float px, float py) {
 
 void setOptics(const Optics& o) { cudaMemcpyToSymbol(cOpt, &o, sizeof(Optics)); }
 
-void buildGlowTable(const View& v, float4* glowOut, int perSide) {
-    kGlow<<<dim3(kGlowN * kGlowN, v.nVariants), 256>>>(v, glowOut, perSide);
+void buildGlowTable(const View& v, float4* glowOut, int perSide, int skipDirect) {
+    kGlow<<<dim3(kGlowN * kGlowN, v.nVariants), 256>>>(v, glowOut, perSide, skipDirect);
 }
 
 void buildLightTable(const View& v, unsigned char* idx, float* G, float2* far, int samplesSide, int farRays) {
@@ -1290,15 +1368,16 @@ void imageTest(const View& v, int var, float3 E, float3 d, int fa, float fs, int
 
 void o4Point(const View& v, int bq, int f, float3 P, float3 n, int rays, float3& table, float3& brute, int model) {
     float3* d = nullptr;
-    cudaMalloc(reinterpret_cast<void**>(&d), sizeof(float3) * 2);
-    cudaMemset(d, 0, sizeof(float3) * 2);
-    kO4Table<<<1, 1>>>(v, bq, f, P, d);
+    cudaMalloc(reinterpret_cast<void**>(&d), sizeof(float3) * 3);
+    cudaMemset(d, 0, sizeof(float3) * 3);
+    kO4Table<<<1, 1>>>(v, bq, f, P, n, d);
     kO4Brute<<<(rays + 255) / 256, 256>>>(v, P, n, rays, d + 1, model);
-    float3 h[2];
+    float3 h[3];
     cudaMemcpy(h, d, sizeof(h), cudaMemcpyDeviceToHost);
     cudaFree(d);
     table = h[0];
     brute = h[1] * (M_PIf / float(rays));
+    if (model == 1) brute += h[2];   // the machine check: the own room's straight bulbs by the same formula
 }
 
 void probePixel(const View& v, float px, float py) {
