@@ -251,7 +251,7 @@ içinde ışığı sonsuza dek dönen kapalı bir dünya. Odaların kenarları s
 | --- | --- |
 | **Fare** | etrafa bak (tıklamadan; **Tab** imleci bırakır) |
 | **W A S D** | yatay kay (odalara ve demetlere çarparsın) · **Boşluk / C** yüksel, alçal |
-| **Shift** (basılı) | gittikçe hızlan: hız her 1,3 sn'de e katına çıkar, tavan 1,2 trilyon m/s (deney, ~36 sn); bırakınca birkaç saniyede normale döner (düşerken de) |
+| **Shift** (basılı) | gittikçe hızlan: hız her 1,3 sn'de e katına çıkar, ~12 sn'de tavan 12.000 m/s; bırakınca birkaç saniyede normale döner (düşerken de) |
 | **Q / E** | düşüşü yavaşlat / hızlandır (dur, 0,5, 1,5, 4, 10 m/s) |
 | **1 2 3 4** | bakışlar: kuyu, oda (önünde durursun), kafes, yukarı |
 | **R** | başa dön · **↑ / ↓** pozlama |

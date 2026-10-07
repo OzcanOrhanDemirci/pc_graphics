@@ -8,7 +8,7 @@
 - `build\pc_graphics.exe` → galeride **10 Kuyu** (galeride **0** tuşu ya da aşağı ok) → Enter.
 - Görünmez bir gözlemcisin, iki oda sütunu arasındaki kuyudan saniyede 1,5 m düşüyorsun.
 - Fare tıklamadan bakar (Denizaltı'nın sözleşmesi; **Tab** imleci bırakır). **W A S D** yatay kayma (odalara ve
-  demetlere çarparsın), **Boşluk / C** yüksel / alçal, **Shift** basılı tutuldukça gittikçe hızlanır (deney: 1,2 trilyon m/s'ye dek; aşağıda). **Q / E** düşüşü yavaşlatır / hızlandırır (dur,
+  demetlere çarparsın), **Boşluk / C** yüksel / alçal, **Shift** basılı tutuldukça gittikçe hızlanır (12.000 m/s'ye dek; aşağıda). **Q / E** düşüşü yavaşlatır / hızlandırır (dur,
   0,5, 1,5, 4, 10 m/s). **1 2 3 4** bestelenmiş bakışlar: kuyu, oda, kafes, yukarı (**2** en yakın ışıklı odanın
   önüne getirir ve düşüşü durdurur; **E** sürdürür). **R** başa döner, **↑ ↓** pozlama. Ayar paneli yok: kalite
   2560 × 1440 için ayarlı.
@@ -68,6 +68,14 @@ Gerekenler: kare başına yol 100 km'yi geçince çarpışma süpürmesi atlanı
 süpürmesiz karede son itme yalnız konumu düzeltir, hıza dokunmaz (dokununca göz bir odanın içine düşen her karede düşüş
 sıfırlanıyordu); panelde hız 64 bitle yuvarlanır (Windows'ta `lround` 32 bit: 2,1 milyar m/s'nin üstünde "0 m/s"
 yazıyordu). Çarpışma bu kipte sınanmadı (Özcan istemedi).
+
+## Revize 5 (Özcan, aynı akşam): deney bitti, tavan 12.000 m/s
+
+Özcan: *"deneyi sonlandıralım, fark yokmuş [...] O seviyede hızlanalım."* → `boost.max` 12.000 m/s (1,5 m/s'den ~12 sn).
+Konuşulan (162 FPS olsaydı?): hareketin izlenebildiği sınır kare hızıyla orantılı (33 FPS'te ~130 m/s, 162 FPS'te
+~650 m/s); karelerin rastgeleleştiği eşik kare sürelerinin oynamasına bağlı; 1,2 trilyonda her iki kare hızında da
+her kare ilgisiz bir yer. Revize 4'ün koruyucuları kaldı (100 km/kare üstünde süpürme atlanır, panelde hız 64 bit):
+12.000 m/s'de kare başına ~360 m, süpürme çalışır.
 
 ## Bir bakışta
 

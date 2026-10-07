@@ -158,7 +158,7 @@ public:
         // Shift held: faster and faster, exponentially (e-fold every boost.tau seconds) up to boost.max m/s; let go: back
         // within a few seconds. Nothing else changes with the speed. The ceiling: above it the lattice (one cell in 8 m)
         // moves more than half a cell between frames and the eye can no longer follow it (it seems to stand or go back)
-        const float tau = a_.cfg.f("boost.tau", 1.3f), vmax = a_.cfg.f("boost.max", 1.2e12f);
+        const float tau = a_.cfg.f("boost.tau", 1.3f), vmax = a_.cfg.f("boost.max", 12000.0f);
         const float base = std::max(length(want), 0.5f);
         if (in.shift) boostT_ = std::min(boostT_ + dt, tau * std::log(std::max(vmax / base, 1.0f)));
         else boostT_ = std::max(0.0f, boostT_ - 6.0f * dt);   // let go: back from the ceiling in about 3 s
