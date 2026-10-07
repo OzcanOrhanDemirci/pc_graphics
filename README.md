@@ -43,7 +43,7 @@ reflection as sharp as the room itself.
 
 ## The application
 
-The nine scenes live in one program. It opens on a gallery; a scene loads behind a loading screen (its programs
+The ten scenes live in one program. It opens on a gallery; a scene loads behind a loading screen (its programs
 compile and its world is built on a worker thread, so the window stays alive) and then runs under an interface that is
 the same for all of them: who and what at the bottom left, timings at the top right, the way out at the bottom right,
 the keys on F1. The panel at the bottom left takes the mouse: a scene can put rows of choices, sliders and buttons there
@@ -469,6 +469,43 @@ everything without end.
 
 Plan, decisions, measurements and what is not verified in `docs/ayna/` (Turkish).
 
+### 10 · The Well *(Kuyu)* · October 2026
+
+| ![Straight down the shaft: two columns of rooms, the bundles of stretched lines converging to one vanishing point, the rooms glowing level after level](docs/images/kuyu-kuyu.jpg) | ![Before a room: through its dark glass, a chrome sphere and its lamp multiplied without end in the silvered walls](docs/images/kuyu-oda.jpg) |
+|---|---|
+| ![A moonlit room: its cold lamp's images going on in a three-dimensional lattice, the mirrored seams converging](docs/images/kuyu-ay.jpg) | ![Sideways along the lattice: bundles of book-spine threads, rooms of warm and cold light behind them](docs/images/kuyu-kafes.jpg) |
+
+Its focus is infinity, seen from outside: *closed worlds of endless reflection, watched by an observer who falls past
+them*. The sibling of scene 9 (there we were inside the labyrinth; here the infinite rooms are closed and we are out).
+An endless cubic lattice of glass rooms, each a one-way mirror box with its own light and its own furniture; every edge
+of every room runs on without end as a bundle of stretched threads, after the tesseract of *Interstellar*. We fall slowly
+down a shaft between two columns of rooms.
+
+- **One-way walls from physics:** a room's wall is half-inch grey float glass (its data sheet: 18% visible transmission)
+  with a 45 nm silver film on the inside (Johnson and Christy 1972, the thin film's Airy sums) and an antireflection coat
+  outside. Inside, 94.5% comes back and the light goes round without end; from outside the glass reflects 4%; through it,
+  0.7% either way (the same both ways, as reciprocity wants: the one-way look is only the bright inside against the dark
+  outside). Thin silver lets blue through more than red: the deep reflections turn amber, with no setting. Checked
+  against an independent calculation (Abelès matrices) to 1e-6.
+- **Twenty kinds of room**, each turned by one of the cube's 48 symmetries so neighbours differ: bulbs hung at many
+  heights (Kusama's infinity rooms), a single lamp, cold moonlight, a chrome sphere, a copper pendulum swinging at
+  T = 2π√(l/g), a mirror at 45°, a corner reflector, a row of lamps, a candle, and dark rooms with no light of their own.
+- **An exact tracer of its own (CUDA):** a ray walks the lattice cell by cell, meeting in each only its room and its
+  twelve bundles; the bundles' slats are a relief walked exactly. Inside a room it bounces between the silver walls,
+  the mirrors and the metal until nothing it could still gather would show: the bound is a bulb's whole light over the
+  ray's footprint, cut at half a code value of the exposed picture. The 30th image of a lamp lies within a
+  ten-thousandth of a pixel of where the image lattice puts it.
+- **The structure lit only by the rooms:** the threads are lit by the light that leaks out of the rooms' glass. The
+  lattice repeats, so one cell's bundles carry a table (460 thousand texels, 4096 rays each along a Fibonacci spiral: no
+  random numbers) of how much each room face round them gives, shadows included; the rooms' own glow (they do not
+  repeat) is multiplied in as the picture is drawn. Varnished threads reflect by Fresnel, gold-leaf ones as gold.
+- **Small lights that do not twinkle:** a pixel's samples entering the same room share one ray inside; the lamps' deep
+  images, dots under a pixel, are gathered by a Gaussian footprint of the pixel's area (a disc counts a moving dot by two
+  to four pixels in turn and it twinkles). Six fixed samples a pixel, no accumulation, no denoiser; 33 to 42 frames a
+  second at 2560 × 1440. No quality settings.
+
+Plan, decisions, measurements and what is not verified in `docs/kuyu/` (Turkish).
+
 ## What scene 1 computes
 
 | | |
@@ -737,6 +774,7 @@ src/
     olcek/            scene 7: tree of anchors, layer clocks, CUDA renderer, maps, density maps, the desert and the bottom
     denizalti/        scene 8: room and equipment kit, decal atlas, OptiX oven (device/), OpenGL 4.6 tessellation pipeline (glsl/)
     ayna/             scene 9: the lattice tracer, the maze, the beams, light maps, the mist, the materials (CUDA)
+    kuyu/             scene 10: the endless lattice, one-way walls, the rooms' insides, the structure's light table (CUDA)
 scenes/               the scenes' settings (<scene>.cfg)
 assets/               fonts (IBM Plex), gallery pictures, blue-noise texture, earthquake records (ESM, AFAD TADAS)
 tools/                EXR statistics, FLIP and RMSE comparison, noise maps, contact sheets, prism planner, value studies;

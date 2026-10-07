@@ -42,6 +42,9 @@ src/
     ayna/       sahne 9 · Ayna (analitik ızgara izleyici: ayna_geom.h üçgen ızgara ve pencere biçimi, ayna_maze.* labirent ve
                 kürenin çarpışması, ayna_beams.* aynadan ışığın hüzme ağacı, ayna_kernels.* izleyici, ışık haritaları, pus,
                 ayna_material.h görünüş, ayna_app.* durum ve araçlar (--test o1 o2 o3 o4 fuzz), ayna_live.cpp sahne)
+    kuyu/       sahne 10 · Kuyu (sonsuz kafeste analitik izleyici: kuyu_geom.h kafes, demetlerin fırıldak düzeni, karmalar ve
+                küp simetrileri, kuyu_kernels.* izleyici, tek yönlü duvar, oda içi sekme, yapının ışık tablosu, kuyu_app.*
+                optik tablolar, oda türleri, çarpışma, araçlar (--test o1 o2 o3 o4 fuzz carpisma), kuyu_live.cpp sahne)
       particles.*       tanecik çözücüsü (PBF, XPBD bağlar, şekil eşleme, taneler)  surface.* sıvı yüzeyi
       lab_world.*       beş deneyin kurulumu ve adımı (kaba ya da ince)  lab_record.* ince kayıt, işçi iş parçacığı
       lab_kernels.cu    çözücü, kayıt ve çizici arası küçük çekirdekler  weapons.* gerçek yükler, balistik

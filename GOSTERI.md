@@ -241,3 +241,28 @@ Ayar paneli yok: kalite 2560 × 1440 için ayarlı (saniyede 30-40 kare).
 - Bir kapı aralığından yavaşça geç: ışığın pervaza düşüşü yakından da keskin.
 
 Plan, ölçümler ve durum `docs/ayna/`. Ayarlar `scenes/ayna.cfg` (F5 ile).
+
+## 10 · Kuyu — aynalı odalardan sonsuz bir kafeste düşüş
+
+Görünmez bir gözlemcisin; iki oda sütunu arasındaki bir kuyudan saniyede 1,5 m düşersin. Her oda koyu bir cam küp:
+içinde ışığı sonsuza dek dönen kapalı bir dünya. Odaların kenarları sonsuza uzanan iplik demetleri.
+
+| Tuş | |
+| --- | --- |
+| **Fare** | etrafa bak (tıklamadan; **Tab** imleci bırakır) |
+| **W A S D** | yatay kay (odalara ve demetlere çarparsın) · **Boşluk / C** yüksel, alçal · **Shift** hızlı |
+| **Q / E** | düşüşü yavaşlat / hızlandır (dur, 0,5, 1,5, 4, 10 m/s) |
+| **1 2 3 4** | bakışlar: kuyu, oda (önünde durursun), kafes, yukarı |
+| **R** | başa dön · **↑ / ↓** pozlama |
+
+Ayar paneli yok: kalite 2560 × 1440 için ayarlı (saniyede 33-42 kare).
+
+**Dene:**
+- Başta dosdoğru aşağı bak: kuyunun kaçış noktası, kat kat geçen odalar.
+- **2**: bir odanın camının önünde durursun. İçeride lambanın görüntüleri üç boyutlu bir kafeste sonsuza gider; derinde
+  kehribara döner (ince gümüş kırmızıyı daha çok yansıtır).
+- **W** ile bir odanın camına yaklaş: dışarıdan cam yalnız %4 yansıtır, içerisi koyu camın ardında parlar.
+- **Q** ile dur, fareyi yavaşça gezdir: yıldız alanları titremeden kayar.
+- **E E** ile hızlan: odalar sessizce yukarı akar.
+
+Plan, ölçümler ve durum `docs/kuyu/`. Ayarlar `scenes/kuyu.cfg` (F5 ile).

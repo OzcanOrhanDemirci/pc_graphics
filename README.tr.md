@@ -43,7 +43,7 @@ cam, yansımanın yansımasının yansıması odanın kendisi kadar keskin.
 
 ## Uygulama
 
-Dokuz sahne tek bir programda yaşıyor. Program bir galeriyle açılır; sahne bir yükleme ekranının arkasında yüklenir
+On sahne tek bir programda yaşıyor. Program bir galeriyle açılır; sahne bir yükleme ekranının arkasında yüklenir
 (programları derlenir, dünyası kurulur; bunlar ayrı bir iş parçacığında yapıldığı için pencere canlı kalır) ve sonra hepsi
 için aynı olan bir arayüzün altında çalışır: kim ve ne sol altta, süreler sağ üstte, çıkış yolu sağ altta, tuşlar F1'de.
 Sol alttaki panel fareyle kullanılır: sahne oraya seçenek sıraları, kaydırma çubukları ve düğmeler koyabilir (Yıkım'da
@@ -409,6 +409,41 @@ bırakırsın; aynalar her şeyi sonsuza dek çoğaltır.
 
 Plan, kararlar, ölçümler ve doğrulanmayanlar `docs/ayna/` içinde.
 
+### 10 · Kuyu · Ekim 2026
+
+| ![Kuyudan dosdoğru aşağı: iki oda sütunu, tek kaçış noktasına koşan gerilmiş çizgi demetleri, kat kat parlayan odalar](docs/images/kuyu-kuyu.jpg) | ![Bir odanın önünde: koyu camın ardında krom bir küre ve lambası, gümüşlü duvarlarda sonsuza çoğalıyor](docs/images/kuyu-oda.jpg) |
+|---|---|
+| ![Ay ışıklı bir oda: soğuk lambasının görüntüleri üç boyutlu bir kafeste sürüyor, aynalanan dikişler bir noktada birleşiyor](docs/images/kuyu-ay.jpg) | ![Yana, kafes boyunca: kitap sırtı ipliklerinden demetler, arkalarında sıcak ve soğuk ışıklı odalar](docs/images/kuyu-kafes.jpg) |
+
+Odağı sonsuzluk, dışarıdan: *içinde sonsuz yansıma olan kapalı dünyalar ve yanlarından düşen bir gözlemci*. Sahne 9'un
+kardeşi (orada labirentin içindeydik; burada sonsuz odalar kapalı, biz dışarıdayız). Cam odalardan sonsuz bir kübik
+kafes; her oda tek yönlü aynadan bir kutu, kendi ışığı ve eşyasıyla; her odanın her kenarı sonsuza uzanan bir iplik
+demeti olarak sürer (*Interstellar*'ın tesseract'ı gibi). İki oda sütunu arasındaki bir kuyudan yavaşça aşağı düşeriz.
+
+- **Fizikten tek yönlü duvar:** duvar yarım inç gri float cam (veri sayfası: görünür geçirgenlik %18), içte 45 nm gümüş
+  film (Johnson ve Christy 1972, ince filmin Airy toplamları), dışta yansıma önleyici kaplama. İçeride %94,5 döner, ışık
+  sonsuza dek dolaşır; dışarıdan cam %4 yansıtır; içinden iki yönde de %0,7 geçer (karşılıklılık böyle ister: tek
+  yönlülük yalnız aydınlık içeriyle karanlık dışarının farkı). İnce gümüş maviyi kırmızıdan çok geçirir: derin
+  yansımalar kendiliğinden kehribara döner. Bağımsız bir hesapla (Abelès matrisleri) 1e-6'ya dek denetlendi.
+- **Yirmi oda türü**, her biri küpün 48 simetrisinden biriyle döndürülmüş, komşular benzemez: çeşitli yüksekliklere
+  asılı ampuller (Kusama'nın sonsuzluk odaları), tek lamba, soğuk ay ışığı, krom küre, T = 2π√(l/g) ile salınan bakır
+  sarkaç, 45° ayna, köşe yansıtıcı, lamba sırası, mum ve kendi ışığı olmayan karanlık odalar.
+- **Kendi kesin izleyicimiz (CUDA):** ışın kafeste hücreden hücreye yürür, her hücrede yalnız oranın odası ve on iki
+  demetiyle kesişir; demetlerdeki çıtalar kesin yürünen bir kabartma. Odanın içinde gümüş duvarlar, aynalar ve metal
+  arasında, toplayabileceği hiçbir şey görünmeyecek hâle gelene dek seker: sınır, bir ampulün bütün ışığı bölü ışının
+  izdüşümü, pozlanmış görüntüde yarım kod değerinde kesilir. Bir lambanın 30. görüntüsü, görüntü kafesinin koyduğu
+  yerin on binde bir pikseli içinde.
+- **Yapıyı yalnız odalar aydınlatır:** iplikleri odaların camından sızan ışık aydınlatır. Kafes yinelendiği için bir
+  hücrenin demetleri bir tablo taşır (460 bin texel, her biri Fibonacci sarmalında 4096 ışın: rastgele sayı yok):
+  çevresindeki her oda yüzünün ne kadar ışık verdiği, gölgeler dahil; odaların kendi parıltısı (onlar yinelenmez)
+  görüntü çizilirken çarpılır. Cilalı iplikler Fresnel'le, altın varaklılar altın gibi yansıtır.
+- **Titremeyen küçük ışıklar:** bir pikselin aynı odaya giren örnekleri içeride tek bir ışını paylaşır; lambaların
+  derin görüntüleri, pikselden küçük noktalar, piksel alanında bir Gauss izdüşümle toplanır (disk, hareket eden bir
+  noktayı sırayla iki ila dört pikselde sayar ve nokta titrer). Pikselde altı sabit örnek, birikim ve gürültü giderici
+  yok; 2560 × 1440'ta saniyede 33-42 kare. Kalite ayarı yok.
+
+Plan, kararlar, ölçümler ve doğrulanmayanlar `docs/kuyu/` içinde.
+
 ## Sahne 1: neyi hesaplıyor
 
 | | |
@@ -666,6 +701,7 @@ src/
     olcek/            sahne 7: çapa ağacı, katman saatleri, CUDA çizici, haritalar, yoğunluk haritaları, çöl ve dip
     denizalti/        sahne 8: oda ve teçhizat kiti, çıkartma atlası, OptiX fırını (device/), OpenGL 4.6 tessellation hattı (glsl/)
     ayna/             sahne 9: ızgara izleyici, labirent, hüzmeler, ışık haritaları, pus, malzemeler (CUDA)
+    kuyu/             sahne 10: sonsuz kafes, tek yönlü duvarlar, odaların içi, yapının ışık tablosu (CUDA)
 scenes/               sahnelerin ayarları (<sahne>.cfg)
 assets/               yazı tipleri (IBM Plex), galeri resimleri, mavi gürültü dokusu, deprem kayıtları (ESM, AFAD TADAS)
 tools/                EXR istatistikleri, FLIP ve RMSE karşılaştırması, gürültü haritaları, temas tabakaları, prizma planlayıcı, değer etütleri;

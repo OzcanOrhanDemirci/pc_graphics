@@ -255,3 +255,28 @@ No settings panel: the quality is set for 2560 × 1440 (30-40 frames a second).
 - Pass slowly through a doorway: the light on the jamb is sharp even close up.
 
 Plan, measurements and status in `docs/ayna/` (Turkish). Settings `scenes/ayna.cfg` (F5).
+
+## 10 · The Well — an endless fall through a lattice of mirrored rooms
+
+You are an invisible observer falling at 1.5 m/s down a shaft between two columns of rooms. Every room is a dark glass
+cube: a closed world whose light turns inside without end. The rooms' edges run on as endless bundles of threads.
+
+| Key | |
+| --- | --- |
+| **Mouse** | look around (no click; **Tab** releases the cursor) |
+| **W A S D** | drift level (you meet the rooms and the bundles) · **Space / C** rise, sink · **Shift** fast |
+| **Q / E** | slow / quicken the fall (still, 0.5, 1.5, 4, 10 m/s) |
+| **1 2 3 4** | views: the shaft, a room (you stop before it), the lattice, up |
+| **R** | back to the start · **↑ / ↓** exposure |
+
+No settings panel: the quality is set for 2560 × 1440 (33-42 frames a second).
+
+**Try:**
+- At the start look straight down: the shaft's vanishing point, the rooms passing level after level.
+- **2**: you stop before a room's glass. Inside the lamp's images go on in a three-dimensional lattice; deep down they
+  turn amber (thin silver reflects red more).
+- Drift up to a room's glass with **W**: from outside the glass reflects only 4%, the inside glows behind the dark glass.
+- Stop with **Q** and move the mouse slowly: the star fields slide without twinkling.
+- Quicken with **E E**: the rooms stream silently upwards.
+
+Plan, measurements and status in `docs/kuyu/` (Turkish). Settings `scenes/kuyu.cfg` (F5).
