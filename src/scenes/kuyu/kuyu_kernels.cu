@@ -274,8 +274,14 @@ __device__ float3 roomInterior(const View& v, int var, float phase, float3 p, fl
                 const float R = fmaxf(fp + coneS * tc, 1e-5f);
                 const float3 q = p + d * tc - Lt.p;
                 const float dist = length(q);
-                if (dist < Lt.r + R) {
-                    const float cover = fminf(1.0f, discOverlap(Lt.r, R, dist) / (M_PIf * R * R));
+                if (dist < Lt.r + 2.6f * R) {
+                    // the share of the bulb's radiance the footprint gathers. A bulb larger than the footprint: the
+                    // discs' overlap. A bulb smaller (a deep image, a dot): its whole light spread by a Gaussian of the
+                    // footprint's area (sigma^2 = R^2 / 2): a disc's share counts a moving dot by two to four pixel
+                    // centres in turn and it twinkles; this Gaussian sums over the pixel grid to one within 2e-4
+                    const float cd = dist < Lt.r + R ? fminf(1.0f, discOverlap(Lt.r, R, dist) / (M_PIf * R * R)) : 0.0f;
+                    const float cg = (Lt.r * Lt.r) / (R * R) * __expf(-dist * dist / (R * R));
+                    const float cover = fminf(1.0f, lerpf(cd, cg, smoothstepf(Lt.r, 2.0f * Lt.r, R)));
                     L += w * Lt.I * (cover / (M_PIf * Lt.r * Lt.r));
                     w *= (1.0f - cover);
                 }
@@ -561,26 +567,6 @@ __global__ void kLightTable(View v, unsigned char* outIdx, float* outG, float2* 
         outG[size_t(texel) * kLtK + k] = k < nk ? kg[k] : 0.0f;
     }
     outFar[texel] = make_float2(farRoom * scale + spill, mist * scale);
-}
-
-// the far terms are low-frequency light: a box blur along the bundle and across the face (rays, not a field)
-__global__ void kBlurFar(View v, const float2* in, float2* out, int ra, int rw) {
-    const int total = 48 * v.ltNa * v.ltNw;
-    const int texel = blockIdx.x * blockDim.x + threadIdx.x;
-    if (texel >= total) return;
-    const int iw = texel % v.ltNw, ia = (texel / v.ltNw) % v.ltNa, face = texel / (v.ltNw * v.ltNa);
-    float2 acc = make_float2(0, 0);
-    float n = 0.0f;
-    for (int da = -ra; da <= ra; ++da)
-        for (int dw = -rw; dw <= rw; ++dw) {
-            const int a = (ia + da + v.ltNa) % v.ltNa, w = iw + dw;   // along: the cell repeats
-            if (w < 0 || w >= v.ltNw) continue;
-            const float2 q = in[(face * v.ltNa + a) * v.ltNw + w];
-            acc.x += q.x;
-            acc.y += q.y;
-            n += 1.0f;
-        }
-    out[texel] = make_float2(acc.x / n, acc.y / n);
 }
 
 // a slat: how far it stands out (0..1 of the relief), constant along its whole line
@@ -1271,11 +1257,8 @@ void buildGlowTable(const View& v, float4* glowOut, int perSide) {
 
 void buildLightTable(const View& v, unsigned char* idx, float* G, float2* far, int samplesSide, int farRays) {
     const int total = 48 * v.ltNa * v.ltNw;
-    float2* tmp = nullptr;
-    cudaMalloc(reinterpret_cast<void**>(&tmp), sizeof(float2) * total);
     kLightTable<<<(total + 63) / 64, 64>>>(v, idx, G, far, samplesSide, farRays);
     cudaDeviceSynchronize();
-    cudaFree(tmp);
 }
 
 void buildTailTable(const View& v, float4* tailOut, int perSide) {

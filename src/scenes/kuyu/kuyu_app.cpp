@@ -707,6 +707,64 @@ int runKuyuCli(int argc, char** argv) {
             }
         }
     }
+    if (test == "o3") {
+        // Ö3: falling down the shaft at 1.5 m/s (30 frames a second), looking round slowly, the pendulums swinging: the
+        // live frames and the same moments converged (16 samples, every sample its own interior, four renders shifted
+        // by a quarter pixel: 64), for tools/kararlilik.py
+        const std::string dir = out + "/o3";
+        std::filesystem::create_directories(dir);
+        const int frames = std::max(4, [&]() { KuyuApp t; t.root = a.root; t.overrides = a.overrides; t.loadConfig(); return t.cfg.i("o3.frames", 48); }());
+        const int W = w > 0 ? w : 1280, Hh = h > 0 ? h : 720;
+        for (int pass = 0; pass < 2; ++pass) {
+            KuyuApp b;
+            b.root = a.root;
+            b.overrides = a.overrides;
+            if (pass == 1) {
+                b.overrides.push_back("samples=16");
+                b.overrides.push_back("interior.reps=0");
+            }
+            b.loadConfig();
+            b.width = W;
+            b.height = Hh;
+            b.init();
+            const int path = b.cfg.i("o3.path", 0);
+            for (int f = 0; f < frames; ++f) {
+                const double t = double(f) / 30.0;
+                if (path == 0) {   // down the shaft, looking down and slowly round
+                    b.cam.x = 0.05 * std::sin(t * 0.7);
+                    b.cam.y = 0.3 - 1.5 * t;
+                    b.cam.z = 4.0 + 0.1 * std::sin(t * 0.5);
+                    b.cam.yaw = float(0.2 + 0.25 * t);
+                    b.cam.pitch = float(-1.2 + 0.1 * std::sin(t * 1.3));
+                } else if (path == 2) {   // hovering: the view drifts a quarter of a pixel a frame (where twinkling shows)
+                    b.cam.x = 0.0 + 0.002 * f;
+                    b.cam.y = 0.3 - 0.01 * f;
+                    b.cam.z = 4.2;
+                    b.cam.yaw = float(0.2 + 0.0004 * f);
+                    b.cam.pitch = float(-1.0 + 0.0003 * f);
+                } else {           // the same fall, looking at a room as it passes
+                    b.cam.x = 0.0;
+                    b.cam.y = 1.0 - 1.5 * t;
+                    b.cam.z = 4.4;
+                    b.cam.yaw = float(-0.1 + 0.15 * t);
+                    b.cam.pitch = -0.2f;
+                    b.cam.fovY = 70.0f;
+                }
+                b.time = 10.0 + t;
+                char name[64];
+                std::snprintf(name, sizeof(name), "/%s_%04d", pass == 0 ? "live" : "ref", f);
+                if (pass == 1) {
+                    b.saveReference(dir + name);
+                } else {
+                    b.render();
+                    b.save(dir + name);
+                }
+            }
+            b.release();
+        }
+        std::printf("O3: %d kare -> %s (python tools/kararlilik.py %s)\n", frames, dir.c_str(), dir.c_str());
+        return 0;
+    }
     if (test == "o4") {
         // Ö4: points on the bundles of cell (0, 0, 0) (several bundles, faces, along and across), table <-> brute force
         a.loadConfig();
