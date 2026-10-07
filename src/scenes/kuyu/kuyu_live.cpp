@@ -115,10 +115,23 @@ public:
                 const KuyuCam v = KuyuApp::view(k);
                 // the view's place within its cell, at the level we have fallen to
                 const double C = a_.lat.C;
-                const double base = std::floor(a_.cam.y / C + 0.5) * C;
+                double base = std::floor(a_.cam.y / C + 0.5) * C;
+                if (k == 1) {
+                    // a room to look into: the nearest one below with a light of its own (not a dark one)
+                    const long long J = (long long)std::floor(a_.cam.y / C + 0.5);
+                    for (long long j = J; j > J - 40; --j)
+                        if (a_.variants[a_.variantOf[kuyu::cellKey(0, j, 0) & 255u]].nL > 0) {
+                            base = double(j) * C;
+                            break;
+                        }
+                }
                 a_.cam = v;
                 a_.cam.y = base + v.y;
                 vel_ = make_float3(0, 0, 0);
+                if (k == 1) {   // before a room the fall stops: E takes it on
+                    fall_ = 0;
+                    host.toast(L("Bir odanın önünde durdun: E düşüşü sürdürür", "Stopped before a room: E falls on"));
+                }
             }
         if (in.pressed(GLFW_KEY_Q)) fall_ = std::max(0, fall_ - 1);
         if (in.pressed(GLFW_KEY_E)) fall_ = std::min(4, fall_ + 1);
@@ -143,9 +156,24 @@ public:
         if (wl > 1.0f) want = want * (1.0f / wl);
         want = want * speed + make_float3(0.0f, -kFall[fall_], 0.0f);
         vel_ += (want - vel_) * (1.0f - std::exp(-dt * 3.0f));
-        a_.cam.x += vel_.x * dt;
-        a_.cam.y += vel_.y * dt;
-        a_.cam.z += vel_.z * dt;
+        // in small steps, pushed out of the glass and the bundles; the push takes the velocity into them away (a slide)
+        const int sub = std::max(1, int(std::ceil(length(vel_) * dt / 0.05f)));
+        for (int k = 0; k < sub; ++k) {
+            const double px = a_.cam.x + vel_.x * dt / sub, py = a_.cam.y + vel_.y * dt / sub, pz = a_.cam.z + vel_.z * dt / sub;
+            double nx = px, ny = py, nz = pz;
+            if (a_.collide(nx, ny, nz, 0.3f)) {
+                const float3 push = make_float3(float(nx - px), float(ny - py), float(nz - pz));
+                const float pl = length(push);
+                if (pl > 1e-6f) {
+                    const float3 n = push * (1.0f / pl);
+                    const float vn = dot(vel_, n);
+                    if (vn < 0.0f) vel_ -= n * vn;
+                }
+            }
+            a_.cam.x = nx;
+            a_.cam.y = ny;
+            a_.cam.z = nz;
+        }
         a_.time += dt;
 
         a_.evScale = std::exp2(ev_);

@@ -53,6 +53,8 @@ public:
     void computeOptics();
     void buildVariants();
     float3 forward() const;
+    // the observer, a sphere of radius r, pushed out of the rooms' glass and the bundles; true if it touched
+    bool collide(double& x, double& y, double& z, float r) const;
     std::vector<float4> hdrHost() const {
         std::vector<float4> h(size_t(width) * height);
         cudaMemcpy(h.data(), hdr_, h.size() * sizeof(float4), cudaMemcpyDeviceToHost);

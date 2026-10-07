@@ -254,6 +254,7 @@ void App::frameGallery(double now, double dt) {
     if (consume(GLFW_KEY_UP) || consume(GLFW_KEY_W)) select(selected_ - 1);
     for (int i = 0; i < n && i < 9; ++i)
         if (consume(GLFW_KEY_1 + i)) select(i);
+    if (n >= 10 && consume(GLFW_KEY_0)) select(9);   // the tenth: 0
     hovered_ = -1;
     const float mx = float(mouseX_), my = float(mouseY_);
     for (int i = 0; i < int(entryRects_.size()); ++i)
@@ -536,7 +537,7 @@ int App::run(const Options& opt) {
         }
         for (int s = 0; s < int(infos_.size()); ++s) {
             if (!only.empty() && infos_[s].id != only) continue;
-            key(GLFW_KEY_1 + s); wait(0.4);
+            key(s < 9 ? GLFW_KEY_1 + s : GLFW_KEY_0); wait(0.4);
             if (infos_[s].id == "yikim") { mouse(0.88f, 0.735f); wait(0.3); shot("galeri_dugme"); click(); }   // the "open" button
             else key(GLFW_KEY_ENTER);
             wait(0.25); shot(infos_[s].id + "_yukleniyor");
@@ -601,6 +602,18 @@ int App::run(const Options& opt) {
                 key(GLFW_KEY_2); wait(2.0); log("ayna bakis 2 ayna"); shot("ayna_bakis2");
                 key(GLFW_KEY_3); wait(2.0); log("ayna bakis 3 salon"); shot("ayna_bakis3");
                 key(GLFW_KEY_4); wait(2.0); log("ayna bakis 4 zemin"); shot("ayna_bakis4");
+            }
+            if (infos_[s].id == "kuyu") {
+                // falling down the shaft, drifting towards a room, the fall quickened and stopped, the four views (timed)
+                wait(1.5); log("kuyu dusus"); shot("kuyu_dusus");
+                hold(GLFW_KEY_W, true); wait(0.8); hold(GLFW_KEY_W, false); wait(0.4); log("kuyu kayma"); shot("kuyu_kayma");
+                key(GLFW_KEY_E); key(GLFW_KEY_E); wait(1.5); log("kuyu hizli"); shot("kuyu_hizli");
+                key(GLFW_KEY_Q); key(GLFW_KEY_Q); key(GLFW_KEY_Q); key(GLFW_KEY_Q); wait(1.0); log("kuyu duruyor"); shot("kuyu_duruyor");
+                key(GLFW_KEY_1); wait(2.0); log("kuyu bakis 1 kuyu"); shot("kuyu_bakis1");
+                key(GLFW_KEY_2); wait(2.0); log("kuyu bakis 2 oda"); shot("kuyu_bakis2");
+                key(GLFW_KEY_3); wait(2.0); log("kuyu bakis 3 kafes"); shot("kuyu_bakis3");
+                key(GLFW_KEY_4); wait(2.0); log("kuyu bakis 4 yukari"); shot("kuyu_bakis4");
+                key(GLFW_KEY_R); wait(1.0);
             }
             if (infos_[s].id == "denizalti") {
                 // walk forward along the diving station, look about with the mouse (Tab), the binoculars, the panel

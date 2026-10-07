@@ -543,6 +543,62 @@ float3 KuyuApp::forward() const {
     return normalize(make_float3(-std::sin(cam.yaw) * cp, std::sin(cam.pitch), -std::cos(cam.yaw) * cp));
 }
 
+bool KuyuApp::collide(double& x, double& y, double& z, float r) const {
+    const double C = lat.C;
+    bool touched = false;
+    const float H = lat.h + lat.glass, hb = 0.5f * lat.b;
+    for (int it = 0; it < 4; ++it) {
+        bool moved = false;
+        const long long I = (long long)std::floor(x / C + 0.5), J = (long long)std::floor(y / C + 0.5), K = (long long)std::floor(z / C + 0.5);
+        // the boxes of this cell and its neighbours, relative to the observer (centre and half extents)
+        for (int ox = -1; ox <= 1; ++ox)
+            for (int oy = -1; oy <= 1; ++oy)
+                for (int oz = -1; oz <= 1; ++oz) {
+                    const float3 cc = make_float3(float(double(I + ox) * C - x), float(double(J + oy) * C - y), float(double(K + oz) * C - z));
+                    for (int b = -1; b < 12; ++b) {
+                        float3 c = cc, e;
+                        if (b < 0) {
+                            e = make_float3(H, H, H);
+                        } else {
+                            const BundleShape s2 = bundleShape(lat, b);
+                            setComp(c, s2.u, comp(cc, s2.u) + s2.cu);
+                            setComp(c, s2.v, comp(cc, s2.v) + s2.cv);
+                            setComp(e, s2.a, 0.5f * float(C));
+                            setComp(e, s2.u, hb);
+                            setComp(e, s2.v, hb);
+                        }
+                        // the closest point of the box to the observer (at the origin)
+                        const float3 q = make_float3(std::clamp(0.0f, c.x - e.x, c.x + e.x), std::clamp(0.0f, c.y - e.y, c.y + e.y),
+                                                     std::clamp(0.0f, c.z - e.z, c.z + e.z));
+                        const float d2 = dot(q, q);
+                        if (d2 >= r * r) continue;
+                        float3 push;
+                        if (d2 > 1e-12f) {
+                            const float dl = std::sqrt(d2);
+                            push = q * (-(r - dl) / dl);
+                        } else {   // inside: out along the shallowest side
+                            float best = 1e30f;
+                            push = make_float3(0, 0, 0);
+                            for (int a = 0; a < 3; ++a)
+                                for (int sg = -1; sg <= 1; sg += 2) {
+                                    const float depth = sg * (comp(c, a) + sg * comp(e, a)) + r;   // to that face, and r beyond it
+                                    if (depth < best) {
+                                        best = depth;
+                                        push = axisVec(a, float(sg) * depth);
+                                    }
+                                }
+                        }
+                        x += push.x;
+                        y += push.y;
+                        z += push.z;
+                        moved = touched = true;
+                    }
+                }
+        if (!moved) break;
+    }
+    return touched;
+}
+
 View KuyuApp::makeView() const {
     View v;
     v.width = width;
@@ -815,6 +871,78 @@ int runKuyuCli(int argc, char** argv) {
         std::printf("O4 (tablonun makinesi: kaba kuvvet ayni yayici modelle): toplam %.4f, uyum %.4f\n", sumT / sumM, 1.0 - sumAbsM / sumM);
         a.release();
         return 0;
+    }
+    if (test == "carpisma") {
+        // the observer's collision: random points pushed out must end clear of every box (checked by a separate
+        // distance scan), points already clear must not move; the composed views must start clear
+        a.loadConfig();
+        a.lat.C = a.cfg.f("lattice.cell", 8.0f);
+        a.lat.h = a.cfg.f("room.half", 1.8f);
+        a.lat.glass = a.cfg.f("wall.glass", 0.0127f);
+        a.lat.b = a.cfg.f("bundle.width", 0.6f);
+        a.lat.gap = a.cfg.f("bundle.gap", 0.03f);
+        const float r = 0.3f;
+        auto clearance = [&](double x, double y, double z) {   // the smallest distance to any box round the point
+            const double C = a.lat.C;
+            const float H = a.lat.h + a.lat.glass, hb = 0.5f * a.lat.b;
+            float best = 1e30f;
+            const long long I = (long long)std::floor(x / C + 0.5), J = (long long)std::floor(y / C + 0.5), K = (long long)std::floor(z / C + 0.5);
+            for (int ox = -1; ox <= 1; ++ox)
+                for (int oy = -1; oy <= 1; ++oy)
+                    for (int oz = -1; oz <= 1; ++oz) {
+                        const float3 cc = make_float3(float(double(I + ox) * C - x), float(double(J + oy) * C - y), float(double(K + oz) * C - z));
+                        for (int b = -1; b < 12; ++b) {
+                            float3 c = cc, e;
+                            if (b < 0) e = make_float3(H, H, H);
+                            else {
+                                const BundleShape s2 = bundleShape(a.lat, b);
+                                setComp(c, s2.u, comp(cc, s2.u) + s2.cu);
+                                setComp(c, s2.v, comp(cc, s2.v) + s2.cv);
+                                setComp(e, s2.a, 0.5f * float(C));
+                                setComp(e, s2.u, hb);
+                                setComp(e, s2.v, hb);
+                            }
+                            const float dx = std::max(0.0f, std::fabs(c.x) - e.x), dy = std::max(0.0f, std::fabs(c.y) - e.y), dz = std::max(0.0f, std::fabs(c.z) - e.z);
+                            best = std::min(best, std::sqrt(dx * dx + dy * dy + dz * dz));
+                        }
+                    }
+            return best;
+        };
+        unsigned st = 777u;
+        auto rnd = [&]() {
+            st ^= st << 13;
+            st ^= st >> 17;
+            st ^= st << 5;
+            return float(st >> 8) * (1.0f / 16777216.0f);
+        };
+        // walks: from clear points, 400 random steps of up to 5 cm (the live app's sub-steps), each pushed out
+        int bad = 0, movedClear = 0, walks = 0;
+        float worst = 1e30f;
+        for (int k = 0; k < 400; ++k) {
+            double x = (rnd() * 2 - 1) * 16.0, y = (rnd() * 2 - 1) * 16.0, z = (rnd() * 2 - 1) * 16.0;
+            if (clearance(x, y, z) < r) continue;
+            ++walks;
+            for (int st2 = 0; st2 < 400; ++st2) {
+                const double px = x + (rnd() * 2 - 1) * 0.05, py = y + (rnd() * 2 - 1) * 0.05 - 0.02, pz = z + (rnd() * 2 - 1) * 0.05;
+                const float before = clearance(px, py, pz);
+                x = px;
+                y = py;
+                z = pz;
+                a.collide(x, y, z, r);
+                const float after = clearance(x, y, z);
+                worst = std::min(worst, after);
+                if (after < r - 1e-3f) ++bad;
+                if (before >= r && (x != px || y != py || z != pz)) ++movedClear;
+            }
+        }
+        int viewsBad = 0;
+        for (int i = 0; i < KuyuApp::viewCount(); ++i) {
+            const KuyuCam c = KuyuApp::view(i);
+            if (clearance(c.x, c.y, c.z) < r) ++viewsBad;
+        }
+        std::printf("carpisma: %d yuruyus x 400 adim, itildikten sonra engele en yakin %.4f m (gozlemci %.2f m), engelde kalan %d, bosken itilen %d, "
+                    "bakislardan engelde olan %d\n", walks, worst, r, bad, movedClear, viewsBad);
+        return bad || movedClear || viewsBad ? 1 : 0;
     }
     if (test == "fuzz") {   // random poses (fixed seed) over a few cells, the clock running: CUDA and the pixels must stay clean
         a.loadConfig();
