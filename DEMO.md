@@ -264,7 +264,8 @@ cube: a closed world whose light turns inside without end. The rooms' edges run 
 | Key | |
 | --- | --- |
 | **Mouse** | look around (no click; **Tab** releases the cursor) |
-| **W A S D** | drift level (you meet the rooms and the bundles) · **Space / C** rise, sink · **Shift** fast |
+| **W A S D** | drift level (you meet the rooms and the bundles) · **Space / C** rise, sink |
+| **Shift** (held) | faster and faster: the speed grows e-fold every 1.3 s up to 120 m/s; let go and it comes back within a few seconds (falling too) |
 | **Q / E** | slow / quicken the fall (still, 0.5, 1.5, 4, 10 m/s) |
 | **1 2 3 4** | views: the shaft, a room (you stop before it), the lattice, up |
 | **R** | back to the start · **↑ / ↓** exposure |
@@ -278,5 +279,6 @@ No settings panel: the quality is set for 2560 × 1440 (33-42 frames a second).
 - Drift up to a room's glass with **W**: from outside the glass reflects only 4%, the inside glows behind the dark glass.
 - Stop with **Q** and move the mouse slowly: the star fields slide without twinkling.
 - Quicken with **E E**: the rooms stream silently upwards.
+- Hold **Shift** while falling: slowly at first, then faster and faster, to 120 m a second (some 15 rooms a second).
 
 Plan, measurements and status in `docs/kuyu/` (Turkish). Settings `scenes/kuyu.cfg` (F5).

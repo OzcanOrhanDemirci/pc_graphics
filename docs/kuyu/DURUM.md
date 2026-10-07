@@ -8,7 +8,7 @@
 - `build\pc_graphics.exe` → galeride **10 Kuyu** (galeride **0** tuşu ya da aşağı ok) → Enter.
 - Görünmez bir gözlemcisin, iki oda sütunu arasındaki kuyudan saniyede 1,5 m düşüyorsun.
 - Fare tıklamadan bakar (Denizaltı'nın sözleşmesi; **Tab** imleci bırakır). **W A S D** yatay kayma (odalara ve
-  demetlere çarparsın), **Boşluk / C** yüksel / alçal, **Shift** hızlı. **Q / E** düşüşü yavaşlatır / hızlandırır (dur,
+  demetlere çarparsın), **Boşluk / C** yüksel / alçal, **Shift** basılı tutuldukça gittikçe hızlanır (aşağıda). **Q / E** düşüşü yavaşlatır / hızlandırır (dur,
   0,5, 1,5, 4, 10 m/s). **1 2 3 4** bestelenmiş bakışlar: kuyu, oda, kafes, yukarı (**2** en yakın ışıklı odanın
   önüne getirir ve düşüşü durdurur; **E** sürdürür). **R** başa döner, **↑ ↓** pozlama. Ayar paneli yok: kalite
   2560 × 1440 için ayarlı.
@@ -16,6 +16,18 @@
   dur: lambanın görüntüleri içeride üç boyutlu bir kafeste sonsuza gider, derinde kehribara döner; (3) **Q** ile dur ve
   fareyi yavaşça gezdir: yıldız alanları titremeden kaymalı (titriyorsa söyle: ölçüm aşağıda); (4) **W** ile bir odanın
   camına yaklaş; (5) **E E** ile hızlan.
+
+## Revize 1 (Özcan, 2026-10-07 akşam): Shift ile sonsuzlukta hızlanmak
+
+Özcan: *"Test ettim çok güzel olmuş. Çok sonsuz hissettiriyor. [...] shifte basılı tutarken gittikçe hızlanan şekilde
+[...] önce yavaş sonra çok hızlanmak. En son noktada aşırı hızlı. Hıza özel hiçbirşey yok. Sadece hızlı hareket
+ediyorum."* → Shift basılıyken hareketin (kayma ve düşüş birlikte) hızı üstel büyür: her `boost.tau` = 1,3 sn'de e katı,
+tavan `boost.max` = 120 m/s (1,5 m/s düşüşten tavana ~5,7 sn); bırakınca 2,5 kat hızla geri iner (yarılanma ~0,4 sn).
+Hıza bağlı hiçbir görüntü etkisi yok; panelde yalnız "Hız" ölçümü. **Tavan neden 120 m/s:** kafes 8 m'de bir yinelenir;
+kare başına yarım hücreden (33 FPS'te ~130 m/s) fazla ilerleyince göz hareketi izleyemez, kafes durmuş ya da geri
+gidiyormuş gibi görünür (araba tekerleği etkisi). İstenirse `boost.max` ile kaldırılır. Otomatik test: Shift ile 3 sn'de
+36 m/s, 7 sn'de 120 m/s, kare süresi değişmiyor (33 FPS); bırakınca 3 sn'de 4 m/s. Uygulamada `in.shift` artık otomatik
+testin basılı tuttuğu sanal tuşları da görüyor (gerçek tuş için davranış aynı).
 
 ## Bir bakışta
 

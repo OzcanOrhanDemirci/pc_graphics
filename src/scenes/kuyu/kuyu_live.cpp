@@ -1,6 +1,6 @@
 // Scene 10 "Kuyu" inside the application: falling slowly down a shaft of an endless lattice of mirrored rooms. The
 // mouse looks (captured from the start, as the lighthouse's walk; Tab gives the cursor back), W A S D drift level,
-// Space and C rise and sink, Q / E slow and quicken the fall, Shift is fast. No quality settings: the picture is set
+// Space and C rise and sink, Q / E slow and quicken the fall, Shift held goes faster and faster. No quality settings: the picture is set
 // for 2560 x 1440.
 #include "app/scene.h"
 #include "app/theme.h"
@@ -62,7 +62,7 @@ public:
                     {L("Boşluk", "Space"), L("Yüksel", "Rise")},
                     {"C", L("Alçal", "Sink")},
                     {"Q E", L("Düşüşü yavaşlat / hızlandır", "Slow / quicken the fall")},
-                    {"Shift", L("Hızlı", "Fast")},
+                    {"Shift", L("Basılı tut: gittikçe hızlan", "Hold: faster and faster")},
                     {"Tab", L("İmleci bırak / al", "Release / take the cursor")},
                     {"1 2 3 4", L("Bakışlar: kuyu, oda, kafes, yukarı", "Views: the shaft, a room, the lattice, up")},
                     {"R", L("Başa dön", "Back to the start")},
@@ -109,6 +109,7 @@ public:
             a_.cam = KuyuApp::view(0);
             vel_ = make_float3(0, 0, 0);
             fall_ = 2;
+            boostT_ = 0.0f;
         }
         for (int k = 0; k < KuyuApp::viewCount(); ++k)
             if (in.pressed(GLFW_KEY_1 + k)) {
@@ -150,11 +151,19 @@ public:
         const float up = key(GLFW_KEY_SPACE) - key(GLFW_KEY_C);
         const float3 f = make_float3(-std::sin(a_.cam.yaw), 0.0f, -std::cos(a_.cam.yaw));
         const float3 r = make_float3(std::cos(a_.cam.yaw), 0.0f, -std::sin(a_.cam.yaw));
-        const float speed = in.shift ? 3.0f : 1.2f;
         float3 want = f * fwd + r * right + make_float3(0.0f, up, 0.0f);
         const float wl = length(want);
         if (wl > 1.0f) want = want * (1.0f / wl);
-        want = want * speed + make_float3(0.0f, -kFall[fall_], 0.0f);
+        want = want * 1.2f + make_float3(0.0f, -kFall[fall_], 0.0f);
+        // Shift held: faster and faster, exponentially (e-fold every boost.tau seconds) up to boost.max m/s; let go: back
+        // within a few seconds. Nothing else changes with the speed. The ceiling: above it the lattice (one cell in 8 m)
+        // moves more than half a cell between frames and the eye can no longer follow it (it seems to stand or go back)
+        const float tau = a_.cfg.f("boost.tau", 1.3f), vmax = a_.cfg.f("boost.max", 120.0f);
+        const float base = std::max(length(want), 0.5f);
+        if (in.shift) boostT_ = std::min(boostT_ + dt, tau * std::log(std::max(vmax / base, 1.0f)));
+        else boostT_ = std::max(0.0f, boostT_ - 2.5f * dt);
+        want = want * std::exp(boostT_ / tau);
+        if (length(want) > vmax) want = want * (vmax / length(want));
         vel_ += (want - vel_) * (1.0f - std::exp(-dt * 3.0f));
         // in small steps, pushed out of the glass and the bundles; the push takes the velocity into them away (a slide)
         const int sub = std::max(1, int(std::ceil(length(vel_) * dt / 0.05f)));
@@ -220,6 +229,7 @@ public:
     void status(app::Status& s) override {
         using theme::num;
         s.chips.push_back({fall_ == 0 ? L("Duruyor", "Still") : L("Düşüş ", "Falling ") + num(kFall[fall_], 1) + " m/s", true});
+        s.metrics.push_back({L("Hız", "Speed"), num(length(vel_), length(vel_) < 10.0f ? 1 : 0) + " m/s"});
         s.metrics.push_back({L("Kare", "Frame"), num(a_.frameMs, 1) + " ms"});
     }
 
@@ -265,6 +275,7 @@ private:
     float3 vel_{0, 0, 0};
     float ev_ = 0.0f;
     int fall_ = 2;
+    float boostT_ = 0.0f;   // how long Shift has been held (the boost's clock)
 };
 
 }   // namespace

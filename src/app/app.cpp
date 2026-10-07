@@ -331,7 +331,7 @@ void App::frameRunning(double now, double dt) {
     in.down = [w, this](int k) {
         return glfwGetKey(w, k) == GLFW_PRESS || std::find(virtualHeld_.begin(), virtualHeld_.end(), k) != virtualHeld_.end();
     };
-    in.shift = glfwGetKey(win_, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(win_, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
+    in.shift = in.down(GLFW_KEY_LEFT_SHIFT) || in.down(GLFW_KEY_RIGHT_SHIFT);   // (the autotest's held keys too)
     in.ctrl = glfwGetKey(win_, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS || glfwGetKey(win_, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS;
     in.mouseX = float(mouseX_);
     in.mouseY = float(mouseY_);
@@ -608,6 +608,9 @@ int App::run(const Options& opt) {
                 wait(1.5); log("kuyu dusus"); shot("kuyu_dusus");
                 hold(GLFW_KEY_W, true); wait(0.8); hold(GLFW_KEY_W, false); wait(0.4); log("kuyu kayma"); shot("kuyu_kayma");
                 key(GLFW_KEY_E); key(GLFW_KEY_E); wait(1.5); log("kuyu hizli"); shot("kuyu_hizli");
+                // Shift held while falling: faster and faster up to the ceiling, then let go
+                hold(GLFW_KEY_LEFT_SHIFT, true); wait(3.0); log("kuyu shift 3 sn"); shot("kuyu_shift3"); wait(4.0); log("kuyu shift 7 sn"); shot("kuyu_shift7");
+                hold(GLFW_KEY_LEFT_SHIFT, false); wait(3.0); log("kuyu shift birakildi"); shot("kuyu_shift_birakildi");
                 key(GLFW_KEY_Q); key(GLFW_KEY_Q); key(GLFW_KEY_Q); key(GLFW_KEY_Q); wait(1.0); log("kuyu duruyor"); shot("kuyu_duruyor");
                 key(GLFW_KEY_1); wait(2.0); log("kuyu bakis 1 kuyu"); shot("kuyu_bakis1");
                 key(GLFW_KEY_2); wait(2.0); log("kuyu bakis 2 oda"); shot("kuyu_bakis2");
