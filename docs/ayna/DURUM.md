@@ -1,7 +1,11 @@
 # DURUM · Sahne 9 "Ayna"
 
-> **Özcan'ın sabah bakacağı yer bu bölümdür.** Otonom gece oturumu, 2026-10-07 00:40 → (sonu en altta). Plan
-> `docs/ayna/PLAN.md`; plandan sapmalar aşağıda "Kararlar"da, gerekçesiyle.
+> 🏁 **TAMAMLANDI, Özcan kabul, revizesiz (2026-10-07 sabah):** *"Kırılmayı yapmayalım çünkü bu hali çok güzel olmuş.
+> Harbiden yansımayı görüyoruz yani. Sonsuzluk hissi de var. Mükemmel değil ama yeterince iyi."* Kırılma (A7)
+> yapılmayacak; aşağıdaki rapor gecenin kaydı olarak kalır.
+
+> Otonom gece oturumu, 2026-10-07 00:40 → 04:20. Plan `docs/ayna/PLAN.md`; plandan sapmalar aşağıda "Kararlar"da,
+> gerekçesiyle.
 
 ## Sabah: nasıl açılır, ne denenir
 
@@ -169,9 +173,11 @@ Kod: `src/scenes/ayna/` (`ayna_geom.h` ızgara, `ayna_maze.*` labirent ve çarp�
 `ayna_kernels.*` izleyici, ışık haritaları, pus, `ayna_material.h` görünüş, `ayna_app.*` durum ve araçlar,
 `ayna_live.cpp` sahne). Ayarlar `scenes/ayna.cfg`.
 
-## Sıradaki (Özcan isterse)
+## Sıradaki
 
-- **A7 kırılma:** çatlama yalnız görüntü olarak ucuz: darbe noktasından Voronoi parçaları (radyal + halka), her parçanın
+Yok: sahne kapandı. Aşağıdaki kırılma taslağı yalnız kayıt için (Özcan: yapılmayacak).
+
+- **A7 kırılma (İPTAL):** çatlama yalnız görüntü olarak ucuz: darbe noktasından Voronoi parçaları (radyal + halka), her parçanın
   normali 0,5-1,5° eğik, çatlak çizgisinde camın yeşil kenarı; ışın aynaya çarptığında parçayı bulup kendi normaliyle
   yansıtır. Hüzmeler çatlak aynayı düz sayar (ışık birkaç mm kayar). Dökülme (7-8 parça yere) Yıkım'ın katı cisim
   çözücüsünü ister: parçalar hücrelere nesne olarak girer.
