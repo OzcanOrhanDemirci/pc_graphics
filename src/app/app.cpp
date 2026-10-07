@@ -612,6 +612,8 @@ int App::run(const Options& opt) {
                 hold(GLFW_KEY_LEFT_SHIFT, true); wait(3.0); log("kuyu shift 3 sn"); shot("kuyu_shift3"); wait(4.0); log("kuyu shift 7 sn"); shot("kuyu_shift7");
                 wait(3.0); log("kuyu shift 10 sn"); shot("kuyu_shift10"); wait(3.0); log("kuyu shift 13 sn"); shot("kuyu_shift13");
                 wait(5.0); log("kuyu shift 18 sn"); shot("kuyu_shift18"); wait(0.1); shot("kuyu_shift18b"); wait(0.1); shot("kuyu_shift18c");
+                wait(12.0); log("kuyu shift 30 sn"); shot("kuyu_shift30"); wait(10.0); log("kuyu shift 40 sn"); shot("kuyu_shift40");
+                wait(0.1); shot("kuyu_shift40b"); wait(0.1); shot("kuyu_shift40c");
                 hold(GLFW_KEY_LEFT_SHIFT, false); wait(4.0); log("kuyu shift birakildi"); shot("kuyu_shift_birakildi");
                 key(GLFW_KEY_Q); key(GLFW_KEY_Q); key(GLFW_KEY_Q); key(GLFW_KEY_Q); wait(1.0); log("kuyu duruyor"); shot("kuyu_duruyor");
                 key(GLFW_KEY_1); wait(2.0); log("kuyu bakis 1 kuyu"); shot("kuyu_bakis1");

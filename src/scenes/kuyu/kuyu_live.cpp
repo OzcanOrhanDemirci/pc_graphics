@@ -158,7 +158,7 @@ public:
         // Shift held: faster and faster, exponentially (e-fold every boost.tau seconds) up to boost.max m/s; let go: back
         // within a few seconds. Nothing else changes with the speed. The ceiling: above it the lattice (one cell in 8 m)
         // moves more than half a cell between frames and the eye can no longer follow it (it seems to stand or go back)
-        const float tau = a_.cfg.f("boost.tau", 1.3f), vmax = a_.cfg.f("boost.max", 1.2e6f);
+        const float tau = a_.cfg.f("boost.tau", 1.3f), vmax = a_.cfg.f("boost.max", 1.2e12f);
         const float base = std::max(length(want), 0.5f);
         if (in.shift) boostT_ = std::min(boostT_ + dt, tau * std::log(std::max(vmax / base, 1.0f)));
         else boostT_ = std::max(0.0f, boostT_ - 6.0f * dt);   // let go: back from the ceiling in about 3 s
@@ -169,7 +169,15 @@ public:
         // up to the first obstacle, then on along it (the velocity into it taken away: a slide); a last push resolves
         // what the grown boxes' corners leave
         double m[3] = {double(vel_.x) * dt, double(vel_.y) * dt, double(vel_.z) * dt};
-        for (int it = 0; it < 4; ++it) {
+        // (past 100 km a frame the sweep is skipped: at a trillion m/s it would walk billions of cells; whether the way
+        // passed through a bundle no longer means anything, the last push still keeps the eye out of the glass)
+        const bool sweepIt = std::sqrt(m[0] * m[0] + m[1] * m[1] + m[2] * m[2]) < 1e5;
+        if (!sweepIt) {
+            a_.cam.x += m[0];
+            a_.cam.y += m[1];
+            a_.cam.z += m[2];
+        }
+        for (int it = 0; it < 4 && sweepIt; ++it) {
             double n[3];
             const double t = a_.sweep(a_.cam.x, a_.cam.y, a_.cam.z, m[0], m[1], m[2], 0.3f, n);
             const double go = std::max(0.0, t - 1e-6);
@@ -186,7 +194,9 @@ public:
         }
         {
             double nx = a_.cam.x, ny = a_.cam.y, nz = a_.cam.z;
-            if (a_.collide(nx, ny, nz, 0.3f)) {
+            // (unswept, the eye lands anywhere in the lattice, now and then inside a room or a bundle: the push only moves it
+            // out; taking the velocity into it away would stop the fall every few frames)
+            if (a_.collide(nx, ny, nz, 0.3f) && sweepIt) {
                 const float3 push = make_float3(float(nx - a_.cam.x), float(ny - a_.cam.y), float(nz - a_.cam.z));
                 const float pl = length(push);
                 if (pl > 1e-6f) {
@@ -246,7 +256,7 @@ public:
         using theme::num;
         s.chips.push_back({fall_ == 0 ? L("Duruyor", "Still") : L("Düşüş ", "Falling ") + num(kFall[fall_], 1) + " m/s", true});
         const float sp = length(vel_);
-        s.metrics.push_back({L("Hız", "Speed"), (sp < 10.0f ? num(sp, 1) : theme::thousands((unsigned long long)std::lround(sp))) + " m/s"});
+        s.metrics.push_back({L("Hız", "Speed"), (sp < 10.0f ? num(sp, 1) : theme::thousands((unsigned long long)std::llround(sp))) + " m/s"});
         s.metrics.push_back({L("Kare", "Frame"), num(a_.frameMs, 1) + " ms"});
     }
 

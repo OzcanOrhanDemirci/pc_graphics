@@ -8,7 +8,7 @@
 - `build\pc_graphics.exe` → galeride **10 Kuyu** (galeride **0** tuşu ya da aşağı ok) → Enter.
 - Görünmez bir gözlemcisin, iki oda sütunu arasındaki kuyudan saniyede 1,5 m düşüyorsun.
 - Fare tıklamadan bakar (Denizaltı'nın sözleşmesi; **Tab** imleci bırakır). **W A S D** yatay kayma (odalara ve
-  demetlere çarparsın), **Boşluk / C** yüksel / alçal, **Shift** basılı tutuldukça gittikçe hızlanır (1,2 milyon m/s'ye dek; aşağıda). **Q / E** düşüşü yavaşlatır / hızlandırır (dur,
+  demetlere çarparsın), **Boşluk / C** yüksel / alçal, **Shift** basılı tutuldukça gittikçe hızlanır (deney: 1,2 trilyon m/s'ye dek; aşağıda). **Q / E** düşüşü yavaşlatır / hızlandırır (dur,
   0,5, 1,5, 4, 10 m/s). **1 2 3 4** bestelenmiş bakışlar: kuyu, oda, kafes, yukarı (**2** en yakın ışıklı odanın
   önüne getirir ve düşüşü durdurur; **E** sürdürür). **R** başa döner, **↑ ↓** pozlama. Ayar paneli yok: kalite
   2560 × 1440 için ayarlı.
@@ -55,6 +55,19 @@ hareket, 0,1-200 m, yol 5 cm'de bir bağımsız uzaklık taramasıyla): hiçbir 
 en çok 15 cm yaklaşıyor), kare sonunda engelde kalan 0. Büyütülmüş kutunun köşesi kürenin çevresinden geniş: köşe
 bölgesinden başlayan teğet bir kayma kare ortasında küreyi engele 15 cm'ye dek sokabiliyor (6 örnek; kare sonundaki
 itme düzeltir, görüntüye yansımaz).
+
+## Revize 4 (Özcan, aynı akşam, deney): 1,2 trilyon m/s
+
+Özcan: *"Ben artık bunu bir deney olarak denemek istiyorum. Çarpışma test vs yapmadan direk 1 trilyon 200 milyar yapar
+mısın [...] muhtemelen geri alırız [...] Bilgisayar böyle bir hızı nasıl gösterecek bana"* → tavan **1,2 × 10¹² m/s**
+(`boost.max`; geri almak için yalnız bu sayı). Aynı eğriyle ~36 sn'de varılır (otomatik test: 18 sn'de 5,1 milyon,
+30 sn'de 78 milyar, 40 sn'de 1,19999 trilyon m/s). Kare başına ~36 milyar m (~4,5 milyar hücre). Görüntü 12.000 m/s'den
+beri aynı türden: her kare kafeste rastgele bir yer, odalar her karede başka; kare süresi değişmiyor. Işığın hızının
+~4.000 katı: bu sahnede görelilik yok (bilerek: "hıza özel hiçbir şey yok"; Hız sahnesi görelilikliydi).
+Gerekenler: kare başına yol 100 km'yi geçince çarpışma süpürmesi atlanır (milyarlarca hücre yürür, program donardı);
+süpürmesiz karede son itme yalnız konumu düzeltir, hıza dokunmaz (dokununca göz bir odanın içine düşen her karede düşüş
+sıfırlanıyordu); panelde hız 64 bitle yuvarlanır (Windows'ta `lround` 32 bit: 2,1 milyar m/s'nin üstünde "0 m/s"
+yazıyordu). Çarpışma bu kipte sınanmadı (Özcan istemedi).
 
 ## Bir bakışta
 
