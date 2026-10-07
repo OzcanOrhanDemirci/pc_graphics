@@ -10,7 +10,8 @@
   **Tab** imleci bırakır. Duvarlardan, sütunlardan, aynadan geçilmez.
 - Işığımız: **Q / E** renk (sıcak beyaz, gün ışığı, kırmızı, turuncu, yeşil, camgöbeği, mavi, mor), **tekerlek** şiddet
   (8 kademe), **F** aç / kapa. **G** ya da **sol tık** önüne lamba bırakır (o anki renk ve şiddette, en çok 8), **X**
-  hepsini toplar, **R** başa döner. **↑ ↓** pozlama. Ayar paneli yok (karar 6): kalite 2560 × 1440 için ayarlı.
+  hepsini toplar, **R** başa döner, **1-4** bestelenmiş bakışlar (koridor, ayna, salon, zemin). **↑ ↓** pozlama. Ayar paneli
+  yok (karar 6): kalite 2560 × 1440 için ayarlı.
 - Denenecekler: (1) iki uzun koridordan birinde **aynaya dik bak**: tünelin kopyaları, kürenin kendisi; (2) ışığı
   bir aynaya **yatık** tut: yansıyan koni duvara ve pusa düşer; (3) farklı renkte iki üç lamba bırakıp uzaklaş:
   hepsi her yöne sonsuza çoğalır; (4) bir kapı aralığından geçerken ışığın pervaza düşüşü (yakından keskin).
@@ -48,7 +49,8 @@
 - **Sekmenin kesilmesi:** yolun ağırlığı 1/1024'ün altına inince (tünelde ~38 sekme; 1/4096 ile fark piksellerin %0,007'si).
 - **Işıklar:** ışığımız 25-3200 cd (8 kademe), koni 28° / 12°, yarık 3 cm; lamba aynı ışık akısını her yöne verir
   (tepe şiddetinin %3'ü), 3 cm cam küre; fenerler 6 cd, ~1900 K, 7 cm delikli kafes.
-- **Pus:** σ_s 0,006 /m, σ_a 0,001 /m, izotrop; huzmeyi gösterir, 50 m'lik derin tünelde yansımaları %30 söndürür.
+- **Pus:** σ_s 0,006 /m, σ_a 0,001 /m, ileri saçan (Henyey-Greenstein g 0,6: sis makinesinin damlacıkları, toz); huzmeyi
+  gösterir, lambalara bakınca hâle yapar, 50 m'lik derin tünelde yansımaları %30 söndürür.
 
 ## Nasıl çiziliyor (mimari)
 
@@ -73,9 +75,11 @@
   örneklerin birine çarpıp ötekini kaçırarak titremez, sabit bir nokta olur.
 - **Desenler** (kemer taşları, alçı, friz, tavan, mermer damarları) ışının izdüşümüyle süzülür: aynanın ardındaki desen,
   aynı uzaklıktan doğrudan bakıldığı kadar keskin ve sakin.
-- **Pus**, her yol parçası boyunca kapalı biçimde: ışığımızın bütün hüzmeleri (koni ve aynalardaki görüntüleri: aynadan
-  yansıyan koni pusta görünür) ve lambaların doğrudan hüzmeleri; yarım çözünürlükte, derinliğe duyarlı büyütmeyle.
-- **Örnekleme:** pikselde 6 sabit örnek (6 kale deseni), her kare aynı; birikim ve gürültü giderici yok.
+- **Pus**, her yol parçası boyunca kapalı biçimde (nokta ışığın saçılması açıya çevrilip 4 Gauss noktasında faz, koni ve
+  aynalar): ışığımızın bütün hüzmeleri (aynadan yansıyan koni pusta görünür) ve lambaların doğrudan hüzmeleri; yarım
+  çözünürlükte, derinliğe duyarlı büyütmeyle.
+- **Örnekleme:** pikselde 6 sabit örnek (6 kale deseni), her kare aynı, komşu piksellere hafif taşan yeniden
+  yapılandırma; birikim ve gürültü giderici yok. Çıktı OpenGL dokusuna kartın içinde kopyalanır.
 
 ## Ölçümler (Ö1-Ö6)
 
@@ -88,8 +92,8 @@
 | Ö5 | 1440p, büyütmesiz | 30-40 FPS, en kötü bakışta da | Başsız: kare 21-28 ms + 1,8 ms. **Canlı uygulamada 29,5-44 FPS**; en kötü bakış (krom küremiz aynada ekranı doldururken) ~29,5: hedefin sınırında. Çıktı CUDA-GL ortak dokuya gider (ana bellek gidiş-dönüşü yok). |
 | Ö6 | Bozuk piksel (NaN), sekme noktası lekesi | 0 | **0** (bütün çizimlerde sayaç 0; 1000 rastgele pozda CUDA temiz, `--test fuzz`). |
 
-Ö3 mutlak hedefi tutmadığı ve Ö5 en kötü bakışta hedefin hemen altında kaldığı için plandaki kapıya uyuldu: **A7 (kırılma)
-başlatılmadı.**
+Ö3 mutlak hedefi tutmadığı (Ö5 de en kötü bakışta sınırda) için plandaki kapıya uyuldu: **A7 (kırılma) başlatılmadı.**
+Nasıl yapılabileceği aşağıda "Sıradaki"de.
 
 ## Kararlar ve plandan sapmalar
 
@@ -109,6 +113,10 @@ başlatılmadı.**
    (`beam.bulge = 1` açar): düğüm sayısını 2,4 katına çıkarıp farkı %5 azaltıyordu. Oradan geçen biraz ışık eksik.
 6. **Ceviz çerçeveler** ilk denemedeki krem pervazların ve altın filetoların yerini aldı: görüntü "şeker çubuğu" gibi
    çizgiliydi, ince parlak çizgiler kıpırtıyı da artırıyordu.
+7. **İleri saçan pus.** İzotrop pusta ışığımız (göze 17 cm uzakta) her bakışın ortasına parlak bir disk yapıyordu (siste
+   uzun far); gerçek pus ileri saçar, geri saçılma 6 kat azaldı.
+8. **Işığımızın doğrudan ışığı piksel başına.** Haritada (1 cm) yakındaki pervaza düşen pencere kenarı gölgesi basamak
+   yapıyordu; gölge ışınlı kesin yöntemle kıyaslanıp düzeltildi (üç yöntem artık aynı görüntüyü veriyor).
 
 ## Gece boyunca bulunan ve düzeltilen hatalar (kısa)
 
@@ -149,3 +157,11 @@ python tools\kararlilik.py captures\ayna\o3
 Kod: `src/scenes/ayna/` (`ayna_geom.h` ızgara, `ayna_maze.*` labirent ve çarpışma, `ayna_beams.*` hüzme ağacı,
 `ayna_kernels.*` izleyici, ışık haritaları, pus, `ayna_material.h` görünüş, `ayna_app.*` durum ve araçlar,
 `ayna_live.cpp` sahne). Ayarlar `scenes/ayna.cfg`.
+
+## Sıradaki (Özcan isterse)
+
+- **A7 kırılma:** çatlama yalnız görüntü olarak ucuz: darbe noktasından Voronoi parçaları (radyal + halka), her parçanın
+  normali 0,5-1,5° eğik, çatlak çizgisinde camın yeşil kenarı; ışın aynaya çarptığında parçayı bulup kendi normaliyle
+  yansıtır. Hüzmeler çatlak aynayı düz sayar (ışık birkaç mm kayar). Dökülme (7-8 parça yere) Yıkım'ın katı cisim
+  çözücüsünü ister: parçalar hücrelere nesne olarak girer.
+- Kıpırtı için tek büyük kaldıraç kalan: örnek sayısı (8 örnek en ağır bakışta 40 ms; çekirdek hızlanırsa).
