@@ -87,7 +87,7 @@
 | --- | --- | --- | --- |
 | Ö1 | Netlik: aynı görüntü doğrudan ↔ gözün 5 cm önündeki analitik bir aynadan (göz ve örnek deseni aynalanmış) | piksel piksel aynı | **İdeal ayna: aynı** (8 bitte ortalama 0,47/255 fark: titreşim deseni aynalanmıyor; keskinlik ölçüsü 0,1756 ↔ 0,1756). Labirentin aynası (cam + gümüş): W kadar kararır, cam görüntüyü birkaç piksel kaydırır, **bulanıklık yok** (keskinlik 0,1846). `--test o1` |
 | Ö2 | İki paralel aynada tünelin n'inci kopyası analitik yerinde | < 0,1 px, n ≤ 40 | **≤ 0,0001 px** (n = 40'ta yol 55 m; analitik hesap camın n kez kırılmasıyla). `--test o2` |
-| Ö3 | Kararlılık, `tools/kararlilik.py` | Ada/Denizaltı (~0,001) | **Tutmadı (mutlak), yaklaştı:** piksel kıpırtısı 0,0014 (16 örnek referansa), 0,0020 (64 örnek HDR referansa); blok 0,0005 / 0,0007. Gece boyunca 0,0046'dan indi: küçük ışıklar koniyle, ileri saçan pus, sade çerçeveler, 6 örnek, komşu piksellere hafif taşan yeniden yapılandırma (`recon` 0,12: keskinlik −%10). Koy'un yakın yolunun (0,0016) altında, yakınsamış referansla Ada'nın ~iki katı. Harekete göre bağıl 0,049 / 0,072. Kalan kaynak: sütun ve çerçevelerin dikey kenarları, derin tünelde piksel altına inen kemerler. `--test o3` |
+| Ö3 | Kararlılık, `tools/kararlilik.py` | Ada/Denizaltı (~0,001) | **Tutmadı (mutlak), yaklaştı:** piksel kıpırtısı 0,0014 (16 örnek referansa), 0,0020 (64 örnek HDR referansa); blok 0,0005 / 0,0007. Gece boyunca 0,0046'dan indi: küçük ışıklar koniyle, ileri saçan pus, sade çerçeveler, 6 örnek, komşu piksellere hafif taşan yeniden yapılandırma (`recon` 0,12: keskinlik −%10). Koy'un yakın yolunun (0,0016) altında, yakınsamış referansla Ada'nın ~iki katı. Harekete göre bağıl 0,049 / 0,072. Kalan kaynak: sütun ve çerçevelerin dikey kenarları, derin tünelde piksel altına inen kemerler. **Ölçünün tabanı:** 16 örneklik canlı kare bile 64'lük referansa karşı 0,00156 veriyor; 6 örnek 16'lık referansa karşı aşağı yukarı 16 örneğin 64'e karşı durduğu yerde. `--test o3` |
 | Ö4 | Aynadan ışık: hüzme haritası ↔ aynı izleyiciyle foton (1 milyar, Fibonacci yönleri, aynada cam ve gümüş, yan kayma dahil) | ≥ 0,99 | **0,994** (hücre ortasındaki lamba; doğrudan 0,997, aynalardan 0,984), **0,990** (kapı aralığındaki lamba; doğrudan 0,995, aynalardan 0,978). Aynalardan gelen ışığın payı %22-28. Kalan %2: hüzmeler camın yan kaymasını ve şişkin kemer bölgesini saymaz. `--test o4` |
 | Ö5 | 1440p, büyütmesiz | 30-40 FPS, en kötü bakışta da | Başsız: kare 21-28 ms + 1,8 ms. **Canlı uygulamada 29,5-44 FPS**; en kötü bakış (krom küremiz aynada ekranı doldururken) ~29,5: hedefin sınırında. Çıktı CUDA-GL ortak dokuya gider (ana bellek gidiş-dönüşü yok). |
 | Ö6 | Bozuk piksel (NaN), sekme noktası lekesi | 0 | **0** (bütün çizimlerde sayaç 0; 1000 rastgele pozda CUDA temiz, `--test fuzz`). |
@@ -117,6 +117,11 @@ Nasıl yapılabileceği aşağıda "Sıradaki"de.
    uzun far); gerçek pus ileri saçar, geri saçılma 6 kat azaldı.
 8. **Işığımızın doğrudan ışığı piksel başına.** Haritada (1 cm) yakındaki pervaza düşen pencere kenarı gölgesi basamak
    yapıyordu; gölge ışınlı kesin yöntemle kıyaslanıp düzeltildi (üç yöntem artık aynı görüntüyü veriyor).
+9. **Kenar iyileştirmesi denendi, geri alındı (sabaha karşı).** Canlı 6 örnek 16'lık desenin alt kümesi yapıldı; yerel
+   karşıtlığı yüksek piksellere (%3-6) kalan 10 örnek ayrı, sıkıştırılmış bir geçişte veriliyordu. 16'lık referansa karşı
+   kıpırtı 0,0014 → 0,0007 ölçüldü, ama bu büyük ölçüde kenar piksellerinin referansın kendi desenini birebir kopyalaması:
+   4 ek örnekle hiç kazanç yok (0,00137), 64'lük referansa karşı kazanç yalnız %11 (0,0020 → 0,00177). Bedeli kare başına
+   6-8 ms (en kötü bakış 26 → 34 ms). Ö5'i bozup ölçüyü "kandıran" bir kazanç olduğu için alınmadı.
 
 ## Gece boyunca bulunan ve düzeltilen hatalar (kısa)
 
@@ -135,7 +140,13 @@ Nasıl yapılabileceği aşağıda "Sıradaki"de.
   sağ vektörü), otomatik test sanal tuşlarla geçti; ters kontrol iki kez kaçmıştı, ilk denemede bak.
 - Çarpışmanın hissi (kayma, kapıdan geçiş) denenmedi; küre çarpışma çözümü sayısal gradyanla.
 - O bellek hatası **kaynağı bulunmadan** kayboldu (sınır denetimleri derlemeyi değiştirdi). 1000 + 2000 rastgele poz
-  ve otomatik test temiz; yine de bir gün dönebilir.
+  ve otomatik test temiz; yine de bir gün dönebilir. **Aynı sınıftan bir iz** (karar 9'un denemesinde): çok dağınık
+  warp'larla (her warp'ta ekranın farklı yerlerinden pikseller) çalışan çekirdek, aynı girdiyle süreçten sürece birkaç
+  pikselde farklı sonuç verdi ve arada "Out Of Range Address" ile düştü (sürücü günlüğü: SM warp exception). Aynı
+  pikseller komşularıyla aynı warp'ta işlenince her seferinde aynı; `-Xptxas -O0` ile derlenince aynı; kaynak kodda
+  piksel başına davranış başka şeritlere bağlı değil. Derleyicinin (CUDA 13.4 ptxas) dağınık warp'ta yanlış kod üretmesi
+  güçlü aday, kanıtlanmadı. Deneme geri alındı; asıl çekirdekte dört bakış 4 ayrı süreçte bit bit aynı, 3000 pozluk
+  1440p taraması temiz.
 - Ö3'ün mutlak hedefi tutmadı (yukarıda). Görsel olarak derin tünelin kaçış noktasında ince kıpırtı olabilir.
 - Pusu yalnız ışığımız (bütün hüzmeleri) ve lambaların doğrudan ışığı aydınlatır; lambaların aynalardan gelen ışığı
   pusa katılmadı.
@@ -164,4 +175,6 @@ Kod: `src/scenes/ayna/` (`ayna_geom.h` ızgara, `ayna_maze.*` labirent ve çarp�
   normali 0,5-1,5° eğik, çatlak çizgisinde camın yeşil kenarı; ışın aynaya çarptığında parçayı bulup kendi normaliyle
   yansıtır. Hüzmeler çatlak aynayı düz sayar (ışık birkaç mm kayar). Dökülme (7-8 parça yere) Yıkım'ın katı cisim
   çözücüsünü ister: parçalar hücrelere nesne olarak girer.
-- Kıpırtı için tek büyük kaldıraç kalan: örnek sayısı (8 örnek en ağır bakışta 40 ms; çekirdek hızlanırsa).
+- Kıpırtı için tek büyük kaldıraç kalan: örnek sayısı (8 örnek en ağır bakışta 40 ms; çekirdek hızlanırsa). Ölçünün
+  tabanı yüksek (16 örnek bile 64'e karşı 0,00156); ~0,001 için ya 16+ örnek ya da zamansal birikim gerekir, birikim ise
+  aynadaki görüntüde hareket vektörü olmadığından iz bırakır.
