@@ -26,8 +26,8 @@
   köşelikler, mavi zeminde altın yıldızlı friz, yıldız kafesli koyu sedir tavan, yeşil damarlı mermer sütunlar ve altın
   başlıklar, ceviz ayna çerçeveleri, siyah damarlı cilalı mermer zemin, zincirli dört pirinç fener.
 - **Biz:** 35 cm'lik krom küre; göz merkezde, kendimizi yalnız aynalarda görürüz; ışık önümüzdeki yarıktan.
-- **Hız:** 1440p, 6 sabit örnek: kare 22,7-31,1 ms + ışığımızın pişirmesi 1,8 ms → **30-41 FPS** (Ö5). Uygulama
-  otomatik testinde 38-41 fps.
+- **Hız:** 1440p, 6 sabit örnek: kare 21-28 ms + ışığımızın pişirmesi 1,8 ms. Canlı uygulamada (otomatik test, dört
+  bakış ve yürüyüş) **28-42 FPS**; en ağırı aynaya yaklaşıp krom küremizin ekranı doldurduğu an (~28 FPS).
 
 ## Fizik ne derse o: değerler ve kaynakları
 
@@ -83,12 +83,13 @@
 | --- | --- | --- | --- |
 | Ö1 | Netlik: aynı görüntü doğrudan ↔ gözün 5 cm önündeki analitik bir aynadan (göz ve örnek deseni aynalanmış) | piksel piksel aynı | **İdeal ayna: aynı** (8 bitte ortalama 0,47/255 fark: titreşim deseni aynalanmıyor; keskinlik ölçüsü 0,1756 ↔ 0,1756). Labirentin aynası (cam + gümüş): W kadar kararır, cam görüntüyü birkaç piksel kaydırır, **bulanıklık yok** (keskinlik 0,1846). `--test o1` |
 | Ö2 | İki paralel aynada tünelin n'inci kopyası analitik yerinde | < 0,1 px, n ≤ 40 | **≤ 0,0001 px** (n = 40'ta yol 55 m; analitik hesap camın n kez kırılmasıyla). `--test o2` |
-| Ö3 | Kararlılık, `tools/kararlilik.py` | Ada/Denizaltı (~0,001) | **Tutmadı (mutlak):** piksel kıpırtısı 0,0024 (16 örnek referansa), 0,0046 (64 örnek HDR referansa); blok 0,0007 / 0,0011. Harekete göre **bağıl** 0,044 / 0,084: Koy (0,084-0,096) düzeyinde, Fener'den (0,45-1,24) iyi. Kaynak: derin tünelde piksel altına inen kemer ve sütun kenarları (sonsuz ayrıntı kaçış noktasına yakınsar) ve ince parlak çizgiler. `--test o3` |
+| Ö3 | Kararlılık, `tools/kararlilik.py` | Ada/Denizaltı (~0,001) | **Tutmadı (mutlak):** piksel kıpırtısı 0,0017 (16 örnek referansa), 0,0029 (64 örnek HDR referansa); blok 0,0006 / 0,0008 (gece boyunca 0,0046'dan indi: küçük ışıklar koniyle, ileri saçan pus, sade çerçeveler, 6 örnek). Harekete göre **bağıl** 0,058 / 0,10: Koy (0,084-0,096) düzeyinde, Fener'den (0,45-1,24) iyi. Kalan kaynak: sütun ve çerçevelerin dikey kenarları ve derin tünelde piksel altına inen kemerler (sonsuz ayrıntı kaçış noktasına yakınsar); ancak daha çok örnekle iner (8 örnek en ağır bakışta 40 ms). `--test o3` |
 | Ö4 | Aynadan ışık: hüzme haritası ↔ aynı izleyiciyle foton (1 milyar, Fibonacci yönleri, aynada cam ve gümüş, yan kayma dahil) | ≥ 0,99 | **0,994** (hücre ortasındaki lamba; doğrudan 0,997, aynalardan 0,984), **0,990** (kapı aralığındaki lamba; doğrudan 0,995, aynalardan 0,978). Aynalardan gelen ışığın payı %22-28. Kalan %2: hüzmeler camın yan kaymasını ve şişkin kemer bölgesini saymaz. `--test o4` |
-| Ö5 | 1440p, büyütmesiz | 30-40 FPS, en kötü bakışta da | **30-41 FPS** (kare 22,7-31,1 ms + 1,8 ms). Uygulamada 38-41 fps. |
+| Ö5 | 1440p, büyütmesiz | 30-40 FPS, en kötü bakışta da | Başsız: kare 21-28 ms + 1,8 ms. **Canlı uygulamada 28-42 FPS**; en kötü bakış (krom küremiz aynada ekranı doldururken) ~28: hedefin hemen altında. Çıktı CUDA-GL ortak dokuya gider (ana bellek gidiş-dönüşü yok). |
 | Ö6 | Bozuk piksel (NaN), sekme noktası lekesi | 0 | **0** (bütün çizimlerde sayaç 0; 1000 rastgele pozda CUDA temiz, `--test fuzz`). |
 
-Ö3 mutlak hedefi tutmadığı için plandaki kapıya uyuldu: **A7 (kırılma) başlatılmadı.**
+Ö3 mutlak hedefi tutmadığı ve Ö5 en kötü bakışta hedefin hemen altında kaldığı için plandaki kapıya uyuldu: **A7 (kırılma)
+başlatılmadı.**
 
 ## Kararlar ve plandan sapmalar
 

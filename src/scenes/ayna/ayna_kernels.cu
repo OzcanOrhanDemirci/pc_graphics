@@ -1265,7 +1265,7 @@ __device__ float3 tracePath(const View& v, float3 o, float3 d, int& bounces, int
         }
         if (h.kind == HFloor) p.y = 0.0f;   // exactly on it: the windows start at y = 0
         const float ci = -dot(d, h.n);
-        const float fw = coneW / fmaxf(fabsf(ci), 0.2f) * glossyBlur;
+        const float fw = coneW / fmaxf(fabsf(ci), v.grazeClamp) * glossyBlur;
         if (glowOnly) {
             // the mist's ray only follows the polished surfaces' reflections
             if (h.kind == HFloor || h.kind == HColumn) {

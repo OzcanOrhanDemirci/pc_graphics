@@ -126,6 +126,7 @@ struct View {
     int hazeOnly = 0;                // the tools: only the glow pass
     int plainMat = 0;                // the tools: plain colours instead of the materials (their cost)
     float coneScale = 0.5f;          // the footprint: this many pixels a metre (half: four samples share a pixel)
+    float grazeClamp = 0.05f;        // the footprint on a surface seen at a graze: 1 / max(cos, this) wider
     float glossyBlur = 6.0f;         // after a polished stone's weak reflection, the materials' footprint this many times wider
     float subX = 0.0f, subY = 0.0f;  // the tools: every sample shifted by this (pixels), for references of many renders
     // our light straight in its own cell (and the doorways' far halves) is worked out per pixel, sharp; the rest of its
