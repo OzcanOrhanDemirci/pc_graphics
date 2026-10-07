@@ -625,6 +625,86 @@ bool KuyuApp::collide(double& x, double& y, double& z, float r) const {
     return touched;
 }
 
+double KuyuApp::sweep(double x, double y, double z, double mx, double my, double mz, float r, double n[3]) const {
+    const double len = std::sqrt(mx * mx + my * my + mz * mz);
+    n[0] = n[1] = n[2] = 0.0;
+    if (len < 1e-12) return 1.0;
+    const double d[3] = {mx / len, my / len, mz / len}, p[3] = {x, y, z};
+    const double C = lat.C;
+    const double H = double(lat.h + lat.glass) + r, hb = 0.5 * lat.b + r;
+    long long c[3];
+    double tMax[3], tDel[3];
+    int st[3];
+    for (int a = 0; a < 3; ++a) {
+        c[a] = (long long)std::floor(p[a] / C + 0.5);
+        st[a] = d[a] > 0.0 ? 1 : -1;
+        if (std::fabs(d[a]) < 1e-15) {
+            tMax[a] = tDel[a] = 1e300;
+        } else {
+            tMax[a] = ((double(c[a]) + 0.5 * st[a]) * C - p[a]) / d[a];
+            tDel[a] = C / std::fabs(d[a]);
+        }
+    }
+    double best = len, t = 0.0;
+    // a cell's obstacles stay 1.56 m inside its walls even grown by r (as in collide): each cell's own boxes suffice
+    while (t < best) {
+        const double tNext = std::min(tMax[0], std::min(tMax[1], tMax[2]));
+        for (int b = -1; b < 12; ++b) {
+            double cen[3], ext[3];
+            for (int a = 0; a < 3; ++a) {
+                cen[a] = double(c[a]) * C - p[a];   // relative to the start (doubles: the way may be kilometres)
+                ext[a] = H;
+            }
+            if (b >= 0) {
+                const BundleShape s2 = bundleShape(lat, b);
+                cen[s2.u] += s2.cu;
+                cen[s2.v] += s2.cv;
+                ext[s2.a] = 0.5 * C;
+                ext[s2.u] = ext[s2.v] = hb;
+            }
+            double tn = -1e300, tf = 1e300;
+            int ax = 0;
+            bool miss = false;
+            for (int a = 0; a < 3 && !miss; ++a) {
+                if (std::fabs(d[a]) < 1e-15) {
+                    if (std::fabs(cen[a]) > ext[a]) miss = true;
+                    continue;
+                }
+                double t0 = (cen[a] - ext[a]) / d[a], t1 = (cen[a] + ext[a]) / d[a];
+                if (t0 > t1) std::swap(t0, t1);
+                if (t0 > tn) { tn = t0; ax = a; }
+                tf = std::min(tf, t1);
+            }
+            if (miss || tn > tf || tf <= 0.0) continue;
+            if (tn < 0.0) {
+                // starting inside the grown box (its corners reach farther than the sphere does): a hit if going inwards
+                double toC = 0.0;
+                for (int a = 0; a < 3; ++a) toC += d[a] * cen[a];
+                if (toC <= 0.0) continue;
+                // the face nearest the start: its normal
+                double bestDepth = 1e300;
+                for (int a = 0; a < 3; ++a)
+                    for (int sg = -1; sg <= 1; sg += 2) {
+                        const double depth = sg * cen[a] + ext[a];   // from the start out through that face
+                        if (depth < bestDepth) { bestDepth = depth; ax = a; tn = 0.0; n[0] = n[1] = n[2] = 0.0; n[a] = sg; }
+                    }
+                best = 0.0;
+                return 0.0;
+            }
+            if (tn < best) {
+                best = tn;
+                n[0] = n[1] = n[2] = 0.0;
+                n[ax] = d[ax] > 0.0 ? -1.0 : 1.0;
+            }
+        }
+        t = tNext;
+        if (tMax[0] <= tMax[1] && tMax[0] <= tMax[2]) { c[0] += st[0]; tMax[0] += tDel[0]; }
+        else if (tMax[1] <= tMax[2]) { c[1] += st[1]; tMax[1] += tDel[1]; }
+        else { c[2] += st[2]; tMax[2] += tDel[2]; }
+    }
+    return best / len;
+}
+
 View KuyuApp::makeView() const {
     View v;
     v.width = width;
@@ -963,6 +1043,44 @@ int runKuyuCli(int argc, char** argv) {
                 if (before >= r && (x != px || y != py || z != pz)) ++movedClear;
             }
         }
+        // fast moves (up to 200 m a frame, any direction) by the live scene's way: sweep, slide, last push; every
+        // piece of the way sampled every 5 cm by the distance scan
+        int sweepBad = 0, sweepMoves = 0, sweepEndBad = 0;
+        float sweepWorst = 1e30f;
+        for (int k = 0; k < 3000; ++k) {
+            double x = (rnd() * 2 - 1) * 16.0, y = (rnd() * 2 - 1) * 16.0, z = (rnd() * 2 - 1) * 16.0;
+            if (clearance(x, y, z) < r) continue;
+            ++sweepMoves;
+            const double L = std::pow(10.0, rnd() * 3.3 - 1.0);   // 0.1 to 200 m
+            double m[3] = {(rnd() * 2 - 1), (rnd() * 2 - 1), (rnd() * 2 - 1)};
+            const double ml = std::sqrt(m[0] * m[0] + m[1] * m[1] + m[2] * m[2]);
+            for (int a = 0; a < 3; ++a) m[a] *= L / ml;
+            for (int it = 0; it < 4; ++it) {
+                double n[3];
+                const double t = a.sweep(x, y, z, m[0], m[1], m[2], r, n);
+                const double go = std::max(0.0, t - 1e-6);
+                const int samples = std::max(1, int(L * go / 0.05));
+                for (int q = 1; q <= samples; ++q) {
+                    const double f = go * double(q) / samples;
+                    const float c = clearance(x + m[0] * f, y + m[1] * f, z + m[2] * f);
+                    sweepWorst = std::min(sweepWorst, c);
+                    if (c < r - 0.02f) ++sweepBad;
+                }
+                x += m[0] * go;
+                y += m[1] * go;
+                z += m[2] * go;
+                if (t >= 1.0) break;
+                for (int a2 = 0; a2 < 3; ++a2) m[a2] *= (1.0 - go);
+                const double mn = m[0] * n[0] + m[1] * n[1] + m[2] * n[2];
+                if (mn < 0.0)
+                    for (int a2 = 0; a2 < 3; ++a2) m[a2] -= n[a2] * mn;
+            }
+            a.collide(x, y, z, r);
+            if (clearance(x, y, z) < r - 1e-3f) ++sweepEndBad;
+        }
+        std::printf("supurme: %d hizli hareket (0,1-200 m), yol boyunca engele en yakin %.4f m (icinden gecen olsa < 0), yolda kureyle "
+                    "ortusen ornek %d, kare sonunda engelde %d\n", sweepMoves, sweepWorst, sweepBad, sweepEndBad);
+        bad += sweepEndBad + (sweepWorst <= 0.0f ? 1 : 0);
         int viewsBad = 0;
         for (int i = 0; i < KuyuApp::viewCount(); ++i) {
             const KuyuCam c = KuyuApp::view(i);

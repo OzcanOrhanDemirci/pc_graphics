@@ -8,7 +8,7 @@
 - `build\pc_graphics.exe` → galeride **10 Kuyu** (galeride **0** tuşu ya da aşağı ok) → Enter.
 - Görünmez bir gözlemcisin, iki oda sütunu arasındaki kuyudan saniyede 1,5 m düşüyorsun.
 - Fare tıklamadan bakar (Denizaltı'nın sözleşmesi; **Tab** imleci bırakır). **W A S D** yatay kayma (odalara ve
-  demetlere çarparsın), **Boşluk / C** yüksel / alçal, **Shift** basılı tutuldukça gittikçe hızlanır (12.000 m/s'ye dek; aşağıda). **Q / E** düşüşü yavaşlatır / hızlandırır (dur,
+  demetlere çarparsın), **Boşluk / C** yüksel / alçal, **Shift** basılı tutuldukça gittikçe hızlanır (1,2 milyon m/s'ye dek; aşağıda). **Q / E** düşüşü yavaşlatır / hızlandırır (dur,
   0,5, 1,5, 4, 10 m/s). **1 2 3 4** bestelenmiş bakışlar: kuyu, oda, kafes, yukarı (**2** en yakın ışıklı odanın
   önüne getirir ve düşüşü durdurur; **E** sürdürür). **R** başa döner, **↑ ↓** pozlama. Ayar paneli yok: kalite
   2560 × 1440 için ayarlı.
@@ -40,6 +40,21 @@ istenmedi). Çarpışma bu hızda ucuz kalsın diye: yalnız gözlemcinin kendi 
 duvarlarından 1,56 m içeride; gözlemci 0,3 m) ve 0,4 m'lik adımlar (en ince engel gözlemci için 1,2 m kalın);
 `--test carpisma` yine temiz. Otomatik test: Shift'le 7 sn'de 831, 10 sn'de 9.240, 13 sn'de 12.000 m/s; kare süresi
 değişmiyor (28-31 ms).
+
+## Revize 3 (Özcan, aynı akşam): 1,2 milyon m/s
+
+Özcan: *"merak ettim ne olacağını: 12.000 ya şuan. 1.200.000 e çıkartır mısın."* → tavan **1.200.000 m/s** (1,5 m/s'den
+~18 sn; bırakınca ~3 sn'de normal). Kare başına ~36 km (~4.500 hücre). Görüntü 12.000 m/s'dekiyle aynı türden: kare
+süresi 1-3 ms oynadığı için 12 km/s'de bile iskeletin kafesteki yeri kareden kareye rastgele, odalar her karede başka;
+daha hızlısı bunu değiştirmez, yalnız oraya varış uzar. Kare süresi değişmiyor (29-31 ms). Panelde hız binlik
+ayırıcıyla.
+**Çarpışma süpürmeye geçti:** 0,4 m'lik adımlar bu hızda kare başına 90 bin adım ederdi. Artık karenin yolu kafeste
+hücre hücre süpürülüyor (engeller gözlemcinin yarıçapı kadar büyütülmüş kutular, her hücrenin yalnız kendi 13 kutusu):
+ilk engele dek gidilir, sonra onun boyunca kayılır (en çok 4 kez), sonunda bir itme. `--test carpisma` (2034 hızlı
+hareket, 0,1-200 m, yol 5 cm'de bir bağımsız uzaklık taramasıyla): hiçbir yol engelin içinden geçmiyor (merkez engele
+en çok 15 cm yaklaşıyor), kare sonunda engelde kalan 0. Büyütülmüş kutunun köşesi kürenin çevresinden geniş: köşe
+bölgesinden başlayan teğet bir kayma kare ortasında küreyi engele 15 cm'ye dek sokabiliyor (6 örnek; kare sonundaki
+itme düzeltir, görüntüye yansımaz).
 
 ## Bir bakışta
 

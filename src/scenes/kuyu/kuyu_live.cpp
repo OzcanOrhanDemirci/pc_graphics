@@ -158,21 +158,36 @@ public:
         // Shift held: faster and faster, exponentially (e-fold every boost.tau seconds) up to boost.max m/s; let go: back
         // within a few seconds. Nothing else changes with the speed. The ceiling: above it the lattice (one cell in 8 m)
         // moves more than half a cell between frames and the eye can no longer follow it (it seems to stand or go back)
-        const float tau = a_.cfg.f("boost.tau", 1.3f), vmax = a_.cfg.f("boost.max", 12000.0f);
+        const float tau = a_.cfg.f("boost.tau", 1.3f), vmax = a_.cfg.f("boost.max", 1.2e6f);
         const float base = std::max(length(want), 0.5f);
         if (in.shift) boostT_ = std::min(boostT_ + dt, tau * std::log(std::max(vmax / base, 1.0f)));
-        else boostT_ = std::max(0.0f, boostT_ - 2.5f * dt);
+        else boostT_ = std::max(0.0f, boostT_ - 6.0f * dt);   // let go: back from the ceiling in about 3 s
         want = want * std::exp(boostT_ / tau);
         if (length(want) > vmax) want = want * (vmax / length(want));
         vel_ += (want - vel_) * (1.0f - std::exp(-dt * 3.0f));
-        // in small steps, pushed out of the glass and the bundles; the push takes the velocity into them away (a slide)
-        // (steps of 0.4 m: the thinnest obstacle, a 0.6 m bundle, is 1.2 m thick for the observer's 0.3 m: no step jumps it)
-        const int sub = std::min(100000, std::max(1, int(std::ceil(length(vel_) * dt / 0.4f))));
-        for (int k = 0; k < sub; ++k) {
-            const double px = a_.cam.x + vel_.x * dt / sub, py = a_.cam.y + vel_.y * dt / sub, pz = a_.cam.z + vel_.z * dt / sub;
-            double nx = px, ny = py, nz = pz;
+        // the frame's way swept through the lattice cell by cell (any speed: 1.2 million m/s crosses 4500 cells a frame):
+        // up to the first obstacle, then on along it (the velocity into it taken away: a slide); a last push resolves
+        // what the grown boxes' corners leave
+        double m[3] = {double(vel_.x) * dt, double(vel_.y) * dt, double(vel_.z) * dt};
+        for (int it = 0; it < 4; ++it) {
+            double n[3];
+            const double t = a_.sweep(a_.cam.x, a_.cam.y, a_.cam.z, m[0], m[1], m[2], 0.3f, n);
+            const double go = std::max(0.0, t - 1e-6);
+            a_.cam.x += m[0] * go;
+            a_.cam.y += m[1] * go;
+            a_.cam.z += m[2] * go;
+            if (t >= 1.0) break;
+            for (int a = 0; a < 3; ++a) m[a] *= (1.0 - go);
+            const double mn = m[0] * n[0] + m[1] * n[1] + m[2] * n[2];
+            if (mn < 0.0)
+                for (int a = 0; a < 3; ++a) m[a] -= n[a] * mn;
+            const float vn = vel_.x * float(n[0]) + vel_.y * float(n[1]) + vel_.z * float(n[2]);
+            if (vn < 0.0f) vel_ -= make_float3(float(n[0]), float(n[1]), float(n[2])) * vn;
+        }
+        {
+            double nx = a_.cam.x, ny = a_.cam.y, nz = a_.cam.z;
             if (a_.collide(nx, ny, nz, 0.3f)) {
-                const float3 push = make_float3(float(nx - px), float(ny - py), float(nz - pz));
+                const float3 push = make_float3(float(nx - a_.cam.x), float(ny - a_.cam.y), float(nz - a_.cam.z));
                 const float pl = length(push);
                 if (pl > 1e-6f) {
                     const float3 n = push * (1.0f / pl);
@@ -230,7 +245,8 @@ public:
     void status(app::Status& s) override {
         using theme::num;
         s.chips.push_back({fall_ == 0 ? L("Duruyor", "Still") : L("Düşüş ", "Falling ") + num(kFall[fall_], 1) + " m/s", true});
-        s.metrics.push_back({L("Hız", "Speed"), num(length(vel_), length(vel_) < 10.0f ? 1 : 0) + " m/s"});
+        const float sp = length(vel_);
+        s.metrics.push_back({L("Hız", "Speed"), (sp < 10.0f ? num(sp, 1) : theme::thousands((unsigned long long)std::lround(sp))) + " m/s"});
         s.metrics.push_back({L("Kare", "Frame"), num(a_.frameMs, 1) + " ms"});
     }
 

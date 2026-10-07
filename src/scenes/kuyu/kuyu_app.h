@@ -56,6 +56,9 @@ public:
     float3 forward() const;
     // the observer, a sphere of radius r, pushed out of the rooms' glass and the bundles; true if it touched
     bool collide(double& x, double& y, double& z, float r) const;
+    // the observer moving from (x, y, z) by (mx, my, mz) (one frame's way, any length): the share of it before it meets an
+    // obstacle (its boxes grown by r), walked cell by cell; 1 if nothing. n: the face met.
+    double sweep(double x, double y, double z, double mx, double my, double mz, float r, double n[3]) const;
     std::vector<float4> hdrHost() const {
         std::vector<float4> h(size_t(width) * height);
         cudaMemcpy(h.data(), hdr_, h.size() * sizeof(float4), cudaMemcpyDeviceToHost);

@@ -265,7 +265,7 @@ cube: a closed world whose light turns inside without end. The rooms' edges run 
 | --- | --- |
 | **Mouse** | look around (no click; **Tab** releases the cursor) |
 | **W A S D** | drift level (you meet the rooms and the bundles) · **Space / C** rise, sink |
-| **Shift** (held) | faster and faster: the speed grows e-fold every 1.3 s, to 12,000 m/s in about 12 s; let go and it comes back within a few seconds (falling too) |
+| **Shift** (held) | faster and faster: the speed grows e-fold every 1.3 s, to 1,200,000 m/s in about 18 s; let go and it comes back in about 3 s (falling too) |
 | **Q / E** | slow / quicken the fall (still, 0.5, 1.5, 4, 10 m/s) |
 | **1 2 3 4** | views: the shaft, a room (you stop before it), the lattice, up |
 | **R** | back to the start · **↑ / ↓** exposure |
