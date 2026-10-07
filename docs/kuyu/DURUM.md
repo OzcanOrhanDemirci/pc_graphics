@@ -1,5 +1,8 @@
 # DURUM · Sahne 10 "Kuyu"
 
+> 🏁 **TAMAMLANDI (Özcan, 2026-10-07 akşam):** *"Tamamdır. Sahnemiz tamamlandı."* İlk denemesi: *"çok güzel olmuş. Çok
+> sonsuz hissettiriyor."* Beş revizenin hepsi Shift ile hızlanma üzerine (tavan 12.000 m/s). Aşağıdaki rapor kayıt olarak kalır.
+
 > Otonom oturum, 2026-10-07 öğleden sonra (plan `docs/kuyu/PLAN.md`). Plandan sapmalar aşağıda "Kararlar"da,
 > gerekçesiyle.
 
@@ -235,5 +238,5 @@ Ayarlar `scenes/kuyu.cfg`.
 
 ## Sıradaki
 
-Özcan'ın denemesi. Konuşulursa: odanın içine girmek (Inception'ın bir kat aşağısı), odalar arası zaman farkı, ampule
+Yok: sahne kapandı. Konuşulmuş, yapılmamış: odanın içine girmek (Inception'ın bir kat aşağısı), odalar arası zaman farkı, ampule
 yakın demetlerdeki parlak lekeler (Ö4).
