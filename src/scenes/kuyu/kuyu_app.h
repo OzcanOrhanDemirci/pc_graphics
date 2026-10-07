@@ -7,7 +7,7 @@
 #include <vector>
 
 struct KuyuCam {
-    double x = 4.0, y = 0.0, z = 4.0;   // the eye, in the lattice (doubles: the fall never ends)
+    double x = 0.0, y = 0.3, z = 4.0;   // the eye, in the lattice (doubles: the fall never ends)
     float yaw = 0.0f, pitch = 0.0f;     // yaw 0 looks along -z, grows to the left; pitch up positive (radians)
     float fovY = 62.0f;                 // degrees
 };

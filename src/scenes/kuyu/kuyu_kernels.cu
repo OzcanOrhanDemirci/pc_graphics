@@ -300,11 +300,11 @@ __device__ float3 roomInterior(const View& v, int var, float phase, float3 p, fl
             const float ci = fabsf(da);
             setComp(p, idx, da > 0.0f ? h : -h);
             const int a1 = (idx + 1) % 3, a2 = (idx + 2) % 3;
-            // the copper frame along the edges, its border filtered by the footprint
+            // the chromed frame along the edges, its border filtered by the footprint
             const float m = fmaxf(fabsf(comp(p, a1)), fabsf(comp(p, a2)));
             const float fw = fp / fmaxf(ci, v.grazeClamp);
             const float cover = smoothstepf(fr - fw, fr + fw, m);
-            w *= lerp3(tab3(cOpt.inR, ci), tab3(cOpt.copper, ci), cover);
+            w *= lerp3(tab3(cOpt.inR, ci), tab3(cOpt.chrome, ci), cover);
             setComp(d, idx, -da);
         } else if (kind == 1) {
             const float3 n = (p - sc[idx]) * (1.0f / rv.S[idx].r);
@@ -610,22 +610,94 @@ __global__ void kBlurFar(View v, const float2* in, float2* out, int ra, int rw) 
     out[texel] = make_float2(acc.x / n, acc.y / n);
 }
 
-// a slat's look: its colour index and how far it stands out (0..1 of the relief), constant along its whole line
-__device__ __forceinline__ void slatOf(unsigned key, int face, int j, int& col, float& out) {
-    const unsigned h = hash32(key + (unsigned)(face * 64 + j) * 0x9E3779B9u);
-    col = int(h % 1009u);
-    out = float((h >> 20) & 3u) * (1.0f / 3.0f);
+// a slat: how far it stands out (0..1 of the relief), constant along its whole line
+__device__ __forceinline__ float slatOut(unsigned key, int face, int j) {
+    return float((hash32(key + (unsigned)(face * 64 + j) * 0x9E3779B9u) >> 20) & 3u) * (1.0f / 3.0f);
+}
+
+// a thread's look (v.threads to a slat; the bundle's fine lines, the tesseract's stretched book edges): its colour and
+// brightness, its finish (matte, varnished, gold leaf), constant along its line. jt: the thread across the face; the
+// corner posts are thread 4095
+struct Finish {
+    float3 alb;      // the diffuse colour (none for gold)
+    float varn;      // share varnished (a clear coat: Fresnel's reflection on top)
+    float metal;     // share gold leaf
+};
+__device__ __forceinline__ Finish threadLook(const View& v, unsigned key, int face, int jt) {
+    const unsigned h = hash32(key ^ (unsigned)(face * 4096 + jt + 1) * 0x9E3779B9u);
+    const int c = v.threadMap[h & 15u];
+    Finish f;
+    const int fin = v.slatFinish[c];
+    f.varn = fin == 1 ? 1.0f : 0.0f;
+    f.metal = fin == 2 ? 1.0f : 0.0f;
+    f.alb = fin == 2 ? make_float3(0, 0, 0) : v.slatAlbedo[c] * (0.7f + 0.6f * float((h >> 8) & 255u) * (1.0f / 255.0f));
+    return f;
+}
+__device__ __forceinline__ void addLook(Finish& a, const Finish& b, float w) {
+    a.alb += b.alb * w;
+    a.varn += b.varn * w;
+    a.metal += b.metal * w;
+}
+
+// the looks averaged over [lo, hi] across a face (a box filter of the footprint): thread by thread while it spans
+// few, slat by slat (each its threads' mean) when it spans many
+__device__ Finish lookOver(const View& v, unsigned key, int face, float lo, float hi, float hb, float inner, float sw, int k) {
+    Finish acc;
+    acc.alb = make_float3(0, 0, 0);
+    acc.varn = acc.metal = 0.0f;
+    lo = fmaxf(lo, -hb);
+    hi = fminf(hi, hb);
+    if (hi - lo < 1e-5f) {
+        const float m = 0.5f * (lo + hi);
+        lo = m - 5e-6f;
+        hi = m + 5e-6f;
+    }
+    float wsum = 0.0f;
+    const Finish post = threadLook(v, key, face, 4095);
+    if (lo < -inner) { const float l = fminf(hi, -inner) - lo; if (l > 0.0f) { addLook(acc, post, l); wsum += l; } }
+    if (hi > inner) { const float l = hi - fmaxf(lo, inner); if (l > 0.0f) { addLook(acc, post, l); wsum += l; } }
+    const int nt = v.threads;
+    const float tw = sw / float(nt);
+    const float a = fmaxf(lo, -inner), b = fminf(hi, inner);
+    if (b > a) {
+        if (b - a <= 12.0f * tw) {
+            const int i0 = max(0, int(floorf((a + inner) / tw))), i1 = min(k * nt - 1, int(floorf((b + inner) / tw)));
+            for (int i = i0; i <= i1; ++i) {
+                const float l = fminf(b, -inner + float(i + 1) * tw) - fmaxf(a, -inner + float(i) * tw);
+                if (l <= 0.0f) continue;
+                addLook(acc, threadLook(v, key, face, i), l);
+                wsum += l;
+            }
+        } else {
+            const int j0 = max(0, int(floorf((a + inner) / sw))), j1 = min(k - 1, int(floorf((b + inner) / sw)));
+            for (int j = j0; j <= j1; ++j) {
+                const float l = fminf(b, -inner + float(j + 1) * sw) - fmaxf(a, -inner + float(j) * sw);
+                if (l <= 0.0f) continue;
+                Finish m;
+                m.alb = make_float3(0, 0, 0);
+                m.varn = m.metal = 0.0f;
+                for (int t = 0; t < nt; ++t) addLook(m, threadLook(v, key, face, j * nt + t), 1.0f / float(nt));
+                addLook(acc, m, l);
+                wsum += l;
+            }
+        }
+    }
+    const float inv = 1.0f / fmaxf(wsum, 1e-12f);
+    acc.alb *= inv;
+    acc.varn *= inv;
+    acc.metal *= inv;
+    return acc;
 }
 
 // a bundle's face: the slats' relief walked exactly (a height field across the face, constant along the axis), or,
-// once the footprint covers a slat, the flat face with the slats' colours averaged over the footprint. Returns the
-// surface's albedo; t and n are set.
-__device__ float3 bundleSurface(const View& v, const Hit& hh, float3 ol, float3 d, float fpAt, unsigned key, float& t, float3& n) {
+// once the footprint covers a slat, the flat face; the threads' looks filtered by the footprint either way. t and n
+// are set.
+__device__ Finish bundleSurface(const View& v, const Hit& hh, float3 ol, float3 d, float fpAt, unsigned key, float& t, float3& n) {
     const Lattice& g = v.g;
     const BundleShape s = bundleShape(g, hh.q);
     const int nAx = hh.face < 2 ? s.u : s.v, wAx = hh.face < 2 ? s.v : s.u;
     const float sN = (hh.face & 1) ? -1.0f : 1.0f;
-    const float cN = hh.face < 2 ? s.cu : s.cv, cW = hh.face < 2 ? s.cv : s.cu;
+    const float cW = hh.face < 2 ? s.cv : s.cu;
     const float hb = 0.5f * g.b, inner = hb - g.P;
     const int k = min(g.slats, kStripMax);
     const float sw = 2.0f * inner / float(k);
@@ -633,34 +705,34 @@ __device__ float3 bundleSurface(const View& v, const Hit& hh, float3 ol, float3 
     const float dw = comp(d, wAx);
     const float t0 = hh.t;
     const float w0 = comp(ol, wAx) - cW + dw * t0;
-    float3 N = axisVec(nAx, sN);
-    const int nc = v.nSlatColors;
+    const float3 N = axisVec(nAx, sN);
     // the footprint on the face, across the slats
     const float fw = fpAt / fmaxf(-dn, v.grazeClamp);
     const float far = smoothstepf(0.25f * sw, 0.6f * sw, fw);
-    float3 albedo = make_float3(0, 0, 0);
+    Finish out;
+    out.alb = make_float3(0, 0, 0);
+    out.varn = out.metal = 0.0f;
     t = t0;
     n = N;
     if (far < 1.0f && !(v.prof & 4)) {
-        // the relief: strip j's top lies (1 - out_j) P under the bounding face; corner posts at full height
-        float3 a = v.slatAlbedo[(int(key % 7u)) % nc] * 0.8f;   // a corner post
+        // the relief: slat j's top lies (1 - out_j) P under the bounding face; corner posts at full height
         float tt = t0;
         float3 nn = N;
+        Finish a;
+        bool done = false;
         if (fabsf(w0) < inner) {
             int j = min(k - 1, max(0, int(floorf((w0 + inner) / sw))));
             for (int guard = 0; guard < kStripMax + 2; ++guard) {
-                int col;
-                float out;
-                slatOf(key, hh.face, j, col, out);
-                const float depth = (1.0f - out) * g.P;
+                const float depth = (1.0f - slatOut(key, hh.face, j)) * g.P;
                 const float tD = t0 + depth / fmaxf(-dn, 1e-7f);
                 float tW = 1e30f;
                 if (dw > 0.0f) tW = t0 + ((-inner + float(j + 1) * sw) - w0) / dw;
                 else if (dw < 0.0f) tW = t0 + ((-inner + float(j) * sw) - w0) / dw;
-                if (tD <= tW) {
+                if (tD <= tW) {   // its top
                     tt = tD;
-                    nn = N;
-                    a = v.slatAlbedo[col % nc];
+                    const float wh = w0 + dw * (tD - t0);
+                    a = lookOver(v, key, hh.face, wh - fw, wh + fw, hb, inner, sw, k);
+                    done = true;
                     break;
                 }
                 const int j2 = j + (dw > 0.0f ? 1 : -1);
@@ -669,50 +741,34 @@ __device__ float3 bundleSurface(const View& v, const Hit& hh, float3 ol, float3 
                 if (j2 < 0 || j2 >= k) {   // the corner post's side
                     tt = tW;
                     nn = side;
+                    a = threadLook(v, key, hh.face, 4095);
+                    done = true;
                     break;
                 }
-                int col2;
-                float out2;
-                slatOf(key, hh.face, j2, col2, out2);
-                if ((1.0f - out2) * g.P <= depthNow) {   // the next slat stands higher: its side
+                if ((1.0f - slatOut(key, hh.face, j2)) * g.P <= depthNow) {   // the next slat stands higher: its side
                     tt = tW;
                     nn = side;
-                    a = v.slatAlbedo[col2 % nc] * 0.85f;
+                    a = threadLook(v, key, hh.face, j2 * v.threads + (dw > 0.0f ? 0 : v.threads - 1));
+                    a.alb *= 0.85f;
+                    done = true;
                     break;
                 }
                 j = j2;
             }
         }
-        albedo = a * (1.0f - far);
+        if (!done) a = threadLook(v, key, hh.face, 4095);   // entered over a corner post
+        addLook(out, a, 1.0f - far);
         t = tt;
         n = nn;
     }
     if (far > 0.0f) {
-        // the slats' colours averaged over the footprint's span across the face (box filter)
-        const float lo = fmaxf(w0 - fw, -hb), hi = fminf(w0 + fw, hb);
-        float3 acc = make_float3(0, 0, 0);
-        float wsum = 0.0f;
-        const float3 post = v.slatAlbedo[(int(key % 7u)) % nc] * 0.8f;
-        // the corner posts
-        if (lo < -inner) { const float l = fminf(hi, -inner) - lo; if (l > 0.0f) { acc += post * l; wsum += l; } }
-        if (hi > inner) { const float l = hi - fmaxf(lo, inner); if (l > 0.0f) { acc += post * l; wsum += l; } }
-        const int j0 = max(0, int(floorf((fmaxf(lo, -inner) + inner) / sw))), j1 = min(k - 1, int(floorf((fminf(hi, inner) + inner) / sw)));
-        for (int j = j0; j <= j1; ++j) {
-            const float a0 = fmaxf(lo, -inner + float(j) * sw), a1 = fminf(hi, -inner + float(j + 1) * sw);
-            if (a1 <= a0) continue;
-            int col;
-            float out;
-            slatOf(key, hh.face, j, col, out);
-            acc += v.slatAlbedo[col % nc] * (a1 - a0);
-            wsum += a1 - a0;
-        }
-        if (wsum > 0.0f) albedo += acc * (far / wsum);
+        addLook(out, lookOver(v, key, hh.face, w0 - fw, w0 + fw, hb, inner, sw, k), far);
         if (far >= 1.0f) {
             t = t0;
             n = N;
         }
     }
-    return albedo;
+    return out;
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -795,7 +851,7 @@ __device__ float3 tracePath(const View& v, float3 o, float3 d, int& cellsOut, in
                 float th;
                 float3 n;
                 const float fpAt = fp0 + coneS * h.t;
-                const float3 alb = bundleSurface(v, h, ol, d, fpAt, key, th, n);
+                const Finish fin = bundleSurface(v, h, ol, d, fpAt, key, th, n);
                 const float3 q = ol + d * th;
                 if (firstT && pass == 0) *firstT = th;
                 float3 E;
@@ -813,7 +869,18 @@ __device__ float3 tracePath(const View& v, float3 o, float3 d, int& cellsOut, in
                 } else {
                     E = structureLight(v, I, J, K, q, n);
                 }
-                L += thr * alb * INV_PIf * E;
+                // a clear coat reflects as glass does (Fresnel), gold leaf as gold; the rest is the thread's colour
+                const float cn = fmaxf(-dot(d, n), 0.0f);
+                const float Fv = tabLerp(cOpt.varnish, cn) * fin.varn;
+                L += thr * fin.alb * ((1.0f - Fv) * INV_PIf) * E;
+                const float3 spec = make_float3(Fv, Fv, Fv) + tab3(cOpt.gold, cn) * fin.metal;
+                if (pass == 0 && v.reflections && maxc(spec) > 0.0f) {
+                    pending = true;
+                    po = ctr + q + n * 1e-4f;
+                    pd = d + n * (2.0f * cn);
+                    pthr = thr * spec;
+                    pfp = fpAt;
+                }
                 ended = true;
                 break;
             }
@@ -827,7 +894,7 @@ __device__ float3 tracePath(const View& v, float3 o, float3 d, int& cellsOut, in
                 const float3 nOut = axisVec(fa, fs);
                 const float ci = -dot(d, nOut);
                 if (fmaxf(fabsf(comp(p, a1)), fabsf(comp(p, a2))) > H - g.frame) {
-                    // the copper frame, weathered dark outside
+                    // the frame, dark outside (its chrome reflects the dark round it)
                     L += thr * v.frameAlbedo * INV_PIf * ((v.prof & 2) ? make_float3(0.05f, 0.03f, 0.015f) : structureLight(v, I, J, K, p, nOut));
                     ended = true;
                     break;

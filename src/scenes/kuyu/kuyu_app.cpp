@@ -82,6 +82,7 @@ const double kLambda[3] = {0.610, 0.550, 0.465};   // um
 const cd kAg[3] = {{0.058, 4.094}, {0.060, 3.597}, {0.0469, 2.803}};
 const cd kCu[3] = {{0.378, 3.107}, {1.007, 2.582}, {1.247, 2.456}};
 const cd kCr[3] = {{3.1935, 4.266}, {2.7892, 4.1977}, {2.1410, 3.9299}};
+const cd kAu[3] = {{0.226, 3.192}, {0.424, 2.472}, {1.332, 1.869}};   // gold: Johnson and Christy (1972), interpolated
 double glassN(double lum) { return 1.5130 - 0.003169 * lum * lum + 0.003962 / (lum * lum); }
 
 // a blackbody's colour in linear Rec.709, luminance 1
@@ -101,23 +102,24 @@ KuyuCam KuyuApp::view(int i) {
     KuyuCam c;
     switch (i) {
     default:
-    case 0:   // the shaft, straight down: one vanishing point, the rooms round it level after level
-        c.x = 4.0; c.y = 0.0; c.z = 4.0;
-        c.yaw = 0.35f;
+    case 0:   // the shaft between two columns of rooms, straight down: one vanishing point, the rooms passing by
+        c.x = 0.0; c.y = 0.3; c.z = 4.0;
+        c.yaw = 0.2f;
         c.pitch = -1.5708f;
         break;
-    case 1:   // at a room's glass, looking in
-        c.x = 0.0; c.y = 0.25; c.z = 3.7;
+    case 1:   // in the shaft at a room's glass, looking in and a little down
+        c.x = 0.0; c.y = 0.3; c.z = 4.4;
         c.yaw = 0.0f;
-        c.pitch = 0.0f;
+        c.pitch = -0.35f;
+        c.fovY = 70.0f;
         break;
-    case 2:   // sideways, along the lattice
-        c.x = 4.0; c.y = 0.4; c.z = 4.0;
+    case 2:   // sideways, out of the shaft along the lattice
+        c.x = 0.0; c.y = 0.4; c.z = 4.0;
         c.yaw = -1.25f;
         c.pitch = -0.12f;
         break;
     case 3:   // up the shaft
-        c.x = 4.0; c.y = 0.0; c.z = 4.0;
+        c.x = 0.0; c.y = 0.0; c.z = 4.0;
         c.yaw = 0.8f;
         c.pitch = 1.15f;
         break;
@@ -168,7 +170,9 @@ void KuyuApp::computeOptics() {
             optics.outR[ch][s] = float(Far + (1.0 - Far) * (1.0 - Far) * tau * tau * Rg);
             optics.copper[ch][s] = float(fresnel(1.0, kCu[ch], ci));
             optics.chrome[ch][s] = float(fresnel(1.0, kCr[ch], ci));
+            optics.gold[ch][s] = float(fresnel(1.0, kAu[ch], ci));
         }
+        optics.varnish[s] = float(fresnel(1.0, cd(1.5, 0.0), ci));
     }
     setOptics(optics);
 }
@@ -204,18 +208,18 @@ void KuyuApp::buildVariants() {
     for (int k = 0; k < 6; ++k) {
         RoomVariant r;
         r.kind = 0;
-        r.nL = 5 + k % 3;
+        r.nL = 3 + k % 3;
         for (int l = 0; l < r.nL; ++l)
             r.L[l] = bulb((rnd() * 2.0f - 1.0f) * (h - 0.35f), -h + 0.6f + rnd() * (2.0f * h - 1.2f), (rnd() * 2.0f - 1.0f) * (h - 0.35f), starCd,
-                          2500.0f + 400.0f * rnd());
-        add(r, "yildizlar", 5);
+                          3400.0f + 900.0f * rnd());
+        add(r, "yildizlar", 3);
     }
     // one lamp, a little off the middle
     for (int k = 0; k < 2; ++k) {
         RoomVariant r;
         r.kind = 1;
         r.nL = 1;
-        r.L[0] = bulb((rnd() - 0.5f) * 0.8f, 0.2f + rnd() * 0.5f, (rnd() - 0.5f) * 0.8f, oneCd, 2300.0f + 300.0f * rnd());
+        r.L[0] = bulb((rnd() - 0.5f) * 0.8f, 0.2f + rnd() * 0.5f, (rnd() - 0.5f) * 0.8f, oneCd, 3300.0f + 900.0f * rnd());
         add(r, "tek", 9);
     }
     // moonlight: a cold lamp
@@ -223,8 +227,8 @@ void KuyuApp::buildVariants() {
         RoomVariant r;
         r.kind = 2;
         r.nL = 1 + k;
-        for (int l = 0; l < r.nL; ++l) r.L[l] = bulb((rnd() - 0.5f) * 1.4f, 0.0f + rnd() * 0.8f, (rnd() - 0.5f) * 1.4f, oneCd * 0.6f, 4100.0f);
-        add(r, "ay", 6);
+        for (int l = 0; l < r.nL; ++l) r.L[l] = bulb((rnd() - 0.5f) * 1.4f, 0.0f + rnd() * 0.8f, (rnd() - 0.5f) * 1.4f, oneCd * 0.6f, 5200.0f + 1300.0f * k);
+        add(r, "ay", 8);
     }
     // a chrome sphere on the floor, a lamp beside it: every image is the whole room in a sphere
     for (int k = 0; k < 2; ++k) {
@@ -235,7 +239,7 @@ void KuyuApp::buildVariants() {
         r.S[0].c = make_float3(0.0f, -h + 0.5f, 0.0f);
         r.S[0].metal = 0;
         r.nL = 1;
-        r.L[0] = bulb(0.9f, 0.5f + 0.4f * k, -0.6f, oneCd, 2700.0f);
+        r.L[0] = bulb(0.9f, 0.5f + 0.4f * k, -0.6f, oneCd, 3800.0f);
         add(r, "kure", 6);
     }
     // a copper pendulum from the ceiling, swinging slowly (T = 2 pi sqrt(l / g), with the large-swing term)
@@ -251,7 +255,7 @@ void KuyuApp::buildVariants() {
         s.swing = 0.32f;
         s.period = float(2.0 * 3.14159265358979 * std::sqrt(s.len / 9.81) * (1.0 + s.swing * s.swing / 16.0));
         r.nL = 1;
-        r.L[0] = bulb(0.95f, 0.8f, -0.85f + 1.7f * k, oneCd, 2500.0f);
+        r.L[0] = bulb(0.95f, 0.8f, -0.85f + 1.7f * k, oneCd, 3500.0f);
         add(r, "sarkac", 6);
     }
     // a free-standing mirror at 45 degrees across the room: the images' lattice turns
@@ -267,8 +271,8 @@ void KuyuApp::buildVariants() {
         p.hu = 0.9f + 0.4f * k;
         p.hw = 1.2f;
         r.nL = 2;
-        r.L[0] = bulb(-0.8f, 0.5f, -0.9f, oneCd * 0.5f, 2600.0f);
-        r.L[1] = bulb(0.9f, 0.2f, 0.7f, oneCd * 0.5f, 2600.0f);
+        r.L[0] = bulb(-0.8f, 0.5f, -0.9f, oneCd * 0.5f, 4000.0f);
+        r.L[1] = bulb(0.9f, 0.2f, 0.7f, oneCd * 0.5f, 4000.0f);
         add(r, "egik", 5);
     }
     // a corner of three mirrors (a corner reflector): what goes in comes back where it came from
@@ -291,7 +295,7 @@ void KuyuApp::buildVariants() {
         }
         r.nP = 3;
         r.nL = 1;
-        r.L[0] = bulb(0.7f, 0.6f, 0.5f, oneCd, 2600.0f);
+        r.L[0] = bulb(0.7f, 0.6f, 0.5f, oneCd, 4200.0f);
         add(r, "kose", 4);
     }
     // a row of lamps along one axis: endless lines of lights
@@ -299,14 +303,24 @@ void KuyuApp::buildVariants() {
         RoomVariant r;
         r.kind = 7;
         r.nL = 5;
-        for (int l = 0; l < 5; ++l) r.L[l] = bulb(-1.2f + 0.6f * l, 0.3f, 0.0f, starCd, 2700.0f);
+        for (int l = 0; l < 5; ++l) r.L[l] = bulb(-1.2f + 0.6f * l, 0.3f, 0.0f, starCd, 3600.0f);
         add(r, "sira", 5);
     }
     // dark: no light of its own
     {
         RoomVariant r;
         r.kind = 8;
-        add(r, "karanlik", 14);
+        add(r, "karanlik", 12);
+    }
+    // a candle: one small flame, deep amber (1900 K), dim
+    {
+        RoomVariant r;
+        r.kind = 9;
+        r.nL = 1;
+        r.L[0] = bulb(0.15f, -0.4f, -0.1f, oneCd * 0.25f, 1900.0f);
+        r.L[0].r = 0.012f;
+        r.L[0].wire = 0;
+        add(r, "mum", 6);
     }
     // each variant's brightest bulb (I / r^2 with r in units of the 2 cm the cut-off assumes): the cut-off's bound
     for (RoomVariant& r : variants) {
@@ -570,17 +584,24 @@ View KuyuApp::makeView() const {
     v.maxCells = cfg.i("max.cells", 160);
     v.reflections = cfg.i("reflections", 1);
     v.lightRooms = cfg.i("light.rooms", 27);
-    const float3 slat[8] = {cfg.v3("slat.0", make_float3(0.105f, 0.062f, 0.036f)),   // dark walnut
-                            cfg.v3("slat.1", make_float3(0.032f, 0.029f, 0.027f)),   // soot
-                            cfg.v3("slat.2", make_float3(0.46f, 0.41f, 0.32f)),      // bone
-                            cfg.v3("slat.3", make_float3(0.20f, 0.065f, 0.055f)),    // faded bordeaux
-                            cfg.v3("slat.4", make_float3(0.30f, 0.21f, 0.09f)),      // dull brass
-                            cfg.v3("slat.5", make_float3(0.16f, 0.10f, 0.06f)),      // tan leather
-                            cfg.v3("slat.6", make_float3(0.06f, 0.07f, 0.055f)),     // dark green
-                            cfg.v3("slat.7", make_float3(0.10f, 0.09f, 0.08f))};
-    v.nSlatColors = std::clamp(cfg.i("slat.colors", 7), 1, 8);
-    for (int k = 0; k < 8; ++k) v.slatAlbedo[k] = slat[k];
-    v.frameAlbedo = cfg.v3("frame.albedo", make_float3(0.08f, 0.05f, 0.03f));
+    // the threads: book spines (bone, walnut, black, cloth grey, tan leather, oxblood, olive) and gold leaf
+    const float3 slat[8] = {cfg.v3("thread.0", make_float3(0.56f, 0.51f, 0.42f)),     // bone, matte
+                            cfg.v3("thread.1", make_float3(0.085f, 0.062f, 0.045f)),  // walnut, varnished
+                            cfg.v3("thread.2", make_float3(0.018f, 0.017f, 0.016f)),  // black lacquer
+                            cfg.v3("thread.3", make_float3(0.20f, 0.19f, 0.175f)),    // grey cloth, matte
+                            cfg.v3("thread.4", make_float3(0.21f, 0.16f, 0.11f)),     // tan leather, varnished
+                            cfg.v3("thread.5", make_float3(0.13f, 0.065f, 0.055f)),   // oxblood, varnished
+                            cfg.v3("thread.6", make_float3(0.11f, 0.115f, 0.09f)),    // olive cloth, matte
+                            make_float3(0, 0, 0)};                                     // gold leaf
+    const int finish[8] = {0, 1, 1, 0, 1, 1, 0, 2};
+    const int mix[16] = {0, 0, 0, 1, 1, 1, 2, 2, 3, 3, 4, 4, 5, 6, 6, 7};   // gold: one thread in sixteen
+    for (int k = 0; k < 8; ++k) {
+        v.slatAlbedo[k] = slat[k];
+        v.slatFinish[k] = finish[k];
+    }
+    for (int k = 0; k < 16; ++k) v.threadMap[k] = (unsigned char)mix[k];
+    v.threads = std::clamp(cfg.i("bundle.threads", 5), 1, 16);
+    v.frameAlbedo = cfg.v3("frame.albedo", make_float3(0.05f, 0.05f, 0.05f));
     v.hazeSigma = cfg.f("haze.sigma", 0.006f);
     v.hazeAbsorb = cfg.f("haze.absorb", 0.001f);
     v.hazeAmbient = meanGlow * cfg.f("haze.cover", 0.3f);

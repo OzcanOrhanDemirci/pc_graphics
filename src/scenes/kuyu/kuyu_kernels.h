@@ -55,6 +55,8 @@ struct Optics {
     float T[3][kOpticsN];            // through the wall, either way (the same both ways: reciprocity)
     float copper[3][kOpticsN];       // the frame and the pendulums
     float chrome[3][kOpticsN];
+    float gold[3][kOpticsN];         // gold leaf on the threads
+    float varnish[kOpticsN];         // a clear coat (n 1.5) on the threads
     float glassN;
 };
 
@@ -90,7 +92,10 @@ struct View {
     int maxCells = 160;
     int reflections = 1;             // the glass's outer reflection followed (1) or not (0)
     int lightRooms = 27;             // structure light: rooms around the cell (27, or 8 nearest)
-    float3 slatAlbedo[8];            // the slats' colours (book spines)
+    float3 slatAlbedo[8];            // the threads' colours (book spines)
+    int slatFinish[8];               // 0 matte, 1 varnished, 2 gold leaf
+    unsigned char threadMap[16];     // a thread's hash -> its colour (the mix)
+    int threads = 5;                 // threads to a slat
     int nSlatColors = 6;
     float hazeSigma = 0.0f, hazeAbsorb = 0.0f;
     float3 hazeAmbient{0, 0, 0};     // the mean radiance the mist sees round it (the lattice's own glow)
