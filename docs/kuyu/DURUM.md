@@ -8,7 +8,7 @@
 - `build\pc_graphics.exe` → galeride **10 Kuyu** (galeride **0** tuşu ya da aşağı ok) → Enter.
 - Görünmez bir gözlemcisin, iki oda sütunu arasındaki kuyudan saniyede 1,5 m düşüyorsun.
 - Fare tıklamadan bakar (Denizaltı'nın sözleşmesi; **Tab** imleci bırakır). **W A S D** yatay kayma (odalara ve
-  demetlere çarparsın), **Boşluk / C** yüksel / alçal, **Shift** basılı tutuldukça gittikçe hızlanır (aşağıda). **Q / E** düşüşü yavaşlatır / hızlandırır (dur,
+  demetlere çarparsın), **Boşluk / C** yüksel / alçal, **Shift** basılı tutuldukça gittikçe hızlanır (12.000 m/s'ye dek; aşağıda). **Q / E** düşüşü yavaşlatır / hızlandırır (dur,
   0,5, 1,5, 4, 10 m/s). **1 2 3 4** bestelenmiş bakışlar: kuyu, oda, kafes, yukarı (**2** en yakın ışıklı odanın
   önüne getirir ve düşüşü durdurur; **E** sürdürür). **R** başa döner, **↑ ↓** pozlama. Ayar paneli yok: kalite
   2560 × 1440 için ayarlı.
@@ -28,6 +28,18 @@ kare başına yarım hücreden (33 FPS'te ~130 m/s) fazla ilerleyince göz harek
 gidiyormuş gibi görünür (araba tekerleği etkisi). İstenirse `boost.max` ile kaldırılır. Otomatik test: Shift ile 3 sn'de
 36 m/s, 7 sn'de 120 m/s, kare süresi değişmiyor (33 FPS); bırakınca 3 sn'de 4 m/s. Uygulamada `in.shift` artık otomatik
 testin basılı tuttuğu sanal tuşları da görüyor (gerçek tuş için davranış aynı).
+
+## Revize 2 (Özcan, aynı akşam): çok daha hızlı
+
+Özcan: *"Çok güzel optik ilüzyon gibi oldu. Peki bunu çooook daha hızlı yapabilir miyiz. Şuanın onlarca yüzlerce katı
+gibi."* → tavan 120 → **12.000 m/s** (100 katı; 1,5 m/s'den ~12 sn, eğri aynı). Gördüğü ilüzyon tam 120 m/s'nin sınırında
+başlayan örnekleme etkisi: kare başına yarım hücreden (8 m'nin yarısı) fazla ilerleyince kafesin iskeleti, iki kare
+arasındaki yolun 8 m'ye bölümünden kalan kadar kayıyormuş gibi görünür (kare süresi oynadıkça durur, titrer, geri gider),
+odalar her karede başka. 12.000 m/s'de kare başına ~360 m (~45 hücre). Hareket bulanıklığı yok (hıza özel bir şey
+istenmedi). Çarpışma bu hızda ucuz kalsın diye: yalnız gözlemcinin kendi hücresi (her hücrenin oda ve demetleri
+duvarlarından 1,56 m içeride; gözlemci 0,3 m) ve 0,4 m'lik adımlar (en ince engel gözlemci için 1,2 m kalın);
+`--test carpisma` yine temiz. Otomatik test: Shift'le 7 sn'de 831, 10 sn'de 9.240, 13 sn'de 12.000 m/s; kare süresi
+değişmiyor (28-31 ms).
 
 ## Bir bakışta
 

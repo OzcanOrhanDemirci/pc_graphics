@@ -610,7 +610,9 @@ int App::run(const Options& opt) {
                 key(GLFW_KEY_E); key(GLFW_KEY_E); wait(1.5); log("kuyu hizli"); shot("kuyu_hizli");
                 // Shift held while falling: faster and faster up to the ceiling, then let go
                 hold(GLFW_KEY_LEFT_SHIFT, true); wait(3.0); log("kuyu shift 3 sn"); shot("kuyu_shift3"); wait(4.0); log("kuyu shift 7 sn"); shot("kuyu_shift7");
-                hold(GLFW_KEY_LEFT_SHIFT, false); wait(3.0); log("kuyu shift birakildi"); shot("kuyu_shift_birakildi");
+                wait(3.0); log("kuyu shift 10 sn"); shot("kuyu_shift10"); wait(3.0); log("kuyu shift 13 sn"); shot("kuyu_shift13");
+                wait(0.1); shot("kuyu_shift13b"); wait(0.1); shot("kuyu_shift13c");
+                hold(GLFW_KEY_LEFT_SHIFT, false); wait(4.0); log("kuyu shift birakildi"); shot("kuyu_shift_birakildi");
                 key(GLFW_KEY_Q); key(GLFW_KEY_Q); key(GLFW_KEY_Q); key(GLFW_KEY_Q); wait(1.0); log("kuyu duruyor"); shot("kuyu_duruyor");
                 key(GLFW_KEY_1); wait(2.0); log("kuyu bakis 1 kuyu"); shot("kuyu_bakis1");
                 key(GLFW_KEY_2); wait(2.0); log("kuyu bakis 2 oda"); shot("kuyu_bakis2");

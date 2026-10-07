@@ -573,10 +573,13 @@ bool KuyuApp::collide(double& x, double& y, double& z, float r) const {
     for (int it = 0; it < 4; ++it) {
         bool moved = false;
         const long long I = (long long)std::floor(x / C + 0.5), J = (long long)std::floor(y / C + 0.5), K = (long long)std::floor(z / C + 0.5);
-        // the boxes of this cell and its neighbours, relative to the observer (centre and half extents)
-        for (int ox = -1; ox <= 1; ++ox)
-            for (int oy = -1; oy <= 1; ++oy)
-                for (int oz = -1; oz <= 1; ++oz) {
+        // the boxes of this cell (and its neighbours only if the observer could reach them: a cell's room and bundles stay
+        // C/2 - (H + gap + b), 1.56 m, inside its walls, and a bundle running on into the next cell is that cell's too),
+        // relative to the observer (centre and half extents)
+        const int R = r < 0.5f * float(C) - (H + lat.gap + lat.b) ? 0 : 1;
+        for (int ox = -R; ox <= R; ++ox)
+            for (int oy = -R; oy <= R; ++oy)
+                for (int oz = -R; oz <= R; ++oz) {
                     const float3 cc = make_float3(float(double(I + ox) * C - x), float(double(J + oy) * C - y), float(double(K + oz) * C - z));
                     for (int b = -1; b < 12; ++b) {
                         float3 c = cc, e;
