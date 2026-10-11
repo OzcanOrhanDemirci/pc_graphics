@@ -568,8 +568,14 @@ periyotlarda) büyüklüklerde kullanılmadı.
 - **Gölge geçerken süzgecin hafızası leke bırakır:** yıkılan binanın gölgesi zeminde kayarken aynı noktanın eski
   "güneşte" geçmişi kabul edildi (aynı cisim, aynı normal), gölgenin içinde aydınlık lekeler. Geçmiş, yeni karenin 3x3
   komşuluğunun ortalama ± 2 sapmasına kırpılıyor; büyük kırpmada hafıza kısalıyor (3 kare). Lekeler gitti.
-- **Normal kılavuzunun uzayı:** OptiX 9.1 başlığı (`OptixDenoiserGuideLayer`) AOV modelleri için normali **dünya**
-  uzayında istiyor; sahne 1'in hazırlığı kamera uzayına çeviriyor (kaynak gösterilerek). Sahne 1'de doğrulanmadı.
+- **Normal kılavuzunun uzayı:** ~~OptiX 9.1 başlığı (`OptixDenoiserGuideLayer`) AOV modelleri için normali **dünya**
+  uzayında istiyor; sahne 1'in hazırlığı kamera uzayına çeviriyor (kaynak gösterilerek). Sahne 1'de doğrulanmadı.~~
+  **2026-10-12'de çözüldü: kamera uzayı** (x sağa, y yukarı, z kameraya doğru). NVIDIA'nın üç kaynağından ikisi kamera
+  diyor: OptiX 9.1 programlama rehberi (§16.1, model ayrımı yapmadan) ve `optixDenoiserInvoke` belgesi (zamansal
+  modellerde 3B kamera uzayı); "dünya" diyen yalnız `optix_types.h`'taki yorum. Ölçüm (sahne 1, aynı girdi, 4096 örnekli
+  referans): uzayı değiştirmek çıktıyı ortalama < 0,1/255 oynatıyor, rastgele normal 1,9/255 → kılavuz okunuyor ama
+  dönmesi neredeyse fark etmiyor; seçimi belge yapar. Yıkım ve Laboratuvar dünya uzayı veriyordu, kamera uzayına çevrildi
+  (Yıkım klibinde önce↔sonra ortalama 0,05/255).
 
 ## Deprem kayıtları (`assets/deprem/`, `src/yikim/quake.*`)
 ESM (esm-db.eu, işlenmiş MP, hesapsız indirilebilir) ve AFAD TADAS (misafir girişi). İvme cm/s², hepsi ayrıştırılıp

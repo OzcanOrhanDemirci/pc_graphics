@@ -243,8 +243,9 @@ extern "C" __global__ void __raygen__render() {
                                      (unsigned char)(saturate(srgbOetf(col.z) + dn) * 255.0f + 0.5f), 255);
 }
 
-// the denoiser's input: means over the samples so far (params.samples counts this frame's too); normals in world space
-// (optix_types.h, OptixDenoiserGuideLayer: world space for the AOV models)
+// the denoiser's input: means over the samples so far (params.samples counts this frame's too); normals in camera space,
+// x right, y up, z towards the camera (the OptiX 9.1 guide and optixDenoiserInvoke's docs; optix_types.h's comment says
+// world space for these models, the other two win; measured 2026-10-12 in scene 1: the space changes the output < 0.1/255)
 extern "C" __global__ void __raygen__prep() {
     const uint3 ix = optixGetLaunchIndex();
     const unsigned int pix = ix.y * params.width + ix.x;
@@ -254,7 +255,9 @@ extern "C" __global__ void __raygen__prep() {
     params.dnAlbedo[pix] = make_float4(al.x * inv, al.y * inv, al.z * inv, 1.0f);
     const float3 nm = make_float3(n.x, n.y, n.z);
     const float l = sqrtf(dot(nm, nm));
-    params.dnNormal[pix] = l > 1e-6f ? make_float4(nm.x / l, nm.y / l, nm.z / l, 0.0f) : make_float4(0, 0, 0, 0);
+    const float3 nw = l > 1e-6f ? nm * (1.0f / l) : make_float3(0, 0, 0);
+    const YCamera& C = params.cam;
+    params.dnNormal[pix] = make_float4(dot(nw, C.right), dot(nw, C.up), -dot(nw, C.fwd), 0.0f);
 }
 
 // the denoised image to the display, as __raygen__render does with the raw one

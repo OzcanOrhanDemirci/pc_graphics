@@ -518,7 +518,8 @@ extern "C" __global__ void __raygen__render() {
         guidePath(C.pos, d, ga, gn, gp);
         if (params.albedoOut) {
             params.albedoOut[pix] = make_float4(ga.x, ga.y, ga.z, 1.0f);
-            params.normalOut[pix] = make_float4(gn.x, gn.y, gn.z, 0.0f);
+            // the denoiser's normal guide in camera space: x right, y up, z towards the camera (see yikim.cu __raygen__prep)
+            params.normalOut[pix] = make_float4(dot(gn, C.right), dot(gn, C.up), -dot(gn, C.fwd), 0.0f);
         }
         if (params.posOut) params.posOut[pix] = gp;
     }

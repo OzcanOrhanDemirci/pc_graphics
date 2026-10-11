@@ -5,7 +5,7 @@
 #include "shared/spectrum.h"
 
 // Denoiser input: white-balanced linear sRGB of the accumulated image without its caustic part; guides:
-// first-hit albedo (RGB) and world-space normal.
+// first-hit albedo (RGB) and the normal in camera space (converted below).
 __global__ void denoisePrepKernel(Params p, float4* rgb, float4* albedo, float4* normal, float4* caustic) {
     const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y;
     if (x >= p.renderWidth || y >= p.renderHeight) return;
@@ -34,7 +34,9 @@ __global__ void denoisePrepKernel(Params p, float4* rgb, float4* albedo, float4*
     float3 n = make_float3(nr.x, nr.y, nr.z);
     const float l = sqrtf(dot(n, n));
     n = l > 1e-6f ? n * (1.0f / l) : make_float3(0.0f, 0.0f, 0.0f);
-    // the temporal model wants camera space (optixDenoiserInvoke docs): x right, y up, z towards the camera
+    // camera space for every model: x right, y up, z towards the camera (the OptiX 9.1 guide and optixDenoiserInvoke's docs;
+    // optix_types.h's comment says world space for the AOV models, the other two win; measured 2026-10-12: the space changes
+    // the output < 0.1/255 here, random normals change it 1.9/255, so the guide is read but its rotation hardly matters)
     const float3 nc = make_float3(dot(n, p.cam.right), dot(n, p.cam.up), -dot(n, p.cam.fwd));
     normal[i] = make_float4(nc.x, nc.y, nc.z, 0.0f);
 }
