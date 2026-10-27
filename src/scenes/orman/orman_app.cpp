@@ -64,6 +64,25 @@ void OrmanApp::loadAssets() {
         if (assets.loadModel(id, isSolidId(id))) loaded.push_back(id);
     }
     groundMaterial_ = assets.loadMaterial(groundId);
+    // the fallen leaves: mostly brown and dry, some fallen green and yellowing (its share of the litter, a leaf's length,
+    // its curl, its colour times the atlas's)
+    const struct {
+        const char* id;
+        float share, length, curl;
+        float3 tint;
+    } litter[] = {{"LeafSet011", 0.72f, 0.11f, 0.3f, make_float3(1.0f, 1.0f, 1.0f)},
+                  {"LeafSet022", 0.2f, 0.15f, 0.1f, make_float3(0.95f, 0.72f, 0.4f)},
+                  {"LeafSet023", 0.08f, 0.13f, 0.12f, make_float3(0.9f, 0.68f, 0.38f)}};
+    world.litterSets.clear();
+    for (const auto& s : litter) {
+        if (std::find(skip.begin(), skip.end(), s.id) != skip.end()) continue;
+        std::vector<float4> leaves;
+        const int m = assets.loadAtlas(s.id, leaves);
+        if (m < 0 || leaves.empty()) continue;
+        assets.materials[size_t(m)].tint = s.tint;
+        world.litterSets.push_back({m, std::move(leaves), s.share, s.length, s.curl});
+        loaded.push_back(s.id);
+    }
     {
         OMaterial w{};
         w.flags = OMAT_WATER;
@@ -83,6 +102,9 @@ void OrmanApp::loadAssets() {
 
 void OrmanApp::buildWorld() {
     const double t0 = nowMs();
+    // the views' places stay open: the eye stands among the plants, not inside a shrub
+    world.clearings.clear();
+    for (int i = 0; i < viewCount(); ++i) world.clearings.push_back({view(i).feet.x, view(i).feet.z, 0.8f});
     world.build(assets, groundMaterial_, int(assets.protos.size()), waterMaterial_);
     worldMs = nowMs() - t0;
 }
@@ -93,6 +115,7 @@ bool OrmanApp::initRenderer(std::string& err) {
     if (!R.compile(err)) return false;
     std::vector<OProtoCPU> extra{world.ground};
     if (!world.water.geoms.empty()) extra.push_back(world.water);
+    if (!world.litter.geoms.empty()) extra.push_back(world.litter);
     R.upload(assets, extra, world.places);
     applyLight();
     uploadMs = nowMs() - t0;
@@ -134,6 +157,11 @@ void OrmanApp::bakeLight() {
     const float3 lo = make_float3(-0.5f * world.size, world.lo.y, -0.5f * world.size);
     const float3 hi = make_float3(0.5f * world.size, std::min(world.hi.y, cfg.f("grid.top", 40.0f)), 0.5f * world.size);
     R.bakeGroundAO(int(assets.protos.size()), cfg.f("ao.radius", 0.6f), cfg.i("ao.rays", 48), bake);
+    if (world.litterProto >= 0) {
+        const double groundMs = bake.aoMs;
+        R.bakeGroundAO(world.litterProto, cfg.f("ao.radius", 0.6f), cfg.i("ao.rays", 48), bake);
+        bake.aoMs += groundMs;
+    }
     R.bakeGrid(lo, hi, h, cfg.i("grid.rays", 192), cfg.i("grid.passes", 2), bake);
     // the sun in the air: the mist's shafts (up to where the leaves end)
     const float vh = cfg.f("vis.spacing", 0.1f);

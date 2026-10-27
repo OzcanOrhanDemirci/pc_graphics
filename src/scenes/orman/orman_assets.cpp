@@ -448,6 +448,58 @@ int OrmanAssets::loadMaterial(const std::string& id) {
     return addMaterial(m, id);
 }
 
+int OrmanAssets::loadAtlas(const std::string& id, std::vector<float4>& leaves) {
+    leaves.clear();
+    const std::string op = findFile(root + "/" + id, {"_opacity"});
+    if (op.empty()) {
+        missing.push_back(id);
+        return -1;
+    }
+    const int k = loadMaterial(id);
+    const int t = k < 0 ? -1 : texture(op, Alpha);
+    if (t < 0) return -1;
+    OMaterial& m = materials[size_t(k)];
+    m.alpha = textures[t].tex;
+    m.flags |= OMAT_ALPHA | OMAT_FOLIAGE | OMAT_DOUBLE;
+    m.translucency = 0.2f;
+    // the leaves: islands of the opacity on a grid of 8-texel blocks (a block counts if any texel in it is over half)
+    int w = 0, h = 0, n = 0;
+    unsigned char* px = stbi_load(op.c_str(), &w, &h, &n, 1);
+    if (!px) return k;
+    const int g = 8, gw = w / g, gh = h / g;
+    std::vector<unsigned char> on(size_t(gw) * gh, 0);
+    for (int y = 0; y < gh * g; ++y)
+        for (int x = 0; x < gw * g; ++x)
+            if (px[size_t(y) * w + x] > 127) on[size_t(y / g) * gw + x / g] = 1;
+    stbi_image_free(px);
+    std::vector<int> stack;
+    for (int s = 0; s < gw * gh; ++s) {
+        if (on[size_t(s)] != 1) continue;
+        int x0 = gw, y0 = gh, x1 = -1, y1 = -1, cells = 0;
+        stack.assign(1, s);
+        on[size_t(s)] = 2;
+        while (!stack.empty()) {
+            const int c = stack.back();
+            stack.pop_back();
+            const int cx = c % gw, cy = c / gw;
+            x0 = std::min(x0, cx);
+            y0 = std::min(y0, cy);
+            x1 = std::max(x1, cx);
+            y1 = std::max(y1, cy);
+            ++cells;
+            for (int d = 0; d < 4; ++d) {
+                const int nx = cx + (d == 0) - (d == 1), ny = cy + (d == 2) - (d == 3);
+                if (nx < 0 || ny < 0 || nx >= gw || ny >= gh || on[size_t(ny) * gw + nx] != 1) continue;
+                on[size_t(ny) * gw + nx] = 2;
+                stack.push_back(ny * gw + nx);
+            }
+        }
+        // specks of dust are not leaves
+        if (cells >= 24) leaves.push_back(make_float4(float(x0 * g) / w, float(y0 * g) / h, float((x1 + 1) * g) / w, float((y1 + 1) * g) / h));
+    }
+    return k;
+}
+
 size_t OrmanAssets::textureBytes() const {
     size_t n = 0;
     for (const auto& t : textures) n += t.bytes;

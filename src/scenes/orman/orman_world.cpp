@@ -70,11 +70,12 @@ void placeMatrix(float m[12], float3 t, float3 up, float tilt, float yaw, float 
     m[11] = t.z;
 }
 
-enum Kind { GroundPlant, Patch, Tall, Rock, Stone, Log, Root, Tree, Moss };
+enum Kind { GroundPlant, Patch, Tall, Rock, Stone, Log, Root, Tree, Moss, Shrub, Debris };
 
 Kind classify(const std::string& id, float height, float width) {
     auto has = [&](const char* k) { return id.find(k) != std::string::npos; };
     if (id.rfind("moss", 0) == 0) return Moss;   // moss sprigs (a mossy rock set is a rock)
+    if (has("debris") || has("branch")) return Debris;
     if (has("root")) return Root;
     if (has("trunk") || has("log")) return Log;
     if (has("stump")) return Rock;
@@ -82,6 +83,7 @@ Kind classify(const std::string& id, float height, float width) {
     if (height > 6.0f) return Tree;
     if (height > 2.2f) return Tall;
     if (has("anthurium") || has("calathea") || has("alocasia") || has("philodendron") || has("monstera")) return Patch;
+    if (height > 0.9f) return Shrub;
     return GroundPlant;
 }
 
@@ -102,6 +104,12 @@ void OrmanWorld::configure(const Config& cfg) {
     hillRun_ = cfg.f("valley.run", hillRun_);
     bend_ = cfg.f("valley.bend", bend_);
     ringTrees_ = cfg.i("ring.trees", ringTrees_);
+    youngTrees_ = cfg.i("young.trees", youngTrees_);
+    dense_[0] = cfg.f("dense.floor", dense_[0]);
+    dense_[1] = cfg.f("dense.shrub", dense_[1]);
+    dense_[2] = cfg.f("dense.sapling", dense_[2]);
+    dense_[3] = cfg.f("dense.debris", dense_[3]);
+    dense_[4] = cfg.f("dense.litter", dense_[4]);
     sunAzimuth_ = cfg.f("sun.azimuth", sunAzimuth_);
 }
 
@@ -316,6 +324,7 @@ void OrmanWorld::build(OrmanAssets& A, int groundMaterial, int groundProto, int 
 
     // the assets by what they are, the big ones first (the small ones fill around them)
     std::map<int, std::vector<std::string>> kinds;
+    std::map<std::string, float> widths;
     for (const auto& [id, protos] : A.byAsset) {
         float h = 0.0f, w = 0.0f;
         for (int p : protos) {
@@ -323,6 +332,7 @@ void OrmanWorld::build(OrmanAssets& A, int groundMaterial, int groundProto, int 
             w = std::max(w, std::max(A.protos[size_t(p)].bmax.x - A.protos[size_t(p)].bmin.x, A.protos[size_t(p)].bmax.z - A.protos[size_t(p)].bmin.z));
         }
         kinds[classify(id, h, w)].push_back(id);
+        widths[id] = w;
     }
     const float hw = 0.5f * walk;
 
@@ -420,8 +430,30 @@ void OrmanWorld::build(OrmanAssets& A, int groundMaterial, int groundProto, int 
             put(variant(v), x, z, a, 0.8f + 0.4f * U(rng), 0.7f, 0.1f, tintOf(0.06f));
         }
     }
-    // understory in patches, ferns crowding the banks, moss along the water: a jittered grid, kept by a density
-    auto scatter = [&](const std::string& id, float spacing, float sMin, float sMax, auto density) {
+    // the light's gap: within 35 degrees of the sun's bearing from the patch's middle
+    const float sunAz = sunAzimuth_ * 0.0174533f;
+    auto towardSun = [&](float x, float z) { return x * std::cos(sunAz) + z * std::sin(sunAz) > 0.82f * std::sqrt(x * x + z * z); };
+    // the views' places kept open of anything taller than the knee (0 in a clearing, 1 a metre past its edge)
+    auto open = [&](float x, float z) {
+        float o = 1.0f;
+        for (const Clearing& c : clearings) o = std::min(o, smoothstep(c.r, c.r + 1.0f, std::sqrt((x - c.x) * (x - c.x) + (z - c.z) * (z - c.z))));
+        return o;
+    };
+    // young trees under the crowns: the middle storey between the saplings and the canopy, off the light's gap
+    for (const std::string& id : kinds[Tree]) {
+        const auto& v = A.byAsset[id];
+        int made = 0;
+        for (int tries = 0; tries < 800 && made < youngTrees_; ++tries) {
+            const float x = (U(rng) - 0.5f) * size, z = (U(rng) - 0.5f) * size;
+            if (std::sqrt(x * x + z * z) < 5.0f || towardSun(x, z) || streamDistance(x, z) < 2.0f || open(x, z) < 1.0f) continue;
+            if (!free(x, z, 1.0f)) continue;
+            const float top = put(variant(v), x, z, U(rng) * 6.2832f, 0.3f + 0.25f * U(rng), 0.0f, 0.02f, tintOf(0.1f), 0.0f, 0.3f);
+            solids.push_back({x, z, 0.25f, top});
+            ++made;
+        }
+    }
+    // the understory, each layer by its own reason, on a jittered grid kept by a density (times its dense.* setting)
+    auto scatter = [&](const std::string& id, float spacing, float sMin, float sMax, float tilt, auto density) {
         const auto& v = A.byAsset[id];
         const int cells = int(size / spacing);
         for (int j = 0; j < cells; ++j)
@@ -433,41 +465,61 @@ void OrmanWorld::build(OrmanAssets& A, int groundMaterial, int groundProto, int 
                 const OProtoCPU& P = A.protos[size_t(proto)];
                 const float s = sMin + (sMax - sMin) * U(rng);
                 if (!free(x, z, 0.25f * s * std::max(P.bmax.x - P.bmin.x, P.bmax.z - P.bmin.z))) continue;
-                put(proto, x, z, U(rng) * 6.2832f, s, 0.6f, 0.03f, tintOf(0.12f));
+                put(proto, x, z, U(rng) * 6.2832f, s, tilt, 0.03f, tintOf(0.12f));
             }
     };
+    auto patchy = [&](float x, float z, float f, float a, float b, unsigned s) { return smoothstep(a, b, vnoise(x * f, z * f, s)); };
     unsigned salt = 0;
+    // saplings: everywhere but the stream, thicker at the walked part's edge (the walls) and in clumps; from knee-high
+    // shoots to small trees, so the space under the crowns fills at every height
     for (const std::string& id : kinds[Tall]) {
         const unsigned sa = seed_ + 300u + salt++;
-        scatter(id, 2.6f, 0.8f, 1.2f, [&, sa](float x, float z) {
-            const float d = streamDistance(x, z);
-            const float edge = smoothstep(0.6f * hw, hw, std::max(std::fabs(x), std::fabs(z)));   // denser at the edges: the walls
-            return (d < 1.6f ? 0.0f : 0.35f) * (0.5f + 0.5f * smoothstep(0.45f, 0.6f, vnoise(x * 0.15f, z * 0.15f, sa))) + 0.4f * edge;
+        scatter(id, 1.7f, 0.45f, 1.25f, 0.1f, [&, sa](float x, float z) {
+            if (streamDistance(x, z) < 1.6f) return 0.0f;
+            const float edge = smoothstep(0.6f * hw, hw, std::max(std::fabs(x), std::fabs(z)));
+            return std::min(1.0f, dense_[2] * (0.3f + 0.35f * patchy(x, z, 0.15f, 0.4f, 0.65f, sa) + 0.35f * edge)) * open(x, z);
         });
     }
+    // shrubs at the eye's height: in thickets with gaps between them (a look ends in leaves a few metres on, but
+    // there is a way through), not on the stream's rim
+    for (const std::string& id : kinds[Shrub]) {
+        const unsigned sa = seed_ + 500u + salt++;
+        scatter(id, 0.8f, 0.7f, 1.5f, 0.3f, [&, sa](float x, float z) {
+            if (streamDistance(x, z) < 1.3f) return 0.0f;
+            return std::min(1.0f, dense_[1] * (0.3f + 0.6f * patchy(x, z, 0.22f, 0.4f, 0.7f, sa))) * open(x, z);
+        });
+    }
+    // broad leaves in patches, and a few anywhere
     for (const std::string& id : kinds[Patch]) {
         const unsigned sa = seed_ + 100u + salt++;
-        scatter(id, 0.55f, 0.8f, 1.25f, [&, sa](float x, float z) {
-            const float d = streamDistance(x, z);
-            if (d < 1.0f) return 0.0f;
-            const float patch = smoothstep(0.55f, 0.75f, vnoise(x * 0.35f, z * 0.35f, sa));
-            return 0.8f * patch;
+        scatter(id, 0.5f, 0.8f, 1.35f, 0.6f, [&, sa](float x, float z) {
+            if (streamDistance(x, z) < 1.0f) return 0.0f;
+            return std::min(1.0f, dense_[0] * (0.2f + 0.75f * patchy(x, z, 0.35f, 0.45f, 0.7f, sa))) * (0.3f + 0.7f * open(x, z));
         });
     }
+    // the floor: ferns and small weeds everywhere, crowding the moist banks; spaced by the plant's own width
     for (const std::string& id : kinds[GroundPlant]) {
         const unsigned sa = seed_ + 200u + salt++;
-        scatter(id, 0.7f, 0.7f, 1.35f, [&, sa](float x, float z) {
+        const float spacing = std::clamp(0.5f * widths[id], 0.18f, 0.6f);
+        scatter(id, spacing, 0.7f, 1.4f, 0.6f, [&, sa](float x, float z) {
             const float d = streamDistance(x, z);
             if (d < 0.85f) return 0.0f;
             const float bank = 1.0f - smoothstep(1.5f, 5.0f, d);   // moist banks
-            const float patch = smoothstep(0.35f, 0.7f, vnoise(x * 0.25f, z * 0.25f, sa));
-            return 0.18f + 0.45f * bank + 0.3f * patch;
+            return std::min(1.0f, dense_[0] * (0.4f + 0.45f * bank + 0.35f * patchy(x, z, 0.25f, 0.35f, 0.7f, sa)));
+        });
+    }
+    // what falls from the crowns: bark and dry branches, gathered where the ground is low and still
+    for (const std::string& id : kinds[Debris]) {
+        const unsigned sa = seed_ + 600u + salt++;
+        scatter(id, 0.8f, 0.7f, 1.3f, 0.9f, [&, sa](float x, float z) {
+            if (streamDistance(x, z) < 1.0f) return 0.0f;
+            return std::min(1.0f, dense_[3] * (0.25f + 0.4f * patchy(x, z, 0.3f, 0.4f, 0.7f, sa)));
         });
     }
     for (const std::string& id : kinds[Moss]) {
         const unsigned sa = seed_ + 400u + salt++;
         // a moss sprig is two or three centimetres: carpets of them on the wet rim of the bed and in damp patches
-        scatter(id, 0.07f, 0.8f, 1.6f, [&, sa](float x, float z) {
+        scatter(id, 0.07f, 0.8f, 1.6f, 0.6f, [&, sa](float x, float z) {
             const float d = streamDistance(x, z);
             const float rim = smoothstep(0.5f, 0.75f, d) * (1.0f - smoothstep(1.1f, 2.0f, d));
             const float patch = smoothstep(0.6f, 0.8f, vnoise(x * 0.5f, z * 0.5f, sa));
@@ -480,9 +532,6 @@ void OrmanWorld::build(OrmanAssets& A, int groundMaterial, int groundProto, int 
     // height a wall of shrubs from the walked part's edge outwards, so a look outwards ends in leaves, never in the
     // ground's end
     if (oh > half) {
-        const float sa = sunAzimuth_ * 0.0174533f;
-        // within 35 degrees of the sun's bearing from the patch's middle
-        auto towardSun = [&](float x, float z) { return x * std::cos(sa) + z * std::sin(sa) > 0.82f * std::sqrt(x * x + z * z); };
         auto beyond = [&](float x, float z) { return std::max(std::fabs(x), std::fabs(z)); };
         for (const std::string& id : kinds[Tree]) {
             const auto& v = A.byAsset[id];
@@ -509,7 +558,7 @@ void OrmanWorld::build(OrmanAssets& A, int groundMaterial, int groundProto, int 
         }
         // the shrubs: whatever low plant stands over 90 cm, grown a little bigger
         std::vector<int> shrubs;
-        for (Kind k : {GroundPlant, Patch})
+        for (Kind k : {Shrub, GroundPlant, Patch})
             for (const std::string& id : kinds[k])
                 for (int p : A.byAsset[id])
                     if (A.protos[size_t(p)].bmax.y - A.protos[size_t(p)].bmin.y >= 0.9f) shrubs.push_back(p);
@@ -519,6 +568,107 @@ void OrmanWorld::build(OrmanAssets& A, int groundMaterial, int groundProto, int 
                 if (p <= 0.0f || streamDistance(x, z) < 1.3f || U(rng) >= p || !free(x, z, 0.3f)) return;
                 put(variant(shrubs), x, z, U(rng) * 6.2832f, 1.2f + 0.7f * U(rng), 0.3f, 0.03f, tintOf(0.12f));
             });
+    }
+
+    // the fallen leaves over the patch, last and with their own sequence (nothing else moves for them): everywhere,
+    // piled against what stands (trunks, rocks, logs), a few sunk in the bed. Each leaf is cut from its atlas, lies on
+    // the ground's own triangles (not on the smooth height: it rests on what is drawn), its edges curled up and one end
+    // lifted, a few millimetres over the leaves under it
+    litter = OProtoCPU();
+    litterProto = -1;
+    litter.asset = "litter";
+    litter.name = "litter";
+    float shares = 0.0f;
+    for (const LitterSet& s : litterSets) shares += s.leaves.empty() ? 0.0f : s.share;
+    if (shares > 0.0f && dense_[4] > 0.0f) {
+        const OMeshCPU& gm = ground.geoms[0];
+        auto groundY = [&](float x, float z) {
+            const float gx = (x + half) / res, gz = (z + half) / res;
+            const int i = std::clamp(int(gx), 0, n - 2), j = std::clamp(int(gz), 0, n - 2);
+            const float fx = std::clamp(gx - i, 0.0f, 1.0f), fz = std::clamp(gz - j, 0.0f, 1.0f);
+            const float a = gm.pos[size_t(j) * n + i].y, b = gm.pos[size_t(j) * n + i + 1].y;
+            const float c = gm.pos[size_t(j + 1) * n + i].y, d = gm.pos[size_t(j + 1) * n + i + 1].y;
+            return fx + fz <= 1.0f ? a + fx * (b - a) + fz * (c - a) : d + (1.0f - fx) * (c - d) + (1.0f - fz) * (b - d);
+        };
+        std::vector<OMeshCPU> meshes(litterSets.size());
+        for (size_t s = 0; s < litterSets.size(); ++s) meshes[s].material = litterSets[s].material;
+        std::mt19937 lr(seed_ + 77u);
+        auto L = [&]() { return U(lr); };
+        const float cell = 0.09f;
+        const int cells = int(size / cell);
+        for (int j = 0; j < cells; ++j)
+            for (int i = 0; i < cells; ++i) {
+                const float x = -half + (i + L()) * cell, z = -half + (j + L()) * cell;
+                const float d = streamDistance(x, z);
+                float p = (0.45f + 0.35f * patchy(x, z, 0.4f, 0.3f, 0.7f, seed_ + 700u)) *
+                          (d < 0.9f * streamWidth_ ? 0.15f : 0.4f + 0.6f * smoothstep(0.6f * streamWidth_, 1.5f * streamWidth_, d));
+                bool inside = false;
+                for (const Solid& s : solids) {
+                    const float e = std::sqrt((x - s.x) * (x - s.x) + (z - s.z) * (z - s.z)) - s.r;
+                    if (e < 0.0f) inside = true;
+                    else if (e < 0.8f) p += 0.5f * (1.0f - e / 0.8f);
+                }
+                if (inside || L() >= std::min(1.0f, dense_[4] * p)) continue;
+                float pick = L() * shares;
+                size_t si = 0;
+                for (; si < litterSets.size(); ++si) {
+                    if (litterSets[si].leaves.empty()) continue;
+                    if (pick < litterSets[si].share) break;
+                    pick -= litterSets[si].share;
+                }
+                if (si == litterSets.size()) continue;
+                const LitterSet& S = litterSets[si];
+                const float4 r = S.leaves[size_t(L() * S.leaves.size()) % S.leaves.size()];
+                const bool alongV = r.w - r.y >= r.z - r.x;
+                const float len = S.length * (0.7f + 0.6f * L());
+                const float wid = len * (alongV ? (r.z - r.x) / (r.w - r.y) : (r.w - r.y) / (r.z - r.x));
+                const float yaw = L() * 6.2832f;
+                const float3 a = make_float3(std::cos(yaw), 0, std::sin(yaw)), b = make_float3(-std::sin(yaw), 0, std::cos(yaw));
+                const float lift = 0.002f + 0.008f * L(), curl = S.curl * (0.5f + L()), tip = 0.12f * L();
+                const bool flip = L() < 0.5f;
+                OMeshCPU& m = meshes[si];
+                const unsigned base = unsigned(m.pos.size());
+                for (int k = 0; k < 3; ++k)
+                    for (int l = 0; l < 3; ++l) {
+                        const float t = 0.5f * k, s = float(l - 1), te = flip ? 1.0f - t : t;
+                        const float px = x + a.x * (t - 0.5f) * len + b.x * s * 0.5f * wid, pz = z + a.z * (t - 0.5f) * len + b.z * s * 0.5f * wid;
+                        m.pos.push_back(make_float3(px, groundY(px, pz) + lift + curl * s * s * 0.5f * wid + tip * len * te * te, pz));
+                        const float u = 0.5f * (s + 1.0f);
+                        m.uv.push_back(alongV ? make_float2(r.x + (r.z - r.x) * u, r.w + (r.y - r.w) * t) : make_float2(r.x + (r.z - r.x) * t, r.y + (r.w - r.y) * u));
+                    }
+                for (int k = 0; k < 2; ++k)
+                    for (int l = 0; l < 2; ++l) {
+                        const unsigned v0 = base + unsigned(k * 3 + l), v1 = v0 + 1, v2 = v0 + 3, v3 = v2 + 1;
+                        m.idx.push_back(make_uint3(v0, v2, v1));
+                        m.idx.push_back(make_uint3(v1, v2, v3));
+                    }
+                // its normals from its own bend, up
+                m.nrm.resize(m.pos.size(), make_float3(0, 0, 0));
+                for (size_t q = m.idx.size() - 8; q < m.idx.size(); ++q) {
+                    const uint3 f = m.idx[q];
+                    float3 fn = cross(m.pos[f.y] - m.pos[f.x], m.pos[f.z] - m.pos[f.x]);
+                    if (fn.y < 0.0f) fn = fn * -1.0f;
+                    m.nrm[f.x] += fn;
+                    m.nrm[f.y] += fn;
+                    m.nrm[f.z] += fn;
+                }
+                for (unsigned v = base; v < base + 9; ++v) m.nrm[v] = normalize(m.nrm[v]);
+            }
+        for (OMeshCPU& m : meshes)
+            if (!m.idx.empty()) {
+                m.ao.assign(m.pos.size(), 1.0f);   // baked like the ground's: the leaves under the plants darken
+                litter.geoms.push_back(std::move(m));
+            }
+        if (!litter.geoms.empty()) {
+            litter.bmin = make_float3(-half, -2, -half);
+            litter.bmax = make_float3(half, hill_ + 2, half);
+            OPlace lp;
+            lp.proto = litterProto = groundProto + (water.geoms.empty() ? 1 : 2);
+            places.push_back(lp);
+            size_t leaves = 0;
+            for (const OMeshCPU& m : litter.geoms) leaves += m.idx.size() / 8;
+            counts["litter"] = int(leaves);
+        }
     }
     lo.y -= 1.0f;
     hi.y += 1.0f;

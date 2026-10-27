@@ -19,11 +19,23 @@ public:
     float outer = 120.0f;     // the valley around it: a coarser ground rising into hills, so its end never shows (m)
     OProtoCPU ground;
     OProtoCPU water;          // the stream's surface (a ribbon along its line)
+    OProtoCPU litter;         // the fallen leaves over the patch: one mesh, each leaf lying on the ground's own triangles
+    struct LitterSet {
+        int material;
+        std::vector<float4> leaves;       // each leaf's place in the atlas (u0, v0, u1, v1)
+        float share, length, curl;        // its share of the litter, a leaf's length (m), how far its edges curl up
+    };
+    std::vector<LitterSet> litterSets;
+    int litterProto = -1;     // its prototype once uploaded (-1: none)
     std::vector<OPlace> places;
     struct Solid {
         float x, z, r, top;               // a disc the body does not walk into, up to its top (m)
     };
     std::vector<Solid> solids;
+    struct Clearing {
+        float x, z, r;                    // kept open of shrubs and saplings (m): the views' places
+    };
+    std::vector<Clearing> clearings;
     std::map<std::string, int> counts;   // copies per asset
     float3 lo{0, 0, 0}, hi{0, 0, 0};    // everything's bounds
 
@@ -35,7 +47,8 @@ public:
     float streamDistance(float x, float z) const;   // to the stream's middle line (m)
     float streamCentre(float x) const;              // its z at x
     float waterLevel(float x) const;                // the stream's surface at x (smooth down the stream)
-    // the ground (prototype `groundProto` once uploaded after the assets' own) and the copies
+    // the ground (prototype `groundProto` once uploaded after the assets' own), then the water and the litter when there
+    // are any, and the copies
     void build(OrmanAssets& assets, int groundMaterial, int groundProto, int waterMaterial);
 
 private:
@@ -46,5 +59,7 @@ private:
     float hill_ = 9.0f, hillRun_ = 28.0f;          // the valley's sides: how high, over how far past the patch (m)
     float bend_ = 0.025f;                          // past the patch the stream bends away (1/m)
     int ringTrees_ = 20;                           // big trees around the patch, none between it and the sun
+    int youngTrees_ = 10;                          // young ones inside it: the middle storey
+    float dense_[5] = {1, 1, 1, 1, 1};             // the understory's layers: floor, shrubs, saplings, debris, litter
     float sunAzimuth_ = 15.0f;                     // degrees, +x towards +z (the gap the sun comes through)
 };

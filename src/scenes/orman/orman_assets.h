@@ -52,6 +52,9 @@ public:
     bool loadModel(const std::string& id, bool solid);
     // a tiling material (Poly Haven texture or ambientCG set) for the ground; -1 if not there
     int loadMaterial(const std::string& id);
+    // a leaf atlas (ambientCG's LeafSet): its material cut by its opacity map, and each leaf's place in it (u0, v0, u1,
+    // v1: the opacity's islands); -1 if not there
+    int loadAtlas(const std::string& id, std::vector<float4>& leaves);
     int addMaterial(const OMaterial& m, const std::string& name);
     size_t textureBytes() const;
     void release();

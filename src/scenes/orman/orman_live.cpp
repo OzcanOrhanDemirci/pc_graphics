@@ -39,10 +39,13 @@ public:
         i.details = {
             {L("Yoğunluk", "Density"),
              L("Her bitki, taş ve gövde açık lisanslı gerçek bir tarama; aynı model binlerce kez kopyalanır, kopya bellekte bir kez "
-               "durur. Yerleri bir sebepten: eğreltiler nemli kıyıda, taşlar derenin yatağında, devrik gövde derenin üstünde.",
+               "durur. Orman katlardan: yerde düşmüş yapraklar ve eğreltiler, göz hizasında çalılıklar, onların üstünde fidanlar ve "
+               "genç ağaçlar, en üstte tepe. Her katın yeri bir sebepten: eğreltiler nemli kıyıda sık, yapraklar gövdelerin ve "
+               "kayaların dibine yığılır, taşlar derenin yatağında, devrik gövde derenin üstünde.",
                "Every plant, stone and trunk is a real open-licence scan; one model is copied thousands of times and stays in "
-               "memory once. Each has its place for a reason: ferns on the moist banks, stones in the bed, the fallen trunk over "
-               "the stream.")},
+               "memory once. The forest is in layers: fallen leaves and ferns on the ground, thickets at the eye's height, "
+               "saplings and young trees over them, the crowns on top. Each has its place for a reason: ferns crowd the moist "
+               "banks, leaves pile at the foot of trunks and rocks, stones lie in the bed, the fallen trunk lies over the stream.")},
             {L("Görünürlük", "Visibility"),
              L("Görüntü de ışın izlemeyle çizilir. Yapraklar ve dallar pikselden ince: yürürken birkaç sabit ışın onları "
                "titretiyordu. Şimdi her karede pikselin başka bir noktasına tek ışın gider, NVIDIA DLSS Ray Reconstruction "
