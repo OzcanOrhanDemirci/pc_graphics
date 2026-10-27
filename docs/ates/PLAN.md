@@ -59,8 +59,9 @@ tıkandığı ve soğuk odun ısıyı çektiği için söner. Her senaryo bir te
 5. **Kare süresi** (GPU zaman damgası): 1440p'de hedef ≥ 40 FPS, en kötü anda ≥ 30 (bütçe F0'da ölçülür).
 6. **Özcan'ın gözü:** her aşamanın sonunda klip ve exe.
 
-**Kapsam kilidi:** ses yok · odun türü, ıslaklık yok · tek ocak · gece · rüzgâr, yağmur, su dökme yok · duman ateşin
-ızgarasının üstünde pişmiş · kamerada bulanıklık ve gren yok. Kilit ancak Özcan'ın sözüyle açılır.
+**Kapsam kilidi:** ses yok · odun türü, ıslaklık yok · tek ocak · gece · duman ateşin ızgarasının üstünde pişmiş ·
+kamerada bulanıklık ve gren yok. Kilit ancak Özcan'ın sözüyle açılır. Önerim, kilide Özcan'ın onayıyla girer (§6):
+ortam rüzgârı, yağmur, su dökme yok.
 
 ## 3 · Mimari
 
@@ -166,7 +167,7 @@ OptiX hattı ve DLSS-RR (Orman) · göz uyumu ve panel · `tools/titreme.py`, `k
 
 ## 6 · Açık (Özcan'ın kararı)
 
-Önerilenler, onay bekliyor: dumanın iki dikişi (§3.6) · kibritle tutuşturma ve iki boy yakıt (§3.9) · kıvılcımın kısa
-izi (§3.7) · gökyüzü: aysız ama tam siyah değil (ufukta hafif gök ışığı; duman tepede seçilir) · FPS hedefi ≥ 40 ·
-ad **Ateş** (kimlik `ates`, galeride 12) · isteğe bağlı: maşayla karıştırma (kıvılcımın doğal tetikleyicisi), üflemede
-nefes süresi.
+Önerilenler, onay bekliyor: dumanın iki dikişi (§3.6) · ortam rüzgârı, yağmur, su dökme kapsam dışı (§2) · kibritle
+tutuşturma ve iki boy yakıt (§3.9) · kıvılcımın kısa izi (§3.7) · gökyüzü: aysız ama tam siyah değil (ufukta hafif gök
+ışığı; duman tepede seçilir) · FPS hedefi ≥ 40 · ad **Ateş** (kimlik `ates`, galeride 12) · isteğe bağlı: maşayla
+karıştırma (kıvılcımın doğal tetikleyicisi), üflemede nefes süresi.
