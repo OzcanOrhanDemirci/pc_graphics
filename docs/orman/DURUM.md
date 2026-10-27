@@ -13,10 +13,11 @@
   **1 2 3 4** bakışlar (dere boyunca, devrik gövde, yukarı yapraklara, yer), **R** başa, **↑ ↓** pozlama. Panelde
   **Örnek 1 / 4 / 8 / 16 / DLSS** (varsayılan DLSS; sabit örnekler kıyas için, kurulamazsa 4'e döner).
 - Yoğunluk `scenes/orman.cfg`'de katman katman: `dense.floor / shrub / sapling / debris / litter`, `young.trees`.
-  Ormanın büyüklüğü `world.cells` (4: 9 × 9 karo, 396 m; 0: yalnız parça).
-- Yürüyüş merkezden 132 m'de durur (dünyanın ucuna 66 m kala): oradan bakış ağaçların arasından uca ulaşmaz.
+  Ormanın büyüklüğü `world.cells` (4: 9 × 9 karo, 396 m; 0: yalnız parça, kenarında durulur).
+- **Duvar yok:** orman bir simit (torus), kenarları birbirine dikili. Hangi yöne yürünürse yürünsün durulmaz;
+  dümdüz giden 396 m sonra (yürüyerek ~5 dk, koşarak ~2 dk) dereye öbür yandan döner.
 
-## Şu an (2026-10-27 akşam): iskelet + titremesiz yürüyüş + katmanlı yoğunluk + büyük orman
+## Şu an (2026-10-27 akşam): iskelet + titremesiz yürüyüş + katmanlı yoğunluk + duvarsız büyük orman
 
 Plandaki taşlar sırayla değil, ilk bakışı en çok değiştirenden başlayarak yürüdü:
 
@@ -65,6 +66,15 @@ Plandaki taşlar sırayla değil, ilk bakışı en çok değiştirenden başlaya
   - Parçanın yerleşimi birebir aynı; son 5 m'sinde (merkezden 17–22 m) zemini karonunkine bağlanır.
   - Karonun ışık ızgarası ve havadaki güneşi bir kez, dolanarak, kopyalarının derinindeki bir hücrede pişer (parçanınkinden
     önce). Parçanın dışında ışık karonunkinden okunur, parçanın kenarında 3 m'de geçer.
+  - **Simit (duvarsız):** Özcan: *"ben hiç duvar istemiyorum. Sonsuzluk da yapamayız."* 9 × 9 hücrenin sonuncusu
+    ilkine dikili. Karo zaten kendi kopyalarına oturuyordu; derenin orta çizgisi ve yatağının gürültüsü dikişten önceki
+    son hücrede kendi başlangıcına karışır (yarısı yarısına dikişte), parçanınki birebir aynı. Su her hücrede kendi
+    şeridi; dalgacıklar simidin kenarına tam dalga sayısıyla oturur. Parça, derenin her şeridi ve her güneş hücresi
+    artık kendi IAS'ı olan birer grup (kopya numaraları önceki gibi). Üst IAS gözün hücresinin çevresinde her hücreyi
+    bir kez tutar, göz başka hücreye geçince yeniden kurulur: her yöne en az 176 m orman (`world.window`). Dikişte göz
+    simidin kendi kopyasına alınır, son göz de onunla; DLSS'e kamera kesintisiz gider, geçmişi bozulmaz. Pişmiş ışık
+    ve havadaki güneş bir noktanın kendi kopyasında okunur; zeminlerin kapanması ormanı kendi hücresinin çevresinde
+    toplayarak pişer (dikişteki şerit karşı yanı da görür).
 - **Katmanlı yoğunluk:** her kat kendi sebebiyle. Eğrelti ve küçük ot her yerde, bitkinin kendi genişliğiyle aralıklı,
   nemli kıyıda sık; geniş yapraklılar öbekler hâlinde. Pachira eğreltilerden ayrıldı: göz hizasında kendi çalı katı,
   aralarında geçit. Fidanlar diz boyundan küçük ağaca; 10 genç jakaranda orta kat (ışığın aralığında yok). Kabuk ve
@@ -89,6 +99,7 @@ Plandaki taşlar sırayla değil, ilk bakışı en çok değiştirenden başlaya
 | Titreme (bakış 1, 0,06 m/s yana yürüyüş, 1440p, 24 kare; `tools/titreme.py`, `tools/kararlilik.py`) | 4 örnek, düzeltmeden sonra: titreme 0,0106 (önce 0,0100; güneş beneği ısı haritasından gitti), kare ~25 ms (önce 19,8) · **DLSS: titreme 0,0047** (16 örnekli referans 0,0080), kıpırtı 0,0096 (4 örnek 0,0143), blok 0,0015 (0,0024); kare 13,4 ms (4 örnek 24,8) |
 | Yoğunluk (önce → sonra, 1440p, DLSS, `--bench 30`) | kopya 64.457 → 119.822 + 191.917 yerde yaprak; kopyalanmış üçgen 3.481 M → 4.330 M · bakış 0-3: 15,6 / 13,2 / 15,8 / 15,4 → 17,0 / 16,0 / 18,8 / 18,5 ms · ızgara 6,3 → 6,8 sn · uygulamada 50,5 FPS, kart 7,2 GB · titreme 0,0035 (referans 0,0069, oran önceki gibi) |
 | Büyük orman (önce → sonra, 1440p, DLSS, `--bench 30`) | bakış 0-3: 16,4 / 14,6 / 17,4 / 17,5 → 18,2 / 15,9 / 18,6 / 18,7 ms · kopya 120 bin → 8,31 M (üst düzeyde 800 bin; karoda 101.849 yer, 76 hücre) · GAS 293 → 569 MB, IAS 36 → 221 MB; doku 2,2 GB, geometri 897 MB, ızgara 121 + karo 119 MB, güneş hacmi 102 MB · yükleme ~18 → 33 sn (varlık 7,8, dünya 4,3, yapılar 2,3, AO 0,7, ızgara 17,0, güneş hacmi 0,7 sn) · uygulamada 47,8 FPS, kart 8,0 GB · iki katın bedeli: aynı görüntüyü veren tek katlıya göre kareye ~%10 · titreme (bakış 1) 0,0033 (referans 0,0060, oran 0,54, önceki gibi), kıpırtı 0,0076, blok 0,0012 |
+| Simit (önce → sonra, aynı gün, 1440p, DLSS, `--bench 30`) | bakış 0-3: 19,3 / 16,3 / 19,4 / 19,9 → 18,7 / 16,8 / 17,9 / 18,8 ms (koşular arası oynama içinde; bir önceki ölçümde aynı yapı 18,2 / 15,9 / 18,6 / 18,7) · üst düzey 800 bin → 87 · IAS 221 → 291 MB (13 grup ayrı kuruluyor; nedeni ayrıca bakılmadı) · uygulamada üç koşu 45,1 / 45,3 / 55,7 FPS, kart 7,8-8,1 GB · görüntü: albedoda yalnız su ve şeritlerin yaprakları değişti (dalgacık yönleri; şeritlerin kopya numaraları), pişmiş ışık %1'in altında (+6,5 EV'de ortanca 0,67/255) · dikiş yürüyüşleri (3,2 m/s, 90 kare, `--kararlilik`): ormanın dikişinden geçiş iç hücre sınırından geçişle aynı kareleri veriyor (sayılar 0,005 içinde); derenin dikişinde ne görüntü ne DLSS geçmişi sıçradı · dere koridorunda pencereyi 4'ten 6 hücreye açmak BVH'nin yeniden kurulma gürültüsünden fazlasını değiştirmedi |
 
 ### Kararlar (plandan sapmalar)
 
@@ -111,30 +122,38 @@ Plandaki taşlar sırayla değil, ilk bakışı en çok değiştirenden başlaya
   görünüyordu.
 - **Güneş yolu açık:** parçanın ışığı vadideki 35°'lik dilimden geliyordu; karoda o ışığı kesecek uzun ağaçlar
   güneş hücrelerinden çıkarıldı (dilim yerine ağacın tepesinin uzanabildiği kadar).
+- **Sonsuz değil, simit:** gerçek sonsuzluk da aynı kayan pencereyle yapılabilirdi, ama dere bir yere varmalıydı
+  (sonsuz düz dere ya biter ya kendini kopyalar) ve koordinatlar büyüdükçe kayan noktanın inceliği düşerdi (km'lerce
+  yürüyüşte gölge ışınlarının payı). Simitte koordinatlar hep 396 m içinde, dere kendine dönen bir halka: ormanda
+  kaybolanın daire çizmesi gibi.
+- **Koyuluk ve parlama kalsın (Özcan, 2026-10-27):** karonun içinin parçadan koyu olması (pozlama ×200 tavanında)
+  ve dere içinde güneşe bakınca suyun beyaza patlaması açık işti; Özcan: *"tam tersi doğallık katmış. Kalsın.
+  Yanlışlıkla daha güzel olmuş."* Düzeltilmeyecek.
 
 ## Açık işler (sıra Özcan'ın bakışına göre değişir)
 
 1. **Tropikal varlıklar:** Poly Haven'da yağmur ormanı ağacı, palmiye, sarmaşık, monstera, muz, eğrelti ağacı yok;
    bugünkü taç jakaranda ve küçük ağaçlarla "orman" okunuyor, "yağmur ormanı" değil. Sketchfab (CC-BY) için Özcan'ın
    anahtarı gerekiyor (PLAN §6).
-2. **Özcan'ın büyük ormana bakışı:** yoğunluk ve titreme için *"Ne titreme var ne de boşluk"* dedi (2026-10-27);
-   büyük orman ondan sonra geldi, gözle yürüyüşü bekleniyor.
-3. **Karonun içi parçadan koyu:** parçadan uzaklaşınca otomatik pozlama ×200 tavanına dayanıyor (parçanın içinde
-   bakış 0'da ×88).
-4. **Dere içinde güneşe bakınca su beyaza patlıyor.**
-5. **Pachira yapraklarının altı çok koyu** (eski sorun; çalı katı göz hizasına çıkınca daha çok görünüyor).
-6. Zemin karışımı (çamur, çakıl), kuru dal yığını (`StickSet001` indirildi, kullanılmadı), kompozisyon (devrik dev,
+2. **Özcan'ın simide bakışı:** büyük ormana *"Çok güzel olmuş"*, uzaklarda titreme görmedi (2026-10-27); duvarsız
+   hâli ondan sonra geldi, gözle yürüyüşü bekleniyor (en çok: dikişten geçerken bir şey sıçrıyor mu, dere halkası
+   doğal mı).
+3. **Pachira yapraklarının altı koyu** (eski sorun); Özcan'ın dikkatini çekmedi (2026-10-27), öncelik düşük.
+4. Zemin karışımı (çamur, çakıl), kuru dal yığını (`StickSet001` indirildi, kullanılmadı), kompozisyon (devrik dev,
    payanda köklü ağaç), yaprak kenarının üç yolu, kör test, elde kamera kipi.
 
-(Kapananlar, 2026-10-27: dünyanın kenarı önce vadiyle, sonra karonun kopyalarıyla; güneş beneği greni alfanın
-kapsamasıyla; yürürken titreme DLSS-RR ile.)
+(Kapananlar, 2026-10-27: dünyanın kenarı önce vadiyle, sonra karonun kopyalarıyla, en son simitle (duvar yok);
+güneş beneği greni alfanın kapsamasıyla; yürürken titreme DLSS-RR ile; karonun koyuluğu ve suyun parlaması Özcan'ın
+kararıyla kaldı.)
 
 ## NE DOĞRULANMADI
 
 - Yürüyüş, çarpışma ve bakışlar elle canlı denenmedi; yalnız otomatik test (açılış, panel, yardım) ve komut satırı
-  kareleri. Büyük ormanda karonun dikişi ve dünyanın ucu yalnız komut satırından seçilen bakışlarda (`--cam`) arandı,
-  görünmedi; 132 m'lik sınıra kadar yürüyüş denenmedi.
-- Titreme parçanın içinde ölçüldü; karonun uzak hücrelerinde (iki katlı yapı, karonun ışığı) ölçülmedi.
+  kareleri. Simidin dikişinden elle geçilmedi; yalnız komut satırının üç düz yürüyüşü (`--kararlilik`, 1,5 sn) ölçüldü.
+  Pencerenin hücre değişiminde yeniden kurulmasının canlıda takılma yapıp yapmadığı ölçülmedi (87 kopyalık üst IAS,
+  tahminen 1 ms'nin altında).
+- Pencerenin (≥ 176 m) kenarının hiçbir yerden görünmediği yalnız dere koridorundaki üç bakışta sınandı.
+- Uzak hücrelerde titreme ölçüyle değil, Özcan'ın gözüyle yok (2026-10-27: *"Uzaklarda da titreme yok"*).
 - Titreme ve kıpırtı yalnız bakış 1'de, tek bir yavaş yana yürüyüşte ölçüldü; koşu, dönüş ve öbür bakışlar ölçülmedi.
   DLSS'in hızlı dönüşte iz bırakıp bırakmadığı (ghosting) bilinmiyor.
 - DLSS SDK'sı olmadan derleme yolunun (sabit örneklere dönüş) bu son hâliyle sınandığına dair kayıt yok.
