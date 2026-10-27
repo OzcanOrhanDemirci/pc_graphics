@@ -32,20 +32,24 @@ public:
         i.number = "11";
         i.title = L("Orman", "Rainforest");
         i.subtitle = L("Yağmurdan sonra, sabahın erken saatinde bir yağmur ormanı", "A rainforest early in the morning, after the rain");
-        i.description = L("Otuz metrelik bir yağmur ormanı parçasında yürürsün: her yerde bir şey var, eğrelti, kök, yosun, taş, "
-                          "devrik gövde. Güneş yaprakların arasından süzülür.",
-                          "You walk in thirty metres of rainforest where something is everywhere: ferns, roots, moss, stones, a fallen "
-                          "trunk. The sun filters through the leaves.");
+        i.description = L("Bir derenin kıyısında, her yanı süren bir yağmur ormanında yürürsün: her yerde bir şey var, eğrelti, "
+                          "kök, yosun, taş, devrik gövde. Güneş yaprakların arasından süzülür.",
+                          "You walk by a stream in a rainforest that goes on all round, where something is everywhere: ferns, roots, "
+                          "moss, stones, a fallen trunk. The sun filters through the leaves.");
         i.details = {
             {L("Yoğunluk", "Density"),
              L("Her bitki, taş ve gövde açık lisanslı gerçek bir tarama; aynı model binlerce kez kopyalanır, kopya bellekte bir kez "
                "durur. Orman katlardan: yerde düşmüş yapraklar ve eğreltiler, göz hizasında çalılıklar, onların üstünde fidanlar ve "
                "genç ağaçlar, en üstte tepe. Her katın yeri bir sebepten: eğreltiler nemli kıyıda sık, yapraklar gövdelerin ve "
-               "kayaların dibine yığılır, taşlar derenin yatağında, devrik gövde derenin üstünde.",
+               "kayaların dibine yığılır, taşlar derenin yatağında, devrik gövde derenin üstünde. Derenin parçasının çevresinde "
+               "orman 400 metre sürer: kenarları birbirine oturan tek bir orman karosunun kopyaları. Dere kopyalanmaz, kendi "
+               "şeridinde akmayı sürdürür.",
                "Every plant, stone and trunk is a real open-licence scan; one model is copied thousands of times and stays in "
                "memory once. The forest is in layers: fallen leaves and ferns on the ground, thickets at the eye's height, "
                "saplings and young trees over them, the crowns on top. Each has its place for a reason: ferns crowd the moist "
-               "banks, leaves pile at the foot of trunks and rocks, stones lie in the bed, the fallen trunk lies over the stream.")},
+               "banks, leaves pile at the foot of trunks and rocks, stones lie in the bed, the fallen trunk lies over the stream. "
+               "Around the stream's patch the forest goes on for 400 metres: copies of one tile of it whose sides meet. The stream "
+               "is not copied: it runs on in its own band.")},
             {L("Görünürlük", "Visibility"),
              L("Görüntü de ışın izlemeyle çizilir. Yapraklar ve dallar pikselden ince: yürürken birkaç sabit ışın onları "
                "titretiyordu. Şimdi her karede pikselin başka bir noktasına tek ışın gider, NVIDIA DLSS Ray Reconstruction "
@@ -193,8 +197,8 @@ public:
         want = want * (speed * (1.0f - 0.5f * crouch_));
         vel_ += (want - vel_) * (1.0f - std::exp(-dt * 8.0f));
         float3 p = a_.cam.feet + vel_ * dt;
-        // the walkable patch and its ring: beyond it the forest is a wall
-        const float lim = 0.5f * a_.world.size - 2.0f;
+        // the forest goes on: one stops a cell and a half short of its end, where no look reaches it
+        const float lim = a_.world.limit();
         p.x = std::clamp(p.x, -lim, lim);
         p.z = std::clamp(p.z, -lim, lim);
         a_.world.collide(p.x, p.z, a_.cam.feet.y, 0.3f);

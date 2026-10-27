@@ -1,6 +1,7 @@
 // Scene 11 "Orman": what the host and the OptiX programs (device/orman.cu) share. The world is instances of open-licence
 // models (docs/orman/VARLIK.md): a prototype (one variant of a model) is one GAS whose build inputs are its glTF
-// primitives; an instance points at its prototype. The light is baked (a probe grid of the sky's and the bounces' light,
+// primitives; an instance points at its prototype, or (a copy of the forest's tile around the stream's patch) at the
+// tile's own IAS: two levels, the instance id the inner one's. The light is baked (a probe grid of the sky's and the bounces' light,
 // the ground's own occlusion per vertex); the sun is traced live, one shadow ray a sample (the dapples through the leaves
 // are the forest's life). docs/orman/PLAN.md §3.
 #pragma once
@@ -69,6 +70,7 @@ struct OGrid {
     int nx, ny, nz;
     float3 origin;            // probe (0, 0, 0)
     float h;                  // spacing (m)
+    int wrap;                 // the forest's tile: x and z go round (nx h and nz h its sides), its copies read it in turn
 };
 
 struct OrmanParams {
@@ -106,7 +108,9 @@ struct OrmanParams {
     float sunCos;             // cos of the sun's angular radius
     float2 sunDisk[ORMAN_MAX_SPP];   // per sample: where on the sun's disk its shadow ray aims (unit disk)
     float3 skyZenith, skyHorizon, skyGround;   // the sky's radiance (and the light from below the horizon)
-    OGrid grid;
+    OGrid grid;               // the stream's patch in the middle
+    OGrid tileGrid;           // the forest's tile around it (wrap: every copy reads the same probes), or empty
+    float patchHalf;          // the patch's half side (m): within it its own grid, outside the tile's
     float giScale;            // the baked light times this (an artistic dial, 1 = physical)
     float aoPower;
     float wetness;            // 0 dry .. 1 just rained: rougher surfaces turn glossy (leaves, stones, bark)
@@ -115,9 +119,11 @@ struct OrmanParams {
     float waterFlow;          // its speed (m/s) along +x
 
     // the morning's mist: denser near the ground, the sun's shafts through it from a baked visibility volume
-    unsigned long long sunVis;   // cudaTextureObject_t, 3D, 0..1 (four shadow rays a voxel), or 0
-    float3 sunVisOrigin;      // voxel (0, 0, 0)'s centre
+    unsigned long long sunVis;   // cudaTextureObject_t, 3D, 0..1 (four shadow rays a voxel), or 0: the patch's
+    float3 sunVisOrigin;      // the volume's corner
     float3 sunVisInvSize;     // 1 / the volume's size (m): normalized coordinates
+    unsigned long long tileVis;  // the same over the tile, wrapping in x and z, or 0
+    float3 tileVisOrigin, tileVisInvSize;
     float fogDensity;         // extinction everywhere (1/m)
     float fogGround;          // more of it at the ground, falling off over fogHeight
     float fogHeight;
@@ -138,15 +144,18 @@ struct OrmanParams {
     // the oven (load time)
     int bakePass;             // 0 the sky and the sun, then the probes of the pass before
     int bakeRays;
+    OGrid bakeGrid;           // the probes being baked (where they stand: the tile's in one of its copies)
     float4* bakeOut[4];       // one probe slab
     int bakeZ0, bakeZn;       // the slab: probes z0 .. z0 + zn - 1
-    const float3* aoPos;      // the ground's vertices (world) and normals, for its occlusion
+    const float3* aoPos;      // a ground's vertices and normals, for its occlusion
     const float3* aoNrm;
+    float3 aoOffset;          // where those vertices stand in the world (the tile's: in one of its copies)
     float* aoOut;
     unsigned int aoCount;
     float aoRadius;
     int aoRays;
     unsigned char* visOut;    // the sun's visibility volume, one slab
+    float3 visOrigin;         // its corner where it is baked
     int visN[3];
     float visH;
     int visZ0;

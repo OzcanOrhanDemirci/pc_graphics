@@ -194,7 +194,9 @@ bool OrmanRenderer::compile(std::string& log) {
     mco.optLevel = OPTIX_COMPILE_OPTIMIZATION_DEFAULT;
     mco.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_MINIMAL;
     OptixPipelineCompileOptions pco{};
-    pco.traversableGraphFlags = OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_LEVEL_INSTANCING;
+    // two levels: the tile's copies are instances of the tile's own IAS (measured: about a tenth more a frame than one
+    // level, the same picture)
+    pco.traversableGraphFlags = OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_ANY;
     pco.numPayloadValues = 4;
     pco.numAttributeValues = 2;
     pco.exceptionFlags = OPTIX_EXCEPTION_FLAG_NONE;
@@ -238,7 +240,7 @@ bool OrmanRenderer::compile(std::string& log) {
         log = std::string("optixPipelineCreate: ") + optixGetErrorString(r) + "\n" + olog;
         return false;
     }
-    OPTIX_CHECK(optixPipelineSetStackSizeFromCallDepths(pipeline, 1, 0, 0, 0, 2));
+    OPTIX_CHECK(optixPipelineSetStackSizeFromCallDepths(pipeline, 1, 0, 0, 0, 3));
     CUDA_CHECK(cudaDeviceSynchronize());
     if (pipeline_) optixPipelineDestroy(pipeline_);
     for (auto g : groups_) optixProgramGroupDestroy(g);
@@ -270,7 +272,7 @@ bool OrmanRenderer::compile(std::string& log) {
     return true;
 }
 
-void OrmanRenderer::upload(const OrmanAssets& assets, const std::vector<OProtoCPU>& extra, const std::vector<OPlace>& places) {
+void OrmanRenderer::upload(const OrmanAssets& assets, const std::vector<OProtoCPU>& extra, const std::vector<OPlace>& places, const OTile& tile) {
     CUDA_CHECK(cudaDeviceSynchronize());
     for (void* p : world_) cudaFree(p);
     world_.clear();
@@ -357,36 +359,83 @@ void OrmanRenderer::upload(const OrmanAssets& assets, const std::vector<OProtoCP
         world_.push_back(out);
         gas_.push_back(h);
     }
-    std::vector<OptixInstance> inst;
+    // every copy's record by its instance id: those placed in the world (the patch, the stream's row, the cells in the
+    // sun's way), then the tile's own, which its copies reach through the tile's IAS
     std::vector<OInstance> oinst;
-    instancedTriangles = 0;
-    for (const OPlace& pl : places) {
-        if (pl.proto < 0 || size_t(pl.proto) >= gas_.size()) continue;
+    auto record = [&](const OPlace& pl) {
+        OInstance o{};
+        o.proto = unsigned(std::max(pl.proto, 0));
+        o.scale = pl.scale;
+        o.tint = pl.tint;
+        oinst.push_back(o);
+    };
+    auto valid = [&](const OPlace& pl) { return pl.proto >= 0 && size_t(pl.proto) < gas_.size(); };
+    auto instance = [&](const OPlace& pl, unsigned id) {
         OptixInstance oi{};
         std::memcpy(oi.transform, pl.m, sizeof(pl.m));
-        oi.instanceId = unsigned(inst.size());
+        oi.instanceId = id;
         oi.sbtOffset = 0;
         oi.visibilityMask = pl.mask;
         oi.flags = OPTIX_INSTANCE_FLAG_NONE;
         oi.traversableHandle = gas_[size_t(pl.proto)];
-        inst.push_back(oi);
-        OInstance o{};
-        o.proto = unsigned(pl.proto);
-        o.scale = pl.scale;
-        o.tint = pl.tint;
-        oinst.push_back(o);
+        return oi;
+    };
+    instancedTriangles = 0;
+    unsigned long long copies = 0;
+    std::vector<OptixInstance> top;
+    for (const OPlace& pl : places) {
+        if (!valid(pl)) continue;
+        top.push_back(instance(pl, unsigned(oinst.size())));
+        record(pl);
         instancedTriangles += protoTris[size_t(pl.proto)];
+        ++copies;
     }
-    instanceCount = unsigned(inst.size());
-    OptixInstance* dInst = toDevice(inst, world_);
+    const unsigned tileFirst = unsigned(oinst.size());
+    for (const OPlace& pl : tile.places) record(pl);
+    iasBytes = 0;
+    std::vector<OptixTraversableHandle> ways;
+    std::vector<unsigned long long> wayTris, wayCopies;
+    for (const auto& way : tile.variants) {
+        std::vector<OptixInstance> vi;
+        unsigned long long tris = 0;
+        for (unsigned k : way) {
+            const OPlace& pl = tile.places[k];
+            if (!valid(pl)) continue;
+            vi.push_back(instance(pl, tileFirst + k));
+            tris += protoTris[size_t(pl.proto)];
+        }
+        ways.push_back(buildIas(vi));
+        wayTris.push_back(tris);
+        wayCopies.push_back(vi.size());
+    }
+    for (const OTile::Cell& c : tile.cells) {
+        if (c.variant < 0 || size_t(c.variant) >= ways.size()) continue;
+        OptixInstance oi{};
+        oi.transform[0] = oi.transform[5] = oi.transform[10] = 1.0f;
+        oi.transform[3] = c.offset.x;
+        oi.transform[7] = c.offset.y;
+        oi.transform[11] = c.offset.z;
+        oi.visibilityMask = 0xFFu;   // (the tile's own instances carry the masks)
+        oi.traversableHandle = ways[size_t(c.variant)];
+        top.push_back(oi);
+        instancedTriangles += wayTris[size_t(c.variant)];
+        copies += wayCopies[size_t(c.variant)];
+    }
+    instanceCount = unsigned(copies);
+    topInstances = unsigned(top.size());
     params.instances = toDevice(oinst, world_);
     params.geoms = toDevice(geomsHost_, world_);
     params.protos = toDevice(protosHost_, world_);
     params.materials = toDevice(assets.materials, world_);
+    params.handle = buildIas(top);
+}
+
+OptixTraversableHandle OrmanRenderer::buildIas(const std::vector<OptixInstance>& inst) {
+    OptixInstance* dInst = toDevice(inst, world_);
     OptixBuildInput bi{};
     bi.type = OPTIX_BUILD_INPUT_TYPE_INSTANCES;
     bi.instanceArray.instances = CUdeviceptr(dInst);
-    bi.instanceArray.numInstances = instanceCount;
+    bi.instanceArray.numInstances = unsigned(inst.size());
     OptixAccelBuildOptions ao{};
     ao.buildFlags = OPTIX_BUILD_FLAG_PREFER_FAST_TRACE;
     ao.operation = OPTIX_BUILD_OPERATION_BUILD;
@@ -401,8 +450,8 @@ void OrmanRenderer::upload(const OrmanAssets& assets, const std::vector<OProtoCP
     CUDA_CHECK(cudaDeviceSynchronize());
     cudaFree(temp);
     world_.push_back(out);
-    iasBytes = sizes.outputSizeInBytes;
-    params.handle = h;
+    iasBytes += sizes.outputSizeInBytes;
+    return h;
 }
 
 void OrmanRenderer::launch(CUdeviceptr rg, unsigned int w, unsigned int h, unsigned int d) {
@@ -412,12 +461,13 @@ void OrmanRenderer::launch(CUdeviceptr rg, unsigned int w, unsigned int h, unsig
     OPTIX_CHECK(optixLaunch(pipeline_, stream_, CUdeviceptr(dParams_), sizeof(OrmanParams), &s, w, h, d));
 }
 
-void OrmanRenderer::bakeGroundAO(int proto, float radius, int rays, OBakeStats& st) {
+void OrmanRenderer::bakeGroundAO(int proto, float3 at, float radius, int rays, OBakeStats& st) {
     const double t0 = nowMs();
     const OProto& pr = protosHost_[size_t(proto)];
     params.aoRadius = radius;
     params.aoRays = rays;
-    // every piece of the ground: the walked patch and the valley around it
+    params.aoOffset = at;
+    // every piece of it (the litter: one per leaf set)
     for (unsigned int gi = pr.firstGeom; gi < pr.firstGeom + pr.geomCount; ++gi) {
         const OGeom& g = geomsHost_[gi];
         const unsigned int n = geomVerts_[gi];
@@ -432,35 +482,54 @@ void OrmanRenderer::bakeGroundAO(int proto, float radius, int rays, OBakeStats& 
             CUDA_CHECK(cudaStreamSynchronize(cudaStream_t(stream_)));
         }
     }
-    st.aoMs = nowMs() - t0;
+    st.aoMs += nowMs() - t0;
 }
 
-void OrmanRenderer::bakeGrid(float3 lo, float3 hi, float h, int rays, int passes, OBakeStats& st) {
+void OrmanRenderer::bakeGrid(bool tile, float3 lo, float3 hi, float h, float3 at, int rays, int passes, OBakeStats& st) {
     const double t0 = nowMs();
-    for (void* p : gridBufs_) cudaFree(p);
-    gridBufs_.clear();
+    std::vector<void*>& owned = tile ? tileGridBufs_ : gridBufs_;
+    OGrid& target = tile ? params.tileGrid : params.grid;
+    for (void* p : owned) cudaFree(p);
+    owned.clear();
+    target = OGrid{};
+    // the tile first: while it bakes the patch has no grid, so everything reads the tile's (its probes see its copies)
+    if (tile) {
+        for (void* p : gridBufs_) cudaFree(p);
+        gridBufs_.clear();
+        params.grid = OGrid{};
+    }
     OGrid G{};
-    G.h = h;
     G.origin = lo;
-    G.nx = int(std::ceil((hi.x - lo.x) / h)) + 1;
-    G.ny = int(std::ceil((hi.y - lo.y) / h)) + 1;
-    G.nz = int(std::ceil((hi.z - lo.z) / h)) + 1;
+    G.wrap = tile ? 1 : 0;
+    if (tile) {
+        // whole probes to its side: the last one's neighbour is the first of the next copy
+        G.nx = std::max(1, int(std::round((hi.x - lo.x) / h)));
+        G.nz = std::max(1, int(std::round((hi.z - lo.z) / h)));
+        G.h = (hi.x - lo.x) / G.nx;
+    } else {
+        G.h = h;
+        G.nx = int(std::ceil((hi.x - lo.x) / h)) + 1;
+        G.nz = int(std::ceil((hi.z - lo.z) / h)) + 1;
+    }
+    G.ny = int(std::ceil((hi.y - lo.y) / G.h)) + 1;
     const size_t n = size_t(G.nx) * G.ny * G.nz;
     float4* bufs[2][4] = {};
     for (int b = 0; b < 2; ++b)
         for (int c = 0; c < 4; ++c) {
             CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&bufs[b][c]), n * sizeof(float4)));
             CUDA_CHECK(cudaMemset(bufs[b][c], 0, n * sizeof(float4)));
-            gridBufs_.push_back(bufs[b][c]);
+            owned.push_back(bufs[b][c]);
         }
-    gridBytes = n * sizeof(float4) * 4;
+    (tile ? tileGridBytes : gridBytes) = n * sizeof(float4) * 4;
     params.bakeRays = rays;
+    params.bakeGrid = G;
+    params.bakeGrid.origin = lo + at;
     int read = -1;
     for (int pass = 0; pass < passes; ++pass) {
         const int write = read == 0 ? 1 : 0;
         OGrid R = G;
         for (int c = 0; c < 4; ++c) R.sh[c] = read >= 0 ? bufs[read][c] : nullptr;
-        params.grid = R;
+        target = R;
         params.bakePass = pass;
         for (int c = 0; c < 4; ++c) params.bakeOut[c] = bufs[write][c];
         // slabs small enough for the display driver's watchdog (2 s): about 64 million rays a launch
@@ -478,26 +547,30 @@ void OrmanRenderer::bakeGrid(float3 lo, float3 hi, float h, int rays, int passes
     const int other = read == 0 ? 1 : 0;
     for (int c = 0; c < 4; ++c) {
         cudaFree(bufs[other][c]);
-        gridBufs_.erase(std::remove(gridBufs_.begin(), gridBufs_.end(), static_cast<void*>(bufs[other][c])), gridBufs_.end());
+        owned.erase(std::remove(owned.begin(), owned.end(), static_cast<void*>(bufs[other][c])), owned.end());
     }
-    params.grid = G;
+    target = G;
     std::vector<float4> s0(n);
     CUDA_CHECK(cudaMemcpy(s0.data(), G.sh[0], n * sizeof(float4), cudaMemcpyDeviceToHost));
     size_t valid = 0;
     for (const float4& v : s0)
         if (v.w > 0.5f) ++valid;
-    st.probes = n;
-    st.validShare = float(valid) / float(std::max<size_t>(n, 1));
-    st.gridMs = nowMs() - t0;
+    st.probes += n;
+    st.valid += valid;
+    st.gridMs += nowMs() - t0;
 }
 
-void OrmanRenderer::bakeSunVis(float3 lo, float3 hi, float h, OBakeStats& st) {
+void OrmanRenderer::bakeSunVis(bool tile, float3 lo, float3 hi, float h, float3 at, OBakeStats& st) {
     const auto t0 = std::chrono::steady_clock::now();
-    if (params.sunVis) cudaDestroyTextureObject(cudaTextureObject_t(params.sunVis));
-    if (visArr_) cudaFreeArray(visArr_);
-    params.sunVis = 0;
-    visArr_ = nullptr;
-    const int nx = int(std::ceil((hi.x - lo.x) / h)), ny = int(std::ceil((hi.y - lo.y) / h)), nz = int(std::ceil((hi.z - lo.z) / h));
+    unsigned long long& texOut = tile ? params.tileVis : params.sunVis;
+    cudaArray_t& arr = tile ? tileVisArr_ : visArr_;
+    if (texOut) cudaDestroyTextureObject(cudaTextureObject_t(texOut));
+    if (arr) cudaFreeArray(arr);
+    texOut = 0;
+    arr = nullptr;
+    // the tile's: whole voxels to its side (it wraps)
+    if (tile) h = (hi.x - lo.x) / std::max(1.0f, std::round((hi.x - lo.x) / h));
+    const int nx = int(std::ceil((hi.x - lo.x) / h - 1e-3f)), ny = int(std::ceil((hi.y - lo.y) / h)), nz = int(std::ceil((hi.z - lo.z) / h - 1e-3f));
     const size_t n = size_t(nx) * ny * nz;
     unsigned char* buf = nullptr;
     CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&buf), n));
@@ -506,7 +579,7 @@ void OrmanRenderer::bakeSunVis(float3 lo, float3 hi, float h, OBakeStats& st) {
     params.visN[1] = ny;
     params.visN[2] = nz;
     params.visH = h;
-    params.sunVisOrigin = lo;
+    params.visOrigin = lo + at;
     const int zn = std::max(1, int(1.6e7 / (double(nx) * ny * 4.0)));
     for (int z0 = 0; z0 < nz; z0 += zn) {
         params.visZ0 = z0;
@@ -514,10 +587,10 @@ void OrmanRenderer::bakeSunVis(float3 lo, float3 hi, float h, OBakeStats& st) {
         CUDA_CHECK(cudaStreamSynchronize(cudaStream_t(stream_)));
     }
     cudaChannelFormatDesc fd = cudaCreateChannelDesc<unsigned char>();
-    CUDA_CHECK(cudaMalloc3DArray(&visArr_, &fd, make_cudaExtent(nx, ny, nz)));
+    CUDA_CHECK(cudaMalloc3DArray(&arr, &fd, make_cudaExtent(nx, ny, nz)));
     cudaMemcpy3DParms cp{};
     cp.srcPtr = make_cudaPitchedPtr(buf, size_t(nx), size_t(nx), size_t(ny));
-    cp.dstArray = visArr_;
+    cp.dstArray = arr;
     cp.extent = make_cudaExtent(nx, ny, nz);
     cp.kind = cudaMemcpyDeviceToDevice;
     CUDA_CHECK(cudaMemcpy3D(&cp));
@@ -525,18 +598,26 @@ void OrmanRenderer::bakeSunVis(float3 lo, float3 hi, float h, OBakeStats& st) {
     params.visOut = nullptr;
     cudaResourceDesc rd{};
     rd.resType = cudaResourceTypeArray;
-    rd.res.array.array = visArr_;
+    rd.res.array.array = arr;
     cudaTextureDesc td{};
     td.addressMode[0] = td.addressMode[1] = td.addressMode[2] = cudaAddressModeClamp;
+    if (tile) td.addressMode[0] = td.addressMode[2] = cudaAddressModeWrap;
     td.filterMode = cudaFilterModeLinear;
     td.readMode = cudaReadModeNormalizedFloat;
     td.normalizedCoords = 1;
     cudaTextureObject_t tex = 0;
     CUDA_CHECK(cudaCreateTextureObject(&tex, &rd, &td, nullptr));
-    params.sunVis = tex;
-    params.sunVisInvSize = make_float3(1.0f / (nx * h), 1.0f / (ny * h), 1.0f / (nz * h));
-    visBytes = n;
-    st.visMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    texOut = tex;
+    const float3 inv = make_float3(1.0f / (nx * h), 1.0f / (ny * h), 1.0f / (nz * h));
+    if (tile) {
+        params.tileVisOrigin = lo;
+        params.tileVisInvSize = inv;
+    } else {
+        params.sunVisOrigin = lo;
+        params.sunVisInvSize = inv;
+    }
+    visBytes += n;
+    st.visMs += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
 }
 
 void OrmanRenderer::freePlanes() {
@@ -667,10 +748,15 @@ void OrmanRenderer::release() {
     world_.clear();
     for (void* p : gridBufs_) cudaFree(p);
     gridBufs_.clear();
-    if (params.sunVis) cudaDestroyTextureObject(cudaTextureObject_t(params.sunVis));
-    params.sunVis = 0;
-    if (visArr_) cudaFreeArray(visArr_);
-    visArr_ = nullptr;
+    for (void* p : tileGridBufs_) cudaFree(p);
+    tileGridBufs_.clear();
+    params.grid = params.tileGrid = OGrid{};
+    for (unsigned long long* t : {&params.sunVis, &params.tileVis})
+        if (*t) cudaDestroyTextureObject(cudaTextureObject_t(*t));
+    params.sunVis = params.tileVis = 0;
+    for (cudaArray_t* a : {&visArr_, &tileVisArr_})
+        if (*a) cudaFreeArray(*a);
+    visArr_ = tileVisArr_ = nullptr;
     for (int k = 0; k < kLevels; ++k) {
         if (levels_[k]) cudaFree(levels_[k]);
         if (accum_[k]) cudaFree(accum_[k]);

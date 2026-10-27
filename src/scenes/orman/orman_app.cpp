@@ -113,10 +113,7 @@ bool OrmanApp::initRenderer(std::string& err) {
     const double t0 = nowMs();
     R.init(width, height, root);
     if (!R.compile(err)) return false;
-    std::vector<OProtoCPU> extra{world.ground};
-    if (!world.water.geoms.empty()) extra.push_back(world.water);
-    if (!world.litter.geoms.empty()) extra.push_back(world.litter);
-    R.upload(assets, extra, world.places);
+    R.upload(assets, world.extras, world.places, world.tile);
     applyLight();
     uploadMs = nowMs() - t0;
     return true;
@@ -153,19 +150,23 @@ void OrmanApp::applyLight() {
 }
 
 void OrmanApp::bakeLight() {
-    const float h = cfg.f("grid.spacing", 0.3f);
-    const float3 lo = make_float3(-0.5f * world.size, world.lo.y, -0.5f * world.size);
-    const float3 hi = make_float3(0.5f * world.size, std::min(world.hi.y, cfg.f("grid.top", 40.0f)), 0.5f * world.size);
-    R.bakeGroundAO(int(assets.protos.size()), cfg.f("ao.radius", 0.6f), cfg.i("ao.rays", 48), bake);
-    if (world.litterProto >= 0) {
-        const double groundMs = bake.aoMs;
-        R.bakeGroundAO(world.litterProto, cfg.f("ao.radius", 0.6f), cfg.i("ao.rays", 48), bake);
-        bake.aoMs += groundMs;
+    bake = OBakeStats();
+    R.visBytes = 0;
+    R.params.patchHalf = 0.5f * world.size;
+    for (const OrmanWorld::AoJob& j : world.aoJobs) R.bakeGroundAO(j.proto, j.at, cfg.f("ao.radius", 0.6f), cfg.i("ao.rays", 48), bake);
+    const float h = cfg.f("grid.spacing", 0.3f), top = cfg.f("grid.top", 40.0f), vh = cfg.f("vis.spacing", 0.1f);
+    const float half = 0.5f * world.size;
+    const float3 zero = make_float3(0, 0, 0);
+    // the tile's light first, in a cell deep among its copies (the patch's then sees the forest around it lit)
+    if (!world.tile.cells.empty()) {
+        const float3 lo = make_float3(-half, world.tileLo.y, -half), hi = make_float3(half, std::min(world.tileHi.y, top), half);
+        R.bakeGrid(true, lo, hi, h, world.tileBakeAt, cfg.i("grid.rays", 192), cfg.i("grid.passes", 2), bake);
+        R.bakeSunVis(true, lo, make_float3(half, std::min(world.tileHi.y + 1.0f, top), half), vh, world.tileBakeAt, bake);
     }
-    R.bakeGrid(lo, hi, h, cfg.i("grid.rays", 192), cfg.i("grid.passes", 2), bake);
+    const float3 lo = make_float3(-half, world.lo.y, -half), hi = make_float3(half, std::min(world.hi.y, top), half);
+    R.bakeGrid(false, lo, hi, h, zero, cfg.i("grid.rays", 192), cfg.i("grid.passes", 2), bake);
     // the sun in the air: the mist's shafts (up to where the leaves end)
-    const float vh = cfg.f("vis.spacing", 0.1f);
-    R.bakeSunVis(make_float3(lo.x, world.lo.y, lo.z), make_float3(hi.x, std::min(world.hi.y + 1.0f, cfg.f("grid.top", 40.0f)), hi.z), vh, bake);
+    R.bakeSunVis(false, lo, make_float3(half, std::min(world.hi.y + 1.0f, top), half), vh, zero, bake);
 }
 
 float3 OrmanApp::forward() const {
@@ -295,12 +296,13 @@ OrmanCam OrmanApp::view(int i) {
 std::string OrmanApp::summary() const {
     char b[1024];
     std::snprintf(b, sizeof(b),
-                  "orman: %zu varlik, %zu prototip, %zu malzeme, doku %.0f MB | kopya %u, kopyalanmis ucgen %.1f M | GAS %.0f MB, IAS %.1f MB, "
-                  "geometri %.0f MB, izgara %.0f MB (%zu yoklama, gecerli %%%.0f), gunes hacmi %.0f MB | sureler: varlik %.0f ms, dunya %.0f ms, "
-                  "yukleme %.0f ms, AO %.0f ms, izgara %.0f ms, gunes hacmi %.0f ms",
-                  loaded.size(), assets.protos.size(), assets.materials.size(), assets.textureBytes() / 1e6, R.instanceCount, R.instancedTriangles / 1e6,
-                  R.gasBytes / 1e6, R.iasBytes / 1e6, R.geomBytes / 1e6, R.gridBytes / 1e6, bake.probes, bake.validShare * 100.0f, R.visBytes / 1e6,
-                  assetsMs, worldMs, uploadMs, bake.aoMs, bake.gridMs, bake.visMs);
+                  "orman: %zu varlik, %zu prototip, %zu malzeme, doku %.0f MB | kopya %u (ust duzey %u; karo %zu yer, %zu hucre), kopyalanmis ucgen "
+                  "%.1f M | GAS %.0f MB, IAS %.1f MB, geometri %.0f MB, izgara %.0f + karo %.0f MB (%zu yoklama, gecerli %%%.0f), gunes hacmi %.0f MB | "
+                  "sureler: varlik %.0f ms, dunya %.0f ms, yukleme %.0f ms, AO %.0f ms, izgara %.0f ms, gunes hacmi %.0f ms",
+                  loaded.size(), assets.protos.size(), assets.materials.size(), assets.textureBytes() / 1e6, R.instanceCount, R.topInstances,
+                  world.tile.places.size(), world.tile.cells.size(), R.instancedTriangles / 1e6, R.gasBytes / 1e6, R.iasBytes / 1e6, R.geomBytes / 1e6,
+                  R.gridBytes / 1e6, R.tileGridBytes / 1e6, bake.probes, 100.0 * double(bake.valid) / double(std::max<size_t>(bake.probes, 1)),
+                  R.visBytes / 1e6, assetsMs, worldMs, uploadMs, bake.aoMs, bake.gridMs, bake.visMs);
     return b;
 }
 
@@ -347,7 +349,7 @@ int runOrmanCli(int argc, char** argv) {
     std::printf("\n");
     for (const auto& id : a.assets.missing) std::printf("orman: eksik %s\n", id.c_str());
     a.buildWorld();
-    for (const auto& [id, n] : a.world.counts) std::printf("  %-28s %d kopya\n", id.c_str(), n);
+    for (const auto& [id, n] : a.world.counts) std::printf("  %-28s %lld kopya\n", id.c_str(), n);
     std::string err;
     if (!a.initRenderer(err)) {
         std::fprintf(stderr, "orman: %s\n", err.c_str());

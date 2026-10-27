@@ -117,7 +117,8 @@ static __forceinline__ __device__ Hit trace(float3 o, float3 d, float tmin, floa
     h.hit = optixHitObjectIsHit();
     if (!h.hit) return h;
     h.t = optixHitObjectGetRayTmax();
-    h.inst = optixHitObjectGetInstanceId();
+    // the instance nearest the geometry (a tile's copy is two: the copy's, then the tile's own)
+    h.inst = optixGetInstanceIdFromHandle(optixHitObjectGetTransformListHandle(optixHitObjectGetTransformListSize() - 1));
     h.prim = optixHitObjectGetPrimitiveIndex();
     h.input = optixHitObjectGetSbtGASIndex();
     h.b = optixHitObjectGetTriangleBarycentrics();
@@ -251,27 +252,34 @@ struct SH {
     float3 Lr, Lg, Lb;        // L1 (x, y, z) per colour
     bool ok;
 };
-static __forceinline__ __device__ SH gridSH(float3 p, float3 n) {
+// the tile's grid: p brought into the tile's own copy (its middle at the origin)
+static __forceinline__ __device__ float3 intoTile(const OGrid& G, float3 p) {
+    const float sx = float(G.nx) * G.h, sz = float(G.nz) * G.h;
+    return make_float3(p.x - sx * floorf((p.x - G.origin.x) / sx), p.y, p.z - sz * floorf((p.z - G.origin.z) / sz));
+}
+static __forceinline__ __device__ SH gridSample(const OGrid& G, float3 p, float3 n) {
     SH r;
     r.L0 = r.Lr = r.Lg = r.Lb = make_float3(0, 0, 0);
     r.ok = false;
-    const OGrid& G = params.grid;
     if (!G.sh[0]) return r;
-    // past the grid (the ring and the valley's sides around the walked patch) the light of its nearest face
+    // past the grid the light of its nearest face (the tile's goes round in x and z)
+    if (G.wrap) p = intoTile(G, p);
     const float3 top = G.origin + make_float3(float(G.nx - 1), float(G.ny - 1), float(G.nz - 1)) * G.h;
-    p = make_float3(fminf(fmaxf(p.x, G.origin.x), top.x), fminf(fmaxf(p.y, G.origin.y), top.y), fminf(fmaxf(p.z, G.origin.z), top.z));
+    p.y = fminf(fmaxf(p.y, G.origin.y), top.y);
+    if (!G.wrap) p = make_float3(fminf(fmaxf(p.x, G.origin.x), top.x), p.y, fminf(fmaxf(p.z, G.origin.z), top.z));
     const float3 q = (p + n * (0.35f * G.h) - G.origin) * (1.0f / G.h);
     const int ix = int(floorf(q.x)), iy = int(floorf(q.y)), iz = int(floorf(q.z));
     const float fx = q.x - ix, fy = q.y - iy, fz = q.z - iz;
     float wsum = 0.0f;
     for (int c = 0; c < 8; ++c) {
-        const int x = ix + (c & 1), y = iy + ((c >> 1) & 1), z = iz + ((c >> 2) & 1);
+        const int ux = ix + (c & 1), y = iy + ((c >> 1) & 1), uz = iz + ((c >> 2) & 1);
+        const int x = G.wrap ? (ux % G.nx + G.nx) % G.nx : ux, z = G.wrap ? (uz % G.nz + G.nz) % G.nz : uz;
         if (x < 0 || y < 0 || z < 0 || x >= G.nx || y >= G.ny || z >= G.nz) continue;
         const size_t k = (size_t(z) * G.ny + y) * G.nx + x;
         const float4 s0 = G.sh[0][k];
         if (s0.w <= 0.0f) continue;
         float w = ((c & 1) ? fx : 1.0f - fx) * (((c >> 1) & 1) ? fy : 1.0f - fy) * (((c >> 2) & 1) ? fz : 1.0f - fz);
-        const float3 pp = G.origin + make_float3(float(x), float(y), float(z)) * G.h;
+        const float3 pp = G.origin + make_float3(float(ux), float(y), float(uz)) * G.h;
         const float3 dir = pp - p;
         const float dl = length(dir);
         const float facing = dl > 1e-4f ? (dot(dir * (1.0f / dl), n) + 1.0f) * 0.5f : 1.0f;
@@ -293,6 +301,52 @@ static __forceinline__ __device__ SH gridSH(float3 p, float3 n) {
         r.ok = true;
     }
     return r;
+}
+// how far p is inside the stream's patch (m; negative outside)
+static __forceinline__ __device__ float inPatch(float3 p) { return params.patchHalf - fmaxf(fabsf(p.x), fabsf(p.z)); }
+// the baked light around p: inside the patch its own grid, fading into the tile's over its last three metres (the
+// patch was baked with the forest around it, the tile with its own copies); outside the tile's. Where the stream's row
+// cuts its bed below the tile's ground the tile's probes there lie under that ground: the light of those above
+static __forceinline__ __device__ SH gridSH(float3 p, float3 n) {
+    const OGrid& P = params.grid;
+    const OGrid& T = params.tileGrid;
+    const float e = inPatch(p);
+    if (P.sh[0] && (e >= 3.0f || !T.sh[0])) return gridSample(P, p, n);
+    SH t = gridSample(T, p, n);
+    for (int k = 1; k <= 2 && !t.ok && T.sh[0]; ++k) t = gridSample(T, p + make_float3(0.0f, 0.6f * k, 0.0f), n);
+    if (!P.sh[0] || e <= 0.0f) return t;
+    const SH g = gridSample(P, p, n);
+    if (!g.ok) return t;
+    if (!t.ok) return g;
+    const float w = e * e * (3.0f - 2.0f * e / 3.0f) / 9.0f;   // smoothstep(0, 3, e)
+    t.L0 = t.L0 + (g.L0 - t.L0) * w;
+    t.Lr = t.Lr + (g.Lr - t.Lr) * w;
+    t.Lg = t.Lg + (g.Lg - t.Lg) * w;
+    t.Lb = t.Lb + (g.Lb - t.Lb) * w;
+    return t;
+}
+// the probe nearest p (the mist's own light), from the grid gridSH would read
+static __forceinline__ __device__ float4 probeNear(float3 p) {
+    const OGrid& G = params.grid.sh[0] && (inPatch(p) > 0.0f || !params.tileGrid.sh[0]) ? params.grid : params.tileGrid;
+    if (!G.sh[0]) return make_float4(0, 0, 0, 0);
+    if (G.wrap) p = intoTile(G, p);
+    int x = int(roundf((p.x - G.origin.x) / G.h)), z = int(roundf((p.z - G.origin.z) / G.h));
+    x = G.wrap ? x % G.nx : min(max(x, 0), G.nx - 1);
+    z = G.wrap ? z % G.nz : min(max(z, 0), G.nz - 1);
+    const int y = min(max(int(roundf((p.y - G.origin.y) / G.h)), 0), G.ny - 1);
+    return G.sh[0][(size_t(z) * G.ny + y) * G.nx + x];
+}
+// the sun's visibility in the air at p (the patch's volume, outside it the tile's, which wraps)
+static __forceinline__ __device__ float sunInAir(float3 p) {
+    if (params.sunVis && (inPatch(p) > 0.0f || !params.tileVis)) {
+        const float3 q = (p - params.sunVisOrigin) * params.sunVisInvSize;
+        return tex3D<float>(cudaTextureObject_t(params.sunVis), q.x, q.y, q.z);
+    }
+    if (params.tileVis) {
+        const float3 q = (p - params.tileVisOrigin) * params.tileVisInvSize;
+        return tex3D<float>(cudaTextureObject_t(params.tileVis), q.x, q.y, q.z);
+    }
+    return 1.0f;
 }
 // irradiance on a surface facing n: pi c0 L00 + (2 pi / 3) c1 (L1 . n)
 static __forceinline__ __device__ float3 shE(const SH& h, float3 n) {
@@ -380,26 +434,15 @@ static __forceinline__ __device__ float3 mist(float3 o, float3 d, float tEnd, in
     const float g = params.fogG, cs = dot(d, params.sunDir);
     const float phase = (1.0f - g * g) / (4.0f * 3.14159265f * powf(fmaxf(1.0f + g * g - 2.0f * g * cs, 1e-4f), 1.5f));
     const float f = (float(sample) + 0.5f) / float(params.spp);
-    const OGrid& G = params.grid;
     for (int i = 0; i < N; ++i) {
         const float u0 = float(i) / N, u1 = float(i + 1) / N;
         const float t0 = L * u0 * u0, t1 = L * u1 * u1;
         const float t = t0 + (t1 - t0) * f, dt = t1 - t0;
         const float3 p = o + d * t;
         const float sigma = params.fogDensity + params.fogGround * expf(-fmaxf(p.y, 0.0f) / params.fogHeight);
-        float vis = 1.0f;
-        if (params.sunVis) {
-            const float3 q = (p - params.sunVisOrigin) * params.sunVisInvSize;
-            vis = tex3D<float>(cudaTextureObject_t(params.sunVis), q.x, q.y, q.z);
-        }
-        float3 amb = make_float3(0, 0, 0);
-        if (G.sh[0]) {
-            const int x = min(max(int(roundf((p.x - G.origin.x) / G.h)), 0), G.nx - 1);
-            const int y = min(max(int(roundf((p.y - G.origin.y) / G.h)), 0), G.ny - 1);
-            const int z = min(max(int(roundf((p.z - G.origin.z) / G.h)), 0), G.nz - 1);
-            const float4 s0 = G.sh[0][(size_t(z) * G.ny + y) * G.nx + x];
-            amb = make_float3(s0.x, s0.y, s0.z) * (0.282095f * s0.w * params.fogAmbient);
-        }
+        const float vis = sunInAir(p);
+        const float4 s0 = probeNear(p);
+        const float3 amb = make_float3(s0.x, s0.y, s0.z) * (0.282095f * s0.w * params.fogAmbient);
         const float a = expf(-sigma * dt);
         // the light scattered in this step, times what is left of it on the way to the eye (exact for a constant step)
         acc += (params.sunE * (phase * vis) + amb) * (T * (1.0f - a));
@@ -632,7 +675,7 @@ static __forceinline__ __device__ float3 sphereDir(int i, int n, unsigned int se
 
 extern "C" __global__ void __raygen__bake() {
     const uint3 li = optixGetLaunchIndex();
-    const OGrid& G = params.grid;
+    const OGrid& G = params.bakeGrid;
     const int x = int(li.x), y = int(li.y), z = params.bakeZ0 + int(li.z);
     if (x >= G.nx || y >= G.ny || z >= G.nz) return;
     const size_t k = (size_t(z) * G.ny + y) * G.nx + x;
@@ -687,7 +730,7 @@ extern "C" __global__ void __raygen__bakeAO() {
     const uint3 li = optixGetLaunchIndex();
     const unsigned int v = li.x + li.y * 65536u;
     if (v >= params.aoCount) return;
-    const float3 p = params.aoPos[v], n = params.aoNrm[v];
+    const float3 p = params.aoPos[v] + params.aoOffset, n = params.aoNrm[v];
     const float3 a = normalize(fabsf(n.y) < 0.9f ? cross(n, make_float3(0, 1, 0)) : cross(n, make_float3(1, 0, 0)));
     const float3 b = cross(n, a);
     const unsigned int seed = hash32(v * 747796405u + 1u);
@@ -714,7 +757,7 @@ extern "C" __global__ void __raygen__bakeVis() {
     const uint3 li = optixGetLaunchIndex();
     const int x = int(li.x), y = int(li.y), z = params.visZ0 + int(li.z);
     if (x >= params.visN[0] || y >= params.visN[1] || z >= params.visN[2]) return;
-    const float3 p = params.sunVisOrigin + make_float3(float(x) + 0.5f, float(y) + 0.5f, float(z) + 0.5f) * params.visH;
+    const float3 p = params.visOrigin + make_float3(float(x) + 0.5f, float(y) + 0.5f, float(z) + 0.5f) * params.visH;
     const float3 L = params.sunDir;
     const float3 a = normalize(fabsf(L.y) < 0.9f ? cross(L, make_float3(0, 1, 0)) : cross(L, make_float3(1, 0, 0)));
     const float3 b = cross(L, a);
