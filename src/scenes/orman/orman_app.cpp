@@ -315,8 +315,7 @@ int runOrmanCli(int argc, char** argv) {
     a.root = PROJECT_ROOT;
     std::string out = "captures/orman";
     std::vector<int> views;
-    bool hasCam = false;
-    OrmanCam freeCam;
+    std::vector<OrmanCam> freeCams;   // --cam, as many as given
     int bench = 0, stab = 0, refSpp = 16;
     std::string path = "yan";
     float speed = 1.3f;
@@ -337,8 +336,7 @@ int runOrmanCli(int argc, char** argv) {
         else if (s == "--cam") {
             OrmanCam c;
             if (std::sscanf(next().c_str(), "%f %f %f %f %f %f", &c.feet.x, &c.feet.y, &c.feet.z, &c.yaw, &c.pitch, &c.fovY) >= 5) {
-                freeCam = c;
-                hasCam = true;
+                freeCams.push_back(c);
             }
         }
     }
@@ -363,7 +361,7 @@ int runOrmanCli(int argc, char** argv) {
     std::printf("%s\n", a.summary().c_str());
     std::error_code ec;
     fs::create_directories(fs::path(a.root) / fs::path(out).parent_path(), ec);
-    if (views.empty() && !hasCam) views = {0, 1, 2, 3};
+    if (views.empty() && freeCams.empty()) views = {0, 1, 2, 3};
     auto shoot = [&](const OrmanCam& c, const std::string& name) {
         a.cam = c;
         a.world.collide(a.cam.feet.x, a.cam.feet.z, -1e9f, 0.3f);
@@ -391,7 +389,7 @@ int runOrmanCli(int argc, char** argv) {
         // configured samples) and as a reference (--ref samples), the same exposure (settled once, then held) and the
         // same clock. --yol yan: a step sideways (the parallax that makes leaves crawl), ileri: forwards, don: turning
         // on the spot
-        const OrmanCam c0 = hasCam ? freeCam : OrmanApp::view(views.empty() ? 0 : views[0]);
+        const OrmanCam c0 = !freeCams.empty() ? freeCams[0] : OrmanApp::view(views.empty() ? 0 : views[0]);
         const int live = a.cfg.i("samples", 4);
         const float sigma = a.cfg.f("filter.sigma", 0.42f);
         const std::string dir = (fs::path(a.root) / out).generic_string();
@@ -440,7 +438,7 @@ int runOrmanCli(int argc, char** argv) {
         a.release();
         return 0;
     }
-    if (hasCam) shoot(freeCam, "serbest");
+    for (size_t k = 0; k < freeCams.size(); ++k) shoot(freeCams[k], freeCams.size() == 1 ? std::string("serbest") : "serbest" + std::to_string(k));
     for (int v : views) shoot(OrmanApp::view(v), "bakis" + std::to_string(v));
     a.release();
     return 0;
