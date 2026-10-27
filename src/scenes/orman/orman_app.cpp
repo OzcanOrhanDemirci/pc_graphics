@@ -57,6 +57,7 @@ void OrmanApp::loadAssets() {
     std::sort(ids.begin(), ids.end());
     for (const std::string& id : ids) {
         if (std::find(skip.begin(), skip.end(), id) != skip.end() || id == groundId) continue;
+        if (id.rfind("trex_", 0) == 0) continue;   // a creature is no plant (scene 12's trial models, the trex-prova branch)
         bool hasGltf = false;
         for (const auto& f : fs::directory_iterator(assets.root + "/" + id, ec))
             if (f.path().extension() == ".gltf") hasGltf = true;
