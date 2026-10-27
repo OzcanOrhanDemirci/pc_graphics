@@ -230,7 +230,9 @@ int runOrmanCli(int argc, char** argv) {
     std::vector<int> views;
     bool hasCam = false;
     OrmanCam freeCam;
-    int bench = 0;
+    int bench = 0, stab = 0, refSpp = 16;
+    std::string path = "yan";
+    float speed = 1.3f;
     for (int i = 1; i < argc; ++i) {
         const std::string s = argv[i];
         auto next = [&]() { return i + 1 < argc ? std::string(argv[++i]) : std::string(); };
@@ -241,6 +243,10 @@ int runOrmanCli(int argc, char** argv) {
         else if (s == "--w") a.overrides.push_back("width=" + next());
         else if (s == "--h") a.overrides.push_back("height=" + next());
         else if (s == "--bench") bench = std::stoi(next());
+        else if (s == "--kararlilik") stab = std::stoi(next());
+        else if (s == "--yol") path = next();
+        else if (s == "--hiz") speed = std::stof(next());
+        else if (s == "--ref") refSpp = std::stoi(next());
         else if (s == "--cam") {
             OrmanCam c;
             if (std::sscanf(next().c_str(), "%f %f %f %f %f %f", &c.feet.x, &c.feet.y, &c.feet.z, &c.yaw, &c.pitch, &c.fovY) >= 5) {
@@ -288,6 +294,47 @@ int runOrmanCli(int argc, char** argv) {
             std::printf("orman: olcum %d kare: ortalama %.2f ms, en kotu %.2f ms\n", bench, sum / bench, worst);
         }
     };
+    if (stab > 0) {
+        // a walk at 60 frames a second for tools/titreme.py and tools/kararlilik.py: each moment drawn live (the
+        // configured samples) and as a reference (--ref samples), the same exposure (settled once, then held) and the
+        // same clock. --yol yan: a step sideways (the parallax that makes leaves crawl), ileri: forwards, don: turning
+        // on the spot
+        const OrmanCam c0 = hasCam ? freeCam : OrmanApp::view(views.empty() ? 0 : views[0]);
+        const int live = a.cfg.i("samples", 4);
+        const float sigma = a.cfg.f("filter.sigma", 0.42f);
+        const std::string dir = (fs::path(a.root) / out).generic_string();
+        fs::create_directories(dir, ec);
+        a.cam = c0;
+        a.cam.feet.y = a.world.height(a.cam.feet.x, a.cam.feet.z);
+        for (int k = 0; k < 6; ++k) a.render(0.0f);
+        a.exposureEv = std::log2(a.autoExposure);
+        a.autoOn = false;
+        double liveMs = 0.0;
+        for (int f = 0; f < stab; ++f) {
+            const float t = f / 60.0f;
+            OrmanCam c = c0;
+            const float fx = -std::sin(c0.yaw), fz = -std::cos(c0.yaw);
+            if (path == "ileri") c.feet = c0.feet + make_float3(fx, 0, fz) * (speed * t);
+            else if (path == "don") c.yaw = c0.yaw - speed * t;   // (--hiz in radians a second)
+            else c.feet = c0.feet + make_float3(-fz, 0, fx) * (speed * t);
+            c.feet.y = a.world.height(c.feet.x, c.feet.z);
+            a.cam = c;
+            a.R.setPattern(live, sigma);
+            a.render(1.0f / 60.0f);
+            liveMs += a.R.renderMs + a.R.displayMs;
+            char name[64];
+            std::snprintf(name, sizeof(name), "/live_%04d", f);
+            a.save(dir + name);
+            a.R.setPattern(refSpp, sigma);
+            a.render(0.0f);
+            std::snprintf(name, sizeof(name), "/ref_%04d", f);
+            a.save(dir + name);
+        }
+        std::printf("orman: kararlilik %d kare (%s, %.2f m/s) -> %s, canli %d ornek (ortalama %.2f ms), referans %d\n", stab, path.c_str(), speed,
+                    dir.c_str(), live, liveMs / stab, refSpp);
+        a.release();
+        return 0;
+    }
     if (hasCam) shoot(freeCam, "serbest");
     for (int v : views) shoot(OrmanApp::view(v), "bakis" + std::to_string(v));
     a.release();

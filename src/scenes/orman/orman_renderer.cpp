@@ -137,6 +137,7 @@ void OrmanRenderer::setPattern(int spp, float sigma) {
         return float(x);
     };
     params.spp = n;
+    params.covBias = 0.5f * std::log2(float(n)) + 0.6f;
     for (int k = 0; k < n; ++k) {
         // a stratum's centre (the patterns' points sit on a 1/16 lattice: nudged half a step inwards)
         const float2 u = src ? make_float2(src[k].x + 1.0f / 32.0f, src[k].y + 1.0f / 32.0f) : make_float2(0.5f, 0.5f);
@@ -193,7 +194,7 @@ bool OrmanRenderer::compile(std::string& log) {
     mco.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_MINIMAL;
     OptixPipelineCompileOptions pco{};
     pco.traversableGraphFlags = OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_LEVEL_INSTANCING;
-    pco.numPayloadValues = 2;
+    pco.numPayloadValues = 4;
     pco.numAttributeValues = 2;
     pco.exceptionFlags = OPTIX_EXCEPTION_FLAG_NONE;
     pco.pipelineLaunchParamsVariableName = "params";
@@ -314,7 +315,8 @@ void OrmanRenderer::upload(const OrmanAssets& assets, const std::vector<OProtoCP
             bi.triangleArray.numIndexTriplets = unsigned(m.idx.size());
             bi.triangleArray.indexBuffer = CUdeviceptr(g.idx);
             const bool alpha = m.material >= 0 && size_t(m.material) < assets.materials.size() && (assets.materials[m.material].flags & OMAT_ALPHA);
-            flags[gi] = alpha ? OPTIX_GEOMETRY_FLAG_NONE : OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT;
+            // (a shadow ray multiplies the light each leaf lets through: one call per leaf, or it would count twice)
+            flags[gi] = alpha ? OPTIX_GEOMETRY_FLAG_REQUIRE_SINGLE_ANYHIT_CALL : OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT;
             bi.triangleArray.flags = &flags[gi];
             bi.triangleArray.numSbtRecords = 1;
         }

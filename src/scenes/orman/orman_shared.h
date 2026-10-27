@@ -29,6 +29,11 @@ struct OGeom {
 #define OMAT_ALPHA 4u         // cut by its alpha map (the any-hit program)
 #define OMAT_WATER 8u         // the stream's surface: a mirror and a window (one ray each)
 
+// what a ray is for (the any-hit's third payload): a shadow ray (the fourth payload carries the light it lets through), or
+// a sample of a set: its index in the low byte, the set's size in the next (0: one fixed cutoff)
+#define ORAY_SHADOW 0x80000000u
+#define ORAY_SAMPLE(k, n) ((unsigned int)(k) & 0xFFu) | (((unsigned int)(n) & 0xFFu) << 8)
+
 #define OMASK_SOLID 1u        // everything that stops light
 #define OMASK_WATER 2u        // the water's surface: seen, but casting no shadow (the oven and the sun look through it)
 
@@ -77,6 +82,7 @@ struct OrmanParams {
     float pixelAngle;         // radians a pixel (the ray cone's spread)
     int spp;
     float2 pattern[ORMAN_MAX_SPP];   // sub-pixel offsets from the pixel's centre (pixels), the filter's own distribution
+    float covBias;            // a leaf's coverage read this many levels above the sample's own (the pixel's reach)
 
     // the world
     const OGeom* geoms;

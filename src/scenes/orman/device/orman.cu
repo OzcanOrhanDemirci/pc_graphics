@@ -7,7 +7,8 @@
 //                      seen from every probe in fixed directions
 //   __raygen__bakeAO   the ground's occlusion per vertex (the plants over it)
 //   __raygen__bakeVis  the sun's visibility in the air, per voxel (the mist's shafts)
-//   __anyhit__alpha    a leaf's alpha map cuts its triangles (the mip level from the ray's cone)
+//   __anyhit__alpha    a leaf's alpha map cuts its triangles (the mip level from the ray's cone); far away its coverage
+//                      is shared among the pixel's samples, and a shadow ray lets through the uncovered share
 // Nothing here is random: every frame is the same frame from the same place (grafik netlik kuralı).
 #include <optix.h>
 
@@ -67,6 +68,34 @@ extern "C" __global__ void __anyhit__alpha() {
     const float width = __uint_as_float(optixGetPayload_0()) + optixGetRayTmax() * __uint_as_float(optixGetPayload_1());
     const float lod = coneLod(g.pos[tri.x], g.pos[tri.y], g.pos[tri.z], t0, t1, t2, in.scale, m.texelArea, width, 1.0f);
     const float a = tex2DLod<float>(cudaTextureObject_t(m.alpha), uv.x, uv.y, fmaxf(lod, 0.0f));
+    // level 0 is the leaf's own cut; from level 1 on a texel holds the share of its footprint the leaf covers
+    const float far = fminf(fmaxf(lod, 0.0f), 1.0f);
+    const unsigned int info = optixGetPayload_2();
+    if (info & ORAY_SHADOW) {
+        // to the sun: its disk blurs a far leaf's shadow over the leaf's coverage (the cone spreads by the disk), so the
+        // leaf lets through its uncovered share, not all or nothing (no glittering dapples); close up the cut is sharp
+        const float cov = far * a + (1.0f - far) * fminf(fmaxf((a - m.alphaCutoff) * 4.0f + 0.5f, 0.0f), 1.0f);
+        const float T = __uint_as_float(optixGetPayload_3()) * (1.0f - cov);
+        if (T < 0.03f) optixTerminateRay();   // (accepts this hit: the sun is all but gone)
+        optixSetPayload_3(__float_as_uint(T));
+        optixIgnoreIntersection();
+    }
+    // the eye's samples: close up one cutoff (a sharp edge); further away each of the pixel's samples has its own
+    // threshold, so the leaf's coverage becomes the share of the samples that stop on it (alpha to coverage) and the far
+    // leaves neither glitter nor thin out. The thresholds turn per triangle: layers of leaves do not stop the same
+    // samples, and the turn stays with the leaf as the eye moves
+    const unsigned int n = (info >> 8) & 0xFFu;
+    if (n > 0u && far > 0.0f) {
+        // the coverage over the whole pixel (its filter's reach, not the sample's own share of it): every sample of
+        // the pixel reads nearly the same coverage, so how many stop changes smoothly as the leaf moves
+        const float ac = tex2DLod<float>(cudaTextureObject_t(m.alpha), uv.x, uv.y, fmaxf(lod + params.covBias, 0.0f));
+        const unsigned int hs = hash32(optixGetInstanceId() * 0x9E3779B9u ^ (optixGetPrimitiveIndex() + 1u) * 0x85EBCA6Bu ^ optixGetSbtGASIndex());
+        float tk = (float(info & 0xFFu) + 0.5f) / float(n) + float(hs >> 8) * (1.0f / 16777216.0f);
+        tk -= floorf(tk);
+        const float v = a + (ac - a) * far, cut = m.alphaCutoff + (tk - m.alphaCutoff) * far;
+        if (v < cut) optixIgnoreIntersection();
+        return;
+    }
     if (a < m.alphaCutoff) optixIgnoreIntersection();
 }
 
@@ -79,10 +108,11 @@ struct Hit {
     float m[12];
 };
 
-static __forceinline__ __device__ Hit trace(float3 o, float3 d, float tmin, float tmax, float width0, float spread,
+// info: ORAY_SAMPLE(k, n), the ray's place in its set (the alpha thresholds)
+static __forceinline__ __device__ Hit trace(float3 o, float3 d, float tmin, float tmax, float width0, float spread, unsigned int info,
                                             unsigned int mask = OMASK_SOLID | OMASK_WATER) {
-    unsigned int p0 = __float_as_uint(width0), p1 = __float_as_uint(spread);
-    optixTraverse(params.handle, o, d, tmin, tmax, 0.0f, OptixVisibilityMask(mask), OPTIX_RAY_FLAG_NONE, 0, 1, 0, p0, p1);
+    unsigned int p0 = __float_as_uint(width0), p1 = __float_as_uint(spread), p2 = info, p3 = 0u;
+    optixTraverse(params.handle, o, d, tmin, tmax, 0.0f, OptixVisibilityMask(mask), OPTIX_RAY_FLAG_NONE, 0, 1, 0, p0, p1, p2, p3);
     Hit h;
     h.hit = optixHitObjectIsHit();
     if (!h.hit) return h;
@@ -95,12 +125,16 @@ static __forceinline__ __device__ Hit trace(float3 o, float3 d, float tmin, floa
     return h;
 }
 
-// true if nothing is in the way (leaves cut by their alpha: the dapples)
-static __forceinline__ __device__ bool visible(float3 o, float3 d, float tmax, float width0) {
-    unsigned int p0 = __float_as_uint(width0), p1 = __float_as_uint(0.0f);
+// the sun's light let through on the way from o along d (0 .. 1): anything solid stops it, a leaf lets through its
+// uncovered share over the ray's cone. The cone starts as wide as the sample's footprint (no shadow detail finer than
+// a pixel: it would glitter as the eye moves) and widens by the sun's radius (each of a pixel's shadow rays aims at
+// its own part of the disk; together they make the half-shadow), so a gap the size of a dapple stays a dapple
+static __forceinline__ __device__ float sunThrough(float3 o, float3 d, float tmax, float width0) {
+    const float spread = sqrtf(fmaxf(0.0f, 1.0f - params.sunCos * params.sunCos)) / params.sunCos;
+    unsigned int p0 = __float_as_uint(width0), p1 = __float_as_uint(spread), p2 = ORAY_SHADOW, p3 = __float_as_uint(1.0f);
     optixTraverse(params.handle, o, d, 0.0f, tmax, 0.0f, OptixVisibilityMask(OMASK_SOLID), OPTIX_RAY_FLAG_TERMINATE_ON_FIRST_HIT, 0, 1, 0,
-                  p0, p1);
-    return !optixHitObjectIsHit();
+                  p0, p1, p2, p3);
+    return optixHitObjectIsHit() ? 0.0f : __uint_as_float(p3);
 }
 
 struct Surf {
@@ -110,6 +144,7 @@ struct Surf {
     unsigned int flags;
     bool back;                // a single-sided surface seen from behind (inside a rock: the oven's validity)
     float lod;
+    float foot;               // the sample's footprint here (m): what a shadow ray from it must not resolve finer than
 };
 
 static __forceinline__ __device__ Surf surface(const Hit& h, float3 o, float3 d, float width) {
@@ -121,6 +156,7 @@ static __forceinline__ __device__ Surf surface(const Hit& h, float3 o, float3 d,
     const float3 p0 = xfPoint(h.m, q0), p1 = xfPoint(h.m, q1), p2 = xfPoint(h.m, q2);
     Surf s;
     s.p = lerp3(p0, p1, p2, h.b);
+    s.foot = width;
     s.flags = m.flags;
     // (scans hold degenerate triangles: a zero cross product must not become a NaN that spreads)
     const float3 cr = cross(p1 - p0, p2 - p0);
@@ -181,6 +217,11 @@ static __forceinline__ __device__ Surf surface(const Hit& h, float3 o, float3 d,
                 const float3 tn = make_float3(nm.x * 2.0f - 1.0f, -(nm.y * 2.0f - 1.0f), nm.z * 2.0f - 1.0f);
                 const float3 nn = normalize(T * tn.x + Bn * tn.y + n * fmaxf(tn.z, 0.05f));
                 n = nn;
+                // the normals' spread over the footprint (the mean's length, in the map's alpha) widens the highlight
+                // (Toksvig): a far bark's or leaf's bumps shine as a sheen, not as glittering points
+                const float len = fmaxf(nm.w, 0.05f);
+                const float ga = s.rough * s.rough;
+                s.rough = sqrtf(sqrtf(fminf(ga * ga + 2.0f * (1.0f - len) / len, 1.0f)));
             }
         }
     }
@@ -280,7 +321,8 @@ static __forceinline__ __device__ float3 sunLight(const Surf& s, float3 d, int s
         Ls = normalize(L + (a * u.x + b * u.y) * r);
     }
     const float3 side = front > 0.0f ? s.ng : -s.ng;
-    if (trace && !visible(s.p + side * 2e-3f + Ls * 1e-3f, Ls, 1e4f, 0.002f)) return make_float3(0, 0, 0);
+    const float through = trace ? sunThrough(s.p + side * 2e-3f + Ls * 1e-3f, Ls, 1e4f, s.foot) : 1.0f;
+    if (through <= 0.0f) return make_float3(0, 0, 0);
     if (front > 0.0f) {
         const float ndl = fmaxf(dot(s.n, Ls), 0.0f);
         float3 c = s.albedo * (INV_PIf * ndl * (1.0f - s.trans));
@@ -296,11 +338,11 @@ static __forceinline__ __device__ float3 sunLight(const Surf& s, float3 d, int s
         const float F = 0.04f + 0.96f * powf(1.0f - fmaxf(dot(v, hv), 0.0f), 5.0f);
         const float spec = D * G * F / (4.0f * ndv + 1e-4f);
         c += make_float3(spec, spec, spec);
-        return c * params.sunE;
+        return c * (params.sunE * through);
     }
     // from behind: through the leaf (its colour twice: in and out)
     const float ndl = fmaxf(-dot(s.n, Ls), 0.0f);
-    return s.albedo * s.albedo * (INV_PIf * ndl * s.trans * 2.2f) * params.sunE;
+    return s.albedo * s.albedo * (INV_PIf * ndl * s.trans * 2.2f * through) * params.sunE;
 }
 
 static __forceinline__ __device__ float3 shade(const Surf& s, float3 d, int sample) {
@@ -368,7 +410,7 @@ static __forceinline__ __device__ float3 mist(float3 o, float3 d, float tEnd, in
 
 // what a ray off the water sees: the sky, or a surface shaded as any other (no second water)
 static __forceinline__ __device__ float3 seen(float3 o, float3 d, float width0, float spread, int sample, float& t) {
-    const Hit h = trace(o, d, 0.002f, 1e4f, width0, spread, OMASK_SOLID);
+    const Hit h = trace(o, d, 0.002f, 1e4f, width0, spread, ORAY_SAMPLE(sample, params.spp), OMASK_SOLID);
     if (!h.hit) {
         t = 1e4f;
         return sky(d);
@@ -413,13 +455,14 @@ static __forceinline__ __device__ float3 water(const Surf& s, float3 d, float t,
     }
     // the sun's glint on the ripples
     const float3 L = params.sunDir;
-    if (dot(n, L) > 0.0f && visible(s.p + n * 0.003f, L, 1e4f, 0.002f)) {
+    const float through = dot(n, L) > 0.0f ? sunThrough(s.p + n * 0.003f, L, 1e4f, 0.002f) : 0.0f;
+    if (through > 0.0f) {
         const float3 hv = normalize(v + L);
         const float a2 = 0.004f;
         const float ndh = fmaxf(dot(n, hv), 0.0f);
         const float den = ndh * ndh * (a2 - 1.0f) + 1.0f;
         const float D = a2 / (3.14159265f * den * den);
-        c += params.sunE * (D * F * 0.25f / cosi) * fmaxf(dot(n, L), 0.0f);
+        c += params.sunE * (D * F * 0.25f / cosi * through) * fmaxf(dot(n, L), 0.0f);
     }
     return c;
 }
@@ -439,7 +482,7 @@ extern "C" __global__ void __raygen__render() {
         const float x = ((float(px) + 0.5f + o.x) / float(params.width)) * 2.0f - 1.0f;
         const float y = 1.0f - ((float(py) + 0.5f + o.y) / float(params.height)) * 2.0f;
         const float3 d = normalize(params.W + params.U * x + params.V * y);
-        const Hit h = trace(params.eye, d, 0.02f, 1e4f, 0.0f, spread);
+        const Hit h = trace(params.eye, d, 0.02f, 1e4f, 0.0f, spread, ORAY_SAMPLE(k, params.spp));
         float T;
         const float3 fog = mist(params.eye, d, h.hit ? h.t : 1e4f, k, T);
         if (!h.hit) {
@@ -519,7 +562,7 @@ extern "C" __global__ void __raygen__bake() {
         // tilt the whole sphere a little (the poles not always on y)
         const float tilt = float((seed >> 16) & 255u) * (0.5f / 255.0f);
         d = normalize(make_float3(d.x, d.y * cosf(tilt) - d.z * sinf(tilt), d.y * sinf(tilt) + d.z * cosf(tilt)));
-        const Hit h = trace(p, d, 0.0f, 1e4f, 0.01f, 0.0f, OMASK_SOLID);
+        const Hit h = trace(p, d, 0.0f, 1e4f, 0.01f, 0.0f, ORAY_SAMPLE(i & 15, 16), OMASK_SOLID);
         float3 Lr;
         if (!h.hit) {
             Lr = sky(d);
@@ -570,9 +613,9 @@ extern "C" __global__ void __raygen__bakeAO() {
         const float r = sqrtf((float(i) + 0.5f) / float(N));
         const float phi = 2.39996323f * float(i) + float(seed & 0xFFFFu) * (6.2831853f / 65536.0f);
         const float3 d = normalize(a * (r * cosf(phi)) + b * (r * sinf(phi)) + n * sqrtf(fmaxf(0.0f, 1.0f - r * r)));
-        unsigned int p0 = __float_as_uint(0.003f), p1 = __float_as_uint(0.02f);
+        unsigned int p0 = __float_as_uint(0.003f), p1 = __float_as_uint(0.02f), p2 = ORAY_SAMPLE(i & 15, 16), p3 = 0u;
         optixTraverse(params.handle, p + n * 0.01f, d, 0.0f, params.aoRadius, 0.0f, OptixVisibilityMask(OMASK_SOLID), OPTIX_RAY_FLAG_NONE, 0, 1,
-                      0, p0, p1);
+                      0, p0, p1, p2, p3);
         if (optixHitObjectIsHit()) {
             const float t = optixHitObjectGetRayTmax() / params.aoRadius;
             occ += 1.0f - t * t;   // near things darken more than far ones
@@ -581,7 +624,7 @@ extern "C" __global__ void __raygen__bakeAO() {
     params.aoOut[v] = 1.0f - occ / float(N);
 }
 
-// the sun's visibility in the air, per voxel: four shadow rays to the disk (0, 1/4 .. 1): the mist's shafts
+// the sun's visibility in the air, per voxel: the light four shadow rays to the disk let through: the mist's shafts
 extern "C" __global__ void __raygen__bakeVis() {
     const uint3 li = optixGetLaunchIndex();
     const int x = int(li.x), y = int(li.y), z = params.visZ0 + int(li.z);
@@ -592,10 +635,10 @@ extern "C" __global__ void __raygen__bakeVis() {
     const float3 b = cross(L, a);
     const float r = sqrtf(fmaxf(0.0f, 1.0f - params.sunCos * params.sunCos)) / params.sunCos;
     const float2 disk[4] = {{0.5f, 0.2f}, {-0.2f, 0.5f}, {-0.5f, -0.2f}, {0.2f, -0.5f}};
-    int seen = 0;
+    float seen = 0.0f;
     for (int k = 0; k < 4; ++k) {
         const float3 Ls = normalize(L + (a * disk[k].x + b * disk[k].y) * r);
-        if (visible(p, Ls, 1e4f, 0.01f)) ++seen;
+        seen += sunThrough(p, Ls, 1e4f, 0.01f);
     }
-    params.visOut[(size_t(z) * params.visN[1] + y) * params.visN[0] + x] = (unsigned char)(seen * 255 / 4);
+    params.visOut[(size_t(z) * params.visN[1] + y) * params.visN[0] + x] = (unsigned char)(seen * (255.0f / 4.0f) + 0.5f);
 }

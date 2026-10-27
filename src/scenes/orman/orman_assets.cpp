@@ -42,13 +42,6 @@ template <class F> Level halve(const Level& a, int ch, F avg) {
     return b;
 }
 
-float coverage(const Level& l, float cutoff, float scale) {
-    size_t n = 0;
-    const float c = cutoff * 255.0f;
-    for (unsigned char v : l.px)
-        if (float(v) * scale >= c) ++n;
-    return float(n) / float(std::max<size_t>(l.px.size(), 1));
-}
 
 std::string findFile(const std::string& dir, const std::vector<std::string>& keys, const std::string& notKey = "") {
     std::error_code ec;
@@ -138,23 +131,57 @@ int OrmanAssets::texture(const std::string& path, Kind kind, float cutoff, bool 
         for (int i = 0; i < 256; ++i) lin[i] = srgbToLinear(i / 255.0f);
         linReady = true;
     }
+    // a normal map's levels: the mean of level 0's unit normals over each texel's footprint, its direction in rgb and its
+    // length in a (short where the normals disagree: the shader widens the highlight by it, Toksvig 2005)
+    std::vector<float3> mean;
+    if (kind == Normal) {
+        mean.resize(size_t(w) * h);
+        for (size_t i = 0; i < mean.size(); ++i) {
+            const unsigned char* q = &levels[0].px[i * 4];
+            const float3 v = make_float3(q[0] / 127.5f - 1.0f, q[1] / 127.5f - 1.0f, q[2] / 127.5f - 1.0f);
+            const float l = std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+            mean[i] = l > 1e-6f ? v * (1.0f / l) : make_float3(0, 0, 1);
+            levels[0].px[i * 4 + 3] = 255;
+        }
+    }
     while (levels.back().w > 1 || levels.back().h > 1) {
         const Level& a = levels.back();
         Level b;
-        if (kind == Albedo) {
+        if (kind == Normal) {
+            b.w = std::max(1, a.w / 2);
+            b.h = std::max(1, a.h / 2);
+            b.px.resize(size_t(b.w) * b.h * 4);
+            std::vector<float3> next(size_t(b.w) * b.h);
+            for (int y = 0; y < b.h; ++y)
+                for (int x = 0; x < b.w; ++x) {
+                    const int x0 = std::min(2 * x, a.w - 1), x1 = std::min(2 * x + 1, a.w - 1);
+                    const int y0 = std::min(2 * y, a.h - 1), y1 = std::min(2 * y + 1, a.h - 1);
+                    const float3 m = (mean[size_t(y0) * a.w + x0] + mean[size_t(y0) * a.w + x1] + mean[size_t(y1) * a.w + x0] +
+                                      mean[size_t(y1) * a.w + x1]) * 0.25f;
+                    const size_t o = size_t(y) * b.w + x;
+                    next[o] = m;
+                    const float l = std::sqrt(m.x * m.x + m.y * m.y + m.z * m.z);
+                    const float3 u = l > 1e-6f ? m * (1.0f / l) : make_float3(0, 0, 1);
+                    b.px[o * 4 + 0] = (unsigned char)std::lround(std::clamp(u.x * 127.5f + 127.5f, 0.0f, 255.0f));
+                    b.px[o * 4 + 1] = (unsigned char)std::lround(std::clamp(u.y * 127.5f + 127.5f, 0.0f, 255.0f));
+                    b.px[o * 4 + 2] = (unsigned char)std::lround(std::clamp(u.z * 127.5f + 127.5f, 0.0f, 255.0f));
+                    b.px[o * 4 + 3] = (unsigned char)std::lround(std::clamp(l, 0.0f, 1.0f) * 255.0f);
+                }
+            mean.swap(next);
+        } else if (kind == Alpha && levels.size() == 1) {
+            // a leaf's coverage: the first level averages the cut (over the cutoff or not), every later one averages that,
+            // so far away a texel holds the share of its footprint the leaf covers (the any-hit turns it into the share
+            // of a pixel's samples that stop on it, and into the light a shadow ray lets through)
+            const unsigned char c = (unsigned char)std::lround(cutoff * 255.0f);
+            b = halve(a, 1, [c](const unsigned char* const* q, unsigned char* o) {
+                const int n = (q[0][0] >= c) + (q[1][0] >= c) + (q[2][0] >= c) + (q[3][0] >= c);
+                o[0] = (unsigned char)((n * 255 + 2) / 4);
+            });
+        } else if (kind == Albedo) {
             // in linear light: an sRGB average darkens the mips (the far ground would turn muddy)
             b = halve(a, 4, [&](const unsigned char* const* q, unsigned char* o) {
                 for (int c = 0; c < 3; ++c) o[c] = (unsigned char)std::lround(linearToSrgb(0.25f * (lin[q[0][c]] + lin[q[1][c]] + lin[q[2][c]] + lin[q[3][c]])) * 255.0f);
                 o[3] = (unsigned char)((q[0][3] + q[1][3] + q[2][3] + q[3][3] + 2) / 4);
-            });
-        } else if (kind == Normal) {
-            b = halve(a, 4, [](const unsigned char* const* q, unsigned char* o) {
-                float v[3] = {0, 0, 0};
-                for (int k = 0; k < 4; ++k)
-                    for (int c = 0; c < 3; ++c) v[c] += q[k][c] / 127.5f - 1.0f;
-                const float l = std::sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
-                for (int c = 0; c < 3; ++c) o[c] = (unsigned char)std::lround(std::clamp((l > 1e-6f ? v[c] / l : (c == 2 ? 1.0f : 0.0f)) * 127.5f + 127.5f, 0.0f, 255.0f));
-                o[3] = 255;
             });
         } else {
             b = halve(a, ch, [ch](const unsigned char* const* q, unsigned char* o) {
@@ -162,19 +189,6 @@ int OrmanAssets::texture(const std::string& path, Kind kind, float cutoff, bool 
             });
         }
         levels.push_back(std::move(b));
-    }
-    if (kind == Alpha) {
-        // the coverage kept: every level scaled so the share over the cutoff is level 0's
-        const float c0 = coverage(levels[0], cutoff, 1.0f);
-        for (size_t k = 1; k < levels.size(); ++k) {
-            float lo = 0.0f, hi = 8.0f;
-            for (int it = 0; it < 16; ++it) {
-                const float mid = 0.5f * (lo + hi);
-                if (coverage(levels[k], cutoff, mid) < c0) lo = mid;
-                else hi = mid;
-            }
-            for (unsigned char& v : levels[k].px) v = (unsigned char)std::min(255.0f, std::round(float(v) * hi));
-        }
     }
 
     OTexture t;
