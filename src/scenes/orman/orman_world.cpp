@@ -96,9 +96,20 @@ void OrmanWorld::configure(const Config& cfg) {
     streamDepth_ = cfg.f("stream.depth", streamDepth_);
     streamWidth_ = cfg.f("stream.width", streamWidth_);
     waterDepth_ = cfg.f("stream.water", waterDepth_);
+    outer = std::max(cfg.f("world.outer", outer), size);
+    outerRes_ = cfg.f("ground.outer_res", outerRes_);
+    hill_ = cfg.f("valley.hill", hill_);
+    hillRun_ = cfg.f("valley.run", hillRun_);
+    bend_ = cfg.f("valley.bend", bend_);
+    ringTrees_ = cfg.i("ring.trees", ringTrees_);
+    sunAzimuth_ = cfg.f("sun.azimuth", sunAzimuth_);
 }
 
-float OrmanWorld::streamCentre(float x) const { return 1.8f * std::sin(0.14f * x + 0.6f) + 0.7f * std::sin(0.33f * x + 2.1f) - 1.5f; }
+float OrmanWorld::streamCentre(float x) const {
+    // past the patch it bends away, one end each way: down its valley the eye meets the far bank, not the world's end
+    const float b = std::max(std::fabs(x) - 0.5f * size - 2.0f, 0.0f);
+    return 1.8f * std::sin(0.14f * x + 0.6f) + 0.7f * std::sin(0.33f * x + 2.1f) - 1.5f + std::copysign(bend_ * b * b, x);
+}
 
 float OrmanWorld::streamDistance(float x, float z) const {
     const float c = streamCentre(x);
@@ -115,6 +126,12 @@ float OrmanWorld::height(float x, float z) const {
     h -= carve;
     // the bed's own small unevenness
     h += 0.04f * fbm(x * 1.7f, z * 1.7f, 2, seed_ + 13u) * (1.0f - smoothstep(0.0f, 1.5f * streamWidth_, d));
+    // past the patch the valley's sides rise (nothing changes inside it), unevenly, but not over the stream's own bed
+    const float e = std::max(std::fabs(x), std::fabs(z)) - 0.5f * size;
+    if (e > 0.0f) {
+        const float rate = 0.7f + 0.6f * vnoise(x * 0.05f + 7.3f, z * 0.05f - 2.9f, seed_ + 21u);
+        h += hill_ * smoothstep(0.0f, hillRun_, e * rate) * smoothstep(1.5f * streamWidth_, 10.0f, d);
+    }
     return h;
 }
 
@@ -180,8 +197,40 @@ void OrmanWorld::build(OrmanAssets& A, int groundMaterial, int groundProto, int 
     g.material = groundMaterial;
     g.uvScale = 1.0f / tile_;
     ground.geoms.push_back(std::move(g));
-    ground.bmin = make_float3(-half, -2, -half);
-    ground.bmax = make_float3(half, 2, half);
+    // the valley around it, coarser: under the patch's edge by a few centimetres where the two overlap (the finer one is
+    // the one seen), so no gap opens between them
+    const float oh = 0.5f * outer;
+    if (oh > half) {
+        OMeshCPU v;
+        const int m = int(std::round(outer / outerRes_)) + 1;
+        const float step = outer / float(m - 1), inner = half - 2.0f * step;
+        std::vector<int> at(size_t(m) * m, -1);
+        auto vertex = [&](int i, int j) {
+            int& k = at[size_t(j) * m + i];
+            if (k < 0) {
+                const float x = -oh + i * step, z = -oh + j * step;
+                k = int(v.pos.size());
+                v.pos.push_back(make_float3(x, height(x, z) - 0.03f, z));
+                v.nrm.push_back(normal(x, z));
+                v.uv.push_back(make_float2(x, z));
+            }
+            return unsigned(k);
+        };
+        for (int j = 0; j + 1 < m; ++j)
+            for (int i = 0; i + 1 < m; ++i) {
+                const float x0 = -oh + i * step, z0 = -oh + j * step;
+                if (x0 >= -inner && x0 + step <= inner && z0 >= -inner && z0 + step <= inner) continue;   // under the patch
+                const unsigned a = vertex(i, j), b = vertex(i + 1, j), c = vertex(i, j + 1), d = vertex(i + 1, j + 1);
+                v.idx.push_back(make_uint3(a, c, b));
+                v.idx.push_back(make_uint3(b, c, d));
+            }
+        v.ao.assign(v.pos.size(), 1.0f);
+        v.material = groundMaterial;
+        v.uvScale = 1.0f / tile_;
+        ground.geoms.push_back(std::move(v));
+    }
+    ground.bmin = make_float3(-oh, -2, -oh);
+    ground.bmax = make_float3(oh, hill_ + 2, oh);
     OPlace gp;
     gp.proto = groundProto;
     places.push_back(gp);
@@ -192,10 +241,15 @@ void OrmanWorld::build(OrmanAssets& A, int groundMaterial, int groundProto, int 
     water.name = "water";
     if (waterMaterial >= 0) {
         OMeshCPU w;
-        const int nx = int(size / 0.1f) + 1, nv = 33;
+        // every 10 cm along the patch, coarser down the valley on either side
+        std::vector<float> xs;
+        for (float x = -oh; x < -half; x += 0.4f) xs.push_back(x);
+        for (int i = 0; i <= int(size / 0.1f); ++i) xs.push_back(-half + i * 0.1f);
+        for (float x = half + 0.4f; x <= oh; x += 0.4f) xs.push_back(x);
+        const int nx = int(xs.size()), nv = 33;
         const float halfW = 2.2f * streamWidth_;
         for (int i = 0; i < nx; ++i) {
-            const float x = -half + i * 0.1f, c = streamCentre(x), y = waterLevel(x);
+            const float x = xs[size_t(i)], c = streamCentre(x), y = waterLevel(x);
             const float dc = (streamCentre(x + 0.05f) - streamCentre(x - 0.05f)) / 0.1f;
             const float il = 1.0f / std::sqrt(1.0f + dc * dc);
             for (int j = 0; j < nv; ++j) {
@@ -214,8 +268,8 @@ void OrmanWorld::build(OrmanAssets& A, int groundMaterial, int groundProto, int 
             }
         w.material = waterMaterial;
         water.geoms.push_back(std::move(w));
-        water.bmin = make_float3(-half, -2, -half);
-        water.bmax = make_float3(half, 2, half);
+        water.bmin = make_float3(-oh, -2, -oh);
+        water.bmax = make_float3(oh, 2, oh);
         OPlace wp;
         wp.proto = groundProto + 1;
         wp.mask = OMASK_WATER;
@@ -233,10 +287,10 @@ void OrmanWorld::build(OrmanAssets& A, int groundMaterial, int groundProto, int 
     };
     lo = make_float3(-half, 1e9f, -half);
     hi = make_float3(half, -1e9f, half);
-    auto put = [&](int proto, float x, float z, float yaw, float s, float tilt, float sink, float3 tint, float lift = 0.0f) -> float {
+    auto put = [&](int proto, float x, float z, float yaw, float s, float tilt, float sink, float3 tint, float lift = 0.0f, float foot = -1.0f) -> float {
         const OProtoCPU& P = A.protos[size_t(proto)];
-        // the lowest ground under its footprint: nothing floats on a slope
-        const float rx = 0.35f * s * std::max(P.bmax.x - P.bmin.x, P.bmax.z - P.bmin.z);
+        // the lowest ground under its footprint: nothing floats on a slope (a tree's footprint is its trunk, not its crown)
+        const float rx = foot >= 0.0f ? foot : 0.35f * s * std::max(P.bmax.x - P.bmin.x, P.bmax.z - P.bmin.z);
         float y = height(x, z);
         for (int k = 0; k < 4; ++k) y = std::min(y, height(x + rx * std::cos(k * 1.5708f + yaw), z + rx * std::sin(k * 1.5708f + yaw)));
         y += lift - sink * s * (P.bmax.y - P.bmin.y);
@@ -247,8 +301,11 @@ void OrmanWorld::build(OrmanAssets& A, int groundMaterial, int groundProto, int 
         placeMatrix(p.m, make_float3(x, y, z), normal(x, z), tilt, yaw, s);
         places.push_back(p);
         ++counts[P.asset];
-        lo.y = std::min(lo.y, y + s * P.bmin.y);
-        hi.y = std::max(hi.y, y + s * P.bmax.y);
+        // the baked light's bounds: the patch only (around it the light of the grid's nearest face)
+        if (std::fabs(x) <= half && std::fabs(z) <= half) {
+            lo.y = std::min(lo.y, y + s * P.bmin.y);
+            hi.y = std::max(hi.y, y + s * P.bmax.y);
+        }
         return y + s * P.bmax.y;
     };
     auto variant = [&](const std::vector<int>& v) { return v[size_t(U(rng) * v.size()) % v.size()]; };
@@ -416,6 +473,52 @@ void OrmanWorld::build(OrmanAssets& A, int groundMaterial, int groundProto, int 
             const float patch = smoothstep(0.6f, 0.8f, vnoise(x * 0.5f, z * 0.5f, sa));
             return 0.85f * rim * (0.4f + 0.6f * vnoise(x * 2.0f, z * 2.0f, sa + 1u)) + 0.5f * patch;
         });
+    }
+
+    // the ring and the valley around the patch, placed after it (the patch stays as it was): big trees all round but
+    // between the patch and the sun (the gap its light comes through), young trees on the slopes, and at the eye's
+    // height a wall of shrubs from the walked part's edge outwards, so a look outwards ends in leaves, never in the
+    // ground's end
+    if (oh > half) {
+        const float sa = sunAzimuth_ * 0.0174533f;
+        // within 35 degrees of the sun's bearing from the patch's middle
+        auto towardSun = [&](float x, float z) { return x * std::cos(sa) + z * std::sin(sa) > 0.82f * std::sqrt(x * x + z * z); };
+        auto beyond = [&](float x, float z) { return std::max(std::fabs(x), std::fabs(z)); };
+        for (const std::string& id : kinds[Tree]) {
+            const auto& v = A.byAsset[id];
+            int made = 0;
+            for (int tries = 0; tries < 4000 && made < ringTrees_; ++tries) {
+                const float x = (U(rng) - 0.5f) * (outer - 8.0f), z = (U(rng) - 0.5f) * (outer - 8.0f);
+                if (beyond(x, z) < half + 1.0f || towardSun(x, z) || streamDistance(x, z) < 6.0f || !free(x, z, 4.0f)) continue;
+                const float top = put(variant(v), x, z, U(rng) * 6.2832f, 0.9f + 0.35f * U(rng), 0.0f, 0.02f, tintOf(0.08f), 0.0f, 0.8f);
+                solids.push_back({x, z, 0.5f, top});
+                ++made;
+            }
+        }
+        auto grid = [&](float spacing, auto each) {
+            const int cells = int(outer / spacing);
+            for (int j = 0; j < cells; ++j)
+                for (int i = 0; i < cells; ++i) each(-oh + (i + U(rng)) * spacing, -oh + (j + U(rng)) * spacing);
+        };
+        for (const std::string& id : kinds[Tall]) {
+            const auto& v = A.byAsset[id];
+            grid(2.4f, [&](float x, float z) {
+                if (beyond(x, z) < half || streamDistance(x, z) < 2.0f || U(rng) >= 0.7f || !free(x, z, 0.4f)) return;
+                put(variant(v), x, z, U(rng) * 6.2832f, 0.85f + 0.45f * U(rng), 0.1f, 0.03f, tintOf(0.1f), 0.0f, 0.3f);
+            });
+        }
+        // the shrubs: whatever low plant stands over 90 cm, grown a little bigger
+        std::vector<int> shrubs;
+        for (Kind k : {GroundPlant, Patch})
+            for (const std::string& id : kinds[k])
+                for (int p : A.byAsset[id])
+                    if (A.protos[size_t(p)].bmax.y - A.protos[size_t(p)].bmin.y >= 0.9f) shrubs.push_back(p);
+        if (!shrubs.empty())
+            grid(1.1f, [&](float x, float z) {
+                const float p = 0.75f * smoothstep(0.5f * walk, half + 2.0f, beyond(x, z));
+                if (p <= 0.0f || streamDistance(x, z) < 1.3f || U(rng) >= p || !free(x, z, 0.3f)) return;
+                put(variant(shrubs), x, z, U(rng) * 6.2832f, 1.2f + 0.7f * U(rng), 0.3f, 0.03f, tintOf(0.12f));
+            });
     }
     lo.y -= 1.0f;
     hi.y += 1.0f;

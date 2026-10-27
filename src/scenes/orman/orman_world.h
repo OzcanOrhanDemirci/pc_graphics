@@ -13,9 +13,10 @@
 
 class OrmanWorld {
 public:
-    float size = 44.0f;       // the ground's side (m), centred on the origin
+    float size = 44.0f;       // the detailed ground's side (m), centred on the origin
     float walk = 30.0f;       // the side of the part one walks in
     float res = 0.05f;        // the ground's vertex spacing (m)
+    float outer = 120.0f;     // the valley around it: a coarser ground rising into hills, so its end never shows (m)
     OProtoCPU ground;
     OProtoCPU water;          // the stream's surface (a ribbon along its line)
     std::vector<OPlace> places;
@@ -41,4 +42,9 @@ private:
     float tile_ = 3.0f;
     unsigned seed_ = 11;
     float streamDepth_ = 0.55f, streamWidth_ = 1.1f, waterDepth_ = 0.16f;
+    float outerRes_ = 0.25f;                       // the valley's vertex spacing (m)
+    float hill_ = 9.0f, hillRun_ = 28.0f;          // the valley's sides: how high, over how far past the patch (m)
+    float bend_ = 0.025f;                          // past the patch the stream bends away (1/m)
+    int ringTrees_ = 20;                           // big trees around the patch, none between it and the sun
+    float sunAzimuth_ = 15.0f;                     // degrees, +x towards +z (the gap the sun comes through)
 };

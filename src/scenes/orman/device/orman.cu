@@ -216,6 +216,9 @@ static __forceinline__ __device__ SH gridSH(float3 p, float3 n) {
     r.ok = false;
     const OGrid& G = params.grid;
     if (!G.sh[0]) return r;
+    // past the grid (the ring and the valley's sides around the walked patch) the light of its nearest face
+    const float3 top = G.origin + make_float3(float(G.nx - 1), float(G.ny - 1), float(G.nz - 1)) * G.h;
+    p = make_float3(fminf(fmaxf(p.x, G.origin.x), top.x), fminf(fmaxf(p.y, G.origin.y), top.y), fminf(fmaxf(p.z, G.origin.z), top.z));
     const float3 q = (p + n * (0.35f * G.h) - G.origin) * (1.0f / G.h);
     const int ix = int(floorf(q.x)), iy = int(floorf(q.y)), iz = int(floorf(q.z));
     const float fx = q.x - ix, fy = q.y - iy, fz = q.z - iz;

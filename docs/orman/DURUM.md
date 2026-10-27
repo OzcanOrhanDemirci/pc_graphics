@@ -5,7 +5,7 @@
 
 ## Özcan: nasıl açılır, ne denenir
 
-- Varlıklar git'te değil: önce `python assets/orman/fetch.py` (indirir, her dosyayı özetiyle denetler; ~0,5 GB).
+- Varlıklar git'te değil: önce `python assets/orman/fetch.py` (indirir, her dosyayı özetiyle denetler; 50 varlık, diskte ~1,2 GB + zipler 0,4 GB).
 - `build\pc_graphics.exe` → galeride **0**, sonra **aşağı ok** (11. sahnenin sayı tuşu yok) → Enter. İlk yükleme
   ~13 sn (taramalar 7 sn, ışık 4 sn).
 - Fare tıklamadan bakar (Tab imleci bırakır), **W A S D** yürür, **Shift** koşar, **Boşluk** zıplar, **C** eğilir.
@@ -41,6 +41,12 @@ Plandaki taşlar sırayla değil, ilk bakışı en çok değiştirenden başlaya
 - **Yerleşim (O3'ün kaba hâli):** sebepli kurallar: devrik gövde derenin üstünde kıyılara dayanır, kayalar kıyıda yarı
   gömülü, taşlar yatakta, ağaçlar ortadaki aralığın dışında, eğreltiler nemli kıyıda yoğun, geniş yapraklılar
   öbekler hâlinde, yosun yatağın ıslak kenarında halı. Gövdeler ve kayalar yürüyüşte engel.
+- **Kenar gizlendi (vadi):** 44 m'lik ayrıntılı zeminin çevresinde 120 m'lik, 25 cm aralıklı ikinci bir zemin; 44 m'nin
+  dışında yamaçlar dengesiz bir eğimle 28 m boyunca 9 m'ye kalkar (dere yatağının üstünde kalkmaz), dere parçanın dışında
+  iki ucunda ters yönlere kıvrılıp gözden çıkar (su şeridi de onunla uzar). Parça birebir aynı kaldı: halkanın kopyaları
+  parçadan sonra yerleşir. Halkada 20 dev ağaç (parçayla güneş arasındaki 35°'lik dilimde yok: ışığın geldiği aralık),
+  yamaçlarda genç ağaçlar, yürünen alanın kenarından (15 m) dışarı göz hizasında bir çalı duvarı (90 cm'yi geçen alçak
+  bitkiler, biraz büyütülmüş: bugün yalnız pachira). Izgaranın dışındaki yüzey ızgaranın en yakın yüzünün ışığını alır.
 
 ### Ölçümler (2026-10-27, RTX 4080)
 
@@ -52,6 +58,7 @@ Plandaki taşlar sırayla değil, ilk bakışı en çok değiştirenden başlaya
 | Yükleme | taramalar 7,4 sn, dünya 0,5 sn, yapılar 0,9 sn, zemin AO 16 ms, ızgara 4,1 sn, güneş hacmi 0,1 sn |
 | 1440p, bakış 0, `--bench 30` | 1 örnek 5,8 ms · **4 örnek 24,2 ms** · 8 örnek 59 ms · 16 örnek 116 ms; pussuz 4 örnek 21,4 ms |
 | Uygulamada (`--autotest-only orman`) | 46,7 FPS, kare 21,3 ms |
+| Vadi ve halka (aynı oturumda `world.outer=44` ile kıyas, 1440p, 4 örnek, `--bench 30`) | bakış 0: 26,6 → 27,9 ms · bakış 1: 17,9 → 19,8 ms; kopya 55.228 → 64.457; yükleme ~+1,3 sn (ızgara 3,3 → 4,4 sn) |
 
 ### Kararlar (plandan sapmalar)
 
@@ -67,8 +74,12 @@ Plandaki taşlar sırayla değil, ilk bakışı en çok değiştirenden başlaya
 1. **Tropikal varlıklar:** Poly Haven'da yağmur ormanı ağacı, palmiye, sarmaşık, monstera, muz, eğrelti ağacı yok;
    bugünkü taç jakaranda ve küçük ağaçlarla "orman" okunuyor, "yağmur ormanı" değil. Sketchfab (CC-BY) için Özcan'ın
    anahtarı gerekiyor (PLAN §6).
-2. **Dünyanın kenarı:** 44 m'lik zeminin bittiği yer ufukta gri bir bant olarak görünüyor (pusla yumuşasa da);
-   çevre halkası daha sık, zemin dışa uzanmalı.
+2. **Güneş beneği greni:** güneşin yaprak arasından süzüldüğü yerlerde tek piksellik parlak benekler var (bakış 1'de
+   gövde ve zemin, vadiye bakınca kıyılar). Kenar işinden önce de vardı, halka ağaçları olmadan da çıkıyor. Olası
+   kaynak (sınanmadı): örnek başına tek gölge ışını; uzaktaki ince yaprakçığın yarı gölgesi pikselden geniş, dört ışın
+   onu ikili açıp kapatıyor. Netlik kuralına aykırı; denenecek yol: gölge ışınlarını çoğaltmak ya da uzak kapanmayı
+   süzülmüş hacimden almak.
+   (Dünyanın kenarı 2026-10-27'de vadiyle kapandı, yukarıda.)
 3. Zemin karışımı (çamur, çakıl, yaprak katmanı), kompozisyon (devrik dev, payanda köklü ağaç), yaprak kenarının üç
    yolu, kör test, kıpırtı ölçümü, elde kamera kipi.
 

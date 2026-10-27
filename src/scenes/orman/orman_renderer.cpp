@@ -412,19 +412,22 @@ void OrmanRenderer::launch(CUdeviceptr rg, unsigned int w, unsigned int h, unsig
 void OrmanRenderer::bakeGroundAO(int proto, float radius, int rays, OBakeStats& st) {
     const double t0 = nowMs();
     const OProto& pr = protosHost_[size_t(proto)];
-    const OGeom& g = geomsHost_[pr.firstGeom];
-    const unsigned int n = geomVerts_[pr.firstGeom];
-    if (!g.ao || !n) return;
     params.aoRadius = radius;
     params.aoRays = rays;
-    for (unsigned int first = 0; first < n; first += 65536u * 64u) {
-        const unsigned int count = std::min(n - first, 65536u * 64u);
-        params.aoPos = g.pos + first;
-        params.aoNrm = g.nrm + first;
-        params.aoOut = const_cast<float*>(g.ao) + first;
-        params.aoCount = count;
-        launch(rgBakeAO_, 65536u, (count + 65535u) / 65536u, 1);
-        CUDA_CHECK(cudaStreamSynchronize(cudaStream_t(stream_)));
+    // every piece of the ground: the walked patch and the valley around it
+    for (unsigned int gi = pr.firstGeom; gi < pr.firstGeom + pr.geomCount; ++gi) {
+        const OGeom& g = geomsHost_[gi];
+        const unsigned int n = geomVerts_[gi];
+        if (!g.ao || !n) continue;
+        for (unsigned int first = 0; first < n; first += 65536u * 64u) {
+            const unsigned int count = std::min(n - first, 65536u * 64u);
+            params.aoPos = g.pos + first;
+            params.aoNrm = g.nrm + first;
+            params.aoOut = const_cast<float*>(g.ao) + first;
+            params.aoCount = count;
+            launch(rgBakeAO_, 65536u, (count + 65535u) / 65536u, 1);
+            CUDA_CHECK(cudaStreamSynchronize(cudaStream_t(stream_)));
+        }
     }
     st.aoMs = nowMs() - t0;
 }
