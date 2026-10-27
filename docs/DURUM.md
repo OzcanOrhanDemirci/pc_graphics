@@ -5,6 +5,12 @@
 > `docs/tanecik/` arşiv.
 
 ## Şu an
+- **2026-10-27 (akşam) · Sahne 11 "Orman" kapandı.** Özcan: *"Tamamdır sorun çözüldü. Sahneyi burada
+  noktalayabiliriz. [...] göze batan hiçbir şey yok. Gayet iyi."* Son hâli: DLSS Ray Reconstruction ile karede tek
+  ışın (titremesiz yürüyüş), katmanlı yoğunluk ve yere düşmüş yapraklar, 44 m'lik tek karonun kopyalarıyla 396 m'lik
+  orman (dere kopyalanmaz, her hücrede kendi şeridi) ve duvarsız simit (kenarlar dikili, dere halka). 1440p DLSS bakış
+  0-3 17-19 ms; uygulamada 45-56 FPS, kart ~8 GB. Yapılmadan kalanlar (tropikal varlıklar, zemin karışımı, kompozisyon,
+  kör test) ve NE DOĞRULANMADI `docs/orman/DURUM.md`'de. Sıradaki: sahne 12 konuşuluyor.
 - **2026-10-27 · Sahne 11 "Orman": yoğunluk, ilk iskelet.** Galeride **11 Orman** (0, sonra aşağı ok; yaprak yeşili
   `#8DBF6A`). Yağmurdan sonra erken sabah, 30 m'lik bir orman parçası; her şey açık lisanslı tarama
   (`python assets/orman/fetch.py`), 55 bin kopya, ~400 milyon kopyalanmış üçgen. Görüntü de OptiX'le (sabit desenli

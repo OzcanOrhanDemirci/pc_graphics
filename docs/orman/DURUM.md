@@ -3,6 +3,12 @@
 > Plan `docs/orman/PLAN.md`; varlıkların kaynağı ve lisansı `docs/orman/VARLIK.md`. Özcan'la etkileşimli ilerleniyor
 > (2026-10-27: *"Sahnede ilerledikçe [...] 11. sahneyi açıp fikirlerimi belirtebilirim"*).
 
+## 🏁 Kapandı (2026-10-27 akşam)
+
+Özcan duvarsız hâlden sonra: *"Tamamdır sorun çözüldü. Sahneyi burada noktalayabiliriz. Senin sırada bekleyenler
+dediğin kısımlar var ama açıkçası göze batan hiçbir şey yok. Gayet iyi. Ondan bu seviye yeterli."* Sahne bugünkü
+hâliyle bitti: aşağıdaki "Yapılmadan kalanlar" kendiliğinden açılmaz, istenirse oradan sürer.
+
 ## Özcan: nasıl açılır, ne denenir
 
 - Varlıklar git'te değil: önce `python assets/orman/fetch.py` (indirir, her dosyayı özetiyle denetler; 50 varlık, diskte ~1,2 GB + zipler 0,4 GB).
@@ -130,14 +136,13 @@ Plandaki taşlar sırayla değil, ilk bakışı en çok değiştirenden başlaya
   ve dere içinde güneşe bakınca suyun beyaza patlaması açık işti; Özcan: *"tam tersi doğallık katmış. Kalsın.
   Yanlışlıkla daha güzel olmuş."* Düzeltilmeyecek.
 
-## Açık işler (sıra Özcan'ın bakışına göre değişir)
+## Yapılmadan kalanlar (sahne kapandı; kendiliğinden açılmaz, istenirse buradan)
 
 1. **Tropikal varlıklar:** Poly Haven'da yağmur ormanı ağacı, palmiye, sarmaşık, monstera, muz, eğrelti ağacı yok;
    bugünkü taç jakaranda ve küçük ağaçlarla "orman" okunuyor, "yağmur ormanı" değil. Sketchfab (CC-BY) için Özcan'ın
    anahtarı gerekiyor (PLAN §6).
-2. **Özcan'ın simide bakışı:** büyük ormana *"Çok güzel olmuş"*, uzaklarda titreme görmedi (2026-10-27); duvarsız
-   hâli ondan sonra geldi, gözle yürüyüşü bekleniyor (en çok: dikişten geçerken bir şey sıçrıyor mu, dere halkası
-   doğal mı).
+2. ~~**Özcan'ın simide bakışı**~~ yapıldı: büyük ormana *"Çok güzel olmuş"*, uzaklarda titreme görmedi; duvarsız
+   hâline *"sorun çözüldü"* (2026-10-27), sahne kapandı.
 3. **Pachira yapraklarının altı koyu** (eski sorun); Özcan'ın dikkatini çekmedi (2026-10-27), öncelik düşük.
 4. Zemin karışımı (çamur, çakıl), kuru dal yığını (`StickSet001` indirildi, kullanılmadı), kompozisyon (devrik dev,
    payanda köklü ağaç), yaprak kenarının üç yolu, kör test, elde kamera kipi.
@@ -149,7 +154,8 @@ kararıyla kaldı.)
 ## NE DOĞRULANMADI
 
 - Yürüyüş, çarpışma ve bakışlar elle canlı denenmedi; yalnız otomatik test (açılış, panel, yardım) ve komut satırı
-  kareleri. Simidin dikişinden elle geçilmedi; yalnız komut satırının üç düz yürüyüşü (`--kararlilik`, 1,5 sn) ölçüldü.
+  kareleri; canlıyı Özcan gezdi (son sözü yukarıda). Simidin dikişinden benim elimle geçilmedi; Özcan'ın geçip
+  geçmediği bilinmiyor; komut satırının üç düz yürüyüşü (`--kararlilik`, 1,5 sn) ölçüldü.
   Pencerenin hücre değişiminde yeniden kurulmasının canlıda takılma yapıp yapmadığı ölçülmedi (87 kopyalık üst IAS,
   tahminen 1 ms'nin altında).
 - Pencerenin (≥ 176 m) kenarının hiçbir yerden görünmediği yalnız dere koridorundaki üç bakışta sınandı.
