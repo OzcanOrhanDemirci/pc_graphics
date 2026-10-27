@@ -153,7 +153,14 @@ void OrmanApp::bakeLight() {
     bake = OBakeStats();
     R.visBytes = 0;
     R.params.patchHalf = 0.5f * world.size;
-    for (const OrmanWorld::AoJob& j : world.aoJobs) R.bakeGroundAO(j.proto, j.at, cfg.f("ao.radius", 0.6f), cfg.i("ao.rays", 48), bake);
+    R.windowReach = 0;
+    if (world.period() > 0.0f) R.placeWindow(0, 0);
+    // each ground's occlusion with the forest gathered round its own cell (a band by the torus's seam sees across it)
+    for (const OrmanWorld::AoJob& j : world.aoJobs) {
+        if (world.period() > 0.0f && (j.i != R.windowI() || j.j != R.windowJ())) R.placeWindow(j.i, j.j);
+        R.bakeGroundAO(j.proto, j.at, cfg.f("ao.radius", 0.6f), cfg.i("ao.rays", 48), bake);
+    }
+    if (R.windowI() != 0 || R.windowJ() != 0) R.placeWindow(0, 0);
     const float h = cfg.f("grid.spacing", 0.3f), top = cfg.f("grid.top", 40.0f), vh = cfg.f("vis.spacing", 0.1f);
     const float half = 0.5f * world.size;
     const float3 zero = make_float3(0, 0, 0);
@@ -167,6 +174,9 @@ void OrmanApp::bakeLight() {
     R.bakeGrid(false, lo, hi, h, zero, cfg.i("grid.rays", 192), cfg.i("grid.passes", 2), bake);
     // the sun in the air: the mist's shafts (up to where the leaves end)
     R.bakeSunVis(false, lo, make_float3(half, std::min(world.hi.y + 1.0f, top), half), vh, zero, bake);
+    // baked with each cell once around the middle; the eye's window may reach further
+    R.windowReach = cfg.i("world.window", world.cells);
+    if (world.period() > 0.0f) R.placeWindow(R.windowI(), R.windowJ());
 }
 
 float3 OrmanApp::forward() const {
@@ -176,6 +186,13 @@ float3 OrmanApp::eye() const { return cam.feet + make_float3(0.0f, cam.eyeHeight
 
 void OrmanApp::render(float dt) {
     OrmanParams& p = R.params;
+    // round the torus: the feet back into its own copy (the same forest there), the cells placed around them
+    cam.feet = world.home(cam.feet);
+    const float W = world.period();
+    if (W > 0.0f) {
+        const int ci = int(std::floor(cam.feet.x / world.size + 0.5f)), cj = int(std::floor(cam.feet.z / world.size + 0.5f));
+        if (ci != R.windowI() || cj != R.windowJ()) R.placeWindow(ci, cj);
+    }
     const float3 f = forward();
     const float3 rt = normalize(cross(f, make_float3(0, 1, 0)));
     const float3 up = cross(rt, f);
@@ -203,6 +220,13 @@ void OrmanApp::render(float dt) {
         };
         p.jitter = make_float2(halton(ph + 1, 2) - 0.5f, halton(ph + 1, 3) - 0.5f);
         p.phase = ph;
+        if (W > 0.0f && havePrev_) {
+            // the last eye's copy nearest this one (over the torus's seam it was a side away)
+            const float3 d = prevEye_ - p.eye;
+            const float3 back = make_float3(W * std::round(d.x / W), 0.0f, W * std::round(d.z / W));
+            prevEye_ = prevEye_ - back;
+            turned_ = turned_ + back;
+        }
         const bool jump = !havePrev_ || length(p.eye - prevEye_) > 0.5f || dot(p.W, prevW_) < 0.9f;
         if (jump) {
             prevEye_ = p.eye;
@@ -221,7 +245,8 @@ void OrmanApp::render(float dt) {
         fr.reset = fr.reset || jump;
         fr.frameMs = dt > 0.0f ? dt * 1000.0f : 16.7f;
         // the eye's matrices, row-major for row vectors (v' = v M): view x right, y up, z ahead; the projection D3D's
-        const float3 r = normalize(p.U), u = normalize(p.V), w = p.W, e = p.eye;
+        // (the eye as if never brought back round the torus: to DLSS the camera goes on)
+        const float3 r = normalize(p.U), u = normalize(p.V), w = p.W, e = p.eye + turned_;
         const float m[16] = {r.x, u.x, w.x, 0, r.y, u.y, w.y, 0, r.z, u.z, w.z, 0, -dot(r, e), -dot(u, e), -dot(w, e), 1};
         const float zn = 0.02f, zf = 1e4f;
         const float c[16] = {1.0f / length(p.U), 0, 0, 0, 0, 1.0f / length(p.V), 0, 0, 0, 0, zf / (zf - zn), 1, 0, 0, -zn * zf / (zf - zn), 0};
@@ -296,11 +321,11 @@ OrmanCam OrmanApp::view(int i) {
 std::string OrmanApp::summary() const {
     char b[1024];
     std::snprintf(b, sizeof(b),
-                  "orman: %zu varlik, %zu prototip, %zu malzeme, doku %.0f MB | kopya %u (ust duzey %u; karo %zu yer, %zu hucre), kopyalanmis ucgen "
+                  "orman: %zu varlik, %zu prototip, %zu malzeme, doku %.0f MB | kopya %u (ust duzey %u; %zu grupta %zu yer, %zu hucre), kopyalanmis ucgen "
                   "%.1f M | GAS %.0f MB, IAS %.1f MB, geometri %.0f MB, izgara %.0f + karo %.0f MB (%zu yoklama, gecerli %%%.0f), gunes hacmi %.0f MB | "
                   "sureler: varlik %.0f ms, dunya %.0f ms, yukleme %.0f ms, AO %.0f ms, izgara %.0f ms, gunes hacmi %.0f ms",
                   loaded.size(), assets.protos.size(), assets.materials.size(), assets.textureBytes() / 1e6, R.instanceCount, R.topInstances,
-                  world.tile.places.size(), world.tile.cells.size(), R.instancedTriangles / 1e6, R.gasBytes / 1e6, R.iasBytes / 1e6, R.geomBytes / 1e6,
+                  world.tile.variants.size(), world.tile.places.size(), world.tile.cells.size(), R.instancedTriangles / 1e6, R.gasBytes / 1e6, R.iasBytes / 1e6, R.geomBytes / 1e6,
                   R.gridBytes / 1e6, R.tileGridBytes / 1e6, bake.probes, 100.0 * double(bake.valid) / double(std::max<size_t>(bake.probes, 1)),
                   R.visBytes / 1e6, assetsMs, worldMs, uploadMs, bake.aoMs, bake.gridMs, bake.visMs);
     return b;

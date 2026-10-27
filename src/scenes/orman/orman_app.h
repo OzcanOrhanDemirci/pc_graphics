@@ -57,6 +57,7 @@ private:
     unsigned int frame_ = 0;            // DLSS: frames since it was turned on (the sub-pixel sequence)
     bool havePrev_ = false;
     float3 prevEye_{0, 0, 0}, prevU_{0, 0, 0}, prevV_{0, 0, 0}, prevW_{0, 0, 1};
+    float3 turned_{0, 0, 0};            // the torus's sides the eye has been brought back by (DLSS sees it go on)
 };
 
 int runOrmanCli(int argc, char** argv);

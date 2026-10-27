@@ -129,8 +129,26 @@ void OrmanWorld::configure(const Config& cfg) {
     sunElevation_ = cfg.f("sun.elevation", sunElevation_);
 }
 
+float3 OrmanWorld::home(float3 p) const {
+    const float W = period();
+    if (W <= 0.0f) return p;
+    p.x -= W * std::floor(p.x / W + 0.5f);
+    p.z -= W * std::floor(p.z / W + 0.5f);
+    return p;
+}
+
+template <class F> float OrmanWorld::roundTorus(float x, F f) const {
+    const float W = period();
+    if (W <= 0.0f) return f(x);
+    x -= W * std::floor(x / W + 0.5f);
+    const float L = size;
+    if (x > 0.5f * W - L) return f(x) + (f(x - W) - f(x)) * smoothstep(-L, L, x - 0.5f * W);
+    if (x < L - 0.5f * W) return f(x + W) + (f(x) - f(x + W)) * smoothstep(-L, L, x + 0.5f * W);
+    return f(x);
+}
+
 float OrmanWorld::streamCentre(float x) const {
-    return 1.8f * std::sin(0.14f * x + 0.6f) + 0.7f * std::sin(0.33f * x + 2.1f) - 1.5f;
+    return roundTorus(x, [](float u) { return 1.8f * std::sin(0.14f * u + 0.6f) + 0.7f * std::sin(0.33f * u + 2.1f) - 1.5f; });
 }
 
 float OrmanWorld::streamDistance(float x, float z) const {
@@ -146,10 +164,14 @@ float OrmanWorld::tileHeight(float x, float z) const {
 }
 
 float OrmanWorld::height(float x, float z) const {
+    const float3 q = home(make_float3(x, 0.0f, z));
+    x = q.x;
+    z = q.z;
     const float d = streamDistance(x, z);
     // the stream's bed: cut down between its banks, with its own small unevenness
     const float carve = streamDepth_ * (1.0f - smoothstep(0.4f * streamWidth_, 1.8f * streamWidth_, d));
-    const float bed = 0.04f * fbm(x * 1.7f, z * 1.7f, 2, seed_ + 13u) * (1.0f - smoothstep(0.0f, 1.5f * streamWidth_, d));
+    const float bed = 0.04f * roundTorus(x, [&](float u) { return fbm(u * 1.7f, z * 1.7f, 2, seed_ + 13u); }) *
+                      (1.0f - smoothstep(0.0f, 1.5f * streamWidth_, d));
     // the forest around the patch: the tile's ground, the banks rising away from the stream over 4 m (by the band's
     // sides it is the tile's again)
     auto world = [&]() { return tileHeight(x, z) - 0.25f * (1.0f - smoothstep(1.0f, 4.0f, d)) - carve + bed; };
@@ -182,21 +204,24 @@ float OrmanWorld::waterLevel(float x) const {
 }
 
 void OrmanWorld::collide(float& x, float& z, float feet, float r) const {
+    // (round the torus: each solid's copy nearest the body)
+    const float W = period();
+    auto nearest = [&](float s, float v) { return W > 0.0f ? s + W * std::round((v - s) / W) : s; };
     for (int it = 0; it < 3; ++it)
         for (const Solid& d : solids) {
             if (d.top < feet + 0.45f) continue;
-            const float dx = x - d.x, dz = z - d.z, dd = dx * dx + dz * dz, rr = r + d.r;
+            const float sx = nearest(d.x, x), sz = nearest(d.z, z);
+            const float dx = x - sx, dz = z - sz, dd = dx * dx + dz * dz, rr = r + d.r;
             if (dd >= rr * rr) continue;
             const float l = std::sqrt(std::max(dd, 1e-8f));
-            x = d.x + dx / l * rr;
-            z = d.z + dz / l * rr;
+            x = sx + dx / l * rr;
+            z = sz + dz / l * rr;
         }
 }
 
 float OrmanWorld::limit() const {
-    // a cell and a half short of the world's end: the eye never sees it through the trees
-    if (cells <= 0) return 0.5f * size - 2.0f;
-    return std::max(0.5f * size - 2.0f, (cells + 0.5f) * size - 1.5f * size);
+    // the patch alone has an edge; the forest of cells goes round
+    return cells <= 0 ? 0.5f * size - 2.0f : 0.0f;
 }
 
 bool OrmanWorld::towardSun(float x, float z) const {
@@ -341,7 +366,7 @@ void OrmanWorld::build(OrmanAssets& A, int groundMaterial, int firstProto, int w
         kinds_[classify(id, h, w)].push_back(id);
         widths_[id] = w;
     }
-    const float half = 0.5f * size, wh = (cells + 0.5f) * size;
+    const float half = 0.5f * size;
     const int n = int(std::round(size / res)) + 1;
     auto H = [&](float x, float z) { return height(x, z); };
     // the patch's ground
@@ -357,22 +382,18 @@ void OrmanWorld::build(OrmanAssets& A, int groundMaterial, int firstProto, int w
         placeAt(places, groundProto);
         aoJobs.push_back({groundProto, make_float3(0, 0, 0)});
     }
-    // the water: a ribbon along the stream at its level, the whole way through the forest; where the banks rise over
-    // it the ground hides it (the shore)
-    if (waterMaterial >= 0) {
+    // the water: a ribbon along the stream at its level, `count` steps of `step` from xa; where the banks rise over it
+    // the ground hides it (the shore). The patch's every 10 cm, each cell of the stream's row its own, coarser
+    auto ribbon = [&](float xa, float step, int count, float zlo, float zhi) {
+        if (waterMaterial < 0) return;
         OProtoCPU water;
         water.asset = "water";
         water.name = "water";
         OMeshCPU w;
-        // every 10 cm along the patch, coarser on either side
-        std::vector<float> xs;
-        for (float x = -wh; x < -half; x += 0.4f) xs.push_back(x);
-        for (int i = 0; i <= int(size / 0.1f); ++i) xs.push_back(-half + i * 0.1f);
-        for (float x = half + 0.4f; x <= wh; x += 0.4f) xs.push_back(x);
-        const int nx = int(xs.size()), nv = 33;
+        const int nx = count + 1, nv = 33;
         const float halfW = 2.2f * streamWidth_;
         for (int i = 0; i < nx; ++i) {
-            const float x = xs[size_t(i)], c = streamCentre(x), y = waterLevel(x);
+            const float x = xa + i * step, c = streamCentre(x), y = waterLevel(x);
             const float dc = (streamCentre(x + 0.05f) - streamCentre(x - 0.05f)) / 0.1f;
             const float il = 1.0f / std::sqrt(1.0f + dc * dc);
             for (int j = 0; j < nv; ++j) {
@@ -391,10 +412,11 @@ void OrmanWorld::build(OrmanAssets& A, int groundMaterial, int firstProto, int w
             }
         w.material = waterMaterial;
         water.geoms.push_back(std::move(w));
-        water.bmin = make_float3(-wh, -2, -wh);
-        water.bmax = make_float3(wh, 2, wh);
+        water.bmin = make_float3(xa, -2, zlo);
+        water.bmax = make_float3(xa + count * step, 2, zhi);
         placeAt(places, addExtra(std::move(water)), OMASK_WATER);
-    }
+    };
+    ribbon(-half, 0.1f, int(std::round(size / 0.1f)), -half, half);
 
     std::mt19937 rng(seed_);
     std::uniform_real_distribution<float> U(0.0f, 1.0f);
@@ -684,6 +706,12 @@ void OrmanWorld::build(OrmanAssets& A, int groundMaterial, int firstProto, int w
 
     // the forest's tile: the same rules without the stream, grown on a ground that wraps
     if (cells > 0) {
+        // what the patch and each cell hold of their own, in `places` (the rest of a cell is the tile's copy)
+        struct Own {
+            int i, j;
+            size_t from;
+        };
+        std::vector<Own> own{{0, 0, 0}};
         std::vector<Solid> tsol;
         std::vector<unsigned char> ttall, band;
         tileLo = make_float3(-half, 1e9f, -half);
@@ -755,13 +783,14 @@ void OrmanWorld::build(OrmanAssets& A, int groundMaterial, int firstProto, int w
         for (int j = -cells; j <= cells; ++j)
             for (int i = -cells; i <= cells; ++i) {
                 if (i == 0 && j == 0) continue;
+                own.push_back({i, j, places.size()});
                 const float ox = i * size, oz = j * size;
                 const bool row = j == 0;
                 bool sunny = false;
                 for (size_t q = 0; q < tile.places.size() && !sunny; ++q)
                     if (ttall[q] && !(row && band[q]) && inSun(tile.places[q].m[3] + ox, tile.places[q].m[11] + oz)) sunny = true;
                 if (!sunny) {
-                    tile.cells.push_back({make_float3(ox, 0.0f, oz), row ? 1 : 0});
+                    tile.cells.push_back({make_float3(ox, 0.0f, oz), row ? 1 : 0, i, j});
                 } else {
                     for (size_t q = 0; q < tile.places.size(); ++q) {
                         if ((row && band[q]) || (ttall[q] && inSun(tile.places[q].m[3] + ox, tile.places[q].m[11] + oz))) continue;
@@ -808,13 +837,32 @@ void OrmanWorld::build(OrmanAssets& A, int groundMaterial, int firstProto, int w
                           [](float) { return 0; }, meshes);
                 const int proto = addExtra(std::move(gp));
                 placeAt(places, proto);
-                aoJobs.push_back({proto, make_float3(0, 0, 0)});
+                aoJobs.push_back({proto, make_float3(0, 0, 0), i, j});
                 addLitter(meshes, make_float3(x0, -2, bandLo_), make_float3(x0 + size, 4, bandHi_), [&](int, int lp) {
                     placeAt(places, lp);
-                    aoJobs.push_back({lp, make_float3(0, 0, 0)});
+                    aoJobs.push_back({lp, make_float3(0, 0, 0), i, j});
                 });
+                ribbon(x0, 0.4f, int(std::round(size / 0.4f)), bandLo_, bandHi_);
                 for (const Solid& s : bsol) solids.push_back(s);
             }
+        // the torus: every cell a copy of the tile (whole, or without the band) and its own as one more group of its
+        // own, where it stands. Its own come first among the places, so their instance ids stay what they were
+        const unsigned nOwn = unsigned(places.size());
+        for (auto& v : tile.variants)
+            for (unsigned& q : v) q += nOwn;
+        places.insert(places.end(), tile.places.begin(), tile.places.end());
+        tile.places = std::move(places);
+        places.clear();
+        for (size_t c = 0; c < own.size(); ++c) {
+            const size_t to = c + 1 < own.size() ? own[c + 1].from : nOwn;
+            if (to <= own[c].from) continue;
+            std::vector<unsigned> g;
+            for (size_t q = own[c].from; q < to; ++q) g.push_back(unsigned(q));
+            tile.variants.push_back(std::move(g));
+            tile.cells.push_back({make_float3(0, 0, 0), int(tile.variants.size()) - 1, own[c].i, own[c].j});
+        }
+        tile.n = 2 * cells + 1;
+        tile.side = size;
     }
 
     // the copies of each asset, every cell's (the litter: its leaves)

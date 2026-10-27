@@ -276,6 +276,8 @@ void OrmanRenderer::upload(const OrmanAssets& assets, const std::vector<OProtoCP
     CUDA_CHECK(cudaDeviceSynchronize());
     for (void* p : world_) cudaFree(p);
     world_.clear();
+    for (void* p : top_) cudaFree(p);
+    top_.clear();
     gasBytes = iasBytes = geomBytes = 0;
     geomsHost_.clear();
     protosHost_.clear();
@@ -359,8 +361,8 @@ void OrmanRenderer::upload(const OrmanAssets& assets, const std::vector<OProtoCP
         world_.push_back(out);
         gas_.push_back(h);
     }
-    // every copy's record by its instance id: those placed in the world (the patch, the stream's row, the cells in the
-    // sun's way), then the tile's own, which its copies reach through the tile's IAS
+    // every copy's record by its instance id: those placed in the world (the patch alone), then the groups' (the
+    // patch, the stream's row, the cells in the sun's way, the tile), which the cells reach through their IAS
     std::vector<OInstance> oinst;
     auto record = [&](const OPlace& pl) {
         OInstance o{};
@@ -382,10 +384,11 @@ void OrmanRenderer::upload(const OrmanAssets& assets, const std::vector<OProtoCP
     };
     instancedTriangles = 0;
     unsigned long long copies = 0;
-    std::vector<OptixInstance> top;
+    fixed_.clear();
+    cells_.clear();
     for (const OPlace& pl : places) {
         if (!valid(pl)) continue;
-        top.push_back(instance(pl, unsigned(oinst.size())));
+        fixed_.push_back(instance(pl, unsigned(oinst.size())));
         record(pl);
         instancedTriangles += protoTris[size_t(pl.proto)];
         ++copies;
@@ -404,34 +407,68 @@ void OrmanRenderer::upload(const OrmanAssets& assets, const std::vector<OProtoCP
             vi.push_back(instance(pl, tileFirst + k));
             tris += protoTris[size_t(pl.proto)];
         }
-        ways.push_back(buildIas(vi));
+        ways.push_back(buildIas(vi, world_, iasBytes));
         wayTris.push_back(tris);
         wayCopies.push_back(vi.size());
     }
     for (const OTile::Cell& c : tile.cells) {
         if (c.variant < 0 || size_t(c.variant) >= ways.size()) continue;
-        OptixInstance oi{};
-        oi.transform[0] = oi.transform[5] = oi.transform[10] = 1.0f;
-        oi.transform[3] = c.offset.x;
-        oi.transform[7] = c.offset.y;
-        oi.transform[11] = c.offset.z;
-        oi.visibilityMask = 0xFFu;   // (the tile's own instances carry the masks)
-        oi.traversableHandle = ways[size_t(c.variant)];
-        top.push_back(oi);
+        cells_.push_back({ways[size_t(c.variant)], c.offset, c.i, c.j});
         instancedTriangles += wayTris[size_t(c.variant)];
         copies += wayCopies[size_t(c.variant)];
     }
+    torusN_ = tile.n;
+    torusSide_ = tile.side;
+    params.period = tile.n > 0 ? float(tile.n) * tile.side : 0.0f;
     instanceCount = unsigned(copies);
-    topInstances = unsigned(top.size());
     params.instances = toDevice(oinst, world_);
     params.geoms = toDevice(geomsHost_, world_);
     params.protos = toDevice(protosHost_, world_);
     params.materials = toDevice(assets.materials, world_);
-    params.handle = buildIas(top);
+    topBytes_ = 0;
+    placeWindow(0, 0);
 }
 
-OptixTraversableHandle OrmanRenderer::buildIas(const std::vector<OptixInstance>& inst) {
-    OptixInstance* dInst = toDevice(inst, world_);
+void OrmanRenderer::placeWindow(int ci, int cj) {
+    CUDA_CHECK(cudaDeviceSynchronize());
+    for (void* p : top_) cudaFree(p);
+    top_.clear();
+    iasBytes -= topBytes_;
+    topBytes_ = 0;
+    windowI_ = ci;
+    windowJ_ = cj;
+    // cell c's copies within `reach` cells of the eye's cell e: the torus sides each is moved by (one each way when the
+    // reach is half the torus; a wider reach brings some twice)
+    const int reach = torusN_ > 0 ? std::max(windowReach, torusN_ / 2) : 0;
+    auto turns = [&](int c, int e) {
+        if (torusN_ <= 0) return std::vector<int>{0};
+        std::vector<int> t;
+        const int lo = int(std::floor(float(e - reach - c) / float(torusN_)));
+        for (int k = lo; c + k * torusN_ <= e + reach; ++k)
+            if (c + k * torusN_ >= e - reach) t.push_back(k);
+        return t;
+    };
+    const float W = float(torusN_) * torusSide_;
+    std::vector<OptixInstance> top = fixed_;
+    for (const CellIas& c : cells_)
+        for (int tx : turns(c.i, ci))
+            for (int tz : turns(c.j, cj)) {
+                OptixInstance oi{};
+                oi.transform[0] = oi.transform[5] = oi.transform[10] = 1.0f;
+                oi.transform[3] = c.offset.x + float(tx) * W;
+                oi.transform[7] = c.offset.y;
+                oi.transform[11] = c.offset.z + float(tz) * W;
+                oi.visibilityMask = 0xFFu;   // (the group's own instances carry the masks)
+                oi.traversableHandle = c.handle;
+                top.push_back(oi);
+            }
+    topInstances = unsigned(top.size());
+    params.handle = buildIas(top, top_, topBytes_);
+    iasBytes += topBytes_;
+}
+
+OptixTraversableHandle OrmanRenderer::buildIas(const std::vector<OptixInstance>& inst, std::vector<void*>& keep, size_t& bytes) {
+    OptixInstance* dInst = toDevice(inst, keep);
     OptixBuildInput bi{};
     bi.type = OPTIX_BUILD_INPUT_TYPE_INSTANCES;
     bi.instanceArray.instances = CUdeviceptr(dInst);
@@ -449,8 +486,8 @@ OptixTraversableHandle OrmanRenderer::buildIas(const std::vector<OptixInstance>&
                                 nullptr, 0));
     CUDA_CHECK(cudaDeviceSynchronize());
     cudaFree(temp);
-    world_.push_back(out);
-    iasBytes += sizes.outputSizeInBytes;
+    keep.push_back(out);
+    bytes += sizes.outputSizeInBytes;
     return h;
 }
 
@@ -746,6 +783,8 @@ void OrmanRenderer::release() {
     params.dlss = 0;
     for (void* p : world_) cudaFree(p);
     world_.clear();
+    for (void* p : top_) cudaFree(p);
+    top_.clear();
     for (void* p : gridBufs_) cudaFree(p);
     gridBufs_.clear();
     for (void* p : tileGridBufs_) cudaFree(p);

@@ -197,10 +197,12 @@ public:
         want = want * (speed * (1.0f - 0.5f * crouch_));
         vel_ += (want - vel_) * (1.0f - std::exp(-dt * 8.0f));
         float3 p = a_.cam.feet + vel_ * dt;
-        // the forest goes on: one stops a cell and a half short of its end, where no look reaches it
+        // the forest goes round (a torus, no end); the patch alone stops at its edge
         const float lim = a_.world.limit();
-        p.x = std::clamp(p.x, -lim, lim);
-        p.z = std::clamp(p.z, -lim, lim);
+        if (lim > 0.0f) {
+            p.x = std::clamp(p.x, -lim, lim);
+            p.z = std::clamp(p.z, -lim, lim);
+        }
         a_.world.collide(p.x, p.z, a_.cam.feet.y, 0.3f);
         const float ground = a_.world.height(p.x, p.z);
         // a body: gravity, a jump from the ground, the feet never under it

@@ -1,7 +1,8 @@
 // Scene 11 "Orman": what the host and the OptiX programs (device/orman.cu) share. The world is instances of open-licence
 // models (docs/orman/VARLIK.md): a prototype (one variant of a model) is one GAS whose build inputs are its glTF
 // primitives; an instance points at its prototype, or (a copy of the forest's tile around the stream's patch) at the
-// tile's own IAS: two levels, the instance id the inner one's. The light is baked (a probe grid of the sky's and the bounces' light,
+// tile's own IAS: two levels, the instance id the inner one's. The cells are a torus (period): what the patch baked is
+// read where the eye's copy of it stands. The light is baked (a probe grid of the sky's and the bounces' light,
 // the ground's own occlusion per vertex); the sun is traced live, one shadow ray a sample (the dapples through the leaves
 // are the forest's life). docs/orman/PLAN.md §3.
 #pragma once
@@ -111,6 +112,7 @@ struct OrmanParams {
     OGrid grid;               // the stream's patch in the middle
     OGrid tileGrid;           // the forest's tile around it (wrap: every copy reads the same probes), or empty
     float patchHalf;          // the patch's half side (m): within it its own grid, outside the tile's
+    float period;             // the torus's side (m): a place and its copies a side apart are one; 0 none
     float giScale;            // the baked light times this (an artistic dial, 1 = physical)
     float aoPower;
     float wetness;            // 0 dry .. 1 just rained: rougher surfaces turn glossy (leaves, stones, bark)

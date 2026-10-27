@@ -8,6 +8,10 @@
 // runs on through the row of cells it crosses, and there a band of each cell is its own (its bed, its banks, its
 // stones) while the rest is the tile. Where the tile's tall trees would stand in the sun's way to the patch, that cell's
 // copies are placed one by one without them.
+//
+// The forest has no edge: its cells are a torus, the last meeting the first (the stream, its bed and its ground go
+// round, blended into their own start over the last cell). One walks on for ever and, going straight, comes back to the
+// stream after the forest's side. The renderer keeps every cell once around the eye (OrmanRenderer::placeWindow).
 #pragma once
 #include "core/config.h"
 #include "scenes/orman/orman_assets.h"
@@ -29,6 +33,7 @@ public:
     struct AoJob {
         int proto;
         float3 at;            // where its vertices stand (the tile's: in the cell its light is baked in)
+        int i = 0, j = 0;     // the cell the forest is gathered around for it (a band by the torus's seam: its own)
     };
     std::vector<AoJob> aoJobs;   // the grounds and litters whose occlusion is baked per vertex
     struct LitterSet {
@@ -54,6 +59,10 @@ public:
     float3 lo{0, 0, 0}, hi{0, 0, 0};    // the patch's bounds (its baked light)
 
     void configure(const Config& cfg);
+    // the torus's side (m; the cells' sides together), 0 for the patch alone (it has an edge)
+    float period() const { return cells > 0 ? float(2 * cells + 1) * size : 0.0f; }
+    // a place brought into the torus's own copy (its middle at the origin): the same ground, the same forest
+    float3 home(float3 p) const;
     float height(float x, float z) const;
     float3 normal(float x, float z) const;
     // the tile's ground at (x, z) in its own copy (its middle at the origin); the world's is the same in every cell but
@@ -61,9 +70,9 @@ public:
     float tileHeight(float x, float z) const;
     // a body of radius r at (x, z) pushed out of the solids it overlaps (whose top is over its knees: feet + 0.45 m)
     void collide(float& x, float& z, float feet, float r) const;
-    float limit() const;                            // how far from the middle one walks, each way (m)
+    float limit() const;                            // how far from the middle one walks, each way (m; 0: no end)
     float streamDistance(float x, float z) const;   // to the stream's middle line (m)
-    float streamCentre(float x) const;              // its z at x
+    float streamCentre(float x) const;              // its z at x (going round with the torus)
     float waterLevel(float x) const;                // the stream's surface at x (smooth down the stream)
     // the patch's ground (prototype `firstProto`, the first of the extras), the water, the litter, the tile and the
     // stream's row
@@ -100,4 +109,7 @@ private:
     void layLitter(const OMeshCPU& g, float x0, float z0, int nx, int nz, bool wrap, float cell, std::mt19937& lr, D density, P piece,
                    std::vector<std::vector<OMeshCPU>>& meshes) const;
     bool towardSun(float x, float z) const;        // within 35 degrees of the sun's bearing from the patch's middle
+    // f(x) made to go round the torus: as it was but over the last cell before its seam, where it blends into its own
+    // value a torus's side on (half of each at the seam itself); the patch keeps its own exactly
+    template <class F> float roundTorus(float x, F f) const;
 };

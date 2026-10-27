@@ -302,12 +302,19 @@ static __forceinline__ __device__ SH gridSample(const OGrid& G, float3 p, float3
     }
     return r;
 }
+// p in the torus's own copy (its middle at the origin): the patch's light and its sun in the air are read there
+static __forceinline__ __device__ float3 home(float3 p) {
+    if (params.period <= 0.0f) return p;
+    const float W = params.period;
+    return make_float3(p.x - W * floorf(p.x / W + 0.5f), p.y, p.z - W * floorf(p.z / W + 0.5f));
+}
 // how far p is inside the stream's patch (m; negative outside)
 static __forceinline__ __device__ float inPatch(float3 p) { return params.patchHalf - fmaxf(fabsf(p.x), fabsf(p.z)); }
 // the baked light around p: inside the patch its own grid, fading into the tile's over its last three metres (the
 // patch was baked with the forest around it, the tile with its own copies); outside the tile's. Where the stream's row
 // cuts its bed below the tile's ground the tile's probes there lie under that ground: the light of those above
 static __forceinline__ __device__ SH gridSH(float3 p, float3 n) {
+    p = home(p);
     const OGrid& P = params.grid;
     const OGrid& T = params.tileGrid;
     const float e = inPatch(p);
@@ -327,6 +334,7 @@ static __forceinline__ __device__ SH gridSH(float3 p, float3 n) {
 }
 // the probe nearest p (the mist's own light), from the grid gridSH would read
 static __forceinline__ __device__ float4 probeNear(float3 p) {
+    p = home(p);
     const OGrid& G = params.grid.sh[0] && (inPatch(p) > 0.0f || !params.tileGrid.sh[0]) ? params.grid : params.tileGrid;
     if (!G.sh[0]) return make_float4(0, 0, 0, 0);
     if (G.wrap) p = intoTile(G, p);
@@ -338,6 +346,7 @@ static __forceinline__ __device__ float4 probeNear(float3 p) {
 }
 // the sun's visibility in the air at p (the patch's volume, outside it the tile's, which wraps)
 static __forceinline__ __device__ float sunInAir(float3 p) {
+    p = home(p);
     if (params.sunVis && (inPatch(p) > 0.0f || !params.tileVis)) {
         const float3 q = (p - params.sunVisOrigin) * params.sunVisInvSize;
         return tex3D<float>(cudaTextureObject_t(params.sunVis), q.x, q.y, q.z);
@@ -464,7 +473,8 @@ static __forceinline__ __device__ float3 seen(float3 o, float3 d, float width0, 
 }
 
 // the stream: its surface rippled by the flow (a few waves drifting down the stream, the same every frame at the same
-// time), the forest mirrored by Fresnel's share, the bed through the water's tea colour, the sun's glint
+// time; round the torus whole waves to its side, so they meet at its seam), the forest mirrored by Fresnel's share, the
+// bed through the water's tea colour, the sun's glint
 static __forceinline__ __device__ float3 water(const Surf& s, float3 d, float t, float spread, int sample, float& reflT) {
     const float tt = params.time * params.waterFlow;
     float dx = 0.0f, dz = 0.0f;
@@ -472,7 +482,12 @@ static __forceinline__ __device__ float3 water(const Surf& s, float3 d, float t,
                                {61.0f, 0.5f, 0.0004f, 3.3f}};
     for (int i = 0; i < 5; ++i) {
         const float k = waves[i][0], ang = waves[i][1], amp = waves[i][2];
-        const float kx = k * cosf(ang), kz = k * sinf(ang);
+        float kx = k * cosf(ang);
+        const float kz = k * sinf(ang);
+        if (params.period > 0.0f) {
+            const float w = 6.2831853f / params.period;
+            kx = w * roundf(kx / w);
+        }
         const float ph = kx * (s.p.x - tt) + kz * s.p.z + waves[i][3];
         const float c = cosf(ph) * amp;
         dx += kx * c;

@@ -1,6 +1,8 @@
-// Scene 11 "Orman": the OptiX side. One GAS per prototype (its primitives as build inputs, compacted), an IAS of the
-// forest's tile (one per way it is cut) and the top IAS of every copy placed in the world and every cell of the tile; the probe grid and the ground's occlusion baked at load; a frame is the render launch (visibility +
-// shading, the sun's shadow rays), the glare pyramid and the display launch.
+// Scene 11 "Orman": the OptiX side. One GAS per prototype (its primitives as build inputs, compacted), an IAS of each
+// group a cell of the forest's torus is made of (the tile, the patch, a band of the stream, a cell in the sun's way)
+// and the top IAS of the cells around the eye, each once (rebuilt as the eye goes from cell to cell); the probe grid
+// and the ground's occlusion baked at load; a frame is the render launch (visibility + shading, the sun's shadow
+// rays), the glare pyramid and the display launch.
 #pragma once
 #include "scenes/orman/orman_assets.h"
 #include "scenes/orman/orman_dlss.h"
@@ -20,16 +22,20 @@ struct OPlace {
     unsigned int mask = OMASK_SOLID;
 };
 
-// the forest's tile around the stream's patch: its own copies (its middle at the origin), the ways it is cut (each a
-// list of its places: all of it, or without the stream's band) and the cells it is copied into
+// the forest around the stream's patch, a torus of n x n cells: the groups its cells are made of (each a list of
+// places, an IAS: the tile whole or without the stream's band, its middle at the origin; the patch, a band, a cell in
+// the sun's way, where they stand) and which group each cell holds where
 struct OTile {
     std::vector<OPlace> places;
     std::vector<std::vector<unsigned>> variants;
     struct Cell {
         float3 offset;
         int variant;
+        int i = 0, j = 0;     // the torus's cell it is in (the middle one 0, 0)
     };
     std::vector<Cell> cells;
+    int n = 0;                // cells to the torus's side (0: no torus, the world's own copies alone)
+    float side = 0.0f;        // a cell's (m)
 };
 
 struct OBakeStats {
@@ -43,7 +49,7 @@ public:
     std::string deviceName;
     size_t gasBytes = 0, iasBytes = 0, geomBytes = 0, gridBytes = 0, tileGridBytes = 0, visBytes = 0;
     unsigned int instanceCount = 0;              // every copy, the tile's in each of its cells
-    unsigned int topInstances = 0;               // the top level's: the world's own and one a tile cell
+    unsigned int topInstances = 0;               // the top level's: the world's own and one a cell's group
     unsigned long long instancedTriangles = 0;   // every copy's triangles: the density the eye sees
     float renderMs = 0.0f, displayMs = 0.0f, dlssMs = 0.0f;
     unsigned int badSamples = 0;                 // the last frame's samples that were not finite
@@ -52,6 +58,12 @@ public:
     bool compile(std::string& log);
     // the prototypes (the ground among them), the copies placed in the world and the tile with its cells
     void upload(const OrmanAssets& assets, const std::vector<OProtoCPU>& extra, const std::vector<OPlace>& places, const OTile& tile);
+    // the torus's cells around the eye's cell (i, j): each once, its copy nearest the eye (the top IAS, rebuilt when
+    // the eye goes into another cell); no look reaches past them
+    void placeWindow(int i, int j);
+    int windowReach = 0;                         // cells each way around the eye's (at least half the torus)
+    int windowI() const { return windowI_; }
+    int windowJ() const { return windowJ_; }
     // a ground's occlusion per vertex (every geometry of prototype `proto` that has one), its vertices standing at `at`
     void bakeGroundAO(int proto, float3 at, float radius, int rays, OBakeStats& st);
     // the probe grid over [lo, hi]: the patch's, or the tile's (whole probes to its side, wrapping; baked first, in its
@@ -108,5 +120,18 @@ private:
     cudaEvent_t evD_ = nullptr;
     void freePlanes();
     void launch(CUdeviceptr rg, unsigned int w, unsigned int h, unsigned int d);
-    OptixTraversableHandle buildIas(const std::vector<OptixInstance>& inst);   // kept in world_
+    OptixTraversableHandle buildIas(const std::vector<OptixInstance>& inst, std::vector<void*>& keep, size_t& bytes);
+    // the top level: the world's own copies and each cell's group, moved round the torus into the window
+    struct CellIas {
+        OptixTraversableHandle handle;
+        float3 offset;
+        int i, j;
+    };
+    std::vector<OptixInstance> fixed_;
+    std::vector<CellIas> cells_;
+    int torusN_ = 0;
+    float torusSide_ = 0.0f;
+    int windowI_ = 0, windowJ_ = 0;
+    std::vector<void*> top_;             // the top IAS's buffers (rebuilt with the window)
+    size_t topBytes_ = 0;
 };
