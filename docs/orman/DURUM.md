@@ -9,6 +9,13 @@
 dediğin kısımlar var ama açıkçası göze batan hiçbir şey yok. Gayet iyi. Ondan bu seviye yeterli."* Sahne bugünkü
 hâliyle bitti: aşağıdaki "Yapılmadan kalanlar" kendiliğinden açılmaz, istenirse oradan sürer.
 
+**Yeniden açılış iptal edildi (2026-10-28).** Sahne 10-27 gecesi "en iyi orman" için yeniden açılmış, ilk adım olarak
+hafif rüzgâr yazılmıştı. Özcan rüzgârı yapay buldu (*"deprem veya bitkiler için su altında gibi"*), sonra yönü
+kapattı: *"yoğunluktan fiziğe ve güzel orman yapmaya döndük. Amacımızdan çıkıyoruz. [...] En son rüzgarsız o sabit ve
+beğendiğim ormana dönelim. Bu sahneyi kapatalım. Orman çok açık uçlu bir sahne."* Sahne bu kapanıştaki hâlinde kalır.
+O denemeden yalnız iki düzeltme ana dalda: T-Rex provasının indirdiği modeller ormana saçılmıyor, `tools/titreme.py`
+değişmeyen referansta sıfıra bölmüyor. Rüzgâr ve planı (ölçümleriyle) yerel `orman-ruzgar` dalında, itilmedi.
+
 ## Özcan: nasıl açılır, ne denenir
 
 - Varlıklar git'te değil: önce `python assets/orman/fetch.py` (indirir, her dosyayı özetiyle denetler; 50 varlık, diskte ~1,2 GB + zipler 0,4 GB).
