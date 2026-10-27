@@ -45,6 +45,10 @@ src/
     kuyu/       sahne 10 · Kuyu (sonsuz kafeste analitik izleyici: kuyu_geom.h kafes, demetlerin fırıldak düzeni, karmalar ve
                 küp simetrileri, kuyu_kernels.* izleyici, tek yönlü duvar, oda içi sekme, yapının ışık tablosu, kuyu_app.*
                 optik tablolar, oda türleri, çarpışma, araçlar (--test o1 o2 o3 o4 fuzz carpisma), kuyu_live.cpp sahne)
+    orman/      sahne 11 · Orman (yoğunluk: açık lisanslı taramaların kopyaları, görüntü de OptiX'le; orman_assets.* glTF ve
+                dokular, alfa kapsaması korunan mip'ler; orman_world.* zemin, dere, sebepli yerleşim, çarpışma diskleri;
+                orman_renderer.* prototip başına GAS, kopyaların IAS'ı, fırınlar; device/orman.cu görünürlük, pişmiş ışık,
+                canlı güneş, pus, su; orman_app.* durum ve araçlar (--bench, --view, --cam); orman_live.cpp sahne)
       particles.*       tanecik çözücüsü (PBF, XPBD bağlar, şekil eşleme, taneler)  surface.* sıvı yüzeyi
       lab_world.*       beş deneyin kurulumu ve adımı (kaba ya da ince)  lab_record.* ince kayıt, işçi iş parçacığı
       lab_kernels.cu    çözücü, kayıt ve çizici arası küçük çekirdekler  weapons.* gerçek yükler, balistik
@@ -134,7 +138,7 @@ değişince uygulama bütün sahnelerin `info()`'sunu yeniden ister. Komut satı
 ## Tasarım dili
 
 - **Koyu, sessiz bir çerçeve, parlak resimler.** Arayüz nötr gri tonlarda; her sahne tek bir vurgu rengi getirir:
-  01 altın (`#E6B566`), 02 soğuk mavi (`#86B3DA`), 03 güvenlik turuncusu (`#E5764A`), 04 deniz yeşili (`#6FC2B4`), 05 deniz mavisi (`#4FB8C8`), 06 lavanta (`#9D8CE0`), 07 gül (`#E08BAE`), 09 ayna camı (`#7FC8C2`). Galeri düğmesi, seçili öğe,
+  01 altın (`#E6B566`), 02 soğuk mavi (`#86B3DA`), 03 güvenlik turuncusu (`#E5764A`), 04 deniz yeşili (`#6FC2B4`), 05 deniz mavisi (`#4FB8C8`), 06 lavanta (`#9D8CE0`), 07 gül (`#E08BAE`), 09 ayna camı (`#7FC8C2`), 11 yaprak yeşili (`#8DBF6A`). Galeri düğmesi, seçili öğe,
   seçici ve ilerleme çubukları o rengi alır.
 - **Tek yazı ailesi, üç ses:** IBM Plex Serif adlar ve başlıklar, Plex Sans metin, Plex Mono sayılar ve tuş kapakları.
   Küçük başlıklar büyük harf ve harf aralıklı (Türkçe büyük harf: i → İ).

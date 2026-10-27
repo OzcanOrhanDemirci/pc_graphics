@@ -1,10 +1,17 @@
 # DURUM · pc_graphics uygulaması
 
 > Uygulamanın tek kaynak durum panosu. Mimari ve yeni sahne ekleme: `docs/MIMARI.md`. Sahnelerin kendi panoları:
-> `docs/altinsaat/`, `docs/fener/`, `docs/yikim/`, `docs/laboratuvar/`, `docs/koy/`, `docs/heykel/`, `docs/olcek/`, `docs/denizalti/`, `docs/ayna/`, `docs/kuyu/` (PLAN.md ve DURUM.md);
+> `docs/altinsaat/`, `docs/fener/`, `docs/yikim/`, `docs/laboratuvar/`, `docs/koy/`, `docs/heykel/`, `docs/olcek/`, `docs/denizalti/`, `docs/ayna/`, `docs/kuyu/`, `docs/orman/` (PLAN.md ve DURUM.md);
 > `docs/tanecik/` arşiv.
 
 ## Şu an
+- **2026-10-27 · Sahne 11 "Orman": yoğunluk, ilk iskelet.** Galeride **11 Orman** (0, sonra aşağı ok; yaprak yeşili
+  `#8DBF6A`). Yağmurdan sonra erken sabah, 30 m'lik bir orman parçası; her şey açık lisanslı tarama
+  (`python assets/orman/fetch.py`), 55 bin kopya, ~400 milyon kopyalanmış üçgen. Görüntü de OptiX'le (sabit desenli
+  görünürlük ışınları, alfa kesimi, kapsaması korunan mip'ler), ışık pişmiş (30 cm'lik L1 SH yoklama ızgarası, zemin
+  AO), güneş canlı gölge ışınıyla, pus ve huzmeler pişmiş güneş hacminden, derede yansıma + kırılma. 1440p 4 örnek
+  24 ms; uygulamada 47 FPS. Uygulamaya ek: otomatik test 10'dan sonraki sahneyi 0 + aşağı okla seçer. Durum, kararlar
+  ve NE DOĞRULANMADI `docs/orman/DURUM.md`.
 - **2026-10-07 (öğleden sonra, otonom) · Sahne 10 "Kuyu": sonsuzluğu dışarıdan izlemek.** Ayna'nın kardeşi, galeride **10 Kuyu** (galeride 0 tuşu). Cam odalardan sonsuz bir kübik kafes; her oda tek yönlü aynadan bir kutu (yarım inç gri cam + 45 nm gümüş film: içeriden %94,5, dışarıdan %4,1, iki yönde %0,7), kendi ışığı ve eşyasıyla (20 tür, 48 simetri); odaların kenarları sonsuza uzanan iplik demetleri (*Interstellar*'ın tesseract'ı). İki oda sütunu arasındaki kuyudan düşülür. Kendi kafes izleyicimiz (CUDA), yapının ışığı dönemli kafeste bir kez kurulan gölgeli tablodan, oda içi görünmezlik sınırına dek. Canlı 33-42 FPS. Ölçümler: lambanın 30. görüntüsü 0,00013 px, duvar tabloları bağımsız hesaba 1e-6, belirlilik ve tarama temiz; kararlılığın (Ö3) ve yapı ışığının fiziğe karşı (Ö4, 0,935) mutlak hedefleri tutmadı (gerekçeleri `docs/kuyu/DURUM.md` başında, NE DOĞRULANMADI ile). **Özcan test etti (*"çok sonsuz hissettiriyor"*), Shift ile üstel hızlanma eklendi (tavan 12.000 m/s); 🏁 sahne tamamlandı (10-07 akşam).**
 - **2026-10-07 (gece, otonom) · Sahne 9 "Ayna": ayna labirenti, en iyi yansıma.** Isı taslağı silindi, yerine galeride **09 Ayna**. Elhamra / Kurtuba kemerli, 60° üçgen ızgarada kompakt bir ayna labirenti; biz krom bir küreyiz, ışığımız renkli ve şiddeti ayarlı, lamba bırakılır, pirinç fenerler, hafif pus. Aynalar ölçülmüş değerlerle (6 mm float cam + gümüş: dik gelişte 0,79 / 0,84 / 0,84, tünelin derini camgöbeği-yeşile döner). Kendi analitik ızgara izleyicimiz (OptiX değil), aynadan duvara ışık için plan görünümünde hüzme ağacı, ışık haritaları. 1440p 6 örnek 30-41 FPS. Ölçümler: tünelin 40. kopyası 0,0001 px, ideal aynadan görüntü doğrudan görüntüyle aynı, aynadan ışık fotonlara karşı 0,990-0,994; kıpırtının mutlak hedefi tutmadı (bu yüzden kırılma başlatılmadı). Ayrıntı, kararlar ve NE DOĞRULANMADI `docs/ayna/DURUM.md` başında. **Özcan kabul, revizesiz (10-07 sabah: "harbiden yansımayı görüyoruz, sonsuzluk hissi de var"); kırılma yapılmayacak.**
 - **2026-10-06 (akşam) · Sahne 9 "Isı": kaba 3B taslak (sonra iptal edildi, 10-07'de silindi).** Bilgisayarın içi bir manzara boyunda (ekran kartı fan duvarı, RAM kuleleri, pompa tapınağı, delikli gök); balkon + dört bestelenmiş bakış + W A S D uçuş. Özcan bakıp karar verecek: ayrıntılı kurulum ya da iptal. Canlı 44,6 fps. `docs/isi/DURUM.md`.

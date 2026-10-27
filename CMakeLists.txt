@@ -107,6 +107,11 @@ add_library(pc_core OBJECT
     src/scenes/kuyu/kuyu_app.cpp
     src/scenes/kuyu/kuyu_live.cpp
     src/scenes/kuyu/kuyu_kernels.cu
+    src/scenes/orman/orman_assets.cpp
+    src/scenes/orman/orman_world.cpp
+    src/scenes/orman/orman_renderer.cpp
+    src/scenes/orman/orman_app.cpp
+    src/scenes/orman/orman_live.cpp
     ${TP}/tinyexr/miniz.c)
 add_executable(pc_graphics src/app/main.cpp $<TARGET_OBJECTS:pc_core>)
 
@@ -119,6 +124,7 @@ foreach(t pc_core pc_graphics)
         ${TP}/glfw/include
         ${TP}/stb
         ${TP}/tinyexr
+        ${TP}/cgltf
         ${TP}/gl)
     target_compile_definitions(${t} PRIVATE
         PROJECT_ROOT="${CMAKE_SOURCE_DIR}"

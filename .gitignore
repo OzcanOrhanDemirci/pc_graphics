@@ -24,3 +24,7 @@ assets/olcek/*
 cache/
 # Scene 8: reference pictures (various licences: private reference, see docs/denizalti/REFERANS.md)
 assets/denizalti/referans/
+
+# Orman: open-licence assets fetched by assets/orman/fetch.py, not committed (sources: docs/orman/VARLIK.md)
+assets/orman/cc0/
+assets/orman/_dl/
