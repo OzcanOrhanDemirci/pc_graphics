@@ -34,4 +34,6 @@ for d in sys.argv[1:]:
     rf = sorted(glob.glob(os.path.join(d, "ref_*.png")))
     a, a99 = second(lv)
     b, b99 = second(rf)
-    print(f"{d}: canli {a:.5f} (p99 {a99:.4f})  referans {b:.5f} (p99 {b99:.4f})  oran {a / b:.2f}")
+    # (hiçbir şeyin kıpırdamadığı bir yolda referans hiç değişmez: oran yok)
+    oran = f"{a / b:.2f}" if b > 0 else "yok (referans durgun)"
+    print(f"{d}: canli {a:.5f} (p99 {a99:.4f})  referans {b:.5f} (p99 {b99:.4f})  oran {oran}")
