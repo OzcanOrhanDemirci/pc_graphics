@@ -74,6 +74,7 @@ bool OrmanRenderer::init(int width, int height, const std::string& root) {
     CUDA_CHECK(cudaEventCreate(&ev0_));
     CUDA_CHECK(cudaEventCreate(&ev1_));
     CUDA_CHECK(cudaEventCreate(&ev2_));
+    CUDA_CHECK(cudaEventCreate(&evD_));
     OPTIX_CHECK(optixInit());
     OptixDeviceContextOptions o{};
     o.logCallbackFunction = optixLog;
@@ -538,9 +539,96 @@ void OrmanRenderer::bakeSunVis(float3 lo, float3 hi, float h, OBakeStats& st) {
     st.visMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
 }
 
+void OrmanRenderer::freePlanes() {
+    for (Plane& p : planes_) {
+        if (p.surf) cudaDestroySurfaceObject(p.surf);
+        if (p.tex) cudaDestroyTextureObject(p.tex);
+        if (p.arr) cudaFreeArray(p.arr);
+        p = Plane();
+    }
+}
+
+bool OrmanRenderer::enableDlss(bool on) {
+    if (on == dlssOn_) return true;
+    CUDA_CHECK(cudaStreamSynchronize(cudaStream_t(stream_)));
+    dlssOn_ = false;
+    params.dlss = 0;
+    params.lodBias = 0.0f;
+    dlss_.release();
+    freePlanes();
+    if (!on) return true;
+    // the planes as DLSS reads them: CUDA arrays behind a point-sampled texture (inputs) and a surface (written)
+    const cudaChannelFormatDesc f4 = cudaCreateChannelDesc<float4>(), f2 = cudaCreateChannelDesc<float2>(), f1 = cudaCreateChannelDesc<float>();
+    const cudaChannelFormatDesc fmt[kPlanes] = {f4, f4, f4, f4, f1, f1, f2, f1, f4};
+    for (int k = 0; k < kPlanes; ++k) {
+        Plane& p = planes_[k];
+        if (cudaMallocArray(&p.arr, &fmt[k], size_t(width_), size_t(height_), cudaArraySurfaceLoadStore) != cudaSuccess) {
+            cudaGetLastError();
+            freePlanes();
+            dlssError = "DLSS icin bellek yok";
+            return false;
+        }
+        cudaResourceDesc rd{};
+        rd.resType = cudaResourceTypeArray;
+        rd.res.array.array = p.arr;
+        cudaTextureDesc td{};
+        td.addressMode[0] = td.addressMode[1] = cudaAddressModeClamp;
+        td.filterMode = cudaFilterModePoint;
+        td.readMode = cudaReadModeElementType;
+        td.normalizedCoords = 0;
+        CUDA_CHECK(cudaCreateTextureObject(&p.tex, &rd, &td, nullptr));
+        CUDA_CHECK(cudaCreateSurfaceObject(&p.surf, &rd));
+    }
+    if (!dlss_.init(width_, height_, stream_)) {
+        dlssError = dlss_.error;
+        freePlanes();
+        return false;
+    }
+    dlssError.clear();
+    params.gColor = planes_[0].surf;
+    params.gAlbedo = planes_[1].surf;
+    params.gSpecular = planes_[2].surf;
+    params.gNormal = planes_[3].surf;
+    params.gRough = planes_[4].surf;
+    params.gDepth = planes_[5].surf;
+    params.gMotion = planes_[6].surf;
+    params.gHitT = planes_[7].surf;
+    params.dlss = 1;
+    // textures one level finer than the pixel (the guide's DLAA bias): the frames gather the detail
+    params.lodBias = -1.0f;
+    dlssOn_ = true;
+    return true;
+}
+
 void OrmanRenderer::render() {
     CUDA_CHECK(cudaEventRecord(ev0_, cudaStream_t(stream_)));
     launch(rgRender_, params.width, params.height, 1);
+    CUDA_CHECK(cudaEventRecord(evD_, cudaStream_t(stream_)));
+    dlssMs = 0.0f;
+    if (dlssOn_ && params.dlss) {
+        OrmanDlssFrame& f = dlssFrame;
+        f.color = planes_[0].tex;
+        f.albedo = planes_[1].tex;
+        f.specular = planes_[2].tex;
+        f.normal = planes_[3].tex;
+        f.rough = planes_[4].tex;
+        f.depth = planes_[5].tex;
+        f.motion = planes_[6].tex;
+        f.hitT = planes_[7].tex;
+        f.output = planes_[8].surf;
+        // NGX does not run in our stream's order: the guides finished before it reads them, its picture before the copy
+        CUDA_CHECK(cudaStreamSynchronize(cudaStream_t(stream_)));
+        const bool ok = dlss_.evaluate(f);
+        CUDA_CHECK(cudaDeviceSynchronize());
+        if (ok) {
+            // its picture where the fixed samples' would be: the glare and the display read it from there
+            CUDA_CHECK(cudaMemcpy2DFromArrayAsync(params.hdr, size_t(width_) * sizeof(float4), planes_[8].arr, 0, 0, size_t(width_) * sizeof(float4),
+                                                  size_t(height_), cudaMemcpyDeviceToDevice, cudaStream_t(stream_)));
+        } else {
+            dlssError = dlss_.error;
+        }
+        f.reset = false;
+    }
     CUDA_CHECK(cudaEventRecord(ev1_, cudaStream_t(stream_)));
     if (params.bloomStrength > 0.0f) {
         launchBloom(params.hdr, width_, height_, levels_, accum_, kLevels, cudaStream_t(stream_));
@@ -552,6 +640,7 @@ void OrmanRenderer::render() {
     CUDA_CHECK(cudaEventRecord(ev2_, cudaStream_t(stream_)));
     CUDA_CHECK(cudaEventSynchronize(ev2_));
     cudaEventElapsedTime(&renderMs, ev0_, ev1_);
+    if (dlssOn_ && params.dlss) cudaEventElapsedTime(&dlssMs, evD_, ev1_);
     cudaEventElapsedTime(&displayMs, ev1_, ev2_);
     cudaMemcpy(&badSamples, params.badCount, sizeof(unsigned int), cudaMemcpyDeviceToHost);
     cudaMemsetAsync(params.badCount, 0, sizeof(unsigned int), cudaStream_t(stream_));
@@ -570,6 +659,10 @@ std::vector<float4> OrmanRenderer::hdrHost() const {
 
 void OrmanRenderer::release() {
     if (context_) cudaDeviceSynchronize();
+    dlss_.release();
+    freePlanes();
+    dlssOn_ = false;
+    params.dlss = 0;
     for (void* p : world_) cudaFree(p);
     world_.clear();
     for (void* p : gridBufs_) cudaFree(p);
@@ -604,7 +697,7 @@ void OrmanRenderer::release() {
     pipeline_ = nullptr;
     module_ = nullptr;
     context_ = nullptr;
-    for (cudaEvent_t* e : {&ev0_, &ev1_, &ev2_})
+    for (cudaEvent_t* e : {&ev0_, &ev1_, &ev2_, &evD_})
         if (*e) {
             cudaEventDestroy(*e);
             *e = nullptr;

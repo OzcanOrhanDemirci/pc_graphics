@@ -43,6 +43,13 @@ for f in exr_reader.hh streamreader.hh; do [ -f tinyexr/$f ] || curl -sSL -o tin
 # glTF 2.0 reader for scene 11's open-licence models (MIT)
 mkdir -p cgltf
 [ -f cgltf/cgltf.h ] || curl -sSL -o cgltf/cgltf.h https://raw.githubusercontent.com/jkuhlmann/cgltf/v1.15/cgltf.h
+# NVIDIA's DLSS SDK (NGX; NVIDIA RTX SDK licence, see dlss/LICENSE.txt): scene 11's Ray Reconstruction through NGX's
+# CUDA path. Only the headers, the loader library and the release runtime DLLs
+if [ ! -d dlss ]; then
+  git clone -q --depth 1 --branch v310.9.1 --filter=blob:none --sparse https://github.com/NVIDIA/DLSS.git dlss
+  git -C dlss sparse-checkout set include lib/Windows_x86_64/x64 lib/Windows_x86_64/rel
+  echo "dlss: v310.9.1"
+fi
 # OpenGL 4.6 enums and function types for scene 8's raster path (Khronos registry)
 mkdir -p gl/GL gl/KHR
 [ -f gl/GL/glext.h ] || curl -sSL -o gl/GL/glext.h https://registry.khronos.org/OpenGL/api/GL/glext.h

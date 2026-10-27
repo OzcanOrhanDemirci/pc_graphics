@@ -11,6 +11,7 @@
 #endif
 
 #define ORMAN_MAX_SPP 16
+#define ORMAN_PHASES 16       // DLSS: frames before the sub-pixel sequence repeats (the guide asks 8 or more for DLAA)
 #define ORMAN_MAX_INPUTS 16   // primitives a prototype may have (its GAS's build inputs; that many identical hit records)
 
 // one glTF primitive (a build input of its prototype's GAS), in the prototype's own space
@@ -83,6 +84,15 @@ struct OrmanParams {
     int spp;
     float2 pattern[ORMAN_MAX_SPP];   // sub-pixel offsets from the pixel's centre (pixels), the filter's own distribution
     float covBias;            // a leaf's coverage read this many levels above the sample's own (the pixel's reach)
+    float lodBias;            // texture levels finer by this (DLSS gathers the frames: it samples finer)
+
+    // DLSS Ray Reconstruction (orman_dlss.h): one sample a pixel at this frame's place in it, the guides it reads
+    int dlss;
+    float2 jitter;            // this frame's sample in the pixel (pixels from its centre)
+    unsigned int phase;       // its place in the sequence (0 .. ORMAN_PHASES - 1): the sun's disk point, the mist's step,
+                              // the alpha threshold turn with it
+    float3 prevEye, prevU, prevV, prevW;   // the last frame's eye (the motion vectors)
+    unsigned long long gColor, gAlbedo, gSpecular, gNormal, gRough, gDepth, gMotion, gHitT;   // cudaSurfaceObject_t
 
     // the world
     const OGeom* geoms;

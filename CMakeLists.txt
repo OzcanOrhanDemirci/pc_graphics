@@ -112,6 +112,7 @@ add_library(pc_core OBJECT
     src/scenes/orman/orman_renderer.cpp
     src/scenes/orman/orman_app.cpp
     src/scenes/orman/orman_live.cpp
+    src/scenes/orman/orman_dlss.cpp
     ${TP}/tinyexr/miniz.c)
 add_executable(pc_graphics src/app/main.cpp $<TARGET_OBJECTS:pc_core>)
 
@@ -147,6 +148,20 @@ foreach(t pc_graphics)
         ${TP}/glfw/lib-vc2022/glfw3.lib
         opengl32 advapi32 user32 gdi32 shell32 winmm)
 endforeach()
+
+# Scene 11's DLSS Ray Reconstruction (NGX, CUDA path), when third_party/fetch.sh has brought the SDK: its loader
+# library linked, its runtime DLL next to the executable
+if(EXISTS ${TP}/dlss/include/nvsdk_ngx.h)
+    foreach(t pc_core pc_graphics)
+        target_include_directories(${t} PRIVATE ${TP}/dlss/include)
+        target_compile_definitions(${t} PRIVATE ORMAN_DLSS)
+    endforeach()
+    target_link_libraries(pc_graphics PRIVATE ${TP}/dlss/lib/Windows_x86_64/x64/nvsdk_ngx_d.lib)
+    add_custom_command(TARGET pc_graphics POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${TP}/dlss/lib/Windows_x86_64/rel/nvngx_dlssd.dll
+            $<TARGET_FILE_DIR:pc_graphics>)
+endif()
 
 # NVRTC is loaded at run time: keep its DLLs next to the executables (both live in build/).
 add_custom_command(TARGET pc_graphics POST_BUILD

@@ -178,7 +178,7 @@ static __forceinline__ __device__ Surf surface(const Hit& h, float3 o, float3 d,
     const float2 t0 = g.uv[tri.x] * g.uvScale, t1 = g.uv[tri.y] * g.uvScale, t2 = g.uv[tri.z] * g.uvScale;
     const float2 uv = lerp2(t0, t1, t2, h.b);
     const float cosT = fabsf(dot(ng, d));
-    s.lod = fmaxf(0.0f, coneLod(q0, q1, q2, t0, t1, t2, in.scale, m.texelArea, width, cosT));
+    s.lod = fmaxf(0.0f, coneLod(q0, q1, q2, t0, t1, t2, in.scale, m.texelArea, width, cosT) + params.lodBias);
     if (m.albedo) {
         const float4 a = tex2DLod<float4>(cudaTextureObject_t(m.albedo), uv.x, uv.y, s.lod);
         s.albedo = make_float3(a.x, a.y, a.z) * m.tint * in.tint;
@@ -422,7 +422,7 @@ static __forceinline__ __device__ float3 seen(float3 o, float3 d, float width0, 
 
 // the stream: its surface rippled by the flow (a few waves drifting down the stream, the same every frame at the same
 // time), the forest mirrored by Fresnel's share, the bed through the water's tea colour, the sun's glint
-static __forceinline__ __device__ float3 water(const Surf& s, float3 d, float t, float spread, int sample) {
+static __forceinline__ __device__ float3 water(const Surf& s, float3 d, float t, float spread, int sample, float& reflT) {
     const float tt = params.time * params.waterFlow;
     float dx = 0.0f, dz = 0.0f;
     const float waves[5][4] = {{9.0f, 0.3f, 0.0035f, 0.0f}, {14.0f, -0.6f, 0.0022f, 1.3f}, {23.0f, 0.9f, 0.0013f, 2.1f}, {37.0f, -0.2f, 0.0008f, 0.7f},
@@ -443,6 +443,7 @@ static __forceinline__ __device__ float3 water(const Surf& s, float3 d, float t,
     const float3 r = n * (2.0f * dot(n, v)) - v;
     float tr;
     float3 c = seen(s.p + n * 0.002f, r.y > 0.01f ? r : normalize(make_float3(r.x, 0.01f, r.z)), width0, spread, sample, tr) * F;
+    reflT = tr;
     // through it: Snell's window, then the tea-coloured water to the bed
     const float eta = 1.0f / 1.333f;
     const float k = 1.0f - eta * eta * (1.0f - cosi * cosi);
@@ -468,11 +469,94 @@ static __forceinline__ __device__ float3 water(const Surf& s, float3 d, float t,
 }
 
 // ---------------------------------------------------------------------------------------------------------------
+// DLSS Ray Reconstruction (orman_dlss.h): one sample at this frame's place in the pixel and the guides DLSS-RR reads
+
+// the share of light a surface reflects as a mirror would, seen from NoV (Karis's fit of the split sum, F0 4%)
+static __forceinline__ __device__ float specAlbedo(float NoV, float rough) {
+    const float rx = -rough + 1.0f, ry = -0.0275f * rough + 0.0425f, rz = -0.572f * rough + 1.04f, rw = 0.022f * rough - 0.04f;
+    const float a004 = fminf(rx * rx, exp2f(-9.28f * NoV)) * rx + ry;
+    return 0.04f * (-1.04f * a004 + rz) + (1.04f * a004 + rw);
+}
+
+// where q (a point less the last eye, or a direction: the sky) was in the last frame's picture (pixels, top left 0)
+static __forceinline__ __device__ bool prevPixel(float3 q, float2& pix) {
+    const float z = dot(q, params.prevW);
+    if (z <= 1e-6f) return false;
+    const float x = dot(q, params.prevU) / (dot(params.prevU, params.prevU) * z);
+    const float y = dot(q, params.prevV) / (dot(params.prevV, params.prevV) * z);
+    pix = make_float2((x + 1.0f) * 0.5f * float(params.width), (1.0f - y) * 0.5f * float(params.height));
+    return true;
+}
+
+static __forceinline__ __device__ void renderDlss(unsigned int px, unsigned int py) {
+    const float cx = float(px) + 0.5f + params.jitter.x, cy = float(py) + 0.5f + params.jitter.y;
+    const float x = cx / float(params.width) * 2.0f - 1.0f, y = 1.0f - cy / float(params.height) * 2.0f;
+    const float3 d = normalize(params.W + params.U * x + params.V * y);
+    // the sample's place in the sequences (the sun's disk point, the alpha threshold, the mist's step): this frame's,
+    // turned by the pixel's place in a 4 x 4 Bayer tile, so every tile holds all sixteen each frame. Turned together
+    // over the whole picture, a sunlit patch would brighten and darken as one, and DLSS would follow it as a change of
+    // the light; scattered over the tile it is noise, which it gathers away
+    const int bayer[16] = {0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5};
+    const int k = int((params.phase + unsigned(bayer[(py & 3u) * 4u + (px & 3u)])) % ORMAN_PHASES);
+    const float spread = params.pixelAngle;
+    const Hit h = trace(params.eye, d, 0.02f, 1e4f, 0.0f, spread, ORAY_SAMPLE(k, ORMAN_PHASES));
+    float T;
+    const float3 fog = mist(params.eye, d, h.hit ? h.t : 1e4f, k, T);
+    // the sky's guides as the guide asks: a grey albedo, no mirror, no normal, far away
+    float3 c, albedo = make_float3(0.5f, 0.5f, 0.5f), n = make_float3(0, 0, 0);
+    float spec = 0.0f, rough = 0.0f, depth = 1e4f, hitT = 65504.0f;
+    float3 q = d;
+    if (!h.hit) {
+        c = sky(d) * T + fog;
+    } else {
+        const Surf s = surface(h, params.eye, d, h.t * spread);
+        const float ndv = fmaxf(dot(s.n, -d), 0.0f);
+        if (s.flags & OMAT_WATER) {
+            // the stream's surface: its mirror is what the eye follows (depth, normal and the reflection's length)
+            float reflT = 0.0f;
+            c = water(s, d, h.t, spread, k, reflT);
+            albedo = make_float3(0.05f, 0.05f, 0.05f);
+            spec = 0.02f + 0.98f * powf(1.0f - ndv, 5.0f);
+            rough = 0.02f;
+            hitT = reflT;
+        } else {
+            c = shade(s, d, k);
+            albedo = s.albedo;
+            spec = specAlbedo(ndv, s.rough);
+            rough = s.rough;
+            hitT = 0.0f;   // the wet sheen is the baked light's broad lobe: it moves with the surface
+        }
+        c = c * T + fog;
+        n = s.n;
+        depth = h.t * dot(d, params.W);
+        q = s.p - params.prevEye;
+    }
+    if (!(isfinite(c.x) && isfinite(c.y) && isfinite(c.z))) {
+        c = make_float3(0, 0, 0);
+        if (params.badCount) atomicAdd(params.badCount, 1u);
+    }
+    float2 mv = make_float2(0, 0), pp;
+    if (prevPixel(q, pp)) mv = make_float2(pp.x - cx, pp.y - cy);
+    surf2Dwrite(make_float4(c.x, c.y, c.z, 1.0f), cudaSurfaceObject_t(params.gColor), int(px * sizeof(float4)), int(py));
+    surf2Dwrite(make_float4(albedo.x, albedo.y, albedo.z, 1.0f), cudaSurfaceObject_t(params.gAlbedo), int(px * sizeof(float4)), int(py));
+    surf2Dwrite(make_float4(spec, spec, spec, 1.0f), cudaSurfaceObject_t(params.gSpecular), int(px * sizeof(float4)), int(py));
+    surf2Dwrite(make_float4(n.x, n.y, n.z, 0.0f), cudaSurfaceObject_t(params.gNormal), int(px * sizeof(float4)), int(py));
+    surf2Dwrite(rough, cudaSurfaceObject_t(params.gRough), int(px * sizeof(float)), int(py));
+    surf2Dwrite(depth, cudaSurfaceObject_t(params.gDepth), int(px * sizeof(float)), int(py));
+    surf2Dwrite(mv, cudaSurfaceObject_t(params.gMotion), int(px * sizeof(float2)), int(py));
+    surf2Dwrite(hitT, cudaSurfaceObject_t(params.gHitT), int(px * sizeof(float)), int(py));
+}
+
+// ---------------------------------------------------------------------------------------------------------------
 extern "C" __global__ void __raygen__render() {
     const uint3 li = optixGetLaunchIndex();
     const unsigned int px = li.x, py = li.y;
     if (params.layout != sizeof(OrmanParams)) {
         params.hdr[py * params.width + px] = make_float4(1, 0, 1, 1);
+        return;
+    }
+    if (params.dlss) {
+        renderDlss(px, py);
         return;
     }
     const float spread = params.pixelAngle * rsqrtf(float(params.spp));
@@ -490,7 +574,8 @@ extern "C" __global__ void __raygen__render() {
             continue;
         }
         const Surf s = surface(h, params.eye, d, h.t * spread);
-        const float3 c = ((s.flags & OMAT_WATER) ? water(s, d, h.t, spread, k) : shade(s, d, k)) * T + fog;
+        float reflT;
+        const float3 c = ((s.flags & OMAT_WATER) ? water(s, d, h.t, spread, k, reflT) : shade(s, d, k)) * T + fog;
         // a sample that is not finite would spread over the glare pyramid as a black square: dropped and counted
         if (isfinite(c.x) && isfinite(c.y) && isfinite(c.z)) acc += c;
         else if (params.badCount) atomicAdd(params.badCount, 1u);

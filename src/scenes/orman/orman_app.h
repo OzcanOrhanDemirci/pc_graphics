@@ -40,6 +40,8 @@ public:
     void bakeLight();
     void applyLight();                 // the sun, the sky and the display settings from cfg to the renderer
     void render(float dt = 0.0f);
+    // DLSS Ray Reconstruction on or off (false: off, R.dlssError says why when it was asked for)
+    bool setDlss(bool on);
     bool save(const std::string& pathNoExt);
     float3 eye() const;
     float3 forward() const;
@@ -52,6 +54,9 @@ private:
     int groundMaterial_ = -1, waterMaterial_ = -1;
     double clock_ = 0.0;
     float adaptLum_ = -1.0f;
+    unsigned int frame_ = 0;            // DLSS: frames since it was turned on (the sub-pixel sequence)
+    bool havePrev_ = false;
+    float3 prevEye_{0, 0, 0}, prevU_{0, 0, 0}, prevV_{0, 0, 0}, prevW_{0, 0, 1};
 };
 
 int runOrmanCli(int argc, char** argv);

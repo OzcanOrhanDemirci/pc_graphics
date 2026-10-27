@@ -160,7 +160,55 @@ void OrmanApp::render(float dt) {
     p.exposure = std::exp2(cfg.f("exposure", 0.0f) + exposureEv) * (autoOn ? autoExposure : 1.0f);
     clock_ += dt;
     p.time = float(clock_);
+    if (R.dlssOn() && p.dlss) {
+        // this frame's place in the pixel (Halton 2, 3: the sequence DLSS was trained on) and the last frame's eye; a
+        // jump (a view key, the start) drops the history
+        const unsigned int ph = frame_++ % ORMAN_PHASES;
+        auto halton = [](unsigned int i, unsigned int b) {
+            float f = 1.0f, r = 0.0f;
+            for (; i > 0; i /= b) {
+                f /= float(b);
+                r += f * float(i % b);
+            }
+            return r;
+        };
+        p.jitter = make_float2(halton(ph + 1, 2) - 0.5f, halton(ph + 1, 3) - 0.5f);
+        p.phase = ph;
+        const bool jump = !havePrev_ || length(p.eye - prevEye_) > 0.5f || dot(p.W, prevW_) < 0.9f;
+        if (jump) {
+            prevEye_ = p.eye;
+            prevU_ = p.U;
+            prevV_ = p.V;
+            prevW_ = p.W;
+        }
+        p.prevEye = prevEye_;
+        p.prevU = prevU_;
+        p.prevV = prevV_;
+        p.prevW = prevW_;
+        OrmanDlssFrame& fr = R.dlssFrame;
+        // DLSS's jitter is the picture's shift: the opposite of where the sample sits
+        fr.jitterX = -p.jitter.x;
+        fr.jitterY = -p.jitter.y;
+        fr.reset = fr.reset || jump;
+        fr.frameMs = dt > 0.0f ? dt * 1000.0f : 16.7f;
+        // the eye's matrices, row-major for row vectors (v' = v M): view x right, y up, z ahead; the projection D3D's
+        const float3 r = normalize(p.U), u = normalize(p.V), w = p.W, e = p.eye;
+        const float m[16] = {r.x, u.x, w.x, 0, r.y, u.y, w.y, 0, r.z, u.z, w.z, 0, -dot(r, e), -dot(u, e), -dot(w, e), 1};
+        const float zn = 0.02f, zf = 1e4f;
+        const float c[16] = {1.0f / length(p.U), 0, 0, 0, 0, 1.0f / length(p.V), 0, 0, 0, 0, zf / (zf - zn), 1, 0, 0, -zn * zf / (zf - zn), 0};
+        for (int k = 0; k < 16; ++k) {
+            fr.worldToView[k] = m[k];
+            fr.viewToClip[k] = c[k];
+        }
+    }
     R.render();
+    if (R.dlssOn() && p.dlss) {
+        prevEye_ = p.eye;
+        prevU_ = p.U;
+        prevV_ = p.V;
+        prevW_ = p.W;
+        havePrev_ = true;
+    }
     if (autoOn) {
         // the eye's adaptation: the frame's mean log brightness on a sparse grid (centre-weighted), followed over a
         // second or so; the picture's key 0.16 at the mean
@@ -185,6 +233,17 @@ void OrmanApp::render(float dt) {
         else adaptLum_ += (lum - adaptLum_) * (1.0f - std::exp(-dt / 1.2f));
         autoExposure = std::clamp(cfg.f("exposure.key", 0.16f) / std::max(adaptLum_, 1e-4f), cfg.f("exposure.min", 0.05f), cfg.f("exposure.max", 40.0f));
     }
+}
+
+bool OrmanApp::setDlss(bool on) {
+    // the sequences (the sun's disk points, the mist's steps, the alpha thresholds) need all sixteen places
+    if (on) R.setPattern(ORMAN_PHASES, cfg.f("filter.sigma", 0.42f));
+    const bool ok = R.enableDlss(on);
+    if (ok && on) R.params.covBias = 0.6f;   // one sample a pixel: the leaf's coverage over the pixel's own reach
+    frame_ = 0;
+    havePrev_ = false;
+    R.dlssFrame.reset = true;
+    return ok && on;
 }
 
 bool OrmanApp::save(const std::string& pathNoExt) {
@@ -269,6 +328,10 @@ int runOrmanCli(int argc, char** argv) {
         return 1;
     }
     a.bakeLight();
+    if (a.cfg.i("dlss", 1) != 0) {
+        if (a.setDlss(true)) std::printf("orman: DLSS-RR acik (DLAA, piksel basina bir ornek)\n");
+        else std::printf("orman: DLSS-RR kapali: %s\n", a.R.dlssError.c_str());
+    }
     std::printf("%s\n", a.summary().c_str());
     std::error_code ec;
     fs::create_directories(fs::path(a.root) / fs::path(out).parent_path(), ec);
@@ -277,8 +340,9 @@ int runOrmanCli(int argc, char** argv) {
         a.cam = c;
         a.world.collide(a.cam.feet.x, a.cam.feet.z, -1e9f, 0.3f);
         a.cam.feet.y = a.world.height(a.cam.feet.x, a.cam.feet.z);
-        // the eye's adaptation settled: a few frames
-        for (int k = 0; k < 4; ++k) a.render(0.0f);
+        // the eye's adaptation settled: a few frames (DLSS: its history filled, three rounds of the sequence)
+        const int settle = a.R.dlssOn() ? 3 * ORMAN_PHASES : 4;
+        for (int k = 0; k < settle; ++k) a.render(0.0f);
         a.render(0.0f);
         const std::string path = (fs::path(a.root) / (out + "_" + name)).generic_string();
         a.save(path);
@@ -306,7 +370,7 @@ int runOrmanCli(int argc, char** argv) {
         fs::create_directories(dir, ec);
         a.cam = c0;
         a.cam.feet.y = a.world.height(a.cam.feet.x, a.cam.feet.z);
-        for (int k = 0; k < 6; ++k) a.render(0.0f);
+        for (int k = 0; k < (a.R.dlssOn() ? 3 * ORMAN_PHASES : 6); ++k) a.render(0.0f);
         a.exposureEv = std::log2(a.autoExposure);
         a.autoOn = false;
         double liveMs = 0.0;
@@ -319,19 +383,32 @@ int runOrmanCli(int argc, char** argv) {
             else c.feet = c0.feet + make_float3(-fz, 0, fx) * (speed * t);
             c.feet.y = a.world.height(c.feet.x, c.feet.z);
             a.cam = c;
-            a.R.setPattern(live, sigma);
+            if (!a.R.dlssOn()) a.R.setPattern(live, sigma);
             a.render(1.0f / 60.0f);
             liveMs += a.R.renderMs + a.R.displayMs;
             char name[64];
             std::snprintf(name, sizeof(name), "/live_%04d", f);
             a.save(dir + name);
+            // the reference: the fixed samples, DLSS paused (its history waits for the next live frame)
+            const bool dl = a.R.dlssOn();
+            if (dl) {
+                a.R.params.dlss = 0;
+                a.R.params.lodBias = 0.0f;
+            }
             a.R.setPattern(refSpp, sigma);
             a.render(0.0f);
             std::snprintf(name, sizeof(name), "/ref_%04d", f);
             a.save(dir + name);
+            if (dl) {
+                a.R.setPattern(ORMAN_PHASES, sigma);
+                a.R.params.covBias = 0.6f;
+                a.R.params.lodBias = -1.0f;
+                a.R.params.dlss = 1;
+            }
         }
-        std::printf("orman: kararlilik %d kare (%s, %.2f m/s) -> %s, canli %d ornek (ortalama %.2f ms), referans %d\n", stab, path.c_str(), speed,
-                    dir.c_str(), live, liveMs / stab, refSpp);
+        const std::string liveName = a.R.dlssOn() ? std::string("DLSS-RR") : std::to_string(live) + " ornek";
+        std::printf("orman: kararlilik %d kare (%s, %.2f m/s) -> %s, canli %s (ortalama %.2f ms), referans %d\n", stab, path.c_str(), speed,
+                    dir.c_str(), liveName.c_str(), liveMs / stab, refSpp);
         a.release();
         return 0;
     }

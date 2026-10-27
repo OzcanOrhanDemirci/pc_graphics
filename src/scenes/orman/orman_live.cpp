@@ -22,6 +22,7 @@ namespace {
 using app::L;
 
 const int kSamples[4] = {1, 4, 8, 16};
+const int kDlss = 4;   // the panel's fifth choice: DLSS Ray Reconstruction
 
 class OrmanLive : public app::Scene {
 public:
@@ -43,16 +44,20 @@ public:
                "memory once. Each has its place for a reason: ferns on the moist banks, stones in the bed, the fallen trunk over "
                "the stream.")},
             {L("Görünürlük", "Visibility"),
-             L("Görüntü de ışın izlemeyle çizilir: pikselde sabit desenli birkaç ışın, yaprağın kenarı alfa haritasıyla kesilir. "
-               "Uzakta yaprak incelmesin diye haritanın kapsaması her seviyede korunur.",
-               "The picture itself is ray traced: a few rays a pixel on a fixed pattern, a leaf's edge cut by its alpha map. The "
-               "map keeps its coverage at every level, so far leaves do not thin away.")},
+             L("Görüntü de ışın izlemeyle çizilir. Yapraklar ve dallar pikselden ince: yürürken birkaç sabit ışın onları "
+               "titretiyordu. Şimdi her karede pikselin başka bir noktasına tek ışın gider, NVIDIA DLSS Ray Reconstruction "
+               "kareleri hareketin izinden toplar. Uzaktaki yaprağın kapsaması piksellerin örnekleri arasında paylaşılır.",
+               "The picture itself is ray traced. Leaves and twigs are finer than a pixel: a few fixed rays made them shimmer "
+               "while walking. Now each frame sends one ray to another point of the pixel and NVIDIA DLSS Ray Reconstruction "
+               "gathers the frames along the motion. A far leaf's coverage is shared among the pixel's samples.")},
             {L("Işık", "Light"),
              L("Gökyüzünün ve sekmelerin ışığı yükleme sırasında pişirilir: ormanın içinde 30 santimde bir yoklama, her biri her "
                "yönden gelen ışığı tutar. Güneş her karede canlı: her örnek yaprakların arasından kendi gölge ışınını yollar.",
                "The light of the sky and of its bounces is baked while loading: a probe every 30 centimetres through the forest, "
                "each holding the light from every direction. The sun is live every frame: every sample sends its own shadow "
-               "ray through the leaves.")}};
+               "ray through the leaves.")},
+            {L("Teşekkür", "Credits"), L("NVIDIA DLSS (NVIDIA RTX SDK). Varlıklar: Poly Haven ve ambientCG (CC0), docs/orman/VARLIK.md.",
+                                         "NVIDIA DLSS (NVIDIA RTX SDK). Assets: Poly Haven and ambientCG (CC0), docs/orman/VARLIK.md.")}};
         i.tags = {L("Yoğunluk", "Density"), L("Işık", "Light"), L("Doğa", "Nature")};
         i.image = "assets/gallery/orman.jpg";
         i.accent = 0x8DBF6A;
@@ -107,7 +112,8 @@ public:
         }
         default:
             a_.bakeLight();
-            setSamples(a_.cfg.i("samples", 4));
+            if (a_.cfg.i("dlss", 1) != 0) setMode(kDlss);
+            else setSamples(a_.cfg.i("samples", 4));
             reset();
             cudaMallocHost(reinterpret_cast<void**>(&pinned_), size_t(a_.width) * a_.height * sizeof(uchar4));
             a_.render(0.0f);
@@ -128,10 +134,24 @@ public:
         crouch_ = 0.0f;
     }
     void setSamples(int n) {
-        samples_ = 0;
+        int m = 0;
         for (int k = 0; k < 4; ++k)
-            if (kSamples[k] <= n) samples_ = k;
-        a_.R.setPattern(kSamples[samples_], a_.cfg.f("filter.sigma", 0.42f));
+            if (kSamples[k] <= n) m = k;
+        setMode(m);
+    }
+    // 0..3 the fixed samples, kDlss DLSS (back to 4 samples if it cannot be set up)
+    void setMode(int m) {
+        if (m == kDlss) {
+            if (a_.setDlss(true)) {
+                samples_ = kDlss;
+                return;
+            }
+            std::fprintf(stderr, "orman: DLSS-RR kapali: %s\n", a_.R.dlssError.c_str());
+            m = 1;
+        }
+        a_.setDlss(false);
+        samples_ = m;
+        a_.R.setPattern(kSamples[m], a_.cfg.f("filter.sigma", 0.42f));
     }
 
     void frame(app::Host& host, const app::Input& in) override {
@@ -142,7 +162,7 @@ public:
             started_ = true;
         }
         for (const auto& e : in.events)
-            if (e.id == "samples" && e.item >= 0) setSamples(kSamples[e.item]);
+            if (e.id == "samples" && e.item >= 0) setMode(e.item);
         if (in.pressed(GLFW_KEY_TAB)) {
             look_ = !look_;
             host.captureMouse(look_);
@@ -238,13 +258,15 @@ public:
         s.chips.push_back({theme::thousands(a_.R.instanceCount) + L(" kopya", " copies"), true});
         s.chips.push_back({num(double(a_.R.instancedTriangles) / 1e6, 0) + L(" milyon üçgen", " million triangles")});
         s.metrics.push_back({L("Kare", "Frame"), num(a_.R.renderMs + a_.R.displayMs, 1) + " ms"});
+        if (samples_ == kDlss) s.metrics.push_back({"DLSS", num(a_.R.dlssMs, 1) + " ms"});
         app::Control c;
         c.kind = app::Control::Kind::Choice;
         c.id = "samples";
         c.title = L("ÖRNEK", "SAMPLES");
-        c.items = {"1", "4", "8", "16"};
+        c.items = {"1", "4", "8", "16", "DLSS"};
         c.active = samples_;
-        c.detail = L("Pikselde sabit desenli ışın", "Rays a pixel, on a fixed pattern");
+        c.detail = samples_ == kDlss ? L("Her karede tek ışın, DLSS Ray Reconstruction toplar", "One ray a frame, gathered by DLSS Ray Reconstruction")
+                                     : L("Pikselde sabit desenli ışın", "Rays a pixel, on a fixed pattern");
         s.controls.push_back(c);
     }
 
@@ -263,7 +285,8 @@ public:
             return;
         }
         a_.applyLight();
-        setSamples(kSamples[samples_]);
+        if (samples_ != kDlss) a_.R.setPattern(kSamples[samples_], a_.cfg.f("filter.sigma", 0.42f));
+        a_.R.dlssFrame.reset = true;
         host.toast(L("Ayarlar ve programlar yeniden yüklendi", "Settings and programs reloaded"));
     }
 
