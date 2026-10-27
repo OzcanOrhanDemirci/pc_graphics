@@ -537,7 +537,13 @@ int App::run(const Options& opt) {
         }
         for (int s = 0; s < int(infos_.size()); ++s) {
             if (!only.empty() && infos_[s].id != only) continue;
-            key(s < 9 ? GLFW_KEY_1 + s : GLFW_KEY_0); wait(0.4);
+            // (past the tenth there is no number key: 0, then down)
+            if (s < 9) key(GLFW_KEY_1 + s);
+            else {
+                key(GLFW_KEY_0);
+                for (int k = 9; k < s; ++k) { wait(0.15); key(GLFW_KEY_DOWN); }
+            }
+            wait(0.4);
             if (infos_[s].id == "yikim") { mouse(0.88f, 0.735f); wait(0.3); shot("galeri_dugme"); click(); }   // the "open" button
             else key(GLFW_KEY_ENTER);
             wait(0.25); shot(infos_[s].id + "_yukleniyor");
