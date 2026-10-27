@@ -43,7 +43,7 @@ reflection as sharp as the room itself.
 
 ## The application
 
-The ten scenes live in one program. It opens on a gallery; a scene loads behind a loading screen (its programs
+The eleven scenes live in one program. It opens on a gallery; a scene loads behind a loading screen (its programs
 compile and its world is built on a worker thread, so the window stays alive) and then runs under an interface that is
 the same for all of them: who and what at the bottom left, timings at the top right, the way out at the bottom right,
 the keys on F1. The panel at the bottom left takes the mouse: a scene can put rows of choices, sliders and buttons there
@@ -506,6 +506,40 @@ down a shaft between two columns of rooms.
 
 Plan, decisions, measurements and what is not verified in `docs/kuyu/` (Turkish).
 
+### 11 · The Forest *(Orman)* · October 2026
+
+| ![Along the stream: sun shafts through the mist, a fallen trunk across the water, ferns and broad leaves on a floor of fallen leaves](docs/images/orman-dere.jpg) | ![A standing trunk's bark close up, pachira shrubs beside it, the dark understorey behind](docs/images/orman-govde.jpg) |
+|---|---|
+| ![Looking up into the canopy: jacaranda fronds and small trees' leaves layered up to the sky](docs/images/orman-tepe.jpg) | ![The uprooted trunk across the stream, its plate of earth and roots, jacaranda fronds in front](docs/images/orman-devrik.jpg) |
+
+Its focus is density: *a small piece of rainforest where something is everywhere, as in a real one; staged chaos, not
+endless repetition*. Game forests are mostly built from three or four materials (tall tree, ground cover, wood, soil)
+and look clean; here it is a 30 m patch early in the morning after rain, with a stream, a fallen trunk and growth layer
+upon layer, and the graphics card's whole strength goes to how much there is. W A S D walks, the mouse looks.
+
+- **Scans only:** nothing is modelled by hand. 26 open-licence scans (Poly Haven and ambientCG, CC0: trees, shrubs,
+  ferns, roots, rocks, trunks, leaf atlases) become 80 prototypes, fetched and checked by `assets/orman/fetch.py`.
+- **Placement with causes:** the fallen trunk rests on both banks above the stream, rocks lie half-buried at the bank
+  and stones in the bed, ferns grow thick in the damp, broad leaves in clumps, moss on the wet edge of the bed; each
+  layer (floor, shrubs, saplings, young trees, debris) has its own reason and its own spacing. Fallen leaves come from
+  the islands of the leaf atlases as one mesh, each lying on the ground's own triangles, heaped against trunks and
+  stones.
+- **The picture is ray traced too (OptiX):** one ray a pixel a frame, gathered over frames by NVIDIA's DLSS Ray
+  Reconstruction at native resolution (DLAA). A leaf's alpha keeps its coverage down the mip chain and the sun's shadow
+  ray lets through a leaf's open share: the sun dapples do not glitter and walking does not make the leaves crawl.
+- **Light baked, the sun live:** a 30 cm grid of 3.7 million probes (L1 spherical harmonics: sky and sun, then one
+  bounce) carries the soft light; the sun is a shadow ray from every sample; mist lies thickest on the ground, its
+  shafts from a baked 10 cm volume of the sun's visibility. The stream reflects and refracts, tea-coloured in its depth.
+- **A forest with no edge:** the patch sits among 80 copies of one 44 m forest tile (9 × 9 cells, 396 m, two levels of
+  instancing); the stream is never copied, each cell grows its own strip of it. The last row of cells is sewn to the
+  first, a torus: walk straight for 396 m and you are back at the stream from the other side. The coordinates stay
+  small, and the eye and DLSS's history cross the seam unbroken.
+- 8.3 million instances, about 108 billion instanced triangles (the program's own count), 2.2 GB of textures; 17 to
+  21 ms a frame at 2560 × 1440, 45 to 56 frames a second in the application, about 8 GB on the card, about 35 s to
+  load. The panel also offers 1, 4, 8 or 16 fixed samples a pixel, for comparison.
+
+Plan, decisions, measurements and what is not verified in `docs/orman/` (Turkish).
+
 ## What scene 1 computes
 
 | | |
@@ -775,6 +809,7 @@ src/
     denizalti/        scene 8: room and equipment kit, decal atlas, OptiX oven (device/), OpenGL 4.6 tessellation pipeline (glsl/)
     ayna/             scene 9: the lattice tracer, the maze, the beams, light maps, the mist, the materials (CUDA)
     kuyu/             scene 10: the endless lattice, one-way walls, the rooms' insides, the structure's light table (CUDA)
+    orman/            scene 11: glTF scans, the forest's placement, tile and torus, baked probe grid, DLSS-RR; device/
 scenes/               the scenes' settings (<scene>.cfg)
 assets/               fonts (IBM Plex), gallery pictures, blue-noise texture, earthquake records (ESM, AFAD TADAS)
 tools/                EXR statistics, FLIP and RMSE comparison, noise maps, contact sheets, prism planner, value studies;
@@ -795,8 +830,10 @@ third_party/fetch.sh  fetches the dependencies; the folder itself is not committ
 Private repository. All rights reserved. Scene 5's amphora profiles are written into the code from ArchAIDE consortium
 (2019), vector profiles of the University of Southampton's drawings (P. Copeland, *Roman Amphorae: a digital resource*,
 2014), CC BY 4.0, https://doi.org/10.5284/1050896; its scanned textures (Poly Haven, ambientCG) are CC0 and fetched by
-`assets/koy/fetch.py` (`assets/koy/LICENSES.md`). Third-party components are fetched at build time under their own licences:
-the NVIDIA CUDA redistributables and OptiX SDK headers, GLFW (zlib), stb (public domain), tinyexr (BSD). The IBM Plex
+`assets/koy/fetch.py` (`assets/koy/LICENSES.md`). Scene 11's scans (Poly Haven, ambientCG) are CC0 too, fetched by
+`assets/orman/fetch.py` (sources in `docs/orman/VARLIK.md`). Third-party components are fetched at build time under their own licences:
+the NVIDIA CUDA redistributables and OptiX SDK headers, the NVIDIA DLSS SDK (NVIDIA RTX SDK licence), GLFW (zlib), stb
+(public domain), tinyexr (BSD), cgltf (MIT). The IBM Plex
 fonts in `assets/fonts` are under the SIL Open Font License (`assets/fonts/LICENSE.txt`). Earthquake records: ESM, the
 Engineering Strong-Motion database (Mascandola et al., doi 10.13127/esm.3), and AFAD TADAS.
 

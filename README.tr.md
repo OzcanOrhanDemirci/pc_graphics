@@ -43,7 +43,7 @@ cam, yansımanın yansımasının yansıması odanın kendisi kadar keskin.
 
 ## Uygulama
 
-On sahne tek bir programda yaşıyor. Program bir galeriyle açılır; sahne bir yükleme ekranının arkasında yüklenir
+On bir sahne tek bir programda yaşıyor. Program bir galeriyle açılır; sahne bir yükleme ekranının arkasında yüklenir
 (programları derlenir, dünyası kurulur; bunlar ayrı bir iş parçacığında yapıldığı için pencere canlı kalır) ve sonra hepsi
 için aynı olan bir arayüzün altında çalışır: kim ve ne sol altta, süreler sağ üstte, çıkış yolu sağ altta, tuşlar F1'de.
 Sol alttaki panel fareyle kullanılır: sahne oraya seçenek sıraları, kaydırma çubukları ve düğmeler koyabilir (Yıkım'da
@@ -444,6 +444,40 @@ demeti olarak sürer (*Interstellar*'ın tesseract'ı gibi). İki oda sütunu ar
 
 Plan, kararlar, ölçümler ve doğrulanmayanlar `docs/kuyu/` içinde.
 
+### 11 · Orman · Ekim 2026
+
+| ![Dere boyunca: pusun içinden güneş huzmeleri, suyun üstünde devrik bir gövde, yere düşmüş yaprakların üstünde eğreltiler ve geniş yapraklar](docs/images/orman-dere.jpg) | ![Ayakta bir gövdenin kabuğu yakından, yanında pachira çalıları, arkada koyu alt kat](docs/images/orman-govde.jpg) |
+|---|---|
+| ![Yukarı, tepe örtüsüne: jakaranda yaprakları ve küçük ağaçların yaprakları kat kat göğe dek](docs/images/orman-tepe.jpg) | ![Derenin üstünde kökünden sökülmüş gövde, toprak ve kök plakası, önde jakaranda yaprakları](docs/images/orman-devrik.jpg) |
+
+Odağı yoğunluk: *gerçek bir ormandaki gibi her yerde bir şeylerin olduğu küçük bir yağmur ormanı parçası; sonsuz
+tekrar değil, sahneye konmuş kaos*. Oyun ormanları çoğunlukla üç dört malzemeyle kurulur (uzun ağaç, kısa örtü, odun,
+toprak) ve temiz görünür; burada yağmurdan sonra erken sabah 30 m'lik bir parça var, bir dere, devrik bir gövde ve kat
+kat bitki örtüsüyle; ekran kartının bütün gücü ne kadar çok şey olduğuna gidiyor. W A S D yürür, fare bakar.
+
+- **Yalnız tarama:** elle modellenmiş hiçbir şey yok. 26 açık lisanslı tarama (Poly Haven ve ambientCG, CC0: ağaçlar,
+  çalılar, eğreltiler, kökler, kayalar, gövdeler, yaprak atlasları) 80 prototip olur; `assets/orman/fetch.py` indirir
+  ve denetler.
+- **Sebepli yerleşim:** devrik gövde derenin üstünde iki kıyıya dayanır, kayalar kıyıda yarı gömülü, taşlar yatakta,
+  eğreltiler nemde sık, geniş yapraklılar öbek öbek, yosun yatağın ıslak kenarında; her katın (zemin, çalı, fidan, genç
+  ağaç, döküntü) kendi sebebi ve kendi aralığı var. Yere düşmüş yapraklar yaprak atlaslarının adalarından tek bir ağ
+  olarak gelir; her biri zeminin kendi üçgenlerine yatar, gövdelerin ve taşların önüne yığılır.
+- **Görüntü de ışın izlemeyle (OptiX):** karede piksel başına tek ışın; kareleri NVIDIA'nın DLSS Ray Reconstruction'ı
+  doğal çözünürlükte (DLAA) toplar. Yaprağın alfası mip zinciri boyunca kapsamasını korur, güneşin gölge ışını yaprağın
+  açık payı kadar geçer: güneş benekleri pırıldamaz, yürürken yapraklar kıpırdamaz.
+- **Işık pişmiş, güneş canlı:** 30 cm'lik ızgarada 3,7 milyon yoklama (L1 küresel harmonik: gök ve güneş, sonra bir
+  sekme) yumuşak ışığı taşır; güneş her örnekten bir gölge ışını; pus yerde en yoğun, huzmeleri güneşin görünürlüğünün
+  pişmiş 10 cm'lik hacminden. Dere yansıtır ve kırar, derinde çay rengine döner.
+- **Kenarı olmayan orman:** parça, 44 m'lik tek bir orman karosunun 80 kopyasının ortasında (9 × 9 hücre, 396 m, iki
+  katlı kopyalama); dere hiç kopyalanmaz, her hücre kendi şeridini büyütür. Hücrelerin son sırası ilkine dikili, bir
+  simit: dümdüz 396 m yürüyen dereye öbür yandan döner. Koordinatlar küçük kalır, göz ve DLSS'in geçmişi dikişten
+  kesintisiz geçer.
+- 8,3 milyon kopya, yaklaşık 108 milyar kopyalanmış üçgen (programın kendi sayımı), 2,2 GB doku; 2560 × 1440'ta kare
+  17-21 ms, uygulamada saniyede 45-56 kare, kartta yaklaşık 8 GB, yükleme yaklaşık 35 sn. Panel kıyas için pikselde 1,
+  4, 8 ya da 16 sabit örnek de sunar.
+
+Plan, kararlar, ölçümler ve doğrulanmayanlar `docs/orman/` içinde.
+
 ## Sahne 1: neyi hesaplıyor
 
 | | |
@@ -702,6 +736,7 @@ src/
     denizalti/        sahne 8: oda ve teçhizat kiti, çıkartma atlası, OptiX fırını (device/), OpenGL 4.6 tessellation hattı (glsl/)
     ayna/             sahne 9: ızgara izleyici, labirent, hüzmeler, ışık haritaları, pus, malzemeler (CUDA)
     kuyu/             sahne 10: sonsuz kafes, tek yönlü duvarlar, odaların içi, yapının ışık tablosu (CUDA)
+    orman/            sahne 11: glTF taramaları, ormanın yerleşimi, karo ve simit, pişmiş yoklama ızgarası, DLSS-RR; device/
 scenes/               sahnelerin ayarları (<sahne>.cfg)
 assets/               yazı tipleri (IBM Plex), galeri resimleri, mavi gürültü dokusu, deprem kayıtları (ESM, AFAD TADAS)
 tools/                EXR istatistikleri, FLIP ve RMSE karşılaştırması, gürültü haritaları, temas tabakaları, prizma planlayıcı, değer etütleri;
@@ -722,8 +757,10 @@ third_party/fetch.sh  bağımlılıkları indirir; klasörün kendisi git'te de�
 Özel depo. Tüm hakları saklıdır. Sahne 5'in amfora profilleri koda şuradan yazıldı: ArchAIDE konsorsiyumu (2019),
 Southampton Üniversitesi çizimlerinin vektör profilleri (P. Copeland, *Roman Amphorae: a digital resource*, 2014), CC BY
 4.0, https://doi.org/10.5284/1050896; taranmış dokuları (Poly Haven, ambientCG) CC0, `assets/koy/fetch.py` indirir
-(`assets/koy/LICENSES.md`). Üçüncü taraf bileşenler derleme sırasında kendi lisanslarıyla indirilir: NVIDIA
-CUDA dağıtım arşivleri ve OptiX SDK başlıkları, GLFW (zlib), stb (kamu malı), tinyexr (BSD). `assets/fonts`
+(`assets/koy/LICENSES.md`). Sahne 11'in taramaları (Poly Haven, ambientCG) da CC0, `assets/orman/fetch.py` indirir
+(kaynakları `docs/orman/VARLIK.md`). Üçüncü taraf bileşenler derleme sırasında kendi lisanslarıyla indirilir: NVIDIA
+CUDA dağıtım arşivleri ve OptiX SDK başlıkları, NVIDIA DLSS SDK (NVIDIA RTX SDK lisansı), GLFW (zlib), stb (kamu
+malı), tinyexr (BSD), cgltf (MIT). `assets/fonts`
 altındaki IBM Plex yazı tipleri SIL Open Font License ile (`assets/fonts/LICENSE.txt`). Deprem kayıtları: ESM,
 Engineering Strong-Motion veritabanı (Mascandola ve diğ., doi 10.13127/esm.3) ve AFAD TADAS.
 
