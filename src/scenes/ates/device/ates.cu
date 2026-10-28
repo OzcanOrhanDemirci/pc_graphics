@@ -325,7 +325,7 @@ static __forceinline__ __device__ Surf surface(const Hit& h, float3 d, float wid
 // ---------------------------------------------------------------------------------------------------------------
 // the fire's light: a block of the gas picked by its share of the light (the cumulative sum, binary search), a point in
 // it, a shadow ray. Returns the illuminance (lux, RGB) times the cosine at the surface, divided by the pick's chance
-static __forceinline__ __device__ float3 fireLight(const Surf& s, float u1, float2 u2) {
+static __forceinline__ __device__ float3 fireLight(const Surf& s, float u1, float2 u2, float3& Ldir) {
     if (params.lightN <= 0) return make_float3(0, 0, 0);
     const float total = params.lightCdf[params.lightN - 1];
     if (total <= 0.0f) return make_float3(0, 0, 0);
@@ -346,6 +346,7 @@ static __forceinline__ __device__ float3 fireLight(const Surf& s, float u1, floa
     const float r2 = dot(L, L);
     const float r = sqrtf(r2);
     L = L * (1.0f / fmaxf(r, 1e-6f));
+    Ldir = L;
     const float cosn = dot(s.n, L), cosg = dot(s.ng, L);
     if (cosn <= 0.0f || cosg <= 0.0f) return make_float3(0, 0, 0);
     if (occluded(s.p + s.ng * 0.002f, L, r * 0.999f)) return make_float3(0, 0, 0);
@@ -360,13 +361,28 @@ static __forceinline__ __device__ float3 sky(float3 d) {
     return params.skyHorizon + (params.skyZenith - params.skyHorizon) * sqrtf(up);
 }
 
-static __forceinline__ __device__ float3 shade(const Surf& s, float u1, float2 u2) {
+// a dielectric's gloss (F0 0.04) under one light: GGX, Smith's height-correlated visibility, Schlick's Fresnel
+static __forceinline__ __device__ float gloss(float3 n, float3 wo, float3 wi, float rough) {
+    const float NoL = dot(n, wi), NoV = dot(n, wo);
+    if (NoL <= 0.0f || NoV <= 0.0f) return 0.0f;
+    const float3 hv = normalize(wi + wo);
+    const float NoH = fmaxf(dot(n, hv), 0.0f), VoH = fmaxf(dot(wo, hv), 0.0f);
+    const float a = fmaxf(rough * rough, 0.002f), a2 = a * a;
+    const float dd = NoH * NoH * (a2 - 1.0f) + 1.0f;
+    const float D = a2 / (3.14159265f * dd * dd);
+    const float Vis = 0.5f / (NoL * sqrtf(NoV * NoV * (1.0f - a2) + a2) + NoV * sqrtf(NoL * NoL * (1.0f - a2) + a2));
+    const float f = 1.0f - VoH, f2 = f * f;
+    return D * Vis * (0.04f + 0.96f * f2 * f2 * f);
+}
+
+static __forceinline__ __device__ float3 shade(const Surf& s, float3 wo, float u1, float2 u2) {
     if (params.debug == 1) return s.albedo;
     if (params.debug == 2) return s.emit;
-    const float3 E = fireLight(s, u1, u2);
+    float3 Ld = make_float3(0, 1, 0);
+    const float3 E = fireLight(s, u1, u2, Ld);
     // the night's light: a faint sky over everything open (no shadow: it is a few thousandths of a candela)
     const float3 amb = make_float3(params.ambient, params.ambient, params.ambient) * (0.5f + 0.5f * s.n.y);
-    return s.albedo * (E * INV_PIf + amb) + s.emit;
+    return s.albedo * (E * INV_PIf + amb) + E * gloss(s.n, wo, Ld, s.rough) + s.emit;
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -419,7 +435,7 @@ extern "C" __global__ void __raygen__render() {
             float u1;
             float2 u2;
             lightSample(px, py, k, u1, u2);
-            c = shade(s, u1, u2);
+            c = shade(s, -d, u1, u2);
             albedo = s.albedo;
             // the emitted light is not lit by anything: DLSS sees it as part of the albedo's response
             if (s.emit.x + s.emit.y + s.emit.z > 0.0f) albedo = albedo + make_float3(0.02f, 0.02f, 0.02f);
@@ -474,7 +490,7 @@ extern "C" __global__ void __raygen__render() {
         float u1;
         float2 u2;
         lightSample(px, py, unsigned(k), u1, u2);
-        const float3 c = shade(s, u1, u2);
+        const float3 c = shade(s, -d, u1, u2);
         if (isfinite(c.x) && isfinite(c.y) && isfinite(c.z)) acc += c;
     }
     acc *= 1.0f / float(params.spp);
