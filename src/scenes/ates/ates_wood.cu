@@ -483,6 +483,14 @@ std::array<float, 12> ALog::pose() const {
 bool AtesWood::init(unsigned int cap, cudaStream_t st) {
     release();
     st_ = st;
+    // the small per-frame tables come from the stream's pool: kept by it, not handed back to the system at every
+    // synchronisation (its default), which made each frame's few allocations cost about a millisecond each
+    cudaMemPool_t pool = nullptr;
+    int dev = 0;
+    WOOD_CHECK(cudaGetDevice(&dev));
+    WOOD_CHECK(cudaDeviceGetDefaultMemPool(&pool, dev));
+    unsigned long long keep = ~0ull;
+    WOOD_CHECK(cudaMemPoolSetAttribute(pool, cudaMemPoolAttrReleaseThreshold, &keep));
     capacity = cap;
     auto F = [&](size_t n) {
         float* p = nullptr;
