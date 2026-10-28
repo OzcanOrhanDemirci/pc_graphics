@@ -239,6 +239,7 @@ void AtesApp::initSim() {
     const float h = cfg.f("gas.h", 0.0075f);
     gas.vcycles = cfg.i("gas.vcycles", 2);
     gas.k.wallMix = cfg.f("gas.wallMix", gas.k.wallMix);
+    gas.k.conserve = cfg.i("gas.conserve", 1) != 0;
     gas.init(nx, ny, nz, h, make_float3(-0.5f * nx * h, 0.0f, -0.5f * nz * h), R.stream());
     wood.init(unsigned(cfg.i("wood.patches", 40000)), R.stream());
     wood.k.filmT0 = cfg.f("wood.filmT0", wood.k.filmT0);

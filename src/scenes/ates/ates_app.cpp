@@ -64,6 +64,7 @@ int gasTest(Config& cfg, const std::string& root, const std::string& out, int st
     g.k.buoyLocal = cfg.f("gas.buoyLocal", g.k.buoyLocal);
     g.k.maxExpand = cfg.f("gas.maxExpand", g.k.maxExpand);
     g.k.maccormack = cfg.f("gas.mc", g.k.maccormack);
+    g.k.conserve = cfg.i("gas.conserve", 1) != 0;
     g.k.smag = cfg.f("gas.smag", g.k.smag);
     g.k.smagMomentum = cfg.f("gas.smagV", g.k.smagMomentum);
     g.k.nbMargin = cfg.f("gas.nbMargin", g.k.nbMargin);
@@ -86,7 +87,7 @@ int gasTest(Config& cfg, const std::string& root, const std::string& out, int st
     const int warm = int(cfg.f("test.warm", 3.0f) / dt);
     std::vector<double> meanT(ny, 0.0), meanV(ny, 0.0), meanQ(ny, 0.0);   // (meanQ: the heat released per height, W/m)
     int samples = 0;
-    double ms = 0.0, injected = 0.0, burnt = 0.0;
+    double ms = 0.0, injected = 0.0, burnt = 0.0, leftGrid = 0.0, made = 0.0;
     const double t0 = nowMs();
     for (int s = 0; s < steps; ++s) {
         const float t = s * dt;
@@ -166,6 +167,8 @@ int gasTest(Config& cfg, const std::string& root, const std::string& out, int st
             writeSlice(g, (fs::path(root) / (out + nm)).generic_string());
         }
         injected += g.stats.fuelIn * dt;
+        leftGrid += g.stats.fuelOut * dt;
+        made += g.stats.fuelMade * dt;
         if (s % 120 == 0) {
             std::printf("  t %.2f s: HRR %.1f kW, isinim %.1f kW (%%%.0f), en sicak %.0f K, artik %.1e, adim %.2f ms\n", t, g.stats.hrr / 1000.0f,
                         g.stats.rad / 1000.0f, 100.0f * g.stats.rad / std::max(g.stats.hrr, 1.0f), g.stats.maxT, g.stats.residual, g.stats.stepMs);
@@ -174,7 +177,8 @@ int gasTest(Config& cfg, const std::string& root, const std::string& out, int st
                 const std::vector<float> T = g.download(0), Fu = g.download(1), So = g.download(4), Sm = g.download(5);
                 double inGrid = 0.0;
                 for (size_t c = 0; c < T.size(); ++c) inGrid += (g.k.rhoT / T[c]) * (Fu[c] + So[c] + Sm[c]) * h * h * h;
-                std::printf("    yakit: girdi %.3f g, izgarada %.3f g, yanan %.3f g (HRR'den)\n", injected * 1e3, inGrid * 1e3, burnt * 1e3);
+                std::printf("    yakit: girdi %.3f g, izgarada %.3f g, yanan %.3f g (HRR'den), cikan %.3f g, tasimanin yaptigi %.3f g\n", injected * 1e3,
+                            inGrid * 1e3, burnt * 1e3, leftGrid * 1e3, made * 1e3);
             }
         }
         burnt += g.stats.hrr / g.k.hcF * dt;

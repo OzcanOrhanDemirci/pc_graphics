@@ -48,6 +48,7 @@ struct AGasConst {
     float smagMomentum = 0.0f;  // the eddy viscosity on the velocity too (0: on the scalars only: measured, it laminarized)
     float Sct = 0.5f;           // turbulent Schmidt and Prandtl numbers (FDS)
     float maccormack = 1.0f;    // the scalars' MacCormack correction (0: plain semi-Lagrangian)
+    bool conserve = true;       // the fuel species scaled back to their books after the advection (ates_gas.cu)
     float maxExpand = 2.5f;     // a cell's temperature may grow by this factor a step from its reactions
     float Tad = 2350.0f;        // nor beyond this: the volatiles' adiabatic flame temperature in the night's air
                                 // (T0 + hcF Yst / cp: 288 + 14.7 MJ x 0.17 / 1250 J/kg K, ~2290 K; a little room)
@@ -83,6 +84,8 @@ struct AGasStats {
     float hrr = 0.0f;           // heat release rate (W), last step
     float rad = 0.0f;           // radiated by the soot (W)
     float fuelIn = 0.0f;        // kg/s of fuel injected
+    float fuelOut = 0.0f;       // kg/s of volatiles out of the grid's open faces (with gas.conserve)
+    float fuelMade = 0.0f;      // kg/s of volatiles the advection made (lost, negative) before the books took it back
     float maxT = 0.0f;
     float residual = 0.0f;      // the projection's last relative residual
     float stepMs = 0.0f;        // GPU time of one step
@@ -146,6 +149,9 @@ private:
     std::vector<int3> dims_;
     int bottom_ = 0;            // the first level the one-block bottom solve takes
     float* red_ = nullptr;      // reductions: hrr, rad, fuel, maxT, residual parts
+    float* books_ = nullptr;    // the fuel species' books across the advection (before, out, after; ates_gas.cu)
+    float* factors_ = nullptr;  // and their verdict, taken by the next step's cells
+    unsigned int booksStep_ = 0;
     float3* light_ = nullptr;
     unsigned int* bricks_ = nullptr;
     cudaArray_t arr_ = nullptr;

@@ -111,6 +111,9 @@ struct CellArgs {
     float* rad;       // out: the soot's radiation (W/m^3)
     float* nut;       // out: the sub-grid eddy viscosity (Smagorinsky: (Cs h)^2 |S|, m^2/s)
     float* red;       // reductions: [0] hrr, [1] rad, [2] fuel in, [3] max T (as int bits)
+    float* books;     // the fuel species' books: [0..3] what the cells hold after their step, [12..15] what their
+                      // expansion pushes out for the advection to carry (null: none kept)
+    const float* factors;   // the last step's books' verdict on F, C, S, M (applied as the cells load them)
     AGasBurner burner;
     float dt;
 };
@@ -139,7 +142,7 @@ __device__ __forceinline__ float strainAt(const Dims& d, const Vel& V, int i, in
 __global__ void kCells(CellArgs a) {
     const int i = blockIdx.x * blockDim.x + threadIdx.x, j = blockIdx.y * blockDim.y + threadIdx.y, kk = blockIdx.z;
     const Dims& d = a.d;
-    float hrr = 0.0f, radW = 0.0f, fuelIn = 0.0f, tmax = 0.0f;
+    float hrr = 0.0f, radW = 0.0f, fuelIn = 0.0f, tmax = 0.0f, ex[4] = {0, 0, 0, 0}, held[4] = {0, 0, 0, 0};
     if (i < d.nx && j < d.ny && kk < d.nz) {
         const int c = cid(d, i, j, kk);
         const AGasConst& K = a.k;
@@ -151,9 +154,16 @@ __global__ void kCells(CellArgs a) {
             a.s.T[c] = fmaxf(a.s.T[c], K.T0);
         } else {
             float T = a.s.T[c], F = a.s.F[c], C = a.s.C[c], O = a.s.O[c], S = a.s.S[c], M = a.s.M[c];
+            if (a.factors) {
+                F *= a.factors[0];
+                C *= a.factors[1];
+                S *= a.factors[2];
+                M *= a.factors[3];
+            }
             float T00 = T;   // the temperature the expansion is measured from
             const float V = d.h * d.h * d.h, dt = a.dt;
             float rho = K.rhoT / T, m = rho * V;
+            const float m0 = m;
             float divMass = 0.0f;
             // what the wood (and the burner) put in: mass at its own temperature, heat, the oxygen the embers take
             float mF = a.src.fuel[c], mC = a.src.co[c], mO = a.src.o2[c], qW = a.src.heat[c], mT = a.src.massT[c];
@@ -355,7 +365,27 @@ __global__ void kCells(CellArgs a) {
             hrr = qv * V;
             radW = P * V;
             tmax = Tn;
+            // the mass the cell no longer holds at its new temperature (and what was put into it): its expansion
+            // pushes it out, the advection carries it to the neighbours
+            const float mEnd = K.rhoT / fminf(Tn, K.Tad) * V, out = m0 + mIn * dt - mEnd;
+            const float Y[4] = {fmaxf(F, 0.0f), fmaxf(C, 0.0f), fmaxf(S, 0.0f), fmaxf(M, 0.0f)};
+            for (int q = 0; q < 4; ++q) {
+                ex[q] = out * Y[q];
+                held[q] = mEnd * Y[q];
+            }
         }
+    }
+    if (a.books) {
+        for (int o = 16; o > 0; o >>= 1)
+            for (int q = 0; q < 4; ++q) {
+                ex[q] += __shfl_down_sync(0xffffffffu, ex[q], o);
+                held[q] += __shfl_down_sync(0xffffffffu, held[q], o);
+            }
+        if ((threadIdx.x + threadIdx.y * blockDim.x) % 32 == 0)
+            for (int q = 0; q < 4; ++q) {
+                atomicAdd(&a.books[q], held[q]);
+                atomicAdd(&a.books[12 + q], ex[q]);
+            }
     }
     // a warp's sums, one atomic each
     for (int o = 16; o > 0; o >>= 1) {
@@ -477,6 +507,78 @@ __global__ void kGhost(Dims d, Scalars s, const unsigned char* solid) {
         s.M[c] = sum[5] * w;
     } else {
         s.F[c] = s.C[c] = s.O[c] = s.S[c] = s.M[c] = 0.0f;
+    }
+}
+
+// The fuel's books across the advection. Semi-Lagrangian advection is not conservative, and least so where the flame
+// expands the gas twofold in a step: in the burner test the gas burnt 34% more volatiles than the burner gave it (18%
+// at a quarter of the step). So the species the fire's fuel becomes (volatiles, CO, soot, smoke) are kept in books:
+// what the cells hold after their step and what their expansion pushes out (kCells), what leaves the grid's open
+// sides and top, what the cells hold after the advection and the mixing (kDiffuseS); the next step's cells take each
+// back to its books (over the whole grid: where the error arose the books do not say). The sum below serves when the
+// mixing is off
+__global__ void kSpeciesSum(Dims d, CScalars s, const unsigned char* solid, float rhoT, float* out) {
+    const int i = blockIdx.x * blockDim.x + threadIdx.x, j = blockIdx.y * blockDim.y + threadIdx.y, k = blockIdx.z;
+    float a[4] = {0, 0, 0, 0};
+    if (i < d.nx && j < d.ny && k < d.nz) {
+        const int c = cid(d, i, j, k);
+        if (!(solid && solid[c])) {
+            const float m = rhoT / s.T[c] * d.h * d.h * d.h;
+            a[0] = m * s.F[c];
+            a[1] = m * s.C[c];
+            a[2] = m * s.S[c];
+            a[3] = m * s.M[c];
+        }
+    }
+    for (int o = 16; o > 0; o >>= 1)
+        for (int q = 0; q < 4; ++q) a[q] += __shfl_down_sync(0xffffffffu, a[q], o);
+    if ((threadIdx.x + threadIdx.y * blockDim.x) % 32 == 0)
+        for (int q = 0; q < 4; ++q) atomicAdd(&out[q], a[q]);
+}
+// what the step's velocity carries out through the open faces (the sides and the top; the floor is closed)
+__global__ void kSpeciesOut(Dims d, Vel V, CScalars s, float rhoT, float dt, float* out) {
+    const int a = blockIdx.x * blockDim.x + threadIdx.x, b = blockIdx.y * blockDim.y + threadIdx.y, side = blockIdx.z;
+    float flux = 0.0f;   // m^3 of the cell's gas out in the step
+    int c = -1;
+    const float A = d.h * d.h;
+    if (side < 2 && a < d.ny && b < d.nz) {          // x = 0, x = nx
+        const float u = side == 0 ? -V.u[uid(d, 0, a, b)] : V.u[uid(d, d.nx, a, b)];
+        if (u > 0.0f) {
+            flux = u * A * dt;
+            c = cid(d, side == 0 ? 0 : d.nx - 1, a, b);
+        }
+    } else if (side >= 2 && side < 4 && a < d.nx && b < d.ny) {   // z = 0, z = nz
+        const float w = side == 2 ? -V.w[wid(d, a, b, 0)] : V.w[wid(d, a, b, d.nz)];
+        if (w > 0.0f) {
+            flux = w * A * dt;
+            c = cid(d, a, b, side == 2 ? 0 : d.nz - 1);
+        }
+    } else if (side == 4 && a < d.nx && b < d.nz) {   // the top
+        const float v = V.v[vid(d, a, d.ny, b)];
+        if (v > 0.0f) {
+            flux = v * A * dt;
+            c = cid(d, a, d.ny - 1, b);
+        }
+    }
+    float o[4] = {0, 0, 0, 0};
+    if (c >= 0) {
+        const float m = rhoT / s.T[c] * flux;
+        o[0] = m * s.F[c];
+        o[1] = m * s.C[c];
+        o[2] = m * s.S[c];
+        o[3] = m * s.M[c];
+    }
+    for (int q = 0; q < 4; ++q)
+        for (int k = 16; k > 0; k >>= 1) o[q] += __shfl_down_sync(0xffffffffu, o[q], k);
+    if ((threadIdx.x + threadIdx.y * blockDim.x) % 32 == 0)
+        for (int q = 0; q < 4; ++q) atomicAdd(&out[q], o[q]);
+}
+// the books closed: books[0..3] held before the advection, [4..7] carried out of the grid, [8..11] held after it,
+// [12..15] the cells' expansion pushed out (kCells); the next step's cells take each species by want / have
+__global__ void kBooksClose(const float* books, float* factors) {
+    for (int q = 0; q < 4; ++q) {
+        const float want = fmaxf(books[q] + books[12 + q] - books[4 + q], 0.0f), have = books[8 + q];
+        factors[q] = have > 1e-12f ? fminf(fmaxf(want / have, 0.5f), 1.5f) : 1.0f;
     }
 }
 
@@ -733,9 +835,9 @@ __global__ void kConfine(Dims d, const float4* om, float* u, float* v, float* w,
 // the sub-grid's mixing (Smagorinsky, as FDS: Cs 0.2, turbulent Schmidt and Prandtl numbers 0.5): what the grid's
 // eddies cannot carry, the eddy diffusivity does, explicitly (its number kept under the explicit limit)
 
-__global__ void kDiffuseS(Dims d, CScalars s, Scalars o, const float* nut, const unsigned char* solid, AGasConst k, float dt) {
-    const int i = blockIdx.x * blockDim.x + threadIdx.x, j = blockIdx.y * blockDim.y + threadIdx.y, kk = blockIdx.z;
-    if (i >= d.nx || j >= d.ny || kk >= d.nz) return;
+// (a cell of it; held: the fuel species it holds after, kg)
+__device__ __forceinline__ void diffuseCell(Dims d, CScalars s, Scalars o, const float* nut, const unsigned char* solid, AGasConst k, float dt, int i, int j,
+                                            int kk, float held[4]) {
     const int c = cid(d, i, j, kk);
     const float lim = 0.15f * d.h * d.h / dt;   // (the explicit limit is h^2 / 6 dt)
     const float Dc = fminf(nut[c] / k.Sct, lim);
@@ -762,8 +864,31 @@ __global__ void kDiffuseS(Dims d, CScalars s, Scalars o, const float* nut, const
         }
     }
     const float g = dt / (d.h * d.h);
-    for (int f = 0; f < 6; ++f) out[f][c] = fmaxf(in[f][c] + g * acc[f], f == 0 ? 200.0f : 0.0f);
+    float res[6];
+    for (int f = 0; f < 6; ++f) {
+        res[f] = fmaxf(in[f][c] + g * acc[f], f == 0 ? 200.0f : 0.0f);
+        out[f][c] = res[f];
+    }
+    if (!sc) {
+        const float m = k.rhoT / res[0] * d.h * d.h * d.h;
+        held[0] = m * res[1];
+        held[1] = m * res[2];
+        held[2] = m * res[4];
+        held[3] = m * res[5];
+    }
 }
+__global__ void kDiffuseS(Dims d, CScalars s, Scalars o, const float* nut, const unsigned char* solid, AGasConst k, float dt, float* books) {
+    const int i = blockIdx.x * blockDim.x + threadIdx.x, j = blockIdx.y * blockDim.y + threadIdx.y, kk = blockIdx.z;
+    float held[4] = {0, 0, 0, 0};
+    if (i < d.nx && j < d.ny && kk < d.nz) diffuseCell(d, s, o, nut, solid, k, dt, i, j, kk, held);
+    if (books) {
+        for (int off = 16; off > 0; off >>= 1)
+            for (int q = 0; q < 4; ++q) held[q] += __shfl_down_sync(0xffffffffu, held[q], off);
+        if ((threadIdx.x + threadIdx.y * blockDim.x) % 32 == 0)
+            for (int q = 0; q < 4; ++q) atomicAdd(&books[8 + q], held[q]);
+    }
+}
+
 
 // the eddy viscosity on a velocity component's faces (the cells' values averaged onto them)
 __global__ void kDiffuseV(Dims d, const float* cur, float* outp, int comp, const float* nut, float dt) {
@@ -1217,6 +1342,8 @@ bool AtesGas::init(int nx_, int ny_, int nz_, float h_, float3 origin_, cudaStre
     while (bottom_ > 1 && size_t(dims_[size_t(bottom_ - 1)].x) * dims_[size_t(bottom_ - 1)].y * dims_[size_t(bottom_ - 1)].z <= 8192 && levels - (bottom_ - 1) <= 8)
         --bottom_;
     red_ = alloc(8);
+    books_ = alloc(16);
+    factors_ = alloc(4);
     lnx = (nx + lightDiv - 1) / lightDiv;
     lny = (ny + lightDiv - 1) / lightDiv;
     lnz = (nz + lightDiv - 1) / lightDiv;
@@ -1258,6 +1385,7 @@ void AtesGas::reset() {
     for (float* p : phi_) (void)p;
     for (size_t l = 0; l < phi_.size(); ++l) GAS_CHECK(cudaMemsetAsync(phi_[l], 0, size_t(dims_[l].x) * dims_[l].y * dims_[l].z * sizeof(float), st_));
     for (float* p : {src.fuel, src.co, src.o2, src.heat, src.massT, src.ignite}) GAS_CHECK(cudaMemsetAsync(p, 0, n * sizeof(float), st_));
+    kFill<<<1, 32, 0, st_>>>(factors_, 4, 1.0f);
     pack(nullptr);
 }
 
@@ -1347,6 +1475,12 @@ void AtesGas::step(float dt) {
     ca.rad = rad;
     ca.nut = nut_;
     ca.red = red_;
+    // the books are kept every fourth step (their sums cost the cells a third more), their verdict taken every step:
+    // the advection's error changes slowly from step to step
+    const bool books = k.conserve && (booksStep_++ % 4 == 0);
+    ca.books = books ? books_ : nullptr;
+    ca.factors = k.conserve ? factors_ : nullptr;
+    if (books) GAS_CHECK(cudaMemsetAsync(books_, 0, 16 * sizeof(float), st_));
     ca.burner = burner;
     ca.dt = dt;
     kCells<<<g, b, 0, st_>>>(ca);
@@ -1397,6 +1531,10 @@ void AtesGas::step(float dt) {
     as.solid = solid;
     as.mc = k.maccormack;
     kGhost<<<g, b, 0, st_>>>(d, Scalars{T, F, C, O, S, M}, solid);
+    if (books) {
+        const int side = std::max(std::max(nx, ny), nz);
+        kSpeciesOut<<<dim3((side + 31) / 32, (side + 3) / 4, 5), dim3(32, 4), 0, st_>>>(d, Vel{u, v, w}, CScalars{T, F, C, O, S, M}, k.rhoT, dt, books_ + 4);
+    }
     kAdvectS1<<<g, b, 0, st_>>>(as);
     // (a third set: the correction reads the old values' and the hats' neighbours)
     as.out = Scalars{T3_, F3_, C3_, O3_, S3_, M3_};
@@ -1409,7 +1547,7 @@ void AtesGas::step(float dt) {
     std::swap(M, M3_);
     mark(5);
     if (k.smag > 0.0f) {
-        kDiffuseS<<<g, b, 0, st_>>>(d, CScalars{T, F, C, O, S, M}, Scalars{T3_, F3_, C3_, O3_, S3_, M3_}, nut_, solid, k, dt);
+        kDiffuseS<<<g, b, 0, st_>>>(d, CScalars{T, F, C, O, S, M}, Scalars{T3_, F3_, C3_, O3_, S3_, M3_}, nut_, solid, k, dt, books ? books_ : nullptr);
         std::swap(T, T3_);
         std::swap(F, F3_);
         std::swap(C, C3_);
@@ -1417,12 +1555,21 @@ void AtesGas::step(float dt) {
         std::swap(S, S3_);
         std::swap(M, M3_);
     }
+    if (books) {
+        if (k.smag <= 0.0f) kSpeciesSum<<<g, b, 0, st_>>>(d, CScalars{T, F, C, O, S, M}, solid, k.rhoT, books_ + 8);
+        kBooksClose<<<1, 1, 0, st_>>>(books_, factors_);
+    }
     mark(6);
     GAS_CHECK(cudaEventRecord(e1_, st_));
     // the step's sums (read back once: the tools and the panel); the maximum was taken on the float's bits (positive)
-    float r[6];
+    float r[6], bk[16] = {};
     GAS_CHECK(cudaMemcpyAsync(r, red_, sizeof(r), cudaMemcpyDeviceToHost, st_));
+    if (books) GAS_CHECK(cudaMemcpyAsync(bk, books_, sizeof(bk), cudaMemcpyDeviceToHost, st_));
     GAS_CHECK(cudaStreamSynchronize(st_));
+    if (books) {
+        stats.fuelOut = bk[4] / dt;
+        stats.fuelMade = (bk[8] - (bk[0] + bk[12] - bk[4])) / dt;
+    }
     stats.hrr = r[0];
     stats.rad = r[1];
     stats.fuelIn = r[2];
