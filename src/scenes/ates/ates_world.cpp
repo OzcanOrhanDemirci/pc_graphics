@@ -219,7 +219,7 @@ bool AtesApp::initRenderer(std::string& err) {
     R.params.skyHorizon = cfg.v3("sky.horizon", make_float3(0.0016f, 0.0017f, 0.0020f));
     R.params.ambient = cfg.f("sky.ambient", 0.002f);
     R.params.march = cfg.f("march", 0.0035f);
-    R.params.chemEmit = ates_spectra::chemiluminescence(cfg.f("chem.eta", 6e-7f));
+    R.params.chemEmit = ates_spectra::chemiluminescence(cfg.f("chem.eta", 3.4e-7f));
     R.params.hazeScale = cfg.f("haze", 1.0f);
     R.params.bloomStrength = cfg.f("bloom", 0.02f);
     R.params.vignette = cfg.f("vignette", 0.25f);

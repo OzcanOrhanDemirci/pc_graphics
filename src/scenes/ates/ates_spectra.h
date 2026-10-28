@@ -71,14 +71,29 @@ inline float3 sootAbsorption() {
     return make_float3(float(kSootE * 1e-6 / 610e-9), float(kSootE * 1e-6 / 550e-9), float(kSootE * 1e-6 / 465e-9));
 }
 
-// the flame front's chemiluminescence: a share eta of the heat release leaves as CH* (431 nm) and C2* (516 nm) light,
-// isotropically; per W/m^3, cd/m^2 per metre
+// the flame front's chemiluminescence: a share eta of the heat release leaves as light, isotropically; per W/m^3,
+// cd/m^2 per metre. Its spectrum: CH*'s band at 431 nm, C2*'s Swan bands (473, 516, 563 nm) and the CO + O -> CO2*
+// continuum (broad, from the near ultraviolet over the blue; the whole light of carbon monoxide burning over embers).
+// Together they are the sky blue of a gas flame, not the violet of CH* alone
 inline float3 chemiluminescence(double eta) {
     const double perSr = eta / (4.0 * 3.14159265358979);
-    const float3 a = cieXYZ(431.0f), b = cieXYZ(516.0f);
-    // (in a wood fire's soot-free foot CH* at 431 nm outshines C2*'s Swan bands)
-    const double X = 683.0 * perSr * (0.8 * a.x + 0.2 * b.x), Y = 683.0 * perSr * (0.8 * a.y + 0.2 * b.y), Z = 683.0 * perSr * (0.8 * a.z + 0.2 * b.z);
-    return toRgb(X, Y, Z);
+    const struct { double mu, s, w; } part[5] = {{431, 4, 0.3}, {473, 5, 0.1}, {516, 5, 0.15}, {563, 5, 0.1}, {420, 55, 0.35}};
+    double X = 0, Y = 0, Z = 0;
+    for (const auto& b : part) {
+        double sum = 0, x = 0, y = 0, z = 0;
+        for (int l = 360; l <= 830; ++l) {
+            const double t = (l - b.mu) / b.s, g = std::exp(-0.5 * t * t);
+            const float3 c = cieXYZ(float(l));
+            sum += g;
+            x += g * c.x;
+            y += g * c.y;
+            z += g * c.z;
+        }
+        X += b.w * x / sum;
+        Y += b.w * y / sum;
+        Z += b.w * z / sum;
+    }
+    return toRgb(683.0 * perSr * X, 683.0 * perSr * Y, 683.0 * perSr * Z);
 }
 
 }   // namespace ates_spectra
