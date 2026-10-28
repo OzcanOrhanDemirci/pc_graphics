@@ -221,7 +221,7 @@ bool AtesApp::initRenderer(std::string& err) {
     R.params.march = cfg.f("march", 0.0035f);
     R.params.chemEmit = ates_spectra::chemiluminescence(cfg.f("chem.eta", 6e-7f));
     R.params.hazeScale = cfg.f("haze", 1.0f);
-    R.params.bloomStrength = cfg.f("bloom", 0.05f);
+    R.params.bloomStrength = cfg.f("bloom", 0.02f);
     R.params.vignette = cfg.f("vignette", 0.25f);
     R.params.saturation = cfg.f("saturation", 1.2f);
     R.params.contrast = cfg.f("contrast", 1.5f);
