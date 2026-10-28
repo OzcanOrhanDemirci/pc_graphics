@@ -777,14 +777,50 @@ __device__ __forceinline__ void stencil(int nx, int ny, int nz, const Coef& cf, 
     if (k < nz - 1) { sum += bF * phi[c + nx * ny]; diag += bF; } else diag += 2.0f * bF;
 }
 
-// one colour of a red-black Gauss-Seidel sweep
-__global__ void kSmooth(int nx, int ny, int nz, float* phi, const float* b, Coef cf, int colour) {
+// the finest level's sweep reads its faces' coefficients from the cells' w = T0 / T (beta = 2 / (w_a + w_b), the same
+// harmonic mean kCoef stores; a solid's +inf closes its faces): one array for three, the smoother being bound by its reads
+__global__ void kCellW(Dims d, const float* T, const unsigned char* solid, float T0, float* wc) {
+    const int i = blockIdx.x * blockDim.x + threadIdx.x, j = blockIdx.y * blockDim.y + threadIdx.y, k = blockIdx.z;
+    if (i >= d.nx || j >= d.ny || k >= d.nz) return;
+    const int c = cid(d, i, j, k);
+    wc[c] = (solid && solid[c]) ? __int_as_float(0x7f800000) : T0 / T[c];
+}
+
+__global__ void kSmoothW(int nx, int ny, int nz, float* phi, const float* b, const float* wc, int colour) {
     const int i = blockIdx.x * blockDim.x + threadIdx.x, j = blockIdx.y * blockDim.y + threadIdx.y, k = blockIdx.z;
     if (i >= nx || j >= ny || k >= nz || ((i + j + k) & 1) != colour) return;
+    const int c = i + nx * (j + ny * k);
+    const float w0 = wc[c];
+    float sum = 0.0f, diag = 0.0f;
+    // (beyond the open sides and the top the air at T0, w 1: its ghost is -phi, the face counted twice)
+    auto side = [&](bool in, int n) {
+        const float f = __fdividef(2.0f, w0 + (in ? wc[n] : 1.0f));
+        if (in) {
+            sum += f * phi[n];
+            diag += f;
+        } else diag += 2.0f * f;
+    };
+    side(i > 0, c - 1);
+    side(i < nx - 1, c + 1);
+    if (j > 0) side(true, c - nx);   // (the floor is closed)
+    side(j < ny - 1, c + nx);
+    side(k > 0, c - nx * ny);
+    side(k < nz - 1, c + nx * ny);
+    phi[c] = diag > 1e-12f ? (b[c] + sum) / diag : 0.0f;
+}
+
+__device__ __forceinline__ void smoothCell(int nx, int ny, int nz, float* phi, const float* b, const Coef& cf, int i, int j, int k) {
     const int c = i + nx * (j + ny * k);
     float sum, diag;
     stencil(nx, ny, nz, cf, phi, i, j, k, sum, diag);
     phi[c] = diag > 1e-12f ? (b[c] + sum) / diag : 0.0f;
+}
+
+// one colour of a red-black Gauss-Seidel sweep
+__global__ void kSmooth(int nx, int ny, int nz, float* phi, const float* b, Coef cf, int colour) {
+    const int i = blockIdx.x * blockDim.x + threadIdx.x, j = blockIdx.y * blockDim.y + threadIdx.y, k = blockIdx.z;
+    if (i >= nx || j >= ny || k >= nz || ((i + j + k) & 1) != colour) return;
+    smoothCell(nx, ny, nz, phi, b, cf, i, j, k);
 }
 
 __global__ void kResidual(int nx, int ny, int nz, const float* phi, const float* b, Coef cf, float* r, float* red) {
@@ -811,20 +847,21 @@ __global__ void kResidual(int nx, int ny, int nz, const float* phi, const float*
 }
 
 // fine residual to the coarse right-hand side: b_c = (sum of the 8 children's residuals) / 2 (h doubles)
-__global__ void kRestrict(int cx, int cy, int cz, const float* r, int fx, int fy, float* bc, float* phic) {
-    const int i = blockIdx.x * blockDim.x + threadIdx.x, j = blockIdx.y * blockDim.y + threadIdx.y, k = blockIdx.z;
-    if (i >= cx || j >= cy || k >= cz) return;
+__device__ __forceinline__ void restrictCell(int cx, int cy, const float* r, int fx, int fy, float* bc, float* phic, int i, int j, int k) {
     float s = 0.0f;
     for (int n = 0; n < 8; ++n) s += r[(2 * i + (n & 1)) + fx * ((2 * j + ((n >> 1) & 1)) + fy * (2 * k + (n >> 2)))];
     const int c = i + cx * (j + cy * k);
     bc[c] = 0.5f * s;
     phic[c] = 0.0f;
 }
+__global__ void kRestrict(int cx, int cy, int cz, const float* r, int fx, int fy, float* bc, float* phic) {
+    const int i = blockIdx.x * blockDim.x + threadIdx.x, j = blockIdx.y * blockDim.y + threadIdx.y, k = blockIdx.z;
+    if (i >= cx || j >= cy || k >= cz) return;
+    restrictCell(cx, cy, r, fx, fy, bc, phic, i, j, k);
+}
 
 // the coarse correction back, trilinear between the coarse cells (cell-centred: the fine cell at coarse i/2 - 1/4)
-__global__ void kProlong(int fx, int fy, int fz, float* phif, const unsigned char* mskf, int cx, int cy, int cz, const float* ec) {
-    const int i = blockIdx.x * blockDim.x + threadIdx.x, j = blockIdx.y * blockDim.y + threadIdx.y, k = blockIdx.z;
-    if (i >= fx || j >= fy || k >= fz) return;
+__device__ __forceinline__ void prolongCell(int fx, int fy, float* phif, const unsigned char* mskf, int cx, int cy, int cz, const float* ec, int i, int j, int k) {
     const int c = i + fx * (j + fy * k);
     if (mskf && mskf[c]) return;
     const float x = 0.5f * i - 0.25f, y = 0.5f * j - 0.25f, z = 0.5f * k - 0.25f;
@@ -845,6 +882,60 @@ __global__ void kProlong(int fx, int fy, int fz, float* phif, const unsigned cha
         s += wgt * sign * ec[a + cx * (b + cy * cc)];
     }
     phif[c] += s;
+}
+__global__ void kProlong(int fx, int fy, int fz, float* phif, const unsigned char* mskf, int cx, int cy, int cz, const float* ec) {
+    const int i = blockIdx.x * blockDim.x + threadIdx.x, j = blockIdx.y * blockDim.y + threadIdx.y, k = blockIdx.z;
+    if (i >= fx || j >= fy || k >= fz) return;
+    prolongCell(fx, fy, phif, mskf, cx, cy, cz, ec, i, j, k);
+}
+
+// the V-cycle's small levels in one block (their sweeps are a few microseconds of work each: as separate launches the
+// bottom of the cycle took longer than its finest level). Same operations as the launches, each pass over the level's
+// cells by the block's threads in turn, a barrier between passes (the block's global writes are seen after it)
+struct MGLevel {
+    int nx, ny, nz;
+    float *phi, *rhs, *res;
+    Coef cf;
+    const unsigned char* msk;
+};
+struct MGBottom {
+    MGLevel L[8];
+    int n;            // levels, the first one the bottom starts at
+    int coarseIters;
+};
+
+__global__ void kBottom(MGBottom m) {
+    auto each = [&](const MGLevel& L, auto f) {
+        const int n = L.nx * L.ny * L.nz;
+        for (int c = threadIdx.x; c < n; c += blockDim.x) f(c % L.nx, (c / L.nx) % L.ny, c / (L.nx * L.ny));
+        __syncthreads();
+    };
+    auto smooth = [&](const MGLevel& L, int iters) {
+        for (int it = 0; it < iters; ++it)
+            for (int colour = 0; colour < 2; ++colour)
+                each(L, [&](int i, int j, int k) {
+                    if (((i + j + k) & 1) == colour) smoothCell(L.nx, L.ny, L.nz, L.phi, L.rhs, L.cf, i, j, k);
+                });
+    };
+    for (int l = 0; l + 1 < m.n; ++l) {
+        const MGLevel &F = m.L[l], &C = m.L[l + 1];
+        smooth(F, 2);
+        each(F, [&](int i, int j, int k) {
+            float sum, diag;
+            stencil(F.nx, F.ny, F.nz, F.cf, F.phi, i, j, k, sum, diag);
+            const int c = i + F.nx * (j + F.ny * k);
+            F.res[c] = diag > 1e-12f ? F.rhs[c] - (diag * F.phi[c] - sum) : 0.0f;
+        });
+        each(C, [&](int i, int j, int k) { restrictCell(C.nx, C.ny, F.res, F.nx, F.ny, C.rhs, C.phi, i, j, k); });
+    }
+    smooth(m.L[m.n - 1], m.coarseIters);
+    for (int l = m.n - 2; l >= 0; --l) {
+        const MGLevel &F = m.L[l], &C = m.L[l + 1];
+        each(F, [&](int i, int j, int k) {
+            if (!(F.msk && F.msk[i + F.nx * (j + F.ny * k)])) prolongCell(F.nx, F.ny, F.phi, nullptr, C.nx, C.ny, C.nz, C.phi, i, j, k);
+        });
+        smooth(F, 2);
+    }
 }
 
 __global__ void kCoarsenMask(int cx, int cy, int cz, const unsigned char* mf, int fx, int fy, unsigned char* mc) {
@@ -987,6 +1078,7 @@ bool AtesGas::init(int nx_, int ny_, int nz_, float h_, float3 origin_, cudaStre
     q = alloc(n);
     rad = alloc(n);
     div_ = alloc(n);
+    wc_ = alloc(n);
     src.fuel = alloc(n);
     src.co = alloc(n);
     src.o2 = alloc(n);
@@ -1028,6 +1120,10 @@ bool AtesGas::init(int nx_, int ny_, int nz_, float h_, float3 origin_, cudaStre
         dl = make_int3(dl.x / 2, dl.y / 2, dl.z / 2);
     }
     levels = int(dims_.size());
+    // the levels small enough for one block (and at most the eight its table holds)
+    bottom_ = levels - 1;
+    while (bottom_ > 1 && size_t(dims_[size_t(bottom_ - 1)].x) * dims_[size_t(bottom_ - 1)].y * dims_[size_t(bottom_ - 1)].z <= 8192 && levels - (bottom_ - 1) <= 8)
+        --bottom_;
     red_ = alloc(8);
     lnx = (nx + lightDiv - 1) / lightDiv;
     lny = (ny + lightDiv - 1) / lightDiv;
@@ -1078,12 +1174,26 @@ void AtesGas::smooth(int l, int iters) {
     const dim3 b(32, 4), g = grid3(dl.x, dl.y, dl.z, b);
     const Coef cf{bx_[l], by_[l], bz_[l]};
     for (int it = 0; it < iters; ++it)
-        for (int c = 0; c < 2; ++c) kSmooth<<<g, b, 0, st_>>>(dl.x, dl.y, dl.z, phi_[l], rhs_[l], cf, c);
+        for (int c = 0; c < 2; ++c) {
+            if (l == 0) kSmoothW<<<g, b, 0, st_>>>(dl.x, dl.y, dl.z, phi_[l], rhs_[l], wc_, c);
+            else kSmooth<<<g, b, 0, st_>>>(dl.x, dl.y, dl.z, phi_[l], rhs_[l], cf, c);
+        }
 }
 
 void AtesGas::vcycle(int l) {
     const int3 dl = dims_[l];
     const dim3 b(32, 4), g = grid3(dl.x, dl.y, dl.z, b);
+    if (l == bottom_ && l < levels - 1) {
+        MGBottom m{};
+        m.n = levels - l;
+        m.coarseIters = 24;
+        for (int q = 0; q < m.n; ++q) {
+            const int3 dq = dims_[l + q];
+            m.L[q] = MGLevel{dq.x, dq.y, dq.z, phi_[l + q], rhs_[l + q], res_[l + q], Coef{bx_[l + q], by_[l + q], bz_[l + q]}, msk_[l + q]};
+        }
+        kBottom<<<1, 1024, 0, st_>>>(m);
+        return;
+    }
     if (l == levels - 1) {
         smooth(l, 24);
         return;
@@ -1103,6 +1213,7 @@ void AtesGas::project(float dt) {
     const dim3 b(32, 4), g = grid3(nx, ny, nz, b);
     const dim3 gf = grid3(nx + 1, ny + 1, nz + 1, b);
     kCoef<<<gf, b, 0, st_>>>(d, T, solid, k.T0, Coef{bx_[0], by_[0], bz_[0]});
+    kCellW<<<g, b, 0, st_>>>(d, T, solid, k.T0, wc_);
     for (int l = 1; l < levels; ++l) {
         const int3 dc = dims_[l], df = dims_[l - 1];
         kCoarsenMask<<<grid3(dc.x, dc.y, dc.z, b), b, 0, st_>>>(dc.x, dc.y, dc.z, msk_[l - 1], df.x, df.y, msk_[l]);

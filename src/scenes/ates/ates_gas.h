@@ -139,9 +139,11 @@ private:
     float* nut_ = nullptr;      // the eddy viscosity at the cells
     float *u2_ = nullptr, *v2_ = nullptr, *w2_ = nullptr, *u3_ = nullptr, *v3_ = nullptr, *w3_ = nullptr;
     float* div_ = nullptr;      // the expansion (1/s) the projection must leave
+    float* wc_ = nullptr;       // per cell T0 / T (+inf in a solid): the finest smoother's faces, 2 / (w_a + w_b)
     std::vector<float*> phi_, rhs_, res_, bx_, by_, bz_;   // the multigrid's levels (bx..: the faces' rho0 / rho)
     std::vector<unsigned char*> msk_;
     std::vector<int3> dims_;
+    int bottom_ = 0;            // the first level the one-block bottom solve takes
     float* red_ = nullptr;      // reductions: hrr, rad, fuel, maxT, residual parts
     float3* light_ = nullptr;
     unsigned int* bricks_ = nullptr;
