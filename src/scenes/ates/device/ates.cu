@@ -586,7 +586,9 @@ extern "C" __global__ void __raygen__volume() {
         behind = params.surf[y0 * params.width + x0] * ((1 - ax) * (1 - ay)) + params.surf[y0 * params.width + x1] * (ax * (1 - ay)) +
                  params.surf[y1 * params.width + x0] * ((1 - ax) * ay) + params.surf[y1 * params.width + x1] * (ax * ay);
     }
-    const float3 c = make_float3(behind.x, behind.y, behind.z) * Tr + L;
+    float3 c = make_float3(behind.x, behind.y, behind.z) * Tr + L;
+    // (debug 3: the flame's opacity along the ray, 1 - its transmittance at green, as a grey)
+    if (params.debug == 3) c = make_float3(1.0f - Tr.y, 1.0f - Tr.y, 1.0f - Tr.y);
     params.hdr[i] = make_float4(c.x, c.y, c.z, 1.0f);
 }
 
