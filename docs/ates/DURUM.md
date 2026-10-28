@@ -43,6 +43,9 @@ sürdürüyor (yakıt defterinden sonra ~7,6 kW), 60 kat hızda ~45 dakikada (od
 | Kül yatağı ölçüsü yerine ışınım dengesi (A/B, 60 kat hız) | 5. dakikada 6,2 → 10,1 kW; alevler ~25 yerine ~45 dk sürüyor |
 | Kıvılcımların üçte biri doğduğu an katıda ölüyordu (241/639) | Katıdan boş yana adım, yüzden sekme (12/628) |
 | Gaz yakıtından fazlasını yakıyordu: brülör testinde 20 kW'tan 31,5 kW (alevin genleşmesinde yarı Lagrange taşıma korunumsuz); odun ateşinde 1,4 kat | Yakıt türlerinin (uçucu, CO, is, duman) defteri: hücrelerin tuttuğu ve genleşmesinin ittiği, ızgaradan çıkan, taşımadan sonra kalan; fark bütün ızgaraya geri ölçeklenir. Brülör 19,7 kW, girdi 4,11 g → hesaplanan 4,09 g |
+| Odun atarken çökme (Özcan, 10-28): her atışta bütün kütüklerin ışın izleme yapısı yeniden kuruluyor, OptiX'in kurucusu arada geçersiz adrese düşüyordu (çalı ile 3/3) | Atılan kütüğün yapısı tek başına; diğerleri biçimi değişince (en çok 8). 40 atışlık zorlamada 6/6 geçti |
+| Ateşin üstünde izleyen siyah kareler (Özcan): DLSS yarım duyarlıkta 65504'ü aşan parlaklığı (alevin dibinde 1e4-1e5 cd/m²) ve sonlu olmayan rehberleri geçmişinde taşıyor | Renk pozlamayla ölçeklenip veriliyor (InPreExposure); sonlu olmayan her değer türüyle sayılıp ayıklanıyor. Ölçümde kare görülmedi, canlı denemede doğrulanacak |
+| Galeride ateşin resmi yok, yükleme ekranında çıplak geçiş bantları | `assets/gallery/ates.jpg` (alçak bakış) |
 | Duman hiç azalmıyordu: 10 sn'de 0,39 g, bir hücrede 104 g/m³ (soğuk yüzlerin dibinde sis) | Yüz dibinde yoğuşmaz; sıcak gaza dönen damlacık buharlaşıp yanar; yüze çöker (1 cm/s): 0,04 g, en yoğun 24 g/m³ |
 
 Yakıt defteri (`2fb24fb`) gelince ateşin gücü dürüstleşti: kendi hâlinde gerçek zamanda ~7,6 kW'ta duruyor (önce 14,7;
