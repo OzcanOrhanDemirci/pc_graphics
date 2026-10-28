@@ -43,7 +43,7 @@ reflection as sharp as the room itself.
 
 ## The application
 
-The eleven scenes live in one program. It opens on a gallery; a scene loads behind a loading screen (its programs
+The twelve scenes live in one program. It opens on a gallery; a scene loads behind a loading screen (its programs
 compile and its world is built on a worker thread, so the window stays alive) and then runs under an interface that is
 the same for all of them: who and what at the bottom left, timings at the top right, the way out at the bottom right,
 the keys on F1. The panel at the bottom left takes the mouse: a scene can put rows of choices, sliders and buttons there
@@ -539,6 +539,35 @@ upon layer, and the graphics card's whole strength goes to how much there is. W 
   load. The panel also offers 1, 4, 8 or 16 fixed samples a pixel, for comparison.
 
 Plan, decisions, measurements and what is not verified in `docs/orman/` (Turkish).
+
+### 12 · The Fire *(Ateş)* · October 2026
+
+| ![Standing by the pit at night: a flame over the logs and the bed of coals, the stones and the ground lit by it](docs/images/ates-ocak.jpg) | ![Crouched by it: the flame's blue foot on a log over the glowing coals](docs/images/ates-comelmis.jpg) |
+|---|---|
+| ![Low by the pit: the flames against the night, blue at their base, the coals between the logs](docs/images/ates-alcak.jpg) | ![Looking down into the pit: the logs across the coals, flames along their edges, the stones around](docs/images/ates-kor.jpg) |
+
+Its focus is a fire that is *scientific and hyper-real*, where 3D scenes usually make fire a token. A wood fire burns
+in a stone pit outdoors on a moonless night, and nothing it does is drawn by hand. W A S D walks round the pit, C
+crouches, R lays the fire again.
+
+- **The gas:** hot gas flows over the pit on a 7.5 mm grid (128 × 192 × 128): buoyancy, the volume heat expands, the
+  air's changing density. The wood's volatiles burn as fast as they mix with oxygen; soot forms on the fuel side,
+  burns at the flame front and glows by Planck's law; the flame's blue comes from the CH*, C2 Swan and CO2* bands.
+- **The wood:** each log is cut into patches, each patch layered from its surface to its core: it heats, dries and
+  breaks down by Di Blasi's three reactions into gas, tar and char. The char burns at its surface (the embers) and its
+  ash covers it; logs and coals keep each other hot by their radiation.
+- **Light and sparks:** the stones, the ground and the logs are lit by the gas's own emission, their shadows ray
+  traced (OptiX), gathered by NVIDIA's DLSS Ray Reconstruction at native resolution. Each spark is a flake of char
+  thrown out by a crackle or torn off a glowing crust, carried by the gas, burning with the oxygen it meets.
+- **A clean black:** the dither is fixed blue noise on the display's code values and fades out by black; the night sky
+  reads 0 in every pixel, and the live picture flickers no more than a reference of 16 sub-pixel × 64 light samples.
+- About 40 frames a second at 2560 × 1440, the simulation some 16 ms of the 25.
+- **Closed narrower than planned:** the plan was a fire to tend: lit with a match, fed, blown on, choking and flaring
+  again from its embers. Its look was reached, its dynamics were not (a match could not light the kindling, blowing
+  did not show, the logs did not break up into a bed of embers), so the scene was closed as a fire to look at and those
+  moves were taken out. Left alone it burns at about 8 to 9 kW.
+
+Plan, decisions, measurements and what is not verified in `docs/ates/` (Turkish).
 
 ## What scene 1 computes
 
