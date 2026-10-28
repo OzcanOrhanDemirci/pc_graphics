@@ -349,8 +349,11 @@ struct AdvS {
 // and each species' partial density (R Y). Averaging T and Y themselves would mix a hot and a cold parcel as if they
 // weighed the same: a cell of 2000 K gas and one of 300 K mix to 522 K, not 1150 K, and the hot cell's fuel is a
 // sixth of the cold one's per volume. (The linear mix made heat from nothing: a 20 kW burner released 31 kW.)
+// A corner in a solid gives the sampling cell's own value (own[], in the same variables): nothing crosses a wall (a
+// solid's ghost, its gas neighbours' mean, would hand the fuel-rich cell at a burning face on to every cell sampling
+// it)
 __device__ __forceinline__ void sample6(const Dims& d, const float* const* arr, bool conserved, float T0, float Yo2, float3 p, float out[6],
-                                        float lo[6], float hi[6]) {
+                                        float lo[6], float hi[6], const unsigned char* solid, const float own[6]) {
     const float x = p.x - 0.5f, y = fminf(fmaxf(p.y - 0.5f, 0.0f), float(d.ny)), z = p.z - 0.5f;
     const int i0 = int(floorf(x)), j0 = min(int(floorf(y)), d.ny - 1), k0 = int(floorf(z));
     const float fx = x - i0, fy = y - j0, fz = z - k0;
@@ -371,6 +374,9 @@ __device__ __forceinline__ void sample6(const Dims& d, const float* const* arr, 
             v[0] = 1.0f;
             v[1] = v[2] = v[4] = v[5] = 0.0f;
             v[3] = Yo2;
+        } else if (solid && solid[cid(d, i, j, k)]) {
+#pragma unroll
+            for (int f = 0; f < 6; ++f) v[f] = own[f];
         } else {
             const int c = cid(d, i, j, k);
             if (conserved) {
@@ -392,6 +398,45 @@ __device__ __forceinline__ void sample6(const Dims& d, const float* const* arr, 
     }
 }
 
+// a solid cell before the scalars move: it takes the mean of its gas neighbours (a wall's ghost: no gradient across
+// it, so the trilinear samples beside a log read the gas, not the log). Left as it was, a cell a log moved into kept
+// the gas it had then, rich in volatiles beside a pyrolysing face, and every step its neighbours drew from it again:
+// a source that never ran dry (the fire released several times the heat of its fuel). Deep inside, where no gas
+// touches, it holds nothing to give: no species, no oxygen
+__global__ void kGhost(Dims d, Scalars s, const unsigned char* solid) {
+    const int i = blockIdx.x * blockDim.x + threadIdx.x, j = blockIdx.y * blockDim.y + threadIdx.y, k = blockIdx.z;
+    if (i >= d.nx || j >= d.ny || k >= d.nz) return;
+    const int c = cid(d, i, j, k);
+    if (!solid[c]) return;
+    float sum[6] = {0, 0, 0, 0, 0, 0};
+    int n = 0;
+    const int nb[6][3] = {{-1, 0, 0}, {1, 0, 0}, {0, -1, 0}, {0, 1, 0}, {0, 0, -1}, {0, 0, 1}};
+    for (int q = 0; q < 6; ++q) {
+        const int a = i + nb[q][0], b = j + nb[q][1], e = k + nb[q][2];
+        if (a < 0 || b < 0 || e < 0 || a >= d.nx || b >= d.ny || e >= d.nz) continue;
+        const int o = cid(d, a, b, e);
+        if (solid[o]) continue;
+        sum[0] += s.T[o];
+        sum[1] += s.F[o];
+        sum[2] += s.C[o];
+        sum[3] += s.O[o];
+        sum[4] += s.S[o];
+        sum[5] += s.M[o];
+        ++n;
+    }
+    if (n > 0) {
+        const float w = 1.0f / n;
+        s.T[c] = sum[0] * w;
+        s.F[c] = sum[1] * w;
+        s.C[c] = sum[2] * w;
+        s.O[c] = sum[3] * w;
+        s.S[c] = sum[4] * w;
+        s.M[c] = sum[5] * w;
+    } else {
+        s.F[c] = s.C[c] = s.O[c] = s.S[c] = s.M[c] = 0.0f;
+    }
+}
+
 // pass 1: the hats, as density and partial densities (R, R F, R C, R O, R S, R M)
 __global__ void kAdvectS1(AdvS a) {
     const int i = blockIdx.x * blockDim.x + threadIdx.x, j = blockIdx.y * blockDim.y + threadIdx.y, k = blockIdx.z;
@@ -401,8 +446,10 @@ __global__ void kAdvectS1(AdvS a) {
     const float3 p = make_float3(i + 0.5f, j + 0.5f, k + 0.5f);
     const float3 q = backtrace(d, a.V, p, a.dt);
     const float* cur[6] = {a.cur.T, a.cur.F, a.cur.C, a.cur.O, a.cur.S, a.cur.M};
-    float v[6], lo[6], hi[6];
-    sample6(d, cur, true, a.k.T0, a.k.Yo2, q, v, lo, hi);
+    float v[6], lo[6], hi[6], own[6];
+    own[0] = a.k.T0 / a.cur.T[c];
+    for (int f = 1; f < 6; ++f) own[f] = own[0] * cur[f][c];
+    sample6(d, cur, true, a.k.T0, a.k.Yo2, q, v, lo, hi, a.solid, own);
     a.hat.T[c] = v[0];
     a.hat.F[c] = v[1];
     a.hat.C[c] = v[2];
@@ -423,12 +470,13 @@ __global__ void kAdvectS2(AdvS a) {
     const float* cur[6] = {a.cur.T, a.cur.F, a.cur.C, a.cur.O, a.cur.S, a.cur.M};
     const float* hat[6] = {a.hatC.T, a.hatC.F, a.hatC.C, a.hatC.O, a.hatC.S, a.hatC.M};
     float src[6], lo[6], hi[6], back[6], l2[6], h2[6];
-    sample6(d, cur, true, a.k.T0, a.k.Yo2, q, src, lo, hi);
-    sample6(d, hat, false, a.k.T0, a.k.Yo2, fwd, back, l2, h2);
     const float Rc = a.k.T0 / a.cur.T[c];
-    float here[6];
+    float here[6], hatHere[6];
     here[0] = Rc;
     for (int f = 1; f < 6; ++f) here[f] = Rc * cur[f][c];
+    for (int f = 0; f < 6; ++f) hatHere[f] = hat[f][c];
+    sample6(d, cur, true, a.k.T0, a.k.Yo2, q, src, lo, hi, a.solid, here);
+    sample6(d, hat, false, a.k.T0, a.k.Yo2, fwd, back, l2, h2, a.solid, hatHere);
     float res[6];
     for (int f = 0; f < 6; ++f) {
         const float h0 = hat[f][c];
@@ -1304,6 +1352,7 @@ void AtesGas::step(float dt) {
     as.dt = dt;
     as.solid = solid;
     as.mc = k.maccormack;
+    kGhost<<<g, b, 0, st_>>>(d, Scalars{T, F, C, O, S, M}, solid);
     kAdvectS1<<<g, b, 0, st_>>>(as);
     // (a third set: the correction reads the old values' and the hats' neighbours)
     as.out = Scalars{T3_, F3_, C3_, O3_, S3_, M3_};
