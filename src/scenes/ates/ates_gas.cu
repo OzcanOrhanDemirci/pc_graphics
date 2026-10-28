@@ -158,6 +158,8 @@ __global__ void kCells(CellArgs a) {
             // what the wood (and the burner) put in: mass at its own temperature, heat, the oxygen the embers take
             float mF = a.src.fuel[c], mC = a.src.co[c], mO = a.src.o2[c], qW = a.src.heat[c], mT = a.src.massT[c];
             const bool boundary = mF > 0.0f;   // the wood's: in the boundary layer over a pyrolysing surface
+            bool pilot = false;
+            float mAir = 0.0f;
             if (a.burner.radius > 0.0f && a.burner.power > 0.0f) {
                 const float3 p = a.origin + make_float3((i + 0.5f) * d.h, (j + 0.5f) * d.h, (kk + 0.5f) * d.h);
                 const float3 r = p - a.burner.centre;
@@ -170,14 +172,23 @@ __global__ void kCells(CellArgs a) {
                     inside = j == 0 && r.x * r.x + r.z * r.z <= a.burner.radius * a.burner.radius;
                     vol = 3.14159f * a.burner.radius * a.burner.radius * d.h;
                 }
+                // a match's head is a flame of its own, finer than the grid: its volatiles come with the air they
+                // burn in and burn where they come out (its 80 W of fuel alone in a cell's air warmed it a few
+                // kelvin; lit there, the fuel-rich cell starved itself of oxygen and the extinction test put it out)
+                pilot = inside && a.burner.point;
                 if (inside) {
                     const float share = fminf(V / fmaxf(vol, V), 1.0f);
                     const float rate = a.burner.power / K.hcF * share;
                     mF += rate;
                     mT += rate * a.burner.temp;
+                    if (pilot) {
+                        mAir = rate * K.sF / K.Yo2;
+                        mO -= mAir * K.Yo2;
+                        mT += mAir * a.burner.temp;
+                    }
                 }
             }
-            const float mIn = mF + mC;
+            const float mIn = mF + mC + mAir;
             if (mIn > 0.0f || mO > 0.0f || qW != 0.0f) {
                 const float mNew = m + mIn * dt;
                 F = (F * m + mF * dt) / mNew;
@@ -205,7 +216,7 @@ __global__ void kCells(CellArgs a) {
             // its logs (mixed at the buoyant time, the cell burnt them all at the surface: a blue sheet over each log)
             if (boundary && K.wallMix > 0.0f) tau = fmaxf(tau, K.wallMix * d.h * d.h / (2.2e-5f * powf(fmaxf(T, 288.0f) / 298.0f, 1.75f)));
             a.nut[c] = sqr(K.smag * d.h) * strain;
-            const float mixFrac = 1.0f - __expf(-dt / tau);
+            const float mixFrac = pilot ? 1.0f : 1.0f - __expf(-dt / tau);
             const float dil = fmaxf(1.0f - F - C - O - S - M, 0.0f);
             float heat = 0.0f;   // J per kg of the cell's gas
             // the heat capacity grows with the temperature (air and its products: about 1005 J/kg K at 300 K, 1195 at
@@ -232,6 +243,7 @@ __global__ void kCells(CellArgs a) {
             float Tig = fmaxf(T, a.Tprev ? Tnb - K.nbMargin : T);
             // a glowing ember lights what flows over it (its boundary layer is hotter than the cell's mean)
             if (a.src.ignite && a.src.ignite[c] >= K.TignSurf) Tig = fmaxf(Tig, K.TignF + 1.0f);
+            if (pilot) Tig = fmaxf(Tig, a.burner.temp);
             // a step lets a cell grow by at most maxExpand (its heat beyond waits for the next): the expansion the
             // projection and the advection carry stays small per step, as their accuracy needs (a whole stoichiometric
             // burn in one step grew a cell eightfold, and the advection made a fifth of its fuel twice over)
@@ -242,7 +254,7 @@ __global__ void kCells(CellArgs a) {
             auto room = [&](float want) { return want > 0.0f ? fminf(1.0f, fmaxf(hMax - heat, 0.0f) / want) : 0.0f; };
             if (Tig > K.TignF) {
                 const float avail = fminf(F, O / K.sF);
-                if (avail > 1e-7f && burnable(K.hcF, K.sF)) {
+                if (avail > 1e-7f && (pilot || burnable(K.hcF, K.sF))) {
                     float dF = avail * mixFrac;
                     dF *= room(dF * K.hcF);
                     F -= dF;

@@ -285,11 +285,18 @@ void AtesApp::lay(const std::string& name) {
         gas.burner.power = cfg.f("test.Q", 20.0f) * 1000.0f;
         gas.burner.temp = 450.0f;
     } else if (name == "soguk") {
-        // laid and not lit: a bundle of twigs under a tent of kindling, two logs across
+        // laid and not lit: a bundle of twigs, tinder (shavings a millimetre thick) on it, a tent of kindling over
+        // them, two logs across. (Without the tinder a match could not light it: a twig of 7 mm takes a match's flame
+        // half a minute to char, the match burns 18 s)
         for (int i = 0; i < 14; ++i) {
             const float a = 6.2831853f * rnd(seed), r = 0.06f * rnd(seed);
             log(0.003f + 0.002f * rnd(seed), 0.22f + 0.08f * rnd(seed), make_float3(r * std::cos(a), 0.012f + 0.03f * rnd(seed), r * std::sin(a)),
                 make_float3(std::cos(a * 3), 0.15f * (rnd(seed) - 0.5f), std::sin(a * 3)), 0.0f, 288.0f, 0);
+        }
+        for (int i = 0; i < 24; ++i) {
+            const float a = 6.2831853f * rnd(seed), r = 0.03f * rnd(seed);
+            log(0.0005f + 0.0005f * rnd(seed), 0.06f + 0.04f * rnd(seed), make_float3(r * std::cos(a), 0.03f + 0.02f * rnd(seed), r * std::sin(a)),
+                make_float3(std::cos(a * 5), 0.4f * (rnd(seed) - 0.5f), std::sin(a * 5)), 0.0f, 288.0f, 0);
         }
         for (int i = 0; i < 6; ++i) {
             const float a = 6.2831853f * i / 6;
@@ -374,16 +381,17 @@ void AtesApp::placeAndView() {
 }
 
 void AtesApp::strikeMatch() {
-    // where the look meets the pit's floor (a match is held to the kindling at its foot)
+    // where the look meets the pit's floor, 1.5 cm over it (a match is held to the tinder at the pile's foot:
+    // a flame lights what is over it)
     const float3 e = eye(), f = forward();
-    float3 at = make_float3(0, 0.04f, 0);
+    float3 at = make_float3(0, 0.015f, 0);
     if (f.y < -0.05f) {
-        const float t = (0.04f - e.y) / f.y;
+        const float t = (0.015f - e.y) / f.y;
         at = e + f * t;
     }
     const float r = std::sqrt(at.x * at.x + at.z * at.z);
     if (r > 0.35f) at = at * (0.35f / r);
-    at.y = 0.04f;
+    at.y = 0.015f;
     matchAt = at;
     matchLeft = cfg.f("match.seconds", 18.0f);
 }
