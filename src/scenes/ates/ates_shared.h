@@ -98,9 +98,10 @@ struct AtesParams {
     float exposure;
     float bloomStrength;
     float vignette;
-    float saturation;
-    float contrast;           // a power on AgX's display values (Blender's "Punchy" look: 1.35): AgX alone keeps
-                              // sixteen stops, so char seven stops under the flame came out mid-grey, not black
+    float saturation;         // around the luminance, after the contrast (1.2: firelight stays orange, AgX alone
+                              // turns it beige)
+    float contrast;           // a power on AgX's display values (Blender's "Punchy" look: 1.35; here 1.5): AgX alone
+                              // keeps sixteen stops, so char six stops under the flame came out mid-grey, not dark
     int debug;
     unsigned int* badCount;
 

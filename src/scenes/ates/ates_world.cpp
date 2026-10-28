@@ -223,8 +223,8 @@ bool AtesApp::initRenderer(std::string& err) {
     R.params.hazeScale = cfg.f("haze", 1.0f);
     R.params.bloomStrength = cfg.f("bloom", 0.05f);
     R.params.vignette = cfg.f("vignette", 0.25f);
-    R.params.saturation = cfg.f("saturation", 1.0f);
-    R.params.contrast = cfg.f("contrast", 1.35f);
+    R.params.saturation = cfg.f("saturation", 1.2f);
+    R.params.contrast = cfg.f("contrast", 1.5f);
     R.params.debug = cfg.i("debug", 0);
     return true;
 }
@@ -607,7 +607,7 @@ void AtesApp::render(float dt) {
         }
         const float hiY = float(s2 / std::max(s1, 1e-12));
         const float meanY = float(std::exp(acc / double(nc)));
-        const float want = std::min(cfg.f("exposure.key", 80.0f) / std::max(hiY, 1e-6f), cfg.f("exposure.keyMean", 0.25f) / std::max(meanY, 1e-6f));
+        const float want = std::min(cfg.f("exposure.key", 45.0f) / std::max(hiY, 1e-6f), cfg.f("exposure.keyMean", 0.25f) / std::max(meanY, 1e-6f));
         const float lum = 1.0f / std::max(want, 1e-6f);
         if (adaptLum_ < 0.0f || dt <= 0.0f) adaptLum_ = lum;
         else adaptLum_ += (lum - adaptLum_) * (1.0f - std::exp(-dt / 1.5f));
