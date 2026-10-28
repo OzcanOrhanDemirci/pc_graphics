@@ -197,6 +197,170 @@ int gasTest(Config& cfg, const std::string& root, const std::string& out, int st
     return 0;
 }
 
+// each log's surface (debug.wood): mean char depth, ash, surface temperature, and its heat balance
+void printLogs(const AtesApp& a) {
+    std::printf("  kul yatagi %.0f K (%.2f m)\n", a.wood.bedT, a.wood.bedR);
+    std::vector<float> cd(a.wood.patches), as(a.wood.patches), st(a.wood.patches), pr;
+    if (a.wood.probe) {
+        pr.resize(size_t(a.wood.patches) * 8);
+        cudaMemcpy(pr.data(), a.wood.probe, pr.size() * 4, cudaMemcpyDeviceToHost);
+    }
+    cudaMemcpy(cd.data(), a.wood.charD, cd.size() * 4, cudaMemcpyDeviceToHost);
+    cudaMemcpy(as.data(), a.wood.ash, as.size() * 4, cudaMemcpyDeviceToHost);
+    cudaMemcpy(st.data(), a.wood.surfT, st.size() * 4, cudaMemcpyDeviceToHost);
+    for (size_t l = 0; l < a.wood.logs.size(); ++l) {
+        const ALog& L = a.wood.logs[l];
+        double c = 0, s2 = 0, t = 0, tmax = 0;
+        const int n = L.nTheta * L.nZ;
+        for (int k = 0; k < n; ++k) {
+            c += cd[L.firstPatch + k];
+            s2 += as[L.firstPatch + k];
+            t += st[L.firstPatch + k];
+            tmax = std::max(tmax, double(st[L.firstPatch + k]));
+        }
+        std::printf("  kutuk %zu: r %.1f mm (simdi %.1f), komur %.2f mm, kul %.2f mm, yuzey %.0f K (en %.0f), kutle %.0f g, yer (%.3f %.3f %.3f)%s\n", l,
+                    L.r0 * 1e3f, L.radius * 1e3f, c / n * 1e3, s2 / n * 1e3, t / n, tmax, L.mass * 1e3f, L.pos.x, L.pos.y, L.pos.z, L.sleeping ? " uyuyor" : "");
+        if (pr.empty()) continue;
+        // its surface's balance, the mean over its patches (W/m^2): what it absorbs and keeps of its char's heat
+        // against what it radiates and gives the gas
+        double m[8] = {};
+        for (int k = 0; k < n; ++k)
+            for (int j = 0; j < 8; ++j) m[j] += pr[size_t(L.firstPatch + k) * 8 + j] / n;
+        std::printf("      O2 %.3f, gaz %.0f K, h %.1f W/m2K, hiz %.2f m/s | emilen %.1f, komur isisi %.1f | isinan %.1f, tasinan %.1f kW/m2\n", m[0], m[1],
+                    m[2], m[7], m[3] * 1e-3, m[4] * 1e-3, m[5] * 1e-3, m[6] * 1e-3);
+    }
+}
+
+// PLAN §2.1's behaviours as scripted runs: the hand's moves at fixed times of the gas's clock and nothing else; what
+// the fire does with them is its own. One crouches before the pit, looking at the foot of the fire: a match or wood
+// goes where the look meets the pile, the breath along the look, the pictures see what the eye does.
+struct ScenarioMove {
+    float t;
+    enum { Match, Twigs, Log, BlowOn, BlowOff, Scale, Picture } what;
+    float arg = 0.0f;
+};
+struct Scenario {
+    const char* name;
+    const char* layout;
+    float length;   // seconds of the gas
+    std::vector<ScenarioMove> moves;
+};
+
+std::vector<Scenario> scenarios() {
+    using M = ScenarioMove;
+    std::vector<Scenario> s;
+    // lit with a match at the twigs' foot: twigs, then kindling, then the logs
+    s.push_back({"tutusturma", "soguk", 120.0f, {{1.0f, M::Match}, {10.0f, M::Picture}, {40.0f, M::Picture}, {80.0f, M::Picture}, {120.0f, M::Picture}}});
+    // a burning fire blown on for 15 s: the flame leans and grows, the embers turn yellow, and settles after
+    s.push_back({"ufleme", "ates", 45.0f, {{14.0f, M::Picture}, {15.0f, M::BlowOn}, {27.0f, M::Picture}, {30.0f, M::BlowOff}, {45.0f, M::Picture}}});
+    // left alone in real time: the baseline the others are read against
+    s.push_back({"kendi", "ates", 180.0f, {{60.0f, M::Picture}, {180.0f, M::Picture}}});
+    // left alone: it burns down to embers without flame (the wood's time 60 times the real)
+    s.push_back({"kor", "ates", 150.0f, {{10.0f, M::Scale, 60.0f}, {60.0f, M::Picture}, {150.0f, M::Picture}}});
+    // six logs thrown on at once: cold wood that draws the heat and closes the air's ways
+    s.push_back({"bogulma", "ates", 90.0f,
+                 {{14.0f, M::Picture}, {15.0f, M::Log}, {15.5f, M::Log}, {16.0f, M::Log}, {16.5f, M::Log}, {17.0f, M::Log}, {17.5f, M::Log},
+                  {30.0f, M::Picture}, {40.0f, M::Scale, 15.0f}, {90.0f, M::Picture}}});
+    // burnt down to embers, then blown on: the flames come back from what wood is left
+    s.push_back({"yeniden", "ates", 165.0f,
+                 {{10.0f, M::Scale, 60.0f}, {130.0f, M::Scale, 1.0f}, {139.0f, M::Picture}, {140.0f, M::BlowOn}, {155.0f, M::Picture}, {155.0f, M::BlowOff},
+                  {165.0f, M::Picture}}});
+    // kept going: a log every five minutes of the wood's time (15 times the real)
+    s.push_back({"besleme", "ates", 140.0f, {{5.0f, M::Scale, 15.0f}, {25.0f, M::Log}, {45.0f, M::Log}, {65.0f, M::Log}, {85.0f, M::Log},
+                                             {105.0f, M::Log}, {125.0f, M::Log}, {70.0f, M::Picture}, {140.0f, M::Picture}}});
+    return s;
+}
+
+// one run: <out>.csv holds a row per half second of the gas's clock (the step's sums averaged over it), the pictures
+// <out>_<t>s.png; the summary goes to stdout
+int runScenario(AtesApp& a, const Scenario& sc, const std::string& root, const std::string& out) {
+    // from the side the laid logs leave open (they lie along x), at the coals between them; a match at the foot of
+    // the twigs' bundle
+    AtesCam hand;
+    const float3 at = std::string(sc.layout) == "soguk" ? make_float3(0.0f, 0.03f, 0.0f) : make_float3(0.06f, 0.03f, 0.0f);
+    hand.feet = make_float3(at.x + 1.3f, 0.0f, at.z);
+    hand.eyeHeight = 0.71f;
+    hand.yaw = 1.5707963f;
+    hand.pitch = -std::atan2(hand.eyeHeight - at.y, 1.3f);
+    a.cam = hand;
+    const float dtGas = a.cfg.f("gas.dt", 1.0f / 120.0f);
+    const std::string base = (fs::path(root) / out).generic_string();
+    std::error_code ec;
+    fs::create_directories(fs::path(base).parent_path(), ec);
+    FILE* csv = std::fopen((base + ".csv").c_str(), "w");
+    if (!csv) {
+        std::fprintf(stderr, "ates: %s.csv yazilamadi\n", base.c_str());
+        return 1;
+    }
+    std::fprintf(csv, "t_gaz_s,t_odun_s,hrr_kW,isinim_kW,gaz_yakit_gs,piroliz_gs,kor_yanmasi_gs,kutle_kg,kor_cm2,en_sicak_yuzey_K,en_sicak_gaz_K,kivilcim_dogan,ufleme,odun_sayisi\n");
+    std::vector<ScenarioMove> moves = sc.moves;
+    std::stable_sort(moves.begin(), moves.end(), [](const ScenarioMove& x, const ScenarioMove& y) { return x.t < y.t; });
+    size_t next = 0;
+    const float length = a.cfg.f("senaryo.sure", sc.length);   // (a shorter run for a quick look)
+    double hrr = 0, rad = 0, fuel = 0, pyro = 0, charB = 0, maxT = 0;
+    int n = 0;
+    float peak = 0.0f, peakAt = 0.0f;
+    const double t0 = nowMs();
+    const int steps = int(std::ceil(length / dtGas));
+    for (int s = 0; s <= steps; ++s) {
+        const float t = s * dtGas;
+        while (next < moves.size() && moves[next].t <= t + 0.5f * dtGas) {
+            const ScenarioMove& m = moves[next++];
+            switch (m.what) {
+            case ScenarioMove::Match: a.strikeMatch(); break;
+            case ScenarioMove::Twigs: a.addFuel(0); break;
+            case ScenarioMove::Log: a.addFuel(1); break;
+            case ScenarioMove::BlowOn: a.blowing = true; break;
+            case ScenarioMove::BlowOff: a.blowing = false; break;
+            case ScenarioMove::Scale: a.timeScale = m.arg; break;
+            case ScenarioMove::Picture: {
+                // DLSS's frames through first; the fire's clock goes on by them
+                for (int k = 0; k < (a.R.dlssOn() ? 3 * ATES_PHASES : 4); ++k) {
+                    a.update(1.0f / 60.0f);
+                    a.render(1.0f / 60.0f);
+                }
+                char nm[32];
+                std::snprintf(nm, sizeof(nm), "_%03ds", int(std::lround(m.t)));
+                a.save(base + nm);
+                if (a.wood.probe) {
+                    std::printf("ates: %.1f s%s\n", t, a.blowing ? " (ufleniyor)" : "");
+                    printLogs(a);
+                }
+                break;
+            }
+            }
+        }
+        if (s == steps) break;
+        a.update(dtGas);
+        hrr += a.gas.stats.hrr;
+        rad += a.gas.stats.rad;
+        fuel += a.gas.stats.fuelIn;
+        pyro += a.wood.stats.pyrolysis;
+        charB += a.wood.stats.charBurn;
+        maxT = std::max(maxT, double(a.gas.stats.maxT));
+        ++n;
+        if (n * dtGas >= 0.5f - 1e-4f) {
+            const float h = float(hrr / n);
+            if (h > peak) {
+                peak = h;
+                peakAt = t;
+            }
+            a.sparks.readStats();
+            int alive = 0;
+            for (const ALog& L : a.wood.logs) alive += L.alive ? 1 : 0;
+            std::fprintf(csv, "%.2f,%.1f,%.2f,%.2f,%.3f,%.3f,%.3f,%.4f,%.0f,%.0f,%.0f,%u,%d,%d\n", t + dtGas, a.woodTime, h / 1000.0f, rad / n / 1000.0, fuel / n * 1e3, pyro / n * 1e3,
+                         charB / n * 1e3, a.wood.stats.mass, a.wood.stats.emberArea * 1e4f, a.wood.stats.hottest, maxT, a.sparks.stats.born, a.blowing ? 1 : 0, alive);
+            hrr = rad = fuel = pyro = charB = maxT = 0;
+            n = 0;
+        }
+    }
+    std::fclose(csv);
+    std::printf("ates: senaryo %s, %.0f s gaz (odun %.0f s) %.0f s'de; en yuksek HRR %.1f kW (%.1f s), son: HRR %.2f kW, kutle %.3f kg, kor %.0f cm2 -> %s.csv\n",
+                sc.name, length, a.woodTime, (nowMs() - t0) / 1000.0, peak / 1000.0f, peakAt, a.gas.stats.hrr / 1000.0f, a.wood.stats.mass,
+                a.wood.stats.emberArea * 1e4f, base.c_str());
+    return 0;
+}
+
 }   // namespace
 
 int runAtesCli(int argc, char** argv) {
@@ -207,6 +371,7 @@ int runAtesCli(int argc, char** argv) {
     int gas = 0, bench = 0, seq = 0;
     float settle = 4.0f, seqFps = 30.0f;
     bool blow = false, live = false;
+    std::string scenario;
     std::vector<std::pair<float, int>> throws;
     for (int i = 1; i < argc; ++i) {
         const std::string s = argv[i];
@@ -222,6 +387,7 @@ int runAtesCli(int argc, char** argv) {
         else if (s == "--fps") seqFps = std::stof(next());
         else if (s == "--ufle") blow = true;
         else if (s == "--canli") live = true;
+        else if (s == "--senaryo") scenario = next();
         else if (s == "--odun") {
             const float at = std::stof(next());
             throws.push_back({at, std::stoi(next())});
@@ -241,6 +407,19 @@ int runAtesCli(int argc, char** argv) {
         return gasTest(cfg, root, out.empty() ? "captures/ates/gaz" : out, gas);
     }
     // the scene without a window: views after `settle` seconds of fire, a series of frames, the frame's cost
+    const Scenario* sc = nullptr;
+    static const std::vector<Scenario> all = scenarios();
+    if (!scenario.empty()) {
+        for (const Scenario& c : all)
+            if (scenario == c.name) sc = &c;
+        if (!sc) {
+            std::fprintf(stderr, "ates: senaryo yok: %s (", scenario.c_str());
+            for (const Scenario& c : all) std::fprintf(stderr, " %s", c.name);
+            std::fprintf(stderr, " )\n");
+            return 1;
+        }
+        overrides.insert(overrides.begin(), std::string("layout=") + sc->layout);
+    }
     AtesApp a;
     a.root = root;
     a.overrides = overrides;
@@ -260,6 +439,12 @@ int runAtesCli(int argc, char** argv) {
     std::error_code ec;
     fs::create_directories(fs::path(root) / fs::path(out).parent_path(), ec);
     std::printf("%s\n", a.summary().c_str());
+    if (sc) {
+        if (a.cfg.i("debug.wood", 0)) cudaMalloc(reinterpret_cast<void**>(&a.wood.probe), size_t(a.wood.capacity) * 8 * sizeof(float));
+        const int rc = runScenario(a, *sc, root, out == "captures/ates/ates" ? std::string("captures/ates/senaryo_") + sc->name : out);
+        a.release();
+        return rc;
+    }
     // the fire's first seconds (the gas fills, the flames stand up): simulated at the gas's own step
     const double t0 = nowMs();
     const float dtGas = a.cfg.f("gas.dt", 1.0f / 120.0f);
@@ -274,38 +459,7 @@ int runAtesCli(int argc, char** argv) {
                 a.wood.stats.pyrolysis * 1e3f, a.wood.stats.emberArea * 1e4f, a.wood.stats.hottest);
     std::printf("ates: odun %.3f kg, kor yanmasi %.3f g/s, gaz yakit girdisi %.3f g/s, isinim %.1f kW, en sicak gaz %.0f K\n", a.wood.stats.mass,
                 a.wood.stats.charBurn * 1e3f, a.gas.stats.fuelIn * 1e3f, a.gas.stats.rad / 1000.0f, a.gas.stats.maxT);
-    if (a.cfg.i("debug.wood", 0)) {
-        // each log's surface: mean char depth, ash, surface temperature
-        std::vector<float> cd(a.wood.patches), as(a.wood.patches), st(a.wood.patches), pr;
-        if (a.wood.probe) {
-            pr.resize(size_t(a.wood.patches) * 8);
-            cudaMemcpy(pr.data(), a.wood.probe, pr.size() * 4, cudaMemcpyDeviceToHost);
-        }
-        cudaMemcpy(cd.data(), a.wood.charD, cd.size() * 4, cudaMemcpyDeviceToHost);
-        cudaMemcpy(as.data(), a.wood.ash, as.size() * 4, cudaMemcpyDeviceToHost);
-        cudaMemcpy(st.data(), a.wood.surfT, st.size() * 4, cudaMemcpyDeviceToHost);
-        for (size_t l = 0; l < a.wood.logs.size(); ++l) {
-            const ALog& L = a.wood.logs[l];
-            double c = 0, s2 = 0, t = 0, tmax = 0;
-            const int n = L.nTheta * L.nZ;
-            for (int k = 0; k < n; ++k) {
-                c += cd[L.firstPatch + k];
-                s2 += as[L.firstPatch + k];
-                t += st[L.firstPatch + k];
-                tmax = std::max(tmax, double(st[L.firstPatch + k]));
-            }
-            std::printf("  kutuk %zu: r %.1f mm (simdi %.1f), komur %.2f mm, kul %.2f mm, yuzey %.0f K (en %.0f), kutle %.0f g, yer (%.3f %.3f %.3f)%s\n", l,
-                        L.r0 * 1e3f, L.radius * 1e3f, c / n * 1e3, s2 / n * 1e3, t / n, tmax, L.mass * 1e3f, L.pos.x, L.pos.y, L.pos.z, L.sleeping ? " uyuyor" : "");
-            if (pr.empty()) continue;
-            // its surface's balance, the mean over its patches (W/m^2): what it absorbs and keeps of its char's heat
-            // against what it radiates and gives the gas
-            double m[8] = {};
-            for (int k = 0; k < n; ++k)
-                for (int j = 0; j < 8; ++j) m[j] += pr[size_t(L.firstPatch + k) * 8 + j] / n;
-            std::printf("      O2 %.3f, gaz %.0f K, h %.1f W/m2K, hiz %.2f m/s | emilen %.1f, komur isisi %.1f | isinan %.1f, tasinan %.1f kW/m2\n", m[0], m[1],
-                        m[2], m[7], m[3] * 1e-3, m[4] * 1e-3, m[5] * 1e-3, m[6] * 1e-3);
-        }
-    }
+    if (a.cfg.i("debug.wood", 0)) printLogs(a);
     if (a.cfg.i("debug.slice", 0)) {
         // the middle slice, and the flame's reach: the highest burning cell (0.2 MW/m^3) and the highest glowing soot
         // (over 1000 K), and how many cells are over 2300 K (the stoichiometric flame's adiabatic temperature)
