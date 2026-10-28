@@ -543,7 +543,8 @@ int App::run(const Options& opt) {
                 key(GLFW_KEY_0);
                 for (int k = 9; k < s; ++k) { wait(0.15); key(GLFW_KEY_DOWN); }
             }
-            wait(0.4);
+            wait(0.8);
+            shot(infos_[s].id + "_galeride");
             if (infos_[s].id == "yikim") { mouse(0.88f, 0.735f); wait(0.3); shot("galeri_dugme"); click(); }   // the "open" button
             else key(GLFW_KEY_ENTER);
             wait(0.25); shot(infos_[s].id + "_yukleniyor");
@@ -594,6 +595,15 @@ int App::run(const Options& opt) {
                 control("buyukluk", 5); wait(0.3); key(GLFW_KEY_SPACE); wait(14.0); log("yikim sismik deprem 8"); shot("yikim_sismik_deprem");
                 key(GLFW_KEY_SPACE); wait(2.0);
                 control("yapi", 0); wait(6.0);
+            }
+            if (infos_[s].id == "ates") {
+                // wood thrown on, one log after another (a log once crashed the application), twigs, a match, a blow
+                for (int k = 0; k < 4; ++k) { key(GLFW_KEY_E); wait(1.5); log("ates kutuk " + std::to_string(k + 1)); }
+                shot("ates_kutukler");
+                key(GLFW_KEY_Q); wait(1.0); key(GLFW_KEY_F); wait(2.0); shot("ates_kibrit");
+                left(true); wait(3.0); shot("ates_ufleme"); left(false); wait(1.0);
+                key(GLFW_KEY_T); key(GLFW_KEY_T); wait(4.0); log("ates zaman x15"); shot("ates_hizli");
+                key(GLFW_KEY_E); wait(2.0); key(GLFW_KEY_E); wait(3.0); log("ates hizda kutuk"); shot("ates_hizda_kutuk");
             }
             if (infos_[s].id == "ayna") {
                 // forward through the hall, our light's colour, two lamps left, the deepest tunnel, the haze's beams
