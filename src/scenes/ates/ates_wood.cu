@@ -342,19 +342,27 @@ __global__ void kWoodStep(StepArgs a) {
                     const float keff = 1.0f / (1.0f / fmaxf(ks, 1e-9f) + 1.0f / fmaxf(hm, 1e-6f) + ashT / K.ashDiff);
                     const float rCO = 2500.0f * __expf(-6240.0f / Ts);
                     const float fCO = rCO / (1.0f + rCO);
-                    const float sC = 2.667f * (1.0f - fCO) + 1.333f * fCO;
+                    // the CO burns in the surface's own boundary layer once the surface can light it there (the
+                    // ember's blue film, millimetres over it: a large char particle's double film), with oxygen from
+                    // the same diffusion, its heat released at the surface as the char's is; cooler, it leaves
+                    // unburnt into the gas
+                    const float film = fminf(fmaxf((Ts - K.filmT0) / (K.filmT1 - K.filmT0), 0.0f), 1.0f);
+                    const float sC = 2.667f * (1.0f - fCO) + 1.333f * fCO * (1.0f + film);
                     float mC = rhoG * Og * keff / sC;   // kg of carbon per m^2 per s
                     const float Vout = 0.5f * wedge * (ro[out] * ro[out] - ro[out + 1] * ro[out + 1]) * Lz;
                     mC = fminf(mC, Cl[out] * Vout / (As * dt));
-                    const float hcC = (1.0f - fCO) * 32.8e6f + fCO * 9.2e6f;
-                    qOx = mC * hcC;
+                    // the surface's own reaction leaves all its heat in the surface (what it then loses to the gas
+                    // is the convection below); the CO's film flame, a sheet millimetres off, conducts half of its
+                    // heat back to the surface and half out into the gas
+                    const float hSurf = (1.0f - fCO) * 32.8e6f + fCO * 9.2e6f, hFilm = fCO * film * 23.6e6f;
+                    qOx = mC * (hSurf + K.filmBack * hFilm);
                     Cl[out] -= mC * As * dt / Vout;
                     // (kg and J over the sub-step: the rates are these over dtW)
                     charOx += mC * As * dt;
-                    coOut += mC * fCO * (28.0f / 12.0f) * As * dt;
+                    coOut += mC * fCO * (1.0f - film) * (28.0f / 12.0f) * As * dt;
                     o2In += mC * sC * As * dt;
-                    heatGas += (1.0f - K.charHeatShare) * qOx * As * dt;
-                    qOxKept = K.charHeatShare * qOx;
+                    heatGas += (1.0f - K.filmBack) * mC * hFilm * As * dt;
+                    qOxKept = qOx;
                     ashT += mC * K.ashInChar / K.rhoAsh * dt;
                 }
                 // a draught lifts the ash; ash on a side facing down falls; everywhere the skin flakes off as it
@@ -389,7 +397,7 @@ __global__ void kWoodStep(StepArgs a) {
                         // the surface: absorbed radiation, convection, the char's heat, its own emission (linearized)
                         const float T3 = Ti * Ti * Ti;
                         diag += (K.emissivity * SIGMA * 4.0f * T3 + hc) * As;
-                        rhs += (K.emissivity * qin + hc * Tg + K.charHeatShare * qOx + 3.0f * K.emissivity * SIGMA * T3 * Ti) * As;
+                        rhs += (K.emissivity * qin + hc * Tg + qOx + 3.0f * K.emissivity * SIGMA * T3 * Ti) * As;
                     }
                     cB[i] = diag;
                     cD[i] = rhs;

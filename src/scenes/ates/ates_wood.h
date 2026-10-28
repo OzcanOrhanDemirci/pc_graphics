@@ -29,7 +29,9 @@ struct AWoodConst {
     float emissivity = 0.9f;       // char and wood surfaces
     float hPyro = 3.0e5f;          // J/kg, the primary pyrolysis endothermic
     float latent = 2.26e6f;        // J/kg, water
-    float charHeatShare = 0.7f;    // the share of the char's oxidation heat that stays in the surface
+    float filmBack = 0.5f;         // the share of the CO's film flame's heat that comes back to the surface
+    float filmT0 = 850.0f, filmT1 = 1000.0f;   // K: the CO burns in the boundary layer from none to all over these
+                                               // (its ignition in air ~900 K)
     float ashDiff = 1.5e-5f;       // oxygen's effective diffusivity through the ash (m^2/s)
     float ashLift = 1.2f;          // gas speed (m/s) over which the draught lifts ash
     float kinA = 3.0e8f, kinTa = 19000.0f;   // the char's apparent surface rate k = A exp(-Ta/T), m/s

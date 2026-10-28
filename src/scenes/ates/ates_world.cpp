@@ -236,6 +236,8 @@ void AtesApp::initSim() {
     gas.k.wallMix = cfg.f("gas.wallMix", gas.k.wallMix);
     gas.init(nx, ny, nz, h, make_float3(-0.5f * nx * h, 0.0f, -0.5f * nz * h), R.stream());
     wood.init(unsigned(cfg.i("wood.patches", 40000)), R.stream());
+    wood.k.filmT0 = cfg.f("wood.filmT0", wood.k.filmT0);
+    wood.k.filmT1 = cfg.f("wood.filmT1", wood.k.filmT1);
     bodies.ground = groundHeight;
     bodies.substeps = cfg.i("body.substeps", 16);
     sparks.init(unsigned(cfg.i("spark.max", 8192)), R.stream());
