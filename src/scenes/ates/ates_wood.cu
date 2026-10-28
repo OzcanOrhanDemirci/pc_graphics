@@ -37,6 +37,7 @@ struct GasView {
     float h;
     float3 origin;
     const float *T, *O, *u, *v, *w;
+    const float* q;   // the reactions' heat release (W/m^3)
     AGasSources src;
     float T0, Yo2, rhoT;
 };
@@ -238,6 +239,17 @@ __global__ void kWoodStep(StepArgs a) {
             const float Tg = cg >= 0 ? a.g.T[cg] : a.g.T0;
             const float Og = cg >= 0 ? a.g.O[cg] : a.g.Yo2;
             const float spd = cg >= 0 ? speedAt(a.g, cg) : 0.0f;
+            // a flame on the face: the volatiles burning in the first cells off it stand as a sheet a few millimetres
+            // out, thinner than a cell, and conduct to the face across that gap (k / delta of hot gas: 0.08 W/m K over
+            // 4 mm). The grid sees it only as a warm cell of unburnt volatiles: without it a log under its own flame
+            // took ~1 kW/m^2 from the gas against the 15-30 a wood flame gives its fuel, and the fire went out in
+            // two minutes
+            float fl = 0.0f;
+            {
+                const int cg2 = gasCell(a.g, pos + nrm * (1.75f * a.g.h));
+                const float qb = fmaxf(cg >= 0 ? a.g.q[cg] : 0.0f, cg2 >= 0 ? a.g.q[cg2] : 0.0f);
+                fl = fminf(qb / K.flameQ, 1.0f) * K.flameH;   // W/m^2 K
+            }
             // convection: a cylinder in cross-flow (Churchill-Bernstein's leading terms, Pr 0.7), never less than
             // free convection's
             const float Tf = 0.5f * (Tg + Tl[out]);
@@ -396,8 +408,8 @@ __global__ void kWoodStep(StepArgs a) {
                     if (i == out) {
                         // the surface: absorbed radiation, convection, the char's heat, its own emission (linearized)
                         const float T3 = Ti * Ti * Ti;
-                        diag += (K.emissivity * SIGMA * 4.0f * T3 + hc) * As;
-                        rhs += (K.emissivity * qin + hc * Tg + qOx + 3.0f * K.emissivity * SIGMA * T3 * Ti) * As;
+                        diag += (K.emissivity * SIGMA * 4.0f * T3 + hc + fl) * As;
+                        rhs += (K.emissivity * qin + hc * Tg + fl * K.flameT + qOx + 3.0f * K.emissivity * SIGMA * T3 * Ti) * As;
                     }
                     cB[i] = diag;
                     cD[i] = rhs;
@@ -410,7 +422,7 @@ __global__ void kWoodStep(StepArgs a) {
                 Tl[WOOD_LAYERS - 1] = cD[WOOD_LAYERS - 1] / cB[WOOD_LAYERS - 1];
                 for (int i = WOOD_LAYERS - 2; i >= out; --i) Tl[i] = (cD[i] - cC[i] * Tl[i + 1]) / cB[i];
                 // the convective heat the surface gave the gas
-                heatGas += hc * (Tl[out] - Tg) * As * dt;
+                heatGas += (hc * (Tl[out] - Tg) - fl * (K.flameT - Tl[out])) * As * dt;
                 // --- drying and pyrolysis in each layer
                 for (int i = out; i < WOOD_LAYERS; ++i) {
                     const float V = 0.5f * wedge * (ro[i] * ro[i] - ro[i + 1] * ro[i + 1]) * Lz;
@@ -455,7 +467,7 @@ __global__ void kWoodStep(StepArgs a) {
                 q[3] = K.emissivity * qin;
                 q[4] = qOxKept;
                 q[5] = K.emissivity * SIGMA * Ts * Ts * Ts * Ts;
-                q[6] = hc * (Ts - Tg);
+                q[6] = hc * (Ts - Tg) - fl * (K.flameT - Ts);
                 q[7] = spd;
             }
             // what went into the gas, at its real rates (the wood's time ran timeScale times faster)
@@ -684,6 +696,7 @@ GasView view(const AtesGas& gas) {
     g.u = gas.u;
     g.v = gas.v;
     g.w = gas.w;
+    g.q = gas.q;
     g.src = gas.src;
     g.T0 = gas.k.T0;
     g.Yo2 = gas.k.Yo2;

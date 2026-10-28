@@ -30,6 +30,9 @@ struct AWoodConst {
     float hPyro = 3.0e5f;          // J/kg, the primary pyrolysis endothermic
     float latent = 2.26e6f;        // J/kg, water
     float filmBack = 0.5f;         // the share of the CO's film flame's heat that comes back to the surface
+    // a flame on a face, finer than the grid: its sheet's temperature (a wood volatiles' diffusion flame), the gas's
+    // conductance across its standoff (0.08 W/m K over 4 mm), the heat release beside the face that means a flame
+    float flameT = 1800.0f, flameH = 20.0f, flameQ = 1.0e6f;
     float filmT0 = 850.0f, filmT1 = 1000.0f;   // K: the CO burns in the boundary layer from none to all over these
                                                // (its ignition in air ~900 K)
     float ashDiff = 1.5e-5f;       // oxygen's effective diffusivity through the ash (m^2/s)
