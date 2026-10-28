@@ -357,8 +357,9 @@ __global__ void kWoodStep(StepArgs a) {
                     qOxKept = K.charHeatShare * qOx;
                     ashT += mC * K.ashInChar / K.rhoAsh * dt;
                 }
-                // a draught lifts the ash; ash on a side facing down falls (a slow loss everywhere: it settles off)
-                ashT = fmaxf(ashT - dt * (fmaxf(spd - K.ashLift, 0.0f) * 2e-4f + 2e-6f + fmaxf(-nrm.y, 0.0f) * 2e-5f), 0.0f);
+                // a draught lifts the ash; ash on a side facing down falls; everywhere the skin flakes off as it
+                // thickens (its thickness over ashFall: what is left is what the char makes in that time)
+                ashT = fmaxf(ashT - dt * (fmaxf(spd - K.ashLift, 0.0f) * 2e-4f + ashT / K.ashFall + fmaxf(-nrm.y, 0.0f) * 2e-5f), 0.0f);
                 // --- conduction with the surface's balance, implicit (Thomas) over the layers left
                 float cA[WOOD_LAYERS], cB[WOOD_LAYERS], cC[WOOD_LAYERS], cD[WOOD_LAYERS];
                 for (int i = out; i < WOOD_LAYERS; ++i) {
@@ -638,7 +639,11 @@ int AtesWood::add(const ALog& proto, float burnt, float surfaceT) {
     WOOD_CHECK(cudaMemcpy(surfT + patches, st.data(), n * sizeof(float), cudaMemcpyHostToDevice));
     WOOD_CHECK(cudaMemcpy(charD + patches, cd.data(), n * sizeof(float), cudaMemcpyHostToDevice));
     WOOD_CHECK(cudaMemcpy(radOut + patches, rr.data(), n * sizeof(float), cudaMemcpyHostToDevice));
-    WOOD_CHECK(cudaMemset(ash + patches, 0, n * sizeof(float)));
+    // a coal of an old fire carries the ash skin its burning has left (what the char makes in ashFall at a coal's
+    // rate, ~1e-3 kg/m^2 s: ~0.07 mm)
+    const bool coal = burnt >= 0.9f * L.r0;
+    std::vector<float> as(n, coal ? 1e-3f * k.ashInChar / k.rhoAsh * k.ashFall : 0.0f);
+    WOOD_CHECK(cudaMemcpy(ash + patches, as.data(), n * sizeof(float), cudaMemcpyHostToDevice));
     patches += n;
     logs.push_back(L);
     return int(logs.size()) - 1;

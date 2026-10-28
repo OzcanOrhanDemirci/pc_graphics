@@ -114,7 +114,7 @@ static __forceinline__ __device__ void logSurface(const ALogView& L, float2 uv, 
     const float edge = 0.5f * (sqrtf(d2) - sqrtf(d1));
     const float crackW = 0.07f * charred;
     const float crack = 1.0f - smoothstepf(crackW * 0.5f, crackW, edge);
-    const float ashCover = smoothstepf(0.0f, 0.002f, ash);
+    const float ashCover = smoothstepf(0.00002f, 0.00012f, ash);
     s.albedo = s.albedo * (1.0f - charred) + make_float3(0.035f, 0.032f, 0.03f) * charred;
     s.albedo = s.albedo * (1.0f - crack * 0.6f);
     s.albedo = s.albedo * (1.0f - ashCover) + make_float3(0.55f, 0.53f, 0.5f) * ashCover;

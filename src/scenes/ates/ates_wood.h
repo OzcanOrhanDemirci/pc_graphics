@@ -23,7 +23,9 @@ struct AWoodConst {
     float rhoWood = 550.0f;        // dry wood (kg/m^3: oak 650-750, pine 450-550, beech 700)
     float moisture = 0.10f;        // water per dry wood (air-dried firewood 0.1-0.2)
     float ashInChar = 0.03f;       // ash per char (wood ash ~0.6% of the wood, char a fifth of it)
-    float rhoAsh = 250.0f;         // a fluffy ash layer
+    float rhoAsh = 40.0f;          // the ash skin on a coal: the char's mineral skeleton (3% of 140 kg/m^3), its
+                                   // cells fallen in to a tenth of their volume (settled ash 250-700)
+    float ashFall = 90.0f;         // s: the skin flakes off at its thickness over this (thicker, sooner)
     float emissivity = 0.9f;       // char and wood surfaces
     float hPyro = 3.0e5f;          // J/kg, the primary pyrolysis endothermic
     float latent = 2.26e6f;        // J/kg, water
