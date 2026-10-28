@@ -224,6 +224,7 @@ bool AtesApp::initRenderer(std::string& err) {
     R.params.bloomStrength = cfg.f("bloom", 0.05f);
     R.params.vignette = cfg.f("vignette", 0.25f);
     R.params.saturation = cfg.f("saturation", 1.0f);
+    R.params.contrast = cfg.f("contrast", 1.35f);
     R.params.debug = cfg.i("debug", 0);
     return true;
 }
@@ -540,15 +541,17 @@ void AtesApp::render(float dt) {
     }
     if (autoOn) {
         // the eye's adaptation: the frame's mean log luminance on a sparse grid, followed over a second or so
-        const int gx = 48, gy = 27;
+        const int gx = 128, gy = 72;
         std::vector<float4> s(size_t(gx) * gy);
         const int sx = width / gx, sy = height / gy;
         for (int j = 0; j < gy; ++j)
             cudaMemcpy2D(&s[size_t(j) * gx], sizeof(float4), p.hdr + size_t(j * sy + sy / 2) * width + sx / 2, size_t(sx) * sizeof(float4), sizeof(float4), gx,
                          cudaMemcpyDeviceToHost);
-        // a camera at night by a fire: its exposure is set by what is bright in the frame (the flames, the embers,
-        // their light on the near ground), not by the dark around it; the 96th percentile of the luminance lands at
-        // exposure.key (AgX's shoulder), the mean only limits it (a frame with no fire still opens up, as the eye does)
+        // a camera at night by a fire: its exposure is set by the brightest in the frame, the flames (or the embers
+        // when there are none), not by the dark around it: the eye looking at a fire sees its flames yellow and orange,
+        // not white, and the ground beyond them dim. The exposure.pct percentile of the luminance (the flame's body
+        // even when it fills a hundredth of the frame) lands at exposure.key (below AgX's white at 16); the mean only
+        // limits it (a frame with no fire still opens up, as the eye does)
         std::vector<float> Ys;
         Ys.reserve(s.size());
         double acc = 0.0;
@@ -558,9 +561,9 @@ void AtesApp::render(float dt) {
             acc += std::log(Y);
         }
         std::sort(Ys.begin(), Ys.end());
-        const float hiY = Ys[size_t(0.96 * (Ys.size() - 1))];
+        const float hiY = Ys[size_t(double(cfg.f("exposure.pct", 0.997f)) * (Ys.size() - 1))];
         const float meanY = float(std::exp(acc / double(Ys.size())));
-        const float want = std::min(cfg.f("exposure.key", 1.2f) / std::max(hiY, 1e-6f), cfg.f("exposure.keyMean", 0.25f) / std::max(meanY, 1e-6f));
+        const float want = std::min(cfg.f("exposure.key", 4.0f) / std::max(hiY, 1e-6f), cfg.f("exposure.keyMean", 0.25f) / std::max(meanY, 1e-6f));
         const float lum = 1.0f / std::max(want, 1e-6f);
         if (adaptLum_ < 0.0f || dt <= 0.0f) adaptLum_ = lum;
         else adaptLum_ += (lum - adaptLum_) * (1.0f - std::exp(-dt / 1.5f));

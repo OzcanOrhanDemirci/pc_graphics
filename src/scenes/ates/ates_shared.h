@@ -95,6 +95,8 @@ struct AtesParams {
     float bloomStrength;
     float vignette;
     float saturation;
+    float contrast;           // a power on AgX's display values (Blender's "Punchy" look: 1.35): AgX alone keeps
+                              // sixteen stops, so char seven stops under the flame came out mid-grey, not black
     int debug;
     unsigned int* badCount;
 

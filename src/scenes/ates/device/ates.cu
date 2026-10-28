@@ -464,6 +464,7 @@ extern "C" __global__ void __raygen__final() {
     const float r2 = (u * u + v * v) * 2.0f;
     c *= 1.0f - params.vignette * r2 * r2 * 0.5f - params.vignette * r2 * 0.5f;
     c = agx(fmaxf3(c, make_float3(0, 0, 0)));
+    if (params.contrast != 1.0f) c = make_float3(powf(c.x, params.contrast), powf(c.y, params.contrast), powf(c.z, params.contrast));
     const float Y = luminance709(c);
     c = fmaxf3(make_float3(Y, Y, Y) + (c - make_float3(Y, Y, Y)) * params.saturation, make_float3(0, 0, 0));
     const float dz = (float(hash32(px * 1973u + py * 9277u) & 1023u) / 1023.0f - 0.5f) / 255.0f;
