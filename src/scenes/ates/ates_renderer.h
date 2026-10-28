@@ -61,7 +61,8 @@ public:
     void redoVolume();
     void download(std::vector<unsigned char>& rgba) const;
     std::vector<float4> hdrHost() const;
-    // the last picture's luminance (cd/m^2, before the exposure) at the centres of a gx x gy grid, in one read
+    // the last picture's luminance (cd/m^2, before the exposure) over a gx x gy grid of cells, in one read: the cells'
+    // means, then their means of its square (2 gx gy values)
     void lumSamples(int gx, int gy, std::vector<float>& Y);
     void release();
     cudaStream_t stream() const { return stream_; }
@@ -127,5 +128,6 @@ private:
 
 // the cumulative sum of the light blocks' luminance (ates_kernels.cu)
 void atesLightCdf(const float3* light, int n, float* lum, float* cdf, void*& tmp, size_t& tmpBytes, cudaStream_t st);
-// the picture's luminance at the centres of a gx x gy grid of cells (ates_kernels.cu)
+// the picture's mean luminance over each of a gx x gy grid of cells, then each cell's mean squared luminance
+// (ates_kernels.cu)
 void atesSampleLum(const float4* hdr, int w, int h, int gx, int gy, float* out, cudaStream_t st);

@@ -605,7 +605,7 @@ void AtesRenderer::redoVolume() {
 }
 
 void AtesRenderer::lumSamples(int gx, int gy, std::vector<float>& Y) {
-    const int n = gx * gy;
+    const int n = 2 * gx * gy;
     if (n > lumN_) {
         if (lumS_) cudaFree(lumS_);
         CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&lumS_), n * sizeof(float)));

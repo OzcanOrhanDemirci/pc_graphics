@@ -11,12 +11,23 @@ __global__ void kLum(const float3* light, int n, float* lum) {
     const float3 c = light[i];
     lum[i] = fmaxf(0.2126f * c.x + 0.7152f * c.y + 0.0722f * c.z, 0.0f);
 }
+// each cell's mean luminance and mean squared luminance over all its pixels (a point sample a cell lands on a thin
+// flame or misses it from frame to frame)
 __global__ void kSampleLum(const float4* hdr, int w, int gx, int gy, int sx, int sy, float* out) {
     const int t = blockIdx.x * blockDim.x + threadIdx.x;
     if (t >= gx * gy) return;
     const int i = t % gx, j = t / gx;
-    const float4 c = hdr[size_t(j * sy + sy / 2) * size_t(w) + size_t(i * sx + sx / 2)];
-    out[t] = 0.2126f * c.x + 0.7152f * c.y + 0.0722f * c.z;
+    float s = 0.0f, s2 = 0.0f;
+    for (int y = j * sy; y < (j + 1) * sy; ++y)
+        for (int x = i * sx; x < (i + 1) * sx; ++x) {
+            const float4 c = hdr[size_t(y) * size_t(w) + size_t(x)];
+            const float Y = fmaxf(0.2126f * c.x + 0.7152f * c.y + 0.0722f * c.z, 0.0f);
+            s += Y;
+            s2 += Y * Y;
+        }
+    const float inv = 1.0f / float(sx * sy);
+    out[t] = s * inv;
+    out[gx * gy + t] = s2 * inv;
 }
 }   // namespace
 
