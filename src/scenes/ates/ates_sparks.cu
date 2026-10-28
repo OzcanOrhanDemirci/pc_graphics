@@ -77,6 +77,29 @@ __device__ bool gasAt(const SGas& g, float3 p, float3& U, float& T, float& O) {
     return true;
 }
 
+__device__ __forceinline__ bool solidCell(const SGas& g, int i, int j, int k) {
+    if (!g.solid || i < 0 || j < 0 || k < 0 || i >= g.nx || j >= g.ny || k >= g.nz) return false;
+    return g.solid[i + g.nx * (j + g.ny * k)] != 0;
+}
+
+// the way out of a solid at a point: toward its free neighbours (the 26 around its cell), up when it has none
+__device__ float3 solidNormal(const SGas& g, float3 p) {
+    const float3 c = (p - g.origin) * (1.0f / g.h);
+    const int ci = int(floorf(c.x)), cj = int(floorf(c.y)), ck = int(floorf(c.z));
+    float3 n = make_float3(0, 0, 0);
+    for (int dk = -1; dk <= 1; ++dk)
+        for (int dj = -1; dj <= 1; ++dj)
+            for (int di = -1; di <= 1; ++di)
+                if (!solidCell(g, ci + di, cj + dj, ck + dk)) n = n + make_float3(float(di), float(dj), float(dk));
+    const float l = length(n);
+    return l > 1e-3f ? n * (1.0f / l) : make_float3(0, 1, 0);
+}
+
+__device__ __forceinline__ bool inSolid(const SGas& g, float3 p) {
+    const float3 c = (p - g.origin) * (1.0f / g.h);
+    return solidCell(g, int(floorf(c.x)), int(floorf(c.y)), int(floorf(c.z)));
+}
+
 // what leaves the grid's top: weighted by the buoyant flux (upward speed times excess temperature)
 __global__ void kPlume(SGas g, float* out) {
     __shared__ float s[6][1024];
@@ -172,8 +195,15 @@ __global__ void kSpark(SGas g, unsigned int cap, float4* pos, float4* prev, floa
     for (int s = 0; s < n && !dead; ++s) {
         float3 ug;
         float Tg, Og;
-        if (!gasAt(g, x, ug, Tg, Og)) {
-            dead = true;   // into a log or a stone
+        // born in a log's cell (its cells are coarser than its surface) or caught by a log settling: out on the free
+        // side, a cell at a time
+        bool inGas = gasAt(g, x, ug, Tg, Og);
+        for (int k = 0; k < 3 && !inGas; ++k) {
+            x = x + solidNormal(g, x) * g.h;
+            inGas = gasAt(g, x, ug, Tg, Og);
+        }
+        if (!inGas) {
+            dead = true;   // buried in a log or a stone
             if (dbg) atomicAdd(&dbg[0], 1u);
             break;
         }
@@ -188,8 +218,17 @@ __global__ void kSpark(SGas g, unsigned int cap, float4* pos, float4* prev, floa
         const float3 a = ug + make_float3(0.0f, -9.81f * tau, 0.0f);
         const bool landed = x.y <= 0.0031f;
         if (!landed) {
+            const float3 x0 = x;
             x = x + a * h + (v - a) * (tau * (1.0f - e));
             v = a + (v - a) * e;
+            // it struck a log or a stone: back where it was, bounced off the face (a third of its speed into the face
+            // comes back, rubbing takes some of its glide), so it skips over the bed or comes to rest on a log
+            if (inSolid(g, x)) {
+                const float3 nf = solidNormal(g, x);
+                x = x0;
+                const float vn = dot(v, nf);
+                if (vn < 0.0f) v = (v - nf * vn) * 0.6f - nf * (0.3f * vn);
+            }
         }
         // on the ground it lies where it fell, the ground under it drawing its heat (a contact conductance)
         if (x.y < 0.003f) {
