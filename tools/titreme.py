@@ -30,7 +30,8 @@ def second(files):
 
 
 for d in sys.argv[1:]:
-    lv = sorted(glob.glob(os.path.join(d, "live_*.png")))
+    # (Ateş'in `--seri N --dondur --donus D` klibinde canlı kare_*.png)
+    lv = sorted(glob.glob(os.path.join(d, "live_*.png"))) or sorted(glob.glob(os.path.join(d, "kare_*.png")))
     rf = sorted(glob.glob(os.path.join(d, "ref_*.png")))
     a, a99 = second(lv)
     b, b99 = second(rf)

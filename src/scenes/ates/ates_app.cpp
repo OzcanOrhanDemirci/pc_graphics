@@ -648,6 +648,7 @@ int runAtesCli(int argc, char** argv) {
         setPNGCompression(1);
         // (--dondur: the fire stands still, only the picture's samples move: what flickers then is the sampling's;
         // --donus: the look turns this many degrees a second)
+        const float yaw0 = a.cam.yaw;
         for (int f = 0; f < seq; ++f) {
             if (!freeze) a.update(1.0f / seqFps);
             a.cam.yaw += turn * 0.0174533f / seqFps;
@@ -666,6 +667,17 @@ int runAtesCli(int argc, char** argv) {
             a.R.params.lightSamples = 64;
             a.render(1.0f / seqFps);
             a.save(dir + "/ref");
+            // turning, the whole path again, every frame drawn so (ref_*: tools/titreme.py's reference)
+            if (turn != 0.0f) {
+                a.cam.yaw = yaw0;
+                for (int f = 0; f < seq; ++f) {
+                    a.cam.yaw += turn * 0.0174533f / seqFps;
+                    a.render(1.0f / seqFps);
+                    char nm[64];
+                    std::snprintf(nm, sizeof(nm), "/ref_%05d", f);
+                    a.save(dir + nm);
+                }
+            }
             a.R.params.lightSamples = keep;
         }
         std::printf("ates: %d kare -> %s\n", seq, dir.c_str());
