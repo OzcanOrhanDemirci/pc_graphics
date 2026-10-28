@@ -128,56 +128,93 @@ static __forceinline__ __device__ void logSurface(const ALogView& L, float2 uv, 
     const float T = bil(L.surfT), charD = bil(L.charD), ash = bil(L.ash);
     // char: black where it is deeper than the bark's first fraction of a millimetre
     const float charred = smoothstepf(0.0002f, 0.0015f, charD);
-    // the checks (the alligator pattern): long cracks along the grain cut the char into strips, short ones across cut
-    // the strips into blocks, staggered from strip to strip, a fifth of them missing (two blocks as one); the lines
-    // wander. Their size is the log's (set when the char first split, it does not crawl as it deepens), their width
-    // grows with the char's depth. A coal (a short piece of the bed) breaks into few, broad facets
+    // the checks (the alligator pattern): the char shrinks most along the grain, so its widest cracks run across it,
+    // rings around the log; between two rings shorter fissures along the grain cut the band into blocks, staggered
+    // from band to band, a fifth of them missing (two blocks as one); the lines wander. Their size is the log's (set
+    // when the char first split, it does not crawl as it deepens), their width grows with the char's depth. A coal (a
+    // short piece of the bed) breaks into few, broad facets
     const bool coal = L.len < 0.15f;
     const float cell = coal ? fminf(fmaxf(0.75f * L.r0, 0.009f), 0.018f) : fminf(fmaxf(0.3f * L.r0, 0.007f), 0.014f);
     const float pillow = coal ? 0.45f : 1.0f;
-    const int ncol = max(6, int(6.2831853f * L.r0 / (0.85f * cell) + 0.5f));
-    const float wU = 6.2831853f * L.r0 / float(ncol), H = 1.5f * cell;
+    const int ncol = max(6, int(6.2831853f * L.r0 / cell + 0.5f));
+    const float wU = 6.2831853f * L.r0 / float(ncol), H = 1.1f * cell;
     // (the noise's place: around on the first radius's circle, so it closes on itself)
     const float cs = cosf(th), sn = sinf(th);
     const float3 pn = make_float3(v, L.r0 * cs, L.r0 * sn);
     const float ic = 1.0f / cell;
-    const float u = th * L.r0 + (vnoise(pn * ic, L.seed) - 0.5f) * 0.7f * cell;
-    const float vw = v + (vnoise(pn * ic, L.seed ^ 0x5bd1e995u) - 0.5f) * 0.7f * cell;
+    // (a coal's lines wander further: its cracks run every way, not in rings)
+    const float wander = coal ? 1.6f : 0.7f;
+    const float u = th * L.r0 + (vnoise(pn * ic, L.seed) - 0.5f) * wander * cell;
+    const float vw = v + (vnoise(pn * (coal ? 0.6f * ic : ic), L.seed ^ 0x5bd1e995u) - 0.5f) * wander * cell;
     const float aa = fmaxf(0.5f * width, 0.00015f);
     const float hw0 = fminf(0.0003f + 0.07f * charD, 0.12f * cell) * charred;
     const float wob = 0.6f + 0.8f * vnoise(pn * (3.0f * ic), L.seed ^ 0x27d4eb2fu);
     float crack, edgeD, dhdu = 0.0f, dhdv = 0.0f;   // (edgeD: the distance out from the nearest crack's lip, m)
+    float pit = 1.0f;                                // the light the char's relief lets reach the point
     unsigned int blockId;
     if (!end) {
-        const int c = int(floorf(u / wU));
-        const unsigned int cw = unsigned((c % ncol + ncol) % ncol);
-        const float du0 = u - float(c) * wU, du1 = float(c + 1) * wU - u;
-        const unsigned int hcol = hash32(cw * 2654435761u ^ L.seed);
-        const float off = u01(hcol) * H;
-        const int k0 = int(floorf((vw - off) / H));
-        float lo = -1e9f, hi = 1e9f;
-        int klo = k0 - 3;
-        for (int k = k0 - 2; k <= k0 + 3; ++k) {
-            const unsigned int hk = hash32(hcol ^ unsigned(k) * 0x9e3779b9u);
-            if (u01(hash32(hk)) < 0.2f) continue;
-            const float b = off + H * (float(k) + 0.35f * (u01(hk) - 0.5f));
-            if (b <= vw && b > lo) {
-                lo = b;
-                klo = k;
+        // the band between two rings (each ring a little off its place, the same all around)
+        const int k = int(floorf(vw / H));
+        float lo = H * float(k), hi = H * float(k + 1);
+        int kb = k;
+        {
+            const float jl = 0.3f * H * (u01(hash32(unsigned(k) * 0x9e3779b9u ^ L.seed)) - 0.5f);
+            const float jh = 0.3f * H * (u01(hash32(unsigned(k + 1) * 0x9e3779b9u ^ L.seed)) - 0.5f);
+            if (vw < lo + jl) {
+                hi = lo + jl;
+                lo = H * float(k - 1) + 0.3f * H * (u01(hash32(unsigned(k - 1) * 0x9e3779b9u ^ L.seed)) - 0.5f);
+                kb = k - 1;
+            } else if (vw >= hi + jh) {
+                lo = hi + jh;
+                hi = H * float(k + 2) + 0.3f * H * (u01(hash32(unsigned(k + 2) * 0x9e3779b9u ^ L.seed)) - 0.5f);
+                kb = k + 1;
+            } else {
+                lo += jl;
+                hi += jh;
             }
-            if (b > vw && b < hi) hi = b;
         }
-        const float dv0 = fminf(vw - lo, 2.0f * H), dv1 = fminf(hi - vw, 2.0f * H);
-        const float hwL = hw0 * wob * 1.2f, hwT = hw0 * wob * 0.8f;
+        // the band's fissures along the grain, staggered from band to band; their index wraps around the log
+        const unsigned int hb = hash32(unsigned(kb) * 2654435761u ^ L.seed);
+        const float off = u01(hb) * wU;
+        const int c0 = int(floorf((u - off) / wU));
+        float ul = -1e9f, ur = 1e9f;
+        int clo = c0 - 3;
+        for (int c = c0 - 2; c <= c0 + 3; ++c) {
+            const unsigned int hc = hash32(hb ^ unsigned((c % ncol + ncol) % ncol) * 0x85ebca6bu);
+            if (u01(hash32(hc)) < 0.2f) continue;
+            const float b = off + wU * (float(c) + 0.35f * (u01(hc) - 0.5f));
+            if (b <= u && b > ul) {
+                ul = b;
+                clo = c;
+            }
+            if (b > u && b < ur) ur = b;
+        }
+        const float du0 = fminf(u - ul, 2.0f * wU), du1 = fminf(ur - u, 2.0f * wU);
+        const float dv0 = vw - lo, dv1 = hi - vw;
+        const float hwT = hw0 * wob * (coal ? 1.0f : 1.25f), hwL = hw0 * wob * (coal ? 1.0f : 0.7f);
         const float e = fminf(fminf(du0, du1) - hwL, fminf(dv0, dv1) - hwT);
         edgeD = e;
         // (a crack narrower than the pixel covers its share of it)
-        crack = (1.0f - smoothstepf(-aa, aa, e)) * fminf(hwT / aa, 1.0f);
-        // the block's top is a pillow over its whole width and length; each block leans its own way a little
-        const float Ru = 0.45f * wU, Rv = 0.45f * (dv0 + dv1);
-        blockId = hash32(hcol ^ unsigned(klo) * 0x85ebca6bu);
+        crack = (1.0f - smoothstepf(-aa, aa, e)) * fminf((fminf(du0, du1) - hwL < fminf(dv0, dv1) - hwT ? hwL : hwT) / aa, 1.0f);
+        // the block's top: flat, rounded off at its lips; each block leans its own way a little
+        const float Ru = 0.3f * (du0 + du1), Rv = 0.3f * (dv0 + dv1);
+        blockId = hash32(hb ^ unsigned((clo % ncol + ncol) % ncol) * 0x27d4eb2fu);
         dhdu = ((bevel(du0 - hwL, Ru) - bevel(du1 - hwL, Ru)) * pillow + 0.3f * (u01(blockId) - 0.5f)) * charred;
         dhdv = ((bevel(dv0 - hwT, Rv) - bevel(dv1 - hwT, Rv)) * pillow + 0.3f * (u01(hash32(blockId)) - 0.5f)) * charred;
+        // its face is not smooth: the char's own relief, a few millimetres across (two octaves of noise, its slope by
+        // differences over a fifth of the finer one's wavelength)
+        const float f1 = 3.0f * ic, f2 = 7.0f * ic, dd = 0.2f / f2;
+        auto relief = [&](float a, float b) {
+            const float t2 = th + b / L.r0;
+            const float3 q = make_float3(v + a, L.r0 * cosf(t2), L.r0 * sinf(t2));
+            return vnoise(q * f1, L.seed ^ 0x51ed270bu) / f1 + 0.5f * vnoise(q * f2, L.seed ^ 0x2f4a7c15u) / f2;
+        };
+        const float h0 = relief(0.0f, 0.0f), A = 0.8f * charred;
+        dhdu += A * (relief(0.0f, dd) - h0) / dd;
+        dhdv += A * (relief(dd, 0.0f) - h0) / dd;
+        // (its hollows see less of the fire than its crests: the relief's height, in the coarser octave's wavelengths 0
+        // to ~1.2, sets the share of the light that reaches in, 0.45 down in a hollow to 0.9 on a crest)
+        pit = 1.0f - 0.55f * charred * (1.0f - fminf(h0 * f1 / 1.5f, 1.0f));
     } else {
         // an end: cracks out from the heart (every few strips' lines, each from its own depth in) and along the rings
         const int c = int(floorf(u / wU));
@@ -211,7 +248,7 @@ static __forceinline__ __device__ void logSurface(const ALogView& L, float2 uv, 
     }
     // the char's tone: block to block a little, the grain in it, the cracks' depths dark
     const float tone = 0.75f + 0.5f * u01(hash32(blockId ^ 0x3c6ef372u));
-    const float3 charA = make_float3(0.038f, 0.035f, 0.033f) * (tone * (0.85f + 0.3f * grain));
+    const float3 charA = make_float3(0.038f, 0.035f, 0.033f) * (tone * (0.85f + 0.3f * grain) * pit);
     s.albedo = s.albedo * (1.0f - charred) + charA * charred;
     s.albedo = s.albedo * (1.0f - 0.75f * crack);
     // the ash: a pale skin on the blocks' tops first (none down in the cracks), in patches
