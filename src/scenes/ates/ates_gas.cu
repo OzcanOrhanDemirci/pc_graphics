@@ -1148,8 +1148,6 @@ void AtesGas::step(float dt) {
     ca.dt = dt;
     kCells<<<g, b, 0, st_>>>(ca);
     if (jet.on) kJetAir<<<g, b, 0, st_>>>(d, origin, Scalars{T, F, C, O, S, M}, jet, k, dt);
-    const size_t n = size_t(nx) * ny * nz;
-    for (float* p : {src.fuel, src.co, src.o2, src.heat, src.massT, src.ignite}) GAS_CHECK(cudaMemsetAsync(p, 0, n * sizeof(float), st_));
     mark(1);
     // 2 the velocity carried by itself
     for (int comp = 0; comp < 3; ++comp) {
@@ -1234,6 +1232,11 @@ void AtesGas::step(float dt) {
             sectionMs[s] += ms;
         }
     ++stats.steps;
+}
+
+void AtesGas::clearSources() {
+    const size_t n = size_t(nx) * ny * nz;
+    for (float* p : {src.fuel, src.co, src.o2, src.heat, src.massT, src.ignite}) GAS_CHECK(cudaMemsetAsync(p, 0, n * sizeof(float), st_));
 }
 
 void AtesGas::pack(const float3* sootEmit) {

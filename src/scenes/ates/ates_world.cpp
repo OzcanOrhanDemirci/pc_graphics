@@ -417,7 +417,6 @@ void AtesApp::update(float dt) {
     // the logs fall and settle in the clock's time
     bodies.step(wood.logs, std::min(dt, 0.05f));
     gasAcc_ += dt;
-    int steps = 0;
     const int maxSteps = cfg.i("gas.maxSteps", 3);
     // the hand: a match's flame (a small burner at its head), the breath along the look
     if (matchLeft > 0.0f) {
@@ -455,14 +454,19 @@ void AtesApp::update(float dt) {
             gas.jet.length = cfg.f("blow.length", 1.2f);
         }
     }
-    while (gasAcc_ >= dtGas && steps < maxSteps) {
+    const int steps = std::min(int(gasAcc_ / dtGas), maxSteps);
+    if (steps > 0) {
+        // the wood once a frame, over all its gas steps: it gives the gas rates (kg/s, W per cell) that hold through
+        // them, and its own time is seconds (a few gas steps of coupling lag are nothing to it)
+        gas.clearSources();
         wood.markSolids(gas);
-        wood.step(dtGas * timeScale, timeScale, gas);
-        gas.step(dtGas);
-        gasAcc_ -= dtGas;
-        simTime += dtGas;
-        woodTime += dtGas * timeScale;
-        ++steps;
+        wood.step(steps * dtGas * timeScale, timeScale, gas);
+        for (int s = 0; s < steps; ++s) {
+            gas.step(dtGas);
+        }
+        gasAcc_ -= steps * dtGas;
+        simTime += steps * dtGas;
+        woodTime += steps * dtGas * timeScale;
     }
     if (gasAcc_ > dtGas) gasAcc_ = 0.0f;   // behind: the gas runs slower than the clock rather than catching up in bursts
     gas.pack(R.params.sootEmit);

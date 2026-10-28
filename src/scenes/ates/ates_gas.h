@@ -105,6 +105,8 @@ public:
 
     bool init(int nx, int ny, int nz, float h, float3 origin, cudaStream_t stream);
     void reset();               // still air at T0
+    // the sources are rates (kg/s, W per cell): written by the wood, they hold for every step until cleared
+    void clearSources();
     void step(float dt);
     // the drawing's view of the gas: a half4 3D texture per cell (T, soot volume fraction * 1e6, smoke kg/m^3 * 1e3,
     // the reactions' heat release W/m^3 * 1e-6), refreshed by pack(); and per brick of ATES_BRICK^3 cells what it
