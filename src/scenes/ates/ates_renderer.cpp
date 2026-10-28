@@ -1,6 +1,7 @@
 #include "scenes/ates/ates_renderer.h"
 
 #include "core/bloom.h"
+#include "core/image_io.h"
 #include "scenes/ates/ates_spectra.h"
 
 #include <nvrtc.h>
@@ -118,6 +119,20 @@ bool AtesRenderer::init(int width, int height, const std::string& root) {
     params.groundMaterial = -1;
     params.groundMaterial2 = -1;
     params.lightSamples = 1;
+    // blue noise for the dither (tools/bluenoise.py)
+    {
+        int w = 0, h = 0;
+        std::vector<unsigned char> g;
+        if (readPNGGray(root + "/assets/bluenoise128.png", w, h, g) && w == 128 && h == 128) {
+            std::vector<float> f(g.size());
+            for (size_t i = 0; i < g.size(); ++i) f[i] = (g[i] + 0.5f) / 256.0f;
+            CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&blueNoise_), f.size() * sizeof(float)));
+            CUDA_CHECK(cudaMemcpy(blueNoise_, f.data(), f.size() * sizeof(float), cudaMemcpyHostToDevice));
+            params.blueNoise = blueNoise_;
+        } else {
+            std::printf("ates: assets/bluenoise128.png yok, titretmesiz\n");
+        }
+    }
     setPattern(4, 0.42f);
     return true;
 }
@@ -675,7 +690,7 @@ void AtesRenderer::release() {
     for (void** p : {reinterpret_cast<void**>(&dGeoms_), reinterpret_cast<void**>(&dInst_), reinterpret_cast<void**>(&dLogs_),
                      reinterpret_cast<void**>(&dMats_), reinterpret_cast<void**>(&lum_), reinterpret_cast<void**>(&cdf_), &scanTmp_,
                      reinterpret_cast<void**>(&tables_), reinterpret_cast<void**>(&lumS_), reinterpret_cast<void**>(&smokeList_),
-                     reinterpret_cast<void**>(&smokeCount_), reinterpret_cast<void**>(&smokeLight_)}) {
+                     reinterpret_cast<void**>(&smokeCount_), reinterpret_cast<void**>(&smokeLight_), reinterpret_cast<void**>(&blueNoise_)}) {
         if (*p) cudaFree(*p);
         *p = nullptr;
     }

@@ -690,6 +690,14 @@ extern "C" __global__ void __raygen__volume() {
     params.hdr[i] = make_float4(c.x, c.y, c.z, 1.0f);
 }
 
+// a display value (0-1, linear) to its 8-bit code, dithered by dz (+-1 level). The dither fades out over the last level
+// to black: a true black has no steps to hide, and the clamp at 0 would lift it to a fixed sprinkle of ones (an eighth
+// of the pixels)
+static __forceinline__ __device__ unsigned char codeValue(float v, float dz) {
+    const float s = srgbOetf(v) * 255.0f;
+    return (unsigned char)fminf(fmaxf(s + 0.5f + dz * fminf(s, 1.0f), 0.0f), 255.0f);
+}
+
 extern "C" __global__ void __raygen__final() {
     const uint3 li = optixGetLaunchIndex();
     const unsigned int px = li.x, py = li.y, i = py * params.width + px;
@@ -717,7 +725,9 @@ extern "C" __global__ void __raygen__final() {
     if (params.contrast != 1.0f) c = make_float3(powf(c.x, params.contrast), powf(c.y, params.contrast), powf(c.z, params.contrast));
     const float Y = luminance709(c);
     c = fmaxf3(make_float3(Y, Y, Y) + (c - make_float3(Y, Y, Y)) * params.saturation, make_float3(0, 0, 0));
-    const float dz = (float(hash32(px * 1973u + py * 9277u) & 1023u) / 1023.0f - 0.5f) / 255.0f;
-    params.output[i] = make_uchar4((unsigned char)(srgbOetf(c.x + dz) * 255.0f + 0.5f), (unsigned char)(srgbOetf(c.y + dz) * 255.0f + 0.5f),
-                                   (unsigned char)(srgbOetf(c.z + dz) * 255.0f + 0.5f), 255);
+    // a fixed TPDF dither of +-1 level from two decorrelated blue-noise tiles, added to the display's code values (in
+    // linear light, before the sRGB curve, the curve's slope of 12.92 by black made half a level six: a grainy black)
+    float dz = 0.0f;
+    if (params.blueNoise) dz = params.blueNoise[(py & 127u) * 128u + (px & 127u)] + params.blueNoise[((py + 61u) & 127u) * 128u + ((px + 37u) & 127u)] - 1.0f;
+    params.output[i] = make_uchar4(codeValue(c.x, dz), codeValue(c.y, dz), codeValue(c.z, dz), 255);
 }

@@ -111,6 +111,7 @@ struct AtesParams {
                               // turns it beige)
     float contrast;           // a power on AgX's display values (Blender's "Punchy" look: 1.35; here 1.5): AgX alone
                               // keeps sixteen stops, so char six stops under the flame came out mid-grey, not dark
+    const float* blueNoise;   // 128 x 128 in [0, 1): the dither, fixed (it does not move from frame to frame)
     int debug;
     unsigned int* badCount;
 

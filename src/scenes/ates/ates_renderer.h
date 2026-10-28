@@ -126,6 +126,7 @@ private:
     bool iasDirty_ = true;
     float3* tables_ = nullptr;           // the soot's and the black body's emission tables (2 x ATES_TABLE_N)
     float* lumS_ = nullptr;              // lumSamples' grid
+    float* blueNoise_ = nullptr;         // the dither's tile (128 x 128)
     int lumN_ = 0;
     void freePlanes();
     void launch(CUdeviceptr rg, unsigned int w, unsigned int h);
