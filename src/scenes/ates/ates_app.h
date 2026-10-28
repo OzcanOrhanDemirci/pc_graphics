@@ -31,6 +31,7 @@ public:
     AtesGas gas;
     AtesWood wood;
     AtesBodies bodies;
+    AtesSparks sparks;
     float exposureEv = 0.0f;
     float autoExposure = 1.0f;
     bool autoOn = true;
@@ -78,6 +79,8 @@ private:
     float3 prevEye_{0, 0, 0}, prevU_{0, 0, 0}, prevV_{0, 0, 0}, prevW_{0, 0, 1};
     std::vector<float> patchRad_;
     std::vector<std::array<float, 12>> prevPoses_;   // the logs' poses a frame ago (DLSS's motion)
+    std::vector<float3> lastVel_;                     // the logs' velocities a frame ago (a landing's sparks)
+    void landingSparks();
     void placeAndView();
     void syncLogs(bool rebuild);
     void placeLog(ALog& L, float3 at, float3 axis);

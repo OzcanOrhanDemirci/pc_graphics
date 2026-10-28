@@ -58,6 +58,16 @@ public:
                "ışın izlemeyle. Alevin rengi isin sıcaklığından, korun kızıllığı yüzeyinkinden.",
                "The fire's light comes from the gas's own emission: the stones, the ground and the logs are lit by it each "
                "frame, their shadows ray traced. The flame's colour is its soot's temperature, the ember's red its surface's.")},
+            {L("Kıvılcım", "Sparks"),
+             L("Her kıvılcım bir kömür pulu: odunun içinde buhar ve uçucu cebi patlayınca (çıtırtı) fırlar, alevin çektiği hava "
+               "kızgın kabuktan koparır ya da kora düşen odun saçar. Gazın akışı onu taşır, ağırlığı kalınlığından, sürüklenmesi "
+               "genişliğinden: ince pul tüyle yükselir, kalını yere düşer. Ulaşan oksijenle yanar, rengi kendi sıcaklığıdır; "
+               "yanıp bitince ya da soğuyunca söner.",
+               "Each spark is a flake of char: thrown out when a pocket of steam and volatiles bursts in the wood (a crackle), "
+               "torn off a glowing crust by the air the flame draws in, or knocked out of the embers by wood landing on them. "
+               "The gas's flow carries it, its weight its thickness's, its drag its breadth's: a thin flake rides the plume up, "
+               "a thick one falls. It burns with the oxygen that reaches it, its colour its own temperature; it goes out "
+               "burnt away or cooled.")},
             {L("Teşekkür", "Credits"), L("NVIDIA DLSS (NVIDIA RTX SDK). Varlıklar: Poly Haven (CC0), docs/ates/VARLIK.md.",
                                          "NVIDIA DLSS (NVIDIA RTX SDK). Assets: Poly Haven (CC0), docs/ates/VARLIK.md.")}};
         i.tags = {L("Fizik", "Physics"), L("Yanma", "Combustion"), L("Işık", "Light")};

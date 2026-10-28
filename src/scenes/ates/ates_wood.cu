@@ -152,7 +152,57 @@ struct StepArgs {
     int nLogs;
     float bedT, bedR;   // the ash bed under the pile: its temperature (K) and reach (m)
     float* red;   // [0] pyrolysis kg/s, [1] char kg/s, [2] mass kg, [3] hottest (bits), [4] ember area
+    ASparkSink sp;
 };
+
+__device__ __forceinline__ unsigned int pcg(unsigned int& s) {
+    s = s * 747796405u + 2891336453u;
+    const unsigned int w = ((s >> ((s >> 28u) + 4u)) ^ s) * 277803737u;
+    return (w >> 22u) ^ w;
+}
+__device__ __forceinline__ float rnd01(unsigned int& s) { return float(pcg(s) >> 8) * (1.0f / 16777216.0f); }
+
+// a patch's sparks over the frame's real time: a crackle (a pocket of steam and volatiles bursting under the char) at a
+// rate per kg of volatiles, throwing out a few fragments or, rarely, hundreds (a power law); a flake of glowing char
+// lifted off by the gas flowing over it, at a rate per kg of the char burnt and formed (the crust that cracks and
+// spalls as the wood under it pyrolyses) that grows with the draught
+__device__ void seedSparks(const StepArgs& a, unsigned int p, float3 pos, float3 nrm, float3 ug, float pyro, float charB, float Ts, float spd) {
+    const ASparkSink& S = a.sp;
+    if (!S.seeds) return;
+    const float dtReal = a.dtW / a.timeScale;
+    unsigned int h = p * 0x9E3779B1u ^ (S.frame + 1u) * 0x85EBCA77u;
+    pcg(h);
+    if (rnd01(h) < S.popPerKg * pyro * dtReal) {
+        const int n = min(int(3.0f * powf(fmaxf(rnd01(h), 1e-4f), -1.0f / 1.1f)), 300);
+        const unsigned int at = atomicAdd(S.count, unsigned(n));
+        for (int k = 0; k < n && at + k < S.cap; ++k) {
+            float3 r = make_float3(rnd01(h) - 0.5f, rnd01(h) - 0.5f, rnd01(h) - 0.5f) * 2.0f;
+            float3 dir = normalize(nrm + r * 0.8f + make_float3(0.0f, 0.3f, 0.0f));
+            if (dot(dir, nrm) < 0.1f) dir = normalize(dir + nrm * (0.1f - dot(dir, nrm) + 0.2f));
+            const float speed = 0.7f * powf(6.0f / 0.7f, rnd01(h));
+            const float d = 5.0e-4f * powf(6.0f, powf(rnd01(h), 1.5f));
+            ASparkSeed s;
+            s.p = pos + nrm * (0.75f * a.g.h);
+            s.v = ug + dir * speed;
+            s.d = d;
+            s.t = 4.0e-5f * powf(10.0f, rnd01(h));   // a crust: thin or thick whatever its breadth
+            s.T = Ts + 100.0f * rnd01(h);
+            S.seeds[at + k] = s;
+        }
+    }
+    if (Ts > 850.0f && rnd01(h) < S.flakePerKg * (charB + pyro) * dtReal * (1.0f + spd * spd)) {
+        const unsigned int at = atomicAdd(S.count, 1u);
+        if (at < S.cap) {
+            ASparkSeed s;
+            s.p = pos + nrm * (0.75f * a.g.h);
+            s.v = ug + nrm * (0.3f * rnd01(h));
+            s.d = 1.0e-3f * powf(4.0f, rnd01(h));
+            s.t = 5.0e-5f + 1.0e-4f * rnd01(h);
+            s.T = Ts;
+            S.seeds[at] = s;
+        }
+    }
+}
 
 __global__ void kWoodStep(StepArgs a) {
     const unsigned int p = blockIdx.x * blockDim.x + threadIdx.x;
@@ -403,6 +453,16 @@ __global__ void kWoodStep(StepArgs a) {
             (void)tarOut;
             pyroRate = volat * inv;
             charRate = charOx * inv;
+            {
+                float3 ug = make_float3(0, 0, 0);
+                if (cg >= 0) {
+                    const int i = cg % a.g.nx, j = (cg / a.g.nx) % a.g.ny, k = cg / (a.g.nx * a.g.ny);
+                    ug = make_float3(0.5f * (a.g.u[i + (a.g.nx + 1) * (j + a.g.ny * k)] + a.g.u[i + 1 + (a.g.nx + 1) * (j + a.g.ny * k)]),
+                                     0.5f * (a.g.v[i + a.g.nx * (j + (a.g.ny + 1) * k)] + a.g.v[i + a.g.nx * (j + 1 + (a.g.ny + 1) * k)]),
+                                     0.5f * (a.g.w[i + a.g.nx * (j + a.g.ny * k)] + a.g.w[i + a.g.nx * (j + a.g.ny * (k + 1))]));
+                }
+                seedSparks(a, p, pos, nrm, ug, pyroRate, charRate, Tl[out], spd);
+            }
             // what is left, the surface for the eye and the body
             rs = out < WOOD_LAYERS ? ro[out + 1] + (ro[out] - ro[out + 1]) * fmaxf(solidFrac(out), 0.0f) : 0.0f;
             float mass = 0.0f, cdepth = 0.0f;
@@ -655,6 +715,7 @@ void AtesWood::step(float dtWood, float timeScale, AtesGas& gas) {
     a.bedT = bedT;
     a.bedR = bedR;
     a.red = red;
+    a.sp = sparks;
     kWoodStep<<<(patches + 127) / 128, 128, 0, st_>>>(a);
     WOOD_CHECK(cudaEventRecord(e1_, st_));
     float r[8];

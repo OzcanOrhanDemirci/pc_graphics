@@ -11,7 +11,7 @@
 #include <optix.h>
 
 #include <array>
-
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -54,6 +54,8 @@ public:
     // the fire: the gas's texture, its grid and its light blocks (the cumulative sum is built here each frame)
     void setGas(cudaTextureObject_t tex, const unsigned int* bricks, float3 origin, int nx, int ny, int nz, float h, const float3* lightI, int lnx, int lny, int lnz,
                 float lightCell);
+    // drawn over the fire before the glare (the sparks): called with the stream, the picture in params.hdr
+    std::function<void(cudaStream_t)> overlay;
     void render();
     // the fire's pass alone again over the last frame's surfaces (the tools' A/B of the march), its picture in hdr
     void redoVolume();

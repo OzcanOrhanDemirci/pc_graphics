@@ -238,6 +238,12 @@ void AtesApp::initSim() {
     wood.init(unsigned(cfg.i("wood.patches", 40000)), R.stream());
     bodies.ground = groundHeight;
     bodies.substeps = cfg.i("body.substeps", 16);
+    sparks.init(unsigned(cfg.i("spark.max", 8192)), R.stream());
+    sparks.kinA = cfg.f("spark.kinA", sparks.kinA);
+    R.overlay = [this](cudaStream_t st) {
+        const AtesParams& p = R.params;
+        sparks.draw(p.hdr, p.depth, width, height, p.eye, p.U, p.V, p.W, p.pixelAngle, p.greyEmit, st);
+    };
     simTime = woodTime = 0.0;
     lay(layout);
 }
@@ -250,6 +256,8 @@ void AtesApp::placeLog(ALog& L, float3 at, float3 axis) {
 void AtesApp::lay(const std::string& name) {
     wood.init(wood.capacity ? wood.capacity : 40000u, R.stream());
     gas.reset();
+    sparks.clear();
+    lastVel_.clear();
     gas.burner = AGasBurner();
     unsigned int seed = 99u;
     bool settle = true;   // laid down onto what is under it (the bodies settle it the rest of the way)
@@ -416,6 +424,7 @@ void AtesApp::update(float dt) {
     const float dtGas = cfg.f("gas.dt", 1.0f / 120.0f);
     // the logs fall and settle in the clock's time
     bodies.step(wood.logs, std::min(dt, 0.05f));
+    landingSparks();
     gasAcc_ += dt;
     const int maxSteps = cfg.i("gas.maxSteps", 3);
     // the hand: a match's flame (a small burner at its head), the breath along the look
@@ -461,6 +470,7 @@ void AtesApp::update(float dt) {
         // them, and its own time is seconds (a few gas steps of coupling lag are nothing to it)
         gas.clearSources();
         wood.markSolids(gas);
+        wood.sparks = sparks.sink(cfg.f("spark.popPerKg", 1500.0f), cfg.f("spark.flakePerKg", 25000.0f));
         wood.step(steps * dtGas * timeScale, timeScale, gas);
         cost.woodMs = wood.stats.stepMs;
         for (int s = 0; s < steps; ++s) {
@@ -472,6 +482,7 @@ void AtesApp::update(float dt) {
         woodTime += steps * dtGas * timeScale;
     }
     cost.steps = steps;
+    sparks.step(dt, gas);
     if (gasAcc_ > dtGas) gasAcc_ = 0.0f;   // behind: the gas runs slower than the clock rather than catching up in bursts
     gas.pack(R.params.sootEmit);
     wood.emberLight(gas, const_cast<float3*>(gas.lightIntensity()), gas.lnx, gas.lny, gas.lnz, gas.h * gas.lightDiv, R.params.greyEmit);
@@ -482,6 +493,35 @@ void AtesApp::update(float dt) {
         meshAge_ = 0.0f;
         syncLogs(true);
     } else placeAndView();
+}
+
+void AtesApp::landingSparks() {
+    // wood landing on the embers knocks fragments out of them: a burst as large as the energy the landing took
+    // (a share of it into hundreds of sparks), from under the log, as hot as the embers it struck
+    if (lastVel_.size() != wood.logs.size()) lastVel_.assign(wood.logs.size(), make_float3(0, 0, 0));
+    std::vector<ASparkSeed> seeds;
+    unsigned int seed = unsigned(frame_ * 2654435761u + 17u);
+    for (size_t i = 0; i < wood.logs.size(); ++i) {
+        const ALog& L = wood.logs[i];
+        const float3 v0 = lastVel_[i];
+        lastVel_[i] = L.vel;
+        const float lost = 0.5f * L.mass * (dot(v0, v0) - dot(L.vel, L.vel));
+        if (!L.alive || lost < 0.05f || length(v0) < 0.5f || L.pos.y > 0.35f || wood.stats.hottest < 850.0f) continue;
+        const int n = std::min(int(cfg.f("spark.perJoule", 300.0f) * lost), 400);
+        const float3 axis = make_float3(1 - 2 * (L.q.z * L.q.z + L.q.w * L.q.w), 2 * (L.q.y * L.q.z + L.q.x * L.q.w), 2 * (L.q.y * L.q.w - L.q.x * L.q.z));
+        for (int k = 0; k < n; ++k) {
+            ASparkSeed s;
+            const float along = (rnd(seed) - 0.5f) * 0.8f * L.len;
+            s.p = L.pos + axis * along + make_float3(0.03f * (rnd(seed) - 0.5f), -0.6f * L.radius, 0.03f * (rnd(seed) - 0.5f));
+            const float a = 6.2831853f * rnd(seed), up = 1.0f + 2.5f * rnd(seed), side = 1.2f * rnd(seed);
+            s.v = make_float3(side * std::cos(a), up, side * std::sin(a));
+            s.d = 5.0e-4f * std::pow(5.0f, rnd(seed));
+            s.t = s.d * (0.15f + 0.25f * rnd(seed));
+            s.T = wood.stats.hottest - 80.0f * rnd(seed);
+            seeds.push_back(s);
+        }
+    }
+    sparks.burst(seeds);
 }
 
 float3 AtesApp::forward() const {
@@ -608,6 +648,8 @@ std::string AtesApp::summary() const {
 }
 
 void AtesApp::release() {
+    R.overlay = nullptr;
+    sparks.release();
     wood.release();
     gas.release();
     R.release();

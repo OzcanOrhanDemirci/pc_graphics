@@ -365,6 +365,28 @@ int runAtesCli(int argc, char** argv) {
         }
         std::printf("ates: %s (yuzey %.2f ms, DLSS %.2f, ates %.2f ms, goruntu %.2f ms, gaz adimi %.2f ms, odun %.2f ms, pozlama x%.3g, sonlu olmayan %u)\n",
                     path.c_str(), a.R.renderMs, a.R.dlssMs, a.R.volumeMs, a.R.displayMs, a.gas.stats.stepMs, a.wood.stats.stepMs, a.autoExposure, a.R.badSamples);
+        a.sparks.readStats();
+        if (a.cfg.i("debug.sparks", 0)) {
+            // where the live ones are: by height, on the ground or in the air, and how hot
+            std::vector<float4> P, V;
+            a.sparks.snapshot(P, V);
+            const float edges[5] = {0.0f, 0.0035f, 0.3f, 1.44f, 100.0f};
+            for (int b = 0; b < 4; ++b) {
+                int n = 0;
+                double T = 0.0, d = 0.0, vy = 0.0;
+                for (size_t k = 0; k < P.size(); ++k)
+                    if (P[k].y >= edges[b] && P[k].y < edges[b + 1]) {
+                        ++n;
+                        T += V[k].w;
+                        d += P[k].w;
+                        vy += V[k].y;
+                    }
+                if (n) std::printf("  kivilcim y %.3f-%.2f m: %d, ortalama %.0f K, %.2f mm, vy %.2f m/s\n", edges[b], edges[b + 1], n, T / n, d / n * 1e3, vy / n);
+            }
+        }
+        std::printf("ates: kivilcim %u canli (simdiye dek %u; olen: katiya %u, yanip biten %u, sonen %u, yere %u, uzaga %u), adim + cizim %.2f ms\n",
+                    a.sparks.stats.alive, a.sparks.stats.born, a.sparks.stats.deaths[0], a.sparks.stats.deaths[1], a.sparks.stats.deaths[2],
+                    a.sparks.stats.deaths[3], a.sparks.stats.deaths[4], a.sparks.stats.ms);
         if (bench > 0) {
             // the frame's cost, each part's mean: the wall clock of the update and of the picture, the GPU's time of
             // their parts, the bodies' CPU time. --canli runs each frame with the last frame's own time, as the live

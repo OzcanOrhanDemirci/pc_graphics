@@ -580,6 +580,7 @@ void AtesRenderer::render() {
     // the fire over the surfaces (the heat haze reads around in a copy of them)
     CUDA_CHECK(cudaMemcpyAsync(params.surf, params.hdr, size_t(width_) * height_ * sizeof(float4), cudaMemcpyDeviceToDevice, stream_));
     launch(rgVolume_, params.width, params.height);
+    if (overlay) overlay(stream_);
     CUDA_CHECK(cudaEventRecord(ev2_, stream_));
     if (params.bloomStrength > 0.0f) {
         launchBloom(params.hdr, width_, height_, levels_, accum_, kLevels, stream_);

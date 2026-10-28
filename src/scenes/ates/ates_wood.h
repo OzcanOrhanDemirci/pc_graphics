@@ -10,6 +10,7 @@
 #pragma once
 #include "scenes/ates/ates_gas.h"
 #include "scenes/ates/ates_shared.h"
+#include "scenes/ates/ates_sparks.h"
 
 #include <array>
 #include <cuda_runtime.h>
@@ -71,6 +72,7 @@ public:
     AWoodStats stats;
     float bedT = 288.0f;           // the ash bed under the pile (K): a share of the embers' mean (set by the run)
     float bedR = 0.25f;            // its reach (m)
+    ASparkSink sparks;             // where its crackles and flakes leave their sparks (ates_sparks.h; none by default)
     unsigned int patches = 0, capacity = 0;
     // device: per patch (surface temperature, char depth, ash thickness: for the eye), per layer
     float *surfT = nullptr, *charD = nullptr, *ash = nullptr, *qrad = nullptr;
