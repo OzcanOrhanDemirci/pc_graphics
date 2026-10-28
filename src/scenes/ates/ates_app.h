@@ -42,6 +42,10 @@ public:
     float3 matchAt{0, 0, 0};
     std::string layout;              // the fire laid at the start (ates.cfg: layout)
     double loadMs = 0.0;
+    struct FrameCost {
+        int steps = 0;               // the gas's steps in the last update
+        float gasMs = 0.0f, woodMs = 0.0f;   // their GPU time
+    } cost;
 
     void loadConfig();
     void loadAssets();

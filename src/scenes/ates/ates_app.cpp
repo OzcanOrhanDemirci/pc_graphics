@@ -206,7 +206,7 @@ int runAtesCli(int argc, char** argv) {
     std::vector<AtesCam> freeCams;
     int gas = 0, bench = 0, seq = 0;
     float settle = 4.0f, seqFps = 30.0f;
-    bool blow = false;
+    bool blow = false, live = false;
     std::vector<std::pair<float, int>> throws;
     for (int i = 1; i < argc; ++i) {
         const std::string s = argv[i];
@@ -221,6 +221,7 @@ int runAtesCli(int argc, char** argv) {
         else if (s == "--seri") seq = std::stoi(next());
         else if (s == "--fps") seqFps = std::stof(next());
         else if (s == "--ufle") blow = true;
+        else if (s == "--canli") live = true;
         else if (s == "--odun") {
             const float at = std::stof(next());
             throws.push_back({at, std::stoi(next())});
@@ -365,16 +366,41 @@ int runAtesCli(int argc, char** argv) {
         std::printf("ates: %s (yuzey %.2f ms, DLSS %.2f, ates %.2f ms, goruntu %.2f ms, gaz adimi %.2f ms, odun %.2f ms, pozlama x%.3g, sonlu olmayan %u)\n",
                     path.c_str(), a.R.renderMs, a.R.dlssMs, a.R.volumeMs, a.R.displayMs, a.gas.stats.stepMs, a.wood.stats.stepMs, a.autoExposure, a.R.badSamples);
         if (bench > 0) {
-            double sum = 0.0, worst = 0.0;
+            // the frame's cost, each part's mean: the wall clock of the update and of the picture, the GPU's time of
+            // their parts, the bodies' CPU time. --canli runs each frame with the last frame's own time, as the live
+            // scene does (the gas's steps then follow the frame rate: 40 FPS takes three); otherwise frames of 1/60 s
+            double sum = 0.0, worst = 0.0, upd = 0.0, ren = 0.0, sim0 = a.simTime;
+            double gasMs = 0.0, woodMs = 0.0, surfMs = 0.0, dlssMs = 0.0, volMs = 0.0, dispMs = 0.0, bodyMs = 0.0;
+            int steps = 0;
+            float dt = 1.0f / 60.0f;
             for (int k = 0; k < bench; ++k) {
                 const double s0 = nowMs();
-                a.update(1.0f / 60.0f);
-                a.render(1.0f / 60.0f);
+                a.update(dt);
+                cudaDeviceSynchronize();
+                const double s1 = nowMs();
+                a.render(dt);
                 const double ms = nowMs() - s0;
+                if (live) dt = std::min(float(ms) * 1e-3f, 0.1f);
                 sum += ms;
                 worst = std::max(worst, ms);
+                upd += s1 - s0;
+                ren += ms - (s1 - s0);
+                steps += a.cost.steps;
+                gasMs += a.cost.gasMs;
+                woodMs += a.cost.woodMs;
+                surfMs += a.R.renderMs - a.R.dlssMs;
+                dlssMs += a.R.dlssMs;
+                volMs += a.R.volumeMs;
+                dispMs += a.R.displayMs;
+                bodyMs += a.bodies.stats.ms;
             }
-            std::printf("ates: olcum %d kare (gaz + odun + goruntu, duvar saati): ortalama %.2f ms, en kotu %.2f ms\n", bench, sum / bench, worst);
+            const double n = bench;
+            std::printf("ates: olcum %d kare%s (duvar saati): ortalama %.2f ms (%.1f FPS), en kotu %.2f ms; guncelleme %.2f, goruntu %.2f ms\n", bench,
+                        live ? " canli" : "", sum / n, 1000.0 * n / sum, worst, upd / n, ren / n);
+            std::printf("ates:   GPU: gaz %.2f ms (%.2f adim x %.2f), odun %.2f, yuzey %.2f, DLSS %.2f, ates %.2f, goruntu %.2f ms; cisimler (CPU) %.2f ms; gaz "
+                        "gercek zamanin %%%.0f'i\n",
+                        gasMs / n, steps / n, steps ? gasMs / steps : 0.0, woodMs / n, surfMs / n, dlssMs / n, volMs / n, dispMs / n, bodyMs / n,
+                        100.0 * (a.simTime - sim0) / (sum * 1e-3));
         }
     };
     if (seq > 0) {

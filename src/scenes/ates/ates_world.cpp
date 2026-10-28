@@ -454,6 +454,7 @@ void AtesApp::update(float dt) {
             gas.jet.length = cfg.f("blow.length", 1.2f);
         }
     }
+    cost = FrameCost{};
     const int steps = std::min(int(gasAcc_ / dtGas), maxSteps);
     if (steps > 0) {
         // the wood once a frame, over all its gas steps: it gives the gas rates (kg/s, W per cell) that hold through
@@ -461,13 +462,16 @@ void AtesApp::update(float dt) {
         gas.clearSources();
         wood.markSolids(gas);
         wood.step(steps * dtGas * timeScale, timeScale, gas);
+        cost.woodMs = wood.stats.stepMs;
         for (int s = 0; s < steps; ++s) {
             gas.step(dtGas);
+            cost.gasMs += gas.stats.stepMs;
         }
         gasAcc_ -= steps * dtGas;
         simTime += steps * dtGas;
         woodTime += steps * dtGas * timeScale;
     }
+    cost.steps = steps;
     if (gasAcc_ > dtGas) gasAcc_ = 0.0f;   // behind: the gas runs slower than the clock rather than catching up in bursts
     gas.pack(R.params.sootEmit);
     wood.emberLight(gas, const_cast<float3*>(gas.lightIntensity()), gas.lnx, gas.lny, gas.lnz, gas.h * gas.lightDiv, R.params.greyEmit);
