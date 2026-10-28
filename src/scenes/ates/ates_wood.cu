@@ -620,8 +620,11 @@ int AtesWood::add(const ALog& proto, float burnt, float surfaceT) {
             w[x] = charred ? 0.0f : k.rhoWood;
             c[x] = charred ? 0.25f * k.rhoWood : 0.0f;
             h[x] = charred ? 0.0f : k.rhoWood * k.moisture;
-            // a hot skin over a cooler core: the profile of a heated slab (an error function, ~3 char depths deep)
-            const float decay = burnt > 0.0f ? std::exp(-mid / std::max(2.0f * burnt, 1e-4f)) : 0.0f;
+            // a hot skin over a cooler core: the profile of a heated slab (an error function, ~3 char depths deep). A
+            // coal charred through is as hot inside as at its face: it burns at its surface and loses heat there,
+            // nothing inside it draws heat any more (a coal of an old fire, not a log just heated)
+            const bool coal = burnt >= 0.9f * L.r0;
+            const float decay = coal ? 1.0f : burnt > 0.0f ? std::exp(-mid / std::max(2.0f * burnt, 1e-4f)) : 0.0f;
             t[x] = 288.0f + (surfaceT - 288.0f) * (burnt > 0.0f ? decay : (i == 0 ? 1.0f : 0.0f));
             if (!charred && t[x] > 373.0f) h[x] = 0.0f;
         }
