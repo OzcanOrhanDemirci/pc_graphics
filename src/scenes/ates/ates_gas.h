@@ -99,6 +99,8 @@ public:
     AGasBurner burner;
     AGasStats stats;
     int vcycles = 2;
+    bool profile = false;       // time each part of the step (sectionMs: cells, velocity, forces, projection, scalars, mixing)
+    float sectionMs[6] = {};
     unsigned char* solid = nullptr;   // per cell, 1: inside a log or a stone (written by the wood each step)
 
     bool init(int nx, int ny, int nz, float h, float3 origin, cudaStream_t stream);
@@ -140,6 +142,7 @@ private:
     cudaTextureObject_t tex_ = 0;
     cudaSurfaceObject_t surf_ = 0;
     cudaEvent_t e0_ = nullptr, e1_ = nullptr;
+    cudaEvent_t pe_[7] = {};
     std::vector<void*> owned_;
     float* alloc(size_t n);
     void project(float dt);

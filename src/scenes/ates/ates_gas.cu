@@ -1101,6 +1101,12 @@ void AtesGas::step(float dt) {
     const Dims d{nx, ny, nz, h};
     const dim3 b(32, 4), g = grid3(nx, ny, nz, b);
     GAS_CHECK(cudaEventRecord(e0_, st_));
+    if (profile && !pe_[0])
+        for (cudaEvent_t& e : pe_) GAS_CHECK(cudaEventCreate(&e));
+    auto mark = [&](int s) {
+        if (profile) GAS_CHECK(cudaEventRecord(pe_[s], st_));
+    };
+    mark(0);
     GAS_CHECK(cudaMemsetAsync(red_, 0, 4 * sizeof(float), st_));
     // 1 the cells: what came in, what burnt
     CellArgs ca{};
@@ -1124,6 +1130,7 @@ void AtesGas::step(float dt) {
     if (jet.on) kJetAir<<<g, b, 0, st_>>>(d, origin, Scalars{T, F, C, O, S, M}, jet, k, dt);
     const size_t n = size_t(nx) * ny * nz;
     for (float* p : {src.fuel, src.co, src.o2, src.heat, src.massT, src.ignite}) GAS_CHECK(cudaMemsetAsync(p, 0, n * sizeof(float), st_));
+    mark(1);
     // 2 the velocity carried by itself
     for (int comp = 0; comp < 3; ++comp) {
         float* cur = comp == 0 ? u : comp == 1 ? v : w;
@@ -1145,6 +1152,7 @@ void AtesGas::step(float dt) {
             kDiffuseV<<<grid3(nx + (comp == 0), ny + (comp == 1), nz + (comp == 2), b), b, 0, st_>>>(d, cur, out, comp, nut_, dt);
             std::swap(cur, out);
         }
+    mark(2);
     // 3 forces
     ForceArgs fa{d, origin, u, v, w, T, nullptr, k, jet, dt};
     kForces<<<grid3(nx + 1, ny + 1, nz + 1, b), b, 0, st_>>>(fa);
@@ -1152,8 +1160,10 @@ void AtesGas::step(float dt) {
         kVorticity<<<g, b, 0, st_>>>(d, u, v, w, omega_);
         kConfine<<<g, b, 0, st_>>>(d, omega_, u, v, w, k.vortEps, dt);
     }
+    mark(3);
     // 4 the projection
     project(dt);
+    mark(4);
     // 5 the scalars carried by the new velocity
     AdvS as{};
     as.d = d;
@@ -1175,6 +1185,7 @@ void AtesGas::step(float dt) {
     std::swap(O, O3_);
     std::swap(S, S3_);
     std::swap(M, M3_);
+    mark(5);
     if (k.smag > 0.0f) {
         kDiffuseS<<<g, b, 0, st_>>>(d, CScalars{T, F, C, O, S, M}, Scalars{T3_, F3_, C3_, O3_, S3_, M3_}, nut_, solid, k, dt);
         std::swap(T, T3_);
@@ -1184,6 +1195,7 @@ void AtesGas::step(float dt) {
         std::swap(S, S3_);
         std::swap(M, M3_);
     }
+    mark(6);
     GAS_CHECK(cudaEventRecord(e1_, st_));
     // the step's sums (read back once: the tools and the panel); the maximum was taken on the float's bits (positive)
     float r[6];
@@ -1195,6 +1207,12 @@ void AtesGas::step(float dt) {
     stats.maxT = r[3];
     stats.residual = r[5] > 0.0f ? std::sqrt(r[4] / r[5]) : 0.0f;
     cudaEventElapsedTime(&stats.stepMs, e0_, e1_);
+    if (profile)
+        for (int s = 0; s < 6; ++s) {
+            float ms = 0.0f;
+            cudaEventElapsedTime(&ms, pe_[s], pe_[s + 1]);
+            sectionMs[s] += ms;
+        }
     ++stats.steps;
 }
 
@@ -1245,6 +1263,10 @@ void AtesGas::release() {
     if (e0_) cudaEventDestroy(e0_);
     if (e1_) cudaEventDestroy(e1_);
     e0_ = e1_ = nullptr;
+    for (cudaEvent_t& e : pe_) {
+        if (e) cudaEventDestroy(e);
+        e = nullptr;
+    }
     T = F = C = O = S = M = nullptr;
     u = v = w = nullptr;
     solid = nullptr;

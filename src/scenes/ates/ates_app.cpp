@@ -70,6 +70,7 @@ int gasTest(Config& cfg, const std::string& root, const std::string& out, int st
     g.k.TignF = cfg.f("gas.TignF", g.k.TignF);
     g.k.Tcond = cfg.f("gas.Tcond", g.k.Tcond);
     g.init(nx, ny, nz, h, make_float3(-0.5f * nx * h, 0.0f, -0.5f * nz * h), st);
+    g.profile = cfg.i("test.prof", 0) != 0;
     const float D = cfg.f("test.D", 0.4f), Q = cfg.f("test.Q", 20.0f) * 1000.0f;
     const float dt = cfg.f("gas.dt", 1.0f / 120.0f);
     g.burner.centre = make_float3(0, 0, 0);
@@ -187,6 +188,9 @@ int gasTest(Config& cfg, const std::string& root, const std::string& out, int st
                          meanQ[j] / std::max(samples, 1));
         std::fclose(e);
     }
+    if (g.profile)
+        std::printf("ates gaz: adim parcalari (ms): hucreler %.2f, hiz tasima %.2f, kuvvetler %.2f, izdusum %.2f, skaler tasima %.2f, karisma %.2f\n",
+                    g.sectionMs[0] / steps, g.sectionMs[1] / steps, g.sectionMs[2] / steps, g.sectionMs[3] / steps, g.sectionMs[4] / steps, g.sectionMs[5] / steps);
     std::printf("ates gaz: %d adim, ortalama %.2f ms/adim (GPU), duvar saati %.0f ms -> %s\n", steps, ms / steps, nowMs() - t0, csv.c_str());
     g.release();
     cudaStreamDestroy(st);
@@ -284,9 +288,24 @@ int runAtesCli(int argc, char** argv) {
                 t += st[L.firstPatch + k];
                 tmax = std::max(tmax, double(st[L.firstPatch + k]));
             }
-            std::printf("  kutuk %zu: r %.1f mm (simdi %.1f), komur %.2f mm, kul %.2f mm, yuzey %.0f K (en %.0f), kutle %.0f g\n", l, L.r0 * 1e3f, L.radius * 1e3f,
-                        c / n * 1e3, s2 / n * 1e3, t / n, tmax, L.mass * 1e3f);
+            std::printf("  kutuk %zu: r %.1f mm (simdi %.1f), komur %.2f mm, kul %.2f mm, yuzey %.0f K (en %.0f), kutle %.0f g, yer (%.3f %.3f %.3f)%s\n", l,
+                        L.r0 * 1e3f, L.radius * 1e3f, c / n * 1e3, s2 / n * 1e3, t / n, tmax, L.mass * 1e3f, L.pos.x, L.pos.y, L.pos.z, L.sleeping ? " uyuyor" : "");
         }
+    }
+    if (a.cfg.i("debug.slice", 0)) {
+        // the middle slice, and the flame's reach: the highest burning cell (0.2 MW/m^3) and the highest glowing soot
+        // (over 1000 K), and how many cells are over 2300 K (the stoichiometric flame's adiabatic temperature)
+        writeSlice(a.gas, (fs::path(root) / (out + "_dilim.png")).generic_string());
+        const std::vector<float> T = a.gas.download(0), S = a.gas.download(4), q = a.gas.download(6);
+        int tipQ = -1, tipS = -1;
+        size_t over = 0;
+        for (size_t c = 0; c < T.size(); ++c) {
+            const int j = int((c / size_t(a.gas.nx)) % size_t(a.gas.ny));
+            if (q[c] > 2e5f) tipQ = std::max(tipQ, j);
+            if (T[c] > 1000.0f && (a.gas.k.rhoT / T[c]) * S[c] / a.gas.k.rhoSoot > 1e-7f) tipS = std::max(tipS, j);
+            if (T[c] > 2300.0f) ++over;
+        }
+        std::printf("ates: alev ucu %.2f m (yanan), %.2f m (parlayan is), 2300 K ustu %zu hucre\n", (tipQ + 1) * a.gas.h, (tipS + 1) * a.gas.h, over);
     }
     if (views.empty() && freeCams.empty()) views = {0, 1, 2, 3};
     auto shoot = [&](const AtesCam& c, const std::string& name) {
@@ -309,6 +328,10 @@ int runAtesCli(int argc, char** argv) {
             std::printf("ates: parlaklik (cd/m2): %%50 %.3g, %%90 %.3g, %%99 %.3g, %%99.9 %.3g, en %.3g\n", pc(0.5), pc(0.9), pc(0.99), pc(0.999), Y.back());
         }
         a.save(path);
+        if (a.cfg.i("debug.exr", 0)) {
+            const std::vector<float4> hd = a.R.hdrHost();
+            writeEXR(path + ".exr", a.width, a.height, 4, reinterpret_cast<const float*>(hd.data()));
+        }
         std::printf("ates: %s (yuzey %.2f ms, DLSS %.2f, ates %.2f ms, goruntu %.2f ms, gaz adimi %.2f ms, odun %.2f ms, pozlama x%.3g, sonlu olmayan %u)\n",
                     path.c_str(), a.R.renderMs, a.R.dlssMs, a.R.volumeMs, a.R.displayMs, a.gas.stats.stepMs, a.wood.stats.stepMs, a.autoExposure, a.R.badSamples);
         if (bench > 0) {
