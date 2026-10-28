@@ -53,6 +53,9 @@ Sahne **bakılan bir ateş** olarak kapandı: alev, ışık, kıvılcım, kor ve
 Kalan ateş kendi hâlinde gerçek zamanda ~8-9 kW'ta yanıyor (§3); odunun 60 kat hızlı ölçümünde ~45 dakikada
 sönüyordu (gerçek zamanda bu süre ölçülmedi). **R** onu baştan yakar. Gaz, odun, kor ve kıvılcımın motoru değişmedi.
 
+Özcan kapanış sürümünü canlıda izleyip onayladı (2026-10-28): *"Tamam sahne temiz ve düzgün. Sahneyi
+kapatabiliriz."*
+
 ## 2 · Bu oturumda bulunan ve düzeltilen fizik
 
 | Bulgu (ölçüyle) | Düzeltme |
@@ -122,8 +125,8 @@ senaryolar yeniden koşunca `besleme` ve `bogulma` farklı çıktı (besleme 4/4
 **Yok: sahne kapandı (§1).** İyileştirme turunun İ1'i bitti; İ2-İ9 Özcan'ın kapsam kararıyla yapılmayacak (PLAN §7,
 §8). Sahneye dönülürse yol haritası olarak PLAN §7 duruyor.
 
-**Özcan'ın kararı (açık bırakıldı):** loş zemin canlıda referansından %10-30 koyu (§4, DLSS-RR'nin loş, seyrek
-örneklenmiş yerdeki yanlılığı). Netlik kuralı koyuluğa kendiliğinden dokunmayı yasaklıyor.
+Loş zemin canlıda referansından %10-30 koyu (§4, DLSS-RR'nin loş, seyrek örneklenmiş yerdeki yanlılığı). Netlik
+kuralı koyuluğa kendiliğinden dokunmayı yasaklıyor; Özcan sahneyi canlıda izleyip bu hâliyle kapattı (§1).
 
 ## 6 · Kararlar (Claude, tam yetkiyle)
 
@@ -141,8 +144,8 @@ senaryolar yeniden koşunca `besleme` ve `bogulma` farklı çıktı (besleme 4/4
 - Izgara altı iki modelin katsayıları (alev tabakası 20 W/m²K, 1800 K; film 850-1000 K, yarı yarıya) literatür
   mertebesinden, bu sahneye özel ölçüyle değil.
 - 60 kat hızda gaz gerçek zamanda, odun 60 kat: aradaki gecikmenin davranışa etkisi ölçülmedi.
-- Temiz siyah ölçüyle doğrulandı, canlıda Özcan'ın gözüyle değil; "fırça izi"nin zeminin dokusu olduğu Claude'un
-  referansla kıyası.
+- Temiz siyah ölçüyle doğrulandı; Özcan canlıda "temiz ve düzgün" dedi (§1), ama bu tek bakış, ölçü değil.
+  "Fırça izi"nin zeminin dokusu olduğu Claude'un referansla kıyası.
 - **Çökmenin kök nedeni bulunmadı.** "an illegal memory access", her seferinde bir kütüğün OptiX yapısı kurulurken
   (`ates_renderer.cpp`, `buildGas`, `optixAccelBuild`'in ardındaki eşitleme); hemen önceki eşitleme (`setLogs`'un ilk
   satırı) temizdi, yani hata kurulumun içinde. Ağın indisleri sınırda, girdiler doğru görünüyor. compute-sanitizer bu

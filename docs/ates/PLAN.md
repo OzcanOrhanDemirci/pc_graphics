@@ -211,3 +211,6 @@ gerçek, yakma, söndürme ve besleme dinamiği yok**. İ2-İ9 yapılmayacak; ta
    çalışma sırasındaki kurulumlardı). Kararlılık uzun canlı koşularla ve R zorlamasıyla ölçülür (DURUM §4).
 3. Galeri metni, otomatik test, README bölümü, DURUM ve hafıza kapanışa göre.
 
+Özcan kapanış sürümünü canlıda izleyip onayladı (2026-10-28): *"Tamam sahne temiz ve düzgün. Sahneyi
+kapatabiliriz."*
+
