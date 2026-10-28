@@ -37,6 +37,8 @@ struct AGasConst {
     float Tcond = 480.0f, tarShare = 0.45f, tauCond = 0.15f;
     float cp = 1150.0f;         // J/(kg K), the mixture at flame temperatures
     float mixC = 0.4f;          // tau_mix = min(sqrt(2h/g), mixC / |S|) (the buoyant and the resolved strain's time)
+    float wallMix = 1.0f;       // a cell the wood breathes its volatiles into mixes no faster than wallMix h^2 / D (the
+                                // laminar boundary layer's molecular diffusion, FDS's tau_d); 0: as any other cell
     float vortEps = 0.6f;       // vorticity confinement (the advection's lost swirl; 0: none)
     float buoy = 1.0f;          // the buoyancy times this (1: physical)
     float buoyLocal = 1.0f;     // 1: g (rho0 - rho) / rho (a free parcel); 0: g (rho0 - rho) / rho0 (Boussinesq, the

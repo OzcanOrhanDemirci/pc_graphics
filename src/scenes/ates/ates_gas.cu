@@ -155,6 +155,7 @@ __global__ void kCells(CellArgs a) {
             float divMass = 0.0f;
             // what the wood (and the burner) put in: mass at its own temperature, heat, the oxygen the embers take
             float mF = a.src.fuel[c], mC = a.src.co[c], mO = a.src.o2[c], qW = a.src.heat[c], mT = a.src.massT[c];
+            const bool boundary = mF > 0.0f;   // the wood's: in the boundary layer over a pyrolysing surface
             if (a.burner.radius > 0.0f && a.burner.power > 0.0f) {
                 const float3 p = a.origin + make_float3((i + 0.5f) * d.h, (j + 0.5f) * d.h, (kk + 0.5f) * d.h);
                 const float3 r = p - a.burner.centre;
@@ -195,7 +196,12 @@ __global__ void kCells(CellArgs a) {
             }
             // mixing-limited burning (eddy dissipation): the buoyant time of a cell, or the resolved strain's
             const float strain = strainAt(d, a.V, i, j, kk);
-            const float tau = fminf(sqrtf(2.0f * d.h / K.g), K.mixC / fmaxf(strain, 1e-3f));
+            float tau = fminf(sqrtf(2.0f * d.h / K.g), K.mixC / fmaxf(strain, 1e-3f));
+            // over a pyrolysing surface the cell is the boundary layer, laminar: its volatiles meet the air across it
+            // by molecular diffusion (D of the hot mixture ~ 2.2e-5 (T/298)^1.75 m^2/s), most of them leave it unburnt
+            // and burn above and around the log, where they make their soot, as a wood fire's yellow flames stand on
+            // its logs (mixed at the buoyant time, the cell burnt them all at the surface: a blue sheet over each log)
+            if (boundary && K.wallMix > 0.0f) tau = fmaxf(tau, K.wallMix * d.h * d.h / (2.2e-5f * powf(fmaxf(T, 288.0f) / 298.0f, 1.75f)));
             a.nut[c] = sqr(K.smag * d.h) * strain;
             const float mixFrac = 1.0f - __expf(-dt / tau);
             const float dil = fmaxf(1.0f - F - C - O - S - M, 0.0f);

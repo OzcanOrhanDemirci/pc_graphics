@@ -233,6 +233,7 @@ void AtesApp::initSim() {
     const int nx = cfg.i("gas.nx", 128), ny = cfg.i("gas.ny", 192), nz = cfg.i("gas.nz", 128);
     const float h = cfg.f("gas.h", 0.0075f);
     gas.vcycles = cfg.i("gas.vcycles", 2);
+    gas.k.wallMix = cfg.f("gas.wallMix", gas.k.wallMix);
     gas.init(nx, ny, nz, h, make_float3(-0.5f * nx * h, 0.0f, -0.5f * nz * h), R.stream());
     wood.init(unsigned(cfg.i("wood.patches", 40000)), R.stream());
     bodies.ground = groundHeight;
