@@ -325,35 +325,24 @@ void AtesApp::lay(const std::string& name) {
     syncLogs(true);
 }
 
-void AtesApp::syncLogs(bool rebuild) {
-    if (rebuild || patchRad_.size() != wood.patches) {
-        wood.readBack();
-        // a log burnt thinner lets what lies on it down: the sleeping bodies wake
-        bool thinner = false;
-        for (ALog& L : wood.logs)
-            if (L.alive && L.wakeRadius - L.radius > 0.0005f) thinner = true;
-        if (thinner) {
-            bodies.wakeAll(wood.logs);
-            for (ALog& L : wood.logs) L.wakeRadius = L.radius;
-        }
+// the wood's shapes back for the bodies (a log burnt thinner lets what lies on it down); the logs' ray tracing structures
+// are built when the fire is laid and kept: rebuilding them as the fire changed their shape (by a few millimetres in
+// its hour) took OptiX's builder to an illegal address now and then, and the application with it
+void AtesApp::syncLogs(bool lay) {
+    wood.readBack();
+    bool thinner = false;
+    for (ALog& L : wood.logs)
+        if (L.alive && L.wakeRadius - L.radius > 0.0005f) thinner = true;
+    if (thinner) {
+        bodies.wakeAll(wood.logs);
+        for (ALog& L : wood.logs) L.wakeRadius = L.radius;
+    }
+    if (lay) {
         patchRad_.assign(wood.patches, 0.0f);
         if (wood.patches) cudaMemcpy(patchRad_.data(), wood.radOut, wood.patches * sizeof(float), cudaMemcpyDeviceToHost);
-        // the logs whose shape the fire has changed since their structure was built (a twentieth of a millimetre on
-        // a ring, on average), at most a few a time: their structures are rebuilt
-        std::vector<int> changed;
-        for (size_t i = 0; i < wood.logs.size(); ++i) {
-            ALog& L = wood.logs[i];
-            float sum = 0.0f;
-            for (float r : L.ringRadius) sum += r;
-            if (L.meshRadiusSum <= 0.0f) L.meshRadiusSum = sum;   // (built just now, as new)
-            else if (std::fabs(sum - L.meshRadiusSum) > 5e-5f * float(L.nZ) && changed.size() < 8) {
-                changed.push_back(int(i));
-                L.meshRadiusSum = sum;
-            }
-        }
         std::vector<ALogMesh> meshes(wood.logs.size());
         for (size_t i = 0; i < wood.logs.size(); ++i) buildLogMesh(wood.logs[i], patchRad_, meshes[i]);
-        R.setLogs(meshes, changed, barkMat_, endMat_);
+        R.setLogs(meshes, {}, barkMat_, endMat_);
         // (the materials list may have grown: the end grain's)
         R.uploadMaterials(assets.materials);
         prevPoses_.clear();
@@ -419,11 +408,11 @@ void AtesApp::update(float dt) {
     gas.pack(R.params.sootEmit);
     wood.emberLight(gas, const_cast<float3*>(gas.lightIntensity()), gas.lnx, gas.lny, gas.lnz, gas.h * gas.lightDiv, R.params.greyEmit);
     R.setGas(gas.texture(), gas.bricks(), gas.origin, gas.nx, gas.ny, gas.nz, gas.h, gas.lightIntensity(), gas.lnx, gas.lny, gas.lnz, gas.h * gas.lightDiv);
-    // the logs' shapes follow their burning (every half second of the clock)
+    // the wood's shapes back for the bodies (every half second of the clock)
     meshAge_ += dt;
     if (meshAge_ > 0.5f) {
         meshAge_ = 0.0f;
-        syncLogs(true);
+        syncLogs(false);
     } else placeAndView();
 }
 

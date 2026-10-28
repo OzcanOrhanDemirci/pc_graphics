@@ -59,7 +59,6 @@ struct ALog {
     float radius = 0.05f;          // the mean radius now (m)
     std::vector<float> ringRadius; // per z ring: the mean surface radius now (m)
     bool alive = true;
-    float meshRadiusSum = 0.0f;    // the radii the mesh was built with (it is rebuilt when they drift)
     std::array<float, 12> pose() const;
 };
 

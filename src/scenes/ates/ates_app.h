@@ -76,7 +76,7 @@ private:
     std::vector<float3> lastVel_;                     // the logs' velocities a frame ago (a landing's sparks)
     void landingSparks();
     void placeAndView();
-    void syncLogs(bool rebuild);
+    void syncLogs(bool lay);
     void placeLog(ALog& L, float3 at, float3 axis);
 };
 

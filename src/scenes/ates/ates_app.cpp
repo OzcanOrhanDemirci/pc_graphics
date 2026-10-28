@@ -348,7 +348,7 @@ int runAtesCli(int argc, char** argv) {
     std::vector<std::string> overrides;
     std::vector<int> views;
     std::vector<AtesCam> freeCams;
-    int gas = 0, bench = 0, seq = 0;
+    int gas = 0, bench = 0, seq = 0, relay = 0;
     float settle = 4.0f, seqFps = 30.0f, turn = 0.0f;
     bool live = false, freeze = false;
     std::string scenario;
@@ -362,6 +362,7 @@ int runAtesCli(int argc, char** argv) {
         else if (s == "--view") views.push_back(std::stoi(next()));
         else if (s == "--sure") settle = std::stof(next());
         else if (s == "--bench") bench = std::stoi(next());
+        else if (s == "--yeniden") relay = std::stoi(next());
         else if (s == "--seri") seq = std::stoi(next());
         else if (s == "--fps") seqFps = std::stof(next());
         else if (s == "--canli") live = true;
@@ -557,6 +558,8 @@ int runAtesCli(int argc, char** argv) {
             float dt = 1.0f / 60.0f;
             for (int k = 0; k < bench; ++k) {
                 const double s0 = nowMs();
+                // (--yeniden n: the fire laid again every n frames, as R does live: every log's structure built anew)
+                if (relay > 0 && k % relay == relay - 1) a.lay(a.layout);
                 a.update(dt);
                 cudaDeviceSynchronize();
                 const double s1 = nowMs();
