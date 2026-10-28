@@ -862,9 +862,32 @@ void AtesWood::release() {
 
 // the side follows each patch's radius (the vertex the mean of the four patches around it); u is metres around (at the
 // first radius), v metres along: the bark's texture keeps its size, the patch is found from them (ates.cu)
+namespace {
+unsigned int meshHash(unsigned int x) {
+    x ^= x >> 16;
+    x *= 0x7feb352du;
+    x ^= x >> 15;
+    x *= 0x846ca68bu;
+    x ^= x >> 16;
+    return x;
+}
+float meshRnd(unsigned int h) { return float(meshHash(h) >> 8) * (1.0f / 16777216.0f); }
+// value noise in [0, 1) (the device's vnoise, on the host)
+float meshNoise(float px, float py, float pz, unsigned int seed) {
+    const float fx = std::floor(px), fy = std::floor(py), fz = std::floor(pz);
+    const int ix = int(fx), iy = int(fy), iz = int(fz);
+    const float tx = px - fx, ty = py - fy, tz = pz - fz;
+    const float wx = tx * tx * (3.0f - 2.0f * tx), wy = ty * ty * (3.0f - 2.0f * ty), wz = tz * tz * (3.0f - 2.0f * tz);
+    float c[8];
+    for (int k = 0; k < 8; ++k)
+        c[k] = meshRnd(unsigned(ix + (k & 1)) * 73856093u ^ unsigned(iy + ((k >> 1) & 1)) * 19349663u ^ unsigned(iz + (k >> 2)) * 83492791u ^ seed);
+    const float x0 = c[0] + (c[1] - c[0]) * wx, x1 = c[2] + (c[3] - c[2]) * wx, x2 = c[4] + (c[5] - c[4]) * wx, x3 = c[6] + (c[7] - c[6]) * wx;
+    const float y0 = x0 + (x1 - x0) * wy, y1 = x2 + (x3 - x2) * wy;
+    return y0 + (y1 - y0) * wz;
+}
+}   // namespace
+
 void buildLogMesh(const ALog& L, const std::vector<float>& pr, ALogMesh& out) {
-    OMeshCPU& s = out.side;
-    s = OMeshCPU();
     const int nt = L.nTheta, nz = L.nZ;
     auto rad = [&](int t, int z) {
         t = (t % nt + nt) % nt;
@@ -872,14 +895,93 @@ void buildLogMesh(const ALog& L, const std::vector<float>& pr, ALogMesh& out) {
         const size_t p = size_t(L.firstPatch) + size_t(z * nt + t);
         return p < pr.size() ? pr[p] : L.r0;
     };
+    // a coal of the bed is a lump, not a cut cylinder: its radius wanders by a quarter, ridged, and its ends are broken
+    // faces (tilted, their rims rounded off); a log's radius wanders by a twentieth (its knots, its bark). Inward
+    // mostly: the body (ates_body) is the cylinder and the eye's shape lies within it, so nothing the body touches goes
+    // into what the eye sees
+    const bool lump = L.kind == 1 && L.len < 0.15f;
+    const float amp = L.kind == 0 ? 0.0f : lump ? 1.0f : 0.2f;
+    auto shape = [&](float th, float x) {
+        const float s = 1.0f / (0.6f * L.r0), c = std::cos(th) * L.r0, sn = std::sin(th) * L.r0;
+        const float n1 = meshNoise(x * s, c * s, sn * s, L.seed), n2 = meshNoise(x * s * 2.4f, c * s * 2.4f, sn * s * 2.4f, L.seed ^ 0x9e3779b9u);
+        const float ridge = 1.0f - std::fabs(2.0f * n2 - 1.0f);
+        return 1.0f - amp * (0.25f - 0.3f * (0.6f * n1 + 0.4f * ridge));
+    };
+    // each end's face: a plane tilted by its slope sl along the direction al (none for a log: sawn square), within the
+    // body's length; the side meets it h in from it and its rim rounds over D rings
+    const int D = lump ? 3 : 0;
+    float sl[2] = {0.0f, 0.0f}, al[2] = {0.0f, 0.0f}, hh[2] = {0.0f, 0.0f};
+    if (lump)
+        for (int e = 0; e < 2; ++e) {
+            const unsigned int k = L.seed ^ (e ? 0x71u : 0x51u);
+            hh[e] = L.r0 * (0.08f + 0.08f * meshRnd(k));
+            sl[e] = std::min(0.15f + 0.45f * meshRnd(k + 1u), std::max(0.0f, (0.3f * L.len - hh[e]) / (2.0f * L.r0)));
+            al[e] = 6.2831853f * meshRnd(k + 2u);
+        }
+    auto plane = [&](int e, float y, float z) {
+        const float in = sl[e] * (L.r0 + y * std::cos(al[e]) + z * std::sin(al[e]));
+        return e == 0 ? -0.5f * L.len + in : 0.5f * L.len - in;
+    };
+    const int nr = nz + 1 + 2 * D, nc = nt + 1;
+    std::vector<float3> P(size_t(nr) * nc), N(size_t(nr) * nc);
+    std::vector<float> X(static_cast<size_t>(nr));   // each ring's place along the body (the uv's)
+    auto at = [&](int r, int t) -> float3& { return P[size_t(r) * nc + t]; };
+    std::vector<float> endR0(static_cast<size_t>(nc)), endR1(static_cast<size_t>(nc));
+    for (int z = 0; z <= nz; ++z) {
+        const float xb = -0.5f * L.len + L.len * z / nz;
+        for (int t = 0; t <= nt; ++t) {
+            const float th = 6.2831853f * t / nt;
+            // the side between its two rims (each h in from its face where the face meets the first radius)
+            const float f0 = plane(0, L.r0 * std::cos(th), L.r0 * std::sin(th)) + hh[0], f1 = plane(1, L.r0 * std::cos(th), L.r0 * std::sin(th)) - hh[1];
+            const float x = f0 + (f1 - f0) * z / nz;
+            // a lump's edges round off into its ends (a quarter circle over 0.3 of its radius)
+            float edge = 1.0f;
+            if (lump) {
+                const float e = std::clamp(std::min(x - f0, f1 - x) / (0.3f * L.r0), 0.0f, 1.0f);
+                edge = 0.85f + 0.15f * std::sqrt(e * (2.0f - e));
+            }
+            const float r = 0.25f * (rad(t - 1, z - 1) + rad(t, z - 1) + rad(t - 1, z) + rad(t, z)) * shape(th, xb) * edge;
+            at(D + z, t) = make_float3(x, r * std::cos(th), r * std::sin(th));
+            if (z == 0) endR0[size_t(t)] = r;
+            if (z == nz) endR1[size_t(t)] = r;
+        }
+        X[size_t(D + z)] = xb;
+    }
+    // the rims: out from the side's last ring to the face, drawing in by a quarter of the radius
+    for (int k = 1; k <= D; ++k) {
+        const float phi = 1.5707963f * k / (D + 1);
+        for (int t = 0; t <= nt; ++t) {
+            const float th = 6.2831853f * t / nt;
+            const float r0 = endR0[size_t(t)] * (1.0f - 0.25f * (1.0f - std::cos(phi))), r1 = endR1[size_t(t)] * (1.0f - 0.25f * (1.0f - std::cos(phi)));
+            const float y0 = r0 * std::cos(th), z0 = r0 * std::sin(th), y1 = r1 * std::cos(th), z1 = r1 * std::sin(th);
+            at(D - k, t) = make_float3(plane(0, y0, z0) + hh[0] * (1.0f - std::sin(phi)), y0, z0);
+            at(D + nz + k, t) = make_float3(plane(1, y1, z1) - hh[1] * (1.0f - std::sin(phi)), y1, z1);
+        }
+        X[size_t(D - k)] = -0.5f * L.len;
+        X[size_t(D + nz + k)] = 0.5f * L.len;
+    }
+    // the faces' middles and their normals (the planes')
+    const float3 tip0 = make_float3(plane(0, 0, 0), 0, 0), tip1 = make_float3(plane(1, 0, 0), 0, 0);
+    const float3 tipN0 = normalize(make_float3(-1.0f, sl[0] * std::cos(al[0]), sl[0] * std::sin(al[0])));
+    const float3 tipN1 = normalize(make_float3(1.0f, sl[1] * std::cos(al[1]), sl[1] * std::sin(al[1])));
+    // the normals from the shape itself: across the rings and around them (the tips close the rounded ends)
+    for (int r = 0; r < nr; ++r)
+        for (int t = 0; t <= nt; ++t) {
+            const int tp = t == nt ? 1 : t + 1, tm = t == 0 ? nt - 1 : t - 1;
+            const float3 around = at(r, tp) - at(r, tm);
+            const float3 lo = r > 0 ? at(r - 1, t) : (lump ? tip0 : at(r, t)), hi = r + 1 < nr ? at(r + 1, t) : (lump ? tip1 : at(r, t));
+            const float3 n = cross(around, hi - lo);
+            const float l = length(n);
+            const float th = 6.2831853f * t / nt;
+            N[size_t(r) * nc + t] = l > 1e-12f ? n * (1.0f / l) : make_float3(0, std::cos(th), std::sin(th));
+        }
+    OMeshCPU& s = out.side;
+    s = OMeshCPU();
     for (int z = 0; z <= nz; ++z)
         for (int t = 0; t <= nt; ++t) {
-            const float r = 0.25f * (rad(t - 1, z - 1) + rad(t, z - 1) + rad(t - 1, z) + rad(t, z));
-            const float th = 6.2831853f * t / nt;
-            const float x = -0.5f * L.len + L.len * z / nz;
-            s.pos.push_back(make_float3(x, r * std::cos(th), r * std::sin(th)));
-            s.nrm.push_back(make_float3(0, std::cos(th), std::sin(th)));
-            s.uv.push_back(make_float2(th * L.r0, x));
+            s.pos.push_back(at(D + z, t));
+            s.nrm.push_back(N[size_t(D + z) * nc + t]);
+            s.uv.push_back(make_float2(6.2831853f * t / nt * L.r0, X[size_t(D + z)]));
         }
     for (int z = 0; z < nz; ++z)
         for (int t = 0; t < nt; ++t) {
@@ -888,28 +990,36 @@ void buildLogMesh(const ALog& L, const std::vector<float>& pr, ALogMesh& out) {
             s.idx.push_back(make_uint3(b, c, d));
         }
     s.uvScale = 1.0f;
-    // the two ends: a fan over the end ring's radii, its uv the side's (the angle around, the end's place along)
+    // the two ends: a log's flat (a fan over its end ring), a lump's rounded (its rings, then a fan to its tip); their
+    // uv the side's (the angle around, the end's place along)
     OMeshCPU& e = out.ends;
     e = OMeshCPU();
     for (int side = 0; side < 2; ++side) {
-        const int z = side == 0 ? 0 : nz - 1;
-        const float x = side == 0 ? -0.5f * L.len : 0.5f * L.len;
         const float sx = side == 0 ? -1.0f : 1.0f;
+        const float xe = sx * 0.5f * L.len - sx * 0.001f;
+        const int ring0 = side == 0 ? D : D + nz;
         const unsigned c0 = unsigned(e.pos.size());
-        e.pos.push_back(make_float3(x, 0, 0));
-        e.nrm.push_back(make_float3(sx, 0, 0));
-        e.uv.push_back(make_float2(0.0f, x - sx * 0.001f));
-        for (int t = 0; t <= nt; ++t) {
-            const float th = 6.2831853f * t / nt;
-            const float r = 0.5f * (rad(t - 1, z) + rad(t, z));
-            e.pos.push_back(make_float3(x, r * std::cos(th), r * std::sin(th)));
-            e.nrm.push_back(make_float3(sx, 0, 0));
-            e.uv.push_back(make_float2(th * L.r0, x - sx * 0.001f));
+        for (int k = 0; k <= D; ++k) {
+            const int r = side == 0 ? ring0 - k : ring0 + k;
+            for (int t = 0; t <= nt; ++t) {
+                e.pos.push_back(at(r, t));
+                e.nrm.push_back(lump ? N[size_t(r) * nc + t] : make_float3(sx, 0, 0));
+                e.uv.push_back(make_float2(6.2831853f * t / nt * L.r0, xe));
+            }
         }
+        const unsigned tipI = unsigned(e.pos.size());
+        e.pos.push_back(side == 0 ? tip0 : tip1);
+        e.nrm.push_back(side == 0 ? tipN0 : tipN1);
+        e.uv.push_back(make_float2(0.0f, xe));
+        for (int k = 0; k < D; ++k)
+            for (int t = 0; t < nt; ++t) {
+                const unsigned a = c0 + unsigned(k * (nt + 1) + t), b = a + 1, c = a + unsigned(nt + 1), d = c + 1;
+                e.idx.push_back(make_uint3(a, c, b));
+                e.idx.push_back(make_uint3(b, c, d));
+            }
         for (int t = 0; t < nt; ++t) {
-            const unsigned a = c0 + 1 + unsigned(t), b = a + 1;
-            if (side == 0) e.idx.push_back(make_uint3(c0, a, b));
-            else e.idx.push_back(make_uint3(c0, b, a));
+            const unsigned a = c0 + unsigned(D * (nt + 1) + t), b = a + 1;
+            e.idx.push_back(make_uint3(tipI, a, b));
         }
     }
     e.uvScale = 1.0f;
