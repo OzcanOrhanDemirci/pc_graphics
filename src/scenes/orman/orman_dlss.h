@@ -17,6 +17,7 @@ struct OrmanDlssFrame {
     bool reset;                        // the history is wrong (a jump of the eye, new settings)
     float worldToView[16], viewToClip[16];   // row-major, row vectors (v' = v M)
     float frameMs;
+    float preExposure = 0.0f;          // the scale the colour was given before DLSS (0: none); its output keeps it
 };
 
 class OrmanDlss {

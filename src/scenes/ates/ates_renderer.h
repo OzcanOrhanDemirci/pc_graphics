@@ -34,6 +34,8 @@ public:
     float renderMs = 0.0f, volumeMs = 0.0f, displayMs = 0.0f, dlssMs = 0.0f;
     size_t gasBytes = 0;
     unsigned int badSamples = 0;
+    unsigned int badKinds[5] = {};   // the last frame's values not finite: surface colour, DLSS guides, fire, after sparks,
+                                     // DLSS's output (its history is then reset)
     std::string dlssError;
     OrmanDlssFrame dlssFrame{};
 
@@ -133,6 +135,9 @@ private:
 
 // the cumulative sum of the light blocks' luminance (ates_kernels.cu)
 void atesLightCdf(const float3* light, int n, float* lum, float* cdf, void*& tmp, size_t& tmpBytes, cudaStream_t st);
+// DLSS's output into the picture, its pre-exposure divided out (ates_kernels.cu)
+// (what is not finite in it is counted in bad and zeroed)
+void atesFromDlss(cudaSurfaceObject_t out, float4* hdr, int w, int h, float inv, unsigned int* bad, cudaStream_t st);
 // the smoke's fluence on its coarse grid from the fire's light blocks (ates_kernels.cu)
 void atesSmokeLight(const float3* light, int lnx, int lny, int lnz, float3 origin, float lightCell, float4* list, unsigned int* count, unsigned int cap,
                     int sx, int sy, int sz, float smokeCell, float4* out, cudaStream_t st);

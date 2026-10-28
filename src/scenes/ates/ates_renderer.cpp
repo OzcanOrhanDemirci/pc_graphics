@@ -103,8 +103,8 @@ bool AtesRenderer::init(int width, int height, const std::string& root) {
         lh /= 2;
     }
     CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&dParams_), sizeof(AtesParams)));
-    CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&params.badCount), sizeof(unsigned int)));
-    CUDA_CHECK(cudaMemset(params.badCount, 0, sizeof(unsigned int)));
+    CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&params.badCount), 5 * sizeof(unsigned int)));
+    CUDA_CHECK(cudaMemset(params.badCount, 0, 5 * sizeof(unsigned int)));
     // the light of hot things (Planck), once
     std::vector<float3> soot, grey;
     ates_spectra::tables(soot, grey);
@@ -597,8 +597,7 @@ void AtesRenderer::render() {
         const bool ok = dlss_.evaluate(f);
         CUDA_CHECK(cudaDeviceSynchronize());
         if (ok)
-            CUDA_CHECK(cudaMemcpy2DFromArrayAsync(params.hdr, size_t(width_) * sizeof(float4), planes_[8].arr, 0, 0, size_t(width_) * sizeof(float4),
-                                                  size_t(height_), cudaMemcpyDeviceToDevice, stream_));
+            atesFromDlss(planes_[8].surf, params.hdr, width_, height_, 1.0f / params.preExposure, params.badCount + 4, stream_);
         else
             dlssError = dlss_.error;
         f.reset = false;
@@ -622,8 +621,12 @@ void AtesRenderer::render() {
     if (dlssOn_ && params.dlss) cudaEventElapsedTime(&dlssMs, evD_, ev1_);
     cudaEventElapsedTime(&volumeMs, ev1_, ev2_);
     cudaEventElapsedTime(&displayMs, ev2_, ev3_);
-    cudaMemcpy(&badSamples, params.badCount, sizeof(unsigned int), cudaMemcpyDeviceToHost);
-    cudaMemsetAsync(params.badCount, 0, sizeof(unsigned int), stream_);
+    cudaMemcpy(badKinds, params.badCount, sizeof(badKinds), cudaMemcpyDeviceToHost);
+    cudaMemsetAsync(params.badCount, 0, sizeof(badKinds), stream_);
+    badSamples = badKinds[0] + badKinds[1] + badKinds[2] + badKinds[3] + badKinds[4];
+    // DLSS keeps what is not finite in its history and moves it with the picture (a black block that follows the
+    // fire): drop the history when its output had any
+    if (badKinds[4]) dlssFrame.reset = true;
 }
 
 void AtesRenderer::redoVolume() {

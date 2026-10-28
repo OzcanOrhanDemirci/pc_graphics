@@ -115,6 +115,7 @@ bool OrmanDlss::evaluate(const OrmanDlssFrame& f) {
     e.InMVScaleX = 1.0f;
     e.InMVScaleY = 1.0f;
     e.InFrameTimeDeltaInMsec = f.frameMs;
+    e.InPreExposure = f.preExposure;
     e.InRenderSubrectDimensions = {w_, h_};
     const NVSDK_NGX_Result r = NGX_CUDA_EVALUATE_DLSSD_EXT(static_cast<NVSDK_NGX_Handle*>(handle_), static_cast<NVSDK_NGX_Parameter*>(params_), &e);
     if (NVSDK_NGX_FAILED(r)) {

@@ -499,6 +499,19 @@ extern "C" __global__ void __raygen__render() {
         }
         float2 mv = make_float2(0, 0), pp;
         if (prevPixel(q, pp)) mv = make_float2(pp.x - cx, pp.y - cy);
+        // DLSS keeps what it is given in its history and moves it with the motion: one value not finite among its
+        // guides stays on screen as a black block that follows the surface (counted in badCount[1])
+        {
+            bool bad = false;
+            if (!(isfinite(n.x) && isfinite(n.y) && isfinite(n.z))) { n = -d; bad = true; }
+            if (!(isfinite(albedo.x) && isfinite(albedo.y) && isfinite(albedo.z))) { albedo = make_float3(0.5f, 0.5f, 0.5f); bad = true; }
+            if (!isfinite(spec)) { spec = 0.04f; bad = true; }
+            if (!isfinite(rough)) { rough = 0.8f; bad = true; }
+            if (!(isfinite(mv.x) && isfinite(mv.y))) { mv = make_float2(0, 0); bad = true; }
+            if (!isfinite(depth)) { depth = 1e4f; bad = true; }
+            if (bad && params.badCount) atomicAdd(params.badCount + 1, 1u);
+        }
+        c = fminf3(c * params.preExposure, make_float3(6.0e4f, 6.0e4f, 6.0e4f));
         surf2Dwrite(make_float4(c.x, c.y, c.z, 1.0f), cudaSurfaceObject_t(params.gColor), int(px * sizeof(float4)), int(py));
         surf2Dwrite(make_float4(albedo.x, albedo.y, albedo.z, 1.0f), cudaSurfaceObject_t(params.gAlbedo), int(px * sizeof(float4)), int(py));
         surf2Dwrite(make_float4(spec, spec, spec, 1.0f), cudaSurfaceObject_t(params.gSpecular), int(px * sizeof(float4)), int(py));
@@ -653,6 +666,11 @@ extern "C" __global__ void __raygen__volume() {
     float3 c = make_float3(behind.x, behind.y, behind.z) * Tr + L;
     // (debug 3: the flame's opacity along the ray, 1 - its transmittance at green, as a grey)
     if (params.debug == 3) c = make_float3(1.0f - Tr.y, 1.0f - Tr.y, 1.0f - Tr.y);
+    // nothing not finite goes on to the bloom, which would spread it into a black square (counted in badCount[2])
+    if (!(isfinite(c.x) && isfinite(c.y) && isfinite(c.z))) {
+        c = isfinite(base.x) && isfinite(base.y) && isfinite(base.z) ? make_float3(base.x, base.y, base.z) : make_float3(0, 0, 0);
+        if (params.badCount) atomicAdd(params.badCount + 2, 1u);
+    }
     params.hdr[i] = make_float4(c.x, c.y, c.z, 1.0f);
 }
 
@@ -661,6 +679,11 @@ extern "C" __global__ void __raygen__final() {
     const unsigned int px = li.x, py = li.y, i = py * params.width + px;
     const float4 h = params.hdr[i];
     float3 c = make_float3(h.x, h.y, h.z);
+    // (what the sparks added after the fire's pass: counted in badCount[3])
+    if (!(isfinite(c.x) && isfinite(c.y) && isfinite(c.z))) {
+        c = make_float3(0, 0, 0);
+        if (params.badCount) atomicAdd(params.badCount + 3, 1u);
+    }
     if (params.bloom) {
         const int bw = int(params.width / 2), bh = int(params.height / 2);
         const float fx = fminf(fmaxf((float(px) + 0.5f) * 0.5f - 0.5f, 0.0f), float(bw - 1)), fy = fminf(fmaxf((float(py) + 0.5f) * 0.5f - 0.5f, 0.0f), float(bh - 1));

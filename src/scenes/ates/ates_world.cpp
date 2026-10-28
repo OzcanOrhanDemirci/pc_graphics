@@ -593,6 +593,7 @@ void AtesApp::render(float dt) {
     p.pixelAngle = 2.0f * th / float(height);
     p.exposure = std::exp2(cfg.f("exposure", 0.0f) + exposureEv) * (cfg.f("exposure.fixed", 0.0f) > 0.0f ? cfg.f("exposure.fixed", 0.0f) : autoOn ? autoExposure : 1.0f);
     p.time = float(simTime);
+    p.preExposure = R.dlssOn() && p.dlss && cfg.i("dlss.preexposure", 1) ? std::max(p.exposure, 1e-6f) : 1.0f;
     if (R.dlssOn() && p.dlss) {
         const unsigned int ph = frame_++ % ATES_PHASES;
         auto halton = [](unsigned int i, unsigned int b) {
@@ -621,6 +622,7 @@ void AtesApp::render(float dt) {
         fr.jitterY = -p.jitter.y;
         fr.reset = fr.reset || jump;
         fr.frameMs = dt > 0.0f ? dt * 1000.0f : 16.7f;
+        fr.preExposure = p.preExposure;
         const float3 r = normalize(p.U), u = normalize(p.V), w = p.W, e = p.eye;
         const float m[16] = {r.x, u.x, w.x, 0, r.y, u.y, w.y, 0, r.z, u.z, w.z, 0, -dot(r, e), -dot(u, e), -dot(w, e), 1};
         const float zn = 0.01f, zf = 1e4f;

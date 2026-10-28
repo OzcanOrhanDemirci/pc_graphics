@@ -313,6 +313,7 @@ __global__ void kDraw(unsigned int cap, const float4* pos, const float4* prev, c
         if (r > depth[cy * W + cx] + 0.01f) continue;
         const float omega = 0.3926991f * d * d / (r * r);   // its mean projected area, pi d^2 / 8
         const float3 e = greyAt(grey, T) * (eps * omega / pix2 / n);
+        if (!(isfinite(e.x) && isfinite(e.y) && isfinite(e.z))) continue;
         const int x0 = int(floorf(x)), y0 = int(floorf(y));
         const float fx = x - x0, fy = y - y0;
         for (int jj = 0; jj < 2; ++jj)

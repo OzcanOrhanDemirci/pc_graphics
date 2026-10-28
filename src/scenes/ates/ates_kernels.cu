@@ -72,7 +72,22 @@ __global__ void kSmokeLight(const float4* list, const unsigned int* count, unsig
     }
     if (i < sx * sy * sz) out[i] = make_float4(E.x, E.y, E.z, 0.0f);
 }
+__global__ void kFromDlss(cudaSurfaceObject_t out, float4* hdr, int w, int h, float inv, unsigned int* bad) {
+    const int x = blockIdx.x * blockDim.x + threadIdx.x, y = blockIdx.y * blockDim.y + threadIdx.y;
+    if (x >= w || y >= h) return;
+    float4 c;
+    surf2Dread(&c, out, x * int(sizeof(float4)), y);
+    if (!(isfinite(c.x) && isfinite(c.y) && isfinite(c.z))) {
+        c = make_float4(0, 0, 0, 1);
+        if (bad) atomicAdd(bad, 1u);
+    }
+    hdr[size_t(y) * w + x] = make_float4(c.x * inv, c.y * inv, c.z * inv, 1.0f);
+}
 }   // namespace
+
+void atesFromDlss(cudaSurfaceObject_t out, float4* hdr, int w, int h, float inv, unsigned int* bad, cudaStream_t st) {
+    kFromDlss<<<dim3((w + 15) / 16, (h + 15) / 16), dim3(16, 16), 0, st>>>(out, hdr, w, h, inv, bad);
+}
 
 void atesSmokeLight(const float3* light, int lnx, int lny, int lnz, float3 origin, float lightCell, float4* list, unsigned int* count, unsigned int cap,
                     int sx, int sy, int sz, float smokeCell, float4* out, cudaStream_t st) {

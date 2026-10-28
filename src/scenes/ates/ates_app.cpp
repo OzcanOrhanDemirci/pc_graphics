@@ -589,6 +589,8 @@ int runAtesCli(int argc, char** argv) {
             // scene does (the gas's steps then follow the frame rate: 40 FPS takes three); otherwise frames of 1/60 s
             double sum = 0.0, worst = 0.0, upd = 0.0, ren = 0.0, sim0 = a.simTime;
             double gasMs = 0.0, woodMs = 0.0, surfMs = 0.0, dlssMs = 0.0, volMs = 0.0, dispMs = 0.0, bodyMs = 0.0;
+            unsigned long long bad[5] = {0, 0, 0, 0, 0};
+            int badFrames = 0;
             int steps = 0;
             float dt = 1.0f / 60.0f;
             const double benchT0 = a.simTime;
@@ -615,6 +617,8 @@ int runAtesCli(int argc, char** argv) {
                 volMs += a.R.volumeMs;
                 dispMs += a.R.displayMs;
                 bodyMs += a.bodies.stats.ms;
+                for (int q = 0; q < 5; ++q) bad[q] += a.R.badKinds[q];
+                if (a.R.badSamples) ++badFrames;
             }
             const double n = bench;
             std::printf("ates: olcum %d kare%s (duvar saati): ortalama %.2f ms (%.1f FPS), en kotu %.2f ms; guncelleme %.2f, goruntu %.2f ms\n", bench,
@@ -623,6 +627,8 @@ int runAtesCli(int argc, char** argv) {
                         "gercek zamanin %%%.0f'i\n",
                         gasMs / n, steps / n, steps ? gasMs / steps : 0.0, woodMs / n, surfMs / n, dlssMs / n, volMs / n, dispMs / n, bodyMs / n,
                         100.0 * (a.simTime - sim0) / (sum * 1e-3));
+            std::printf("ates:   sonlu olmayan (%d karede): yuzey rengi %llu, DLSS rehberleri %llu, ates %llu, kivilcimdan sonra %llu, DLSS ciktisi %llu\n",
+                        badFrames, bad[0], bad[1], bad[2], bad[3], bad[4]);
         }
     };
     if (seq > 0) {

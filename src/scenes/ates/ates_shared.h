@@ -102,6 +102,8 @@ struct AtesParams {
 
     // the display
     float exposure;
+    float preExposure;        // the surfaces' colour times this into DLSS (the exposure: its half floats overflow at
+                              // 65504, and the ash by the flame's foot reaches 1e5 cd/m^2), divided out of its output
     float bloomStrength;
     float vignette;
     float saturation;         // around the luminance, after the contrast (1.2: firelight stays orange, AgX alone
