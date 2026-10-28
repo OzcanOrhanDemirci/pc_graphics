@@ -113,6 +113,13 @@ add_library(pc_core OBJECT
     src/scenes/orman/orman_app.cpp
     src/scenes/orman/orman_live.cpp
     src/scenes/orman/orman_dlss.cpp
+    src/scenes/ates/ates_gas.cu
+    src/scenes/ates/ates_wood.cu
+    src/scenes/ates/ates_kernels.cu
+    src/scenes/ates/ates_renderer.cpp
+    src/scenes/ates/ates_world.cpp
+    src/scenes/ates/ates_app.cpp
+    src/scenes/ates/ates_live.cpp
     ${TP}/tinyexr/miniz.c)
 add_executable(pc_graphics src/app/main.cpp $<TARGET_OBJECTS:pc_core>)
 

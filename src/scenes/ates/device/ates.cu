@@ -1,0 +1,464 @@
+// Scene 12 "Ateş": the OptiX programs. Compiled at run time by NVRTC (F5 recompiles).
+//   __raygen__render   the surfaces: the stones, the ground, the logs (their char, ash and glow from the wood's state),
+//                      lit by the fire (one sample of its light a pixel a frame, from the gas's emission, with a shadow
+//                      ray: DLSS-RR gathers the frames) and by the night; the DLSS guides
+//   __raygen__volume   the fire over the surfaces' picture: the gas marched along each pixel's ray, deterministic (no
+//                      random step), the soot's emission and absorption (Planck's law at its temperature), the flame
+//                      front's own blue, the heat haze (the hot air's refraction bends the ray to what is behind)
+//   __raygen__final    exposure, glare, AgX, sRGB
+#include <optix.h>
+
+#include "scenes/ates/ates_shared.h"
+#include "shared/display.h"
+
+extern "C" {
+__constant__ AtesParams params;
+}
+
+static __forceinline__ __device__ float3 xfPoint(const float m[12], float3 p) {
+    return make_float3(m[0] * p.x + m[1] * p.y + m[2] * p.z + m[3], m[4] * p.x + m[5] * p.y + m[6] * p.z + m[7],
+                       m[8] * p.x + m[9] * p.y + m[10] * p.z + m[11]);
+}
+static __forceinline__ __device__ float3 xfVector(const float m[12], float3 v) {
+    return make_float3(m[0] * v.x + m[1] * v.y + m[2] * v.z, m[4] * v.x + m[5] * v.y + m[6] * v.z, m[8] * v.x + m[9] * v.y + m[10] * v.z);
+}
+static __forceinline__ __device__ float3 lerp3b(float3 a, float3 b, float3 c, float2 w) { return a * (1.0f - w.x - w.y) + b * w.x + c * w.y; }
+static __forceinline__ __device__ float2 lerp2b(float2 a, float2 b, float2 c, float2 w) { return a * (1.0f - w.x - w.y) + b * w.x + c * w.y; }
+static __forceinline__ __device__ unsigned int hash32(unsigned int x) {
+    x ^= x >> 16;
+    x *= 0x7feb352du;
+    x ^= x >> 15;
+    x *= 0x846ca68bu;
+    x ^= x >> 16;
+    return x;
+}
+static __forceinline__ __device__ float u01(unsigned int h) { return float(h >> 8) * (1.0f / 16777216.0f); }
+
+extern "C" __global__ void __anyhit__none() {}
+
+// ---------------------------------------------------------------------------------------------------------------
+struct Hit {
+    bool hit;
+    float t;
+    unsigned int inst, prim, input;
+    float2 b;
+    float m[12];
+};
+
+static __forceinline__ __device__ Hit trace(float3 o, float3 d, float tmin, float tmax) {
+    unsigned int p0 = 0, p1 = 0, p2 = 0, p3 = 0;
+    optixTraverse(params.handle, o, d, tmin, tmax, 0.0f, OptixVisibilityMask(255), OPTIX_RAY_FLAG_DISABLE_ANYHIT, 0, 1, 0, p0, p1, p2, p3);
+    Hit h;
+    h.hit = optixHitObjectIsHit();
+    if (!h.hit) return h;
+    h.t = optixHitObjectGetRayTmax();
+    h.inst = optixHitObjectGetInstanceId();
+    h.prim = optixHitObjectGetPrimitiveIndex();
+    h.input = optixHitObjectGetSbtGASIndex();
+    h.b = optixHitObjectGetTriangleBarycentrics();
+    optixHitObjectGetObjectToWorldTransformMatrix(h.m);
+    return h;
+}
+
+static __forceinline__ __device__ bool occluded(float3 o, float3 d, float tmax) {
+    unsigned int p0 = 0, p1 = 0, p2 = 0, p3 = 0;
+    optixTraverse(params.handle, o, d, 0.0f, tmax, 0.0f, OptixVisibilityMask(255),
+                  OPTIX_RAY_FLAG_DISABLE_ANYHIT | OPTIX_RAY_FLAG_TERMINATE_ON_FIRST_HIT, 0, 1, 0, p0, p1, p2, p3);
+    return optixHitObjectIsHit();
+}
+
+// the tables (ates_spectra.h) at a temperature, linear between entries
+static __forceinline__ __device__ float3 table(const float3* t, float T) {
+    const float x = fminf(fmaxf((T - ATES_TABLE_T0) / ATES_TABLE_DT, 0.0f), float(ATES_TABLE_N - 1) - 0.001f);
+    const int i = int(x);
+    const float f = x - i;
+    return t[i] * (1.0f - f) + t[i + 1] * f;
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+struct Surf {
+    float3 p, ng, n;
+    float3 albedo;
+    float3 emit;              // its own light (an ember): cd/m^2
+    float rough;
+};
+
+// a log's surface at (u, v) of its side (u around, v along): the char's cracks (a cell pattern whose size and depth
+// follow the char's), the ash, the glow of its temperature
+static __forceinline__ __device__ void logSurface(const ALogView& L, float2 uv, Surf& s) {
+    // (u is metres around at the first radius, v metres along from the middle)
+    const float fu = uv.x / (6.2831853f * L.r0), fv = uv.y / L.len + 0.5f;
+    const int it = min(max(int(fu * L.nTheta), 0), L.nTheta - 1), iz = min(max(int(fv * L.nZ), 0), L.nZ - 1);
+    const unsigned int p = L.firstPatch + unsigned(iz * L.nTheta + it);
+    const float T = L.surfT[p], charD = L.charD[p], ash = L.ash[p];
+    // char: black where it is deeper than the bark's first fraction of a millimetre
+    const float charred = smoothstepf(0.0002f, 0.0015f, charD);
+    // the char splits into squares (the alligator pattern): cells about twice the char's depth, cracks as wide as a
+    // tenth of it; in them the glow is deeper and hotter (a cavity radiates as a black body and loses less)
+    const float cellSize = fmaxf(2.5f * charD, 0.004f);
+    const float cx = uv.x / cellSize, cy = uv.y / (1.6f * cellSize);
+    const int ix = int(floorf(cx)), iy = int(floorf(cy));
+    float d1 = 1e9f, d2 = 1e9f;
+    for (int b = -1; b <= 1; ++b)
+        for (int a = -1; a <= 1; ++a) {
+            const unsigned int hc = hash32(unsigned(ix + a) * 73856093u ^ unsigned(iy + b) * 19349663u ^ L.seed);
+            const float px = float(ix + a) + 0.15f + 0.7f * u01(hc), py = float(iy + b) + 0.15f + 0.7f * u01(hash32(hc));
+            const float dd = (cx - px) * (cx - px) + (cy - py) * (cy - py);
+            if (dd < d1) {
+                d2 = d1;
+                d1 = dd;
+            } else if (dd < d2) {
+                d2 = dd;
+            }
+        }
+    const float edge = 0.5f * (sqrtf(d2) - sqrtf(d1));
+    const float crackW = 0.07f * charred;
+    const float crack = 1.0f - smoothstepf(crackW * 0.5f, crackW, edge);
+    const float ashCover = smoothstepf(0.0f, 0.002f, ash);
+    s.albedo = s.albedo * (1.0f - charred) + make_float3(0.035f, 0.032f, 0.03f) * charred;
+    s.albedo = s.albedo * (1.0f - crack * 0.6f);
+    s.albedo = s.albedo * (1.0f - ashCover) + make_float3(0.55f, 0.53f, 0.5f) * ashCover;
+    s.rough = s.rough * (1.0f - charred) + 0.9f * charred;
+    // the glow: a grey body at its temperature (emissivity 0.9), the cracks 60 K hotter, ash lets a part through
+    const float Te = T + 60.0f * crack * charred;
+    const float through = 1.0f - 0.8f * ashCover;
+    if (Te > 650.0f) s.emit = table(params.greyEmit, Te) * (0.9f * through);
+}
+
+static __forceinline__ __device__ Surf surface(const Hit& h, float3 d, float width) {
+    const AInst& in = params.instances[h.inst];
+    const OGeom& g = params.geoms[in.firstGeom + h.input];
+    const OMaterial& m = params.materials[g.material];
+    const uint3 tri = g.idx[h.prim];
+    const float3 q0 = g.pos[tri.x], q1 = g.pos[tri.y], q2 = g.pos[tri.z];
+    const float3 p0 = xfPoint(h.m, q0), p1 = xfPoint(h.m, q1), p2 = xfPoint(h.m, q2);
+    Surf s;
+    s.p = lerp3b(p0, p1, p2, h.b);
+    s.emit = make_float3(0, 0, 0);
+    const float3 cr = cross(p1 - p0, p2 - p0);
+    const float crl = length(cr);
+    float3 n = g.nrm ? xfVector(h.m, lerp3b(g.nrm[tri.x], g.nrm[tri.y], g.nrm[tri.z], h.b)) : cr;
+    const float nl = length(n);
+    n = nl > 1e-12f ? n * (1.0f / nl) : (crl > 1e-20f ? cr * (1.0f / crl) : -d);
+    float3 ng = crl > 1e-20f ? cr * (1.0f / crl) : n;
+    if (dot(n, ng) < 0.0f) ng = -ng;
+    if (dot(ng, d) > 0.0f) {
+        ng = -ng;
+        n = -n;
+    }
+    const float2 t0 = g.uv[tri.x], t1 = g.uv[tri.y], t2 = g.uv[tri.z];
+    const float2 uvRaw = lerp2b(t0, t1, t2, h.b);
+    const float2 uv = uvRaw * g.uvScale;
+    // the texture's level from the footprint over the triangle's texel density
+    const float uvArea = fabsf((t1.x - t0.x) * (t2.y - t0.y) - (t2.x - t0.x) * (t1.y - t0.y)) * g.uvScale * g.uvScale;
+    const float wArea = crl * 0.5f;
+    const float texels = uvArea * m.texelArea / fmaxf(wArea, 1e-12f);
+    const float cosT = fmaxf(fabsf(dot(ng, d)), 0.1f);
+    const float lod = fmaxf(0.0f, 0.5f * log2f(fmaxf(texels * width * width / cosT, 1e-12f)) + params.lodBias);
+    float3 albedo = m.tint * in.tint;
+    if (m.albedo) {
+        const float4 a = tex2DLod<float4>(cudaTextureObject_t(m.albedo), uv.x, uv.y, lod);
+        albedo = make_float3(a.x, a.y, a.z) * m.tint * in.tint;
+    }
+    s.rough = m.roughness;
+    if (m.arm) s.rough = tex2DLod<float4>(cudaTextureObject_t(m.arm), uv.x, uv.y, lod).y;
+    // the ground away from the pit: the second material, blended in by distance (the burnt ground is the pit's)
+    if (in.log < 0 && g.material == params.groundMaterial && params.groundMaterial2 >= 0) {
+        const float r = sqrtf(s.p.x * s.p.x + s.p.z * s.p.z);
+        const float w = smoothstepf(params.pitRadius, params.pitRadius * 1.8f, r);
+        if (w > 0.0f) {
+            const OMaterial& m2 = params.materials[params.groundMaterial2];
+            if (m2.albedo) {
+                const float4 a = tex2DLod<float4>(cudaTextureObject_t(m2.albedo), uv.x, uv.y, lod);
+                albedo = albedo * (1.0f - w) + make_float3(a.x, a.y, a.z) * m2.tint * w;
+            }
+        }
+    }
+    float relief = 1.0f;
+    if (in.log >= 0) {
+        const ALogView& Lv = params.logs[in.log];
+        const float fu = uvRaw.x / (6.2831853f * Lv.r0), fv = uvRaw.y / Lv.len + 0.5f;
+        const int it = min(max(int(fu * Lv.nTheta), 0), Lv.nTheta - 1), iz = min(max(int(fv * Lv.nZ), 0), Lv.nZ - 1);
+        relief = 1.0f - 0.85f * smoothstepf(0.0002f, 0.0015f, Lv.charD[Lv.firstPatch + unsigned(iz * Lv.nTheta + it)]);
+    }
+    if (m.normal) {
+        const float2 du1 = t1 - t0, du2 = t2 - t0;
+        const float det = du1.x * du2.y - du1.y * du2.x;
+        if (fabsf(det) > 1e-12f) {
+            const float r = 1.0f / det;
+            const float3 e1 = p1 - p0, e2 = p2 - p0;
+            float3 T = (e1 * du2.y - e2 * du1.y) * r;
+            const float3 B = (e2 * du1.x - e1 * du2.x) * r;
+            T = T - n * dot(n, T);
+            const float tl = length(T);
+            if (tl > 1e-12f) {
+                T = T * (1.0f / tl);
+                const float hand = dot(cross(n, T), B) < 0.0f ? -1.0f : 1.0f;
+                const float3 Bn = cross(n, T) * hand;
+                const float4 nm = tex2DLod<float4>(cudaTextureObject_t(m.normal), uv.x, uv.y, lod);
+                const float3 tn = make_float3((nm.x * 2.0f - 1.0f) * relief, -(nm.y * 2.0f - 1.0f) * relief, nm.z * 2.0f - 1.0f);
+                n = normalize(T * tn.x + Bn * tn.y + n * fmaxf(tn.z, 0.05f));
+            }
+        }
+    }
+    if (dot(n, d) > -0.02f) n = normalize(n - d * (dot(n, d) + 0.02f));
+    s.n = n;
+    s.ng = ng;
+    s.albedo = albedo;
+    if (in.log >= 0) logSurface(params.logs[in.log], uvRaw, s);
+    return s;
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// the fire's light: a block of the gas picked by its share of the light (the cumulative sum, binary search), a point in
+// it, a shadow ray. Returns the illuminance (lux, RGB) times the cosine at the surface, divided by the pick's chance
+static __forceinline__ __device__ float3 fireLight(const Surf& s, float u1, float2 u2) {
+    if (params.lightN <= 0) return make_float3(0, 0, 0);
+    const float total = params.lightCdf[params.lightN - 1];
+    if (total <= 0.0f) return make_float3(0, 0, 0);
+    const float target = u1 * total;
+    int lo = 0, hi = params.lightN - 1;
+    while (lo < hi) {
+        const int mid = (lo + hi) >> 1;
+        if (params.lightCdf[mid] < target) lo = mid + 1;
+        else hi = mid;
+    }
+    const float prev = lo > 0 ? params.lightCdf[lo - 1] : 0.0f;
+    const float pick = (params.lightCdf[lo] - prev) / total;
+    if (pick <= 0.0f) return make_float3(0, 0, 0);
+    const int ix = lo % params.lnx, iy = (lo / params.lnx) % params.lny, iz = lo / (params.lnx * params.lny);
+    const float3 cell = params.lightOrigin + make_float3(ix, iy, iz) * params.lightCell;
+    const float3 lp = cell + make_float3(u2.x, 0.5f, u2.y) * params.lightCell;
+    float3 L = lp - s.p;
+    const float r2 = dot(L, L);
+    const float r = sqrtf(r2);
+    L = L * (1.0f / fmaxf(r, 1e-6f));
+    const float cosn = dot(s.n, L), cosg = dot(s.ng, L);
+    if (cosn <= 0.0f || cosg <= 0.0f) return make_float3(0, 0, 0);
+    if (occluded(s.p + s.ng * 0.002f, L, r * 0.999f)) return make_float3(0, 0, 0);
+    // the block as a small ball: no point nearer than half its side (an ember inside the flame is lit by it, not by a
+    // singular point)
+    const float soft = 0.25f * params.lightCell * params.lightCell;
+    return params.lightI[lo] * (cosn / ((r2 + soft) * pick));
+}
+
+static __forceinline__ __device__ float3 sky(float3 d) {
+    const float up = fmaxf(d.y, 0.0f);
+    return params.skyHorizon + (params.skyZenith - params.skyHorizon) * sqrtf(up);
+}
+
+static __forceinline__ __device__ float3 shade(const Surf& s, float u1, float2 u2) {
+    if (params.debug == 1) return s.albedo;
+    if (params.debug == 2) return s.emit;
+    const float3 E = fireLight(s, u1, u2);
+    // the night's light: a faint sky over everything open (no shadow: it is a few thousandths of a candela)
+    const float3 amb = make_float3(params.ambient, params.ambient, params.ambient) * (0.5f + 0.5f * s.n.y);
+    return s.albedo * (E * INV_PIf + amb) + s.emit;
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+static __forceinline__ __device__ float specAlbedo(float NoV, float rough) {
+    const float rx = -rough + 1.0f, ry = -0.0275f * rough + 0.0425f, rz = -0.572f * rough + 1.04f, rw = 0.022f * rough - 0.04f;
+    const float a004 = fminf(rx * rx, exp2f(-9.28f * NoV)) * rx + ry;
+    return 0.04f * (-1.04f * a004 + rz) + (1.04f * a004 + rw);
+}
+static __forceinline__ __device__ bool prevPixel(float3 q, float2& pix) {
+    const float z = dot(q, params.prevW);
+    if (z <= 1e-6f) return false;
+    const float x = dot(q, params.prevU) / (dot(params.prevU, params.prevU) * z);
+    const float y = dot(q, params.prevV) / (dot(params.prevV, params.prevV) * z);
+    pix = make_float2((x + 1.0f) * 0.5f * float(params.width), (1.0f - y) * 0.5f * float(params.height));
+    return true;
+}
+
+// the sample's place in the light's sequence: this frame's, turned by the pixel's place in a 4 x 4 Bayer tile (every
+// tile holds all sixteen each frame: noise DLSS gathers, not a flicker of the whole picture)
+static __forceinline__ __device__ void lightSample(unsigned int px, unsigned int py, unsigned int k, float& u1, float2& u2) {
+    const unsigned int h = hash32(px * 1973u + py * 9277u);
+    // a rank-1 lattice over the sixteen phases, scrambled per pixel by a fixed shift (the same every frame: no crawl)
+    const float g1 = 0.7548776662f, g2 = 0.5698402910f;
+    u1 = fmodf(u01(h) + float(k) * 0.6180339887f, 1.0f);
+    u2 = make_float2(fmodf(u01(hash32(h)) + float(k) * g1, 1.0f), fmodf(u01(hash32(h ^ 0x9e3779b9u)) + float(k) * g2, 1.0f));
+}
+
+extern "C" __global__ void __raygen__render() {
+    const uint3 li = optixGetLaunchIndex();
+    const unsigned int px = li.x, py = li.y, i = py * params.width + px;
+    if (params.layout != sizeof(AtesParams)) {
+        params.hdr[i] = make_float4(1, 0, 1, 1);
+        return;
+    }
+    if (params.dlss) {
+        const float cx = float(px) + 0.5f + params.jitter.x, cy = float(py) + 0.5f + params.jitter.y;
+        const float x = cx / float(params.width) * 2.0f - 1.0f, y = 1.0f - cy / float(params.height) * 2.0f;
+        const float3 d = normalize(params.W + params.U * x + params.V * y);
+        const int bayer[16] = {0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5};
+        const unsigned int k = (params.phase + unsigned(bayer[(py & 3u) * 4u + (px & 3u)])) % ATES_PHASES;
+        const Hit h = trace(params.eye, d, 0.01f, 1e4f);
+        float3 c, albedo = make_float3(0.5f, 0.5f, 0.5f), n = make_float3(0, 0, 0);
+        float spec = 0.0f, rough = 0.0f, depth = 1e4f, hitT = 65504.0f;
+        float3 q = d;
+        if (!h.hit) {
+            c = sky(d);
+            params.depth[i] = 1e30f;
+        } else {
+            const Surf s = surface(h, d, h.t * params.pixelAngle);
+            float u1;
+            float2 u2;
+            lightSample(px, py, k, u1, u2);
+            c = shade(s, u1, u2);
+            albedo = s.albedo;
+            // the emitted light is not lit by anything: DLSS sees it as part of the albedo's response
+            if (s.emit.x + s.emit.y + s.emit.z > 0.0f) albedo = albedo + make_float3(0.02f, 0.02f, 0.02f);
+            const float ndv = fmaxf(dot(s.n, -d), 0.0f);
+            spec = specAlbedo(ndv, s.rough);
+            rough = s.rough;
+            hitT = 0.0f;
+            n = s.n;
+            depth = h.t * dot(d, params.W);
+            q = s.p - params.prevEye;
+            params.depth[i] = h.t;
+        }
+        if (!(isfinite(c.x) && isfinite(c.y) && isfinite(c.z))) {
+            c = make_float3(0, 0, 0);
+            if (params.badCount) atomicAdd(params.badCount, 1u);
+        }
+        float2 mv = make_float2(0, 0), pp;
+        if (prevPixel(q, pp)) mv = make_float2(pp.x - cx, pp.y - cy);
+        surf2Dwrite(make_float4(c.x, c.y, c.z, 1.0f), cudaSurfaceObject_t(params.gColor), int(px * sizeof(float4)), int(py));
+        surf2Dwrite(make_float4(albedo.x, albedo.y, albedo.z, 1.0f), cudaSurfaceObject_t(params.gAlbedo), int(px * sizeof(float4)), int(py));
+        surf2Dwrite(make_float4(spec, spec, spec, 1.0f), cudaSurfaceObject_t(params.gSpecular), int(px * sizeof(float4)), int(py));
+        surf2Dwrite(make_float4(n.x, n.y, n.z, 0.0f), cudaSurfaceObject_t(params.gNormal), int(px * sizeof(float4)), int(py));
+        surf2Dwrite(rough, cudaSurfaceObject_t(params.gRough), int(px * sizeof(float)), int(py));
+        surf2Dwrite(depth, cudaSurfaceObject_t(params.gDepth), int(px * sizeof(float)), int(py));
+        surf2Dwrite(mv, cudaSurfaceObject_t(params.gMotion), int(px * sizeof(float2)), int(py));
+        surf2Dwrite(hitT, cudaSurfaceObject_t(params.gHitT), int(px * sizeof(float)), int(py));
+        return;
+    }
+    // without DLSS: the fixed sub-pixel samples, each with its own light sample (the same every frame)
+    float3 acc = make_float3(0, 0, 0);
+    float firstT = 1e30f;
+    for (int k = 0; k < params.spp; ++k) {
+        const float2 o = params.pattern[k];
+        const float x = ((float(px) + 0.5f + o.x) / float(params.width)) * 2.0f - 1.0f;
+        const float y = 1.0f - ((float(py) + 0.5f + o.y) / float(params.height)) * 2.0f;
+        const float3 d = normalize(params.W + params.U * x + params.V * y);
+        const Hit h = trace(params.eye, d, 0.01f, 1e4f);
+        if (!h.hit) {
+            acc += sky(d);
+            continue;
+        }
+        if (k == 0) firstT = h.t;
+        const Surf s = surface(h, d, h.t * params.pixelAngle);
+        float u1;
+        float2 u2;
+        lightSample(px, py, unsigned(k), u1, u2);
+        const float3 c = shade(s, u1, u2);
+        if (isfinite(c.x) && isfinite(c.y) && isfinite(c.z)) acc += c;
+    }
+    acc *= 1.0f / float(params.spp);
+    params.hdr[i] = make_float4(acc.x, acc.y, acc.z, 1.0f);
+    params.depth[i] = firstT;
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// the fire over the picture
+
+static __forceinline__ __device__ bool boxHit(float3 o, float3 d, float3 lo, float3 hi, float& t0, float& t1) {
+    const float3 inv = make_float3(1.0f / d.x, 1.0f / d.y, 1.0f / d.z);
+    const float3 a = (lo - o) * inv, b = (hi - o) * inv;
+    const float3 mn = fminf3(a, b), mx = fmaxf3(a, b);
+    t0 = fmaxf(fmaxf(mn.x, mn.y), fmaxf(mn.z, 0.0f));
+    t1 = fminf(fminf(mx.x, mx.y), mx.z);
+    return t1 > t0;
+}
+
+static __forceinline__ __device__ float4 gasAt(float3 p) {
+    const float3 g = (p - params.gasOrigin) * (1.0f / params.gasH);
+    return tex3D<float4>(cudaTextureObject_t(params.gasTex), g.x, g.y, g.z);
+}
+
+extern "C" __global__ void __raygen__volume() {
+    const uint3 li = optixGetLaunchIndex();
+    const unsigned int px = li.x, py = li.y, i = py * params.width + px;
+    const float x = (float(px) + 0.5f) / float(params.width) * 2.0f - 1.0f, y = 1.0f - (float(py) + 0.5f) / float(params.height) * 2.0f;
+    const float3 d = normalize(params.W + params.U * x + params.V * y);
+    float t0, t1;
+    const float4 base = params.surf[i];
+    if (!params.gasTex || !boxHit(params.eye, d, params.gasOrigin, params.gasOrigin + params.gasSize, t0, t1)) {
+        params.hdr[i] = base;
+        return;
+    }
+    const float depth = params.depth[i];
+    t1 = fminf(t1, depth);
+    float3 L = make_float3(0, 0, 0), Tr = make_float3(1, 1, 1);
+    // the heat haze: the ray's bend, the integral of the refractive index's gradient across it (n - 1 = 2.93e-4 T0/T)
+    float3 bend = make_float3(0, 0, 0);
+    const float ds = params.march;
+    // a fixed start on the grid of steps along the ray (the same each frame for a still eye: no crawl)
+    float t = t0 + 0.5f * ds;
+    const float eh = params.gasH;
+    for (int n = 0; n < 2048 && t < t1; ++n, t += ds) {
+        const float3 p = params.eye + d * t;
+        const float4 g = gasAt(p);
+        const float T = g.x, fv = g.y, q = g.w;
+        if (T < 330.0f && fv < 1e-4f) continue;
+        if (fv > 1e-5f) {
+            const float3 jE = table(params.sootEmit, T) * fv;
+            const float3 a = params.sootAbs * fv;
+            const float3 att = make_float3(__expf(-a.x * ds), __expf(-a.y * ds), __expf(-a.z * ds));
+            // emission over the step with its own absorption: j (1 - e^{-a ds}) / a
+            const float3 em = make_float3(a.x > 1e-6f ? jE.x * (1.0f - att.x) / a.x : jE.x * ds, a.y > 1e-6f ? jE.y * (1.0f - att.y) / a.y : jE.y * ds,
+                                          a.z > 1e-6f ? jE.z * (1.0f - att.z) / a.z : jE.z * ds);
+            L += Tr * em;
+            Tr *= att;
+        }
+        if (q > 0.01f) L += Tr * params.chemEmit * (q * 1e6f * ds);
+        if (T > 340.0f && params.hazeScale > 0.0f) {
+            const float Tx = gasAt(p + make_float3(eh, 0, 0)).x, Ty = gasAt(p + make_float3(0, eh, 0)).x, Tz = gasAt(p + make_float3(0, 0, eh)).x;
+            const float3 gT = make_float3(Tx - T, Ty - T, Tz - T) * (1.0f / eh);
+            const float3 gn = gT * (-2.93e-4f * 288.0f / (T * T));
+            bend += (gn - d * dot(gn, d)) * ds;
+        }
+        if (Tr.x + Tr.y + Tr.z < 3e-3f) break;
+    }
+    // what is behind, seen through the bend: the surfaces' picture at the shifted place (bilinear)
+    float4 behind = base;
+    if (params.hazeScale > 0.0f && (bend.x != 0.0f || bend.y != 0.0f || bend.z != 0.0f)) {
+        const float ox = dot(bend, normalize(params.U)) / params.pixelAngle * params.hazeScale;
+        const float oy = -dot(bend, normalize(params.V)) / params.pixelAngle * params.hazeScale;
+        const float sx = fminf(fmaxf(float(px) + ox, 0.0f), float(params.width - 1)), sy = fminf(fmaxf(float(py) + oy, 0.0f), float(params.height - 1));
+        const int x0 = int(sx), y0 = int(sy), x1 = min(x0 + 1, int(params.width) - 1), y1 = min(y0 + 1, int(params.height) - 1);
+        const float ax = sx - x0, ay = sy - y0;
+        behind = params.surf[y0 * params.width + x0] * ((1 - ax) * (1 - ay)) + params.surf[y0 * params.width + x1] * (ax * (1 - ay)) +
+                 params.surf[y1 * params.width + x0] * ((1 - ax) * ay) + params.surf[y1 * params.width + x1] * (ax * ay);
+    }
+    const float3 c = make_float3(behind.x, behind.y, behind.z) * Tr + L;
+    params.hdr[i] = make_float4(c.x, c.y, c.z, 1.0f);
+}
+
+extern "C" __global__ void __raygen__final() {
+    const uint3 li = optixGetLaunchIndex();
+    const unsigned int px = li.x, py = li.y, i = py * params.width + px;
+    const float4 h = params.hdr[i];
+    float3 c = make_float3(h.x, h.y, h.z);
+    if (params.bloom) {
+        const int bw = int(params.width / 2), bh = int(params.height / 2);
+        const float fx = fminf(fmaxf((float(px) + 0.5f) * 0.5f - 0.5f, 0.0f), float(bw - 1)), fy = fminf(fmaxf((float(py) + 0.5f) * 0.5f - 0.5f, 0.0f), float(bh - 1));
+        const int x0 = int(fx), y0 = int(fy), x1 = min(x0 + 1, bw - 1), y1 = min(y0 + 1, bh - 1);
+        const float ax = fx - x0, ay = fy - y0;
+        const float4 b = params.bloom[y0 * bw + x0] * ((1 - ax) * (1 - ay)) + params.bloom[y0 * bw + x1] * (ax * (1 - ay)) +
+                         params.bloom[y1 * bw + x0] * ((1 - ax) * ay) + params.bloom[y1 * bw + x1] * (ax * ay);
+        c = c * (1.0f - params.bloomStrength) + make_float3(b.x, b.y, b.z) * params.bloomStrength;
+    }
+    c *= params.exposure;
+    const float u = (float(px) + 0.5f) / params.width - 0.5f, v = (float(py) + 0.5f) / params.height - 0.5f;
+    const float r2 = (u * u + v * v) * 2.0f;
+    c *= 1.0f - params.vignette * r2 * r2 * 0.5f - params.vignette * r2 * 0.5f;
+    c = agx(fmaxf3(c, make_float3(0, 0, 0)));
+    const float Y = luminance709(c);
+    c = fmaxf3(make_float3(Y, Y, Y) + (c - make_float3(Y, Y, Y)) * params.saturation, make_float3(0, 0, 0));
+    const float dz = (float(hash32(px * 1973u + py * 9277u) & 1023u) / 1023.0f - 0.5f) / 255.0f;
+    params.output[i] = make_uchar4((unsigned char)(srgbOetf(c.x + dz) * 255.0f + 0.5f), (unsigned char)(srgbOetf(c.y + dz) * 255.0f + 0.5f),
+                                   (unsigned char)(srgbOetf(c.z + dz) * 255.0f + 0.5f), 255);
+}

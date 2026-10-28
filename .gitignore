@@ -28,3 +28,7 @@ assets/denizalti/referans/
 # Orman: open-licence assets fetched by assets/orman/fetch.py, not committed (sources: docs/orman/VARLIK.md)
 assets/orman/cc0/
 assets/orman/_dl/
+
+# Ateş: open-licence assets fetched by assets/ates/fetch.py, not committed (sources: docs/ates/VARLIK.md)
+assets/ates/cc0/
+assets/ates/_dl/

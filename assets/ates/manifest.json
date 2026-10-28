@@ -1,0 +1,265 @@
+{
+ "assets": [
+  {
+   "id": "bark_brown_02",
+   "source": "polyhaven",
+   "kind": "texture",
+   "name": "Bark Brown 02",
+   "page": "https://polyhaven.com/a/bark_brown_02",
+   "license": "CC0-1.0",
+   "authors": [
+    "Rob Tuytel"
+   ],
+   "dimensions_mm": [
+    999.9990463256836,
+    999.998927116394
+   ],
+   "polycount": null,
+   "files": [
+    {
+     "path": "bark_brown_02/bark_brown_02_diff_2k.jpg",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/bark_brown_02/bark_brown_02_diff_2k.jpg",
+     "md5": "11a2a6039bb5b93f12dcf1689838545b",
+     "size": 2356592
+    },
+    {
+     "path": "bark_brown_02/bark_brown_02_nor_gl_2k.jpg",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/bark_brown_02/bark_brown_02_nor_gl_2k.jpg",
+     "md5": "39db6c4574fb58de1ad164442e9d6287",
+     "size": 3707907
+    },
+    {
+     "path": "bark_brown_02/bark_brown_02_rough_2k.jpg",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/bark_brown_02/bark_brown_02_rough_2k.jpg",
+     "md5": "1c17004a7262d26d3867198a8fd0e8c1",
+     "size": 1236654
+    },
+    {
+     "path": "bark_brown_02/bark_brown_02_ao_2k.jpg",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/bark_brown_02/bark_brown_02_ao_2k.jpg",
+     "md5": "17656666d7bc41f21899e710007101c3",
+     "size": 1919982
+    },
+    {
+     "path": "bark_brown_02/bark_brown_02_disp_2k.png",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/2k/bark_brown_02/bark_brown_02_disp_2k.png",
+     "md5": "8bc0ca06214c073060c7bafee313214d",
+     "size": 6555476
+    },
+    {
+     "path": "bark_brown_02/bark_brown_02_arm_2k.jpg",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/bark_brown_02/bark_brown_02_arm_2k.jpg",
+     "md5": "5ff81ced228cdbf328a603263ab6d76d",
+     "size": 849538
+    }
+   ]
+  },
+  {
+   "id": "brown_mud_dry",
+   "source": "polyhaven",
+   "kind": "texture",
+   "name": "Brown Mud Dry",
+   "page": "https://polyhaven.com/a/brown_mud_dry",
+   "license": "CC0-1.0",
+   "authors": [
+    "Rob Tuytel"
+   ],
+   "dimensions_mm": [
+    1299.996018409729,
+    1299.996018409729
+   ],
+   "polycount": null,
+   "files": [
+    {
+     "path": "brown_mud_dry/brown_mud_dry_diff_2k.jpg",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/brown_mud_dry/brown_mud_dry_diff_2k.jpg",
+     "md5": "7c062619553df423ce2085c48b2ef3c8",
+     "size": 3519711
+    },
+    {
+     "path": "brown_mud_dry/brown_mud_dry_nor_gl_2k.jpg",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/brown_mud_dry/brown_mud_dry_nor_gl_2k.jpg",
+     "md5": "28547e43fce21a7ac1e71231bb84f433",
+     "size": 5092913
+    },
+    {
+     "path": "brown_mud_dry/brown_mud_dry_rough_2k.jpg",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/brown_mud_dry/brown_mud_dry_rough_2k.jpg",
+     "md5": "29c7d9215dae069ecf9b294fe444d0e5",
+     "size": 1554454
+    },
+    {
+     "path": "brown_mud_dry/brown_mud_dry_ao_2k.jpg",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/brown_mud_dry/brown_mud_dry_ao_2k.jpg",
+     "md5": "8e94fa56e2364a62f20b4822e9feb72a",
+     "size": 2084873
+    },
+    {
+     "path": "brown_mud_dry/brown_mud_dry_disp_2k.png",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/2k/brown_mud_dry/brown_mud_dry_disp_2k.png",
+     "md5": "1b7de7b312b279652a8955cd2cad2a44",
+     "size": 8152283
+    },
+    {
+     "path": "brown_mud_dry/brown_mud_dry_arm_2k.jpg",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/brown_mud_dry/brown_mud_dry_arm_2k.jpg",
+     "md5": "a5fd21eec7310b5d4a5223ce6d7ed4bd",
+     "size": 971719
+    }
+   ]
+  },
+  {
+   "id": "burned_ground_01",
+   "source": "polyhaven",
+   "kind": "texture",
+   "name": "Burned Ground 01",
+   "page": "https://polyhaven.com/a/burned_ground_01",
+   "license": "CC0-1.0",
+   "authors": [
+    "Rob Tuytel"
+   ],
+   "dimensions_mm": [
+    1000,
+    1000
+   ],
+   "polycount": null,
+   "files": [
+    {
+     "path": "burned_ground_01/burned_ground_01_diff_2k.jpg",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/burned_ground_01/burned_ground_01_diff_2k.jpg",
+     "md5": "4a7e6f863ebfa0dde4386c45a97a09ac",
+     "size": 4127752
+    },
+    {
+     "path": "burned_ground_01/burned_ground_01_nor_gl_2k.jpg",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/burned_ground_01/burned_ground_01_nor_gl_2k.jpg",
+     "md5": "3154c4a41c597512f5af447747d0be2a",
+     "size": 1433507
+    },
+    {
+     "path": "burned_ground_01/burned_ground_01_rough_2k.jpg",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/burned_ground_01/burned_ground_01_rough_2k.jpg",
+     "md5": "9006c9524a5d45a9b3358896e6f18a19",
+     "size": 1358903
+    },
+    {
+     "path": "burned_ground_01/burned_ground_01_ao_2k.jpg",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/burned_ground_01/burned_ground_01_ao_2k.jpg",
+     "md5": "dbbf334aed46b489904434c7b942d67a",
+     "size": 2184988
+    },
+    {
+     "path": "burned_ground_01/burned_ground_01_disp_2k.png",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/2k/burned_ground_01/burned_ground_01_disp_2k.png",
+     "md5": "c7c2840f41c18f581d5c500c05256536",
+     "size": 8178257
+    },
+    {
+     "path": "burned_ground_01/burned_ground_01_arm_2k.jpg",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/burned_ground_01/burned_ground_01_arm_2k.jpg",
+     "md5": "7018eb4bd204571efad4eabb16ebd3c5",
+     "size": 934751
+    }
+   ]
+  },
+  {
+   "id": "namaqualand_stones_01",
+   "source": "polyhaven",
+   "kind": "model",
+   "name": "Namaqualand Stones 01",
+   "page": "https://polyhaven.com/a/namaqualand_stones_01",
+   "license": "CC0-1.0",
+   "authors": [
+    "Greg Zaal",
+    "Jenelle van Heerden"
+   ],
+   "dimensions_mm": [
+    1022.2714990377426,
+    112.1760904788971,
+    84.22087505459785
+   ],
+   "polycount": 106602,
+   "files": [
+    {
+     "path": "namaqualand_stones_01/namaqualand_stones_01_2k.gltf",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/2k/namaqualand_stones_01/namaqualand_stones_01_2k.gltf",
+     "md5": "e2d986fe8c51a68e2823915249ac5bc8",
+     "size": 8681
+    },
+    {
+     "path": "namaqualand_stones_01/textures/namaqualand_stones_01_nor_gl_2k.jpg",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/namaqualand_stones_01/namaqualand_stones_01_nor_gl_2k.jpg",
+     "md5": "298d94717b3a79324b04189746522c93",
+     "size": 3967288
+    },
+    {
+     "path": "namaqualand_stones_01/textures/namaqualand_stones_01_arm_2k.jpg",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/namaqualand_stones_01/namaqualand_stones_01_arm_2k.jpg",
+     "md5": "d58f3cdf76abfe3f753282e566f66c1e",
+     "size": 2462431
+    },
+    {
+     "path": "namaqualand_stones_01/textures/namaqualand_stones_01_diff_2k.jpg",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/namaqualand_stones_01/namaqualand_stones_01_diff_2k.jpg",
+     "md5": "4181823b709edec717ca04f2d4cf8aa4",
+     "size": 2667129
+    },
+    {
+     "path": "namaqualand_stones_01/namaqualand_stones_01.bin",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/namaqualand_stones_01/namaqualand_stones_01.bin",
+     "md5": "65f3ea82d94ebf1113eae180aa85d68a",
+     "size": 1599304
+    }
+   ]
+  },
+  {
+   "id": "rock_07",
+   "source": "polyhaven",
+   "kind": "model",
+   "name": "Rock 07",
+   "page": "https://polyhaven.com/a/rock_07",
+   "license": "CC0-1.0",
+   "authors": [
+    "Jenelle van Heerden"
+   ],
+   "dimensions_mm": [
+    169.10234838724136,
+    320.554181933403,
+    143.77418451476842
+   ],
+   "polycount": 27830,
+   "files": [
+    {
+     "path": "rock_07/rock_07_2k.gltf",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/2k/rock_07/rock_07_2k.gltf",
+     "md5": "903924785f3c43703b77ffd692897814",
+     "size": 2979
+    },
+    {
+     "path": "rock_07/rock_07.bin",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/rock_07/rock_07.bin",
+     "md5": "817b2cfd1626cb06f18a825f87f58ec3",
+     "size": 468936
+    },
+    {
+     "path": "rock_07/textures/rock_07_arm_2k.jpg",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/rock_07/rock_07_arm_2k.jpg",
+     "md5": "b61dd56e72420bd1e08cc8f63c5e7e0e",
+     "size": 829879
+    },
+    {
+     "path": "rock_07/textures/rock_07_diff_2k.jpg",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/rock_07/rock_07_diff_2k.jpg",
+     "md5": "21dec6e230e78a4a3758a93f1963e6a1",
+     "size": 2227207
+    },
+    {
+     "path": "rock_07/textures/rock_07_nor_gl_2k.jpg",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/rock_07/rock_07_nor_gl_2k.jpg",
+     "md5": "a0842c476bfbb004d6e1a1f479f4512c",
+     "size": 2781907
+    }
+   ]
+  }
+ ]
+}

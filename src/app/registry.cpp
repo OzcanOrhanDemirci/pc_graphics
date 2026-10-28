@@ -57,6 +57,11 @@ app::SceneInfo info();
 std::unique_ptr<app::Scene> make();
 int cli(int argc, char** argv);
 }
+namespace ates {
+app::SceneInfo info();
+std::unique_ptr<app::Scene> make();
+int cli(int argc, char** argv);
+}
 
 namespace app {
 
@@ -73,6 +78,7 @@ const std::vector<Entry>& registry() {
         {ayna::info, ayna::make, ayna::cli},
         {kuyu::info, kuyu::make, kuyu::cli},
         {orman::info, orman::make, orman::cli},
+        {ates::info, ates::make, ates::cli},
     };
     return scenes;
 }
