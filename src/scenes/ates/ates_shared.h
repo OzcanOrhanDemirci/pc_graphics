@@ -11,6 +11,7 @@
 #define ATES_TABLE_T0 300.0f  // the emission tables: temperature of the first entry (K)
 #define ATES_TABLE_DT 10.0f   // their step (K)
 #define ATES_TABLE_N 300      // entries (300 .. 3290 K)
+#define ATES_BRICK 8          // the gas's bricks for the march's empty-space skipping (cells a side)
 
 // a log's patches for shading (ates_wood.h): the state the eye sees on its surface
 struct ALogView {
@@ -72,8 +73,11 @@ struct AtesParams {
     float3 lightOrigin;
     float lightCell;          // a block's side (m)
 
-    // the gas for the eye (float4 per cell: T, soot fv * 1e6, smoke kg/m^3 * 1e3, heat release W/m^3 * 1e-6)
+    // the gas for the eye (half4 per cell: T, soot fv * 1e6, smoke kg/m^3 * 1e3, heat release W/m^3 * 1e-6) and its
+    // bricks' marks (0: nothing to see, skipped)
     unsigned long long gasTex;
+    const unsigned int* gasBricks;
+    int bnx, bny, bnz;
     float3 gasOrigin;
     float3 gasSize;
     float gasH;

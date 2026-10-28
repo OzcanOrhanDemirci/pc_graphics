@@ -403,11 +403,27 @@ extern "C" __global__ void __raygen__volume() {
     // the heat haze: the ray's bend, the integral of the refractive index's gradient across it (n - 1 = 2.93e-4 T0/T)
     float3 bend = make_float3(0, 0, 0);
     const float ds = params.march;
-    // a fixed start on the grid of steps along the ray (the same each frame for a still eye: no crawl)
-    float t = t0 + 0.5f * ds;
-    const float eh = params.gasH;
-    for (int n = 0; n < 2048 && t < t1; ++n, t += ds) {
+    // a fixed grid of steps along the ray from its entry (the same each frame for a still eye: no crawl)
+    const float tA = t0 + 0.5f * ds;
+    const float eh = params.gasH, bs = ATES_BRICK * eh, ibs = 1.0f / bs;
+    const float3 id = make_float3(1.0f / d.x, 1.0f / d.y, 1.0f / d.z);
+    int n = 0;
+    for (int it = 0; it < 4096; ++it, ++n) {
+        const float t = tA + float(n) * ds;
+        if (t >= t1) break;
         const float3 p = params.eye + d * t;
+        // an empty brick (nothing hot, no soot, no flame front in reach of its samples) is passed in one go, to the
+        // first step of the ray's grid beyond it: the same samples are taken as without the skip
+        const float3 gb = (p - params.gasOrigin) * ibs;
+        const int bx = min(max(int(gb.x), 0), params.bnx - 1), by = min(max(int(gb.y), 0), params.bny - 1), bz = min(max(int(gb.z), 0), params.bnz - 1);
+        if (params.gasBricks && params.gasBricks[bx + params.bnx * (by + params.bny * bz)] == 0u) {
+            const float3 lo = params.gasOrigin + make_float3(float(bx), float(by), float(bz)) * bs;
+            const float tx = ((d.x > 0.0f ? lo.x + bs : lo.x) - params.eye.x) * id.x, ty = ((d.y > 0.0f ? lo.y + bs : lo.y) - params.eye.y) * id.y,
+                        tz = ((d.z > 0.0f ? lo.z + bs : lo.z) - params.eye.z) * id.z;
+            const float te = fminf(fminf(tx, ty), tz);
+            n = max(n, int(ceilf((te - tA) / ds)) - 1);   // (the loop's ++n steps to the first sample past te)
+            continue;
+        }
         const float4 g = gasAt(p);
         const float T = g.x, fv = g.y, q = g.w;
         if (T < 330.0f && fv < 1e-4f) continue;

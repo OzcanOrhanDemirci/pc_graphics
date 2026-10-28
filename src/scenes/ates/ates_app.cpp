@@ -327,6 +327,36 @@ int runAtesCli(int argc, char** argv) {
             auto pc = [&](double q) { return Y[size_t(q * (Y.size() - 1))]; };
             std::printf("ates: parlaklik (cd/m2): %%50 %.3g, %%90 %.3g, %%99 %.3g, %%99.9 %.3g, en %.3g\n", pc(0.5), pc(0.9), pc(0.99), pc(0.999), Y.back());
         }
+        if (a.cfg.i("debug.skipab", 0)) {
+            // the march with and without its empty-space skip over the same frame: their times, the largest difference
+            const std::vector<float4> A = a.R.hdrHost();
+            const unsigned int* keep = a.R.params.gasBricks;
+            auto timed = [&]() {
+                const double q0 = nowMs();
+                for (int r = 0; r < 10; ++r) a.R.redoVolume();
+                return (nowMs() - q0) / 10.0;
+            };
+            const double msA = timed();
+            a.R.params.gasBricks = nullptr;
+            const double msB = timed();
+            const std::vector<float4> B = a.R.hdrHost();
+            a.R.params.gasBricks = keep;
+            a.R.redoVolume();
+            double worst = 0.0;
+            size_t at = 0, differ = 0;
+            for (size_t p = 0; p < A.size(); ++p) {
+                const double dA = std::fabs(double(A[p].x) - B[p].x) + std::fabs(double(A[p].y) - B[p].y) + std::fabs(double(A[p].z) - B[p].z);
+                const double ref = std::fabs(double(B[p].x)) + std::fabs(double(B[p].y)) + std::fabs(double(B[p].z));
+                const double rel = dA / std::max(ref, 1e-6);
+                if (dA > 0.0) ++differ;
+                if (rel > worst) {
+                    worst = rel;
+                    at = p;
+                }
+            }
+            std::printf("ates: atlama A/B: %.2f ms, atlamasiz %.2f ms; %zu piksel farkli, en buyuk goreli fark %.2e (piksel %zu %zu)\n", msA, msB, differ, worst,
+                        at % size_t(a.width), at / size_t(a.width));
+        }
         a.save(path);
         if (a.cfg.i("debug.exr", 0)) {
             const std::vector<float4> hd = a.R.hdrHost();

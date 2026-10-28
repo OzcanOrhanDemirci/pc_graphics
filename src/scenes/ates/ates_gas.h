@@ -106,10 +106,14 @@ public:
     bool init(int nx, int ny, int nz, float h, float3 origin, cudaStream_t stream);
     void reset();               // still air at T0
     void step(float dt);
-    // the drawing's view of the gas: a float4 3D texture per cell (T, soot volume fraction * 1e6, smoke kg/m^3 * 1e3,
-    // the reactions' heat release W/m^3 * 1e-6), refreshed by pack()
+    // the drawing's view of the gas: a half4 3D texture per cell (T, soot volume fraction * 1e6, smoke kg/m^3 * 1e3,
+    // the reactions' heat release W/m^3 * 1e-6), refreshed by pack(); and per brick of ATES_BRICK^3 cells what it
+    // holds for the eye (0 nothing, 1 hot air only, 2 soot or a flame front; a cell's mark reaches the bricks its
+    // trilinear reads touch), so the march skips the empty ones
     void pack(const float3* sootEmit);
     cudaTextureObject_t texture() const { return tex_; }
+    const unsigned int* bricks() const { return bricks_; }
+    int bnx = 0, bny = 0, bnz = 0;
     // the soot's luminous intensity summed over blocks of `lightDiv`^3 cells (cd, RGB; from the emission table given to
     // pack), for the surfaces' light: refreshed by pack()
     int lightDiv = 4, lnx = 0, lny = 0, lnz = 0;
@@ -138,6 +142,7 @@ private:
     std::vector<int3> dims_;
     float* red_ = nullptr;      // reductions: hrr, rad, fuel, maxT, residual parts
     float3* light_ = nullptr;
+    unsigned int* bricks_ = nullptr;
     cudaArray_t arr_ = nullptr;
     cudaTextureObject_t tex_ = 0;
     cudaSurfaceObject_t surf_ = 0;

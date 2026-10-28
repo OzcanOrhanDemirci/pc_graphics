@@ -452,9 +452,13 @@ void AtesRenderer::buildIas() {
     iasDirty_ = false;
 }
 
-void AtesRenderer::setGas(cudaTextureObject_t tex, float3 origin, int nx, int ny, int nz, float h, const float3* lightI, int lnx, int lny, int lnz,
-                          float lightCell) {
+void AtesRenderer::setGas(cudaTextureObject_t tex, const unsigned int* bricks, float3 origin, int nx, int ny, int nz, float h, const float3* lightI, int lnx,
+                          int lny, int lnz, float lightCell) {
     params.gasTex = tex;
+    params.gasBricks = bricks;
+    params.bnx = (nx + ATES_BRICK - 1) / ATES_BRICK;
+    params.bny = (ny + ATES_BRICK - 1) / ATES_BRICK;
+    params.bnz = (nz + ATES_BRICK - 1) / ATES_BRICK;
     params.gasOrigin = origin;
     params.gasSize = make_float3(nx * h, ny * h, nz * h);
     params.gasH = h;
@@ -592,6 +596,11 @@ void AtesRenderer::render() {
     cudaEventElapsedTime(&displayMs, ev2_, ev3_);
     cudaMemcpy(&badSamples, params.badCount, sizeof(unsigned int), cudaMemcpyDeviceToHost);
     cudaMemsetAsync(params.badCount, 0, sizeof(unsigned int), stream_);
+}
+
+void AtesRenderer::redoVolume() {
+    launch(rgVolume_, params.width, params.height);
+    CUDA_CHECK(cudaStreamSynchronize(stream_));
 }
 
 void AtesRenderer::download(std::vector<unsigned char>& rgba) const {

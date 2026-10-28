@@ -467,7 +467,7 @@ void AtesApp::update(float dt) {
     if (gasAcc_ > dtGas) gasAcc_ = 0.0f;   // behind: the gas runs slower than the clock rather than catching up in bursts
     gas.pack(R.params.sootEmit);
     wood.emberLight(gas, const_cast<float3*>(gas.lightIntensity()), gas.lnx, gas.lny, gas.lnz, gas.h * gas.lightDiv, R.params.greyEmit);
-    R.setGas(gas.texture(), gas.origin, gas.nx, gas.ny, gas.nz, gas.h, gas.lightIntensity(), gas.lnx, gas.lny, gas.lnz, gas.h * gas.lightDiv);
+    R.setGas(gas.texture(), gas.bricks(), gas.origin, gas.nx, gas.ny, gas.nz, gas.h, gas.lightIntensity(), gas.lnx, gas.lny, gas.lnz, gas.h * gas.lightDiv);
     // the logs' shapes follow their burning (every half second of the clock)
     meshAge_ += dt;
     if (meshAge_ > 0.5f) {

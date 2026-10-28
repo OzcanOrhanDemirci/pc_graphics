@@ -52,8 +52,11 @@ public:
     bool enableDlss(bool on);
     bool dlssOn() const { return dlssOn_; }
     // the fire: the gas's texture, its grid and its light blocks (the cumulative sum is built here each frame)
-    void setGas(cudaTextureObject_t tex, float3 origin, int nx, int ny, int nz, float h, const float3* lightI, int lnx, int lny, int lnz, float lightCell);
+    void setGas(cudaTextureObject_t tex, const unsigned int* bricks, float3 origin, int nx, int ny, int nz, float h, const float3* lightI, int lnx, int lny, int lnz,
+                float lightCell);
     void render();
+    // the fire's pass alone again over the last frame's surfaces (the tools' A/B of the march), its picture in hdr
+    void redoVolume();
     void download(std::vector<unsigned char>& rgba) const;
     std::vector<float4> hdrHost() const;
     void release();

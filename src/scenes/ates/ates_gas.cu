@@ -5,6 +5,8 @@
 #include "scenes/ates/ates_gas.h"
 #include "scenes/ates/ates_shared.h"
 
+#include <cuda_fp16.h>
+
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -885,7 +887,7 @@ __global__ void kProject(Dims d, float* u, float* v, float* w, const float* phi,
 // ---------------------------------------------------------------------------------------------------------------
 // what the drawing reads
 
-__global__ void kPack(Dims d, CScalars s, const float* q, AGasConst k, cudaSurfaceObject_t out) {
+__global__ void kPack(Dims d, CScalars s, const float* q, AGasConst k, cudaSurfaceObject_t out, unsigned int* bricks, int bnx, int bny) {
     const int i = blockIdx.x * blockDim.x + threadIdx.x, j = blockIdx.y * blockDim.y + threadIdx.y, kk = blockIdx.z;
     if (i >= d.nx || j >= d.ny || kk >= d.nz) return;
     const int c = cid(d, i, j, kk);
@@ -904,7 +906,21 @@ __global__ void kPack(Dims d, CScalars s, const float* q, AGasConst k, cudaSurfa
                 wsum += wgt;
             }
     const float4 v = make_float4(T, fv * 1e6f, rho * s.M[c] * 1e3f, qs / wsum * 1e-6f);
-    surf3Dwrite(v, out, i * int(sizeof(float4)), j, kk);
+    surf3Dwrite(make_ushort4(__half_as_ushort(__float2half_rn(v.x)), __half_as_ushort(__float2half_rn(v.y)), __half_as_ushort(__float2half_rn(v.z)),
+                             __half_as_ushort(__float2half_rn(v.w))),
+                out, i * int(sizeof(ushort4)), j, kk);
+    // the cell's mark for the march (the same thresholds it draws by: soot over 1e-5, a front over 0.01 MW/m^3, the
+    // haze over 330 K), on every brick whose samples read it (a cell beside a brick's side is read from inside it)
+    const unsigned int lvl = (v.y > 1e-5f || v.w > 0.01f) ? 2u : v.x > 330.0f ? 1u : 0u;
+    if (lvl == 0u) return;
+    const int x0 = max(i - 1, 0) / ATES_BRICK, x1 = min(i + 1, d.nx - 1) / ATES_BRICK, y0 = max(j - 1, 0) / ATES_BRICK, y1 = min(j + 1, d.ny - 1) / ATES_BRICK,
+              z0 = max(kk - 1, 0) / ATES_BRICK, z1 = min(kk + 1, d.nz - 1) / ATES_BRICK;
+    for (int bz = z0; bz <= z1; ++bz)
+        for (int by = y0; by <= y1; ++by)
+            for (int bx = x0; bx <= x1; ++bx) {
+                unsigned int* m = &bricks[bx + bnx * (by + bny * bz)];
+                if (*m < lvl) atomicMax(m, lvl);
+            }
 }
 
 // the soot's light for the surfaces: its luminous intensity summed over blocks (cd, RGB), from the same emission table
@@ -1017,8 +1033,12 @@ bool AtesGas::init(int nx_, int ny_, int nz_, float h_, float3 origin_, cudaStre
     lny = (ny + lightDiv - 1) / lightDiv;
     lnz = (nz + lightDiv - 1) / lightDiv;
     light_ = reinterpret_cast<float3*>(alloc(3 * size_t(lnx) * lny * lnz));
-    // the drawing's texture
-    const cudaChannelFormatDesc fd = cudaCreateChannelDesc<float4>();
+    // the drawing's texture (half: the march is bound by its reads; T keeps 0.5-2 K, the rest is scaled to unit range)
+    bnx = (nx + ATES_BRICK - 1) / ATES_BRICK;
+    bny = (ny + ATES_BRICK - 1) / ATES_BRICK;
+    bnz = (nz + ATES_BRICK - 1) / ATES_BRICK;
+    bricks_ = reinterpret_cast<unsigned int*>(alloc(size_t(bnx) * bny * bnz));
+    const cudaChannelFormatDesc fd = cudaCreateChannelDescHalf4();
     GAS_CHECK(cudaMalloc3DArray(&arr_, &fd, make_cudaExtent(nx, ny, nz), cudaArraySurfaceLoadStore));
     cudaResourceDesc rd{};
     rd.resType = cudaResourceTypeArray;
@@ -1030,7 +1050,7 @@ bool AtesGas::init(int nx_, int ny_, int nz_, float h_, float3 origin_, cudaStre
     td.normalizedCoords = 0;
     GAS_CHECK(cudaCreateTextureObject(&tex_, &rd, &td, nullptr));
     GAS_CHECK(cudaCreateSurfaceObject(&surf_, &rd));
-    bytes += n * sizeof(float4);
+    bytes += n * 4 * sizeof(unsigned short);
     GAS_CHECK(cudaEventCreate(&e0_));
     GAS_CHECK(cudaEventCreate(&e1_));
     reset();
@@ -1219,7 +1239,8 @@ void AtesGas::step(float dt) {
 void AtesGas::pack(const float3* sootEmit) {
     const Dims d{nx, ny, nz, h};
     const dim3 b(32, 4);
-    kPack<<<grid3(nx, ny, nz, b), b, 0, st_>>>(d, CScalars{T, F, C, O, S, M}, q, k, surf_);
+    GAS_CHECK(cudaMemsetAsync(bricks_, 0, size_t(bnx) * bny * bnz * sizeof(unsigned int), st_));
+    kPack<<<grid3(nx, ny, nz, b), b, 0, st_>>>(d, CScalars{T, F, C, O, S, M}, q, k, surf_, bricks_, bnx, bny);
     if (sootEmit)
         kLight<<<grid3(lnx, lny, lnz, dim3(8, 8)), dim3(8, 8), 0, st_>>>(d, CScalars{T, F, C, O, S, M}, k, sootEmit, lightDiv, lnx, lny, lnz, light_);
 }
