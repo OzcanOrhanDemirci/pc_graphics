@@ -59,6 +59,8 @@ public:
     void redoVolume();
     void download(std::vector<unsigned char>& rgba) const;
     std::vector<float4> hdrHost() const;
+    // the last picture's luminance (cd/m^2, before the exposure) at the centres of a gx x gy grid, in one read
+    void lumSamples(int gx, int gy, std::vector<float>& Y);
     void release();
     cudaStream_t stream() const { return stream_; }
 
@@ -113,6 +115,8 @@ private:
     bool dlssOn_ = false;
     bool iasDirty_ = true;
     float3* tables_ = nullptr;           // the soot's and the black body's emission tables (2 x ATES_TABLE_N)
+    float* lumS_ = nullptr;              // lumSamples' grid
+    int lumN_ = 0;
     void freePlanes();
     void launch(CUdeviceptr rg, unsigned int w, unsigned int h);
     void buildIas();
@@ -121,3 +125,5 @@ private:
 
 // the cumulative sum of the light blocks' luminance (ates_kernels.cu)
 void atesLightCdf(const float3* light, int n, float* lum, float* cdf, void*& tmp, size_t& tmpBytes, cudaStream_t st);
+// the picture's luminance at the centres of a gx x gy grid of cells (ates_kernels.cu)
+void atesSampleLum(const float4* hdr, int w, int h, int gx, int gy, float* out, cudaStream_t st);

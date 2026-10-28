@@ -603,6 +603,19 @@ void AtesRenderer::redoVolume() {
     CUDA_CHECK(cudaStreamSynchronize(stream_));
 }
 
+void AtesRenderer::lumSamples(int gx, int gy, std::vector<float>& Y) {
+    const int n = gx * gy;
+    if (n > lumN_) {
+        if (lumS_) cudaFree(lumS_);
+        CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&lumS_), n * sizeof(float)));
+        lumN_ = n;
+    }
+    atesSampleLum(params.hdr, width_, height_, gx, gy, lumS_, stream_);
+    Y.resize(size_t(n));
+    CUDA_CHECK(cudaMemcpyAsync(Y.data(), lumS_, n * sizeof(float), cudaMemcpyDeviceToHost, stream_));
+    CUDA_CHECK(cudaStreamSynchronize(stream_));
+}
+
 void AtesRenderer::download(std::vector<unsigned char>& rgba) const {
     rgba.resize(size_t(width_) * height_ * 4);
     CUDA_CHECK(cudaMemcpy(rgba.data(), params.output, rgba.size(), cudaMemcpyDeviceToHost));
@@ -629,11 +642,12 @@ void AtesRenderer::release() {
     top_.clear();
     for (void** p : {reinterpret_cast<void**>(&dGeoms_), reinterpret_cast<void**>(&dInst_), reinterpret_cast<void**>(&dLogs_),
                      reinterpret_cast<void**>(&dMats_), reinterpret_cast<void**>(&lum_), reinterpret_cast<void**>(&cdf_), &scanTmp_,
-                     reinterpret_cast<void**>(&tables_)}) {
+                     reinterpret_cast<void**>(&tables_), reinterpret_cast<void**>(&lumS_)}) {
         if (*p) cudaFree(*p);
         *p = nullptr;
     }
     dGeomsCap_ = dInstCap_ = dLogsCap_ = 0;
+    lumN_ = 0;
     scanBytes_ = 0;
     lightN_ = 0;
     for (int k = 0; k < kLevels; ++k) {

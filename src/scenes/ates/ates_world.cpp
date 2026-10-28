@@ -546,23 +546,16 @@ void AtesApp::render(float dt) {
     }
     if (autoOn) {
         // the eye's adaptation: the frame's mean log luminance on a sparse grid, followed over a second or so
-        const int gx = 128, gy = 72;
-        std::vector<float4> s(size_t(gx) * gy);
-        const int sx = width / gx, sy = height / gy;
-        for (int j = 0; j < gy; ++j)
-            cudaMemcpy2D(&s[size_t(j) * gx], sizeof(float4), p.hdr + size_t(j * sy + sy / 2) * width + sx / 2, size_t(sx) * sizeof(float4), sizeof(float4), gx,
-                         cudaMemcpyDeviceToHost);
+        std::vector<float> Ys;
+        R.lumSamples(128, 72, Ys);
         // a camera at night by a fire: its exposure is set by the brightest in the frame, the flames (or the embers
         // when there are none), not by the dark around it: the eye looking at a fire sees its flames yellow and orange,
         // not white, and the ground beyond them dim. The exposure.pct percentile of the luminance (the flame's body
         // even when it fills a hundredth of the frame) lands at exposure.key (below AgX's white at 16); the mean only
         // limits it (a frame with no fire still opens up, as the eye does)
-        std::vector<float> Ys;
-        Ys.reserve(s.size());
         double acc = 0.0;
-        for (const float4& c : s) {
-            const float Y = std::max(0.2126f * c.x + 0.7152f * c.y + 0.0722f * c.z, 1e-6f);
-            Ys.push_back(Y);
+        for (float& Y : Ys) {
+            Y = std::max(Y, 1e-6f);
             acc += std::log(Y);
         }
         std::sort(Ys.begin(), Ys.end());
