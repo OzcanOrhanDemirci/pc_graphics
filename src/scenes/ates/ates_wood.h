@@ -77,8 +77,9 @@ public:
     AWoodConst k;
     std::vector<ALog> logs;
     AWoodStats stats;
-    float bedT = 288.0f;           // the ash bed under the pile (K): a share of the embers' mean (set by the run)
+    float bedT = 288.0f;           // the ash bed under the pile (K): in radiative balance with what lies on it
     float bedR = 0.25f;            // its reach (m)
+    float bedPin = 0.0f;           // (a test: held at this, K; 0 follows the embers)
     ASparkSink sparks;             // where its crackles and flakes leave their sparks (ates_sparks.h; none by default)
     unsigned int patches = 0, capacity = 0;
     // device: per patch (surface temperature, char depth, ash thickness: for the eye), per layer

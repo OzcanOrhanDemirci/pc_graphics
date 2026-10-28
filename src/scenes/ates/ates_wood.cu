@@ -518,9 +518,11 @@ __global__ void kWoodStep(StepArgs a) {
             massLeft = mass;
             hottest = Tl[out];
             if (Tl[out] > 800.0f) emberA = As;
-            if (Tl[out] > 700.0f && pos.y < 0.08f) {
-                hotSum = Tl[out];
-                hotN = 1.0f;
+            if (pos.y < 0.06f && nrm.y < -0.2f) {
+                // (what faces the bed from just over it: its radiation, by area)
+                const float T2 = Tl[out] * Tl[out];
+                hotSum = As * T2 * T2;
+                hotN = As;
             }
         }
     }
@@ -774,11 +776,15 @@ void AtesWood::step(float dtWood, float timeScale, AtesGas& gas) {
     stats.mass = r[2];
     stats.hottest = r[3];
     stats.emberArea = r[4];
-    // the ash bed under the pile follows the embers lying low on it (a share of their mean over the night's air: ash
-    // between them, cooler than their faces), over a few seconds of the wood's time
-    const float hotMean = r[6] > 0.0f ? r[5] / r[6] : 288.0f;
-    const float target = 288.0f + 0.75f * (hotMean - 288.0f);
-    bedT += (target - bedT) * (1.0f - std::exp(-dtWood / 5.0f));
+    // the ash bed under the pile: an insulating layer (ash conducts ~0.1 W/m K) in radiative balance with what lies
+    // on it, the undersides of the coals and logs facing it, less what it conducts down into the earth (a tenth of
+    // the radiation it takes in); a centimetre of it follows them over some 20 s of the wood's time. (It was three
+    // quarters of the hot embers' excess over the night: a bed cooler than the coals drew their heat, and a bed of
+    // coals that should glow for an hour went dark in two minutes)
+    const float T4 = r[6] > 0.0f ? 0.9f * r[5] / r[6] : 0.0f;
+    const float target = std::max(std::sqrt(std::sqrt(T4)), 288.0f);
+    bedT += (target - bedT) * (1.0f - std::exp(-dtWood / 20.0f));
+    if (bedPin > 0.0f) bedT = bedPin;
     cudaEventElapsedTime(&stats.stepMs, e0_, e1_);
 }
 

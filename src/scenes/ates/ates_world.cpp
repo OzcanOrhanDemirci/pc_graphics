@@ -238,6 +238,7 @@ void AtesApp::initSim() {
     wood.init(unsigned(cfg.i("wood.patches", 40000)), R.stream());
     wood.k.filmT0 = cfg.f("wood.filmT0", wood.k.filmT0);
     wood.k.filmT1 = cfg.f("wood.filmT1", wood.k.filmT1);
+    wood.bedPin = cfg.f("debug.bedT", 0.0f);
     wood.k.flameH = cfg.f("wood.flameH", wood.k.flameH);
     bodies.ground = groundHeight;
     bodies.substeps = cfg.i("body.substeps", 16);
