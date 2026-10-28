@@ -447,16 +447,31 @@ void AtesApp::update(float dt) {
     }
     gas.jet.on = false;
     if (blowing) {
-        // the mouth a little in front of the fire along the look (one leans in to blow): 35 cm before the grid
+        // one leans in to blow: the mouth a little before what the look meets (the first log or coal, else the
+        // ground), along the look; looking past the pile, a little before the grid
         const float3 e = eye(), f = forward();
         const float3 lo = gas.origin, hi = gas.origin + make_float3(gas.nx * gas.h, gas.ny * gas.h, gas.nz * gas.h);
         const float3 inv = make_float3(1.0f / f.x, 1.0f / f.y, 1.0f / f.z);
         const float3 a = (lo - e) * inv, b = (hi - e) * inv;
         const float t0 = std::max(std::max(std::min(a.x, b.x), std::min(a.y, b.y)), std::max(std::min(a.z, b.z), 0.0f));
         const float t1 = std::min(std::min(std::max(a.x, b.x), std::max(a.y, b.y)), std::max(a.z, b.z));
+        float hit = f.y < -1e-3f ? -e.y / f.y : 1e9f;
+        for (const ALog& L : wood.logs) {
+            if (!L.alive) continue;
+            // the ray against the log's cylinder: its distance from the axis is the radius, within its length
+            const std::array<float, 12> P = L.pose();
+            const float3 ax = make_float3(P[0], P[4], P[8]), o = e - L.pos;
+            const float3 dp = f - ax * dot(f, ax), op = o - ax * dot(o, ax);
+            const float A = dot(dp, dp), B = dot(op, dp), C = dot(op, op) - L.radius * L.radius;
+            const float disc = B * B - A * C;
+            if (A < 1e-9f || disc < 0.0f) continue;
+            const float t = (-B - std::sqrt(disc)) / A;
+            if (t > 0.0f && t < hit && std::fabs(dot(o + f * t, ax)) <= 0.5f * L.len) hit = t;
+        }
         if (t1 > t0) {
             gas.jet.on = true;
-            gas.jet.origin = e + f * std::max(0.0f, t0 - cfg.f("blow.lean", 0.35f));
+            const float lean = cfg.f("blow.lean", 0.3f);
+            gas.jet.origin = e + f * std::max(0.0f, hit < t1 ? hit - lean : t0 - lean);
             gas.jet.dir = f;
             gas.jet.speed = cfg.f("blow.speed", 9.0f);
             gas.jet.radius = cfg.f("blow.radius", 0.012f);
