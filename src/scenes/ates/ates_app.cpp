@@ -474,6 +474,26 @@ int runAtesCli(int argc, char** argv) {
             if (T[c] > 2300.0f) ++over;
         }
         std::printf("ates: alev ucu %.2f m (yanan), %.2f m (parlayan is), 2300 K ustu %zu hucre\n", (tipQ + 1) * a.gas.h, (tipS + 1) * a.gas.h, over);
+        // the smoke and the unburnt volatiles the grid holds (g), the densest smoke (g/m^3)
+        {
+            const std::vector<float> F = a.gas.download(1), M = a.gas.download(5);
+            const double V = double(a.gas.h) * a.gas.h * a.gas.h;
+            double mM = 0, mF = 0, top = 0;
+            size_t at = 0;
+            for (size_t c = 0; c < T.size(); ++c) {
+                const double rho = a.gas.k.rhoT / T[c];
+                mM += rho * M[c] * V;
+                mF += rho * F[c] * V;
+                if (rho * M[c] * 1e3 > top) {
+                    top = rho * M[c] * 1e3;
+                    at = c;
+                }
+            }
+            const int ci = int(at % a.gas.nx), cj = int((at / a.gas.nx) % a.gas.ny), ck = int(at / (size_t(a.gas.nx) * a.gas.ny));
+            std::printf("ates: duman %.2f g (en yogun %.2f g/m3: %.3f %.3f %.3f m, %.0f K, F %.3f), yanmamis ucucu %.2f g\n", mM * 1e3, top,
+                        a.gas.origin.x + (ci + 0.5f) * a.gas.h, a.gas.origin.y + (cj + 0.5f) * a.gas.h, a.gas.origin.z + (ck + 0.5f) * a.gas.h, T[at], F[at],
+                        mF * 1e3);
+        }
     }
     if (views.empty() && freeCams.empty()) views = {0, 1, 2, 3};
     auto shoot = [&](const AtesCam& c, const std::string& name) {

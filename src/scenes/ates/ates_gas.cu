@@ -294,12 +294,32 @@ __global__ void kCells(CellArgs a) {
                 O -= sS * dSo;
                 heat += dSo * hS;
             }
-            // the tar that did not burn condenses as the gas cools
-            if (T < K.Tcond && F > 1e-6f) {
+            // beside the ground or a log (a face's own cell, or one by it)
+            bool wall = j == 0 || boundary;
+            if (a.solid && !wall) {
+                if (i > 0 && a.solid[c - 1]) wall = true;
+                else if (i < d.nx - 1 && a.solid[c + 1]) wall = true;
+                else if (j > 0 && a.solid[c - d.nx]) wall = true;
+                else if (j < d.ny - 1 && a.solid[c + d.nx]) wall = true;
+                else if (kk > 0 && a.solid[c - d.nx * d.ny]) wall = true;
+                else if (kk < d.nz - 1 && a.solid[c + d.nx * d.ny]) wall = true;
+            }
+            // the tar that did not burn condenses as the gas cools, away from the faces (by one the vapour has just
+            // left a surface hotter than the cell's mean: the still air by a cool face and under a log condensed it at
+            // once, 70-100 g/m^3 of fog hugging the logs); carried back into hot gas (the flame over the logs) its
+            // droplets boil off again, as volatiles the flame burns
+            if (T < K.Tcond && F > 1e-6f && !wall) {
                 const float dM = K.tarShare * F * (1.0f - __expf(-dt / K.tauCond));
                 F -= dM;
                 M += dM;
+            } else if (T > K.Tcond && M > 0.0f) {
+                const float dM = M * (1.0f - __expf(-dt / K.tauCond));
+                M -= dM;
+                F += dM;
             }
+            // and smoke carried there settles on the face (thermophoresis down the steep gradient by a cool face:
+            // ~1 cm/s, a cell's depth in under a second)
+            if (wall && M > 0.0f) M *= __expf(-dt * K.smokeDep / d.h);
             float Tn = T + heat / cp;
             // the soot's radiation (optically thin): 4 kappa_P sigma (T^4 - T0^4), kappa_P = 1862 fv T (1/m)
             const float fv = rho * S / K.rhoSoot;
