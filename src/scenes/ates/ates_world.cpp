@@ -591,7 +591,8 @@ void AtesApp::render(float dt) {
     p.U = rt * (th * aspect);
     p.V = up * th;
     p.pixelAngle = 2.0f * th / float(height);
-    p.exposure = std::exp2(cfg.f("exposure", 0.0f) + exposureEv) * (cfg.f("exposure.fixed", 0.0f) > 0.0f ? cfg.f("exposure.fixed", 0.0f) : autoOn ? autoExposure : 1.0f);
+    // (autoOn off holds the exposure where the eye had adapted: a clip's frames, measured against one another)
+    p.exposure = std::exp2(cfg.f("exposure", 0.0f) + exposureEv) * (cfg.f("exposure.fixed", 0.0f) > 0.0f ? cfg.f("exposure.fixed", 0.0f) : autoExposure);
     p.time = float(simTime);
     p.preExposure = R.dlssOn() && p.dlss && cfg.i("dlss.preexposure", 1) ? std::max(p.exposure, 1e-6f) : 1.0f;
     if (R.dlssOn() && p.dlss) {
