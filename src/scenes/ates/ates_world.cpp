@@ -230,6 +230,7 @@ bool AtesApp::initRenderer(std::string& err) {
     R.params.vignette = cfg.f("vignette", 0.25f);
     R.params.saturation = cfg.f("saturation", 1.2f);
     R.params.contrast = cfg.f("contrast", 1.5f);
+    R.params.lightSamples = std::clamp(cfg.i("light.samples", 1), 1, 64);
     R.params.debug = cfg.i("debug", 0);
     return true;
 }

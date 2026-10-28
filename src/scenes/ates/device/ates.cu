@@ -362,7 +362,8 @@ static __forceinline__ __device__ Surf surface(const Hit& h, float3 d, float wid
 // ---------------------------------------------------------------------------------------------------------------
 // the fire's light: a block of the gas picked by its share of the light (the cumulative sum, binary search), a point in
 // it, a shadow ray. Returns the illuminance (lux, RGB) times the cosine at the surface, divided by the pick's chance
-static __forceinline__ __device__ float3 fireLight(const Surf& s, float u1, float2 u2, float3& Ldir) {
+static __forceinline__ __device__ float3 fireLight(const Surf& s, float u1, float2 u2, float3& Ldir, int& why) {
+    why = 3;
     if (params.lightN <= 0) return make_float3(0, 0, 0);
     const float total = params.lightCdf[params.lightN - 1];
     if (total <= 0.0f) return make_float3(0, 0, 0);
@@ -385,8 +386,11 @@ static __forceinline__ __device__ float3 fireLight(const Surf& s, float u1, floa
     L = L * (1.0f / fmaxf(r, 1e-6f));
     Ldir = L;
     const float cosn = dot(s.n, L), cosg = dot(s.ng, L);
+    why = 1;
     if (cosn <= 0.0f || cosg <= 0.0f) return make_float3(0, 0, 0);
+    why = 2;
     if (occluded(s.p + s.ng * 0.002f, L, r * 0.999f)) return make_float3(0, 0, 0);
+    why = 0;
     // the block as a small ball: no point nearer than half its side (an ember inside the flame is lit by it, not by a
     // singular point)
     const float soft = 0.25f * params.lightCell * params.lightCell;
@@ -412,14 +416,40 @@ static __forceinline__ __device__ float gloss(float3 n, float3 wo, float3 wi, fl
     return D * Vis * (0.04f + 0.96f * f2 * f2 * f);
 }
 
-static __forceinline__ __device__ float3 shade(const Surf& s, float3 wo, float u1, float2 u2) {
+// the sample's place in the light's sequence: index k, scrambled per pixel by a fixed shift (the same every frame:
+// no crawl). A rank-1 lattice: consecutive indices fill the square evenly
+static __forceinline__ __device__ void lightSample(unsigned int px, unsigned int py, unsigned int k, float& u1, float2& u2) {
+    const unsigned int h = hash32(px * 1973u + py * 9277u);
+    const float g1 = 0.7548776662f, g2 = 0.5698402910f;
+    u1 = fmodf(u01(h) + float(k) * 0.6180339887f, 1.0f);
+    u2 = make_float2(fmodf(u01(hash32(h)) + float(k) * g1, 1.0f), fmodf(u01(hash32(h ^ 0x9e3779b9u)) + float(k) * g2, 1.0f));
+}
+
+// a surface lit: the fire's light from lightSamples consecutive places of the pixel's sequence from k * lightSamples
+// (their mean), the night's sky
+static __forceinline__ __device__ float3 shade(const Surf& s, float3 wo, unsigned int px, unsigned int py, unsigned int k) {
     if (params.debug == 1) return s.albedo;
     if (params.debug == 2) return s.emit;
-    float3 Ld = make_float3(0, 1, 0);
-    const float3 E = fireLight(s, u1, u2, Ld);
+    const unsigned int n = unsigned(max(params.lightSamples, 1));
+    float3 E = make_float3(0, 0, 0), G = make_float3(0, 0, 0), why = make_float3(0, 0, 0);
+    for (unsigned int j = 0; j < n; ++j) {
+        float u1;
+        float2 u2;
+        lightSample(px, py, k * n + j, u1, u2);
+        float3 Ld = make_float3(0, 1, 0);
+        int w = 3;
+        const float3 e = fireLight(s, u1, u2, Ld, w);
+        E += e;
+        G += e * gloss(s.n, wo, Ld, s.rough);
+        why += make_float3(w == 0, w == 1, w == 2);
+    }
+    const float inv = 1.0f / float(n);
+    // (debug 4: the shares of the light's samples that reach the surface, that come from below its horizon, that a
+    // shadow stops, as R, G, B)
+    if (params.debug == 4) return why * inv;
     // the night's light: a faint sky over everything open (no shadow: it is a few thousandths of a candela)
     const float3 amb = make_float3(params.ambient, params.ambient, params.ambient) * (0.5f + 0.5f * s.n.y);
-    return s.albedo * (E * INV_PIf + amb) + E * gloss(s.n, wo, Ld, s.rough) + s.emit;
+    return s.albedo * (E * (inv * INV_PIf) + amb) + G * inv + s.emit;
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -437,16 +467,6 @@ static __forceinline__ __device__ bool prevPixel(float3 q, float2& pix) {
     return true;
 }
 
-// the sample's place in the light's sequence: this frame's, turned by the pixel's place in a 4 x 4 Bayer tile (every
-// tile holds all sixteen each frame: noise DLSS gathers, not a flicker of the whole picture)
-static __forceinline__ __device__ void lightSample(unsigned int px, unsigned int py, unsigned int k, float& u1, float2& u2) {
-    const unsigned int h = hash32(px * 1973u + py * 9277u);
-    // a rank-1 lattice over the sixteen phases, scrambled per pixel by a fixed shift (the same every frame: no crawl)
-    const float g1 = 0.7548776662f, g2 = 0.5698402910f;
-    u1 = fmodf(u01(h) + float(k) * 0.6180339887f, 1.0f);
-    u2 = make_float2(fmodf(u01(hash32(h)) + float(k) * g1, 1.0f), fmodf(u01(hash32(h ^ 0x9e3779b9u)) + float(k) * g2, 1.0f));
-}
-
 extern "C" __global__ void __raygen__render() {
     const uint3 li = optixGetLaunchIndex();
     const unsigned int px = li.x, py = li.y, i = py * params.width + px;
@@ -458,6 +478,8 @@ extern "C" __global__ void __raygen__render() {
         const float cx = float(px) + 0.5f + params.jitter.x, cy = float(py) + 0.5f + params.jitter.y;
         const float x = cx / float(params.width) * 2.0f - 1.0f, y = 1.0f - cy / float(params.height) * 2.0f;
         const float3 d = normalize(params.W + params.U * x + params.V * y);
+        // the frame's place in the light's sequence, turned by the pixel's place in a 4 x 4 Bayer tile (every tile holds
+        // all sixteen each frame: noise DLSS gathers, not a flicker of the whole picture)
         const int bayer[16] = {0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5};
         const unsigned int k = (params.phase + unsigned(bayer[(py & 3u) * 4u + (px & 3u)])) % ATES_PHASES;
         const Hit h = trace(params.eye, d, 0.01f, 1e4f);
@@ -469,10 +491,7 @@ extern "C" __global__ void __raygen__render() {
             params.depth[i] = 1e30f;
         } else {
             const Surf s = surface(h, d, h.t * params.pixelAngle);
-            float u1;
-            float2 u2;
-            lightSample(px, py, k, u1, u2);
-            c = shade(s, -d, u1, u2);
+            c = shade(s, -d, px, py, k);
             albedo = s.albedo;
             // the emitted light is not lit by anything: DLSS sees it as part of the albedo's response
             if (s.emit.x + s.emit.y + s.emit.z > 0.0f) albedo = albedo + make_float3(0.02f, 0.02f, 0.02f);
@@ -537,10 +556,7 @@ extern "C" __global__ void __raygen__render() {
         }
         if (k == 0) firstT = h.t;
         const Surf s = surface(h, d, h.t * params.pixelAngle);
-        float u1;
-        float2 u2;
-        lightSample(px, py, unsigned(k), u1, u2);
-        const float3 c = shade(s, -d, u1, u2);
+        const float3 c = shade(s, -d, px, py, unsigned(k));
         if (isfinite(c.x) && isfinite(c.y) && isfinite(c.z)) acc += c;
     }
     acc *= 1.0f / float(params.spp);

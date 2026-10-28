@@ -66,7 +66,8 @@ struct AtesParams {
     float pitRadius;          // the burnt ground's reach (m)
 
     // the fire's light on the surfaces: the gas's emission summed over blocks (cd per block, RGB), sampled by its
-    // cumulative sum (a sample a pixel a frame, DLSS gathers them)
+    // cumulative sum (lightSamples a pixel a frame, DLSS gathers them)
+    int lightSamples;
     const float3* lightI;
     const float* lightCdf;    // inclusive cumulative of the blocks' luminous intensity (G)
     int lightN, lnx, lny, lnz;

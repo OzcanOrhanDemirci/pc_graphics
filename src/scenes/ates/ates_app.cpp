@@ -378,8 +378,8 @@ int runAtesCli(int argc, char** argv) {
     std::vector<int> views;
     std::vector<AtesCam> freeCams;
     int gas = 0, bench = 0, seq = 0;
-    float settle = 4.0f, seqFps = 30.0f;
-    bool blow = false, live = false;
+    float settle = 4.0f, seqFps = 30.0f, turn = 0.0f;
+    bool blow = false, live = false, freeze = false;
     std::string scenario;
     std::vector<std::pair<float, int>> throws;
     for (int i = 1; i < argc; ++i) {
@@ -396,6 +396,8 @@ int runAtesCli(int argc, char** argv) {
         else if (s == "--fps") seqFps = std::stof(next());
         else if (s == "--ufle") blow = true;
         else if (s == "--canli") live = true;
+        else if (s == "--dondur") freeze = true;
+        else if (s == "--donus") turn = std::stof(next());
         else if (s == "--senaryo") scenario = next();
         else if (s == "--odun") {
             const float at = std::stof(next());
@@ -644,12 +646,27 @@ int runAtesCli(int argc, char** argv) {
         const std::string dir = (fs::path(root) / out).generic_string();
         fs::create_directories(dir, ec);
         setPNGCompression(1);
+        // (--dondur: the fire stands still, only the picture's samples move: what flickers then is the sampling's;
+        // --donus: the look turns this many degrees a second)
         for (int f = 0; f < seq; ++f) {
-            a.update(1.0f / seqFps);
+            if (!freeze) a.update(1.0f / seqFps);
+            a.cam.yaw += turn * 0.0174533f / seqFps;
             a.render(1.0f / seqFps);
             char nm[64];
             std::snprintf(nm, sizeof(nm), "/kare_%05d", f);
             a.save(dir + nm);
+        }
+        if (freeze) {
+            // the same still fire without DLSS, 16 sub-pixel samples, its light from 64 samples each, the textures as
+            // sharp as DLSS takes them: the frames' reference
+            const int keep = a.R.params.lightSamples;
+            a.setDlss(false);
+            a.R.setPattern(16, 0.42f);
+            a.R.params.lodBias = -1.0f;
+            a.R.params.lightSamples = 64;
+            a.render(1.0f / seqFps);
+            a.save(dir + "/ref");
+            a.R.params.lightSamples = keep;
         }
         std::printf("ates: %d kare -> %s\n", seq, dir.c_str());
         a.release();

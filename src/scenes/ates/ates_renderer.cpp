@@ -117,6 +117,7 @@ bool AtesRenderer::init(int width, int height, const std::string& root) {
     params.chemEmit = ates_spectra::chemiluminescence(2e-5);
     params.groundMaterial = -1;
     params.groundMaterial2 = -1;
+    params.lightSamples = 1;
     setPattern(4, 0.42f);
     return true;
 }
