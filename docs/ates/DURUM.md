@@ -15,7 +15,7 @@
   (kare süresi), `--senaryo <ad>` (§3; eğri `<yol>.csv`, resimler `<yol>_<t>s.png`), `--set debug.wood=1` (kütük
   kütük ısı dengesi).
 
-## 1 · Şu an (2026-10-28 sabah)
+## 1 · Şu an (2026-10-28 öğlen)
 
 Plan onaylandı (Özcan, 10-28: *"sahneyi tamamlayana kadar çalışmaya devam et [...] tam yetkilisin"*). F0-F5'in kodu
 var: gaz, odun, kor, kıvılcım, ışık, etkileşim, zaman hızlandırma. F6'dan canlı dumanın çizimi var ama kapalı (§5),
@@ -25,9 +25,9 @@ pişmiş uzak tüy yok; F7 (kapanış ölçüleri, kör test) yok.
 kütüğün içine düşen hücre, o anki gazını (yanan yüzün dibinde, uçucuca zengin) donmuş hâlde tutuyordu; komşuları her
 adımda ondan örnekliyor, yakıt hiç tükenmiyordu. Ölçü: 60 kat hızda 0,4 g/s yakıttan 40 kW ısı (yakıtın verebileceği
 ~6 kW). Hata kapatılınca (`kGhost` + duvarda örnekleyenin kendi değeri) ateş gerçek zamanda iki dakikada söndü.
-Sönmenin sebepleri tek tek ölçülüp fizikle kapatıldı (§2). Bugünkü hâliyle ateş gerçek zamanda ~15 kW'ta yanmayı
-sürdürüyor, 60 kat hızda ~40 dakikada (odun zamanı) yanıp sönüyor; senaryoların ikisi tam, üçü yarım, ikisi yürümüyor
-(§3).
+Sönmenin sebepleri tek tek ölçülüp fizikle kapatıldı (§2). Bugünkü hâliyle ateş gerçek zamanda yanmayı
+sürdürüyor (yakıt defterinden sonra ~7,6 kW), 60 kat hızda ~45 dakikada (odun zamanı) yanıp sönüyor; senaryoların
+üçü tam, ikisi yarım, ikisi yürümüyor (§3).
 
 ## 2 · Bu oturumda bulunan ve düzeltilen fizik
 
@@ -42,57 +42,63 @@ sürdürüyor, 60 kat hızda ~40 dakikada (odun zamanı) yanıp sönüyor; senar
 | Kibrit hiçbir şeyi tutuşturamıyordu: 80 W bir hücreye dağılıp 5 K ısıtıyordu; soğuk dizilişte çıra yoktu | Kibritin başı ızgaradan ince kendi alevi (yakıtı havasıyla gelir, yerinde yanar); dizilişe 1 mm'lik talaş; kibrit yerden 1,5 cm |
 | Kül yatağı ölçüsü yerine ışınım dengesi (A/B, 60 kat hız) | 5. dakikada 6,2 → 10,1 kW; alevler ~25 yerine ~45 dk sürüyor |
 | Kıvılcımların üçte biri doğduğu an katıda ölüyordu (241/639) | Katıdan boş yana adım, yüzden sekme (12/628) |
+| Gaz yakıtından fazlasını yakıyordu: brülör testinde 20 kW'tan 31,5 kW (alevin genleşmesinde yarı Lagrange taşıma korunumsuz); odun ateşinde 1,4 kat | Yakıt türlerinin (uçucu, CO, is, duman) defteri: hücrelerin tuttuğu ve genleşmesinin ittiği, ızgaradan çıkan, taşımadan sonra kalan; fark bütün ızgaraya geri ölçeklenir. Brülör 19,7 kW, girdi 4,11 g → hesaplanan 4,09 g |
 | Duman hiç azalmıyordu: 10 sn'de 0,39 g, bir hücrede 104 g/m³ (soğuk yüzlerin dibinde sis) | Yüz dibinde yoğuşmaz; sıcak gaza dönen damlacık buharlaşıp yanar; yüze çöker (1 cm/s): 0,04 g, en yoğun 24 g/m³ |
 
-**Açık ölçü:** gerçek zamanda ısı salımı, odunun verdiği yakıtın (uçucu + CO) ~1,4 katı; 60 kat hızda ~1. Brülör
-testinde %90 (doğru). Kaynağı bulunmadı (§5).
+Yakıt defteri (`2fb24fb`) gelince ateşin gücü dürüstleşti: kendi hâlinde gerçek zamanda ~7,6 kW'ta duruyor (önce 14,7;
+fazlası taşımanın yarattığı yakıttı). Brülör testinin eski "%90"ı tesadüftü: brülörün 450 K'lik yakıtı katran olarak
+yoğuşup kayboluyor, taşımanın fazlasını örtüyordu.
 
 ## 3 · Senaryolar (`--senaryo <ad>`, PLAN §2.1)
 
 El ocağın açık yanından (kütükler x boyunca), kömürlere bakarak çömelmiş; kibrit ve odun bakışın yığına değdiği yere,
 üfleme bakış boyunca. Resimler aynı gözden.
 
-Ölçüm 2026-10-28 sabah, son fizikle (`4a016ba`). HRR: gazın ısı salımı; "kor": 800 K üstü yüzey.
+Ölçüm 2026-10-28 öğlen, yakıt defteriyle (`2fb24fb`). HRR: gazın ısı salımı; "kor": 800 K üstü yüzey.
 
 | Senaryo | Beklenen (brief) | Çıkan | Hüküm |
 |---|---|---|---|
-| `kendi` (gerçek zaman, 3 dk) | yanmayı sürdürür | 41 → 14,7 kW, 140. sn'den sonra düz; piroliz 0,72'ye inip 0,84 g/s'ye döner; kor 2700 cm² | ✅ |
-| `ufleme` (15 sn üfleme) | rüzgâr yönüne harlanır, güçlenir | kor yanması %31 artar (0,181 → 0,239 g/s), en sıcak yüzey +29 K; alevin HRR'si düşüşünü sürdürür (36 → 29 kW), üfleme bitince 1 kW sıçrar | ◐ kor harlanıyor, alev güçlenmiyor |
-| `kor` (odun 60 kat) | yanar, azalır, son noktada alevsiz kor | ~40 dk yanar (10 → 2 kW), 50. dk'da alev ve kor birlikte biter; 1,69 kg odun kalır | ◐ alevsiz kor evresi yok |
-| `bogulma` (6 kütük, 8 kg) | oksijeni kesilir, zayıflar; kor sıcaksa toparlanır | atıldığı an 36 → 30 kW (%16), 2 sn'de toparlanır; 3. dk'da yeni kütükler tutuşup 47 kW | ◐ zayıflama hafif, sönme yok |
-| `besleme` (5 dk'da bir kütük) | beslendikçe sürer | yarım saat 11-27 kW, son iki kütükle 47-52 kW | ✅ |
-| `yeniden` (35 dk sonra 15 sn üfleme) | kordan yeniden alev | kor 1490 K'e çıkar, kor yanması %22 artar; alev dönmez (0,2-0,6 kW) | ❌ |
-| `tutusturma` (kibrit) | kibrit → çıra → çırpı → kütük | çıra 1350 K, 0,2 kW'lık parlama; kibrit bitince söner | ❌ |
+| `kendi` (gerçek zaman, 3 dk) | yanmayı sürdürür | 22 → 7,6 kW, 2. dakikadan sonra düz; piroliz 0,59'a inip 0,70 g/s'ye döner; kor ~2450 cm² | ✅ |
+| `ufleme` (15 sn üfleme) | rüzgâr yönüne harlanır, güçlenir | kor yanması %31 artar (0,172 → 0,226 g/s), en sıcak yüzey +15 K; alevin HRR'si düşüşünü sürdürür (19,8 → 16,2 kW) | ◐ kor harlanıyor, alev güçlenmiyor |
+| `kor` (odun 60 kat) | yanar, azalır, son noktada alevsiz kor | ~45 dk yanar (8 → 3 kW), 55. dk'da alev ve kor birlikte biter; 1,53 kg odun kalır | ◐ alevsiz kor evresi yok |
+| `bogulma` (6 kütük, 8 kg) | oksijeni kesilir, zayıflar; kor sıcaksa toparlanır, değilse söner | 19,7 → 14,8 kW, sonra (odun 15 kat) 3. dakikada 2,9 kW'a, kor 2800 → 360 cm²: boğulup içten içe yanar, 13. dakikada hâlâ 1,5 kW | ✅ boğulma |
+| `besleme` (5 dk'da bir kütük) | beslendikçe sürer | yarım saat 7-21 kW; atılan her kütük ateşi bir süre büyütür | ✅ |
+| `yeniden` (35 dk sonra 15 sn üfleme) | kordan yeniden alev | kor 1530 K'e çıkar, kor yanması %35 artar; alev dönmez (~1 kW) | ❌ |
+| `tutusturma` (kibrit) | kibrit → çıra → çırpı → kütük | çıra 1350 K, 0,1-0,2 kW'lık parlama; kibrit bitince söner | ❌ |
 
 ## 4 · Ölçümler
 
 | Ne | Değer | Nereden |
 |---|---|---|
-| Alev boyu (brülör, 17 kW) | %95 ısı salım yüksekliği 0,33 m; Heskestad 0,32 m | `c6a923d`, `--gaz` |
-| Işınım payı (brülör) | 0,22-0,25 | `--gaz 1200`: 20 kW'ta HRR 18,0, ışınım 4,4 kW |
-| Kare, bakış 0 (1440p, DLSS-RR DLAA, canlı) | 38,7 FPS, 25,9 ms (en kötü 29,4); gaz 15,0 (3 adım × 5,0), DLSS 5,9, ateş 1,3, odun 0,9 ms | `--bench 240 --canli`, 10-28 sabah |
-| Kare, bakış 3 (közün içine) | 33,6 FPS, 29,7 ms; ateşin geçişi 6,1 ms; gaz gerçek zamanın %84'ü | aynı |
+| Brülör (20 kW, D 0,4 m, 20 sn) | HRR 19,7 kW, ışınım payı 0,20 (odun alevi ~0,2-0,3) | `--gaz 2400` + `tools/ates_olc.py`, `2fb24fb` |
+| Alev boyu | %95 ısı salım yüksekliği 0,39 m; Heskestad 0,37 m (uç medyanı 0,71 m: tek tük dil) | aynı |
+| McCaffrey ekseni | sürekli alevde 1550 K (McCaffrey ~1100), tüyde aşırı sıcaklık 2 kat; hız 1,3-1,5 kat | aynı |
+| Kabarma (puf) | uçta 1,29 Hz; 1,5/√D = 2,37 Hz | aynı |
+| Kare, bakış 0 (1440p, DLSS-RR DLAA, canlı) | 38,1 FPS, 26,3 ms (en kötü 29,8); gaz 15,4 (3 adım × 5,2), DLSS 5,9, ateş 1,1, odun 0,9 ms | `--bench 240 --canli`, `2fb24fb` |
+| Kare, bakış 3 (közün içine) | 33,7 FPS, 29,7 ms; ateşin geçişi 5,2 ms; gaz gerçek zamanın %84'ü | aynı |
 | Gaz adımı | 4,6-5,0 ms (128×192×128, 7,5 mm) | `--gaz`, `--bench` |
 | Kıvılcım | 10 sn'de ~630 doğan; adım + çizim 0,2 ms | §2 |
 
 ## 5 · Açık işler (öncelik sırasıyla)
 
-0. **Senaryoların üçü yarım, ikisi yürümüyor** (§3): alevsiz kor evresi, boğulmanın derinliği, kordan yeniden alev,
-   tutuşturma. Hepsinin ortak noktası ızgaradan ince alevler: kömürün ve talaşın alevi, korun üstündeki uçucunun
+0. **Senaryoların ikisi yarım, ikisi yürümüyor** (§3): alevsiz kor evresi, üflemeyle alevin güçlenmesi, kordan
+   yeniden alev, tutuşturma. Ortak noktaları ızgaradan ince alevler: talaşın alevi, korun üstündeki uçucunun
    tutuşması.
 1. **Tutuşturma yürümüyor:** kibrit talaşı 1350 K'e ısıtıp 0,2 kW'lık bir parlama veriyor, kibrit bitince sönüyor.
    Talaşın ve çırpının alevleri hücreden (7,5 mm) ince: ızgara onları taşıyamıyor. Aday: ince yakıtın uçucuları
    laminer tabakasız karışsın (`gas.wallMix=0` denemesi parlamayı 0,27 kW'a çıkardı, yetmedi) ya da ince yakıtın
    alevi CO filmi gibi ızgara altı yansın.
-2. **Isı salımı / besleme 1,4** (§2): katı köşe düzeltmesi oranı değiştirmedi; aday: yakıtın enjekte edildiği
-   hücrelerin genleşmesi ile yarı Lagrange adveksiyonunun korunumsuzluğu. Gazın yakıt defterini (girdi, yanan,
-   ızgarada kalan, çıkan) kütükle koşuda tut.
+2. **Alevin ekseni çok sıcak, puf yavaş** (§4): sürekli alevde 1550 K (McCaffrey ~1100), puf 1,3 Hz (beklenen 2,4).
+   Aday: 7,5 mm'de alev kenarındaki karışmanın (çekilen hava) eksikliği; Smagorinsky katsayısı ve vortisite
+   hapsi ölçülerek.
 3. **Duman:** çizimi var (`smoke.ext=4.4`), varsayılan kapalı. Alevin üstünde ateşin ışığıyla turuncu bir iz
    güzel; ama ateşin dibinde kalan duman alevin binlerce lüksünde kütükleri örten parlak bir perdeye dönüyor
    (en yoğun 24 g/m³; gerçek kamp ateşinin dibinde duman yok denecek kadar az). Aday: dumanın ışığına gölge
    (kütükler ve dumanın kendisi), dipte yoğuşmanın kaynağı (soğuk yüzlerden kaçan uçucu). Uzak tüy (pişmiş) yok.
-4. **FPS ≥ 40** (Özcan kuralı: DLSS en az Kalite, çözünürlük düşmez): bakış 0'da 38,7, bakış 3'te 33,6. En büyük
-   kalem gaz (karede 3 adım, 15 ms); DLSS-RR DLAA 5,9 ms (Kalite kipine inmek Özcan'ın izin verdiği bir seçenek).
+4. **FPS ≥ 40** (Özcan kuralı: DLSS en az Kalite, çözünürlük düşmez): bakış 0'da 38,1, bakış 3'te 33,7. En büyük
+   kalem gaz (karede 3 adım, 15 ms). İki ölçülmüş kaldıraç, ikisi de Özcan'ın kararı: (a) basınç çözücüsünde adım
+   başına 1 V-döngüsü (`gas.vcycles=1`): adım 4,91 → 4,40 ms (karede ~1,7 ms), artık 4e-3 → 5e-2, brülör ölçüleri
+   aynı (HRR 19,6 kW, %95 yüksekliği 0,40 m); (b) DLSS-RR'yi DLAA'dan Kalite kipine almak (ölçülmedi).
 5. **Kor görünümü:** kömürler hep aynı kırmızı, külde çeşit az; mavi CO alevi büyük (önceki oturumun notu; bu
    sabahki fizik değişikliklerinden sonra yeniden bakılmalı).
 6. Kör test (gerçek gece kamp ateşi fotoğraf ve videolarıyla; referanslar Özcan'da), puf frekansı ölçüsü,
