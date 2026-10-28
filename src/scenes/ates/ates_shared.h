@@ -21,6 +21,7 @@ struct ALogView {
     int nTheta, nZ;           // its patches around and along
     float r0, len;            // its first radius and length (m)
     unsigned int seed;        // its own crack pattern
+    float prevPose[12];       // where it lay a frame ago (row-major 3x4): its surface's motion for DLSS
 };
 
 // per OptiX instance (by its id): its geometries, and the log it is (or -1)

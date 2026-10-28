@@ -45,6 +45,8 @@ struct ALog {
     float4 q{1, 0, 0, 0};
     float3 vel{0, 0, 0}, angVel{0, 0, 0};
     bool sleeping = false;
+    float sleepTime = 0.0f;        // seconds it has hardly moved
+    float wakeRadius = 0.0f;       // its mean radius when the bodies last woke (a log burnt thinner wakes them)
     float mass = 1.0f;             // kg, refreshed from the patches
     float radius = 0.05f;          // the mean radius now (m)
     std::vector<float> ringRadius; // per z ring: the mean surface radius now (m)

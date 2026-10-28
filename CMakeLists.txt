@@ -115,6 +115,7 @@ add_library(pc_core OBJECT
     src/scenes/orman/orman_dlss.cpp
     src/scenes/ates/ates_gas.cu
     src/scenes/ates/ates_wood.cu
+    src/scenes/ates/ates_body.cpp
     src/scenes/ates/ates_kernels.cu
     src/scenes/ates/ates_renderer.cpp
     src/scenes/ates/ates_world.cpp

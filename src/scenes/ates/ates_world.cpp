@@ -143,6 +143,7 @@ void AtesApp::buildWorld() {
     places.push_back(gp);
     // the pit: a ring of stones, each a copy of the scanned rock turned and sized, sunk a little into the ground
     unsigned int seed = 12u;
+    bodies.stones.clear();
     auto it = assets.byAsset.find("rock_07");
     if (it != assets.byAsset.end() && !it->second.empty()) {
         const int proto = it->second.front();
@@ -167,6 +168,18 @@ void AtesApp::buildWorld() {
             const float t = 0.85f + 0.3f * rnd(seed);
             pl.tint = make_float3(t, t * 0.98f, t * 0.95f);
             places.push_back(pl);
+            // for the bodies: the stone as a capsule along its longer side on the ground, as thick as its lesser
+            const float3 c = make_float3(px, py, pz) + make_float3(cy * sc * 0.5f * (P.bmin.x + P.bmax.x) + sy * sc * 0.5f * (P.bmin.z + P.bmax.z),
+                                                                 sc * 0.5f * (P.bmin.y + P.bmax.y),
+                                                                 -sy * sc * 0.5f * (P.bmin.x + P.bmax.x) + cy * sc * 0.5f * (P.bmin.z + P.bmax.z));
+            const bool alongX = ext.x >= ext.z;
+            const float lng = sc * (alongX ? ext.x : ext.z), thick = sc * std::min(ext.y, alongX ? ext.z : ext.x);
+            const float3 dir = alongX ? make_float3(cy, 0, -sy) : make_float3(sy, 0, cy);
+            ABodyObstacle o;
+            o.r = 0.5f * thick;
+            o.a = c - dir * std::max(0.5f * lng - o.r, 0.0f);
+            o.b = c + dir * std::max(0.5f * lng - o.r, 0.0f);
+            bodies.stones.push_back(o);
         }
     }
     // a few stones scattered on the ground beyond
@@ -221,6 +234,8 @@ void AtesApp::initSim() {
     gas.vcycles = cfg.i("gas.vcycles", 2);
     gas.init(nx, ny, nz, h, make_float3(-0.5f * nx * h, 0.0f, -0.5f * nz * h), R.stream());
     wood.init(unsigned(cfg.i("wood.patches", 40000)), R.stream());
+    bodies.ground = groundHeight;
+    bodies.substeps = cfg.i("body.substeps", 16);
     simTime = woodTime = 0.0;
     lay(layout);
 }
@@ -235,6 +250,7 @@ void AtesApp::lay(const std::string& name) {
     gas.reset();
     gas.burner = AGasBurner();
     unsigned int seed = 99u;
+    bool settle = true;   // laid down onto what is under it (the bodies settle it the rest of the way)
     auto log = [&](float r, float len, float3 at, float3 axis, float burnt, float Ts, int kind = 1) {
         ALog L;
         L.kind = kind;
@@ -244,6 +260,8 @@ void AtesApp::lay(const std::string& name) {
         L.nZ = kind == 0 ? 10 : std::max(8, int(std::round(len / 0.0125f)));
         placeLog(L, at, axis);
         L.q = quatFromX(axis, 6.2831853f * rnd(seed));
+        L.radius = L.r0;
+        if (settle) bodies.lower(wood.logs, L);
         wood.add(L, burnt, Ts);
     };
     if (name == "brulor") {
@@ -271,30 +289,46 @@ void AtesApp::lay(const std::string& name) {
         // burning (the default, "ates") or its embers ("kor"): a bed of charred chunks, glowing; over it the logs,
         // charred a few millimetres and hot where the fire has had them
         const bool embers = name == "kor";
-        for (int i = 0; i < 9; ++i) {
-            const float a = 6.2831853f * rnd(seed), r = 0.11f * std::sqrt(rnd(seed));
-            const float rr = 0.016f + 0.012f * rnd(seed);
-            log(rr, 0.07f + 0.07f * rnd(seed), make_float3(r * std::cos(a), rr, r * std::sin(a)), make_float3(std::cos(a + 1.3f), 0.0f, std::sin(a + 1.3f)),
-                rr * 0.9f, 980.0f + 80.0f * rnd(seed));
+        if (!embers) {
+            // the logs, let down onto the ground and the third across them
+            const float over = 0.45f;
+            log(0.042f, 0.40f, make_float3(-0.02f, over, -0.15f), make_float3(1, 0, 0.12f), 0.006f, 900.0f);
+            log(0.038f, 0.38f, make_float3(0.03f, over, 0.15f), make_float3(1, 0, -0.1f), 0.006f, 900.0f);
+            log(0.040f, 0.42f, make_float3(0.0f, over + 0.12f, 0.0f), make_float3(0.15f, 0.0f, 1.0f), 0.005f, 880.0f);
+        }
+        {
+            // the bed between and under them: each coal set down where it falls (on the ground, against the logs or
+            // the coals before it); packed, they keep each other hot by their radiation, as a bed of coals does
+            const int chunks = cfg.i("bed.chunks", 22);
+            for (int i = 0; i < chunks; ++i) {
+                const float a = 6.2831853f * rnd(seed), r = 0.14f * std::sqrt(rnd(seed));
+                const float rr = 0.012f + 0.012f * rnd(seed);
+                log(rr, 0.05f + 0.07f * rnd(seed), make_float3(r * std::cos(a), rr + 0.02f, r * std::sin(a)),
+                    make_float3(std::cos(a + 1.3f), 0.2f * (rnd(seed) - 0.5f), std::sin(a + 1.3f)), rr * 0.95f, 1050.0f + 100.0f * rnd(seed));
+            }
         }
         if (!embers) {
-            log(0.042f, 0.40f, make_float3(-0.02f, 0.042f, -0.15f), make_float3(1, 0, 0.12f), 0.006f, 900.0f);
-            log(0.038f, 0.38f, make_float3(0.03f, 0.038f, 0.15f), make_float3(1, 0, -0.1f), 0.006f, 900.0f);
-            log(0.040f, 0.42f, make_float3(0.0f, 0.12f, 0.0f), make_float3(0.15f, 0.0f, 1.0f), 0.005f, 880.0f);
             // the kindling that lit them has burnt down: its last seconds stand in as a small burner under the logs
             // (the loading's first seconds; then the logs carry on, or not, by themselves)
             starterLeft_ = cfg.f("starter.seconds", 8.0f);
         }
     }
     patchRad_.clear();
+    prevPoses_.clear();
     syncLogs(true);
 }
 
 void AtesApp::syncLogs(bool rebuild) {
-    std::vector<std::array<float, 12>> poses;
-    for (const ALog& L : wood.logs) poses.push_back(L.pose());
     if (rebuild || patchRad_.size() != wood.patches) {
         wood.readBack();
+        // a log burnt thinner lets what lies on it down: the sleeping bodies wake
+        bool thinner = false;
+        for (ALog& L : wood.logs)
+            if (L.alive && L.wakeRadius - L.radius > 0.0005f) thinner = true;
+        if (thinner) {
+            bodies.wakeAll(wood.logs);
+            for (ALog& L : wood.logs) L.wakeRadius = L.radius;
+        }
         patchRad_.assign(wood.patches, 0.0f);
         if (wood.patches) cudaMemcpy(patchRad_.data(), wood.radOut, wood.patches * sizeof(float), cudaMemcpyDeviceToHost);
         std::vector<ALogMesh> meshes(wood.logs.size());
@@ -302,9 +336,24 @@ void AtesApp::syncLogs(bool rebuild) {
         R.setLogs(meshes, {}, barkMat_, endMat_);
         // (the materials list may have grown: the end grain's)
         R.uploadMaterials(assets.materials);
+        prevPoses_.clear();
     }
-    R.placeLogs(poses);
-    R.setLogViews(wood.views());
+    placeAndView();
+}
+
+void AtesApp::placeAndView() {
+    std::vector<std::array<float, 12>> poses;
+    for (const ALog& L : wood.logs) poses.push_back(L.pose());
+    if (prevPoses_.size() != poses.size()) prevPoses_ = poses;
+    std::vector<ALogView> v = wood.views();
+    bool moved = false;
+    for (size_t i = 0; i < v.size(); ++i) {
+        std::copy(prevPoses_[i].begin(), prevPoses_[i].end(), v[i].prevPose);
+        if (poses[i] != prevPoses_[i]) moved = true;
+    }
+    if (moved || !R.params.handle) R.placeLogs(poses);
+    R.setLogViews(v);
+    prevPoses_ = poses;
 }
 
 void AtesApp::strikeMatch() {
@@ -363,6 +412,8 @@ void AtesApp::addFuel(int kind) {
 
 void AtesApp::update(float dt) {
     const float dtGas = cfg.f("gas.dt", 1.0f / 120.0f);
+    // the logs fall and settle in the clock's time
+    bodies.step(wood.logs, std::min(dt, 0.05f));
     gasAcc_ += dt;
     int steps = 0;
     const int maxSteps = cfg.i("gas.maxSteps", 3);
@@ -420,7 +471,7 @@ void AtesApp::update(float dt) {
     if (meshAge_ > 0.5f) {
         meshAge_ = 0.0f;
         syncLogs(true);
-    }
+    } else placeAndView();
 }
 
 float3 AtesApp::forward() const {

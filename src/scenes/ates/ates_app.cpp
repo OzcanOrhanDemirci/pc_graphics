@@ -203,6 +203,7 @@ int runAtesCli(int argc, char** argv) {
     int gas = 0, bench = 0, seq = 0;
     float settle = 4.0f, seqFps = 30.0f;
     bool blow = false;
+    std::vector<std::pair<float, int>> throws;
     for (int i = 1; i < argc; ++i) {
         const std::string s = argv[i];
         auto next = [&]() { return i + 1 < argc ? std::string(argv[++i]) : std::string(); };
@@ -216,6 +217,10 @@ int runAtesCli(int argc, char** argv) {
         else if (s == "--seri") seq = std::stoi(next());
         else if (s == "--fps") seqFps = std::stof(next());
         else if (s == "--ufle") blow = true;
+        else if (s == "--odun") {
+            const float at = std::stof(next());
+            throws.push_back({at, std::stoi(next())});
+        }
         else if (s == "--cam") {
             AtesCam c;
             if (std::sscanf(next().c_str(), "%f %f %f %f %f %f", &c.feet.x, &c.eyeHeight, &c.feet.z, &c.yaw, &c.pitch, &c.fovY) >= 5) freeCams.push_back(c);
@@ -254,7 +259,11 @@ int runAtesCli(int argc, char** argv) {
     const double t0 = nowMs();
     const float dtGas = a.cfg.f("gas.dt", 1.0f / 120.0f);
     a.cam = AtesApp::view(views.empty() ? 0 : views[0]);
-    for (float t = 0.0f; t < settle; t += dtGas) a.update(dtGas);
+    for (float t = 0.0f; t < settle; t += dtGas) {
+        for (const auto& th : throws)
+            if (th.first >= t && th.first < t + dtGas) a.addFuel(th.second);
+        a.update(dtGas);
+    }
     std::printf("ates: %.1f s ates %.0f ms'de (HRR %.1f kW, piroliz %.2f g/s, kor %.0f cm2, en sicak yuzey %.0f K)\n", settle, nowMs() - t0, a.gas.stats.hrr / 1000.0f,
                 a.wood.stats.pyrolysis * 1e3f, a.wood.stats.emberArea * 1e4f, a.wood.stats.hottest);
     std::printf("ates: odun %.3f kg, kor yanmasi %.3f g/s, gaz yakit girdisi %.3f g/s, isinim %.1f kW, en sicak gaz %.0f K\n", a.wood.stats.mass,

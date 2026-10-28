@@ -520,7 +520,9 @@ int AtesWood::add(const ALog& proto, float burnt, float surfaceT) {
     L.firstPatch = patches;
     L.seed = unsigned(logs.size() * 2654435761u + 12345u);
     L.radius = L.r0;
+    L.wakeRadius = L.r0;
     L.ringRadius.assign(size_t(L.nZ), L.r0);
+    L.mass = k.rhoWood * 3.14159265f * L.r0 * L.r0 * L.len;   // (until the patches report theirs)
     // the layers: dry wood with its water at the night's temperature; a charred skin `burnt` deep, hot at its surface
     std::vector<float> t(size_t(n) * WOOD_LAYERS), w(t.size()), c(t.size()), h(t.size());
     std::vector<int> o(n, 0), pl(n, int(logs.size()));

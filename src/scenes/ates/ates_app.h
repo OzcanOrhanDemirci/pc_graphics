@@ -2,6 +2,7 @@
 // (the stones' scans, the ground), the gas, the wood, the eye, and the hand (blowing, a match, the logs added).
 #pragma once
 #include "core/config.h"
+#include "scenes/ates/ates_body.h"
 #include "scenes/ates/ates_gas.h"
 #include "scenes/ates/ates_renderer.h"
 #include "scenes/ates/ates_wood.h"
@@ -29,6 +30,7 @@ public:
     AtesRenderer R;
     AtesGas gas;
     AtesWood wood;
+    AtesBodies bodies;
     float exposureEv = 0.0f;
     float autoExposure = 1.0f;
     bool autoOn = true;
@@ -71,6 +73,8 @@ private:
     bool havePrev_ = false;
     float3 prevEye_{0, 0, 0}, prevU_{0, 0, 0}, prevV_{0, 0, 0}, prevW_{0, 0, 1};
     std::vector<float> patchRad_;
+    std::vector<std::array<float, 12>> prevPoses_;   // the logs' poses a frame ago (DLSS's motion)
+    void placeAndView();
     void syncLogs(bool rebuild);
     void placeLog(ALog& L, float3 at, float3 axis);
 };

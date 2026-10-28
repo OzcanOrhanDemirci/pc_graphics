@@ -317,6 +317,14 @@ extern "C" __global__ void __raygen__render() {
             n = s.n;
             depth = h.t * dot(d, params.W);
             q = s.p - params.prevEye;
+            // a log moves (it falls, it settles): its point where it was a frame ago
+            const AInst& in = params.instances[h.inst];
+            if (in.log >= 0) {
+                const float3 dd = s.p - make_float3(h.m[3], h.m[7], h.m[11]);
+                const float3 lp = make_float3(h.m[0] * dd.x + h.m[4] * dd.y + h.m[8] * dd.z, h.m[1] * dd.x + h.m[5] * dd.y + h.m[9] * dd.z,
+                                              h.m[2] * dd.x + h.m[6] * dd.y + h.m[10] * dd.z);
+                q = xfPoint(params.logs[in.log].prevPose, lp) - params.prevEye;
+            }
             params.depth[i] = h.t;
         }
         if (!(isfinite(c.x) && isfinite(c.y) && isfinite(c.z))) {
