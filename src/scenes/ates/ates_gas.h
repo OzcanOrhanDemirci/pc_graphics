@@ -48,6 +48,8 @@ struct AGasConst {
     float Sct = 0.5f;           // turbulent Schmidt and Prandtl numbers (FDS)
     float maccormack = 1.0f;    // the scalars' MacCormack correction (0: plain semi-Lagrangian)
     float maxExpand = 2.5f;     // a cell's temperature may grow by this factor a step from its reactions
+    float Tad = 2350.0f;        // nor beyond this: the volatiles' adiabatic flame temperature in the night's air
+                                // (T0 + hcF Yst / cp: 288 + 14.7 MJ x 0.17 / 1250 J/kg K, ~2290 K; a little room)
 };
 
 // what the wood and the hand put into the gas this step, per cell (atomics; zeroed after each step)

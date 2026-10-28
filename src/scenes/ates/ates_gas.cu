@@ -233,7 +233,10 @@ __global__ void kCells(CellArgs a) {
             // a step lets a cell grow by at most maxExpand (its heat beyond waits for the next): the expansion the
             // projection and the advection carry stays small per step, as their accuracy needs (a whole stoichiometric
             // burn in one step grew a cell eightfold, and the advection made a fifth of its fuel twice over)
-            const float hMax = (K.maxExpand - 1.0f) * T * cp;
+            // nor past the flame's own ceiling: a cell holds unmixed volatiles and air side by side (the eddy model's
+            // picture), and burning them at its mean temperature heated a hot boundary-layer cell to 3700 K; burnt
+            // where they mix, they reach the adiabatic temperature at most (Tad)
+            const float hMax = fminf((K.maxExpand - 1.0f) * T, fmaxf(K.Tad - T, 0.0f)) * cp;
             auto room = [&](float want) { return want > 0.0f ? fminf(1.0f, fmaxf(hMax - heat, 0.0f) / want) : 0.0f; };
             if (Tig > K.TignF) {
                 const float avail = fminf(F, O / K.sF);
@@ -293,7 +296,7 @@ __global__ void kCells(CellArgs a) {
             const float Pmax = 0.7f * rho * cp * fmaxf(Tn - K.T0, 0.0f) / dt;
             P = fminf(P, Pmax);
             Tn -= P * dt / (rho * cp);
-            a.s.T[c] = fminf(Tn, 3000.0f);
+            a.s.T[c] = fminf(Tn, K.Tad);
             a.s.F[c] = fmaxf(F, 0.0f);
             a.s.C[c] = fmaxf(C, 0.0f);
             a.s.O[c] = O;
