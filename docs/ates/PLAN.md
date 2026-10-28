@@ -186,7 +186,7 @@ tanımı: yedi senaryonun yedisi ✅, siyah temiz, FPS ≥ 40 (ya da Özcan'ın 
 
 | | Ne | Bulgu (ölçülmüş ya da okunmuş) | Yol | Bitti (ölçü) |
 |---|---|---|---|---|
-| İ1 | **Temiz siyah** (gren, çizgi, fırça izi) | Son geçiş titretmeyi (dither) sRGB eğrisinden **önce**, doğrusal ışıkta ekliyor: siyahın yanında eğrinin eğimi 12,92, ±0,5 seviye ±6,5'e çıkıyor; desen doğrusal bir karmadan (`px·1973 + py·9277`): çizgiler. İkinci aday: yüzeylerin ateş ışığı pikselde karede tek rastgele blok örneği, karanlıkta DLSS-RR'nin artığı fırça izi | (a) titretme sRGB'den sonra, görüntü uzayında ±0,5 seviye, mavi gürültü; (b) karanlık bölgenin piksel sapması ve `tools/titreme.py` önce/sonra; (c) fırça izi kalırsa: pikselde 2-4 ışık örneği (maliyeti ölçülür) ya da uzak alan için ateşin ışığı birkaç gölgeli toplu ışık | Siyahta piksel sapması ≤ 1 seviye, çizgi yok; titreme Orman tabanında |
+| İ1 | **Temiz siyah** (gren, çizgi, fırça izi) | Son geçiş titretmeyi (dither) sRGB eğrisinden **önce**, doğrusal ışıkta ekliyor: siyahın yanında eğrinin eğimi 12,92, ±0,5 seviye ±6,5'e çıkıyor; desen doğrusal bir karmadan (`px·1973 + py·9277`): çizgiler. İkinci aday: yüzeylerin ateş ışığı pikselde karede tek rastgele blok örneği, karanlıkta DLSS-RR'nin artığı fırça izi | (a) titretme sRGB'den sonra, görüntü uzayında ±0,5 seviye, mavi gürültü; (b) karanlık bölgenin piksel sapması ve `tools/titreme.py` önce/sonra; (c) fırça izi kalırsa: pikselde 2-4 ışık örneği (maliyeti ölçülür) ya da uzak alan için ateşin ışığı birkaç gölgeli toplu ışık | Siyahta piksel sapması ≤ 1 seviye, çizgi yok; titreme Orman tabanında · **✅ 10-28:** gök %100 sıfır, titreme canlı/referans 0,94-1,03 (DURUM §2, §4) |
 | İ2 | **Ateş sürsün** (yakıt varken sönmesin) | 60 kat hızda 45. dk'da alev ve kor birlikte bitiyor, 1,5 kg odun kalıyor. Kütükler incelip yerinde kalıyor; yatağa yeni kömür düşmüyor (§3.3'ün kırılma ve çökmesi yapılmadı); yatak tükenince altı soğuyan kütükler söner | Kömür kabuğu çatlak deseninde parça parça kopar (kalınlığı ve ısıl gerilmesi), kütüğün taşıyan çekirdeği incelince kütük kırılır: parçalar katı cisim olarak yatağa düşer, kütle ve ısı korunur | `kor`: alevli evre + alevsiz kor evresi, kalan odun < %10; kendi hâlinde 3 kg ~1 saat |
 | İ3 | **Yeni odun tutuşsun, çalı ve çıra alevlensin** | Atılan kütük ateşi önce bastırıyor, odunun 3. dakikasında tutuşuyor; çalı ve çıranın alevi hücreden (7,5 mm) ince, ızgara taşıyamıyor: kibritle 0,2 kW'lık parlama | İnce yakıtın (r < h) alevi ızgara altı: uçucusu yüzeyinde, oksijenin difüzyonuyla sınırlı yanar (CO filmi gibi), ısısının payı yüzeye, kalanı gaza; alev büyüyünce ızgaraya geçer. Tutuşma: yüzey sıcaklığı + kritik uçucu akısı (odunda ~1-2 g/m²s) | `tutusturma`: kibrit → çıra saniyeler, çırpı onlarca saniye, kütük dakikalar; `besleme`: atılan çalı saniyeler içinde parlar, kütük 1-2 dk'da ateşi büyütür |
 | İ4 | **Harlama görünsün** | Üfleme korun yanmasını %30 artırıyor, en sıcak yüzey +15-50 K: gözle seçilmiyor; alevin ısı salımı düşüyor | Canlıda ağzın kora uzaklığında jetin vardığı hız ölçülür; gerçek nefes (dudakta 10-30 m/s, ~1-2 L/s) ve eğilip üfleme; kül kalkması (`ashLift`); kor 1300-1400 K'e çıkıp turuncu-sarıya döner (renk sıcaklıktan) | `ufleme`: kor +200 K mertebesi, kor yanması 2-3 kat, üfleme bitince alev büyür; kıyas klibi |
@@ -199,4 +199,15 @@ tanımı: yedi senaryonun yedisi ✅, siyah temiz, FPS ≥ 40 (ya da Özcan'ın 
 **Oturum sırası (önerim):** 1. oturum İ1 + İ2 · 2. oturum İ3 + İ4 + İ5 · 3. oturum İ6-İ9. Sıra bağımlılıktan: İ1 her
 şeye bakmayı temizler; İ2 olmadan kor evresi ve yeniden yakma olmaz; İ3 tutuşturmanın, beslemenin ve yeniden yakmanın
 ortak çekirdeği.
+
+## 8 · Kapanış (2026-10-28 akşam, Özcan'ın kararı)
+
+İ1'den sonra Özcan kapsamı daralttı: sahne beklenenden pahalı oldu (haftalık kotanın ~%10'u); **ateşin görüntüsü
+gerçek, yakma, söndürme ve besleme dinamiği yok**. İ2-İ9 yapılmayacak; tablo, sahneye dönülürse yol haritası.
+
+1. Çalışmayan ya da gözle seçilmeyen etkileşimler çıktı: kibrit, çalı ve kütük atma, üfleme, zaman hızlandırma; onları
+   sınayan `soguk` ve `kor` yerleşimleri ve altı senaryo. Kalan: bakmak, yürümek, çömelmek, R, bakışlar, pozlama.
+2. Bozukluk kalmasın: kütüklerin ışın izleme yapıları yalnız ateş yakılırken kurulur (çökmenin yakalandığı tek yer
+   çalışma sırasındaki kurulumlardı). Kararlılık uzun canlı koşularla ve R zorlamasıyla ölçülür (DURUM §4).
+3. Galeri metni, otomatik test, README bölümü, DURUM ve hafıza kapanışa göre.
 
