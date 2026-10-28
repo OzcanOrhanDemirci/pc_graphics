@@ -244,13 +244,15 @@ struct Scenario {
     const char* layout;
     float length;   // seconds of the gas
     std::vector<ScenarioMove> moves;
+    float3 aim = make_float3(0.06f, 0.03f, 0.0f);   // where the hand looks (blowing: the coals between the logs)
 };
 
 std::vector<Scenario> scenarios() {
     using M = ScenarioMove;
     std::vector<Scenario> s;
     // lit with a match at the twigs' foot: twigs, then kindling, then the logs
-    s.push_back({"tutusturma", "soguk", 120.0f, {{1.0f, M::Match}, {10.0f, M::Picture}, {40.0f, M::Picture}, {80.0f, M::Picture}, {120.0f, M::Picture}}});
+    s.push_back({"tutusturma", "soguk", 120.0f, {{1.0f, M::Match}, {10.0f, M::Picture}, {40.0f, M::Picture}, {80.0f, M::Picture}, {120.0f, M::Picture}},
+                 make_float3(0.0f, 0.015f, 0.0f)});
     // a burning fire blown on for 15 s: the flame leans and grows, the embers turn yellow, and settles after
     s.push_back({"ufleme", "ates", 45.0f, {{14.0f, M::Picture}, {15.0f, M::BlowOn}, {27.0f, M::Picture}, {30.0f, M::BlowOff}, {45.0f, M::Picture}}});
     // left alone in real time: the baseline the others are read against
@@ -260,24 +262,27 @@ std::vector<Scenario> scenarios() {
     // six logs thrown on at once: cold wood that draws the heat and closes the air's ways
     s.push_back({"bogulma", "ates", 90.0f,
                  {{14.0f, M::Picture}, {15.0f, M::Log}, {15.5f, M::Log}, {16.0f, M::Log}, {16.5f, M::Log}, {17.0f, M::Log}, {17.5f, M::Log},
-                  {30.0f, M::Picture}, {40.0f, M::Scale, 15.0f}, {90.0f, M::Picture}}});
-    // burnt down to embers, then blown on: the flames come back from what wood is left
-    s.push_back({"yeniden", "ates", 165.0f,
-                 {{10.0f, M::Scale, 60.0f}, {130.0f, M::Scale, 1.0f}, {139.0f, M::Picture}, {140.0f, M::BlowOn}, {155.0f, M::Picture}, {155.0f, M::BlowOff},
-                  {165.0f, M::Picture}}});
+                  {30.0f, M::Picture}, {40.0f, M::Scale, 15.0f}, {90.0f, M::Picture}},
+                 make_float3(0.0f, 0.1f, 0.0f)});
+    // burnt down till its flames are all but out (35 minutes of the wood's time), then blown on: the flames come back
+    // from what wood is left over the embers
+    s.push_back({"yeniden", "ates", 75.0f,
+                 {{10.0f, M::Scale, 60.0f}, {45.0f, M::Scale, 1.0f}, {49.0f, M::Picture}, {50.0f, M::BlowOn}, {63.0f, M::Picture}, {65.0f, M::BlowOff},
+                  {75.0f, M::Picture}}});
     // kept going: a log every five minutes of the wood's time (15 times the real)
     s.push_back({"besleme", "ates", 140.0f, {{5.0f, M::Scale, 15.0f}, {25.0f, M::Log}, {45.0f, M::Log}, {65.0f, M::Log}, {85.0f, M::Log},
-                                             {105.0f, M::Log}, {125.0f, M::Log}, {70.0f, M::Picture}, {140.0f, M::Picture}}});
+                                             {105.0f, M::Log}, {125.0f, M::Log}, {70.0f, M::Picture}, {140.0f, M::Picture}},
+                 make_float3(0.0f, 0.1f, 0.0f)});
     return s;
 }
 
 // one run: <out>.csv holds a row per half second of the gas's clock (the step's sums averaged over it), the pictures
 // <out>_<t>s.png; the summary goes to stdout
 int runScenario(AtesApp& a, const Scenario& sc, const std::string& root, const std::string& out) {
-    // from the side the laid logs leave open (they lie along x), at the coals between them; a match at the foot of
-    // the twigs' bundle
+    // from the side the laid logs leave open (they lie along x), at the scenario's aim: a match or wood goes where the
+    // look meets the pile, so the aim is at their height (a match 1.5 cm over the floor, wood 10 cm)
     AtesCam hand;
-    const float3 at = std::string(sc.layout) == "soguk" ? make_float3(0.0f, 0.03f, 0.0f) : make_float3(0.06f, 0.03f, 0.0f);
+    const float3 at = sc.aim;
     hand.feet = make_float3(at.x + 1.3f, 0.0f, at.z);
     hand.eyeHeight = 0.71f;
     hand.yaw = 1.5707963f;
