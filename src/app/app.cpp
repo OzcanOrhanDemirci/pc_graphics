@@ -597,13 +597,10 @@ int App::run(const Options& opt) {
                 control("yapi", 0); wait(6.0);
             }
             if (infos_[s].id == "ates") {
-                // wood thrown on, one log after another (a log once crashed the application), twigs, a match, a blow
-                for (int k = 0; k < 4; ++k) { key(GLFW_KEY_E); wait(1.5); log("ates kutuk " + std::to_string(k + 1)); }
-                shot("ates_kutukler");
-                key(GLFW_KEY_Q); wait(1.0); key(GLFW_KEY_F); wait(2.0); shot("ates_kibrit");
-                left(true); wait(3.0); shot("ates_ufleme"); left(false); wait(1.0);
-                key(GLFW_KEY_T); key(GLFW_KEY_T); wait(4.0); log("ates zaman x15"); shot("ates_hizli");
-                key(GLFW_KEY_E); wait(2.0); key(GLFW_KEY_E); wait(3.0); log("ates hizda kutuk"); shot("ates_hizda_kutuk");
+                // the four views (timed), a walk round the pit, the fire laid again (every log's structure built anew)
+                for (int k = 0; k < 4; ++k) { key(GLFW_KEY_1 + k); wait(3.0); log("ates bakis " + std::to_string(k + 1)); shot("ates_bakis" + std::to_string(k + 1)); }
+                key(GLFW_KEY_1); hold(GLFW_KEY_D, true); wait(2.0); hold(GLFW_KEY_D, false); wait(0.5); log("ates yuruyus"); shot("ates_yuruyus");
+                key(GLFW_KEY_R); wait(4.0); log("ates yeniden"); shot("ates_yeniden");
             }
             if (infos_[s].id == "ayna") {
                 // forward through the hall, our light's colour, two lamps left, the deepest tunnel, the haze's beams

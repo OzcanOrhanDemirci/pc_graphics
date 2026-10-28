@@ -235,56 +235,33 @@ void printLogs(const AtesApp& a) {
     }
 }
 
-// PLAN §2.1's behaviours as scripted runs: the hand's moves at fixed times of the gas's clock and nothing else; what
-// the fire does with them is its own. One crouches before the pit, looking at the foot of the fire: a match or wood
-// goes where the look meets the pile, the breath along the look, the pictures see what the eye does.
+// the fire left alone in real time, as scripted runs (PLAN §2.1; the others, the hand's, went with the hand when the
+// scene was closed): pictures at fixed times of the gas's clock and nothing else. One crouches before the pit, looking
+// at the foot of the fire.
 struct ScenarioMove {
     float t;
-    enum { Match, Twigs, Log, BlowOn, BlowOff, Scale, Picture } what;
-    float arg = 0.0f;
+    enum { Picture } what;
 };
 struct Scenario {
     const char* name;
     const char* layout;
     float length;   // seconds of the gas
     std::vector<ScenarioMove> moves;
-    float3 aim = make_float3(0.06f, 0.03f, 0.0f);   // where the hand looks (blowing: the coals between the logs)
+    float3 aim = make_float3(0.06f, 0.03f, 0.0f);   // where the eye looks: the coals between the logs
 };
 
 std::vector<Scenario> scenarios() {
     using M = ScenarioMove;
     std::vector<Scenario> s;
-    // lit with a match at the twigs' foot: twigs, then kindling, then the logs
-    s.push_back({"tutusturma", "soguk", 120.0f, {{1.0f, M::Match}, {10.0f, M::Picture}, {40.0f, M::Picture}, {80.0f, M::Picture}, {120.0f, M::Picture}},
-                 make_float3(0.0f, 0.015f, 0.0f)});
-    // a burning fire blown on for 15 s: the flame leans and grows, the embers turn yellow, and settles after
-    s.push_back({"ufleme", "ates", 45.0f, {{14.0f, M::Picture}, {15.0f, M::BlowOn}, {27.0f, M::Picture}, {30.0f, M::BlowOff}, {45.0f, M::Picture}}});
-    // left alone in real time: the baseline the others are read against
+    // left alone in real time: it keeps burning
     s.push_back({"kendi", "ates", 180.0f, {{60.0f, M::Picture}, {180.0f, M::Picture}}});
-    // left alone: it burns down to embers without flame (the wood's time 60 times the real)
-    s.push_back({"kor", "ates", 150.0f, {{10.0f, M::Scale, 60.0f}, {60.0f, M::Picture}, {150.0f, M::Picture}}});
-    // six logs thrown on at once: cold wood that draws the heat and closes the air's ways
-    s.push_back({"bogulma", "ates", 90.0f,
-                 {{14.0f, M::Picture}, {15.0f, M::Log}, {15.5f, M::Log}, {16.0f, M::Log}, {16.5f, M::Log}, {17.0f, M::Log}, {17.5f, M::Log},
-                  {30.0f, M::Picture}, {40.0f, M::Scale, 15.0f}, {90.0f, M::Picture}},
-                 make_float3(0.0f, 0.1f, 0.0f)});
-    // burnt down till its flames are all but out (35 minutes of the wood's time), then blown on: the flames come back
-    // from what wood is left over the embers
-    s.push_back({"yeniden", "ates", 75.0f,
-                 {{10.0f, M::Scale, 60.0f}, {45.0f, M::Scale, 1.0f}, {49.0f, M::Picture}, {50.0f, M::BlowOn}, {63.0f, M::Picture}, {65.0f, M::BlowOff},
-                  {75.0f, M::Picture}}});
-    // kept going: a log every five minutes of the wood's time (15 times the real)
-    s.push_back({"besleme", "ates", 140.0f, {{5.0f, M::Scale, 15.0f}, {25.0f, M::Log}, {45.0f, M::Log}, {65.0f, M::Log}, {85.0f, M::Log},
-                                             {105.0f, M::Log}, {125.0f, M::Log}, {70.0f, M::Picture}, {140.0f, M::Picture}},
-                 make_float3(0.0f, 0.1f, 0.0f)});
     return s;
 }
 
 // one run: <out>.csv holds a row per half second of the gas's clock (the step's sums averaged over it), the pictures
 // <out>_<t>s.png; the summary goes to stdout
 int runScenario(AtesApp& a, const Scenario& sc, const std::string& root, const std::string& out) {
-    // from the side the laid logs leave open (they lie along x), at the scenario's aim: a match or wood goes where the
-    // look meets the pile, so the aim is at their height (a match 1.5 cm over the floor, wood 10 cm)
+    // from the side the laid logs leave open (they lie along x), at the scenario's aim
     AtesCam hand;
     const float3 at = sc.aim;
     hand.feet = make_float3(at.x + 1.3f, 0.0f, at.z);
@@ -301,7 +278,7 @@ int runScenario(AtesApp& a, const Scenario& sc, const std::string& root, const s
         std::fprintf(stderr, "ates: %s.csv yazilamadi\n", base.c_str());
         return 1;
     }
-    std::fprintf(csv, "t_gaz_s,t_odun_s,hrr_kW,isinim_kW,gaz_yakit_gs,piroliz_gs,kor_yanmasi_gs,kutle_kg,kor_cm2,en_sicak_yuzey_K,en_sicak_gaz_K,kivilcim_dogan,ufleme,odun_sayisi\n");
+    std::fprintf(csv, "t_gaz_s,t_odun_s,hrr_kW,isinim_kW,gaz_yakit_gs,piroliz_gs,kor_yanmasi_gs,kutle_kg,kor_cm2,en_sicak_yuzey_K,en_sicak_gaz_K,kivilcim_dogan,odun_sayisi\n");
     std::vector<ScenarioMove> moves = sc.moves;
     std::stable_sort(moves.begin(), moves.end(), [](const ScenarioMove& x, const ScenarioMove& y) { return x.t < y.t; });
     size_t next = 0;
@@ -316,12 +293,6 @@ int runScenario(AtesApp& a, const Scenario& sc, const std::string& root, const s
         while (next < moves.size() && moves[next].t <= t + 0.5f * dtGas) {
             const ScenarioMove& m = moves[next++];
             switch (m.what) {
-            case ScenarioMove::Match: a.strikeMatch(); break;
-            case ScenarioMove::Twigs: a.addFuel(0); break;
-            case ScenarioMove::Log: a.addFuel(1); break;
-            case ScenarioMove::BlowOn: a.blowing = true; break;
-            case ScenarioMove::BlowOff: a.blowing = false; break;
-            case ScenarioMove::Scale: a.timeScale = m.arg; break;
             case ScenarioMove::Picture: {
                 // DLSS's frames through first; the fire's clock goes on by them
                 for (int k = 0; k < (a.R.dlssOn() ? 3 * ATES_PHASES : 4); ++k) {
@@ -332,7 +303,7 @@ int runScenario(AtesApp& a, const Scenario& sc, const std::string& root, const s
                 std::snprintf(nm, sizeof(nm), "_%03ds", int(std::lround(m.t)));
                 a.save(base + nm);
                 if (a.wood.probe) {
-                    std::printf("ates: %.1f s%s\n", t, a.blowing ? " (ufleniyor)" : "");
+                    std::printf("ates: %.1f s\n", t);
                     printLogs(a);
                 }
                 break;
@@ -357,8 +328,8 @@ int runScenario(AtesApp& a, const Scenario& sc, const std::string& root, const s
             a.sparks.readStats();
             int alive = 0;
             for (const ALog& L : a.wood.logs) alive += L.alive ? 1 : 0;
-            std::fprintf(csv, "%.2f,%.1f,%.2f,%.2f,%.3f,%.3f,%.3f,%.4f,%.0f,%.0f,%.0f,%u,%d,%d\n", t + dtGas, a.woodTime, h / 1000.0f, rad / n / 1000.0, fuel / n * 1e3, pyro / n * 1e3,
-                         charB / n * 1e3, a.wood.stats.mass, a.wood.stats.emberArea * 1e4f, a.wood.stats.hottest, maxT, a.sparks.stats.born, a.blowing ? 1 : 0, alive);
+            std::fprintf(csv, "%.2f,%.1f,%.2f,%.2f,%.3f,%.3f,%.3f,%.4f,%.0f,%.0f,%.0f,%u,%d\n", t + dtGas, a.woodTime, h / 1000.0f, rad / n / 1000.0, fuel / n * 1e3, pyro / n * 1e3,
+                         charB / n * 1e3, a.wood.stats.mass, a.wood.stats.emberArea * 1e4f, a.wood.stats.hottest, maxT, a.sparks.stats.born, alive);
             hrr = rad = fuel = pyro = charB = maxT = 0;
             n = 0;
         }
@@ -379,9 +350,8 @@ int runAtesCli(int argc, char** argv) {
     std::vector<AtesCam> freeCams;
     int gas = 0, bench = 0, seq = 0;
     float settle = 4.0f, seqFps = 30.0f, turn = 0.0f;
-    bool blow = false, live = false, freeze = false;
+    bool live = false, freeze = false;
     std::string scenario;
-    std::vector<std::pair<float, int>> throws;
     for (int i = 1; i < argc; ++i) {
         const std::string s = argv[i];
         auto next = [&]() { return i + 1 < argc ? std::string(argv[++i]) : std::string(); };
@@ -394,15 +364,10 @@ int runAtesCli(int argc, char** argv) {
         else if (s == "--bench") bench = std::stoi(next());
         else if (s == "--seri") seq = std::stoi(next());
         else if (s == "--fps") seqFps = std::stof(next());
-        else if (s == "--ufle") blow = true;
         else if (s == "--canli") live = true;
         else if (s == "--dondur") freeze = true;
         else if (s == "--donus") turn = std::stof(next());
         else if (s == "--senaryo") scenario = next();
-        else if (s == "--odun") {
-            const float at = std::stof(next());
-            throws.push_back({at, std::stoi(next())});
-        }
         else if (s == "--cam") {
             AtesCam c;
             if (std::sscanf(next().c_str(), "%f %f %f %f %f %f", &c.feet.x, &c.eyeHeight, &c.feet.z, &c.yaw, &c.pitch, &c.fovY) >= 5) freeCams.push_back(c);
@@ -461,11 +426,7 @@ int runAtesCli(int argc, char** argv) {
     const float dtGas = a.cfg.f("gas.dt", 1.0f / 120.0f);
     a.cam = AtesApp::view(views.empty() ? 0 : views[0]);
     if (a.cfg.i("debug.wood", 0)) cudaMalloc(reinterpret_cast<void**>(&a.wood.probe), size_t(a.wood.capacity) * 8 * sizeof(float));
-    for (float t = 0.0f; t < settle; t += dtGas) {
-        for (const auto& th : throws)
-            if (th.first >= t && th.first < t + dtGas) a.addFuel(th.second);
-        a.update(dtGas);
-    }
+    for (float t = 0.0f; t < settle; t += dtGas) a.update(dtGas);
     std::printf("ates: %.1f s ates %.0f ms'de (HRR %.1f kW, piroliz %.2f g/s, kor %.0f cm2, en sicak yuzey %.0f K)\n", settle, nowMs() - t0, a.gas.stats.hrr / 1000.0f,
                 a.wood.stats.pyrolysis * 1e3f, a.wood.stats.emberArea * 1e4f, a.wood.stats.hottest);
     std::printf("ates: odun %.3f kg, kor yanmasi %.3f g/s, gaz yakit girdisi %.3f g/s, isinim %.1f kW, en sicak gaz %.0f K\n", a.wood.stats.mass,
@@ -509,7 +470,6 @@ int runAtesCli(int argc, char** argv) {
     if (views.empty() && freeCams.empty()) views = {0, 1, 2, 3};
     auto shoot = [&](const AtesCam& c, const std::string& name) {
         a.cam = c;
-        a.blowing = blow;
         const int warm = a.R.dlssOn() ? 3 * ATES_PHASES : 4;
         for (int k = 0; k < warm; ++k) {
             a.update(1.0f / 60.0f);
@@ -595,12 +555,8 @@ int runAtesCli(int argc, char** argv) {
             int badFrames = 0;
             int steps = 0;
             float dt = 1.0f / 60.0f;
-            const double benchT0 = a.simTime;
             for (int k = 0; k < bench; ++k) {
                 const double s0 = nowMs();
-                // (--odun times past the settling fall in the measured frames: wood thrown on while it is drawn)
-                for (const auto& th : throws)
-                    if (th.first >= settle && th.first - settle >= a.simTime - benchT0 && th.first - settle < a.simTime - benchT0 + dt) a.addFuel(th.second);
                 a.update(dt);
                 cudaDeviceSynchronize();
                 const double s1 = nowMs();
@@ -637,7 +593,6 @@ int runAtesCli(int argc, char** argv) {
         // a clip's frames at its own rate (the fire's clock advances 1/fps a frame, as the eye would see it)
         const AtesCam c = !freeCams.empty() ? freeCams[0] : AtesApp::view(views.empty() ? 0 : views[0]);
         a.cam = c;
-        a.blowing = blow;
         for (int k = 0; k < 3 * ATES_PHASES; ++k) {
             a.update(1.0f / seqFps);
             a.render(1.0f / seqFps);

@@ -1,6 +1,7 @@
-// Scene 12 "Ateş" inside the application: a fire in a stone pit, outdoors on a moonless night. The mouse looks (captured
-// from the start, Tab gives the cursor back), W A S D walk round the pit, C crouches; the left button (held) blows
-// along the look, F strikes a match, Q throws on a handful of twigs, E a log; the panel sets the wood's time.
+// Scene 12 "Ateş" inside the application: a fire in a stone pit, outdoors on a moonless night, to look at. The mouse
+// looks (captured from the start, Tab gives the cursor back), W A S D walk round the pit, C crouches, R lays the fire
+// again. (Throwing wood on, a match, blowing and the wood's fast time were taken out when the scene was closed:
+// docs/ates/DURUM.md)
 #include "app/lang.h"
 #include "app/scene.h"
 #include "app/theme.h"
@@ -21,8 +22,6 @@ namespace {
 
 using app::L;
 
-const float kScales[5] = {1.0f, 5.0f, 15.0f, 30.0f, 60.0f};
-
 class AtesLive : public app::Scene {
 public:
     static app::SceneInfo describe() {
@@ -31,11 +30,10 @@ public:
         i.number = "12";
         i.title = L("Ateş", "Fire");
         i.subtitle = L("Karanlıkta, açık havada taş bir ocakta yanan ateş", "A fire burning in a stone pit, outdoors in the dark");
-        i.description = L("Taş bir ocakta odun ateşi. Yakıtı gerçekten azalır, harlanır, kora döner; fazla odunla boğulur, "
-                          "kordan üfleyince yeniden alev alır. Hiçbiri kuralla yazılmadı: hepsi yanmanın fiziğinden çıkıyor.",
-                          "A wood fire in a stone pit. Its fuel really runs down; it flares, sinks to embers, chokes under too much "
-                          "wood and flames again from its embers when blown on. None of it is scripted: it all comes out of the "
-                          "physics of burning.");
+        i.description = L("Taş bir ocakta, karanlıkta yanan odun ateşi. Alevin biçimi, rengi, ışığı ve kıvılcımları elle "
+                          "çizilmedi: hepsi yanmanın fiziğinden, gerçek zamanda hesaplanıyor.",
+                          "A wood fire burning in a stone pit in the dark. The flame's shape, colour and light and its sparks are "
+                          "not drawn by hand: they are all computed from the physics of burning, in real time.");
         i.details = {
             {L("Gaz", "Gas"),
              L("Ocağın üstünde 7,5 milimetrelik bir ızgarada sıcak gaz akar: kaldırma, ısının genleştirdiği hacim, havanın "
@@ -47,12 +45,11 @@ public:
                "and sends out its light by Planck's law.")},
             {L("Odun", "Wood"),
              L("Her kütük yamalara bölünür, her yama yüzeyinden özüne katman katman: ısınır, kurur, Di Blasi'nin üç tepkimesiyle "
-               "uçucuya ve köre ayrışır. Kömür yüzeyde oksijenle yanar (kor), külü onu örter; üfleyince kül kalkar, kor "
-               "harlanır. Kütükler birbirlerini ışımayla ısıtır: tek kütük yanmaz.",
+               "uçucuya ve köre ayrışır. Kömür yüzeyde oksijenle yanar (kor), külü onu örter. Kütükler birbirlerini "
+               "ışımayla ısıtır: tek kütük yanmaz.",
                "Each log is cut into patches, each patch layered from its surface to its core: it heats, dries and breaks "
                "down by Di Blasi's three reactions into volatiles and char. The char burns at the surface with oxygen (an "
-               "ember), its ash covers it; blown on, the ash lifts and the ember flares. The logs warm each other by "
-               "radiation: a single log will not burn.")},
+               "ember), its ash covers it. The logs warm each other by radiation: a single log will not burn.")},
             {L("Işık", "Light"),
              L("Ateşin ışığı gazın kendi ışımasından gelir: taşlar, toprak ve kütükler her karede ondan aydınlanır, gölgeleri "
                "ışın izlemeyle. Alevin rengi isin sıcaklığından, korun kızıllığı yüzeyinkinden.",
@@ -60,11 +57,11 @@ public:
                "frame, their shadows ray traced. The flame's colour is its soot's temperature, the ember's red its surface's.")},
             {L("Kıvılcım", "Sparks"),
              L("Her kıvılcım bir kömür pulu: odunun içinde buhar ve uçucu cebi patlayınca (çıtırtı) fırlar, alevin çektiği hava "
-               "kızgın kabuktan koparır ya da kora düşen odun saçar. Gazın akışı onu taşır, ağırlığı kalınlığından, sürüklenmesi "
+               "kızgın kabuktan koparır ya da kora oturan odun saçar. Gazın akışı onu taşır, ağırlığı kalınlığından, sürüklenmesi "
                "genişliğinden: ince pul tüyle yükselir, kalını yere düşer. Ulaşan oksijenle yanar, rengi kendi sıcaklığıdır; "
                "yanıp bitince ya da soğuyunca söner.",
                "Each spark is a flake of char: thrown out when a pocket of steam and volatiles bursts in the wood (a crackle), "
-               "torn off a glowing crust by the air the flame draws in, or knocked out of the embers by wood landing on them. "
+               "torn off a glowing crust by the air the flame draws in, or knocked out of the embers by wood settling on them. "
                "The gas's flow carries it, its weight its thickness's, its drag its breadth's: a thin flake rides the plume up, "
                "a thick one falls. It burns with the oxygen that reaches it, its colour its own temperature; it goes out "
                "burnt away or cooled.")},
@@ -73,13 +70,7 @@ public:
         i.tags = {L("Fizik", "Physics"), L("Yanma", "Combustion"), L("Işık", "Light")};
         i.image = "assets/gallery/ates.jpg";
         i.accent = 0xE8894A;
-        i.keys = {{L("Ateş", "Fire"),
-                   {{L("Sol tık (basılı)", "Left click (held)"), L("Üfle", "Blow")},
-                    {"F", L("Kibrit çak", "Strike a match")},
-                    {"Q", L("Bir avuç çalı at", "Throw on a handful of twigs")},
-                    {"E", L("Kütük at", "Throw on a log")},
-                    {"T", L("Zamanı hızlandır", "Speed time up")}}},
-                  {L("Yürüyüş", "Walking"),
+        i.keys = {{L("Yürüyüş", "Walking"),
                    {{L("Fare", "Mouse"), L("Etrafa bak", "Look around")},
                     {"W A S D", L("Yürü", "Walk")},
                     {"C", L("Çömel", "Crouch")},
@@ -160,12 +151,6 @@ public:
             host.captureMouse(look_);
             started_ = true;
         }
-        for (const auto& e : in.events) {
-            if (e.id == "time" && e.item >= 0) setScale(e.item);
-            if (e.id == "match") a_.strikeMatch();
-            if (e.id == "twigs") a_.addFuel(0);
-            if (e.id == "log") a_.addFuel(1);
-        }
         if (in.pressed(GLFW_KEY_TAB)) {
             look_ = !look_;
             host.captureMouse(look_);
@@ -178,14 +163,6 @@ public:
             if (in.pressed(GLFW_KEY_1 + k)) goView(k);
         if (in.pressed(GLFW_KEY_UP)) a_.exposureEv += 0.25f;
         if (in.pressed(GLFW_KEY_DOWN)) a_.exposureEv -= 0.25f;
-        if (in.pressed(GLFW_KEY_F)) {
-            a_.strikeMatch();
-            host.toast(L("Kibrit çakıldı", "A match struck"));
-        }
-        if (in.pressed(GLFW_KEY_Q)) a_.addFuel(0);
-        if (in.pressed(GLFW_KEY_E)) a_.addFuel(1);
-        if (in.pressed(GLFW_KEY_T)) setScale((scale_ + 1) % 5);
-        a_.blowing = in.leftDown && look_;
 
         const float sens = 0.0022f;
         if (look_) {
@@ -240,11 +217,6 @@ public:
         }
     }
 
-    void setScale(int k) {
-        scale_ = std::clamp(k, 0, 4);
-        a_.timeScale = kScales[scale_];
-    }
-
     const void* image(int& w, int& h) override {
         w = a_.width;
         h = a_.height;
@@ -265,33 +237,6 @@ public:
         s.chips.push_back({L("kor ", "embers ") + num(a_.wood.stats.hottest - 273.15, 0) + " °C"});
         s.metrics.push_back({L("Kare", "Frame"), num(a_.R.renderMs + a_.R.volumeMs + a_.R.displayMs, 1) + " ms"});
         s.metrics.push_back({L("Gaz", "Gas"), num(a_.gas.stats.stepMs, 1) + " ms"});
-        app::Control c;
-        c.kind = app::Control::Kind::Choice;
-        c.id = "time";
-        c.title = L("ZAMAN", "TIME");
-        c.items = {"×1", "×5", "×15", "×30", "×60"};
-        c.active = scale_;
-        c.detail = L("Odunun zamanı; alev hep gerçek hızında", "The wood's time; the flame always runs real time");
-        s.controls.push_back(c);
-        app::Control m;
-        m.kind = app::Control::Kind::Button;
-        m.id = "match";
-        m.text = L("Kibrit", "Match");
-        m.keys = "F";
-        m.section = true;
-        s.controls.push_back(m);
-        app::Control t;
-        t.kind = app::Control::Kind::Button;
-        t.id = "twigs";
-        t.text = L("Çalı", "Twigs");
-        t.keys = "Q";
-        s.controls.push_back(t);
-        app::Control l;
-        l.kind = app::Control::Kind::Button;
-        l.id = "log";
-        l.text = L("Kütük", "Log");
-        l.keys = "E";
-        s.controls.push_back(l);
     }
 
     void screenshot(app::Host& host) override {
@@ -334,7 +279,6 @@ private:
     float3 vel_{0, 0, 0};
     float crouch_ = 0.0f, baseEye_ = 1.65f;
     float warm_ = 0.0f;
-    int scale_ = 0;
 };
 
 }   // namespace

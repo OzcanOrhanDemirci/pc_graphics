@@ -291,32 +291,9 @@ void AtesApp::lay(const std::string& name) {
         gas.burner.radius = 0.5f * cfg.f("test.D", 0.4f);
         gas.burner.power = cfg.f("test.Q", 20.0f) * 1000.0f;
         gas.burner.temp = 450.0f;
-    } else if (name == "soguk") {
-        // laid and not lit: a bundle of twigs, tinder (shavings a millimetre thick) on it, a tent of kindling over
-        // them, two logs across. (Without the tinder a match could not light it: a twig of 7 mm takes a match's flame
-        // half a minute to char, the match burns 18 s)
-        for (int i = 0; i < 14; ++i) {
-            const float a = 6.2831853f * rnd(seed), r = 0.06f * rnd(seed);
-            log(0.003f + 0.002f * rnd(seed), 0.22f + 0.08f * rnd(seed), make_float3(r * std::cos(a), 0.012f + 0.03f * rnd(seed), r * std::sin(a)),
-                make_float3(std::cos(a * 3), 0.15f * (rnd(seed) - 0.5f), std::sin(a * 3)), 0.0f, 288.0f, 0);
-        }
-        for (int i = 0; i < 24; ++i) {
-            const float a = 6.2831853f * rnd(seed), r = 0.03f * rnd(seed);
-            log(0.0005f + 0.0005f * rnd(seed), 0.06f + 0.04f * rnd(seed), make_float3(r * std::cos(a), 0.03f + 0.02f * rnd(seed), r * std::sin(a)),
-                make_float3(std::cos(a * 5), 0.4f * (rnd(seed) - 0.5f), std::sin(a * 5)), 0.0f, 288.0f, 0);
-        }
-        for (int i = 0; i < 6; ++i) {
-            const float a = 6.2831853f * i / 6;
-            const float3 foot = make_float3(0.13f * std::cos(a), 0.012f, 0.13f * std::sin(a));
-            const float3 axis = normalize(make_float3(-std::cos(a) * 0.55f, 1.0f, -std::sin(a) * 0.55f));
-            log(0.011f, 0.3f, foot + axis * 0.15f, axis, 0.0f, 288.0f);
-        }
-        log(0.045f, 0.42f, make_float3(0, 0.045f, -0.2f), make_float3(1, 0, 0), 0.0f, 288.0f);
-        log(0.045f, 0.42f, make_float3(0, 0.045f, 0.2f), make_float3(1, 0, 0), 0.0f, 288.0f);
     } else {
-        // burning (the default, "ates") or its embers ("kor"): a bed of charred chunks, glowing; over it the logs,
-        // charred a few millimetres and hot where the fire has had them
-        const bool embers = name == "kor";
+        // burning: a bed of charred chunks, glowing; over it the logs, charred a few millimetres and hot where the fire
+        // has had them
         {
             // the bed: each coal set down where it falls (on the ground or the coals before it); packed, they keep each
             // other hot by their radiation, as a bed of coals does
@@ -331,18 +308,16 @@ void AtesApp::lay(const std::string& name) {
                     make_float3(std::cos(a + 1.3f), 0.2f * (rnd(seed) - 0.5f), std::sin(a + 1.3f)), rr * 0.95f, 1050.0f + 100.0f * rnd(seed));
             }
         }
-        if (!embers) {
-            // the logs, let down onto the bed and the third across them (laid after it: set down first, the coals
-            // that came after rose over them and rolled off, out of the fire)
-            const float over = 0.45f;
-            const float apart = cfg.f("bed.logApart", 0.15f);
-            log(0.042f, 0.40f, make_float3(-0.02f, over, -apart), make_float3(1, 0, 0.12f), 0.006f, 900.0f);
-            log(0.038f, 0.38f, make_float3(0.03f, over, apart), make_float3(1, 0, -0.1f), 0.006f, 900.0f);
-            log(0.040f, 0.42f, make_float3(0.0f, over + 0.12f, 0.0f), make_float3(0.15f, 0.0f, 1.0f), 0.005f, 880.0f);
-            // the kindling that lit them has burnt down: its last seconds stand in as a small burner under the logs
-            // (the loading's first seconds; then the logs carry on, or not, by themselves)
-            starterLeft_ = cfg.f("starter.seconds", 8.0f);
-        }
+        // the logs, let down onto the bed and the third across them (laid after it: set down first, the coals that came
+        // after rose over them and rolled off, out of the fire)
+        const float over = 0.45f;
+        const float apart = cfg.f("bed.logApart", 0.15f);
+        log(0.042f, 0.40f, make_float3(-0.02f, over, -apart), make_float3(1, 0, 0.12f), 0.006f, 900.0f);
+        log(0.038f, 0.38f, make_float3(0.03f, over, apart), make_float3(1, 0, -0.1f), 0.006f, 900.0f);
+        log(0.040f, 0.42f, make_float3(0.0f, over + 0.12f, 0.0f), make_float3(0.15f, 0.0f, 1.0f), 0.005f, 880.0f);
+        // the kindling that lit them has burnt down: its last seconds stand in as a small burner under the logs (the
+        // loading's first seconds; then the logs carry on by themselves)
+        starterLeft_ = cfg.f("starter.seconds", 8.0f);
     }
     patchRad_.clear();
     prevPoses_.clear();
@@ -401,61 +376,6 @@ void AtesApp::placeAndView() {
     prevPoses_ = poses;
 }
 
-void AtesApp::strikeMatch() {
-    // where the look meets the pit's floor, 1.5 cm over it (a match is held to the tinder at the pile's foot:
-    // a flame lights what is over it)
-    const float3 e = eye(), f = forward();
-    float3 at = make_float3(0, 0.015f, 0);
-    if (f.y < -0.05f) {
-        const float t = (0.015f - e.y) / f.y;
-        at = e + f * t;
-    }
-    const float r = std::sqrt(at.x * at.x + at.z * at.z);
-    if (r > 0.35f) at = at * (0.35f / r);
-    at.y = 0.015f;
-    matchAt = at;
-    matchLeft = cfg.f("match.seconds", 18.0f);
-}
-
-void AtesApp::addFuel(int kind) {
-    // on the pile, where the look points, dropped from a little above (the bodies settle it: ates_body)
-    const float3 e = eye(), f = forward();
-    float3 at = make_float3(0, 0.1f, 0);
-    if (f.y < -0.05f) {
-        const float t = (0.1f - e.y) / f.y;
-        at = e + f * t;
-    }
-    const float r = std::sqrt(at.x * at.x + at.z * at.z);
-    if (r > 0.25f) at = at * (0.25f / r);
-    unsigned int seed = unsigned(wood.logs.size() * 7919u + 3u);
-    ALog L;
-    L.kind = kind;
-    if (kind == 0) {
-        for (int i = 0; i < 8; ++i) {
-            ALog t;
-            t.kind = 0;
-            t.r0 = 0.003f + 0.002f * rnd(seed);
-            t.len = 0.2f + 0.1f * rnd(seed);
-            t.nTheta = 6;
-            t.nZ = 10;
-            const float a = 6.2831853f * rnd(seed);
-            t.pos = at + make_float3(0.03f * (rnd(seed) - 0.5f), 0.12f + 0.01f * i, 0.03f * (rnd(seed) - 0.5f));
-            t.q = quatFromX(make_float3(std::cos(a), 0.1f * (rnd(seed) - 0.5f), std::sin(a)), 0.0f);
-            wood.add(t);
-        }
-    } else {
-        L.r0 = 0.035f + 0.015f * rnd(seed);
-        L.len = 0.36f + 0.08f * rnd(seed);
-        L.nTheta = std::max(12, int(std::round(2 * 3.14159f * L.r0 / 0.012f)));
-        L.nZ = std::max(8, int(std::round(L.len / 0.0125f)));
-        const float a = std::atan2(f.z, f.x) + 1.5708f;
-        L.pos = at + make_float3(0, 0.15f, 0);
-        L.q = quatFromX(make_float3(std::cos(a), 0, std::sin(a)), 6.2831853f * rnd(seed));
-        wood.add(L);
-    }
-    syncLogs(true);
-}
-
 void AtesApp::update(float dt) {
     const float dtGas = cfg.f("gas.dt", 1.0f / 120.0f);
     // the logs fall and settle in the clock's time
@@ -463,15 +383,8 @@ void AtesApp::update(float dt) {
     landingSparks();
     gasAcc_ += dt;
     const int maxSteps = cfg.i("gas.maxSteps", 3);
-    // the hand: a match's flame (a small burner at its head), the breath along the look
-    if (matchLeft > 0.0f) {
-        gas.burner.point = true;
-        gas.burner.centre = matchAt;
-        gas.burner.radius = 0.012f;
-        gas.burner.power = cfg.f("match.power", 80.0f);
-        gas.burner.temp = 1300.0f;
-        matchLeft -= dt;
-    } else if (starterLeft_ > 0.0f) {
+    // the kindling's last seconds: a burner under the logs
+    if (starterLeft_ > 0.0f) {
         gas.burner.point = false;
         gas.burner.centre = make_float3(0, 0, 0);
         gas.burner.radius = 0.12f;
@@ -482,38 +395,6 @@ void AtesApp::update(float dt) {
         gas.burner.radius = 0.0f;
     }
     gas.jet.on = false;
-    if (blowing) {
-        // one leans in to blow: the mouth a little before what the look meets (the first log or coal, else the
-        // ground), along the look; looking past the pile, a little before the grid
-        const float3 e = eye(), f = forward();
-        const float3 lo = gas.origin, hi = gas.origin + make_float3(gas.nx * gas.h, gas.ny * gas.h, gas.nz * gas.h);
-        const float3 inv = make_float3(1.0f / f.x, 1.0f / f.y, 1.0f / f.z);
-        const float3 a = (lo - e) * inv, b = (hi - e) * inv;
-        const float t0 = std::max(std::max(std::min(a.x, b.x), std::min(a.y, b.y)), std::max(std::min(a.z, b.z), 0.0f));
-        const float t1 = std::min(std::min(std::max(a.x, b.x), std::max(a.y, b.y)), std::max(a.z, b.z));
-        float hit = f.y < -1e-3f ? -e.y / f.y : 1e9f;
-        for (const ALog& L : wood.logs) {
-            if (!L.alive) continue;
-            // the ray against the log's cylinder: its distance from the axis is the radius, within its length
-            const std::array<float, 12> P = L.pose();
-            const float3 ax = make_float3(P[0], P[4], P[8]), o = e - L.pos;
-            const float3 dp = f - ax * dot(f, ax), op = o - ax * dot(o, ax);
-            const float A = dot(dp, dp), B = dot(op, dp), C = dot(op, op) - L.radius * L.radius;
-            const float disc = B * B - A * C;
-            if (A < 1e-9f || disc < 0.0f) continue;
-            const float t = (-B - std::sqrt(disc)) / A;
-            if (t > 0.0f && t < hit && std::fabs(dot(o + f * t, ax)) <= 0.5f * L.len) hit = t;
-        }
-        if (t1 > t0) {
-            gas.jet.on = true;
-            const float lean = cfg.f("blow.lean", 0.3f);
-            gas.jet.origin = e + f * std::max(0.0f, hit < t1 ? hit - lean : t0 - lean);
-            gas.jet.dir = f;
-            gas.jet.speed = cfg.f("blow.speed", 9.0f);
-            gas.jet.radius = cfg.f("blow.radius", 0.012f);
-            gas.jet.length = cfg.f("blow.length", 1.2f);
-        }
-    }
     cost = FrameCost{};
     const int steps = std::min(int(gasAcc_ / dtGas), maxSteps);
     if (steps > 0) {

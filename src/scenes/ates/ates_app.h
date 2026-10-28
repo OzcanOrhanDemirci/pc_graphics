@@ -1,5 +1,5 @@
 // Scene 12 "Ateş": one run's state, shared by the live scene and the command-line tools (--scene ates ...): the world
-// (the stones' scans, the ground), the gas, the wood, the eye, and the hand (blowing, a match, the logs added).
+// (the stones' scans, the ground), the gas, the wood and the eye.
 #pragma once
 #include "core/config.h"
 #include "scenes/ates/ates_body.h"
@@ -38,9 +38,6 @@ public:
     float timeScale = 1.0f;          // the wood's time against the real (the flame always runs real time)
     double simTime = 0.0;            // seconds of the gas
     double woodTime = 0.0;           // seconds of the wood (scaled)
-    bool blowing = false;            // the person blows along the look (held)
-    float matchLeft = 0.0f;          // seconds the match still burns
-    float3 matchAt{0, 0, 0};
     std::string layout;              // the fire laid at the start (ates.cfg: layout)
     double loadMs = 0.0;
     struct FrameCost {
@@ -53,10 +50,7 @@ public:
     void buildWorld();
     bool initRenderer(std::string& err);
     void initSim();
-    void lay(const std::string& name);   // the fire's wood: "ates" burning, "soguk" laid and unlit, "kor" embers only
-    // a piece of wood thrown on where the eye looks (kind 0 twigs, 1 a log)
-    void addFuel(int kind);
-    void strikeMatch();
+    void lay(const std::string& name);   // the fire's wood: "ates" burning ("brulor": the test burner alone)
     void update(float dt);           // the gas (fixed steps) and the wood
     void render(float dt);
     bool setDlss(bool on);
