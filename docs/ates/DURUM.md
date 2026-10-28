@@ -82,31 +82,11 @@ El ocağın açık yanından (kütükler x boyunca), kömürlere bakarak çömel
 | Gaz adımı | 4,6-5,0 ms (128×192×128, 7,5 mm) | `--gaz`, `--bench` |
 | Kıvılcım | 10 sn'de ~630 doğan; adım + çizim 0,2 ms | §2 |
 
-## 5 · Açık işler (öncelik sırasıyla)
+## 5 · Açık işler
 
-0. **Senaryoların ikisi yarım, ikisi yürümüyor** (§3): alevsiz kor evresi, üflemeyle alevin güçlenmesi, kordan
-   yeniden alev, tutuşturma. Ortak noktaları ızgaradan ince alevler: talaşın alevi, korun üstündeki uçucunun
-   tutuşması.
-1. **Tutuşturma yürümüyor:** kibrit talaşı 1350 K'e ısıtıp 0,2 kW'lık bir parlama veriyor, kibrit bitince sönüyor.
-   Talaşın ve çırpının alevleri hücreden (7,5 mm) ince: ızgara onları taşıyamıyor. Aday: ince yakıtın uçucuları
-   laminer tabakasız karışsın (`gas.wallMix=0` denemesi parlamayı 0,27 kW'a çıkardı, yetmedi) ya da ince yakıtın
-   alevi CO filmi gibi ızgara altı yansın.
-2. **Alevin ekseni çok sıcak, puf yavaş** (§4): sürekli alevde 1550 K (McCaffrey ~1100), puf 1,3 Hz (beklenen 2,4).
-   Aday: 7,5 mm'de alev kenarındaki karışmanın (çekilen hava) eksikliği; Smagorinsky katsayısı ve vortisite
-   hapsi ölçülerek.
-3. **Duman:** çizimi var (`smoke.ext=4.4`), varsayılan kapalı. Alevin üstünde ateşin ışığıyla turuncu bir iz
-   güzel; ama ateşin dibinde kalan duman alevin binlerce lüksünde kütükleri örten parlak bir perdeye dönüyor
-   (en yoğun 24 g/m³; gerçek kamp ateşinin dibinde duman yok denecek kadar az). Aday: dumanın ışığına gölge
-   (kütükler ve dumanın kendisi), dipte yoğuşmanın kaynağı (soğuk yüzlerden kaçan uçucu). Uzak tüy (pişmiş) yok.
-4. **FPS ≥ 40** (Özcan kuralı: DLSS en az Kalite, çözünürlük düşmez): bakış 0'da 38,1, bakış 3'te 33,7. En büyük
-   kalem gaz (karede 3 adım, 15 ms). İki ölçülmüş kaldıraç, ikisi de Özcan'ın kararı: (a) basınç çözücüsünde adım
-   başına 1 V-döngüsü (`gas.vcycles=1`): adım 4,91 → 4,40 ms (karede ~1,7 ms), artık 4e-3 → 5e-2, brülör ölçüleri
-   aynı (HRR 19,6 kW, %95 yüksekliği 0,40 m); (b) DLSS-RR'yi DLAA'dan Kalite kipine almak (ölçülmedi).
-5. **Kor görünümü:** kömürler hep aynı kırmızı, külde çeşit az; mavi CO alevi büyük (önceki oturumun notu; bu
-   sabahki fizik değişikliklerinden sonra yeniden bakılmalı).
-6. Kör test (gerçek gece kamp ateşi fotoğraf ve videolarıyla; referanslar Özcan'da), puf frekansı ölçüsü,
-   `tools/titreme.py` ile görüntü gürültüsü.
-7. Galeri resmi (`assets/gallery/ates.jpg` yok) ve README bölümü.
+Sıralı ve ölçütleriyle **PLAN §7**'de (iyileştirme turu, 2026-10-28 öğlen: Özcan'ın denemesi). Kısaca: İ1 temiz siyah ·
+İ2 ateş sürsün (kütük kırılır, yatak beslenir) · İ3 yeni odun ve ince yakıt tutuşsun · İ4 harlama görünsün · İ5
+yeniden yakma · İ6 kor görünümü · İ7 duman · İ8 FPS · İ9 kapanış.
 
 ## 6 · Kararlar (Claude, tam yetkiyle)
 

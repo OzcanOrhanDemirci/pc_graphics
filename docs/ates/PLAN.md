@@ -1,7 +1,7 @@
 # PLAN · sahne 12 "Ateş"
 
-> **Taslak (2026-10-28 gece): Özcan'ın onayını bekliyor.** Tek kaynak plan; durum ve ölçümler F0'da açılacak
-> `docs/ates/DURUM.md`'de. Hafızada görev kartı `grafik/project_ates_gorevi.md` (Özcan'ın brief'i birebir orada); önce
+> **Onaylı (Özcan, 2026-10-28).** Tek kaynak plan; durum ve ölçümler `docs/ates/DURUM.md`'de. Sıradaki iş §7
+> (iyileştirme turu). Hafızada görev kartı `grafik/project_ates_gorevi.md` (Özcan'ın brief'i birebir orada); önce
 > `genel/feedback_gpu_ve_grafik.md` §37-38 ve `grafik/feedback_grafik_netlik.md` okunur.
 
 ## 0 · Hedef (değişmez)
@@ -171,3 +171,32 @@ OptiX hattı ve DLSS-RR (Orman) · göz uyumu ve panel · `tools/titreme.py`, `k
 tutuşturma ve iki boy yakıt (§3.9) · kıvılcımın kısa izi (§3.7) · gökyüzü: aysız ama tam siyah değil (ufukta hafif gök
 ışığı; duman tepede seçilir) · FPS hedefi ≥ 40 · ad **Ateş** (kimlik `ates`, galeride 12) · isteğe bağlı: maşayla
 karıştırma (kıvılcımın doğal tetikleyicisi), üflemede nefes süresi.
+
+## 7 · İyileştirme turu (2026-10-28 öğlen, Özcan'ın denemesinden)
+
+Özcan sahneyi açtı (çökme, siyah kareler, galeri düzeldikten sonra): *"Bolca odun ve çalı atmama rağmen ateş
+güçlenmedi, zaman geçtikçe yakıt olmasına rağmen söndü. Kibrit çalışmıyor görünüyor. Harlamayı göremedim. Söndükten
+sonra tekrar nasıl yakıcaz. Ekranda böyle fırça izi gibi noktacıklanma, grenlenme var. [...] Özellikle siyah-karanlıkta
+çok belli oluyor. Temiz siyah değil grenli çizgili siyah gibi. Artık sahne hatalı değil, çalışıyor. Bu iyileştirme ve
+geliştirmeler lazım."*
+
+İlke değişmez: davranış fizikten çıkar, her adım bir ölçüyle başlar ve biter. Her adımdan sonra yedi senaryo
+(`--senaryo`) koşar, DURUM §3'ün tablosu güncellenir; bir adım bir senaryoyu bozarsa adım bitmemiştir. Turun bitti
+tanımı: yedi senaryonun yedisi ✅, siyah temiz, FPS ≥ 40 (ya da Özcan'ın kararı), Özcan'ın gözü.
+
+| | Ne | Bulgu (ölçülmüş ya da okunmuş) | Yol | Bitti (ölçü) |
+|---|---|---|---|---|
+| İ1 | **Temiz siyah** (gren, çizgi, fırça izi) | Son geçiş titretmeyi (dither) sRGB eğrisinden **önce**, doğrusal ışıkta ekliyor: siyahın yanında eğrinin eğimi 12,92, ±0,5 seviye ±6,5'e çıkıyor; desen doğrusal bir karmadan (`px·1973 + py·9277`): çizgiler. İkinci aday: yüzeylerin ateş ışığı pikselde karede tek rastgele blok örneği, karanlıkta DLSS-RR'nin artığı fırça izi | (a) titretme sRGB'den sonra, görüntü uzayında ±0,5 seviye, mavi gürültü; (b) karanlık bölgenin piksel sapması ve `tools/titreme.py` önce/sonra; (c) fırça izi kalırsa: pikselde 2-4 ışık örneği (maliyeti ölçülür) ya da uzak alan için ateşin ışığı birkaç gölgeli toplu ışık | Siyahta piksel sapması ≤ 1 seviye, çizgi yok; titreme Orman tabanında |
+| İ2 | **Ateş sürsün** (yakıt varken sönmesin) | 60 kat hızda 45. dk'da alev ve kor birlikte bitiyor, 1,5 kg odun kalıyor. Kütükler incelip yerinde kalıyor; yatağa yeni kömür düşmüyor (§3.3'ün kırılma ve çökmesi yapılmadı); yatak tükenince altı soğuyan kütükler söner | Kömür kabuğu çatlak deseninde parça parça kopar (kalınlığı ve ısıl gerilmesi), kütüğün taşıyan çekirdeği incelince kütük kırılır: parçalar katı cisim olarak yatağa düşer, kütle ve ısı korunur | `kor`: alevli evre + alevsiz kor evresi, kalan odun < %10; kendi hâlinde 3 kg ~1 saat |
+| İ3 | **Yeni odun tutuşsun, çalı ve çıra alevlensin** | Atılan kütük ateşi önce bastırıyor, odunun 3. dakikasında tutuşuyor; çalı ve çıranın alevi hücreden (7,5 mm) ince, ızgara taşıyamıyor: kibritle 0,2 kW'lık parlama | İnce yakıtın (r < h) alevi ızgara altı: uçucusu yüzeyinde, oksijenin difüzyonuyla sınırlı yanar (CO filmi gibi), ısısının payı yüzeye, kalanı gaza; alev büyüyünce ızgaraya geçer. Tutuşma: yüzey sıcaklığı + kritik uçucu akısı (odunda ~1-2 g/m²s) | `tutusturma`: kibrit → çıra saniyeler, çırpı onlarca saniye, kütük dakikalar; `besleme`: atılan çalı saniyeler içinde parlar, kütük 1-2 dk'da ateşi büyütür |
+| İ4 | **Harlama görünsün** | Üfleme korun yanmasını %30 artırıyor, en sıcak yüzey +15-50 K: gözle seçilmiyor; alevin ısı salımı düşüyor | Canlıda ağzın kora uzaklığında jetin vardığı hız ölçülür; gerçek nefes (dudakta 10-30 m/s, ~1-2 L/s) ve eğilip üfleme; kül kalkması (`ashLift`); kor 1300-1400 K'e çıkıp turuncu-sarıya döner (renk sıcaklıktan) | `ufleme`: kor +200 K mertebesi, kor yanması 2-3 kat, üfleme bitince alev büyür; kıyas klibi |
+| İ5 | **Söndükten sonra yeniden yakma** | `yeniden`: kor 1530 K'e çıkıyor, alev dönmüyor; kor da bitince yakacak bir yol yok (kibrit çalışmıyor) | İ2 + İ3 + İ4 üstüne: (a) kor varken üfle, çalı at → alev; (b) kor bitmişse kibrit + çalı. Panelde ipucu satırı | `yeniden` ✅; yeni senaryo `yeniden_kibrit` ✅ |
+| İ6 | Kor görünümü | Kömürler hep aynı kırmızı, külde çeşit az | İ2'nin yeni kömürleri (boy ve sıcaklık çeşidi) üstüne; kül örtüsü sıcaklığa ve yaşa göre | Özcan'ın gözü, gerçek kor fotoğrafıyla kıyas |
+| İ7 | Duman | Çizimi var, kapalı: dipteki duman alevin ışığında kütükleri örten parlak perde (en yoğun 24 g/m³) | Dumanın ışığına gölge (kütükler, dumanın kendisi); dipte yoğuşmanın kaynağı (soğuk yüzlerden kaçan uçucu) | Dipte perde yok, alevin üstünde iz; varsayılan açık |
+| İ8 | FPS ≥ 40 | Bakış 0'da 38,1, bakış 3'te 33,7; gaz karede 15 ms | Özcan'ın kararı: `gas.vcycles=1` (karede ~1,7 ms) ya da DLSS Kalite kipi | ≥ 40, en kötü ≥ 30 |
+| İ9 | Kapanış | Alevin ekseni sıcak (1550 K, McCaffrey ~1100), puf 1,3 Hz (2,4) | Alev kenarında karışma (Smagorinsky, vortisite); kör test (Özcan'ın gece kamp ateşi referansları); README bölümü, klip | §2'nin hepsi |
+
+**Oturum sırası (önerim):** 1. oturum İ1 + İ2 · 2. oturum İ3 + İ4 + İ5 · 3. oturum İ6-İ9. Sıra bağımlılıktan: İ1 her
+şeye bakmayı temizler; İ2 olmadan kor evresi ve yeniden yakma olmaz; İ3 tutuşturmanın, beslemenin ve yeniden yakmanın
+ortak çekirdeği.
+
