@@ -299,25 +299,28 @@ void AtesApp::lay(const std::string& name) {
         // burning (the default, "ates") or its embers ("kor"): a bed of charred chunks, glowing; over it the logs,
         // charred a few millimetres and hot where the fire has had them
         const bool embers = name == "kor";
-        if (!embers) {
-            // the logs, let down onto the ground and the third across them
-            const float over = 0.45f;
-            log(0.042f, 0.40f, make_float3(-0.02f, over, -0.15f), make_float3(1, 0, 0.12f), 0.006f, 900.0f);
-            log(0.038f, 0.38f, make_float3(0.03f, over, 0.15f), make_float3(1, 0, -0.1f), 0.006f, 900.0f);
-            log(0.040f, 0.42f, make_float3(0.0f, over + 0.12f, 0.0f), make_float3(0.15f, 0.0f, 1.0f), 0.005f, 880.0f);
-        }
         {
-            // the bed between and under them: each coal set down where it falls (on the ground, against the logs or
-            // the coals before it); packed, they keep each other hot by their radiation, as a bed of coals does
-            const int chunks = cfg.i("bed.chunks", 22);
+            // the bed: each coal set down where it falls (on the ground or the coals before it); packed, they keep each
+            // other hot by their radiation, as a bed of coals does
+            // (chunks about as long as they are thick, as a log breaks up into: sticks a few times longer stacked into a
+            // tower where they crossed, which toppled and threw them out of the pit)
+            const int chunks = cfg.i("bed.chunks", 40);
+            const float reach = cfg.f("bed.reach", 0.13f);
             for (int i = 0; i < chunks; ++i) {
-                const float a = 6.2831853f * rnd(seed), r = 0.14f * std::sqrt(rnd(seed));
-                const float rr = 0.012f + 0.012f * rnd(seed);
-                log(rr, 0.05f + 0.07f * rnd(seed), make_float3(r * std::cos(a), rr + 0.02f, r * std::sin(a)),
+                const float a = 6.2831853f * rnd(seed), r = reach * std::sqrt(rnd(seed));
+                const float rr = 0.01f + 0.01f * rnd(seed);
+                log(rr, rr * (2.0f + 1.5f * rnd(seed)), make_float3(r * std::cos(a), rr + 0.02f, r * std::sin(a)),
                     make_float3(std::cos(a + 1.3f), 0.2f * (rnd(seed) - 0.5f), std::sin(a + 1.3f)), rr * 0.95f, 1050.0f + 100.0f * rnd(seed));
             }
         }
         if (!embers) {
+            // the logs, let down onto the bed and the third across them (laid after it: set down first, the coals
+            // that came after rose over them and rolled off, out of the fire)
+            const float over = 0.45f;
+            const float apart = cfg.f("bed.logApart", 0.15f);
+            log(0.042f, 0.40f, make_float3(-0.02f, over, -apart), make_float3(1, 0, 0.12f), 0.006f, 900.0f);
+            log(0.038f, 0.38f, make_float3(0.03f, over, apart), make_float3(1, 0, -0.1f), 0.006f, 900.0f);
+            log(0.040f, 0.42f, make_float3(0.0f, over + 0.12f, 0.0f), make_float3(0.15f, 0.0f, 1.0f), 0.005f, 880.0f);
             // the kindling that lit them has burnt down: its last seconds stand in as a small burner under the logs
             // (the loading's first seconds; then the logs carry on, or not, by themselves)
             starterLeft_ = cfg.f("starter.seconds", 8.0f);
