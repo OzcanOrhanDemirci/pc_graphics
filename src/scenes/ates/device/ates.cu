@@ -552,6 +552,22 @@ static __forceinline__ __device__ float4 gasAt(float3 p) {
     return tex3D<float4>(cudaTextureObject_t(params.gasTex), g.x, g.y, g.z);
 }
 
+// the smoke's fluence at a point (lux, RGB): its coarse grid, trilinear
+static __forceinline__ __device__ float3 smokeLightAt(float3 p) {
+    const float3 c = (p - params.gasOrigin) * (1.0f / params.smokeCell) - make_float3(0.5f, 0.5f, 0.5f);
+    const float x = fminf(fmaxf(c.x, 0.0f), float(params.snx - 1) - 1e-3f), y = fminf(fmaxf(c.y, 0.0f), float(params.sny - 1) - 1e-3f),
+                z = fminf(fmaxf(c.z, 0.0f), float(params.snz - 1) - 1e-3f);
+    const int i = int(x), j = int(y), k = int(z);
+    const float a = x - i, b = y - j, e = z - k;
+    auto at = [&](int ii, int jj, int kk) {
+        const float4 v = params.smokeLight[ii + params.snx * (jj + params.sny * kk)];
+        return make_float3(v.x, v.y, v.z);
+    };
+    const float3 c00 = at(i, j, k) * (1 - a) + at(i + 1, j, k) * a, c10 = at(i, j + 1, k) * (1 - a) + at(i + 1, j + 1, k) * a;
+    const float3 c01 = at(i, j, k + 1) * (1 - a) + at(i + 1, j, k + 1) * a, c11 = at(i, j + 1, k + 1) * (1 - a) + at(i + 1, j + 1, k + 1) * a;
+    return (c00 * (1 - b) + c10 * b) * (1 - e) + (c01 * (1 - b) + c11 * b) * e;
+}
+
 extern "C" __global__ void __raygen__volume() {
     const uint3 li = optixGetLaunchIndex();
     const unsigned int px = li.x, py = li.y, i = py * params.width + px;
@@ -591,8 +607,8 @@ extern "C" __global__ void __raygen__volume() {
             continue;
         }
         const float4 g = gasAt(p);
-        const float T = g.x, fv = g.y, q = g.w;
-        if (T < 330.0f && fv < 1e-4f) continue;
+        const float T = g.x, fv = g.y, sm = g.z, q = g.w;
+        if (T < 330.0f && fv < 1e-4f && sm < 1e-3f) continue;
         if (fv > 1e-5f) {
             const float3 jE = table(params.sootEmit, T) * fv;
             const float3 a = params.sootAbs * fv;
@@ -604,6 +620,17 @@ extern "C" __global__ void __raygen__volume() {
             Tr *= att;
         }
         if (q > 0.01f) L += Tr * params.chemEmit * (q * 1e6f * ds);
+        if (sm > 1e-3f && params.smokeExt > 0.0f) {
+            // the smoke: it scatters the fire's light (evenly every way: J = albedo sigma E / 4 pi) and dims what is
+            // behind it; it thins out over the grid's top 10 cm, where the plume leaves the grid (a flat lid else)
+            const float top = params.gasOrigin.y + params.gasSize.y;
+            const float sig = params.smokeExt * sm * fminf(fmaxf((top - p.y) * 10.0f, 0.0f), 1.0f);
+            if (sig > 1e-6f) {
+                const float att = __expf(-sig * ds);
+                L += Tr * smokeLightAt(p) * (params.smokeAlbedo * (1.0f / 12.566371f) * (1.0f - att));
+                Tr *= att;
+            }
+        }
         if (T > 340.0f && params.hazeScale > 0.0f) {
             const float Tx = gasAt(p + make_float3(eh, 0, 0)).x, Ty = gasAt(p + make_float3(0, eh, 0)).x, Tz = gasAt(p + make_float3(0, 0, eh)).x;
             const float3 gT = make_float3(Tx - T, Ty - T, Tz - T) * (1.0f / eh);

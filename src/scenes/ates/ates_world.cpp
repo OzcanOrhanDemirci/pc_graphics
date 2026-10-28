@@ -219,6 +219,11 @@ bool AtesApp::initRenderer(std::string& err) {
     R.params.skyHorizon = cfg.v3("sky.horizon", make_float3(0.0016f, 0.0017f, 0.0020f));
     R.params.ambient = cfg.f("sky.ambient", 0.002f);
     R.params.march = cfg.f("march", 0.0035f);
+    // white smoke of smouldering wood: 4.4 m^2/g of light taken out of the beam (Mulholland, SFPE Handbook), most
+    // of it scattered. Off by default (0): the gas still leaves smoke by the fire's foot that the flame's light turns
+    // into a bright veil over the logs (docs/ates/DURUM.md); smoke.ext=4.4 draws it
+    R.params.smokeExt = cfg.f("smoke.ext", 0.0f);
+    R.params.smokeAlbedo = cfg.f("smoke.albedo", 0.9f);
     R.params.chemEmit = ates_spectra::chemiluminescence(cfg.f("chem.eta", 3.4e-7f));
     R.params.hazeScale = cfg.f("haze", 1.0f);
     R.params.bloomStrength = cfg.f("bloom", 0.02f);

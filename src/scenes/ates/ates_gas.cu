@@ -1081,8 +1081,9 @@ __global__ void kPack(Dims d, CScalars s, const float* q, AGasConst k, cudaSurfa
                              __half_as_ushort(__float2half_rn(v.w))),
                 out, i * int(sizeof(ushort4)), j, kk);
     // the cell's mark for the march (the same thresholds it draws by: soot over 1e-5, a front over 0.01 MW/m^3, the
-    // haze over 330 K), on every brick whose samples read it (a cell beside a brick's side is read from inside it)
-    const unsigned int lvl = (v.y > 1e-5f || v.w > 0.01f) ? 2u : v.x > 330.0f ? 1u : 0u;
+    // haze over 330 K, smoke over 1 mg/m^3), on every brick whose samples read it (a cell beside a brick's side is read
+    // from inside it)
+    const unsigned int lvl = (v.y > 1e-5f || v.w > 0.01f) ? 2u : (v.x > 330.0f || v.z > 1e-3f) ? 1u : 0u;
     if (lvl == 0u) return;
     const int x0 = max(i - 1, 0) / ATES_BRICK, x1 = min(i + 1, d.nx - 1) / ATES_BRICK, y0 = max(j - 1, 0) / ATES_BRICK, y1 = min(j + 1, d.ny - 1) / ATES_BRICK,
               z0 = max(kk - 1, 0) / ATES_BRICK, z1 = min(kk + 1, d.nz - 1) / ATES_BRICK;

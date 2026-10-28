@@ -482,6 +482,21 @@ void AtesRenderer::setGas(cudaTextureObject_t tex, const unsigned int* bricks, f
     }
     params.lightCdf = cdf_;
     params.lightN = n;
+    // the smoke's light on a grid of two blocks a side (its fluence changes over centimetres, not millimetres)
+    const int sx = (lnx + 1) / 2, sy = (lny + 1) / 2, sz = (lnz + 1) / 2;
+    if (sx * sy * sz != smokeN_) {
+        if (smokeLight_) cudaFree(smokeLight_);
+        CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&smokeLight_), size_t(sx) * sy * sz * sizeof(float4)));
+        CUDA_CHECK(cudaMemset(smokeLight_, 0, size_t(sx) * sy * sz * sizeof(float4)));
+        if (!smokeList_) CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&smokeList_), 2 * kSmokeCap * sizeof(float4)));
+        if (!smokeCount_) CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&smokeCount_), sizeof(unsigned int)));
+        smokeN_ = sx * sy * sz;
+    }
+    params.smokeLight = smokeLight_;
+    params.snx = sx;
+    params.sny = sy;
+    params.snz = sz;
+    params.smokeCell = 2.0f * lightCell;
 }
 
 void AtesRenderer::freePlanes() {
@@ -550,7 +565,12 @@ void AtesRenderer::launch(CUdeviceptr rg, unsigned int w, unsigned int h) {
 
 void AtesRenderer::render() {
     if (iasDirty_) buildIas();
-    if (params.lightI && lightN_ > 0) atesLightCdf(params.lightI, lightN_, lum_, cdf_, scanTmp_, scanBytes_, stream_);
+    if (params.lightI && lightN_ > 0) {
+        atesLightCdf(params.lightI, lightN_, lum_, cdf_, scanTmp_, scanBytes_, stream_);
+        if (params.smokeExt > 0.0f)
+            atesSmokeLight(params.lightI, params.lnx, params.lny, params.lnz, params.lightOrigin, params.lightCell, smokeList_, smokeCount_, kSmokeCap, params.snx,
+                           params.sny, params.snz, params.smokeCell, smokeLight_, stream_);
+    }
     CUDA_CHECK(cudaEventRecord(ev0_, stream_));
     launch(rgRender_, params.width, params.height);
     CUDA_CHECK(cudaEventRecord(evD_, stream_));
@@ -643,7 +663,8 @@ void AtesRenderer::release() {
     top_.clear();
     for (void** p : {reinterpret_cast<void**>(&dGeoms_), reinterpret_cast<void**>(&dInst_), reinterpret_cast<void**>(&dLogs_),
                      reinterpret_cast<void**>(&dMats_), reinterpret_cast<void**>(&lum_), reinterpret_cast<void**>(&cdf_), &scanTmp_,
-                     reinterpret_cast<void**>(&tables_), reinterpret_cast<void**>(&lumS_)}) {
+                     reinterpret_cast<void**>(&tables_), reinterpret_cast<void**>(&lumS_), reinterpret_cast<void**>(&smokeList_),
+                     reinterpret_cast<void**>(&smokeCount_), reinterpret_cast<void**>(&smokeLight_)}) {
         if (*p) cudaFree(*p);
         *p = nullptr;
     }
@@ -651,6 +672,7 @@ void AtesRenderer::release() {
     lumN_ = 0;
     scanBytes_ = 0;
     lightN_ = 0;
+    smokeN_ = 0;
     for (int k = 0; k < kLevels; ++k) {
         if (levels_[k]) cudaFree(levels_[k]);
         if (accum_[k]) cudaFree(accum_[k]);

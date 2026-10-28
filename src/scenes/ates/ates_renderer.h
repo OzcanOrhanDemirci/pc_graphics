@@ -103,6 +103,11 @@ private:
     void* scanTmp_ = nullptr;
     size_t scanBytes_ = 0;
     int lightN_ = 0;
+    float4* smokeList_ = nullptr;        // the smoke's light: the blocks that light it, its fluence grid
+    unsigned int* smokeCount_ = nullptr;
+    float4* smokeLight_ = nullptr;
+    int smokeN_ = 0;
+    static constexpr unsigned int kSmokeCap = 16384;
     static const int kLevels = 6;
     float4* levels_[kLevels] = {};
     float4* accum_[kLevels] = {};
@@ -128,6 +133,9 @@ private:
 
 // the cumulative sum of the light blocks' luminance (ates_kernels.cu)
 void atesLightCdf(const float3* light, int n, float* lum, float* cdf, void*& tmp, size_t& tmpBytes, cudaStream_t st);
+// the smoke's fluence on its coarse grid from the fire's light blocks (ates_kernels.cu)
+void atesSmokeLight(const float3* light, int lnx, int lny, int lnz, float3 origin, float lightCell, float4* list, unsigned int* count, unsigned int cap,
+                    int sx, int sy, int sz, float smokeCell, float4* out, cudaStream_t st);
 // the picture's mean luminance over each of a gx x gy grid of cells, then each cell's mean squared luminance
 // (ates_kernels.cu)
 void atesSampleLum(const float4* hdr, int w, int h, int gx, int gy, float* out, cudaStream_t st);

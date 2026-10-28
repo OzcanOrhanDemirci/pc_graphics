@@ -86,6 +86,12 @@ struct AtesParams {
     const float3* greyEmit;   // [ATES_TABLE_N] a black body's luminance (cd/m^2, RGB): the embers, times emissivity
     float3 sootAbs;           // soot's absorption per metre per unit (fv * 1e6) at the R, G, B wavelengths
     float3 chemEmit;          // the flame front's own light (CH*, C2*) per W/m^3 of heat release: cd/m^2 per m
+    // the smoke (the tar condensed as the gas cools): lit by the fire, its fluence on a coarse grid (lux, RGB: the light
+    // blocks' intensities over r^2, no shadows), scattering it with albedo smokeAlbedo; per g/m^3 smokeExt per metre
+    const float4* smokeLight;
+    int snx, sny, snz;
+    float smokeCell;          // the grid's cell (m), from gasOrigin
+    float smokeExt, smokeAlbedo;
     float march;              // the volume's step (m)
     float hazeScale;          // the heat haze times this (1: physical)
 
