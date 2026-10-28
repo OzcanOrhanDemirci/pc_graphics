@@ -241,8 +241,19 @@ __global__ void kCells(CellArgs a) {
                 if (kk < d.nz - 1) Tnb = fmaxf(Tnb, P[c + d.nx * d.ny]);
             }
             float Tig = fmaxf(T, a.Tprev ? Tnb - K.nbMargin : T);
-            // a glowing ember lights what flows over it (its boundary layer is hotter than the cell's mean)
-            if (a.src.ignite && a.src.ignite[c] >= K.TignSurf) Tig = fmaxf(Tig, K.TignF + 1.0f);
+            // a glowing ember lights what flows over it (its boundary layer is hotter than the cell's mean), in the cell
+            // off its face and the ones around that: its thermal layer and the CO's film flame on it reach past the
+            // first cell's centre, and the volatiles of a log beside it meet them there
+            if (a.src.ignite) {
+                float ig = a.src.ignite[c];
+                if (i > 0) ig = fmaxf(ig, a.src.ignite[c - 1]);
+                if (i < d.nx - 1) ig = fmaxf(ig, a.src.ignite[c + 1]);
+                if (j > 0) ig = fmaxf(ig, a.src.ignite[c - d.nx]);
+                if (j < d.ny - 1) ig = fmaxf(ig, a.src.ignite[c + d.nx]);
+                if (kk > 0) ig = fmaxf(ig, a.src.ignite[c - d.nx * d.ny]);
+                if (kk < d.nz - 1) ig = fmaxf(ig, a.src.ignite[c + d.nx * d.ny]);
+                if (ig >= K.TignSurf) Tig = fmaxf(Tig, K.TignF + 1.0f);
+            }
             if (pilot) Tig = fmaxf(Tig, a.burner.temp);
             // a step lets a cell grow by at most maxExpand (its heat beyond waits for the next): the expansion the
             // projection and the advection carry stays small per step, as their accuracy needs (a whole stoichiometric
