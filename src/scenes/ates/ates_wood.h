@@ -80,6 +80,7 @@ public:
     int *outer = nullptr;          // per patch: the first layer still there (the surface recedes inward)
     float* massOut = nullptr;      // per patch: kg left (for the bodies)
     float* radOut = nullptr;       // per patch: its surface radius now (m)
+    float* probe = nullptr;        // per patch, when set (debug.wood): its surface's balance, 8 terms (kWoodStep)
 
     bool init(unsigned int capacity, cudaStream_t st);
     // a new log (its patches set to the night's air temperature, or charred and hot: `burnt` depth of char, surface at

@@ -152,6 +152,7 @@ struct StepArgs {
     int nLogs;
     float bedT, bedR;   // the ash bed under the pile: its temperature (K) and reach (m)
     float* red;   // [0] pyrolysis kg/s, [1] char kg/s, [2] mass kg, [3] hottest (bits), [4] ember area
+    float* probe;   // per patch, or none: O2, gas T, h, absorbed, the char's heat kept, emitted, convected (W/m^2), speed
     ASparkSink sp;
 };
 
@@ -331,6 +332,7 @@ __global__ void kWoodStep(StepArgs a) {
             const float dt = dtW / nsub;
             float volat = 0.0f, tarOut = 0.0f, charOx = 0.0f, coOut = 0.0f, o2In = 0.0f, heatGas = 0.0f;
             float ashT = a.ash[p];
+            float qOxKept = 0.0f;
             for (int s = 0; s < nsub; ++s) {
                 // --- the char at the surface burns with the oxygen that reaches it
                 const float Ts = Tl[out];
@@ -352,6 +354,7 @@ __global__ void kWoodStep(StepArgs a) {
                     coOut += mC * fCO * (28.0f / 12.0f) * As * dt;
                     o2In += mC * sC * As * dt;
                     heatGas += (1.0f - K.charHeatShare) * qOx * As * dt;
+                    qOxKept = K.charHeatShare * qOx;
                     ashT += mC * K.ashInChar / K.rhoAsh * dt;
                 }
                 // a draught lifts the ash; ash on a side facing down falls (a slow loss everywhere: it settles off)
@@ -434,6 +437,18 @@ __global__ void kWoodStep(StepArgs a) {
             }
             a.outer[p] = out;
             a.ash[p] = ashT;
+            if (a.probe) {
+                float* q = a.probe + size_t(p) * 8;
+                const float Ts = Tl[out];
+                q[0] = Og;
+                q[1] = Tg;
+                q[2] = hc;
+                q[3] = K.emissivity * qin;
+                q[4] = qOxKept;
+                q[5] = K.emissivity * SIGMA * Ts * Ts * Ts * Ts;
+                q[6] = hc * (Ts - Tg);
+                q[7] = spd;
+            }
             // what went into the gas, at its real rates (the wood's time ran timeScale times faster)
             const float inv = 1.0f / dtW;
             if (cg >= 0) {
@@ -715,6 +730,7 @@ void AtesWood::step(float dtWood, float timeScale, AtesGas& gas) {
     a.bedT = bedT;
     a.bedR = bedR;
     a.red = red;
+    a.probe = probe;
     a.sp = sparks;
     kWoodStep<<<(patches + 127) / 128, 128, 0, st_>>>(a);
     WOOD_CHECK(cudaEventRecord(e1_, st_));

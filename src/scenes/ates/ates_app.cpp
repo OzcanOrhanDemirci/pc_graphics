@@ -264,6 +264,7 @@ int runAtesCli(int argc, char** argv) {
     const double t0 = nowMs();
     const float dtGas = a.cfg.f("gas.dt", 1.0f / 120.0f);
     a.cam = AtesApp::view(views.empty() ? 0 : views[0]);
+    if (a.cfg.i("debug.wood", 0)) cudaMalloc(reinterpret_cast<void**>(&a.wood.probe), size_t(a.wood.capacity) * 8 * sizeof(float));
     for (float t = 0.0f; t < settle; t += dtGas) {
         for (const auto& th : throws)
             if (th.first >= t && th.first < t + dtGas) a.addFuel(th.second);
@@ -275,7 +276,11 @@ int runAtesCli(int argc, char** argv) {
                 a.wood.stats.charBurn * 1e3f, a.gas.stats.fuelIn * 1e3f, a.gas.stats.rad / 1000.0f, a.gas.stats.maxT);
     if (a.cfg.i("debug.wood", 0)) {
         // each log's surface: mean char depth, ash, surface temperature
-        std::vector<float> cd(a.wood.patches), as(a.wood.patches), st(a.wood.patches);
+        std::vector<float> cd(a.wood.patches), as(a.wood.patches), st(a.wood.patches), pr;
+        if (a.wood.probe) {
+            pr.resize(size_t(a.wood.patches) * 8);
+            cudaMemcpy(pr.data(), a.wood.probe, pr.size() * 4, cudaMemcpyDeviceToHost);
+        }
         cudaMemcpy(cd.data(), a.wood.charD, cd.size() * 4, cudaMemcpyDeviceToHost);
         cudaMemcpy(as.data(), a.wood.ash, as.size() * 4, cudaMemcpyDeviceToHost);
         cudaMemcpy(st.data(), a.wood.surfT, st.size() * 4, cudaMemcpyDeviceToHost);
@@ -291,6 +296,14 @@ int runAtesCli(int argc, char** argv) {
             }
             std::printf("  kutuk %zu: r %.1f mm (simdi %.1f), komur %.2f mm, kul %.2f mm, yuzey %.0f K (en %.0f), kutle %.0f g, yer (%.3f %.3f %.3f)%s\n", l,
                         L.r0 * 1e3f, L.radius * 1e3f, c / n * 1e3, s2 / n * 1e3, t / n, tmax, L.mass * 1e3f, L.pos.x, L.pos.y, L.pos.z, L.sleeping ? " uyuyor" : "");
+            if (pr.empty()) continue;
+            // its surface's balance, the mean over its patches (W/m^2): what it absorbs and keeps of its char's heat
+            // against what it radiates and gives the gas
+            double m[8] = {};
+            for (int k = 0; k < n; ++k)
+                for (int j = 0; j < 8; ++j) m[j] += pr[size_t(L.firstPatch + k) * 8 + j] / n;
+            std::printf("      O2 %.3f, gaz %.0f K, h %.1f W/m2K, hiz %.2f m/s | emilen %.1f, komur isisi %.1f | isinan %.1f, tasinan %.1f kW/m2\n", m[0], m[1],
+                        m[2], m[7], m[3] * 1e-3, m[4] * 1e-3, m[5] * 1e-3, m[6] * 1e-3);
         }
     }
     if (a.cfg.i("debug.slice", 0)) {
