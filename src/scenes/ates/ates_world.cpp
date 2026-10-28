@@ -345,6 +345,7 @@ void AtesApp::lay(const std::string& name) {
     }
     patchRad_.clear();
     prevPoses_.clear();
+    R.setLogs({}, {}, barkMat_, endMat_);   // (a new fire: every log's structure built anew)
     syncLogs(true);
 }
 
@@ -361,9 +362,22 @@ void AtesApp::syncLogs(bool rebuild) {
         }
         patchRad_.assign(wood.patches, 0.0f);
         if (wood.patches) cudaMemcpy(patchRad_.data(), wood.radOut, wood.patches * sizeof(float), cudaMemcpyDeviceToHost);
+        // the logs whose shape the fire has changed since their structure was built (a twentieth of a millimetre on
+        // a ring, on average), at most a few a time: their structures are rebuilt
+        std::vector<int> changed;
+        for (size_t i = 0; i < wood.logs.size(); ++i) {
+            ALog& L = wood.logs[i];
+            float sum = 0.0f;
+            for (float r : L.ringRadius) sum += r;
+            if (L.meshRadiusSum <= 0.0f) L.meshRadiusSum = sum;   // (built just now, as new)
+            else if (std::fabs(sum - L.meshRadiusSum) > 5e-5f * float(L.nZ) && changed.size() < 8) {
+                changed.push_back(int(i));
+                L.meshRadiusSum = sum;
+            }
+        }
         std::vector<ALogMesh> meshes(wood.logs.size());
         for (size_t i = 0; i < wood.logs.size(); ++i) buildLogMesh(wood.logs[i], patchRad_, meshes[i]);
-        R.setLogs(meshes, {}, barkMat_, endMat_);
+        R.setLogs(meshes, changed, barkMat_, endMat_);
         // (the materials list may have grown: the end grain's)
         R.uploadMaterials(assets.materials);
         prevPoses_.clear();

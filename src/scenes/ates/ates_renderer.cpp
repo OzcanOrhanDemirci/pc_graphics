@@ -349,13 +349,20 @@ void AtesRenderer::setLogs(const std::vector<ALogMesh>& meshes, const std::vecto
     CUDA_CHECK(cudaStreamSynchronize(stream_));
     logSideMat_ = sideMaterial;
     logEndMat_ = endMaterial;
+    // a log thrown on adds its own structure; the others are rebuilt only as asked (their shape drifted). Rebuilding
+    // them all at every log, several hundred with the twigs, faulted in OptiX's builder now and then (an illegal
+    // address, the application gone: one throw in a few dozen)
     std::vector<int> todo = changed;
-    if (meshes.size() != logGas_.size()) {
+    if (meshes.size() < logGas_.size()) {
         for (auto& l : logGas_)
             for (void* p : l.bufs) cudaFree(p);
         logGas_.assign(meshes.size(), LogGas());
         todo.clear();
         for (size_t i = 0; i < meshes.size(); ++i) todo.push_back(int(i));
+    } else if (meshes.size() > logGas_.size()) {
+        const size_t old = logGas_.size();
+        logGas_.resize(meshes.size());
+        for (size_t i = old; i < meshes.size(); ++i) todo.push_back(int(i));
     }
     for (int i : todo) {
         LogGas& L = logGas_[size_t(i)];

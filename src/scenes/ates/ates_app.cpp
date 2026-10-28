@@ -591,8 +591,12 @@ int runAtesCli(int argc, char** argv) {
             double gasMs = 0.0, woodMs = 0.0, surfMs = 0.0, dlssMs = 0.0, volMs = 0.0, dispMs = 0.0, bodyMs = 0.0;
             int steps = 0;
             float dt = 1.0f / 60.0f;
+            const double benchT0 = a.simTime;
             for (int k = 0; k < bench; ++k) {
                 const double s0 = nowMs();
+                // (--odun times past the settling fall in the measured frames: wood thrown on while it is drawn)
+                for (const auto& th : throws)
+                    if (th.first >= settle && th.first - settle >= a.simTime - benchT0 && th.first - settle < a.simTime - benchT0 + dt) a.addFuel(th.second);
                 a.update(dt);
                 cudaDeviceSynchronize();
                 const double s1 = nowMs();
