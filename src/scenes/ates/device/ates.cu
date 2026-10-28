@@ -83,46 +83,156 @@ struct Surf {
     float rough;
 };
 
-// a log's surface at (u, v) of its side (u around, v along): the char's cracks (a cell pattern whose size and depth
-// follow the char's), the ash, the glow of its temperature
-static __forceinline__ __device__ void logSurface(const ALogView& L, float2 uv, Surf& s) {
-    // (u is metres around at the first radius, v metres along from the middle)
-    const float fu = uv.x / (6.2831853f * L.r0), fv = uv.y / L.len + 0.5f;
-    const int it = min(max(int(fu * L.nTheta), 0), L.nTheta - 1), iz = min(max(int(fv * L.nZ), 0), L.nZ - 1);
-    const unsigned int p = L.firstPatch + unsigned(iz * L.nTheta + it);
-    const float T = L.surfT[p], charD = L.charD[p], ash = L.ash[p];
+// value noise in [0, 1): a hash at the lattice's corners, blended smoothly between them
+static __forceinline__ __device__ float vnoise(float3 p, unsigned int seed) {
+    const float fx = floorf(p.x), fy = floorf(p.y), fz = floorf(p.z);
+    const int ix = int(fx), iy = int(fy), iz = int(fz);
+    const float tx = p.x - fx, ty = p.y - fy, tz = p.z - fz;
+    const float wx = tx * tx * (3.0f - 2.0f * tx), wy = ty * ty * (3.0f - 2.0f * ty), wz = tz * tz * (3.0f - 2.0f * tz);
+    float c[8];
+    for (int k = 0; k < 8; ++k)
+        c[k] = u01(hash32(unsigned(ix + (k & 1)) * 73856093u ^ unsigned(iy + ((k >> 1) & 1)) * 19349663u ^ unsigned(iz + (k >> 2)) * 83492791u ^ seed));
+    const float x0 = c[0] + (c[1] - c[0]) * wx, x1 = c[2] + (c[3] - c[2]) * wx, x2 = c[4] + (c[5] - c[4]) * wx, x3 = c[6] + (c[7] - c[6]) * wx;
+    const float y0 = x0 + (x1 - x0) * wy, y1 = x2 + (x3 - x2) * wy;
+    return y0 + (y1 - y0) * wz;
+}
+
+// a block's slope at d from a crack's lip: its top is a pillow, flat at its middle (R in from the lip) and falling
+// into the crack at ~50 degrees
+static __forceinline__ __device__ float bevel(float d, float R) {
+    const float x = fmaxf(1.0f - fmaxf(d, 0.0f) / R, 0.0f);
+    return 1.2f * x * x;
+}
+
+// a log's surface: the char's checks, its grain, the ash, the glow of its temperature. `uv` the side's (metres around
+// at the first radius, metres along from the middle), `lp` the point in the log's own space (its axis along x), `axis`
+// that axis in the world, `width` the pixel's footprint (m)
+static __forceinline__ __device__ void logSurface(const ALogView& L, float2 uv, float3 lp, bool end, float3 axis, float width, Surf& s) {
+    // the place around: the side's angle (stable as the surface burns in), on an end the point's own
+    float th = uv.x / L.r0;
+    float rho = L.r0;
+    if (end) {
+        th = atan2f(lp.z, lp.y);
+        if (th < 0.0f) th += 6.2831853f;
+        rho = sqrtf(lp.y * lp.y + lp.z * lp.z);
+    }
+    const float v = end ? (lp.x > 0.0f ? 0.5f : -0.5f) * L.len : uv.y;
+    // the patches' state, bilinear between their centres (around: wrapped; along: clamped)
+    const float gu = th / 6.2831853f * L.nTheta - 0.5f, gv = fminf(fmaxf((v / L.len + 0.5f) * L.nZ - 0.5f, 0.0f), float(L.nZ - 1));
+    const int u0 = int(floorf(gu)), v0 = min(int(gv), L.nZ - 1);
+    const float au = gu - floorf(gu), av = gv - float(v0);
+    const int ua = (u0 % L.nTheta + L.nTheta) % L.nTheta, ub = (ua + 1) % L.nTheta, v1 = min(v0 + 1, L.nZ - 1);
+    const unsigned int p00 = L.firstPatch + unsigned(v0 * L.nTheta + ua), p01 = L.firstPatch + unsigned(v0 * L.nTheta + ub),
+                       p10 = L.firstPatch + unsigned(v1 * L.nTheta + ua), p11 = L.firstPatch + unsigned(v1 * L.nTheta + ub);
+    auto bil = [&](const float* f) { return (f[p00] * (1.0f - au) + f[p01] * au) * (1.0f - av) + (f[p10] * (1.0f - au) + f[p11] * au) * av; };
+    const float T = bil(L.surfT), charD = bil(L.charD), ash = bil(L.ash);
     // char: black where it is deeper than the bark's first fraction of a millimetre
     const float charred = smoothstepf(0.0002f, 0.0015f, charD);
-    // the char splits into squares (the alligator pattern): cells about twice the char's depth, cracks as wide as a
-    // tenth of it; in them the glow is deeper and hotter (a cavity radiates as a black body and loses less)
-    const float cellSize = fmaxf(2.5f * charD, 0.004f);
-    const float cx = uv.x / cellSize, cy = uv.y / (1.6f * cellSize);
-    const int ix = int(floorf(cx)), iy = int(floorf(cy));
-    float d1 = 1e9f, d2 = 1e9f;
-    for (int b = -1; b <= 1; ++b)
-        for (int a = -1; a <= 1; ++a) {
-            const unsigned int hc = hash32(unsigned(ix + a) * 73856093u ^ unsigned(iy + b) * 19349663u ^ L.seed);
-            const float px = float(ix + a) + 0.15f + 0.7f * u01(hc), py = float(iy + b) + 0.15f + 0.7f * u01(hash32(hc));
-            const float dd = (cx - px) * (cx - px) + (cy - py) * (cy - py);
-            if (dd < d1) {
-                d2 = d1;
-                d1 = dd;
-            } else if (dd < d2) {
-                d2 = dd;
+    // the checks (the alligator pattern): long cracks along the grain cut the char into strips, short ones across cut
+    // the strips into blocks, staggered from strip to strip, a fifth of them missing (two blocks as one); the lines
+    // wander. Their size is the log's (set when the char first split, it does not crawl as it deepens), their width
+    // grows with the char's depth. A coal (a short piece of the bed) breaks into few, broad facets
+    const bool coal = L.len < 0.15f;
+    const float cell = coal ? fminf(fmaxf(0.75f * L.r0, 0.009f), 0.018f) : fminf(fmaxf(0.3f * L.r0, 0.007f), 0.014f);
+    const float pillow = coal ? 0.45f : 1.0f;
+    const int ncol = max(6, int(6.2831853f * L.r0 / (0.85f * cell) + 0.5f));
+    const float wU = 6.2831853f * L.r0 / float(ncol), H = 1.5f * cell;
+    // (the noise's place: around on the first radius's circle, so it closes on itself)
+    const float cs = cosf(th), sn = sinf(th);
+    const float3 pn = make_float3(v, L.r0 * cs, L.r0 * sn);
+    const float ic = 1.0f / cell;
+    const float u = th * L.r0 + (vnoise(pn * ic, L.seed) - 0.5f) * 0.7f * cell;
+    const float vw = v + (vnoise(pn * ic, L.seed ^ 0x5bd1e995u) - 0.5f) * 0.7f * cell;
+    const float aa = fmaxf(0.5f * width, 0.00015f);
+    const float hw0 = fminf(0.0003f + 0.07f * charD, 0.12f * cell) * charred;
+    const float wob = 0.6f + 0.8f * vnoise(pn * (3.0f * ic), L.seed ^ 0x27d4eb2fu);
+    float crack, edgeD, dhdu = 0.0f, dhdv = 0.0f;   // (edgeD: the distance out from the nearest crack's lip, m)
+    unsigned int blockId;
+    if (!end) {
+        const int c = int(floorf(u / wU));
+        const unsigned int cw = unsigned((c % ncol + ncol) % ncol);
+        const float du0 = u - float(c) * wU, du1 = float(c + 1) * wU - u;
+        const unsigned int hcol = hash32(cw * 2654435761u ^ L.seed);
+        const float off = u01(hcol) * H;
+        const int k0 = int(floorf((vw - off) / H));
+        float lo = -1e9f, hi = 1e9f;
+        int klo = k0 - 3;
+        for (int k = k0 - 2; k <= k0 + 3; ++k) {
+            const unsigned int hk = hash32(hcol ^ unsigned(k) * 0x9e3779b9u);
+            if (u01(hash32(hk)) < 0.2f) continue;
+            const float b = off + H * (float(k) + 0.35f * (u01(hk) - 0.5f));
+            if (b <= vw && b > lo) {
+                lo = b;
+                klo = k;
             }
+            if (b > vw && b < hi) hi = b;
         }
-    const float edge = 0.5f * (sqrtf(d2) - sqrtf(d1));
-    const float crackW = 0.07f * charred;
-    const float crack = 1.0f - smoothstepf(crackW * 0.5f, crackW, edge);
-    const float ashCover = smoothstepf(0.00002f, 0.00012f, ash);
-    s.albedo = s.albedo * (1.0f - charred) + make_float3(0.035f, 0.032f, 0.03f) * charred;
-    s.albedo = s.albedo * (1.0f - crack * 0.6f);
-    s.albedo = s.albedo * (1.0f - ashCover) + make_float3(0.55f, 0.53f, 0.5f) * ashCover;
-    s.rough = s.rough * (1.0f - charred) + 0.9f * charred;
-    // the glow: a grey body at its temperature (emissivity 0.9), the cracks 60 K hotter, ash lets a part through
-    const float Te = T + 60.0f * crack * charred;
+        const float dv0 = fminf(vw - lo, 2.0f * H), dv1 = fminf(hi - vw, 2.0f * H);
+        const float hwL = hw0 * wob * 1.2f, hwT = hw0 * wob * 0.8f;
+        const float e = fminf(fminf(du0, du1) - hwL, fminf(dv0, dv1) - hwT);
+        edgeD = e;
+        // (a crack narrower than the pixel covers its share of it)
+        crack = (1.0f - smoothstepf(-aa, aa, e)) * fminf(hwT / aa, 1.0f);
+        // the block's top is a pillow over its whole width and length; each block leans its own way a little
+        const float Ru = 0.45f * wU, Rv = 0.45f * (dv0 + dv1);
+        blockId = hash32(hcol ^ unsigned(klo) * 0x85ebca6bu);
+        dhdu = ((bevel(du0 - hwL, Ru) - bevel(du1 - hwL, Ru)) * pillow + 0.3f * (u01(blockId) - 0.5f)) * charred;
+        dhdv = ((bevel(dv0 - hwT, Rv) - bevel(dv1 - hwT, Rv)) * pillow + 0.3f * (u01(hash32(blockId)) - 0.5f)) * charred;
+    } else {
+        // an end: cracks out from the heart (every few strips' lines, each from its own depth in) and along the rings
+        const int c = int(floorf(u / wU));
+        const unsigned int cw = unsigned((c % ncol + ncol) % ncol);
+        const float duL = (u - float(c) * wU) * rho / L.r0, duR = (float(c + 1) * wU - u) * rho / L.r0;
+        const bool radL = u01(hash32(cw * 2654435761u ^ L.seed ^ 0x1234567u)) < 0.4f, radR = u01(hash32(((cw + 1) % unsigned(ncol)) * 2654435761u ^ L.seed ^ 0x1234567u)) < 0.4f;
+        const float inL = L.r0 * (0.2f + 0.6f * u01(hash32(cw ^ L.seed))), inR = L.r0 * (0.2f + 0.6f * u01(hash32(((cw + 1) % unsigned(ncol)) ^ L.seed)));
+        float e = 1e9f;
+        if (radL && rho > inL) e = fminf(e, duL - hw0 * wob);
+        if (radR && rho > inR) e = fminf(e, duR - hw0 * wob);
+        const float ring = 0.35f * L.r0;
+        const float rr = rho + (vnoise(pn * ic, L.seed ^ 0x2545f491u) - 0.5f) * 0.3f * ring;
+        const float dr = fabsf(rr - ring * floorf(rr / ring + 0.5f));
+        if (u01(hash32(unsigned(rr / ring + 0.5f) ^ cw ^ L.seed)) < 0.5f) e = fminf(e, dr - 0.7f * hw0 * wob);
+        edgeD = e;
+        crack = (1.0f - smoothstepf(-aa, aa, e)) * fminf(0.7f * hw0 * wob / aa, 1.0f);
+        blockId = hash32(cw ^ unsigned(rr / ring) * 0x85ebca6bu ^ L.seed);
+    }
+    // the grain: fibres along the log (fine across it, long along it); on an end its rings
+    const float grain = end ? 0.5f + 0.5f * sinf(rho * (6.2831853f / 0.003f) + 4.0f * vnoise(pn * ic, L.seed ^ 0x68e31da4u))
+                            : vnoise(make_float3(v * (1.0f / 0.03f), pn.y * (1.0f / 0.0012f), pn.z * (1.0f / 0.0012f)), L.seed ^ 0x68e31da4u);
+    if (!end && (dhdu != 0.0f || dhdv != 0.0f)) {
+        float3 tu = cross(axis, s.n);
+        const float tl = length(tu);
+        if (tl > 1e-4f) {
+            tu = tu * (1.0f / tl);
+            const float3 tv = cross(s.n, tu);
+            const float3 nb = normalize(s.n - tu * dhdu - tv * dhdv);
+            if (dot(nb, s.ng) > 0.05f) s.n = nb;
+        }
+    }
+    // the char's tone: block to block a little, the grain in it, the cracks' depths dark
+    const float tone = 0.75f + 0.5f * u01(hash32(blockId ^ 0x3c6ef372u));
+    const float3 charA = make_float3(0.038f, 0.035f, 0.033f) * (tone * (0.85f + 0.3f * grain));
+    s.albedo = s.albedo * (1.0f - charred) + charA * charred;
+    s.albedo = s.albedo * (1.0f - 0.75f * crack);
+    // the ash: a pale skin on the blocks' tops first (none down in the cracks), in patches
+    const float ashCover = smoothstepf(0.00002f, 0.00012f, ash * (0.3f + 1.4f * vnoise(pn * (0.7f * ic), L.seed ^ 0x165667b1u))) * (1.0f - crack);
+    s.albedo = s.albedo * (1.0f - ashCover) + make_float3(0.5f, 0.48f, 0.45f) * (ashCover * (0.8f + 0.4f * grain));
+    // (char's microsurface is very rough: its whole reflectance, gloss and all, is a few per cent, so the gloss is a
+    // faint broad sheen, not a highlight; ash is matt)
+    s.rough = (s.rough * (1.0f - charred) + 0.85f * charred) * (1.0f - ashCover) + 0.95f * ashCover;
+    // the glow: a grey body at its temperature (emissivity 0.9). A crack is a cavity: its walls see mostly each other,
+    // their loss to the open is the opening's share F of a flat face's, so under the same heat they run hotter by
+    // F^(-1/4) (F ~ 0.53 for a crack as deep as it is wide: x1.17) and radiate as a black body. The face's temperature
+    // wanders a little within a patch (the patch is a centimetre; the ash, the draught vary inside it)
+    // The lips share the walls' heat (it conducts out over about the crack's own width), and a crack is as deep as
+    // the char let it split: some run deep, some are shallow
+    const float lip = __expf(-fmaxf(edgeD, 0.0f) / (1.5f * hw0 + aa));
+    const float deep = 0.35f + 0.65f * smoothstepf(0.3f, 0.7f, vnoise(pn * (1.3f * ic), L.seed ^ 0x2c1b3c6du));
+    const float cavity = fmaxf(crack, 0.6f * lip * charred) * deep * smoothstepf(0.001f, 0.004f, charD);
+    const float mottle = 1.0f + 0.05f * (vnoise(pn * (1.6f * ic), L.seed ^ 0x7f4a7c15u) - 0.5f);
+    const float Te = T * mottle * (1.0f + 0.17f * cavity);
     const float through = 1.0f - 0.8f * ashCover;
-    if (Te > 650.0f) s.emit = table(params.greyEmit, Te) * (0.9f * through);
+    if (Te > 650.0f) s.emit = table(params.greyEmit, Te) * ((0.9f + 0.08f * cavity) * through);
 }
 
 static __forceinline__ __device__ Surf surface(const Hit& h, float3 d, float width) {
@@ -205,7 +315,10 @@ static __forceinline__ __device__ Surf surface(const Hit& h, float3 d, float wid
     s.n = n;
     s.ng = ng;
     s.albedo = albedo;
-    if (in.log >= 0) logSurface(params.logs[in.log], uvRaw, s);
+    if (in.log >= 0) {
+        const float3 axis = normalize(make_float3(h.m[0], h.m[4], h.m[8]));
+        logSurface(params.logs[in.log], uvRaw, lerp3b(q0, q1, q2, h.b), h.input == 1, axis, width, s);
+    }
     return s;
 }
 
