@@ -122,6 +122,12 @@ add_library(pc_core OBJECT
     src/scenes/ates/ates_world.cpp
     src/scenes/ates/ates_app.cpp
     src/scenes/ates/ates_live.cpp
+    src/scenes/dag/dag_atmos.cpp
+    src/scenes/dag/dag_world.cpp
+    src/scenes/dag/dag_near.cpp
+    src/scenes/dag/dag_renderer.cpp
+    src/scenes/dag/dag_app.cpp
+    src/scenes/dag/dag_live.cpp
     ${TP}/tinyexr/miniz.c)
 add_executable(pc_graphics src/app/main.cpp $<TARGET_OBJECTS:pc_core>)
 

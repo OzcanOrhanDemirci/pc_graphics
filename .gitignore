@@ -32,3 +32,7 @@ assets/orman/_dl/
 # Ateş: open-licence assets fetched by assets/ates/fetch.py, not committed (sources: docs/ates/VARLIK.md)
 assets/ates/cc0/
 assets/ates/_dl/
+
+# Dag: elevation and imagery fetched and prepared by tools/dag_veri.py, not committed (sources: assets/dag/KAYNAKLAR.md)
+assets/dag/*
+!assets/dag/KAYNAKLAR.md
