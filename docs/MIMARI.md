@@ -49,6 +49,8 @@ src/
                 dokular, alfa kapsaması korunan mip'ler; orman_world.* zemin, dere, sebepli yerleşim, çarpışma diskleri;
                 orman_renderer.* prototip başına GAS, kopyaların IAS'ı, fırınlar; device/orman.cu görünürlük, pişmiş ışık,
                 canlı güneş, pus, su; orman_app.* durum ve araçlar (--bench, --view, --cam); orman_live.cpp sahne)
+    dag/        sahne 13 · Dağ (uzak çizim mesafesi: dag_world.* gerçek yeryüzü, görünen hücreler, ufuk ve eğim katmanları; dag_near.* çevredeki
+                kutupsal ağlar, kaya, korkuluk; dag_atmos.* hava tabloları; dag_renderer.* OptiX; device/dag.cu; dag_app.* araçlar: --menzil, --delik, --kararlilik; dag_live.cpp sahne)
       particles.*       tanecik çözücüsü (PBF, XPBD bağlar, şekil eşleme, taneler)  surface.* sıvı yüzeyi
       lab_world.*       beş deneyin kurulumu ve adımı (kaba ya da ince)  lab_record.* ince kayıt, işçi iş parçacığı
       lab_kernels.cu    çözücü, kayıt ve çizici arası küçük çekirdekler  weapons.* gerçek yükler, balistik

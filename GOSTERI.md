@@ -269,3 +269,15 @@ Ayar paneli yok: kalite 2560 × 1440 için ayarlı (saniyede 33-42 kare).
   hücreden fazla atlar: iskelet durur, titrer, geri gider gibi görünür, odalar her karede başka (tekerleğin geri dönmesi gibi bir ilüzyon).
 
 Plan, ölçümler ve durum `docs/kuyu/`. Ayarlar `scenes/kuyu.cfg` (F5 ile).
+
+## 13 · Dağ — Kaçkar'ın doruğunda gün batımı, ufka kadar gerçek yeryüzü
+
+Küçük, korkuluklu bir terastasın: **W A S D** yürür, **Shift** hızlı, **Boşluk** zıplar, **C** eğilir, fare bakar, **Tab** imleci bırakır, **1-5** bakışlar, **R** başa döner. Terastan çıkılmaz. Panelde örnek sayısı (4, 8, 16, 32, 64; 16'da saniyede ~60 kare).
+
+**Dene:**
+- Açılışta güneş karşında: denizde güneş yolu, katman katman sırtlar.
+- **Sağ tık basılı: dürbün**, tekerlek yaklaştırır (3x-30x). Panel bakılan yerin adını ve uzaklığını yazar. Önce güneş yoluna bak: dalgalar çıkar.
+- **2**, sonra dürbünle yön 20°: Elbruz, 299 km, iki tepesi ve karı. **3**, yön 114°: Ağrı, 295 km.
+- **3** ile doğuya dön: Kaçkar'ın kendi gölgesi havada, ufka kadar üçgen.
+
+Plan, ölçümler ve durum `docs/dag/`. Ayarlar `scenes/dag.cfg` (F5 ile).

@@ -16,20 +16,23 @@ Tuşlar: fare bakar · W A S D · Shift hızlı · Boşluk zıplar · C eğilir 
 
 | Ne | Değer | Nasıl |
 |---|---|---|
-| Kare, pencerede, 16 örnek | Açılış 59,6 · bakışlar 59,8-66,5 FPS · dürbün 19x 40,5 · korkulukta 58 | `--autotest-only dag` |
-| Kare, 32 ve 64 örnek | 35,2 ve 12,5 FPS | aynı |
+| Kare, pencerede, 16 örnek | Açılış 60,2 · bakışlar 60,7-67,3 FPS · dürbün 19x 42,4 · korkulukta 59,0 | `tools/dag_olc.py --pencere` |
+| Kare, 32 ve 64 örnek | 36,3 ve 13,1 FPS | aynı |
+| Kart belleği | 14,2 / 16 GB (işletim sistemi dahil), kapanışta geri döner | aynı |
 | Üçgen | toplam 146 milyon: uzak ağ 51,8 M (1 yay saniyesi, LOD yok), yakın ve orta halka 94 M | `--headless` çıktısı |
 | En uzak çizilen yer | **387 km**, yön 339,7°, denizin üstünden Batı Kafkasya | `--menzil`: tüm çember, her örneğin çarptığı en uzak zemin; panel bunu her yüklemede ölçer |
 | En uzak görülebilen yer | **380-390 km bandı**: siluetin göğe karşı kontrastı ortanca %3,7. Eşik ölçümden önce yazıldı: %2 (Koschmieder). Görüntü eğrisi öncesi, doğrusal ışıkta; zar zor | `--menzil`, 1,5° görüşle tüm çember |
 | Bilinen zirveler | Zirvesine nişanlı ışın, harita uzaklığına karşı: Elbruz 299,2/299,0 km · Şhara 289,8/289,7 · Uşba 283,6/283,5 · Ağrı 294,6/294,5 · Aragats 258,2/258,1 · Palandöken 112,1/112,1. Kazbek ve Tebulosmta görünmüyor: önlerinde sırt var | `--menzil` |
 | Denizin ufku | 239,7 km | Etkin yarıçap 7.323 km, göz 3.923 m |
 | Kontrast, uzaklığa göre | 100 km %36, 200 km %24, 300 km %11, 350 km %5 (bant ortancası) | `--menzil` |
-| Delik | 3.004.560 ışın, köşelerden ve zıplarken, 0'ı yerin içinden geçti. Sınama: aşırı budanmış ağda (`far.tolerance=-0.003`) 163.153 | `--delik` |
-| Kararlılık, dönüş 0,35 rad/sn | piksel kıpırtısı 0,00240, blok 0,00056, FLIP 0,0116 | `tools/kararlilik.py`, 16 kare, 16 örnek, 64 örnek referans |
-| Kararlılık, ileri 1,3 m/sn | piksel kıpırtısı 0,00169, blok 0,00029, FLIP 0,0128 | aynı |
+| Delik | 3.004.560 ışın, köşelerden ve zıplarken, 0'ı yerin içinden geçti. Sınama: aşırı budanmış ağda (`far.tolerance=-0.003`) 163.222 | `--delik` |
+| Kararlılık, dönüş 0,35 rad/sn | piksel kıpırtısı 0,00238, blok 0,00057, FLIP 0,0113, titreme oranı 1,01 | `tools/kararlilik.py`, `tools/titreme.py`, 16 kare, 16 örnek, 64 örnek referans |
+| Kararlılık, ileri 1,3 m/sn | piksel kıpırtısı 0,00166, blok 0,00030, FLIP 0,0130, titreme oranı 1,01 | aynı |
 | Karşılaştırma tabanı | Fener TAA 0,0053-0,0061 · Ada 0,00076-0,0014 (0,5 m/sn yüzüş). Aynı ölçü, başka yol ve hız | `docs/koy/DURUM.md` |
 | Yürürken uzak bant | ikinci fark 0,00000, p99,9 0,0004. Burası neredeyse durduğu için aracı zorlamaz, tek başına kanıt sayılmaz | `tools/dag_titreme.py` |
-| Sonlu olmayan örnek | Önce 1-3, kök neden: korkuluğun Fresnel'inde `powf(1 - x, 5)`, x 1'i aşınca negatif taban. Düzeltmeden sonra aynı üç kamerada 0 | `--cam`, örnek yolu `dag: sonlu olmayan ornek` satırı |
+| Sonlu olmayan örnek | Önce 1-3, kök neden: korkuluğun Fresnel'inde `powf(1 - x, 5)`, x 1'i aşınca negatif taban. Düzeltmeden sonra 10 kamerada 0 | `tools/dag_olc.py`, yol `dag: sonlu olmayan ornek` satırında |
+
+Hepsi tek komutla yeniden: `python tools/dag_olc.py --pencere` (çıktı `captures/dag/olcum.txt`, eşikler betiğin başında, pencere açar).
 
 ## Ana oturumun ölçümünden düzelenler
 
@@ -49,6 +52,7 @@ Tuşlar: fare bakar · W A S D · Shift hızlı · Boşluk zıplar · C eğilir 
 - **Gri kayadaki yaprak ve filiz yüklemede griye çekilir** (`gray_rocks` taraması orman tabanı).
 - **Korkuluk çinko kaplı çelik:** boya sarı yanıyordu.
 - **Bellek:** `aerial_rocks_04` 4K'ya indirildi: yalnız uzaktan okunuyor, ince seviyesi hiç görünmüyor.
+- **Güneş diski yassı** (`sun.flat` 0,88), ışığı yakınlaşmanın karesiyle bölünür: dürbünde kenar parıltıda boğuluyordu. Çizim gerçek, parıltı sanat ayarı.
 
 ## NE DOĞRULANMADI
 
@@ -57,3 +61,5 @@ Tuşlar: fare bakar · W A S D · Shift hızlı · Boşluk zıplar · C eğilir 
 - **Göller:** kodda ayna var ama yalnız modelde düz olan su için. Doruğun 2 km güneyindeki buzul gölü modelde düz değil: su olarak işlenmiyor, uydunun koyu rengiyle duruyor.
 - **Ada ve Fener kıyası** aynı ölçü ama başka yol ve hız. Aynı yol olamaz.
 - **Bellek payı dar.** Başka kart kullanan program varsa sayfalama riski.
+- **Kontrast ölçüsü** ortanca, doğrusal ışıkta, göğe karşı siluette: görüntü eğrisi sonrası ana oturum 387 km kenarında %2,8 ölçmüştü. Sınıra yakın, kesin sayı sayma.
+- **Denizin hareketi:** dalga deseni yavaş kayıyor. Karede güzel; akışı canlı görmedim, kıpırtısı dürbünde ölçülmedi.

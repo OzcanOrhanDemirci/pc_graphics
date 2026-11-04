@@ -284,3 +284,15 @@ No settings panel: the quality is set for 2560 × 1440 (33-42 frames a second).
   illusion).
 
 Plan, measurements and status in `docs/kuyu/` (Turkish). Settings `scenes/kuyu.cfg` (F5).
+
+## 13 · The Mountain — sunset on Kaçkar's summit, the real Earth out to the horizon
+
+A small railed terrace: **W A S D** walk, **Shift** faster, **Space** jumps, **C** crouches, the mouse looks, **Tab** frees the cursor, **1-5** views, **R** back to the start. You cannot leave it. The panel chooses the samples (4, 8, 16, 32, 64; about 60 frames a second at 16).
+
+**Try:**
+- At the start the sun is ahead: its path on the sea, ridge after ridge.
+- **Right button held: binoculars**, the wheel zooms (3x-30x). The panel names what you look at and how far it is. First look at the sun's path: waves appear.
+- **2**, then binoculars at bearing 20°: Elbrus, 299 km, its two tops and snow. **3**, bearing 114°: Ararat, 295 km.
+- **3** and turn east: Kaçkar's own shadow in the air, a triangle out to the horizon.
+
+Plan, measurements and status in `docs/dag/` (Turkish). Settings in `scenes/dag.cfg` (F5).

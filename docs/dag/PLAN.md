@@ -26,6 +26,7 @@ Oyunlar uzağı ayrıntı seviyesiyle (LOD, HLOD, impostor) çizer, çünkü gö
 | Işık | Güneş ufku haritası (doğrusal yay çizgileriyle tam çözüm), penumbra analitik; yakın ve orta halkada gölge ışını; gök payı fırın | Güneş alçak: en güzel şey uzun gölgeler |
 | Hava | Bir kez tabloya: gökyüzü (4096×1536), froxel (1024×768×48) | Göz sabit: tablo kareye maliyetsiz, gürültüsüz |
 | Görüntü | 16 sabit örnek, ton eşleme sonrası ağırlıklı toplama, AgX | Birikim yok, gren yok |
+| Deniz | Örneğin seçebildiği dalga yüzeyi eğer, seçemediği eğimleri genişletir (Beckmann) | Yakınlaştıkça parıltı dalgaya dönüşür, enerji aynı |
 
 ## Karşı görüşler (kendime)
 
