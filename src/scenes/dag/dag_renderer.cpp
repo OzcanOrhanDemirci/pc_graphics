@@ -108,8 +108,8 @@ bool DagRenderer::init(int width, int height, const std::string& root) {
     CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&dParams_), sizeof(DagParams)));
     CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&params.badCount), sizeof(unsigned int)));
     CUDA_CHECK(cudaMemset(params.badCount, 0, sizeof(unsigned int)));
-    CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&params.probe), sizeof(float4)));
-    CUDA_CHECK(cudaMemset(params.probe, 0, sizeof(float4)));
+    CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&params.probe), 2 * sizeof(float4)));
+    CUDA_CHECK(cudaMemset(params.probe, 0, 2 * sizeof(float4)));
     setPattern(16, 0.40f);
     return true;
 }
@@ -549,6 +549,7 @@ void DagRenderer::uploadGround(DagWorld& w) {
     const double t1 = nowMs();
     std::printf("dag: dokular %.1f s, %.2f GB\n", (t1 - t0) * 1e-3, double(texBytes) / 1e9);
     std::fflush(stdout);
+    totalTriangles = w.farTriangles + w.polar[0].idx.size() + w.polar[1].idx.size();
     // the far ground's GAS, one whole degree at a time
     instances_.clear();
     unsigned id = 0;
@@ -741,7 +742,7 @@ void DagRenderer::uploadTables(const DagTables& t) {
     for (int k = 0; k < 4; ++k) params.skySh[k] = t.sh[k];
 }
 
-void DagRenderer::loadRgbaPair(const std::string& albedoPath, const std::string& normalPath, unsigned long long& albedo, unsigned long long& normal, int& size, float* mean) {
+void DagRenderer::loadRgbaPair(const std::string& albedoPath, const std::string& normalPath, unsigned long long& albedo, unsigned long long& normal, int& size, float* mean, bool clean, bool half) {
     auto load = [](const std::string& path, std::vector<unsigned char>& out, int& w) {
         int h = 0, c = 0;
         unsigned char* d = stbi_load(path.c_str(), &w, &h, &c, 4);
@@ -764,6 +765,47 @@ void DagRenderer::loadRgbaPair(const std::string& albedoPath, const std::string&
         std::fprintf(stderr, "dag: tarama okunamadi: %s\n", albedoPath.c_str());
         return;
     }
+    // half the size: what is read only from a distance (it never shows its finest level)
+    if (half) {
+        const auto halve = [](std::vector<unsigned char>& v, int& w) {
+            const int n = w / 2;
+            std::vector<unsigned char> o(size_t(n) * n * 4);
+            parallelFor(n, [&](int y) {
+                for (int x = 0; x < n; ++x) {
+                    const unsigned char* a0 = v.data() + (size_t(y * 2) * w + x * 2) * 4;
+                    const unsigned char* a1 = a0 + 4;
+                    const unsigned char* a2 = v.data() + (size_t(y * 2 + 1) * w + x * 2) * 4;
+                    const unsigned char* a3 = a2 + 4;
+                    unsigned char* q = o.data() + (size_t(y) * n + x) * 4;
+                    for (int c = 0; c < 4; ++c) q[c] = (unsigned char)((a0[c] + a1[c] + a2[c] + a3[c] + 2) / 4);
+                }
+            });
+            v.swap(o);
+            w = n;
+        };
+        halve(a, aw);
+        halve(n, nw);
+    }
+    // a forest floor's leaves and shoots lie in this scan: no leaf grows at 3900 m. Whatever is strongly coloured turns to the dark grey of
+    // the gaps between the stones
+    if (clean) {
+        parallelFor(aw, [&](int y) {
+            unsigned char* row = a.data() + size_t(y) * aw * 4;
+            for (int x = 0; x < aw; ++x) {
+                unsigned char* q = row + size_t(x) * 4;
+                const float r = q[0] / 255.0f, g = q[1] / 255.0f, b = q[2] / 255.0f;
+                const float mx = std::max(r, std::max(g, b)), mn = std::min(r, std::min(g, b));
+                const float sat = mx > 0.02f ? (mx - mn) / mx : 0.0f;
+                const float t = std::clamp((sat - 0.22f) / 0.14f, 0.0f, 1.0f);
+                if (t <= 0.0f) continue;
+                const float L = 0.3f * r + 0.59f * g + 0.11f * b;
+                const float dark = L * (1.0f - 0.45f * t);
+                q[0] = (unsigned char)(std::clamp(r + (dark * 1.02f - r) * t, 0.0f, 1.0f) * 255.0f + 0.5f);
+                q[1] = (unsigned char)(std::clamp(g + (dark - g) * t, 0.0f, 1.0f) * 255.0f + 0.5f);
+                q[2] = (unsigned char)(std::clamp(b + (dark * 0.97f - b) * t, 0.0f, 1.0f) * 255.0f + 0.5f);
+            }
+        });
+    }
     // its mean reflectance, as light
     if (mean) {
         double sum = 0.0;
@@ -785,7 +827,7 @@ void DagRenderer::loadRgbaPair(const std::string& albedoPath, const std::string&
 
 void DagRenderer::uploadRock(int which, const std::string& albedoPath, const std::string& normalPath) {
     int size = 0;
-    loadRgbaPair(albedoPath, normalPath, params.rockAlbedo[which], params.rockNormal[which], size, &params.rockMean[which]);
+    loadRgbaPair(albedoPath, normalPath, params.rockAlbedo[which], params.rockNormal[which], size, &params.rockMean[which], which == 1, which == 0);
 }
 
 void DagRenderer::uploadCirrus(const std::vector<unsigned char>& rgba, int n) {
@@ -834,7 +876,10 @@ void DagRenderer::render() {
     cudaEventElapsedTime(&renderMs, ev0_, ev1_);
     cudaEventElapsedTime(&displayMs, ev1_, ev2_);
     cudaMemcpy(&badSamples, params.badCount, sizeof(unsigned int), cudaMemcpyDeviceToHost);
-    cudaMemcpy(&probe, params.probe, sizeof(float4), cudaMemcpyDeviceToHost);
+    float4 pr[2];
+    cudaMemcpy(pr, params.probe, 2 * sizeof(float4), cudaMemcpyDeviceToHost);
+    probe = pr[0];
+    badAt = pr[1];
     cudaMemsetAsync(params.badCount, 0, sizeof(unsigned int), cudaStream_t(stream_));
 }
 

@@ -10,9 +10,40 @@
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
+#include <mutex>
 #include <thread>
 
 namespace fs = std::filesystem;
+
+// the elevation model read directly (the holes' check: nothing of the mesh in it)
+namespace {
+struct Dem2 {
+    std::vector<uint16_t> v;
+    bool open(const std::string& path) {
+        std::ifstream f(path, std::ios::binary);
+        if (!f) return false;
+        v.resize(size_t(14 * 3600) * 10 * 3600);
+        f.read(reinterpret_cast<char*>(v.data()), std::streamsize(v.size() * 2));
+        return bool(f);
+    }
+    float heightAt(double lat0, double lon0, double mx, double mz) const {
+        const double R = 6371000.0;
+        const double s = std::sqrt(mx * mx + mz * mz) / R;
+        const double az = std::atan2(mx, -mz);
+        const double la0 = lat0 * M_PIf / 180.0;
+        const double sinLat = std::sin(la0) * std::cos(s) + std::cos(la0) * std::sin(s) * std::cos(az);
+        const double lat = std::asin(sinLat);
+        const double lon = lon0 * M_PIf / 180.0 + std::atan2(std::sin(az) * std::sin(s) * std::cos(la0), std::cos(s) - std::sin(la0) * sinLat);
+        const double fr = (46.0 - lat * 180.0 / M_PIf) * 3600.0, fc = (lon * 180.0 / M_PIf - 34.0) * 3600.0;
+        const int W = 14 * 3600, H = 10 * 3600;
+        const int r = std::clamp(int(fr), 0, H - 2), c = std::clamp(int(fc), 0, W - 2);
+        const float ar = float(fr - r), ac = float(fc - c);
+        const auto at = [&](int a, int b) { return float(v[size_t(a) * W + b]) / 8.0f - 500.0f; };
+        return (1 - ar) * ((1 - ac) * at(r, c) + ac * at(r, c + 1)) + ar * ((1 - ac) * at(r + 1, c) + ac * at(r + 1, c + 1));
+    }
+};
+}   // namespace
 
 // a tiling sheet of high cloud: long streaks along the upper wind, broken by a warp. Gradient noise on a wrapped lattice
 static void makeCirrus(std::vector<unsigned char>& out, int n, float stretch) {
@@ -92,6 +123,8 @@ void DagApp::loadConfig() {
     air.mieG = cfg.f("air.mieG", 0.80f);
     air.hazeScat = make_float3(1, 1, 1) * cfg.f("air.haze", 1.0e-6f);
     air.hazeH = cfg.f("air.hazeH", 4000.0f);
+    air.lowScat = make_float3(1, 1, 1) * cfg.f("air.low", 4.0e-6f);
+    air.lowH = cfg.f("air.lowH", 500.0f);
     air.rayleigh = make_float3(5.802e-6f, 13.558e-6f, 33.1e-6f) * cfg.f("air.rayleigh", 1.0f);
     air.top = cfg.f("air.top", 100000.0f);
     air.sunE = cfg.v3("sun.E", make_float3(1.7f, 1.85f, 1.9f));
@@ -145,6 +178,7 @@ bool DagApp::initRenderer(std::string& err) {
     }
     buildAir();
     applyDisplay();
+    farthestDrawn = measureFarthest();
     return true;
 }
 
@@ -199,12 +233,23 @@ void DagApp::buildAir() {
             }
         }
     }
-    dagBuildTables(air, eyeAlt, sun, cfg.i("air.shadow", 1) ? &shadow : nullptr, world.h0, tables, cfg.i("sky.w", 4096), cfg.i("sky.h", 1536), cfg.i("frox.w", 1024),
-                   cfg.i("frox.h", 768), cfg.i("frox.d", 48));
+    // the tables are kept by what makes them: sun, air, sizes. A new build of the code does not count: --set air.tazele=1 (or delete cache/dag/hava_*)
+    {
+        char tag[256];
+        std::snprintf(tag, sizeof(tag), "hava_%.4f_%.4f_%.3g_%.3g_%.3g_%.3g_%.3g_%.3g_%.3g_%d_%d_%d_%d_%d_v3.bin", sun.x, sun.y, air.mieScat.x, air.mieH, air.mieG, air.hazeScat.x, air.hazeH, air.lowScat.x, air.lowH,
+                      cfg.i("sky.w", 4096), cfg.i("sky.h", 1536), cfg.i("frox.w", 1024), cfg.i("frox.h", 640), cfg.i("frox.d", 48));
+        const std::string path = root + "/cache/dag/" + tag;
+        if (cfg.i("air.tazele", 0) == 0 && dagTablesRead(path, tables)) {
+            std::printf("dag: hava tablolari diskten\n");
+        } else {
+            dagBuildTables(air, eyeAlt, sun, cfg.i("air.shadow", 1) ? &shadow : nullptr, world.h0, tables, cfg.i("sky.w", 4096), cfg.i("sky.h", 1536), cfg.i("frox.w", 1024), cfg.i("frox.h", 640), cfg.i("frox.d", 48));
+            dagTablesWrite(path, tables);
+            std::printf("dag: hava tablolari %.1f s\n", tables.ms * 1e-3);
+        }
+    }
     R.uploadTables(tables);
     std::vector<float4>().swap(tables.froxS);
     std::vector<float4>().swap(tables.froxT);
-    std::printf("dag: hava tablolari %.1f s\n", tables.ms * 1e-3);
 }
 
 void DagApp::applyDisplay() {
@@ -215,12 +260,35 @@ void DagApp::applyDisplay() {
     R.params.shadowLift = cfg.f("lift", 2.5f);
     R.params.liftKnee = cfg.f("lift.knee", 0.06f);
     R.params.white = cfg.v3("white", make_float3(1.05f, 1.0f, 0.90f));
+    R.params.zoomK = 1.0f;
     R.params.albedoGain = cfg.f("albedo.gain", 0.55f);
     R.params.albedoGainSnow = cfg.f("albedo.snow", 1.0f);
     R.params.rockGain = cfg.f("rock.gain", 1.7f);
     R.params.debug = cfg.i("debug", 0);
     R.params.time = 0.0f;
     R.setPattern(cfg.i("samples", 16), cfg.f("filter.sigma", 0.40f));
+}
+
+float DagApp::measureFarthest() {
+    const DagCam keep = cam;
+    float best = 0.0f;
+    const float vfov = 16.0f;
+    const float aspect = float(width) / float(height);
+    const float hfov = 2.0f * std::atan(std::tan(vfov * 0.5f * M_PIf / 180.0f) * aspect) * 180.0f / M_PIf;
+    for (float bearing = 0.0f; bearing < 360.0f; bearing += hfov * 0.95f) {
+        DagCam c;
+        c.yaw = -bearing * M_PIf / 180.0f;
+        c.pitch = -2.0f * M_PIf / 180.0f;
+        c.fovY = vfov;
+        c.feet.y = world.groundY(0, 0);
+        cam = c;
+        render();
+        const std::vector<float4> h = R.hdrHost();
+        for (const float4& q : h)
+            if (q.w > best) best = q.w;
+    }
+    cam = keep;
+    return best;
 }
 
 float3 DagApp::eye() const { return cam.feet + make_float3(0, cam.eyeHeight, 0); }
@@ -236,6 +304,15 @@ void DagApp::render() {
     R.params.U = right * (tanY * aspect);
     R.params.V = up * tanY;
     R.params.pixelAngle = 2.0f * tanY / float(height);
+    // through the binoculars: the display's contrast around the sky's brightness there (the eye settles on what little there is)
+    const float baseTan = std::tan(cfg.f("fov", 45.0f) * 0.5f * M_PIf / 180.0f);
+    const float zoom = baseTan / tanY;
+    const float k = std::clamp((zoom - 2.0f) / 14.0f, 0.0f, 1.0f);
+    R.params.zoomK = 1.0f + cfg.f("zoom.contrast", 0.45f) * k;
+    if (k > 0.0f) {
+        const float3 sk = dagSkyDir(tables, normalize(fwd + up * (6.0f * tanY / float(height) * 60.0f)));
+        R.params.zoomPivot = (0.2126f * sk.x + 0.7152f * sk.y + 0.0722f * sk.z) * R.params.exposure;
+    }
     R.render();
 }
 
@@ -283,7 +360,7 @@ std::string DagApp::lookingAt() const {
     std::string s;
     if (P) {
         s = app::L(P->nameTr.c_str(), P->nameEn.c_str());
-        if (P->altitude > 0.0f) s += " · " + theme::thousands((long long)std::lround(P->altitude)) + " m";
+        if (P->published > 0.0f) s += " · " + theme::thousands((unsigned long long)std::lround(P->published)) + " m";
         s += " · ";
     }
     return s + range;
@@ -301,7 +378,7 @@ int runDagCli(int argc, char** argv) {
     std::vector<int> views;
     std::vector<DagCam> freeCams;
     int bench = 0, stab = 0, refSpp = 64;
-    bool countOnly = false, menzil = false;
+    bool countOnly = false, menzil = false, delik = false;
     std::string path = "yan";
     float speed = 1.3f;
     for (int i = 1; i < argc; ++i) {
@@ -316,6 +393,7 @@ int runDagCli(int argc, char** argv) {
         else if (s == "--bench") bench = std::stoi(next());
         else if (s == "--say") countOnly = true;
         else if (s == "--menzil") menzil = true;
+        else if (s == "--delik") delik = true;
         else if (s == "--kararlilik") stab = std::stoi(next());
         else if (s == "--yol") path = next();
         else if (s == "--hiz") speed = std::stof(next());
@@ -397,9 +475,141 @@ int runDagCli(int argc, char** argv) {
             std::printf("dag: yer: %-16s yon %6.2f, yukseklik %5.2f, haritada %6.1f km, isin %6.1f km (%s)\n", P.nameEn.c_str(), bearing, c.pitch * 180.0f / M_PIf, std::hypot(P.mx, P.mz) * 1e-3,
                         a.R.probe.x * 1e-3f, a.R.probe.y < 0.5f ? "gok" : a.R.probe.y > 1.5f ? "deniz" : "zemin");
         }
+        // what is SEEN, not only drawn: over a whole circle through the binoculars' narrowest view, every picture column's silhouette against the
+        // sky: how far it is, how much it stands out. Threshold, written before measuring: Koschmieder's 2 % (the classic limit of sight)
+        {
+            const float vf = 1.5f;
+            const float hf = 2.0f * std::atan(std::tan(vf * 0.5f * M_PIf / 180.0f) * aspect) * 180.0f / M_PIf;
+            std::vector<float> ranges, contrasts;
+            for (float pitchDeg : {-1.05f, -1.75f})
+                for (float bearing = 0.0f; bearing < 360.0f; bearing += hf * 0.98f) {
+                    DagCam c;
+                    c.yaw = -bearing * M_PIf / 180.0f;
+                    c.pitch = pitchDeg * M_PIf / 180.0f;
+                    c.fovY = vf;
+                    c.feet.y = a.world.groundY(0, 0);
+                    a.cam = c;
+                    a.render();
+                    const std::vector<float4> h = a.R.hdrHost();
+                    for (int x = 0; x < a.width; x += 2) {
+                        int yS = -1;
+                        for (int y = 8; y < a.height - 8; ++y)
+                            if (h[size_t(y) * a.width + x].w > 0.0f) {
+                                yS = y;
+                                break;
+                            }
+                        if (yS < 8) continue;
+                        // (the whole picture column is sky above it)
+                        float sky = 0.0f, ground = 0.0f, far2 = 0.0f;
+                        auto lum = [](const float4& q) { return 0.2126f * q.x + 0.7152f * q.y + 0.0722f * q.z; };
+                        for (int k = 3; k <= 6; ++k) {
+                            sky += lum(h[size_t(yS - k) * a.width + x]);
+                            ground += lum(h[size_t(yS + k) * a.width + x]);
+                            far2 = std::max(far2, h[size_t(yS + 1) * a.width + x].w);
+                        }
+                        if (sky <= 0.0f || far2 <= 0.0f) continue;
+                        ranges.push_back(far2);
+                        contrasts.push_back(std::fabs(ground - sky) / sky);
+                    }
+                }
+            // by distance bands: the median contrast of the columns there, how many pass 2 %
+            float seen = 0.0f;
+            std::vector<float> bin[60];
+            for (size_t i = 0; i < ranges.size(); ++i) bin[std::min(59, int(ranges[i] / 10000.0f))].push_back(contrasts[i]);
+            for (int b = 0; b < 60; ++b) {
+                if (bin[b].size() < 40) continue;
+                std::sort(bin[b].begin(), bin[b].end());
+                const float med = bin[b][bin[b].size() / 2], p90 = bin[b][bin[b].size() * 9 / 10];
+                std::printf("dag: kontrast %3d-%3d km: %7zu sutun, ortanca %.1f %%, en iyi onda bir %.1f %%\n", b * 10, b * 10 + 10, bin[b].size(), med * 100.0f, p90 * 100.0f);
+                if (med >= 0.02f) seen = (b + 1) * 10000.0f;
+            }
+            std::printf("dag: gorunen en uzak (ortanca kontrast >= %%2): %.0f km\n", seen * 1e-3f);
+        }
         // the sea's own horizon
         const double h = a.eyeAlt;
         std::printf("dag: menzil: denizin ufku %.1f km (etkin yaricap %.0f km)\n", std::sqrt(2.0 * a.world.Re * h) * 1e-3, a.world.Re * 1e-3);
+        a.release();
+        return 0;
+    }
+    if (delik) {
+        // holes: the mesh leaves out what the terrace cannot see. From the terrace's corners, jumping too: does any ray go through the
+        // ground? Each ray of a sparse grid of pixels against the elevation model itself (no mesh), on the same curved Earth
+        std::string e2;
+        Dem2 dem;
+        if (!dem.open(a.root + "/assets/dag/dem_1s.u16")) {
+            std::fprintf(stderr, "dag: model yok\n");
+            return 1;
+        }
+        a.R.setPattern(1, 0.0f);
+        long long rays = 0, holes = 0, holesFar = 0;
+        float3 worst = make_float3(0, 0, 0);
+        float worstDepth = 0.0f;
+        const int stepPx = 6;
+        for (const float2& corner : a.world.terrace) {
+            for (float lift : {0.0f, 1.2f}) {
+                for (float bearing = 0.0f; bearing < 360.0f; bearing += 40.0f) {
+                    DagCam c;
+                    c.feet = make_float3(corner.x * 0.93f, a.world.groundY(corner.x * 0.93f, corner.y * 0.93f) + lift, corner.y * 0.93f);
+                    c.yaw = -bearing * M_PIf / 180.0f;
+                    c.pitch = -6.0f * M_PIf / 180.0f;
+                    c.fovY = 45.0f;
+                    a.cam = c;
+                    a.render();
+                    const std::vector<float4> h = a.R.hdrHost();
+                    const float3 eye = a.R.params.eye, W = a.R.params.W, U = a.R.params.U, V = a.R.params.V;
+                    std::atomic<long long> rayC{0}, holeC{0}, holeFarC{0};
+                    std::mutex mu;
+                    std::vector<std::thread> pool;
+                    std::atomic<int> nextRow{0};
+                    const int threads = std::max(1, int(std::thread::hardware_concurrency()));
+                    for (int th = 0; th < threads; ++th)
+                        pool.emplace_back([&] {
+                            for (;;) {
+                                const int y0 = nextRow.fetch_add(stepPx);
+                                if (y0 >= a.height) return;
+                                for (int x0 = 0; x0 < a.width; x0 += stepPx) {
+                                    const float xn = ((x0 + 0.5f) / a.width) * 2.0f - 1.0f, yn = 1.0f - ((y0 + 0.5f) / a.height) * 2.0f;
+                                    const float3 d = normalize(W + U * xn + V * yn);
+                                    if (d.y > 0.02f) continue;
+                                    const float tMesh = h[size_t(y0) * a.width + x0].w;
+                                    // up to the mesh's hit, or to the air's limit of sight
+                                    const float tEnd = tMesh > 0.0f ? tMesh * 0.985f : 560000.0f;
+                                    rayC.fetch_add(1);
+                                    float t = 1600.0f;
+                                    while (t < tEnd) {
+                                        const float3 q = eye + d * t;
+                                        double mx, mz, alt;
+                                        a.world.toPlane(q, mx, mz, alt);
+                                        if (alt < 0.0) break;   // the sea: drawn by itself
+                                        const float g = dem.heightAt(a.world.lat0, a.world.lon0, mx, mz);
+                                        const double r = std::hypot(mx, mz);
+                                        // (margins: 45 m where the rock's breakup is, 8 m where the mesh is the model's own triangles)
+                                        const double margin = r < 30000.0 ? 45.0 : 8.0;
+                                        if (alt + margin < g) {
+                                            holeC.fetch_add(1);
+                                            if (r >= 30000.0) holeFarC.fetch_add(1);
+                                            std::lock_guard<std::mutex> lk(mu);
+                                            if (float(g - alt) > worstDepth) {
+                                                worstDepth = float(g - alt);
+                                                worst = make_float3(float(mx), float(mz), t);
+                                            }
+                                            break;
+                                        }
+                                        t += std::max(12.0f, t * 0.0008f);
+                                    }
+                                }
+                            }
+                        });
+                    for (auto& th : pool) th.join();
+                    rays += rayC.load();
+                    holes += holeC.load();
+                    holesFar += holeFarC.load();
+                }
+            }
+        }
+        std::printf("dag: delik: %lld isin, %lld yerin icinden gecti (%lld tanesi 30 km otesinde)", rays, holes, holesFar);
+        if (holes) std::printf(", en derini %.0f m, uzaklik %.1f km", worstDepth, worst.z * 1e-3f);
+        std::printf("\n");
         a.release();
         return 0;
     }
@@ -422,6 +632,7 @@ int runDagCli(int argc, char** argv) {
             else c.feet = c0.feet + make_float3(-fz, 0, fx) * (speed * t);
             c.feet.y = a.world.groundY(c.feet.x, c.feet.z);
             a.cam = c;
+            a.R.params.time = t;
             a.R.setPattern(live, sigma);
             a.render();
             liveMs += a.R.renderMs + a.R.displayMs;
@@ -446,6 +657,7 @@ int runDagCli(int argc, char** argv) {
         const std::string path = (fs::path(a.root) / (out + "_" + name)).generic_string();
         a.save(path);
         std::printf("dag: %s (%.2f ms isleme, %.2f ms goruntu, sonlu olmayan %u)\n", path.c_str(), a.R.renderMs, a.R.displayMs, a.R.badSamples);
+        if (a.R.badSamples) std::printf("dag: sonlu olmayan ornek: piksel %.0f %.0f, yol %.0f, uzaklik %.1f m\n", a.R.badAt.x, a.R.badAt.y, a.R.badAt.z, a.R.badAt.w);
         std::fflush(stdout);
         if (bench > 0) {
             double sum = 0.0, worst = 0.0;

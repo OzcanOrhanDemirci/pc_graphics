@@ -5,6 +5,7 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <fstream>
 #include <functional>
 #include <thread>
 
@@ -45,7 +46,8 @@ inline Medium medium(const DagAir& a, double h) {
     const float oz = float(std::max(0.0, 1.0 - std::abs(h - a.ozoneC) / a.ozoneW));
     Medium o;
     o.scatR = a.rayleigh * r;
-    o.scatM = a.mieScat * m + a.hazeScat * hz;
+    const float lw = float(std::exp(-h / a.lowH));
+    o.scatM = a.mieScat * m + a.hazeScat * hz + a.lowScat * lw;
     o.ext = o.scatR + o.scatM + a.mieAbs * m + a.ozone * oz;
     return o;
 }
@@ -89,6 +91,39 @@ struct Tr {
 };
 
 }   // namespace
+
+static void rwHeader(std::fstream& f, DagTables& t, bool write) {
+    auto io = [&](void* p, size_t n) {
+        if (write) f.write(static_cast<const char*>(p), std::streamsize(n));
+        else f.read(static_cast<char*>(p), std::streamsize(n));
+    };
+    io(&t.trW, 4); io(&t.trH, 4); io(&t.msW, 4); io(&t.msH, 4); io(&t.skyW, 4); io(&t.skyH, 4); io(&t.frW, 4); io(&t.frH, 4); io(&t.frD, 4);
+    io(t.sh, sizeof(t.sh)); io(&t.eyeDip, 4); io(&t.froxR0, 4); io(&t.froxLogK, 4); io(&t.froxElMax, 4);
+}
+
+bool dagTablesRead(const std::string& path, DagTables& t) {
+    std::fstream f(path, std::ios::in | std::ios::binary);
+    if (!f) return false;
+    rwHeader(f, t, false);
+    auto vec = [&](std::vector<float4>& v, size_t n) {
+        v.resize(n);
+        f.read(reinterpret_cast<char*>(v.data()), std::streamsize(n * sizeof(float4)));
+    };
+    vec(t.transmittance, size_t(t.trW) * t.trH);
+    vec(t.multi, size_t(t.msW) * t.msH);
+    vec(t.sky, size_t(t.skyW) * t.skyH);
+    vec(t.froxS, size_t(t.frW) * t.frH * t.frD);
+    vec(t.froxT, size_t(t.frW) * t.frH * t.frD);
+    return bool(f);
+}
+
+void dagTablesWrite(const std::string& path, const DagTables& tc) {
+    DagTables& t = const_cast<DagTables&>(tc);
+    std::fstream f(path, std::ios::out | std::ios::binary);
+    if (!f) return;
+    rwHeader(f, t, true);
+    for (const std::vector<float4>* v : {&t.transmittance, &t.multi, &t.sky, &t.froxS, &t.froxT}) f.write(reinterpret_cast<const char*>(v->data()), std::streamsize(v->size() * sizeof(float4)));
+}
 
 float3 dagSkyDir(const DagTables& t, float3 d) {
     const float az = std::atan2(d.x, -d.z);
@@ -275,7 +310,9 @@ void dagBuildTables(const DagAir& air, float eyeAlt, float3 sunF, const DagShado
             for (int k = 0; k < 64; ++k) tb[k] = 200.0 * (std::pow(std::max(len / 200.0, 1.0001), (k + 1) / 64.0) - 1.0) / (1.0 - 200.0 / len) * 1.0;
             tb[63] = len;
             float3 Sf = make_float3(0, 0, 0);
-            gather(d, tb.data(), 64, 3, [&](int b, float3 S, float3) {
+            // (close to the horizon a ray lies long in thin low layers: too few steps show as bands in the sky through the binoculars)
+            const int subSky = std::fabs(l) < 0.10 ? 10 : 3;
+            gather(d, tb.data(), 64, subSky, [&](int b, float3 S, float3) {
                 if (b == 63) Sf = S;
             });
             out.sky[size_t(y) * skyW + x] = make_float4(Sf.x, Sf.y, Sf.z, 1.0f);
@@ -302,7 +339,7 @@ void dagBuildTables(const DagAir& air, float eyeAlt, float3 sunF, const DagShado
         for (int x = 0; x < frW; ++x) {
             const double az = ((x + 0.5) / frW - 0.5) * 2.0 * M_PI;
             const D3 d{ce * std::sin(az), se, -ce * std::cos(az)};
-            gather(d, tb.data(), frD, 4, [&](int b, float3 S, float3 T) {
+            gather(d, tb.data(), frD, std::fabs(l) < 0.10 ? 10 : 4, [&](int b, float3 S, float3 T) {
                 const size_t i = (size_t(y) * frW + x) * frD + b;
                 out.froxS[i] = make_float4(S.x, S.y, S.z, 1.0f);
                 out.froxT[i] = make_float4(T.x, T.y, T.z, 1.0f);

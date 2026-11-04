@@ -569,6 +569,33 @@ crouches, R lays the fire again.
 
 Plan, decisions, measurements and what is not verified in `docs/ates/` (Turkish).
 
+### 13 · The Mountain *(Dağ)* · November 2026
+
+| | |
+|:---:|:---:|
+| ![The first view: the sun over the Black Sea, its path on the water, ridge after ridge fading in the haze](docs/images/dag-gunes.jpg) | ![Through the binoculars: Elbrus with its two tops, 299 km away, the last light on its snow](docs/images/dag-elbruz.jpg) |
+| ![Looking east: Kaçkar's own shadow in the air, reaching to the horizon, peaks lit beside it](docs/images/dag-golge.jpg) | ![From the railing: rock and scree in the low sun, the valley below](docs/images/dag-kaya.jpg) |
+
+One narrow goal: **draw distance**. A small railed terrace on the real summit of Kaçkar in north-east Turkey at sunset; the eye cannot
+leave it, and that decides everything. Games draw the distance with levels of detail because the player can go anywhere. Here every
+cell of a 1 arc second elevation model the terrace can see is found once and becomes triangles, never to change: nothing can pop or
+switch, and through the binoculars (up to 30x) the same mountain stands there. 146 million triangles, 60 frames a second.
+
+- **Real ground.** Copernicus GLO-30 elevation, SRTM where that is not public; Sentinel-2 cloudless colour with the satellite's own
+  sun taken out; a sphere with the air's usual bending built in. The panel names what the binoculars look at.
+- **Measured.** Farthest ground drawn 387 km, its silhouette still 3.7 % against the sky. A ray aimed at each named top meets it within
+  0.2 km of the map: Elbrus 299.2 km against 299.0. No ray from anywhere on the terrace goes through the ground (3 million tried; on a
+  mesh culled too far on purpose, 163,000 did).
+- **The fade is physics.** Rayleigh, Mie, ozone, multiple scattering, the mountains' shadows in the air, in tables made once for the
+  fixed eye. Terrain shadows are an exact horizon for each cell towards the sun, the rock near the terrace traces its own.
+- **Near is scanned.** Scree and rock faces (Poly Haven, CC0) in the geometry and the shading, 1500 copies of scanned rocks.
+- **Sixteen fixed rays a pixel.** No temporal accumulation, no grain. Live against a 64 ray reference: second difference ratio 1.01.
+
+Plan, decisions, measurements and what is not verified in `docs/dag/` (Turkish). Elevation: Copernicus DEM, © DLR e.V. 2010-2014 and
+© Airbus Defence and Space GmbH 2014-2018, provided under COPERNICUS by the European Union and ESA; Mapzen Terrain Tiles, SRTM terrain
+data courtesy of the U.S. Geological Survey. Colour: Sentinel-2 cloudless 2016 by EOX IT Services GmbH (modified Copernicus Sentinel
+data 2016), CC BY 4.0.
+
 ## What scene 1 computes
 
 | | |

@@ -17,6 +17,35 @@
 #define DAG_ID_RAIL 100001u    // the railing: its own vertices and normals
 #define DAG_ID_STONE 100002u   // first of the stones around the terrace (id - DAG_ID_STONE: which DagGeom)
 
+// where the terrace's scree is large stones and where bare rock shows: the same in the geometry (dag_near.cpp) and the colour
+// (device/dag.cu). Smooth noise in 0 .. 1
+HD float dagPatchNoise(float x, float y, unsigned int seed) {
+    const float xf = floorf(x), yf = floorf(y);
+    const int xi = int(xf), yi = int(yf);
+    const float fx = x - xf, fy = y - yf;
+    const float u = fx * fx * (3.0f - 2.0f * fx), v = fy * fy * (3.0f - 2.0f * fy);
+    const auto h = [&](int a, int b) {
+        unsigned int q = unsigned(a) * 0x8DA6B343u ^ unsigned(b) * 0xD8163841u ^ seed * 0xCB1AB31Fu;
+        q ^= q >> 16;
+        q *= 0x7feb352dU;
+        q ^= q >> 15;
+        q *= 0x846ca68bU;
+        q ^= q >> 16;
+        return float(q & 0xFFFFu) / 65535.0f;
+    };
+    return (1.0f - v) * ((1.0f - u) * h(xi, yi) + u * h(xi + 1, yi)) + v * ((1.0f - u) * h(xi, yi + 1) + u * h(xi + 1, yi + 1));
+}
+// 0 the common scree, 1 large stones
+HD float dagBigStones(float x, float z) {
+    const float n = 0.65f * dagPatchNoise(x / 3.7f + 11.0f, z / 3.7f, 3u) + 0.35f * dagPatchNoise(x / 1.3f, z / 1.3f + 5.0f, 4u);
+    return smoothstepf(0.50f, 0.58f, n);
+}
+// 1 bare rock
+HD float dagBedrock(float x, float z) {
+    const float n = 0.7f * dagPatchNoise(x / 5.3f - 3.0f, z / 5.3f + 2.0f, 7u) + 0.3f * dagPatchNoise(x / 1.7f + 9.0f, z / 1.7f, 8u);
+    return smoothstepf(0.62f, 0.68f, n);
+}
+
 // one level of a clip stack: a square of the azimuthal equidistant plane around the summit
 struct DagClip {
     unsigned long long tex;    // cudaTextureObject_t, mipmapped
@@ -77,6 +106,8 @@ struct DagParams {
     float shadowLift;              // the eye's adaptation in the dark: gain 1 + this at black, fading over liftKnee
     float liftKnee;
     float3 white;                  // the display's white balance
+    float zoomK;                   // through the binoculars the eye settles on the little contrast there is: display contrast around zoomPivot
+    float zoomPivot;
 
     // the amplified ground
     DagPolarTex polar[2];          // near, mid
@@ -106,7 +137,7 @@ struct DagParams {
     float cirrusAlt, cirrusTile, cirrusCover, cirrusThick;
 
     const DagGeom* geoms;       // the railing and the stones
-    float4* probe;              // what the middle of the picture looks at: x the distance, y 0 sky, 1 ground, 2 sea
+    float4* probe;              // [0] what the middle of the picture looks at: x the distance, y 0 sky, 1 ground, 2 sea; [1] the last sample not finite: pixel x, y, instance, sample
 
     // the display
     float exposure;

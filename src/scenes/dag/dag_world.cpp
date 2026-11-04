@@ -454,7 +454,7 @@ bool DagWorld::prepare(const std::string& root, const Config& cfg) {
     const int step1 = cfg.i("far.step1", 1), step2 = cfg.i("far.step2", 2), step3 = cfg.i("far.step3", 3);
     const double band1 = cfg.f("far.band1", 120000.0f), band2 = cfg.f("far.band2", 300000.0f);
     const std::string farPath = cache + "/far_" + std::to_string(step1) + "_" + std::to_string(step2) + "_" + std::to_string(step3) + "_" +
-                                std::to_string(int(band1 / 1000)) + "_" + std::to_string(int(band2 / 1000)) + "_" + std::to_string(int(cfg.f("mid.radius", 30000.0f))) + ".bin";
+                                std::to_string(int(band1 / 1000)) + "_" + std::to_string(int(band2 / 1000)) + "_" + std::to_string(int(cfg.f("mid.radius", 30000.0f))) + "_" + std::to_string(int(std::lround(cfg.f("far.tolerance", 0.001f) * 1e5f))) + "_" + std::to_string(int(cfg.f("far.eyeRing", 10.0f))) + ".bin";
     bool haveFar = false;
     {
         std::ifstream f(farPath, std::ios::binary);
@@ -641,30 +641,31 @@ bool DagWorld::prepare(const std::string& root, const Config& cfg) {
             const char* en;
             double lat, lon;
             int kind;   // 0 peak, 1 town, 2 lake
+            float published;   // the peak's published height (the model, 30 m cells, sees less of a sharp top)
         };
         static const Known known[] = {
-            {"Elbruz", "Elbrus", 43.3499, 42.4453, 0},
-            {"Kazbek", "Kazbek", 42.6970, 44.5181, 0},
-            {"Şhara", "Shkhara", 42.9972, 43.1083, 0},
-            {"Uşba", "Ushba", 43.1250, 42.6600, 0},
-            {"Tebulosmta", "Tebulosmta", 42.5636, 45.2967, 0},
-            {"Ağrı Dağı", "Mount Ararat", 39.7019, 44.2983, 0},
-            {"Küçük Ağrı", "Little Ararat", 39.6517, 44.4067, 0},
-            {"Aragats", "Aragats", 40.5253, 44.2025, 0},
-            {"Süphan", "Süphan", 38.9250, 42.8350, 0},
-            {"Palandöken", "Palandöken", 39.8333, 41.2833, 0},
-            {"Rize", "Rize", 41.0201, 40.5234, 1},
-            {"Trabzon", "Trabzon", 41.0015, 39.7178, 1},
-            {"Giresun", "Giresun", 40.9128, 38.3895, 1},
-            {"Hopa", "Hopa", 41.3903, 41.4190, 1},
-            {"Batum", "Batumi", 41.6168, 41.6367, 1},
-            {"Poti", "Poti", 42.1462, 41.6717, 1},
-            {"Artvin", "Artvin", 41.1828, 41.8183, 1},
-            {"Erzurum", "Erzurum", 39.9043, 41.2679, 1},
-            {"Kars", "Kars", 40.6013, 43.0975, 1},
-            {"Çıldır Gölü", "Lake Çıldır", 41.0500, 43.2000, 2},
-            {"Van Gölü", "Lake Van", 38.6300, 42.9000, 2},
-            {"Sevan Gölü", "Lake Sevan", 40.3800, 45.3000, 2},
+            {"Elbruz", "Elbrus", 43.3499, 42.4453, 0, 5642.0f},
+            {"Kazbek", "Kazbek", 42.6970, 44.5181, 0, 5054.0f},
+            {"Şhara", "Shkhara", 42.9972, 43.1083, 0, 5193.0f},
+            {"Uşba", "Ushba", 43.1250, 42.6600, 0, 4710.0f},
+            {"Tebulosmta", "Tebulosmta", 42.5636, 45.2967, 0, 4493.0f},
+            {"Ağrı Dağı", "Mount Ararat", 39.7019, 44.2983, 0, 5137.0f},
+            {"Küçük Ağrı", "Little Ararat", 39.6517, 44.4067, 0, 3896.0f},
+            {"Aragats", "Aragats", 40.5253, 44.2025, 0, 4090.0f},
+            {"Süphan", "Süphan", 38.9250, 42.8350, 0, 4058.0f},
+            {"Palandöken", "Palandöken", 39.8333, 41.2833, 0, 3176.0f},
+            {"Rize", "Rize", 41.0201, 40.5234, 1, 0.0f},
+            {"Trabzon", "Trabzon", 41.0015, 39.7178, 1, 0.0f},
+            {"Giresun", "Giresun", 40.9128, 38.3895, 1, 0.0f},
+            {"Hopa", "Hopa", 41.3903, 41.4190, 1, 0.0f},
+            {"Batum", "Batumi", 41.6168, 41.6367, 1, 0.0f},
+            {"Poti", "Poti", 42.1462, 41.6717, 1, 0.0f},
+            {"Artvin", "Artvin", 41.1828, 41.8183, 1, 0.0f},
+            {"Erzurum", "Erzurum", 39.9043, 41.2679, 1, 0.0f},
+            {"Kars", "Kars", 40.6013, 43.0975, 1, 0.0f},
+            {"Çıldır Gölü", "Lake Çıldır", 41.0500, 43.2000, 2, 0.0f},
+            {"Van Gölü", "Lake Van", 38.6300, 42.9000, 2, 0.0f},
+            {"Sevan Gölü", "Lake Sevan", 40.3800, 45.3000, 2, 0.0f},
         };
         places.clear();
         for (const Known& k : known) {
@@ -690,6 +691,7 @@ bool DagWorld::prepare(const std::string& root, const Config& cfg) {
                             bc = c0 + b;
                         }
                 P.altitude = best;
+                P.published = k.published;
                 geo.forward(kDemLatTop - br / 3600.0, kDemLonLeft + bc / 3600.0, s, az);
                 P.mx = s * std::sin(az);
                 P.mz = -s * std::cos(az);
@@ -737,12 +739,18 @@ bool DagWorld::prepare(const std::string& root, const Config& cfg) {
             const int r = int(std::floor(fr)), c = int(std::floor(fc));
             const float ar = float(fr - r), ac = float(fc - c);
             float wr[4], wc[4];
-            const auto B = [](float t, float* w) {
+            // close by a B-spline (smooth under the rock's breakup); further out through the samples themselves (Catmull-Rom): the model's own
+            // ridges stay as sharp as it knows them, seen through the binoculars
+            const double far2 = std::sqrt(mx * mx + mz * mz);
+            const float crom = far2 <= 1500.0 ? 0.0f : far2 >= 3000.0 ? 1.0f : float((far2 - 1500.0) / 1500.0);
+            const auto B = [&](float t, float* w) {
                 const float t2 = t * t, t3 = t2 * t;
-                w[0] = (1 - 3 * t + 3 * t2 - t3) / 6;
-                w[1] = (4 - 6 * t2 + 3 * t3) / 6;
-                w[2] = (1 + 3 * t + 3 * t2 - 3 * t3) / 6;
-                w[3] = t3 / 6;
+                const float b0 = (1 - 3 * t + 3 * t2 - t3) / 6, b1 = (4 - 6 * t2 + 3 * t3) / 6, b2 = (1 + 3 * t + 3 * t2 - 3 * t3) / 6, b3 = t3 / 6;
+                const float c0 = 0.5f * (-t + 2 * t2 - t3), c1 = 0.5f * (2 - 5 * t2 + 3 * t3), c2 = 0.5f * (t + 4 * t2 - 3 * t3), c3 = 0.5f * (-t2 + t3);
+                w[0] = b0 + (c0 - b0) * crom;
+                w[1] = b1 + (c1 - b1) * crom;
+                w[2] = b2 + (c2 - b2) * crom;
+                w[3] = b3 + (c3 - b3) * crom;
             };
             B(ar, wr);
             B(ac, wc);

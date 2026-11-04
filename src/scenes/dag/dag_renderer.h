@@ -18,6 +18,8 @@ public:
     float renderMs = 0.0f, displayMs = 0.0f;
     unsigned int badSamples = 0;
     float4 probe{};                     // what the middle of the picture looks at (see DagParams)
+    float4 badAt{};                     // where the last sample that was not finite fell
+    unsigned long long totalTriangles = 0;
     size_t gasBytes = 0, texBytes = 0, tableBytes = 0, meshBytes = 0;
     double buildGasMs = 0.0;
     std::string deviceName;
@@ -45,7 +47,7 @@ private:
     Tex makeRgba16Mips(std::vector<uint16_t>& v, int w, int h, bool wrapU, bool wrapV);
     Tex makeFloat2D(const std::vector<float4>& v, int w, int h, bool wrapU);
     Tex makeFloat3D(const std::vector<float4>& v, int w, int h, int d);
-    void loadRgbaPair(const std::string& albedoPath, const std::string& normalPath, unsigned long long& albedo, unsigned long long& normal, int& size, float* mean);
+    void loadRgbaPair(const std::string& albedoPath, const std::string& normalPath, unsigned long long& albedo, unsigned long long& normal, int& size, float* mean, bool clean = false, bool half = false);
     void launch(CUdeviceptr rg, unsigned int w, unsigned int h, unsigned int d);
     OptixTraversableHandle buildGasTriangles(const float3* verts, size_t nVerts, const uint3* idx, size_t nTri);
     void buildTop();

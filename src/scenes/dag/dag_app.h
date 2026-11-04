@@ -39,6 +39,9 @@ public:
     void buildAir();                     // the sun's shadow height map and the air's tables for the sun of now
     void applyDisplay();
     void render();
+    // the farthest ground the picture really draws: a whole circle of frames, measured, not the bake's list (metres)
+    float measureFarthest();
+    float farthestDrawn = 0.0f;
     bool save(const std::string& pathNoExt);
     float3 eye() const;
     static DagCam view(int i);

@@ -19,6 +19,7 @@ Oyunlar uzağı ayrıntı seviyesiyle (LOD, HLOD, impostor) çizer, çünkü gö
 
 | Parça | Nasıl | Neden |
 |---|---|---|
+| Yükseklik | Copernicus GLO-30; herkese açık olmayan 16 karoda (Ermenistan, Azerbaycan ve sınır karoları, Ağrı dahil) SRTM | GLO-90 yerine: Ağrı 90 m'de kalıyordu |
 | Uzak zemin | 1 yay saniyesi modelin görünen hücreleri, derece başına GAS + tek IAS, OptiX | Üçgen çok az çıktı (görünen pay küçük): 1 yay saniyesi her yere sığdı, 300 km ötede de |
 | Yakın zemin | İki kutupsal ağ (göz çevresinde, hücre uzaklıkla büyür): 1,5 km'ye ve 30 km'ye | 30 m model yakında bulanık. Üstüne eklemli kaya (blok, çatlak), iri taş alanı, teras taşları |
 | Renk | Sentinel-2 cloudless 2016 (CC BY 4.0), 3 katman, uydunun kendi güneşi çıkarılır | Sonraki yıllar NC, kullanılamaz |
@@ -36,6 +37,6 @@ Oyunlar uzağı ayrıntı seviyesiyle (LOD, HLOD, impostor) çizer, çünkü gö
 
 1. Galeriden açılır, W A S D ile korkuluk içinde yürünür, dışarı çıkılmaz. Kontrol sözleşmesi tutar.
 2. Görünen en uzak yer ölçülür (`--menzil`), bilinen zirveler doğru yönde ve yükseklikte durur.
-3. Uzak bantta titreme ölçümü taban sahnelerden (Ada 0,001, Fener 0,006) iyi.
+3. Canlı görüntü kararlı: `tools/kararlilik.py` piksel kıpırtısı dönüşte ve yürürken Fener'in TAA tabanının (0,0053-0,0061) altında, 16 örnek 64 örnek referansa göre `tools/titreme.py` oranı en çok 1,10. (İlk yazım "uzak bantta 0,001" diyordu: uzak bant yürürken durduğu için ölçüm boştu; düzeltildi.)
 4. 1440p'de 30 FPS üstü.
 5. Son hakem: Özcan'ın gözü, canlı.

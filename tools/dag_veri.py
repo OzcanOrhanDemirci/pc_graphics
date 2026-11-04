@@ -6,6 +6,8 @@ assets/dag/KAYNAKLAR.md).
   python tools/dag_veri.py imgfetch   Sentinel-2 cloudless 2016 web map tiles, re-runnable
   python tools/dag_veri.py imgbuild   the ground's colour as clip levels around the summit: assets/dag/a0.rgb8 ...
   python tools/dag_veri.py rocks      Poly Haven's rock scans (CC0), md5 checked: assets/dag/cc0/
+  python tools/dag_veri.py dem90      where GLO-30 is not public (Armenia, Azerbaijan and their border cells, Ararat among them):
+                                      Mapzen's Terrain Tiles (SRTM, zoom 12, about 29 m) in place of GLO-90 in dem_1s.u16
 """
 import concurrent.futures as cf
 import json
@@ -291,6 +293,81 @@ def cmd_imgbuild():
                    'lat0': LAT0, 'lon0': LON0, 'R': R * 1000.0}, f)
 
 
+def one_terrarium(job):
+    z, y, x = job
+    d = os.path.join(DL, 'terrarium', str(z))
+    os.makedirs(d, exist_ok=True)
+    p = os.path.join(d, f'{y}_{x}.png')
+    return fetch(f'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png', p)
+
+
+def cmd_dem90():
+    # the cells GLO-30 does not cover: SRTM by way of the Terrain Tiles. Its water is not always flat, so GLO-90's flat cells
+    # (the lakes, flattened in that model) stay as they were
+    import cv2
+    with open(os.path.join(OUT, 'dem_1s.json')) as f:
+        meta = json.load(f)
+    src = meta['sources']
+    cells = [(LAT_MIN + i, LON_MIN + j) for i, r in enumerate(src) for j, v in enumerate(r) if v == 90]
+    print(len(cells), 'cells', cells, flush=True)
+    z = 12
+    t0 = time.time()
+    jobs = set()
+    for lat, lon in cells:
+        xa, ya = merc_tile(np.array([lat + 1.0]), np.array([lon]), z)
+        xb, yb = merc_tile(np.array([lat]), np.array([lon + 1.0]), z)
+        for y in range(int(ya[0]) - 1, int(yb[0]) + 2):
+            for x in range(int(xa[0]) - 1, int(xb[0]) + 2):
+                jobs.add((z, y, x))
+    jobs = sorted(jobs)
+    print(len(jobs), 'tiles', flush=True)
+    got = {'have': 0, 'got': 0, 'none': 0, 'fail': 0}
+    with cf.ThreadPoolExecutor(12) as ex:
+        for k, r in enumerate(ex.map(one_terrarium, jobs)):
+            got[r] += 1
+            if k % 500 == 0:
+                print(' ', k, got, f'{time.time() - t0:.0f} s', flush=True)
+    print(got, f'{time.time() - t0:.0f} s', flush=True)
+    if got['fail'] or got['none']:
+        raise SystemExit('tiles missing: the cells stay as they are')
+    m = np.memmap(os.path.join(OUT, 'dem_1s.u16'), dtype=np.uint16, mode='r+', shape=(meta['height'], meta['width']))
+    tdir = os.path.join(DL, 'terrarium', str(z))
+    for lat, lon in cells:
+        r0 = (LAT_MAX - (lat + 1)) * 3600
+        c0 = (lon - LON_MIN) * 3600
+        old = np.array(m[r0:r0 + 3600, c0:c0 + 3600]).astype(np.float32) / 8.0 - 500.0
+        rows = (lat + 1) - np.arange(3600) / 3600.0
+        cols = lon + np.arange(3600) / 3600.0
+        gr, gc = np.meshgrid(rows, cols, indexing='ij')
+        x, y = merc_tile(gr, gc, z)
+        px = x * 256.0 - 0.5
+        py = y * 256.0 - 0.5
+        ta, tb = int(np.floor(px.min() / 256)) - 0, int(np.floor(px.max() / 256)) + 1
+        tc, td = int(np.floor(py.min() / 256)) - 0, int(np.floor(py.max() / 256)) + 1
+        canvas = np.zeros(((td - tc + 1) * 256, (tb - ta + 1) * 256), np.float32)
+        for ty in range(tc, td + 1):
+            for tx in range(ta, tb + 1):
+                a = cv2.imread(os.path.join(tdir, f'{ty}_{tx}.png'), cv2.IMREAD_COLOR)
+                if a is None:
+                    raise SystemExit(f'no tile {ty} {tx}')
+                a = a.astype(np.float32)
+                # Terrarium: (red * 256 + green + blue / 256) - 32768, OpenCV reads BGR
+                canvas[(ty - tc) * 256:(ty - tc + 1) * 256, (tx - ta) * 256:(tx - ta + 1) * 256] = a[:, :, 2] * 256.0 + a[:, :, 1] + a[:, :, 0] / 256.0 - 32768.0
+        new = cv2.remap(canvas, (px - ta * 256).astype(np.float32), (py - tc * 256).astype(np.float32), cv2.INTER_LINEAR)
+        # GLO-90's flat water stays, and its open sea
+        flat = cv2.erode((cv2.absdiff(old, cv2.blur(old, (5, 5))) < 0.02).astype(np.uint8), np.ones((3, 3), np.uint8)) > 0
+        merged = np.where(flat, old, new)
+        d = new - old
+        print(f'cell {lat} {lon}: SRTM - GLO-90 mean {d.mean():.2f} m, std {d.std():.2f} m, max {new.max():.0f} m, flat share {flat.mean():.3f}', flush=True)
+        m[r0:r0 + 3600, c0:c0 + 3600] = np.clip(np.round((merged + 500.0) * 8.0), 0, 65535).astype(np.uint16)
+        src[lat - LAT_MIN][lon - LON_MIN] = 31
+    m.flush()
+    meta['sources'] = src
+    with open(os.path.join(OUT, 'dem_1s.json'), 'w') as f:
+        json.dump(meta, f)
+    print('done', f'{time.time() - t0:.0f} s', flush=True)
+
+
 def ph_get(url, path, md5):
     import hashlib
     if os.path.exists(path):
@@ -347,5 +424,7 @@ if __name__ == '__main__':
         cmd_imgbuild()
     elif what == 'rocks':
         cmd_rocks()
+    elif what == 'dem90':
+        cmd_dem90()
     else:
         print(__doc__)

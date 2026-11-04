@@ -50,7 +50,8 @@ struct DagBand {
 struct DagPlace {
     std::string nameTr, nameEn;
     double mx = 0.0, mz = 0.0;
-    float altitude = 0.0f;     // 0: not a peak
+    float altitude = 0.0f;     // the model's top; 0: not a peak
+    float published = 0.0f;    // the peak's published height
     float reach = 0.0f;        // metres around it that count as it
 };
 

@@ -5,6 +5,7 @@
 #pragma once
 #include "shared/vec.h"
 
+#include <string>
 #include <vector>
 
 struct DagAir {
@@ -21,6 +22,9 @@ struct DagAir {
     // a second thin layer of haze high up (the summer's dust): colours the horizon at sunset, keeps the far ridges
     float3 hazeScat = make_float3(1.0e-6f, 1.0e-6f, 1.0e-6f);
     float hazeH = 4000.0f;
+    // the marine layer: thin, low, it softens the sea's horizon
+    float3 lowScat = make_float3(0, 0, 0);
+    float lowH = 500.0f;
     float3 groundAlbedo = make_float3(0.12f, 0.12f, 0.12f);
     float3 sunE = make_float3(1.7f, 1.85f, 1.9f);     // the sun's irradiance above the air (arbitrary scale, its colour real)
 };
@@ -51,5 +55,8 @@ struct DagTables {
 // world up and x, z tangents are those of the eye's frame; sun: the direction towards it in that frame
 void dagBuildTables(const DagAir& air, float eyeAlt, float3 sun, const DagShadowMap* shadow, float h0, DagTables& out, int skyW, int skyH, int frW, int frH,
                     int frD);
+// the tables on disk (they take many seconds to make and change only with the air and the sun)
+bool dagTablesRead(const std::string& path, DagTables& t);
+void dagTablesWrite(const std::string& path, const DagTables& t);
 // sky lookup for the host (the irradiance's check and the gallery)
 float3 dagSkyDir(const DagTables& t, float3 d);

@@ -2,6 +2,7 @@
 // (their cells grow with the distance, so they cover about the same picture everywhere): the real ground underneath, the rock's
 // breakup over it (fractal, ridged, stronger on steep ground, none on water), fading out where the far mesh takes over. What the
 // terrace cannot see is left out. The terrace's flat, the railing.
+#include "scenes/dag/dag_shared.h"
 #include "scenes/dag/dag_world.h"
 
 #include <cgltf.h>
@@ -63,7 +64,7 @@ inline float gnoise(float x, float y) {
 
 // jointed rock at one scale: the plane broken into blocks (the cells of jittered points), each block a tilted slab of its own, a crack
 // along the joints between them. Granite breaks like this: flat faces, sharp edges, no smooth lumps
-inline float blocks(float x, float z, float lambda, int seed) {
+inline float blocks(float x, float z, float lambda, int seed, float finest) {
     const float px = x / lambda, pz = z / lambda;
     const int xi = int(std::floor(px)), zi = int(std::floor(pz));
     float d1 = 1e9f, d2 = 1e9f, fx1 = 0.0f, fz1 = 0.0f;
@@ -91,7 +92,9 @@ inline float blocks(float x, float z, float lambda, int seed) {
     const float slab = c * 0.42f + a * (px - fx1) + b * (pz - fz1);
     // (the slabs meet at the joint: a heightfield's walls would stretch; the crack shows the break)
     const float meet = std::clamp(e / 0.14f, 0.0f, 1.0f);
-    const float crack = -0.10f * std::exp(-e / 0.05f);
+    // (only small blocks crack: a crack across a hundred metres is a round black pit under a low sun)
+    // (and a crack the mesh cannot hold is one cell's pit)
+    const float crack = lambda < 40.0f ? -0.10f * smooth(finest * 2.5f, finest * 6.0f, lambda) * std::exp(-e / 0.05f) : 0.0f;
     return lambda * (slab * meet * meet * (3.0f - 2.0f * meet) + crack);
 }
 
@@ -114,15 +117,16 @@ float rockDetail(float x, float z, float steep, float finest) {
         amp *= 0.5f;
     }
     // the joints: blocks within blocks, each scale riding on the larger
-    float bl = 46.0f;
+    float bl = 110.0f;
     float strength = 0.28f + 0.5f * steep;
     px = x + wx * 0.5f;
     pz = z + wz * 0.5f;
-    for (int oct = 0; oct < 8; ++oct) {
+    for (int oct = 0; oct < 9; ++oct) {
         if (bl * 1.2f <= finest) break;
         // a block fades in as the mesh can hold it
         const float show = smooth(finest, finest * 2.5f, bl);
-        sum += strength * show * blocks(px, pz, bl, oct);
+        // (the largest blocks are spurs, not slabs: a fifth of their strength would otherwise stand as walls)
+        sum += strength * show * blocks(px, pz, bl, oct, finest) * (oct == 0 ? 0.45f : 1.0f);
         const float npx = cr * px + sr * pz - 13.1f, npz = -sr * px + cr * pz + 27.3f;
         px = npx;
         pz = npz;
@@ -141,10 +145,10 @@ struct DispMap {
     int n = 0;
     float tile = 1.8f, cr = 1.0f, sr = 0.0f, texel = 0.0f;
     bool ok() const { return !levels.empty(); }
-    float at(float x, float z, float cell) const {
-        const float u = (cr * x - sr * z) / tile, v = (sr * x + cr * z) / tile;
+    float at(float x, float z, float cell, float scale = 1.0f) const {
+        const float u = (cr * x - sr * z) / (tile * scale), v = (sr * x + cr * z) / (tile * scale);
         int L = 0;
-        float t = texel;
+        float t = texel * scale;
         while (L + 1 < int(levels.size()) && t * 2.0f <= cell) {
             t *= 2.0f;
             ++L;
@@ -231,7 +235,7 @@ void dagAddTube(DagMeshCPU& m, float3 a, float3 b, float radius, int sides) {
 }
 
 static void buildPolar(DagWorld& w, DagWorld::Polar& P, const std::vector<float2>* terrace, int nAz, float r0, float rOut, float fadeFrom, float fadeTo, float finestMin,
-                       const std::function<DagDemSample(double, double, bool)>& demAt, bool cull, const DispMap* disp, float dispAmp, const DispMap* field, float fieldAmp) {
+                       const std::function<DagDemSample(double, double, bool)>& demAt, bool cull, float cullFrom, const DispMap* disp, float dispAmp, const DispMap* field, float fieldAmp) {
     const float q = 1.0f + 6.2831853f / nAz;
     const float logQ1 = std::log(q);
     const int nR = int(std::ceil(std::log(rOut / r0) / logQ1)) + 1;
@@ -275,12 +279,18 @@ static void buildPolar(DagWorld& w, DagWorld::Polar& P, const std::vector<float2
             }
             if (terrace) {
                 // the scree: the fine scan's stones in the geometry, close by
-                const float stones = disp && disp->ok() ? (disp->at(x, z, cell) - 0.4f) * dispAmp : 0.0f;
+                float stones = 0.0f;
+                if (disp && disp->ok()) {
+                    const float big = dagBigStones(x, z), rock = dagBedrock(x, z);
+                    const float fine = (disp->at(x, z, cell) - 0.4f) * dispAmp;
+                    const float large = (disp->at(x, z, cell, 2.2f) - 0.4f) * dispAmp * 2.0f;
+                    stones = (fine + (large - fine) * big) * (1.0f - 0.8f * rock) + 0.05f * rock;
+                }
                 const float stoneFade = 1.0f - smooth(40.0f, 140.0f, r);
                 // the terrace: flat with a little unevenness inside its polygon, the natural ground beyond a short shoulder
                 const float d = r - polyR[a];
                 const float flat = 1.0f - smooth(0.6f, 4.0f, d);
-                const float top = 0.06f * gnoise(x / 2.1f, z / 2.1f) + 0.02f * gnoise(x / 0.7f, z / 0.7f) - 0.02f;
+                const float top = 0.16f * gnoise(x / 5.0f + 2.0f, z / 5.0f) + 0.06f * gnoise(x / 2.1f, z / 2.1f) + 0.02f * gnoise(x / 0.7f, z / 0.7f) - 0.02f;
                 // around the terrace the rock stays at most a little over the floor, here and there an outcrop; it can fall away as far as it likes
                 const float crop = gnoise(ang * 3.1f + 5.0f, 0.3f) * 0.6f + gnoise(ang * 9.7f, 1.7f) * 0.4f;
                 const float limit = 0.4f + 0.012f * d + std::max(crop, 0.0f) * 1.3f * smooth(0.5f, 5.0f, d);
@@ -315,8 +325,8 @@ static void buildPolar(DagWorld& w, DagWorld::Polar& P, const std::vector<float2
                 const float3 p = P.pos[size_t(j) * nAz + a];
                 const float rr = std::sqrt(p.x * p.x + p.z * p.z);
                 const float slope = (p.y - 1.7f) / rr;
-                if (slope >= best - 0.003f) keep[size_t(j) * nAz + a] = 1;
-                best = std::max(best, slope - 12.0f / rr);
+                if (slope >= best - 0.003f || rr < cullFrom) keep[size_t(j) * nAz + a] = 1;
+                if (rr >= 30.0f) best = std::max(best, slope - 12.0f / rr);
             }
         }, 16);
     }
@@ -343,7 +353,7 @@ static void buildPolar(DagWorld& w, DagWorld::Polar& P, const std::vector<float2
             P.idx.push_back(make_uint3(i00, i01, i11));
             P.idx.push_back(make_uint3(i00, i11, i10));
         }
-    if (!cull) {
+    if (terrace) {
         // the centre's small hole is under the eye's feet: covered by a fan
         const unsigned centre = unsigned(P.pos.size());
         P.pos.push_back(make_float3(0, Y[0], 0));
@@ -367,7 +377,7 @@ static void buildPolar(DagWorld& w, DagWorld::Polar& P, const std::vector<float2
             o[3] = 65535;
         }
     }, 8);
-    if (cull) std::printf("dag: orta halka: %zu / %zu hucre gorunur\n", kept, size_t(nAz) * (nR - 1));
+    if (cull) std::printf("dag: halka %.0f m: %zu / %zu hucre gorunur\n", rOut, kept, size_t(nAz) * (nR - 1));
 }
 
 void dagPlaceStones(DagWorld& w, const Config& cfg);
@@ -392,13 +402,13 @@ void dagBuildNear(DagWorld& w, const Config& cfg, const std::function<DagDemSamp
     field.sr = std::sin(1.13f);
     field.texel = field.tile / field.n;
     const float fieldAmp = cfg.f("rock.field", 1.2f);
-    buildPolar(w, w.polar[0], &w.terrace, cfg.i("near.az", 4096), cfg.f("near.r0", 0.25f), rNear, 1e9f, 2e9f, cfg.f("near.finest", 0.03f), demAt, false, &disp, cfg.f("rock.disp", 0.2f), &field, fieldAmp);
-    buildPolar(w, w.polar[1], nullptr, cfg.i("mid.az", 8192), rNear - 30.0f, w.midRadius, w.midRadius * 0.75f, w.midRadius * 0.97f, 2.0f, demAt, true, nullptr, 0.0f, &field, fieldAmp);
+    buildPolar(w, w.polar[0], &w.terrace, cfg.i("near.az", 4096), cfg.f("near.r0", 0.25f), rNear, 1e9f, 2e9f, cfg.f("near.finest", 0.03f), demAt, true, 250.0f, &disp, cfg.f("rock.disp", 0.2f), &field, fieldAmp);
+    buildPolar(w, w.polar[1], nullptr, cfg.i("mid.az", 8192), rNear - 30.0f, w.midRadius, w.midRadius * 0.75f, w.midRadius * 0.97f, 2.0f, demAt, true, 0.0f, nullptr, 0.0f, &field, fieldAmp);
 
     // the railing: posts at every corner and at most kSpan apart, a top rail and a middle rail following the ground
     DagMeshCPU rail;
-    rail.tint = cfg.v3("rail.tint", make_float3(0.24f, 0.25f, 0.27f));
-    rail.rough = cfg.f("rail.rough", 0.62f);
+    rail.tint = cfg.v3("rail.tint", make_float3(0.10f, 0.102f, 0.11f));
+    rail.rough = cfg.f("rail.rough", 0.45f);
     rail.material = 2;
     rail.id = 0;
     const float kSpan = 1.6f;
@@ -544,6 +554,26 @@ void dagPlaceStones(DagWorld& w, const Config& cfg) {
         P.proto = int(rnd() * protos * 0.999f);
         // (sunk a little into the ground)
         const float3 at = make_float3(x, g - 0.12f * sy, z);
+        const float M[12] = {ax.x * size, up.x * sy, az.x * size, at.x, ax.y * size, up.y * sy, az.y * size, at.y, ax.z * size, up.z * sy, az.z * size, at.z};
+        std::memcpy(P.m, M, sizeof(M));
+        w.stones.push_back(P);
+    }
+    // low ones on the terrace: the floor is not a plate (too low to be in the way of a body)
+    for (int k = 0; k < cfg.i("stones.terrace", 34); ++k) {
+        const float a = rnd() * 6.2831853f;
+        const float r = std::sqrt(rnd()) * (polyRadius(w.terrace, a) - 0.5f);
+        const float x = r * std::sin(a), z = -r * std::cos(a);
+        const float size = 0.18f + 0.42f * rnd() * rnd();
+        const float g = w.groundY(x, z);
+        const float yaw = rnd() * 6.2831853f;
+        const float3 up = normalize(make_float3((rnd() - 0.5f) * 0.25f, 1.0f, (rnd() - 0.5f) * 0.25f));
+        const float3 t0 = make_float3(std::cos(yaw), 0.0f, std::sin(yaw));
+        const float3 ax = normalize(t0 - up * dot(t0, up));
+        const float3 az = cross(ax, up);
+        const float sy = size * (0.55f + 0.3f * rnd());
+        DagStonePlace P;
+        P.proto = int(rnd() * protos * 0.999f);
+        const float3 at = make_float3(x, g - 0.2f * sy, z);
         const float M[12] = {ax.x * size, up.x * sy, az.x * size, at.x, ax.y * size, up.y * sy, az.y * size, at.y, ax.z * size, up.z * sy, az.z * size, at.z};
         std::memcpy(P.m, M, sizeof(M));
         w.stones.push_back(P);

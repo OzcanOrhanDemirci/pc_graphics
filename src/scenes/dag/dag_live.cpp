@@ -30,9 +30,9 @@ public:
         i.number = "13";
         i.title = L("Dağ", "Mountain");
         i.subtitle = L("Kaçkar'ın tepesinde gün batımı: ufka kadar gerçek yeryüzü", "Sunset on Kaçkar's summit: the real Earth out to the horizon");
-        i.description = L("Küçük, korkuluklu bir seyir terasındasın, 3.921 metrede. Aşağısı buzul gölleri, sırtlar, Karadeniz; sağda Kafkaslar, "
+        i.description = L("Küçük, korkuluklu bir seyir terasındasın, Kaçkar'ın 3.937 metrelik doruğunda. Aşağıda sırtlar ve Karadeniz; sağda Kafkaslar, "
                           "arkada Ağrı. Gördüğün her tepe gerçek, en uzağı yüzlerce kilometre ötede ve hava onu yavaş yavaş siler.",
-                          "You stand on a small railed viewing terrace at 3,921 metres. Below are glacial lakes, ridges, the Black Sea; to the right the "
+                          "You stand on a small railed viewing terrace on Kaçkar's 3,937 metre summit. Below are ridges and the Black Sea; to the right the "
                           "Caucasus, behind you Ararat. Every peak you see is real, the farthest hundreds of kilometres away, and the air slowly "
                           "wipes it out.");
         i.details = {
@@ -56,9 +56,9 @@ public:
                "Sixteen rays a pixel on a fixed pattern: brute-force supersampling. No temporal accumulation, no grain, nothing that "
                "improves when you stop: every frame is the same frame.")},
             {L("Teşekkür", "Credits"),
-             L("Yükseklik: Copernicus DEM GLO-30/GLO-90 (© DLR, © Airbus, Copernicus). Renk: Sentinel-2 cloudless 2016, EOX (CC BY 4.0, "
+             L("Yükseklik: Copernicus DEM GLO-30 (© DLR, © Airbus, Copernicus); Ermenistan ve Azerbaycan çevresinde SRTM (Mapzen Terrain Tiles, USGS). Renk: Sentinel-2 cloudless 2016, EOX (CC BY 4.0, "
                "değiştirilmiş Copernicus Sentinel verisi). assets/dag/KAYNAKLAR.md.",
-               "Elevation: Copernicus DEM GLO-30/GLO-90 (© DLR, © Airbus, Copernicus). Colour: Sentinel-2 cloudless 2016 by EOX (CC BY 4.0, "
+               "Elevation: Copernicus DEM GLO-30 (© DLR, © Airbus, Copernicus); around Armenia and Azerbaijan SRTM (Mapzen Terrain Tiles, USGS). Colour: Sentinel-2 cloudless 2016 by EOX (CC BY 4.0, "
                "modified Copernicus Sentinel data). assets/dag/KAYNAKLAR.md.")}};
         i.tags = {L("Çizim mesafesi", "Draw distance"), L("Atmosfer", "Atmosphere"), L("Gerçek yer", "Real place")};
         i.image = "assets/gallery/dag.jpg";
@@ -157,7 +157,7 @@ public:
             a_.exposureEv -= 0.25f;
             a_.applyDisplay();
         }
-        // binoculars: the right button; the wheel while holding it zooms between 4x and 24x
+        // binoculars: the right button; the wheel while holding it zooms between 3x and 30x
         if (in.rightDown) {
             binoZoom_ = std::clamp(binoZoom_ * std::pow(1.15f, in.scroll), 3.0f, 30.0f);
         }
@@ -167,7 +167,9 @@ public:
         a_.cam.fovY = 2.0f * std::atan(std::tan(baseFov * 0.5f * M_PIf / 180.0f) / zoom_) * 180.0f / M_PIf;
         // looking: the mouse to the right turns the view right (the picture's right is forward x up, as the renderer's)
         const float sens = 0.0022f / zoom_;
-        if (look_) {
+        // (the first frames carry the jump from where the cursor was to the capture: not a look)
+        if (settle_ > 0) --settle_;
+        else if (look_) {
             a_.cam.yaw -= in.mouseDX * sens;
             a_.cam.pitch = std::clamp(a_.cam.pitch - in.mouseDY * sens, -1.45f, 1.45f);
         }
@@ -207,6 +209,7 @@ public:
         stepPhase_ += dt * length(vel_) * 1.9f;
         a_.cam.eyeHeight = 1.7f - 0.7f * crouch_ + 0.012f * moving * std::sin(stepPhase_ * 2.0f);
 
+        a_.R.params.time = float(in.now);
         a_.render();
         if (!tex_) {
             glGenTextures(1, &tex_);
@@ -250,8 +253,8 @@ public:
 
     void status(app::Status& s) override {
         using theme::num;
-        s.chips.push_back({num(double(a_.world.farTriangles) / 1e6, 0) + L(" milyon üçgen", " million triangles"), true});
-        s.chips.push_back({L("en uzak yer ", "farthest ground ") + num(a_.world.farthestM * 1e-3, 0) + " km"});
+        s.chips.push_back({num(double(a_.R.totalTriangles) / 1e6, 0) + L(" milyon üçgen", " million triangles"), true});
+        s.chips.push_back({L("en uzak çizilen yer ", "farthest ground drawn ") + num(a_.farthestDrawn * 1e-3, 0) + " km"});
         if (zoom_ > 1.05f) {
             s.chips.push_back({L("dürbün ", "binoculars ") + num(zoom_, 0) + "x"});
             const std::string at = a_.lookingAt();
@@ -309,6 +312,7 @@ private:
     float3 vel_{0, 0, 0};
     float vy_ = 0.0f, crouch_ = 0.0f, stepPhase_ = 0.0f, smoothFeet_ = 0.0f;
     float zoom_ = 1.0f, binoZoom_ = 8.0f;
+    int settle_ = 3;
     int samples_ = 2;
 };
 

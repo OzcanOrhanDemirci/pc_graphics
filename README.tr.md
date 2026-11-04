@@ -478,6 +478,17 @@ kat bitki örtüsüyle; ekran kartının bütün gücü ne kadar çok şey oldu�
 
 Plan, kararlar, ölçümler ve doğrulanmayanlar `docs/orman/` içinde.
 
+### 13 · Dağ · Kasım 2026
+
+| | |
+|:---:|:---:|
+| ![İlk bakış: Karadeniz'in üstünde güneş, suda güneş yolu, pusta solan sırt sırt dağlar](docs/images/dag-gunes.jpg) | ![Dürbünle: iki tepesiyle Elbruz, 299 km ötede, karında son ışık](docs/images/dag-elbruz.jpg) |
+| ![Doğuya bakış: Kaçkar'ın havadaki gölgesi ufka kadar, yanında aydınlık doruklar](docs/images/dag-golge.jpg) | ![Korkuluktan: alçak güneşte kaya ve taşlar, aşağıda vadi](docs/images/dag-kaya.jpg) |
+
+Tek dar hedef: **çizim mesafesi.** Kaçkar'ın gerçek doruğunda küçük, korkuluklu bir teras, gün batımı. Göz terastan çıkamıyor ve bu her şeyi belirliyor: oyunlar uzağı ayrıntı seviyesiyle çizer, çünkü oyuncu her yere gidebilir. Burada 1 yay saniyesi yükseklik modelinin terastan görülebilen her hücresi bir kez bulunup üçgen olur ve hiç değişmez: belirme, atlama olamaz, dürbünle (30 kata kadar) aynı dağ durur. 146 milyon üçgen, saniyede 60 kare.
+
+Ölçüler: en uzak çizilen yer 387 km, silueti göğe karşı hâlâ %3,7. Her bilinen zirveye nişanlı ışın haritaya 0,2 km içinde çarpıyor (Elbruz 299,2 / 299,0 km). Plan, kararlar, ölçümler ve doğrulanmayanlar `docs/dag/`'da. Yükseklik: Copernicus DEM ve SRTM (Terrain Tiles); renk: Sentinel-2 cloudless 2016 (EOX, CC BY 4.0).
+
 ## Sahne 1: neyi hesaplıyor
 
 | | |

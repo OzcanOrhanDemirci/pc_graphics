@@ -167,7 +167,7 @@ static __forceinline__ __device__ float3 cirrusOver(float3 skyL, float3 o, float
     const float m1 = tex2DLod<float>(cudaTextureObject_t(params.cirrus), p.x / (params.cirrusTile * 0.37f) + 0.71f, p.z / (params.cirrusTile * 0.37f) - 0.23f,
                                      fmaxf(lod + 1.43f, 0.0f));
     const float cover0 = saturate(((m0 * 0.7f + m1 * 0.3f) - (1.0f - params.cirrusCover)) / 0.3f);
-    const float cover = cover0 * cover0;
+    const float cover = cover0 * cover0 * smoothstepf(0.025f, 0.10f, d.y);
     if (cover <= 0.0f) return skyL;
     // along the slanted path the thin sheet thickens, up to the sheet's breadth
     const float sec = 1.0f / fmaxf(fabsf(d.y) + 0.05f, 0.05f);
@@ -207,12 +207,38 @@ static __forceinline__ __device__ float3 skyColour(float3 o, float3 d, int k) {
 static __forceinline__ __device__ float3 shadeSea(float3 o, float3 d, float t) {
     const float3 p = o + d * t;
     const Under u = underOf(p);
-    const float3 n = u.up;
+    const float3 up0 = u.up;
     const float3 v = -d;
-    const float cv = fmaxf(dot(n, v), 1e-3f);
-    // large calm and rippled patches of the sea: the wind's slicks, seen as the sun's path breaking up
+    const float cv0 = fmaxf(dot(up0, v), 1e-3f);
+    // the waves that the sample can resolve lean its surface; those it cannot widen the slopes (the same energy either way). A wave is long
+    // across the wind. Along the view a sample covers far more sea than across it: that is what decides
+    const float footAcross = t * params.pixelAngle, footAlong = footAcross / fmaxf(cv0, 0.004f);
+    const float3 ex = normalize(make_float3(1, 0, 0) - up0 * up0.x), ez = normalize(make_float3(0, 0, 1) - up0 * up0.z);
+    const float wa = u.mx * 0.53f + u.mz * 0.85f, wb = u.mx * 0.85f - u.mz * 0.53f;   // along and across the wave crests
+    float s2 = params.seaSlope2 * 0.28f;
+    float tx = 0.0f, tz = 0.0f;
+    float wl = 5200.0f, amp2 = params.seaSlope2 * 0.20f;
+    for (int oct = 0; oct < 7; ++oct) {
+        const float a = wa / wl, b = wb / (wl * 0.22f);
+        if (wl < footAlong * 0.4f || wl * 0.22f < footAcross * 0.4f) {
+            s2 += amp2;
+        } else {
+            // the gradient of smooth noise, by differences
+            const float tp = params.time * (0.35f / wl) * 40.0f;
+            const float n0 = vnoise(a + tp, b + 31.0f * float(oct)), na = vnoise(a + tp + 0.3f, b + 31.0f * float(oct)), nb = vnoise(a + tp, b + 31.0f * float(oct) + 0.3f);
+            const float amp = sqrtf(amp2);
+            const float ga = (na - n0) * 3.3f, gb = (nb - n0) * 3.3f;
+            tx += amp * (ga * 0.53f + gb * 0.85f);
+            tz += amp * (ga * 0.85f - gb * 0.53f);
+        }
+        wl *= 0.42f;
+        amp2 *= 0.8f;
+    }
+    // large calm and rippled patches of the sea: the wind's slicks
     const float nA = vnoise(u.mx / 9000.0f, u.mz / 9000.0f) * 0.55f + vnoise(u.mx / 2600.0f, u.mz / 2600.0f) * 0.3f + vnoise(u.mx / 800.0f, u.mz / 800.0f) * 0.15f;
-    const float s2 = params.seaSlope2 * (0.55f + 0.9f * nA);
+    s2 *= 0.45f + 1.1f * nA;
+    const float3 n = normalize(up0 + ex * tx + ez * tz);
+    const float cv = fmaxf(dot(n, v), 1e-3f);
     const float cl = dot(n, params.sunDir);
     // the sun's glitter: Beckmann with the waves' slopes, Smith's masking: over the footprint the waves are never seen one by one
     const float3 hv = normalize(v + params.sunDir);
@@ -221,7 +247,7 @@ static __forceinline__ __device__ float3 shadeSea(float3 o, float3 d, float t) {
     const float tan2 = (1.0f - ch * ch) / (ch * ch);
     const float D = expf(-tan2 / s2) / (M_PIf * s2 * ch * ch * ch * ch);
     const float F0 = 0.02f;
-    const float Fh = F0 + (1.0f - F0) * powf(1.0f - vh, 5.0f);
+    const float Fh = F0 + (1.0f - F0) * powf(fmaxf(1.0f - vh, 0.0f), 5.0f);
     // Smith's G for the Beckmann slopes, rational fit
     const auto lambda = [&](float c) {
         const float a = c / sqrtf(fmaxf((1.0f - c * c), 1e-6f) * s2);
@@ -244,7 +270,7 @@ static __forceinline__ __device__ float3 shadeSea(float3 o, float3 d, float t) {
     for (int i = 0; i < 3; ++i) {
         const float3 nn = normalize(n + towards * slopes[i]);
         const float cvn = fmaxf(dot(v, nn), 0.0f);
-        const float F = F0 + (1.0f - F0) * powf(1.0f - cvn, 5.0f);
+        const float F = F0 + (1.0f - F0) * powf(fmaxf(1.0f - cvn, 0.0f), 5.0f);
         float3 r = d - nn * (2.0f * dot(d, nn));
         // the planet's up differs at the point from the eye's up: the table is by the eye's
         if (r.y < 0.0f) r.y = -r.y;
@@ -259,7 +285,7 @@ static __forceinline__ __device__ float3 shadeSea(float3 o, float3 d, float t) {
 // the rock's grain over the satellite's colour: a scan on each axis by the normal's share (no stretching on steep faces)
 static __forceinline__ __device__ void triplanar(int which, float tile, float rot, float3 p, float3 bw, float foot, float3& colour, float3& normal) {
     const float s = 1.0f / tile;
-    const float L = fmaxf(log2f(fmaxf(foot * s * 8192.0f, 1e-3f)), 0.0f);
+    const float L = fmaxf(log2f(fmaxf(foot * s * (which == 0 ? 4096.0f : 8192.0f), 1e-3f)), 0.0f);
     const float cr = cosf(rot), sr = sinf(rot);
     float3 c = make_float3(0, 0, 0), nb = make_float3(0, 0, 0);
     const auto one = [&](float u, float v, float w, float3 axisU, float3 axisV) {
@@ -288,7 +314,8 @@ static __forceinline__ __device__ float3 groundLight(const Under& u, float3 n, f
     // the sun's disk behind the horizon: the share of it seen, linear in the height of the disk over the horizon
     float vis = saturate((e - horizon + params.sunRad) / (2.0f * params.sunRad));
     vis = vis * vis * (3.0f - 2.0f * vis);
-    const float cl = dot(n, params.sunDir);
+    // (a slope's own roughness: the terminator is no line on the mountain)
+    const float cl = saturate((dot(n, params.sunDir) + 0.05f) / 1.05f);
     float3 E = make_float3(0, 0, 0);
     if (cl > 0.0f && vis > 0.0f) {
         const float3 sunT = sunThroughAir(u.alt + 5.0f, muS);
@@ -302,7 +329,9 @@ static __forceinline__ __device__ float3 groundLight(const Under& u, float3 n, f
         }
         E += params.sunE * sunT * (cl * vis * rayVis);
     }
-    E += skyIrradiance(n) * ao;
+    // the sky reaches what faces up: in the shade the rock's relief is read by this
+    const float faceUp = saturate(dot(n, u.up));
+    E += skyIrradiance(n) * (ao * (0.5f + 0.5f * faceUp * faceUp));
     return E;
 }
 
@@ -393,13 +422,21 @@ static __forceinline__ __device__ float3 shadeGround(float3 p, float3 d, float t
         // close up the scan is the ground itself: its own colour (the satellite only tints it)
         if (wFine > 0.01f) {
             triplanar(1, params.rockTile[0], 0.33f, p, bw, foot, c, nn);
-            if (steepMix > 0.02f && params.rockAlbedo[2]) {
+            const float bigM = dagBigStones(p.x, p.z);
+            if (bigM > 0.01f) {
+                float3 c2, n2;
+                triplanar(1, params.rockTile[0] * 2.2f, 0.33f, p, bw, foot, c2, n2);
+                c = c + (c2 - c) * bigM;
+                nn = nn + (n2 - nn) * bigM;
+            }
+            const float bareM = fmaxf(steepMix, dagBedrock(p.x, p.z));
+            if (bareM > 0.02f && params.rockAlbedo[2]) {
                 float3 c2, n2;
                 triplanar(2, params.rockTile[0] * 1.6f, 0.91f, p, bw, foot, c2, n2);
                 const float cl2 = luminance709(c2);
-                c2 = (make_float3(cl2, cl2, cl2) * 0.6f + c2 * 0.4f) * 1.5f;
-                c = c + (c2 - c) * steepMix;
-                nn = nn + (n2 - nn) * steepMix;
+                c2 = (make_float3(cl2, cl2, cl2) * 0.7f + c2 * 0.3f) * 1.5f;
+                c = c + (c2 - c) * bareM;
+                nn = nn + (n2 - nn) * bareM;
             }
             const float3 scan = c * params.rockGain;
             const float tintBack = saturate(macroLum / 0.12f);
@@ -411,16 +448,17 @@ static __forceinline__ __device__ float3 shadeGround(float3 p, float3 d, float t
     // the snow close by: the satellite's blur over ten metres becomes a sharp, torn edge against the rock
     if (foot < 6.0f) {
         const float near = saturate(log2f(6.0f / fmaxf(foot, 0.01f)) * 0.5f);
-        const float tear = (vnoise(p.x * 0.31f + 3.0f, p.z * 0.31f) - 0.5f) * 0.5f + (vnoise(p.x * 1.3f, p.z * 1.3f + 9.0f) - 0.5f) * 0.3f + (vnoise(p.x * 5.1f, p.z * 5.1f) - 0.5f) * 0.2f;
-        const float amount = saturate((macroLum - 0.22f) / 0.25f + tear * 0.9f);
+        const float tear = (vnoise(p.x * 0.05f + 3.0f, p.z * 0.05f) - 0.5f) * 0.55f + (vnoise(p.x * 0.19f, p.z * 0.19f + 9.0f) - 0.5f) * 0.3f + (vnoise(p.x * 0.9f, p.z * 0.9f) - 0.5f) * 0.15f;
+        const float amount = saturate(((macroLum - 0.27f) / 0.10f) + tear * 3.0f);
         const float cover = amount * amount * (3.0f - 2.0f * amount);
         // where the satellite mixed snow and rock the rock takes back its own brightness
         const float cap = macroLum > 0.13f ? 0.13f / macroLum : 1.0f;
         const float3 rock = albedo * (1.0f + (cap - 1.0f) * near);
-        const float3 snowA = make_float3(0.86f, 0.88f, 0.92f);
+        const float3 snowA = make_float3(0.72f, 0.74f, 0.78f);
         const float c2 = cover * near + saturate((macroLum - 0.22f) / 0.25f) * (1.0f - near);
         albedo = rock + (snowA * params.albedoGainSnow - rock) * c2;
-        n = normalize(n + (ngIn - n) * c2);
+        // (snow lies smoother than what it covers)
+        n = normalize(n + (normalize(ngIn + u.up * 1.5f) - n) * c2);
     }
     float3 E = groundLight(u, n, ngIn, p, ao, horizon, polar, 0.02f + cellSize * 0.2f, k);
     float3 surf = albedo * E * INV_PIf;
@@ -431,7 +469,7 @@ static __forceinline__ __device__ float3 shadeGround(float3 p, float3 d, float t
         const float rip = 0.002f + 0.006f * vnoise(u.mx / 40.0f, u.mz / 40.0f);
         const float3 wn = normalize(u.up + ex * ((vnoise(u.mx / 3.0f, u.mz / 3.0f) - 0.5f) * rip) + ez * ((vnoise(u.mx / 3.0f + 17.0f, u.mz / 3.0f) - 0.5f) * rip));
         const float cv = fmaxf(-dot(d, wn), 0.0f);
-        const float F = 0.02f + 0.98f * powf(1.0f - cv, 5.0f);
+        const float F = 0.02f + 0.98f * powf(fmaxf(1.0f - cv, 0.0f), 5.0f);
         float3 r = d - wn * (2.0f * dot(d, wn));
         if (r.y < 0.0f) r.y = -r.y * 0.2f + 1e-3f;
         r = normalize(r);
@@ -508,8 +546,9 @@ static __forceinline__ __device__ float3 shadeMesh(unsigned int id, unsigned int
     const DagGeom& g = params.geoms[id - DAG_ID_RAIL];
     const uint3 tri = g.idx[prim];
     float3 n = normalize(baryLerp(g.nrm[tri.x], g.nrm[tri.y], g.nrm[tri.z], b));
-    const float3 ngw = normalize(cross(g.pos[tri.y] - g.pos[tri.x], g.pos[tri.z] - g.pos[tri.x]));
-    float3 off = ngw;
+    const float3 crw = cross(g.pos[tri.y] - g.pos[tri.x], g.pos[tri.z] - g.pos[tri.x]);
+    const float crl = length(crw);
+    float3 off = crl > 1e-12f ? crw * (1.0f / crl) : n;
     if (dot(off, d) > 0.0f) off = -off;
     if (dot(n, d) > 0.0f) n = -n;
     const float3 sd = normalize(params.sunDir + (make_float3(1, 0, 0) * params.sunDisk[k].x + make_float3(0, 0, 1) * params.sunDisk[k].y) * params.sunRad);
@@ -528,7 +567,7 @@ static __forceinline__ __device__ float3 shadeMesh(unsigned int id, unsigned int
     // the paint: a dielectric coat over its colour, worn by the weather in patches
     const float wear = g.material == 2 ? vnoise(p.x * 7.0f + p.y * 3.0f, p.z * 7.0f - p.y * 3.0f) * 0.5f + vnoise(p.x * 41.0f + p.y * 17.0f, p.z * 41.0f - p.y * 23.0f) * 0.5f : 0.5f;
     const float3 F0 = g.material == 2 ? g.tint * (0.7f + 0.6f * wear) : g.tint;
-    const float3 F = F0 + (make_float3(1, 1, 1) - F0) * powf(1.0f - vh, 5.0f);
+    const float3 F = F0 + (make_float3(1, 1, 1) - F0) * powf(fmaxf(1.0f - vh, 0.0f), 5.0f);
     const float3 spec = F * (D * G / (4.0f * cv * fmaxf(cl, 1e-3f)));
     // the sky in the metal, blurred by its roughness: a look along the reflection (the table is smooth enough)
     float3 r = d - n * (2.0f * dot(d, n));
@@ -546,10 +585,10 @@ static __forceinline__ __device__ float3 shadeMesh(unsigned int id, unsigned int
     } else {
         seen = skyLookup(r);
     }
-    float3 c = seen * (F0 + (make_float3(1, 1, 1) - F0) * powf(1.0f - cv, 5.0f));
+    float3 c = seen * (F0 + (make_float3(1, 1, 1) - F0) * powf(fmaxf(1.0f - cv, 0.0f), 5.0f));
     c += params.sunE * sunT * spec * (cl * rayVis);
     if (g.material == 1) c = c + g.tint * INV_PIf * (params.sunE * sunT * (cl * rayVis) + skyIrradiance(n));
-    if (g.material == 2) c = c + make_float3(0.05f, 0.05f, 0.052f) * ((1.4f - wear) * INV_PIf) * (params.sunE * sunT * (cl * rayVis) + skyIrradiance(n));
+    if (g.material == 2) c = c + make_float3(0.018f, 0.018f, 0.019f) * ((1.5f - wear) * INV_PIf) * (params.sunE * sunT * (cl * rayVis) + skyIrradiance(n));
     return c;
 }
 
@@ -580,9 +619,11 @@ extern "C" __global__ void __raygen__render() {
         }
         if (hit && (tSea < 0.0f || t < tSea)) farthest = fmaxf(farthest, t);
         float3 c;
+        float pathOf = 0.0f;   // 0 sky, 1 sea, 2 rock copy, 3 railing, 4 near ring, 5 mid ring, 6 far mesh (for the record of a bad sample)
         if (!hit && tSea < 0.0f) {
             c = skyColour(params.eye, d, k);
         } else if (!hit || (tSea > 0.0f && tSea < t)) {
+            pathOf = 1.0f;
             const float3 p = params.eye + d * tSea;
             float3 S, T;
             airTo(p, S, T);
@@ -595,6 +636,7 @@ extern "C" __global__ void __raygen__render() {
             float3 ng = make_float3(0, 1, 0);
             const float3 p = params.eye + d * t;
             float3 surf;
+            pathOf = id >= DAG_ID_STONE ? 2.0f : id == DAG_ID_RAIL ? 3.0f : id == DAG_ID_NEAR ? 4.0f : id == DAG_ID_MID ? 5.0f : 6.0f;
             if (id >= DAG_ID_STONE) {
                 float mtx[12];
                 optixHitObjectGetObjectToWorldTransformMatrix(mtx);
@@ -625,6 +667,7 @@ extern "C" __global__ void __raygen__render() {
         }
         if (!(isfinite(c.x) && isfinite(c.y) && isfinite(c.z))) {
             if (params.badCount) atomicAdd(params.badCount, 1u);
+            if (params.probe) params.probe[1] = make_float4(float(px), float(py), pathOf, t);
             continue;
         }
         // resolved as the eye will see it: a bright sky beside a dark ridge stays a clean edge after the display's curve
@@ -657,6 +700,11 @@ extern "C" __global__ void __raygen__final() {
         // the eye opens up in the dark parts of a scene that holds a bright sky: a gain on the dark, none on the bright
         const float Ls = luminance709(c);
         c *= 1.0f + params.shadowLift / (1.0f + Ls / params.liftKnee);
+        if (params.zoomK > 1.001f) {
+            const float P = fmaxf(params.zoomPivot, 1e-3f);
+            const float Y0 = fmaxf(luminance709(c), 1e-5f);
+            c *= P * powf(Y0 / P, params.zoomK) / Y0;
+        }
         const float u = (float(px) + 0.5f) / params.width - 0.5f, v = (float(py) + 0.5f) / params.height - 0.5f;
         const float r2 = (u * u + v * v) * 2.0f;
         c *= 1.0f - params.vignette * r2 * r2 * 0.5f - params.vignette * r2 * 0.5f;
