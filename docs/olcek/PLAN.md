@@ -1,9 +1,9 @@
 # PLAN · sahne 7: "Ölçek"
 
 > Tek kaynak plan. 2026-10-05 gecesi Özcan'la uzun bir konuşmayla yazıldı; konuşmanın tamamı hafızada
-> `grafik/project_grafik_fikirler.md` sonundaki "🔬 Fikir: mikroskopla maddenin içine" bloğundan itibaren. Durum ve
+> `project_grafik_fikirler.md` (hafıza arşivinde) sonundaki "🔬 Fikir: mikroskopla maddenin içine" bloğundan itibaren. Durum ve
 > ölçümler `docs/olcek/DURUM.md`'de. Bağlam sıkıştırılırsa önce bu dosyayı, sonra hafızada `genel/feedback_gpu_ve_grafik.md`
-> §19 (kıpraşma), §21 (netlik), §28 (derin yakınlaşma, Heykel) ve `grafik/feedback_grafik_netlik.md`'yi oku.
+> §19 (kıpraşma), §21 (netlik), §28 (derin yakınlaşma, Heykel) ve `grafik/project_pc_graphics.md`'yi oku.
 >
 > **Yetki (Özcan, her sahnede):** *"En iyi sonucu elde etmek için her şey serbest ve tamamen özgürsün. Yani planda
 > değişiklik yapabilir, her türlü aracı kullanabilir, indirebilir, araştırabilirsin."* pc_graphics'in üst amacı: bir yapay

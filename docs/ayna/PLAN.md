@@ -117,7 +117,7 @@ süsünde azalan verime girilmez.
 
 ## 7 · Çalışma kuralları (otonom oturum)
 
-- Önce oku: [[gpu-ve-grafik]] (§6, §7, §13-14, §19, §27, §30, §31), [[grafik-netlik-kurali]], bu plan.
+- Önce oku: [[gpu-ve-grafik]] (§6, §7, §13-14, §19, §27, §30, §31), [[project-pc-graphics]], bu plan.
 - Her aşamada ölç, sayıyı DURUM.md'ye yaz; "temiz görünüyor" yetmez. Görüntü değişikliği kareye bakılmadan bitmiş sayılmaz.
 - Önemli kareleri SendUserFile ile gönder (Özcan uyuyor; sabah bakar): kısa, Türkçe, ne gördüğünü söyle. Az ve anlamlı.
 - **Ajan yok, kendin çalış.** Ölçümler Ö1-Ö6 dışında ek denetim katmanı kurma.

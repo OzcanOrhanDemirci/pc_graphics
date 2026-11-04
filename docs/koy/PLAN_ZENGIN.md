@@ -6,7 +6,7 @@
 > Tek kaynak plan. 2026-10-04 akşamı Özcan'ın emriyle, **tam otonom, ajansız**. Önceki: `PLAN_ADA.md` (🏁), durum
 > `DURUM.md`. Bağlam sıkışırsa önce bu dosya, sonra DURUM'un başı, sonra hafızada `genel/feedback_gpu_ve_grafik.md` §24.
 
-## 1 · Özcan'ın sözü (özet; birebiri hafızada `grafik/project_ada_zengin_gorevi.md`)
+## 1 · Özcan'ın sözü (özet; birebiri hafızada `project_ada_zengin_gorevi.md` (hafıza arşivinde))
 
 Sahneyi malzeme olarak zenginleştir: daha fazla kaya, deniz yıldızı, tabanda yeni 8K dokular. İskeleden gemiye kadar ve
 geminin çevresi dahil daha dolu, gerçek su altı zenginliği. Alan küçük (dubaların içi): ekstra özen. Gerçekçilik için görüş

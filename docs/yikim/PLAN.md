@@ -15,7 +15,7 @@ gerçekçi hissettiren bir binanın gerçekçi şekilde yıkılması. Özcan (20
   binanın gerçekçi şekilde yıkılması. Fiziğin çok iyi olması. Matematiksel kesin-mutlak doğru değil. Film gerçekçiliği
   tarzında estetik gerçekçilik diyebiliriz."*
 - Işık: *"RTX ışıklı normal güneşli hava. Yani özel bir atmosfer kurmana, uzun uzun uğraşmana gerek yok."*
-- Fikir aşamasından (hafıza `grafik/project_grafik_fikirler.md`): mühendislik doğruluğu değil *"makul gerçeklik"*;
+- Fikir aşamasından (hafıza `project_grafik_fikirler.md` (hafıza arşivinde)): mühendislik doğruluğu değil *"makul gerçeklik"*;
   *"gerçekçi görünen dedim, gerçekçi değil [...] gerçekçi hissettiriyordur"*; çıta BeamNG ve Red Faction Guerrilla.
 - **Çerçeve (plan sırasında, önemli):** *"Aşırı gerçekçilik için çok araştırma yapmana gerek yok. Ben bunu hobi projesi
   olarak, sen ne kadar iyi fizik yapabilirsin onu görmek için yapıyorum. O nedenle gerçekçi yıkım = iyi yıkım

@@ -30,7 +30,7 @@ boyunca gerilmiş ince çizgilere dönmüş (kitap sırtları sonsuz ipliklere) 
    dizilimi, ışık, nesne). **Yansıma odadan dışarı çıkmaz.** Biz dışarıdayız.
 3. **Ciddi atmosfer, oyuncak değil.** Sanat yönü Claude'da (§5).
 4. Ayna'dan gelen kalıcı kurallar: **ayar paneli yok** (2560×1440, 30-40 FPS, kaliteyi Claude ayarlar) · **fizik ne
-   derse o** · **gren ve pır pır yok** ([[grafik-netlik-kurali]]: canlıda rastgele örnek yok, deterministik) ·
+   derse o** · **gren ve pır pır yok** ([[project-pc-graphics]]: canlıda rastgele örnek yok, deterministik) ·
    **Denizaltı kontrol sözleşmesi** (fare tıklamadan bakar, ters değil; A/D = görüntünün sağ vektörü).
 
 ## 2 · "Fizik ne derse o": tek yönlü duvar
@@ -132,7 +132,7 @@ boyunca gerilmiş ince çizgilere dönmüş (kitap sırtları sonsuz ipliklere) 
 
 ## 7 · Çalışma kuralları (otonom oturum)
 
-- Önce oku: [[gpu-ve-grafik]] (§32 Ayna dersleri başta), [[grafik-netlik-kurali]], bu plan, `docs/ayna/DURUM.md`.
+- Önce oku: [[gpu-ve-grafik]] (§32 Ayna dersleri başta), [[project-pc-graphics]], bu plan, `docs/ayna/DURUM.md`.
 - Her aşamada ölç, sayıyı DURUM.md'ye yaz. Görüntü değişikliği kareye bakılmadan bitmiş sayılmaz. Bir iyileştirme
   farklı desenli ya da daha yakınsamış referansla da ölçülür (Ayna'nın "ölçüyü kandıran kazanç" dersi).
 - Önemli kareleri SendUserFile ile gönder: kısa, Türkçe, ne gördüğünü söyle. Az ve anlamlı.

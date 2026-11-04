@@ -1,7 +1,7 @@
 # PLAN · sahne 6: "Heykel" (çalışma adı; geometri)
 
 > Tek kaynak plan. 2026-10-05 gecesi Özcan'la bir konuşmayla yazıldı; konuşmanın tamamı hafızada
-> `grafik/project_grafik_fikirler.md` sonundaki "Sahne görev çerçevesi" ve ardından gelen bloklarda. Durum ve ölçümler
+> `project_grafik_fikirler.md` (hafıza arşivinde) sonundaki "Sahne görev çerçevesi" ve ardından gelen bloklarda. Durum ve ölçümler
 > `docs/heykel/DURUM.md`'de. Bağlam sıkıştırılırsa önce bu dosyayı, sonra hafızada `genel/feedback_gpu_ve_grafik.md`
 > §6 (SDF), §13 (teknik ≠ görsel), §19 ve §21'i (kararlılık, netlik) oku.
 >

@@ -1,7 +1,7 @@
 # PLAN · sahne 4: "Laboratuvar" (sıvı ve tanecik fiziği, ağır çekim)
 
 > Tek kaynak plan. 2026-10-03 gecesi, Özcan'ın otonom görev emriyle yazıldı (hafızada
-> `grafik/project_laboratuvar_gorevi.md`). Durum ve ölçümler `docs/laboratuvar/DURUM.md`'de. Bağlam sıkıştırılırsa önce
+> `project_laboratuvar_gorevi.md` (hafıza arşivinde)). Durum ve ölçümler `docs/laboratuvar/DURUM.md`'de. Bağlam sıkıştırılırsa önce
 > bu dosyayı, sonra hafızada `genel/feedback_gpu_ve_grafik.md` §9-16'yı oku. Kararları gerekçesiz bozma; bozarsan
 > gerekçesini DURUM.md'ye yaz.
 

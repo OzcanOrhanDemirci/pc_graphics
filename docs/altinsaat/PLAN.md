@@ -57,7 +57,7 @@ gürültüsüz, kenar yumuşatmalı, fiziksel olarak doğru ışık; canlı modd
 - 🔴 **Commit kuralı:** test/doğrulama ile commit **aynı komut satırında durmaz**. Önce koş, çıkış kodunu oku, sonra
   ayrı çağrıda commit. (Bu kural önceki projede iki kez çiğnendi; hafızada ders olarak duruyor.)
 - Commit mesajları Türkçe, sonunda oturumun verdiği atıf satırları. GitHub yok: `git push` yok.
-- Proje hafızası: `hafiza/grafik/project_stress_test_pc.md` (önceki oturum açtı). Kilometre taşlarında güncelle, it.
+- Proje hafızası: `hafiza/grafik/project_pc_graphics.md` (not defteri). Kilometre taşlarında güncelle, it.
 - **Sınırlar günlüğü:** Özcan Claude'un sınırlarını görmek istiyor. `docs/SINIRLAR.md` tut: nerede zorlandın, hangi
   denemen başarısız oldu, neyi göremedin/ölçemedin. Dürüst ve kısa. Proje sonunda Özcan'a bunu da anlat.
 

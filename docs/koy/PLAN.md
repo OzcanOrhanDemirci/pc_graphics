@@ -1,7 +1,7 @@
 # PLAN · sahne 5: "Koy" (su altı)
 
 > Tek kaynak plan. 2026-10-03 akşamı Özcan'la uzun bir konuşmayla yazıldı; konuşmanın tamamı hafızada
-> `grafik/project_grafik_fikirler.md` "Su altı sahnesi" bloğunda. Durum ve ölçümler `docs/koy/DURUM.md`'de (açılınca).
+> `project_grafik_fikirler.md` (hafıza arşivinde) "Su altı sahnesi" bloğunda. Durum ve ölçümler `docs/koy/DURUM.md`'de (açılınca).
 > Bağlam sıkıştırılırsa önce bu dosyayı, sonra hafızada `genel/feedback_gpu_ve_grafik.md` §14, §19, §20'yi oku.
 
 ## 1 · Görev ve Özcan'ın sözleri

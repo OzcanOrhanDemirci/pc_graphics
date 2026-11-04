@@ -1,7 +1,7 @@
 # DURUM · sahne 12 "Ateş"
 
 > Plan `docs/ates/PLAN.md` (hedef, kararlar, mimari); varlıkların kaynağı ve lisansı `docs/ates/VARLIK.md`. Hafızada
-> görev kartı `grafik/project_ates_gorevi.md` (Özcan'ın brief'i birebir). Bu dosya: nerede olduğumuz, ne ölçüldü, ne
+> görev kartı `project_ates_gorevi.md` (hafıza arşivinde) (Özcan'ın brief'i birebir). Bu dosya: nerede olduğumuz, ne ölçüldü, ne
 > açık. Sabitlerin kaynağı başlıklarda, her sabitin yanında (`ates_gas.h`, `ates_wood.h`, `ates_sparks.h`).
 
 ## Özcan: nasıl açılır, ne denenir

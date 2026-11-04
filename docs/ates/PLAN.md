@@ -1,8 +1,8 @@
 # PLAN · sahne 12 "Ateş"
 
 > **Onaylı (Özcan, 2026-10-28).** Tek kaynak plan; durum ve ölçümler `docs/ates/DURUM.md`'de. Sıradaki iş §7
-> (iyileştirme turu). Hafızada görev kartı `grafik/project_ates_gorevi.md` (Özcan'ın brief'i birebir orada); önce
-> `genel/feedback_gpu_ve_grafik.md` §37-38 ve `grafik/feedback_grafik_netlik.md` okunur.
+> (iyileştirme turu). Hafızada görev kartı `project_ates_gorevi.md` (hafıza arşivinde) (Özcan'ın brief'i birebir orada); önce
+> `genel/feedback_gpu_ve_grafik.md` §37-38 ve `grafik/project_pc_graphics.md` okunur.
 
 ## 0 · Hedef (değişmez)
 

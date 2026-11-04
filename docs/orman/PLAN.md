@@ -1,8 +1,8 @@
 # PLAN · sahne 11 "Orman"
 
 > Tek kaynak plan. Durum ve ölçümler `docs/orman/DURUM.md`, varlıkların kaynağı ve lisansı `docs/orman/VARLIK.md`
-> (ikisi de O0'da açılır). Hafızada görev kartı `grafik/project_orman_gorevi.md`; önce `genel/feedback_gpu_ve_grafik.md`
-> §19-21, §27, §30 ve `grafik/feedback_grafik_netlik.md` okunur.
+> (ikisi de O0'da açılır). Hafızada görev kartı `project_orman_gorevi.md` (hafıza arşivinde); önce `genel/feedback_gpu_ve_grafik.md`
+> §19-21, §27, §30 ve `grafik/project_pc_graphics.md` okunur.
 >
 > **Yetki (Özcan, 2026-10-27):** *"Bu projede her sahnede belirttiğim gibi tamamen özgürsün. Yani plana birebir sadık
 > kalmak zorunda değilsin. En iyi sonucu elde etmek için özgürce planda değişiklik yapabilir, benim kararlarımı da

@@ -1,8 +1,8 @@
 # PLAN · sahne 8 "Denizaltı"
 
 > Tek kaynak plan. Durum ve ölçümler `docs/denizalti/DURUM.md`, kaynak ve envanter `docs/denizalti/REFERANS.md`.
-> Hafızada görev kartı `grafik/project_denizalti_gorevi.md`; önce `genel/feedback_gpu_ve_grafik.md` §19-21, §27 ve
-> `grafik/feedback_grafik_netlik.md` okunur.
+> Hafızada görev kartı `project_denizalti_gorevi.md` (hafıza arşivinde); önce `genel/feedback_gpu_ve_grafik.md` §19-21, §27 ve
+> `grafik/project_pc_graphics.md` okunur.
 >
 > **Yetki (Özcan, 2026-10-06):** *"Tam otonom gidelim [...] bu plan da dahil olmak üzere uymak zorunda değilsin. Tam
 > yetkilisin ve özgürsün. Amaca ve en iyi sonuca giden yolda her şey serbest. Bu plan sadece yardımcı bir yön [...]

@@ -4,7 +4,7 @@
 > Durum ve ölçümler `docs/olcek/hiz/DURUM.md`'de. Özcan'ın referans ekran görüntüleri (Alan Becker, *Animation vs.
 > Physics*; yalnız referans, telifli, git dışında) `assets/olcek/referans/`: `zaman-genislemesi.png`, `gamma-egrisi.png`,
 > `uzay-kisalmasi.png`, `kuasar-galaksi.png`. Bağlam sıkıştırılırsa önce bu dosyayı, sonra Ölçek'in `docs/olcek/PLAN.md`
-> §4-§7'sini (zaman, görsel dil, motor), hafızada `genel/feedback_gpu_ve_grafik.md` ve `grafik/feedback_grafik_netlik.md`'yi
+> §4-§7'sini (zaman, görsel dil, motor), hafızada `genel/feedback_gpu_ve_grafik.md` ve `grafik/project_pc_graphics.md`'yi
 > oku.
 >
 > **Yetki (Özcan):** *"Her zamanki gibi tamamen özgürsün, detayları da konuştuk ve gerçekten iyi bir şey bekliyorum. Hiç bu
