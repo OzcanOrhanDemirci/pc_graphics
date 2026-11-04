@@ -11,7 +11,7 @@
 Oyunlar uzağı ayrıntı seviyesiyle (LOD, HLOD, impostor) çizer, çünkü göz her yere gidebilir. Burada göz küçük bir terastan çıkamıyor. Bu kısıt her şeyi değiştirir:
 
 1. **Ayrıntı seviyesi yok.** Terastan görülebilen her hücre önceden bulunur (8 göz konumundan görüş taraması) ve üçgen olur. Bir kez kurulur, hiç değişmez: belirme, geçiş, atlama olamaz.
-2. **Gerçek yer.** Uzakta en zayıf halka gürültüyle üretilmiş arazidir; gerçek yükseklik verisi (Copernicus 30 m) her ölçekte gerçek görünür. Yer: **Kaçkar Dağı doruğu** (3.921 m modelde). Batıda Karadeniz'e batan güneş ve denizde güneş yolu, kuzeyde Kafkaslar (Elbruz 298 km), güneydoğuda Ağrı (295 km).
+2. **Gerçek yer.** Uzakta en zayıf halka gürültüyle üretilmiş arazidir; gerçek yükseklik verisi (Copernicus 30 m) her ölçekte gerçek görünür. Yer: **Kaçkar Dağı doruğu** (3.921 m modelde). Batıda Karadeniz'e batan güneş ve denizde güneş yolu, kuzeyde Kafkaslar (Elbruz 299 km), güneydoğuda Ağrı (295 km).
 3. **Dürbün kanıttır.** Sağ tıkla 30 kata kadar: 300 km ötedeki Elbruz'un iki tepesi seçilir, panel adını ve uzaklığını söyler. LOD'lu bir sahnede dürbün hileyi açığa çıkarır; burada aynı üçgenler.
 4. **Solma fizik.** Rayleigh, Mie, ozon, çoklu saçılma (Hillaire 2020), dağların havadaki gölgesi (gölge yüksekliği haritası). Dünya'nın eğriliği geometride (etkin yarıçap 7.323 km, k = 0,13).
 

@@ -124,6 +124,7 @@ public:
     void goView(int k) {
         a_.cam = DagApp::view(k);
         a_.cam.feet.y = a_.world.groundY(a_.cam.feet.x, a_.cam.feet.z);
+        smoothFeet_ = a_.cam.feet.y;
         vy_ = 0.0f;
         crouch_ = 0.0f;
         vel_ = make_float3(0, 0, 0);
@@ -182,16 +183,25 @@ public:
         vel_ += (want - vel_) * (1.0f - std::exp(-dt * 8.0f));
         float3 p = a_.cam.feet + vel_ * dt;
         a_.world.keepIn(p.x, p.z, 0.32f);
-        const float ground = a_.world.groundY(p.x, p.z);
+        // the feet on the scree: a body does not step down into every gap between the stones (the mean ground under a stride, followed softly)
+        const float e = 0.28f;
+        const float ground = 0.2f * (a_.world.groundY(p.x, p.z) + a_.world.groundY(p.x + e, p.z) + a_.world.groundY(p.x - e, p.z) + a_.world.groundY(p.x, p.z + e) + a_.world.groundY(p.x, p.z - e));
         vy_ -= 9.81f * dt;
         p.y += vy_ * dt;
-        const bool onGround = p.y <= ground + 1e-3f;
+        const bool onGround = p.y <= ground + 1e-3f || (vy_ <= 0.0f && p.y <= smoothFeet_ + 1e-3f);
         if (onGround) {
-            p.y = ground;
+            smoothFeet_ += (ground - smoothFeet_) * (1.0f - std::exp(-dt * 10.0f));
+            p.y = smoothFeet_;
             vy_ = 0.0f;
             if (in.pressed(GLFW_KEY_SPACE)) vy_ = 3.2f;
+        } else {
+            smoothFeet_ = ground;
         }
         a_.cam.feet = p;
+        if (host.testing() && std::fmod(in.now, 1.0) < double(dt)) {
+            std::printf("dag: ayak %.2f %.2f, icerde %d, yon %.1f\n", p.x, p.z, a_.world.inside(p.x, p.z, 0.0f) ? 1 : 0, -a_.cam.yaw * 180.0f / M_PIf);
+            std::fflush(stdout);
+        }
         crouch_ += ((in.isDown(GLFW_KEY_C) ? 1.0f : 0.0f) - crouch_) * (1.0f - std::exp(-dt * 10.0f));
         const float moving = std::min(1.0f, length(vel_) / 1.3f);
         stepPhase_ += dt * length(vel_) * 1.9f;
@@ -297,7 +307,7 @@ private:
     bool texReady_ = false;
     bool started_ = false, look_ = true;
     float3 vel_{0, 0, 0};
-    float vy_ = 0.0f, crouch_ = 0.0f, stepPhase_ = 0.0f;
+    float vy_ = 0.0f, crouch_ = 0.0f, stepPhase_ = 0.0f, smoothFeet_ = 0.0f;
     float zoom_ = 1.0f, binoZoom_ = 8.0f;
     int samples_ = 2;
 };

@@ -5,6 +5,7 @@ assets/dag/KAYNAKLAR.md).
   python tools/dag_veri.py mosaic     the tiles as one lat/lon grid at 1 arc second: assets/dag/dem_1s.u16
   python tools/dag_veri.py imgfetch   Sentinel-2 cloudless 2016 web map tiles, re-runnable
   python tools/dag_veri.py imgbuild   the ground's colour as clip levels around the summit: assets/dag/a0.rgb8 ...
+  python tools/dag_veri.py rocks      Poly Haven's rock scans (CC0), md5 checked: assets/dag/cc0/
 """
 import concurrent.futures as cf
 import json
@@ -290,6 +291,50 @@ def cmd_imgbuild():
                    'lat0': LAT0, 'lon0': LON0, 'R': R * 1000.0}, f)
 
 
+def ph_get(url, path, md5):
+    import hashlib
+    if os.path.exists(path):
+        with open(path, 'rb') as f:
+            if hashlib.md5(f.read()).hexdigest() == md5:
+                return 'have'
+    with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=300) as r:
+        b = r.read()
+    if hashlib.md5(b).hexdigest() != md5:
+        raise RuntimeError('md5: ' + url)
+    with open(path, 'wb') as f:
+        f.write(b)
+    return 'got'
+
+
+def cmd_rocks():
+    d = os.path.join(OUT, 'cc0')
+    os.makedirs(d, exist_ok=True)
+
+    def files(pid):
+        with urllib.request.urlopen(urllib.request.Request(f'https://api.polyhaven.com/files/{pid}', headers=UA), timeout=60) as r:
+            return json.load(r)
+
+    # the two textures
+    for pid, name in (('aerial_rocks_04', 'kayaA'), ('gray_rocks', 'kayaB')):
+        f = files(pid)
+        for m, fn in (('Diffuse', 'albedo'), ('nor_gl', 'normal'), ('Displacement', 'disp')):
+            e = f[m]['8k']['jpg']
+            print(pid, m, ph_get(e['url'], os.path.join(d, f'{name}_{fn}.jpg'), e['md5']), flush=True)
+    # the models: geometry from the glTF's own bin, colour and normals at this resolution
+    for pid, res in (('boulder_01', '8k'), ('rock_07', '4k'), ('rock_09', '4k')):
+        f = files(pid)
+        md = os.path.join(d, pid)
+        os.makedirs(md, exist_ok=True)
+        g = f['gltf'][res]['gltf']
+        print(pid, 'gltf', ph_get(g['url'], os.path.join(md, f'{pid}.gltf'), g['md5']), flush=True)
+        for rel, e in g['include'].items():
+            if rel.endswith('.bin'):
+                print(pid, rel, ph_get(e['url'], os.path.join(md, os.path.basename(rel)), e['md5']), flush=True)
+        for m, fn in (('Diffuse', 'albedo'), ('nor_gl', 'normal')):
+            e = f[m][res]['jpg']
+            print(pid, m, ph_get(e['url'], os.path.join(md, f'{fn}.jpg'), e['md5']), flush=True)
+
+
 if __name__ == '__main__':
     what = sys.argv[1] if len(sys.argv) > 1 else ''
     if what == 'dem':
@@ -300,5 +345,7 @@ if __name__ == '__main__':
         cmd_imgfetch()
     elif what == 'imgbuild':
         cmd_imgbuild()
+    elif what == 'rocks':
+        cmd_rocks()
     else:
         print(__doc__)

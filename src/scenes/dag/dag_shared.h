@@ -38,7 +38,9 @@ struct DagGeom {
     const uint3* idx;
     float3 tint;
     float rough;
-    int material;              // 0 metal, 1 rock, 2 painted steel (tint: its paint)
+    int material;              // 0 metal, 1 a scanned rock (its textures), 2 galvanized steel
+    unsigned long long albedo, normal;   // the scan's (material 1)
+    float texelArea;           // texels of the albedo's level 0
 };
 
 struct DagParams {
@@ -78,9 +80,9 @@ struct DagParams {
 
     // the amplified ground
     DagPolarTex polar[2];          // near, mid
-    unsigned long long rockAlbedo[2], rockNormal[2];   // the scans: 0 the cliffs from the air (large), 1 the rock's grain (close)
+    unsigned long long rockAlbedo[3], rockNormal[3];   // the scans: 0 the cliffs from the air (large), 1 scree (close, on the flats), 2 rock face (close, on the steep)
     float rockTile[4];             // metres a tile: the grain's; the cliffs'; the cliffs' again at a larger scale; the grain's as a boulder field
-    float rockMean[2];             // the scan's mean reflectance: its colour over this is what it adds to the satellite's
+    float rockMean[3];             // the scan's mean reflectance: its colour over this is what it adds to the satellite's
     float rockGain;
 
     // the air

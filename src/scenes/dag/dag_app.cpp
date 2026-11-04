@@ -250,11 +250,13 @@ DagCam DagApp::view(int i) {
     const float deg = M_PIf / 180.0f;
     // bearings from north, clockwise; yaw grows to the left
     const float bearing[] = {299.0f, 30.0f, 118.0f, 200.0f, 330.0f, 299.0f};
-    const float pitch[] = {-1.0f, -1.5f, -1.5f, -4.0f, -3.0f, -14.0f};
+    const float pitch[] = {-2.0f, -2.5f, -2.5f, -4.0f, -3.0f, -14.0f};
     const int k = std::clamp(i, 0, viewCount() - 1);
     c.yaw = -bearing[k] * deg;
     c.pitch = pitch[k] * deg;
-    c.feet = make_float3(0, 0, 0);
+    // a few steps from the railing on that side: the view at once, the railing low in the picture
+    const float r = 4.2f;
+    c.feet = make_float3(r * std::sin(bearing[k] * deg), 0.0f, -r * std::cos(bearing[k] * deg));
     return c;
 }
 
@@ -379,6 +381,22 @@ int runDagCli(int argc, char** argv) {
             }
         }
         std::printf("dag: menzil: en uzak cizilen yer %.1f km, yon %.2f derece, yukseklik %.2f derece\n", best * 1e-3f, bestBearing, bestEl);
+        // the named places: is each where it should be? A ray at its top (or just under it), the distance it meets, against the distance by the map
+        for (const DagPlace& P : a.world.places) {
+            const float3 top = a.world.worldPoint(P.mx, P.mz, P.altitude > 0.0f ? double(P.altitude) - 15.0 : 300.0);
+            DagCam c;
+            c.feet = make_float3(0, a.world.groundY(0, 0), 0);
+            c.fovY = 0.5f;
+            const float3 toTop = top - (c.feet + make_float3(0, c.eyeHeight, 0));
+            const float d = length(toTop);
+            c.pitch = std::asin(toTop.y / d);
+            c.yaw = std::atan2(-toTop.x, -toTop.z);
+            a.cam = c;
+            a.render();
+            const float bearing = std::fmod(-c.yaw * 180.0f / M_PIf + 360.0f, 360.0f);
+            std::printf("dag: yer: %-16s yon %6.2f, yukseklik %5.2f, haritada %6.1f km, isin %6.1f km (%s)\n", P.nameEn.c_str(), bearing, c.pitch * 180.0f / M_PIf, std::hypot(P.mx, P.mz) * 1e-3,
+                        a.R.probe.x * 1e-3f, a.R.probe.y < 0.5f ? "gok" : a.R.probe.y > 1.5f ? "deniz" : "zemin");
+        }
         // the sea's own horizon
         const double h = a.eyeAlt;
         std::printf("dag: menzil: denizin ufku %.1f km (etkin yaricap %.0f km)\n", std::sqrt(2.0 * a.world.Re * h) * 1e-3, a.world.Re * 1e-3);

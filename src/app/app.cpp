@@ -596,6 +596,18 @@ int App::run(const Options& opt) {
                 key(GLFW_KEY_SPACE); wait(2.0);
                 control("yapi", 0); wait(6.0);
             }
+            if (infos_[s].id == "dag") {
+                // the views (timed); the binoculars on the Caucasus, the wheel in; walking until the railing stops it, four ways
+                for (int k = 0; k < 5; ++k) { key(GLFW_KEY_1 + k); wait(1.5); log("dag bakis " + std::to_string(k + 1)); shot("dag_bakis" + std::to_string(k + 1)); }
+                key(GLFW_KEY_2); wait(0.3); right(true); wait(1.0); script_.push_back([] { Step st{14, 0, 0, ""}; st.fx = 6.0f; return st; }()); wait(1.2);
+                log("dag durbun"); shot("dag_durbun"); right(false); wait(0.8);
+                key(GLFW_KEY_1); hold(GLFW_KEY_W, true); wait(9.0); hold(GLFW_KEY_W, false); wait(0.3); log("dag korkuluk"); shot("dag_korkuluk");
+                hold(GLFW_KEY_D, true); wait(6.0); hold(GLFW_KEY_D, false); wait(0.3); shot("dag_korkuluk_sag");
+                hold(GLFW_KEY_S, true); hold(GLFW_KEY_LEFT_SHIFT, true); wait(7.0); hold(GLFW_KEY_S, false); hold(GLFW_KEY_LEFT_SHIFT, false); wait(0.3); shot("dag_korkuluk_arka");
+                key(GLFW_KEY_SPACE); wait(0.25); shot("dag_ziplama"); wait(1.0); hold(GLFW_KEY_C, true); wait(0.6); shot("dag_egilme"); hold(GLFW_KEY_C, false); wait(0.3);
+                key(GLFW_KEY_TAB); wait(0.3); control("samples", 3); wait(1.5); log("dag 32 ornek"); control("samples", 4); wait(1.5); log("dag 64 ornek"); control("samples", 2); wait(0.3); key(GLFW_KEY_TAB);
+                key(GLFW_KEY_R); wait(1.0);
+            }
             if (infos_[s].id == "ates") {
                 // the four views (timed), a walk round the pit, the fire laid again (every log's structure built anew)
                 for (int k = 0; k < 4; ++k) { key(GLFW_KEY_1 + k); wait(3.0); log("ates bakis " + std::to_string(k + 1)); shot("ates_bakis" + std::to_string(k + 1)); }

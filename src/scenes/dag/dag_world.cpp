@@ -680,9 +680,19 @@ bool DagWorld::prepare(const std::string& root, const Config& cfg) {
             if (k.kind == 0) {
                 // the top within a few kilometres, from the model itself
                 float best = 0.0f;
+                int br = 0, bc = 0;
+                const int r0 = int((kDemLatTop - k.lat) * 3600.0), c0 = int((k.lon - kDemLonLeft) * 3600.0);
                 for (int a = -90; a <= 90; ++a)
-                    for (int b = -90; b <= 90; ++b) best = std::max(best, dem.at(int((kDemLatTop - k.lat) * 3600.0) + a, int((k.lon - kDemLonLeft) * 3600.0) + b));
+                    for (int b = -90; b <= 90; ++b)
+                        if (dem.at(r0 + a, c0 + b) > best) {
+                            best = dem.at(r0 + a, c0 + b);
+                            br = r0 + a;
+                            bc = c0 + b;
+                        }
                 P.altitude = best;
+                geo.forward(kDemLatTop - br / 3600.0, kDemLonLeft + bc / 3600.0, s, az);
+                P.mx = s * std::sin(az);
+                P.mz = -s * std::cos(az);
             }
             places.push_back(P);
         }

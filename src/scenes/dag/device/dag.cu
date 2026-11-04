@@ -348,6 +348,8 @@ static __forceinline__ __device__ float3 shadeGround(float3 p, float3 d, float t
         float3 cSum = make_float3(0, 0, 0), nSum = make_float3(0, 0, 0);
         float wSum = 0.0f;
         float3 c, nn;
+        // (the terrace and its shoulders are scree whatever a single stone's side says)
+        const float steepMix = saturate((0.90f - dot(ngIn, u.up)) / 0.12f) * saturate((sqrtf(p.x * p.x + p.z * p.z) - 12.0f) / 10.0f);
         if (wLarge > 0.01f) {
             triplanar(0, params.rockTile[2], 0.61f, p, bw, foot, c, nn);
             cSum += c * (wLarge / params.rockMean[0]);
@@ -361,9 +363,16 @@ static __forceinline__ __device__ float3 shadeGround(float3 p, float3 d, float t
             wSum += wMid;
         }
         if (wField > 0.01f) {
-            // the grain again at eight times its size: a field of boulders
+            // the grain again at eight times its size: a field of boulders; on the steep, rock faces
             triplanar(1, params.rockTile[3], 1.13f, p, bw, foot, c, nn);
-            cSum += c * (wField / params.rockMean[1]);
+            c = c * (1.0f / params.rockMean[1]);
+            if (steepMix > 0.02f && params.rockAlbedo[2]) {
+                float3 c2, n2;
+                triplanar(2, params.rockTile[3] * 1.3f, 0.47f, p, bw, foot, c2, n2);
+                c = c + (c2 * (1.0f / params.rockMean[2]) - c) * steepMix;
+                nn = nn + (n2 - nn) * steepMix;
+            }
+            cSum += c * wField;
             nSum += nn * (wField * 0.6f);
             wSum += wField;
         }
@@ -384,6 +393,14 @@ static __forceinline__ __device__ float3 shadeGround(float3 p, float3 d, float t
         // close up the scan is the ground itself: its own colour (the satellite only tints it)
         if (wFine > 0.01f) {
             triplanar(1, params.rockTile[0], 0.33f, p, bw, foot, c, nn);
+            if (steepMix > 0.02f && params.rockAlbedo[2]) {
+                float3 c2, n2;
+                triplanar(2, params.rockTile[0] * 1.6f, 0.91f, p, bw, foot, c2, n2);
+                const float cl2 = luminance709(c2);
+                c2 = (make_float3(cl2, cl2, cl2) * 0.6f + c2 * 0.4f) * 1.5f;
+                c = c + (c2 - c) * steepMix;
+                nn = nn + (n2 - nn) * steepMix;
+            }
             const float3 scan = c * params.rockGain;
             const float tintBack = saturate(macroLum / 0.12f);
             albedo = albedo * (1.0f - wFine) + scan * (0.75f + 0.25f * tintBack) * wFine;
@@ -436,6 +453,55 @@ static __forceinline__ __device__ float3 shadeGround(float3 p, float3 d, float t
     if (params.debug == 1) return albedo;
     if (params.debug == 2) return n * 0.5f + make_float3(0.5f, 0.5f, 0.5f);
     return surf;
+}
+
+// a scanned rock: its colour brought to the summit's grey, its normal map; the sun and the sky like the ground's
+static __forceinline__ __device__ float3 shadeStone(const DagGeom& g, unsigned int prim, float2 b, const float m[12], float3 p, float3 d, float t, float foot, int k) {
+    const uint3 tri = g.idx[prim];
+    const float3 q0 = g.pos[tri.x], q1 = g.pos[tri.y], q2 = g.pos[tri.z];
+    const auto xfP = [&](float3 q) { return make_float3(m[0] * q.x + m[1] * q.y + m[2] * q.z + m[3], m[4] * q.x + m[5] * q.y + m[6] * q.z + m[7], m[8] * q.x + m[9] * q.y + m[10] * q.z + m[11]); };
+    const auto xfV = [&](float3 q) { return make_float3(m[0] * q.x + m[1] * q.y + m[2] * q.z, m[4] * q.x + m[5] * q.y + m[6] * q.z, m[8] * q.x + m[9] * q.y + m[10] * q.z); };
+    const float3 p0 = xfP(q0), p1 = xfP(q1), p2 = xfP(q2);
+    float3 n = normalize(xfV(baryLerp(g.nrm[tri.x], g.nrm[tri.y], g.nrm[tri.z], b)));
+    float3 ng = cross(p1 - p0, p2 - p0);
+    const float ngl = length(ng);
+    ng = ngl > 1e-12f ? ng * (1.0f / ngl) : n;
+    if (dot(ng, n) < 0.0f) ng = -ng;
+    if (dot(ng, d) > 0.0f) {
+        ng = -ng;
+        n = -n;
+    }
+    const float2 t0 = g.uv[tri.x], t1 = g.uv[tri.y], t2 = g.uv[tri.z];
+    const float2 uv = t0 * (1.0f - b.x - b.y) + t1 * b.x + t2 * b.y;
+    const float2 du1 = t1 - t0, du2 = t2 - t0;
+    const float uvArea = 0.5f * fabsf(du1.x * du2.y - du1.y * du2.x) * g.texelArea;
+    const float cosT = fmaxf(fabsf(dot(ng, d)), 0.2f);
+    const float lod = fmaxf(0.5f * log2f(fmaxf(uvArea, 1e-9f) / fmaxf(ngl * 0.5f, 1e-12f)) + log2f(fmaxf(foot, 1e-6f) / cosT), 0.0f);
+    const float4 a = tex2DLod<float4>(cudaTextureObject_t(g.albedo), uv.x, uv.y, lod);
+    float3 albedo = make_float3(a.x, a.y, a.z);
+    const float gl = luminance709(albedo);
+    albedo = (make_float3(gl, gl, gl) * 0.65f + albedo * 0.35f) * (params.rockGain * 1.5f);
+    const float det = du1.x * du2.y - du1.y * du2.x;
+    if (fabsf(det) > 1e-12f && g.normal) {
+        const float r = 1.0f / det;
+        const float3 e1 = p1 - p0, e2 = p2 - p0;
+        float3 T = (e1 * du2.y - e2 * du1.y) * r;
+        const float3 B = (e2 * du1.x - e1 * du2.x) * r;
+        T = T - n * dot(n, T);
+        const float tl = length(T);
+        if (tl > 1e-12f) {
+            T = T * (1.0f / tl);
+            const float hand = dot(cross(n, T), B) < 0.0f ? -1.0f : 1.0f;
+            const float3 Bn = cross(n, T) * hand;
+            const float4 nm = tex2DLod<float4>(cudaTextureObject_t(g.normal), uv.x, uv.y, lod);
+            n = normalize(T * (nm.x * 2.0f - 1.0f) + Bn * (-(nm.y * 2.0f - 1.0f)) + n * fmaxf(nm.z * 2.0f - 1.0f, 0.05f));
+        }
+    }
+    if (dot(n, d) > -0.02f) n = normalize(n - d * (dot(n, d) + 0.02f));
+    const Under u = underOf(p);
+    const float4 info = clipRead(params.info, u.mx, u.mz, foot);
+    const float horizon = params.horizonLo + (params.horizonHi - params.horizonLo) * info.w;
+    return albedo * groundLight(u, n, ng, p, 0.85f, horizon, true, 0.003f + foot, k) * INV_PIf;
 }
 
 static __forceinline__ __device__ float3 shadeMesh(unsigned int id, unsigned int prim, float2 b, float3 p, float3 d, float t, int k) {
@@ -529,7 +595,11 @@ extern "C" __global__ void __raygen__render() {
             float3 ng = make_float3(0, 1, 0);
             const float3 p = params.eye + d * t;
             float3 surf;
-            if (id == DAG_ID_RAIL || id >= DAG_ID_STONE) {
+            if (id >= DAG_ID_STONE) {
+                float mtx[12];
+                optixHitObjectGetObjectToWorldTransformMatrix(mtx);
+                surf = shadeStone(params.geoms[id - DAG_ID_RAIL], prim, bary, mtx, p, d, t, t * spread, k);
+            } else if (id == DAG_ID_RAIL) {
                 surf = shadeMesh(id, prim, bary, p, d, t, k);
             } else if (id == DAG_ID_NEAR || id == DAG_ID_MID) {
                 // the polar normal map

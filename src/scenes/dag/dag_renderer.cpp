@@ -587,7 +587,8 @@ void DagRenderer::uploadGround(DagWorld& w) {
         }
         std::vector<uint3>().swap(P.idx);
     }
-    // the railing and the stones
+    // the railing and the stones: the rocks' textures first
+    std::vector<OptixTraversableHandle> protoGas;
     unsigned mid = 0;
     for (auto& m : w.meshes) {
         DagGeom g{};
@@ -619,10 +620,40 @@ void DagRenderer::uploadGround(DagWorld& w) {
         g.tint = m.tint;
         g.rough = m.rough;
         g.material = m.material;
+        if (m.material == 1) {
+            const int k = int(mid) - 1;
+            if (k >= 0 && size_t(k) < w.stoneTex.size()) {
+                unsigned long long ta = 0, tn = 0;
+                int aw = 0;
+                loadRgbaPair(w.stoneTex[size_t(k)].first, w.stoneTex[size_t(k)].second, ta, tn, aw, k == 0 ? &params.rockMean[2] : nullptr);
+                g.albedo = ta;
+                g.normal = tn;
+                g.texelArea = float(aw) * float(aw);
+                // the first rock's scan is a rock face without seams: the steep ground wears it too
+                if (k == 0) {
+                    params.rockAlbedo[2] = ta;
+                    params.rockNormal[2] = tn;
+                }
+            }
+        }
         geomsHost_.push_back(g);
-        place(buildGasTriangles(m.pos.data(), m.pos.size(), m.idx.data(), m.idx.size()), DAG_ID_RAIL + mid);
+        const OptixTraversableHandle h = buildGasTriangles(m.pos.data(), m.pos.size(), m.idx.data(), m.idx.size());
+        protoGas.push_back(h);
+        if (m.material != 1) place(h, DAG_ID_RAIL + mid);
         ++mid;
     }
+    // the rocks' copies: their proto by the instance's id, its place in the transform
+    for (const DagStonePlace& st : w.stones) {
+        OptixInstance oi{};
+        std::memcpy(oi.transform, st.m, sizeof(st.m));
+        oi.instanceId = DAG_ID_STONE + unsigned(st.proto);
+        oi.sbtOffset = 0;
+        oi.visibilityMask = 0xFFu;
+        oi.flags = OPTIX_INSTANCE_FLAG_NONE;
+        oi.traversableHandle = protoGas[size_t(st.proto) + 1];
+        instances_.push_back(oi);
+    }
+    std::printf("dag: %zu kopya kaya\n", w.stones.size());
     if (!geomsHost_.empty()) {
         DagGeom* dg = nullptr;
         CUDA_CHECK(cudaMalloc(reinterpret_cast<void**>(&dg), geomsHost_.size() * sizeof(DagGeom)));
@@ -710,7 +741,7 @@ void DagRenderer::uploadTables(const DagTables& t) {
     for (int k = 0; k < 4; ++k) params.skySh[k] = t.sh[k];
 }
 
-void DagRenderer::uploadRock(int which, const std::string& albedoPath, const std::string& normalPath) {
+void DagRenderer::loadRgbaPair(const std::string& albedoPath, const std::string& normalPath, unsigned long long& albedo, unsigned long long& normal, int& size, float* mean) {
     auto load = [](const std::string& path, std::vector<unsigned char>& out, int& w) {
         int h = 0, c = 0;
         unsigned char* d = stbi_load(path.c_str(), &w, &h, &c, 4);
@@ -734,19 +765,27 @@ void DagRenderer::uploadRock(int which, const std::string& albedoPath, const std
         return;
     }
     // its mean reflectance, as light
-    double sum = 0.0;
-    for (size_t i = 0; i < a.size(); i += 4 * 64) {
-        const float r = a[i] / 255.0f, g = a[i + 1] / 255.0f, b = a[i + 2] / 255.0f;
-        auto lin = [](float x) { return x <= 0.04045f ? x / 12.92f : std::pow((x + 0.055f) / 1.055f, 2.4f); };
-        sum += 0.2126f * lin(r) + 0.7152f * lin(g) + 0.0722f * lin(b);
+    if (mean) {
+        double sum = 0.0;
+        for (size_t i = 0; i < a.size(); i += 4 * 64) {
+            const float r = a[i] / 255.0f, g = a[i + 1] / 255.0f, b = a[i + 2] / 255.0f;
+            auto lin = [](float x) { return x <= 0.04045f ? x / 12.92f : std::pow((x + 0.055f) / 1.055f, 2.4f); };
+            sum += 0.2126f * lin(r) + 0.7152f * lin(g) + 0.0722f * lin(b);
+        }
+        *mean = float(sum / (a.size() / (4 * 64)));
     }
-    params.rockMean[which] = float(sum / (a.size() / (4 * 64)));
     Tex ta2 = makeRgba8Mips(a, aw, true, true);
     Tex tn2 = makeRgba8Mips(n, nw, false, true);
     textures_.push_back(ta2);
     textures_.push_back(tn2);
-    params.rockAlbedo[which] = (unsigned long long)ta2.tex;
-    params.rockNormal[which] = (unsigned long long)tn2.tex;
+    albedo = (unsigned long long)ta2.tex;
+    normal = (unsigned long long)tn2.tex;
+    size = aw;
+}
+
+void DagRenderer::uploadRock(int which, const std::string& albedoPath, const std::string& normalPath) {
+    int size = 0;
+    loadRgbaPair(albedoPath, normalPath, params.rockAlbedo[which], params.rockNormal[which], size, &params.rockMean[which]);
 }
 
 void DagRenderer::uploadCirrus(const std::vector<unsigned char>& rgba, int n) {

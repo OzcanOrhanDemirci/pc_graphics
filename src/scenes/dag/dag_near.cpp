@@ -4,12 +4,14 @@
 // terrace cannot see is left out. The terrace's flat, the railing.
 #include "scenes/dag/dag_world.h"
 
+#include <cgltf.h>
 #include <stb_image.h>
 
 #include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <thread>
 
 struct DagDemSample {
@@ -368,6 +370,8 @@ static void buildPolar(DagWorld& w, DagWorld::Polar& P, const std::vector<float2
     if (cull) std::printf("dag: orta halka: %zu / %zu hucre gorunur\n", kept, size_t(nAz) * (nR - 1));
 }
 
+void dagPlaceStones(DagWorld& w, const Config& cfg);
+
 void dagBuildNear(DagWorld& w, const Config& cfg, const std::function<DagDemSample(double, double, bool)>& demAt) {
     // the terrace: a small uneven polygon on the top
     w.terrace.clear();
@@ -423,7 +427,128 @@ void dagBuildNear(DagWorld& w, const Config& cfg, const std::function<DagDemSamp
             prevMid = midP;
         }
     }
+    w.meshes.clear();
     w.meshes.push_back(std::move(rail));
+    dagPlaceStones(w, cfg);
+}
+
+// a scanned rock's triangles, its size brought to one metre on the long side, standing on y = 0
+static bool loadRock(const std::string& path, DagMeshCPU& m) {
+    cgltf_options opt{};
+    cgltf_data* data = nullptr;
+    if (cgltf_parse_file(&opt, path.c_str(), &data) != cgltf_result_success) return false;
+    if (cgltf_load_buffers(&opt, data, path.c_str()) != cgltf_result_success) {
+        cgltf_free(data);
+        return false;
+    }
+    for (cgltf_size n = 0; n < data->nodes_count; ++n) {
+        const cgltf_node& node = data->nodes[n];
+        if (!node.mesh) continue;
+        float W[16];
+        cgltf_node_transform_world(&node, W);
+        for (cgltf_size pi = 0; pi < node.mesh->primitives_count; ++pi) {
+            const cgltf_primitive& pr = node.mesh->primitives[pi];
+            const cgltf_accessor* ap = nullptr;
+            const cgltf_accessor* an = nullptr;
+            const cgltf_accessor* at = nullptr;
+            for (cgltf_size a = 0; a < pr.attributes_count; ++a) {
+                if (pr.attributes[a].type == cgltf_attribute_type_position) ap = pr.attributes[a].data;
+                if (pr.attributes[a].type == cgltf_attribute_type_normal) an = pr.attributes[a].data;
+                if (pr.attributes[a].type == cgltf_attribute_type_texcoord) at = pr.attributes[a].data;
+            }
+            if (!ap || !an || !at || !pr.indices) continue;
+            const unsigned base = unsigned(m.pos.size());
+            for (cgltf_size i = 0; i < ap->count; ++i) {
+                float q[3], v[3], t[2];
+                cgltf_accessor_read_float(ap, i, q, 3);
+                cgltf_accessor_read_float(an, i, v, 3);
+                cgltf_accessor_read_float(at, i, t, 2);
+                m.pos.push_back(make_float3(W[0] * q[0] + W[4] * q[1] + W[8] * q[2] + W[12], W[1] * q[0] + W[5] * q[1] + W[9] * q[2] + W[13], W[2] * q[0] + W[6] * q[1] + W[10] * q[2] + W[14]));
+                m.nrm.push_back(normalize(make_float3(W[0] * v[0] + W[4] * v[1] + W[8] * v[2], W[1] * v[0] + W[5] * v[1] + W[9] * v[2], W[2] * v[0] + W[6] * v[1] + W[10] * v[2])));
+                m.uv.push_back(make_float2(t[0], t[1]));
+            }
+            for (cgltf_size i = 0; i + 2 < pr.indices->count; i += 3)
+                m.idx.push_back(make_uint3(base + unsigned(cgltf_accessor_read_index(pr.indices, i)), base + unsigned(cgltf_accessor_read_index(pr.indices, i + 1)),
+                                           base + unsigned(cgltf_accessor_read_index(pr.indices, i + 2))));
+        }
+    }
+    cgltf_free(data);
+    if (m.pos.empty()) return false;
+    float3 lo = m.pos[0], hi = m.pos[0];
+    for (const float3& q : m.pos) {
+        lo = fminf3(lo, q);
+        hi = fmaxf3(hi, q);
+    }
+    const float side = std::max(hi.x - lo.x, std::max(hi.y - lo.y, hi.z - lo.z));
+    const float3 mid = make_float3((lo.x + hi.x) * 0.5f, lo.y, (lo.z + hi.z) * 0.5f);
+    for (float3& q : m.pos) q = (q - mid) * (1.0f / side);
+    return true;
+}
+
+// the rocks: lying about outside the railing, thick near outcrops, large ones further out; never over the railing's height close to it
+void dagPlaceStones(DagWorld& w, const Config& cfg) {
+    w.stoneTex.clear();
+    w.stones.clear();
+    const std::string dir = w.rootPath() + "/assets/dag/cc0/";
+    const char* ids[3] = {"boulder_01", "rock_07", "rock_09"};
+    int protos = 0;
+    for (const char* id : ids) {
+        DagMeshCPU m;
+        if (!loadRock(dir + id + "/" + id + ".gltf", m)) {
+            std::printf("dag: tarama yok: %s\n", id);
+            continue;
+        }
+        m.material = 1;
+        m.tint = make_float3(1, 1, 1);
+        m.rough = 0.8f;
+        w.meshes.push_back(std::move(m));
+        w.stoneTex.push_back({dir + id + "/albedo.jpg", dir + id + "/normal.jpg"});
+        ++protos;
+    }
+    if (!protos) return;
+    const int count = cfg.i("stones.count", 900);
+    unsigned h = 0x1234567u;
+    auto rnd = [&]() {
+        h ^= h << 13;
+        h ^= h >> 17;
+        h ^= h << 5;
+        return float(h & 0xFFFFFF) / float(0xFFFFFF);
+    };
+    int tries = 0;
+    while (int(w.stones.size()) < count && tries < count * 40) {
+        ++tries;
+        // distance: log-uniform from the railing outwards
+        const float r = 11.0f * std::exp(rnd() * std::log(700.0f / 11.0f));
+        const float a = rnd() * 6.2831853f;
+        const float x = r * std::sin(a), z = -r * std::cos(a);
+        const float d = r - polyRadius(w.terrace, a);
+        if (d < 1.0f) continue;
+        // clusters: more where a low noise is high
+        const float cl = gnoise(x / 26.0f + 3.0f, z / 26.0f) * 0.5f + 0.5f;
+        if (rnd() > cl * cl * 1.8f) continue;
+        // the size grows with the distance from the terrace: boulders stay out of the view's way
+        const float big = 0.6f + 4.0f * rnd() * rnd();
+        const float size = big * std::clamp(0.3f + 0.12f * d, 0.35f, 2.2f);
+        const float g = w.groundY(x, z);
+        const float e = 1.0f;
+        const float gx = (w.groundY(x + e, z) - w.groundY(x - e, z)) * 0.5f / e, gz = (w.groundY(x, z + e) - w.groundY(x, z - e)) * 0.5f / e;
+        // not on very steep faces; tilted partly with the ground, turned at random
+        if (std::sqrt(gx * gx + gz * gz) > 1.1f) continue;
+        const float3 up = normalize(make_float3(-gx * 0.6f + (rnd() - 0.5f) * 0.3f, 1.0f, -gz * 0.6f + (rnd() - 0.5f) * 0.3f));
+        const float yaw = rnd() * 6.2831853f;
+        const float3 t0 = make_float3(std::cos(yaw), 0.0f, std::sin(yaw));
+        const float3 ax = normalize(t0 - up * dot(t0, up));
+        const float3 az = cross(ax, up);
+        const float sy = size * (0.75f + 0.5f * rnd());
+        DagStonePlace P;
+        P.proto = int(rnd() * protos * 0.999f);
+        // (sunk a little into the ground)
+        const float3 at = make_float3(x, g - 0.12f * sy, z);
+        const float M[12] = {ax.x * size, up.x * sy, az.x * size, at.x, ax.y * size, up.y * sy, az.y * size, at.y, ax.z * size, up.z * sy, az.z * size, at.z};
+        std::memcpy(P.m, M, sizeof(M));
+        w.stones.push_back(P);
+    }
+    std::printf("dag: %zu kaya yerlesti\n", w.stones.size());
 }
 
 // the ground's height from the near polar mesh

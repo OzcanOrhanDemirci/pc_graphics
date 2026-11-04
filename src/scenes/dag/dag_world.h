@@ -35,6 +35,12 @@ struct DagMeshCPU {
     int id = 0;
 };
 
+// a copy of a scanned rock
+struct DagStonePlace {
+    int proto = 0;
+    float m[12];               // object to world
+};
+
 struct DagBand {
     float from = 0.0f, to = 0.0f;
     uint64_t cells = 0;
@@ -78,7 +84,9 @@ public:
     Polar polar[2];
     float midRadius = 30000.0f;
 
-    std::vector<DagMeshCPU> meshes;    // the railing, the stones
+    std::vector<DagMeshCPU> meshes;    // 0 the railing; from 1 the scanned rocks (with stoneTex: their textures' paths)
+    std::vector<std::pair<std::string, std::string>> stoneTex;
+    std::vector<DagStonePlace> stones;
     std::vector<DagPlace> places;
 
     // the terrace: the walkable polygon (x, z; the railing stands on it)
