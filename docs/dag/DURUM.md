@@ -1,6 +1,8 @@
 # Sahne 13 · Dağ · durum
 
-## Özcan'ın bakacağı yer
+**Kapandı (2026-11-04):** Özcan canlı baktı, görüntüyü, ışığı, titremeyi ve dar alan hedefini kabul etti, bariz hata görmedi. Geliştirmeye sonra dönülebilir; kalan zayıflar aşağıda "NE DOĞRULANMADI"da.
+
+## Nasıl açılır, neye bakılır
 
 `build\pc_graphics.exe` → galeride **13 Dağ** → Enter. (Doğrudan: `build\pc_graphics.exe --scene dag`.) Veri `cache/dag`'de hazır, yükleme yarım dakika.
 
@@ -8,7 +10,6 @@
 2. **Dürbün:** sağ tık basılı, tekerlek yaklaştırır (3x-30x). Panel bakılan yerin adını ve uzaklığını yazar. Önce güneş yoluna bak: dalgalar çıkar. Sonra tuş **2**, yön 20°: **Elbruz**, 299 km, iki tepesi ve karı. Tuş **3**, yön 114°: **Ağrı**, 295 km, gökten zor ayrılır.
 3. **Tuş 3 ile doğuya dön:** Kaçkar'ın kendi gölgesi havada, ufka kadar üçgen.
 4. **Korkuluğa dayan, aşağı bak.** Kaya, iri taşlar, altta vadi.
-5. Soru: görüntü gönlünü açıyor mu? Dürbünde 10-30 km sırtlar yeterli mi? Korkuluk fazla mı parlak?
 
 Tuşlar: fare bakar · W A S D · Shift hızlı · Boşluk zıplar · C eğilir · sağ tık dürbün · Tab imleç · 1-5 bakışlar · R başa · ↑↓ pozlama · F5 ayar ve hava tabloları (`scenes/dag.cfg`).
 
@@ -56,10 +57,9 @@ Hepsi tek komutla yeniden: `python tools/dag_olc.py --pencere` (çıktı `captur
 
 ## NE DOĞRULANMADI
 
-- **Özcan'ın gözü, canlı his.** Yürüme, fare, dürbün hızı, deniz dalgalarının hareketi. Ters kontrol render vektörüyle ve ana oturumun gerçek girdisiyle doğru; yine de ilk denemede sor (kural).
+- **Ayrı ayrı sorulmadı:** korkuluğun parlaklığı, dürbünde 10-30 km sırtlar, deniz dalgalarının akışı. Özcan genel kabul etti, bunları tek tek söylemedi.
 - **Gerçek fotoğrafla siluet kıyası yok.** Yön, uzaklık ve yükseklik haritayla tutuyor.
 - **Göller:** kodda ayna var ama yalnız modelde düz olan su için. Doruğun 2 km güneyindeki buzul gölü modelde düz değil: su olarak işlenmiyor, uydunun koyu rengiyle duruyor.
 - **Ada ve Fener kıyası** aynı ölçü ama başka yol ve hız. Aynı yol olamaz.
 - **Bellek payı dar.** Başka kart kullanan program varsa sayfalama riski.
 - **Kontrast ölçüsü** ortanca, doğrusal ışıkta, göğe karşı siluette: görüntü eğrisi sonrası ana oturum 387 km kenarında %2,8 ölçmüştü. Sınıra yakın, kesin sayı sayma.
-- **Denizin hareketi:** dalga deseni yavaş kayıyor. Karede güzel; akışı canlı görmedim, kıpırtısı dürbünde ölçülmedi.
