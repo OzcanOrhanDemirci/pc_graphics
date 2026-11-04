@@ -156,6 +156,8 @@ bool DagApp::initRenderer(std::string& err) {
     R.params.atmTop = air.top;
     R.params.sunRad = 0.2665f * M_PIf / 180.0f;
     R.params.sunCos = std::cos(R.params.sunRad);
+    R.params.sunFlat = cfg.f("sun.flat", 0.88f);
+    R.params.sunZoomGain = 1.0f;
     R.params.sunE = air.sunE;
     R.uploadRock(0, root + "/assets/dag/cc0/kayaA_albedo.jpg", root + "/assets/dag/cc0/kayaA_normal.jpg");
     R.uploadRock(1, root + "/assets/dag/cc0/kayaB_albedo.jpg", root + "/assets/dag/cc0/kayaB_normal.jpg");
@@ -178,6 +180,7 @@ bool DagApp::initRenderer(std::string& err) {
     }
     buildAir();
     applyDisplay();
+    R.setPattern(cfg.i("samples", 16), cfg.f("filter.sigma", 0.40f));
     farthestDrawn = measureFarthest();
     return true;
 }
@@ -265,8 +268,6 @@ void DagApp::applyDisplay() {
     R.params.albedoGainSnow = cfg.f("albedo.snow", 1.0f);
     R.params.rockGain = cfg.f("rock.gain", 1.7f);
     R.params.debug = cfg.i("debug", 0);
-    R.params.time = 0.0f;
-    R.setPattern(cfg.i("samples", 16), cfg.f("filter.sigma", 0.40f));
 }
 
 float DagApp::measureFarthest() {
@@ -309,6 +310,7 @@ void DagApp::render() {
     const float zoom = baseTan / tanY;
     const float k = std::clamp((zoom - 2.0f) / 14.0f, 0.0f, 1.0f);
     R.params.zoomK = 1.0f + cfg.f("zoom.contrast", 0.45f) * k;
+    R.params.sunZoomGain = 1.0f / std::max(zoom * zoom, 1.0f);
     if (k > 0.0f) {
         const float3 sk = dagSkyDir(tables, normalize(fwd + up * (6.0f * tanY / float(height) * 60.0f)));
         R.params.zoomPivot = (0.2126f * sk.x + 0.7152f * sk.y + 0.0722f * sk.z) * R.params.exposure;

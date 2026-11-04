@@ -1,4 +1,5 @@
 #define _USE_MATH_DEFINES
+#include "app/lang.h"
 #include "scenes/dag/dag_world.h"
 
 #include <windows.h>
@@ -220,9 +221,10 @@ bool DagWorld::prepare(const std::string& root, const Config& cfg) {
     const std::string assets = root + "/assets/dag", cache = root + "/cache/dag";
     std::error_code ec;
     fs::create_directories(cache, ec);
-    auto say = [&](float f, const std::string& s) {
-        if (progress) progress(f, s);
-        std::printf("dag: %s\n", s.c_str());
+    // the loading screen's line in the reader's language; the console in plain ASCII
+    auto say = [&](float f, const std::string& tr, const std::string& en, const std::string& ascii) {
+        if (progress) progress(f, app::L(tr, en));
+        std::printf("dag: %s\n", ascii.c_str());
         std::fflush(stdout);
     };
     Dem dem;
@@ -255,7 +257,7 @@ bool DagWorld::prepare(const std::string& root, const Config& cfg) {
         int coarseN = 0;
         float coarseCell = 0.0f;
         for (int k = 2; k >= 0; --k) {
-            say(0.02f + 0.03f * (2 - k), "Yeryuzunun egimi ve ufuklari: katman " + std::to_string(k));
+            say(0.02f + 0.03f * (2 - k), "Yeryüzünün eğimi ve ufukları", "The Earth's slopes and horizons", "Yeryuzunun egimi ve ufuklari: katman " + std::to_string(k));
             const int n = kClipN;
             const float cell = kClipCell[k];
             const float half = cell * n * 0.5f;
@@ -373,7 +375,7 @@ bool DagWorld::prepare(const std::string& root, const Config& cfg) {
                 toSrgb[k] = uint8_t(std::clamp(e, 0.0f, 1.0f) * 255.0f + 0.5f);
             }
             for (int k = 0; k < 3; ++k) {
-                say(0.12f + 0.03f * k, "Uydunun gunesi cikariliyor: katman " + std::to_string(k));
+                say(0.12f + 0.03f * k, "Uydunun güneşi çıkarılıyor", "Taking out the satellite's sun", "Uydunun gunesi cikariliyor: katman " + std::to_string(k));
                 const int n = an[k];
                 const float cell = ac[k], half = cell * n * 0.5f;
                 std::ifstream in(assets + "/" + aname[k] + ".rgb8", std::ios::binary);
@@ -436,7 +438,7 @@ bool DagWorld::prepare(const std::string& root, const Config& cfg) {
             std::ofstream(cache + "/albedo.ok") << "ok";
         }
         for (int k = 0; k < 3; ++k) {
-            say(0.2f + 0.03f * k, "Yeryuzunun rengi okunuyor: katman " + std::to_string(k));
+            say(0.2f + 0.03f * k, "Yeryüzünün rengi okunuyor", "Reading the Earth's colour", "Yeryuzunun rengi okunuyor: katman " + std::to_string(k));
             std::ifstream f(cache + "/" + aname[k] + ".bin", std::ios::binary);
             albedo[k].n = an[k];
             albedo[k].cell = ac[k];
@@ -459,7 +461,7 @@ bool DagWorld::prepare(const std::string& root, const Config& cfg) {
     {
         std::ifstream f(farPath, std::ios::binary);
         if (f) {
-            say(0.3f, "Gorunen yeryuzu okunuyor");
+            say(0.3f, "Görünen yeryüzü okunuyor", "Reading the visible Earth", "Gorunen yeryuzu okunuyor");
             uint64_t count = 0;
             f.read(reinterpret_cast<char*>(&count), sizeof(count));
             far.resize(size_t(count));
@@ -475,7 +477,7 @@ bool DagWorld::prepare(const std::string& root, const Config& cfg) {
     }
     if (!haveFar) {
         const double t1 = nowMs();
-        say(0.3f, "Tepeden gorunen her hucre bulunuyor");
+        say(0.3f, "Tepeden görünen her hücre bulunuyor", "Finding every cell the summit can see", "Tepeden gorunen her hucre bulunuyor");
         const double Rd = double(Re);
         std::vector<uint8_t> vis(size_t(kDemW) * kDemH, 0);
         struct Eye {
@@ -524,10 +526,10 @@ bool DagWorld::prepare(const std::string& root, const Config& cfg) {
                     s += s < 60000.0 ? 15.0 : s < 200000.0 ? 25.0 : 40.0;
                 }
             }, 64);
-            say(0.3f + 0.1f * float(e + 1) / eyes.size(), "Gorunen hucreler: goz " + std::to_string(e + 1) + "/" + std::to_string(eyes.size()));
+            say(0.3f + 0.1f * float(e + 1) / eyes.size(), "Tepeden görünen her hücre bulunuyor", "Finding every cell the summit can see", "Gorunen hucreler: goz " + std::to_string(e + 1) + "/" + std::to_string(eyes.size()));
         }
         // the cells to triangles, by whole degree
-        say(0.42f, "Ucgenler kuruluyor");
+        say(0.42f, "Üçgenler kuruluyor", "Building the triangles", "Ucgenler kuruluyor");
         struct TileJob {
             int lat, lon;
         };
@@ -707,7 +709,7 @@ bool DagWorld::prepare(const std::string& root, const Config& cfg) {
         shadowCell = 500.0f;
         shadowN = 2240;
         if (!(f && readVec(f, shadowBase))) {
-            say(0.5f, "Havanin golgesi icin yuksekler");
+            say(0.5f, "Havadaki gölge için yüksek yerler", "The high ground for the shadow in the air", "Havanin golgesi icin yuksekler");
             shadowBase.assign(size_t(shadowN) * shadowN, 0.0f);
             const float half = shadowCell * shadowN * 0.5f;
             parallelFor(shadowN, [&](int r) {
@@ -728,7 +730,7 @@ bool DagWorld::prepare(const std::string& root, const Config& cfg) {
         }
     }
     // the ground around the terrace: its height smooth (a cubic B-spline over the model's cells)
-    say(0.55f, "Terasin cevresindeki kaya");
+    say(0.55f, "Terasın çevresindeki kaya", "The rock around the terrace", "Terasin cevresindeki kaya");
     {
         const Geo g2 = geo;
         const Dem& D = dem;

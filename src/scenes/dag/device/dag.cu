@@ -192,13 +192,23 @@ static __forceinline__ __device__ float3 cirrusOver(float3 skyL, float3 o, float
 static __forceinline__ __device__ float3 skyColour(float3 o, float3 d, int k) {
     float3 c = skyLookup(d);
     c = cirrusOver(c, o, d);
+    // the sun's disk, flattened as the air bends its lower edge more than its upper. Its light is scaled with the zoom: the glare is that of the
+    // picture's pixels, and a disk that fills the view through the binoculars would drown its own edge in it
     const float cs = dot(d, params.sunDir);
-    if (cs > params.sunCos) {
-        const float sinA = sqrtf(fmaxf(1.0f - cs * cs, 0.0f));
-        const float mu = sqrtf(fmaxf(1.0f - sqr(sinA / sinf(params.sunRad)), 0.0f));
-        const float limb = 0.3f + 0.93f * mu - 0.23f * mu * mu;
-        const float area = M_PIf * params.sunRad * params.sunRad;
-        c += params.sunE * sunThroughAir(o.y + params.h0, d.y) * (limb / area);
+    if (cs > params.sunCos * 0.9995f) {
+        const float az0 = atan2f(params.sunDir.x, -params.sunDir.z), az1 = atan2f(d.x, -d.z);
+        float da = az1 - az0;
+        if (da > M_PIf) da -= 2.0f * M_PIf;
+        if (da < -M_PIf) da += 2.0f * M_PIf;
+        const float dx = da * sqrtf(fmaxf(1.0f - d.y * d.y, 0.0f));
+        const float dy = (asinf(clampf(d.y, -1.0f, 1.0f)) - asinf(clampf(params.sunDir.y, -1.0f, 1.0f))) / params.sunFlat;
+        const float q = (dx * dx + dy * dy) / (params.sunRad * params.sunRad);
+        if (q < 1.0f) {
+            const float mu = sqrtf(1.0f - q);
+            const float limb = 0.3f + 0.93f * mu - 0.23f * mu * mu;
+            const float area = M_PIf * params.sunRad * params.sunRad * params.sunFlat;
+            c += params.sunE * sunThroughAir(o.y + params.h0, d.y) * (limb / area * params.sunZoomGain);
+        }
     }
     return c;
 }
@@ -372,8 +382,8 @@ static __forceinline__ __device__ float3 shadeGround(float3 p, float3 d, float t
         // large: the cliffs from the air at a scale of a kilometre; middle: the same at their own scale; fine: the rock in hand
         const float wLarge = saturate(log2f(10.0f / fmaxf(foot, 0.01f)) * 0.5f) * (1.0f - saturate(log2f(0.5f / fmaxf(foot, 0.01f)) * 0.5f));
         const float wMid = saturate(log2f(1.5f / fmaxf(foot, 0.001f)) * 0.5f) * (1.0f - saturate(log2f(0.02f / fmaxf(foot, 0.001f)) * 0.5f));
-        const float wField = saturate(log2f(0.6f / fmaxf(foot, 0.001f)) * 0.5f) * (1.0f - saturate(log2f(0.04f / fmaxf(foot, 0.001f)) * 0.5f));
-        const float wFine = saturate(log2f(0.05f / fmaxf(foot, 0.0005f)) * 0.5f);
+        const float wField = saturate(log2f(0.6f / fmaxf(foot, 0.001f)) * 0.5f) * (1.0f - saturate(log2f(0.008f / fmaxf(foot, 0.001f)) * 0.5f));
+        const float wFine = saturate(log2f(0.012f / fmaxf(foot, 0.0005f)) * 0.5f);
         float3 cSum = make_float3(0, 0, 0), nSum = make_float3(0, 0, 0);
         float wSum = 0.0f;
         float3 c, nn;
@@ -434,7 +444,7 @@ static __forceinline__ __device__ float3 shadeGround(float3 p, float3 d, float t
                 float3 c2, n2;
                 triplanar(2, params.rockTile[0] * 1.6f, 0.91f, p, bw, foot, c2, n2);
                 const float cl2 = luminance709(c2);
-                c2 = (make_float3(cl2, cl2, cl2) * 0.7f + c2 * 0.3f) * 1.5f;
+                c2 = (make_float3(cl2, cl2, cl2) * 0.88f + c2 * 0.12f) * 1.05f;
                 c = c + (c2 - c) * bareM;
                 nn = nn + (n2 - nn) * bareM;
             }
@@ -518,7 +528,7 @@ static __forceinline__ __device__ float3 shadeStone(const DagGeom& g, unsigned i
     const float4 a = tex2DLod<float4>(cudaTextureObject_t(g.albedo), uv.x, uv.y, lod);
     float3 albedo = make_float3(a.x, a.y, a.z);
     const float gl = luminance709(albedo);
-    albedo = (make_float3(gl, gl, gl) * 0.65f + albedo * 0.35f) * (params.rockGain * 1.5f);
+    albedo = (make_float3(gl, gl, gl) * 0.88f + albedo * 0.12f) * (params.rockGain * 1.5f);
     const float det = du1.x * du2.y - du1.y * du2.x;
     if (fabsf(det) > 1e-12f && g.normal) {
         const float r = 1.0f / det;

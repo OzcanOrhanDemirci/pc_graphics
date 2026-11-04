@@ -43,7 +43,7 @@ HD float dagBigStones(float x, float z) {
 // 1 bare rock
 HD float dagBedrock(float x, float z) {
     const float n = 0.7f * dagPatchNoise(x / 5.3f - 3.0f, z / 5.3f + 2.0f, 7u) + 0.3f * dagPatchNoise(x / 1.7f + 9.0f, z / 1.7f, 8u);
-    return smoothstepf(0.62f, 0.68f, n);
+    return smoothstepf(0.66f, 0.71f, n);
 }
 
 // one level of a clip stack: a square of the azimuthal equidistant plane around the summit
@@ -94,6 +94,8 @@ struct DagParams {
     float3 sunE;               // its irradiance above the air
     float sunCos;              // cos of its angular radius
     float sunRad;              // its angular radius (radians)
+    float sunFlat;             // how flattened the air makes it, as it sets
+    float sunZoomGain;         // the disk's light over the zoom's square
 
     // the ground
     DagClip albedo[DAG_CLIPS];     // the ground's colour, sRGB read linear (de-lit)

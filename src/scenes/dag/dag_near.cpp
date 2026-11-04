@@ -284,9 +284,9 @@ static void buildPolar(DagWorld& w, DagWorld::Polar& P, const std::vector<float2
                     const float big = dagBigStones(x, z), rock = dagBedrock(x, z);
                     const float fine = (disp->at(x, z, cell) - 0.4f) * dispAmp;
                     const float large = (disp->at(x, z, cell, 2.2f) - 0.4f) * dispAmp * 2.0f;
-                    stones = (fine + (large - fine) * big) * (1.0f - 0.8f * rock) + 0.05f * rock;
+                    stones = (fine + (large - fine) * big) * (1.0f - 0.55f * rock) + 0.05f * rock;
                 }
-                const float stoneFade = 1.0f - smooth(40.0f, 140.0f, r);
+                const float stoneFade = 1.0f - smooth(25.0f, 80.0f, r);
                 // the terrace: flat with a little unevenness inside its polygon, the natural ground beyond a short shoulder
                 const float d = r - polyR[a];
                 const float flat = 1.0f - smooth(0.6f, 4.0f, d);

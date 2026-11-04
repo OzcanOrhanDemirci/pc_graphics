@@ -605,7 +605,10 @@ int App::run(const Options& opt) {
                 hold(GLFW_KEY_D, true); wait(6.0); hold(GLFW_KEY_D, false); wait(0.3); shot("dag_korkuluk_sag");
                 hold(GLFW_KEY_S, true); hold(GLFW_KEY_LEFT_SHIFT, true); wait(7.0); hold(GLFW_KEY_S, false); hold(GLFW_KEY_LEFT_SHIFT, false); wait(0.3); shot("dag_korkuluk_arka");
                 key(GLFW_KEY_SPACE); wait(0.25); shot("dag_ziplama"); wait(1.0); hold(GLFW_KEY_C, true); wait(0.6); shot("dag_egilme"); hold(GLFW_KEY_C, false); wait(0.3);
-                key(GLFW_KEY_TAB); wait(0.3); control("samples", 3); wait(1.5); log("dag 32 ornek"); control("samples", 4); wait(1.5); log("dag 64 ornek"); control("samples", 2); wait(0.3); key(GLFW_KEY_TAB);
+                key(GLFW_KEY_TAB); wait(0.3); control("samples", 3); wait(1.5); log("dag 32 ornek"); control("samples", 4); wait(1.5); log("dag 64 ornek");
+                // the exposure keys keep the panel's choice; F5: settings, programs, the air's tables again
+                key(GLFW_KEY_UP); wait(1.0); log("dag pozlama 64 ornek"); key(GLFW_KEY_DOWN); control("samples", 2); wait(0.3); key(GLFW_KEY_TAB);
+                key(GLFW_KEY_F5); wait(8.0); log("dag F5"); shot("dag_f5");
                 key(GLFW_KEY_R); wait(1.0);
             }
             if (infos_[s].id == "ates") {
