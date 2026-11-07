@@ -10,8 +10,14 @@
 #endif
 
 namespace ruya {
-inline constexpr float kCellSize = 92.0f;
-inline constexpr float kFarDistance = 1100.0f;
+inline constexpr float kCellSize = 124.0f;
+// Dense fog hides the cut-off: transmittance at kFarDistance is under 4 %.
+inline constexpr float kFarDistance = 640.0f;
+inline constexpr float kTransportDistance = 320.0f;
+// Island stacks rise from this depth, far inside the cloud sea.
+inline constexpr float kIslandBase = -230.0f;
+inline constexpr float kIslandBoundsY = -60.0f;
+inline constexpr float kIslandBoundsRadius = 205.0f;
 inline constexpr float kFovY = 48.0f;
 inline constexpr float kTurnRate = 0.85f;
 inline constexpr int kPrototypeCount = 27;
@@ -25,7 +31,11 @@ inline constexpr unsigned kMaterialDarkStone = 1;
 inline constexpr unsigned kMaterialBronze = 2;
 inline constexpr unsigned kMaterialLeaf = 3;
 inline constexpr unsigned kMaterialWater = 4;
-inline constexpr int kMaterialResolution = 4096;
+inline constexpr unsigned kMaterialMasonry = 5;
+// CC0 texture sets: rock, grass ground, cut stone. Two maps each.
+inline constexpr int kTextureSets = 3;
+inline constexpr unsigned kIslandSlots = 2048;
+inline constexpr unsigned kIslandGraceFrames = 90;
 
 HD unsigned hash(unsigned x) {
     x ^= x >> 16;
@@ -35,7 +45,8 @@ HD unsigned hash(unsigned x) {
     return x ^ (x >> 16);
 }
 HD unsigned cellSeed(int x, int z) {
-    return hash(unsigned(x) * 0x9e3779b9U ^ unsigned(z) * 0x85ebca6bU ^ 0x52555941U);
+    // Nested so that (x, z) and (-x, -z) do not share a seed, as a plain xor of two odd products does.
+    return hash(hash(unsigned(x) * 0x9e3779b9U + 0x52555941U) ^ unsigned(z) * 0x85ebca6bU);
 }
 HD float randomUnit(unsigned x) { return float(hash(x) >> 8) * (1.0f / 16777216.0f); }
 
@@ -69,12 +80,10 @@ HD Cell describeCell(int x, int z) {
     const int rx = int(floorf((float(x) + 0.8f * randomUnit(c.seed + 17)) / 4.0f));
     const int rz = int(floorf((float(z) + 0.8f * randomUnit(c.seed + 23)) / 4.0f));
     c.region = cellSeed(rx + 91, rz - 73) % 4U;
-    const float vacancy = c.region == 2 ? 0.41f : 0.18f;
-    c.offset = make_float3(x * kCellSize + (randomUnit(c.seed + 1) - 0.5f) * 46.0f,
-                          (randomUnit(c.seed + 2) - 0.5f) * 83.0f + (float(c.region) - 1.5f) * 13.0f,
-                          z * kCellSize + (randomUnit(c.seed + 3) - 0.5f) * 46.0f);
-    c.scale = randomUnit(c.seed + 11) < vacancy && (x != 0 || z != 0)
-                  ? 0.0f : lerpf(0.65f, kMaxCellScale, randomUnit(c.seed + 4));
+    const float vacancy = c.region == 2 ? 0.30f : 0.20f;
+    c.offset = make_float3(x * kCellSize + (randomUnit(c.seed + 1) - 0.5f) * 28.0f, 0.0f,
+                          z * kCellSize + (randomUnit(c.seed + 3) - 0.5f) * 28.0f);
+    c.scale = randomUnit(c.seed + 11) < vacancy && (x != 0 || z != 0) ? 0.0f : 1.0f;
     c.yaw = randomUnit(c.seed + 5) * (2.0f * M_PIf);
     return c;
 }
@@ -100,7 +109,7 @@ struct Params {
     float3 eye, U, V, W;
     const Geometry* geometries;
     const InstanceData* instances;
-    unsigned long long materialMap;
+    const unsigned long long* textures;
     float4* color;
     float4* illumination;
     float4* albedo;

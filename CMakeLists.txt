@@ -130,6 +130,7 @@ add_library(pc_core OBJECT
     src/scenes/dag/dag_live.cpp
     src/scenes/ruya/ruya_world.cpp
     src/scenes/ruya/ruya_layout.cpp
+    src/scenes/ruya/ruya_island.cpp
     src/scenes/ruya/ruya_collision.cpp
     src/scenes/ruya/ruya_material.cu
     src/scenes/ruya/ruya_world_test.cpp

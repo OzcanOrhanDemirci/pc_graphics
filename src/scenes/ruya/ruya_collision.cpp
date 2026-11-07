@@ -139,8 +139,53 @@ float3 CollisionWorld::move(float3 start, float3 target) const {
     Camera probe;
     probe.eye = start;
     std::vector<Piece> pieces;
-    for (const Cell& cell : visibleCells(probe, 1, distance + radius, true)) assembleCell(cell, pieces);
-    return move(start, target, pieces);
+    std::vector<Island> islands;
+    for (const Cell& cell : visibleCells(probe, 1, distance + radius, true)) {
+        const CellPlan plan = planCell(cell);
+        pieces.insert(pieces.end(), plan.pieces.begin(), plan.pieces.end());
+        islands.insert(islands.end(), plan.islands, plan.islands + plan.islandCount);
+    }
+    return moveOverIslands(start, move(start, target, pieces), islands);
+}
+
+// Island rock is a distance function, not a stored mesh. The camera marches in
+// short steps and slides along the estimated surface normal on contact.
+float3 CollisionWorld::moveOverIslands(float3 start, float3 target, const std::vector<Island>& islands) {
+    constexpr float kStep = 0.2f;
+    constexpr float kClearance = radius + 0.06f;
+    const auto nearest = [&](float3 p, const Island*& which) {
+        float best = 1e30f;
+        for (const Island& island : islands) {
+            const float d = islandDistance(island, p);
+            if (d < best) { best = d; which = &island; }
+        }
+        return best;
+    };
+    float3 position = start;
+    float3 motion = target - start;
+    const Island* contact = nullptr;
+    const float startDistance = nearest(position, contact);
+    for (int slide = 0; slide < 4 && length(motion) > 1e-6f; ++slide) {
+        const int steps = std::max(1, int(std::ceil(length(motion) / kStep)));
+        const float3 step = motion / float(steps);
+        bool blocked = false;
+        for (int i = 0; i < steps; ++i) {
+            const float3 next = position + step;
+            const float d = nearest(next, contact);
+            // Never step deeper; a camera spawned inside may still walk out.
+            if (d < kClearance && d < std::min(startDistance, kClearance) + 1e-4f) {
+                float3 n = islandGradient(*contact, next);
+                n = n * (1.0f / std::max(length(n), 1e-6f));
+                motion = step * float(steps - i);
+                motion -= n * std::min(0.0f, dot(motion, n));
+                blocked = true;
+                break;
+            }
+            position = next;
+        }
+        if (!blocked) break;
+    }
+    return position;
 }
 
 float3 CollisionWorld::move(float3 start, float3 target, const std::vector<Piece>& pieces) const {

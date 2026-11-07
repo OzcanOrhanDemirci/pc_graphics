@@ -1,5 +1,8 @@
 #include "scenes/ruya/ruya_app.h"
 #include "core/image_io.h"
+#include "scenes/ruya/ruya_island.h"
+
+#include <cmath>
 
 #include <algorithm>
 #include <charconv>
@@ -55,7 +58,7 @@ bool Run::init(const std::string& root, const std::vector<std::string>& override
         }
     }
     if (width < 64 || width > 7680 || height < 64 || height > 4320 || spp < 1 || spp > 4096 ||
-        bounces < 1 || bounces > 12 || detail < 0 || detail > 3) {
+        bounces < 0 || bounces > 12 || detail < 0 || detail > 3) {
         error = "Ruya ayarlari izin verilen araligin disinda";
         return false;
     }
@@ -115,16 +118,21 @@ void Run::release() {
     renderer.release();
 }
 
+// Each view frames a different island kind from outside its rock.
 Camera Run::view(int index) {
+    static const int cells[6][2] = {{0, 0}, {3, -1}, {-2, 2}, {1, 4}, {-4, -3}, {5, 2}};
+    const auto& [cx, cz] = cells[std::clamp(index, 0, 5)];
+    Cell cell = describeCell(cx, cz);
+    for (int step = 1; cell.scale == 0; ++step) cell = describeCell(cx + step, cz);
+    const Island main = planCell(cell).islands[0];
+    const float angle = 0.6f + 1.1f * float(index);
+    const float distance = main.radius + 30.0f + 6.0f * float(index % 3);
     Camera camera;
-    switch (index) {
-    case 1: camera.eye = make_float3(369, -13, 12); camera.yaw = -0.34f; camera.pitch = -0.39f; break;
-    case 2: camera.eye = make_float3(-26, 4, -12); camera.yaw = 1.35f; camera.pitch = 0.08f; break;
-    case 3: camera.eye = make_float3(9, 2, 410); camera.yaw = -0.56f; camera.pitch = -0.16f; break;
-    case 4: camera.eye = make_float3(-185, 27, 130); camera.yaw = -0.33f; camera.pitch = -0.29f; break;
-    case 5: camera.eye = make_float3(-119, 7, -58); camera.yaw = 0.34f; camera.pitch = 0.03f; break;
-    default: break;
-    }
+    camera.eye = make_float3(main.x + std::cos(angle) * distance, main.top + 9.0f + 4.0f * float(index % 2),
+                             main.z + std::sin(angle) * distance);
+    const float3 to = make_float3(main.x, main.top + 2.0f, main.z) - camera.eye;
+    camera.yaw = std::atan2(to.x, -to.z);
+    camera.pitch = std::atan2(to.y, std::hypot(to.x, to.z));
     return camera;
 }
 

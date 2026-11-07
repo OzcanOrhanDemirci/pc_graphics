@@ -1,5 +1,5 @@
 #pragma once
-#include "scenes/ruya/ruya_world.h"
+#include "scenes/ruya/ruya_island.h"
 
 namespace ruya {
 class CollisionWorld {
@@ -11,6 +11,7 @@ public:
     [[nodiscard]] float3 move(float3 start, float3 target, const std::vector<Piece>& pieces) const;
 
 private:
+    [[nodiscard]] static float3 moveOverIslands(float3 start, float3 target, const std::vector<Island>& islands);
     struct Bounds {
         float3 low, high;
         Bounds();

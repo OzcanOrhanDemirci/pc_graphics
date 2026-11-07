@@ -1,6 +1,7 @@
 // Test public world contracts against independent projection and geometry checks.
 #include "scenes/ruya/ruya_world.h"
 #include "scenes/ruya/ruya_collision.h"
+#include "scenes/ruya/ruya_island.h"
 
 #include <algorithm>
 #include <array>
@@ -33,7 +34,7 @@ bool validMesh(const Mesh& mesh, size_t& invalid) {
                                     double(vertex.normal.y) * vertex.normal.y +
                                     double(vertex.normal.z) * vertex.normal.z;
         if (!finiteVector(vertex.position) || !finiteVector(vertex.normal) ||
-            normalLength < 0.98 || normalLength > 1.02 || vertex.material > kMaterialWater) ++invalid;
+            normalLength < 0.98 || normalLength > 1.02 || vertex.material > kMaterialMasonry) ++invalid;
     }
     for (const auto triangle : mesh.indices) {
         if (triangle.x >= mesh.vertices.size() || triangle.y >= mesh.vertices.size() ||
@@ -300,8 +301,8 @@ int testWorld() {
             for (unsigned k = 0; k < 8; ++k) {
                 const float3 corner = make_float3(k & 1 ? lower[i].x : upper[i].x, k & 2 ? lower[i].y : upper[i].y,
                                                   k & 4 ? lower[i].z : upper[i].z);
-                const float3 p = piecePoint(piece, corner) - cell.offset - make_float3(0, kCellBoundsY * cell.scale, 0);
-                largestBound = std::max(largestBound, length(p) / cell.scale);
+                const float3 p = piecePoint(piece, corner) - make_float3(cell.offset.x, kIslandBoundsY, cell.offset.z);
+                largestBound = std::max(largestBound, length(p));
             }
         }
         layouts[cell.region].insert(signature);
@@ -311,7 +312,7 @@ int testWorld() {
     report("yerlesim-bilesen-sayilari-farkli", distinct > 96, distinct);
     report("yerlesim-bayt-ayni", badAssembly == 0, badAssembly);
     report("yerlesim-bos-koridor", emptyCells > 120 && emptyCells < 450, emptyCells);
-    report("yerlesim-donusumlu-kose-siniri", largestBound < kCellBoundsRadius, size_t(largestBound * 1000));
+    report("yerlesim-donusumlu-kose-siniri", largestBound < kIslandBoundsRadius, size_t(largestBound * 1000));
     collisionChecks(failures);
 
     Camera level;
@@ -353,6 +354,61 @@ int testWorld() {
     moveCamera(extreme, 1e6f, 1e6f, 36, 36, 36, 0);
     report("sifir-dt-hareket-etmez", extreme.eye.x == paused.eye.x && extreme.eye.y == paused.eye.y &&
            extreme.eye.z == paused.eye.z && extreme.yaw == paused.yaw && extreme.pitch == paused.pitch);
+    // Islands: the mesh lies on the distance function the camera collides
+    // with, every piece stands on rock, and island shapes do not repeat.
+    {
+        size_t offSurface = 0;
+        size_t floating = 0;
+        size_t badMesh = 0;
+        std::set<std::pair<int, int>> shapes;
+        size_t islandCount = 0;
+        for (int z = -6; z < 6; ++z) for (int x = -6; x < 6; ++x) {
+            const CellPlan plan = planCell(describeCell(x, z));
+            for (int i = 0; i < plan.islandCount; ++i) {
+                const Island& island = plan.islands[i];
+                ++islandCount;
+                if (shapes.count({int(island.radius * 1000.0f), int(island.top * 1000.0f)}))
+                    std::printf("  tekrar %d %d ada %d r %.3f\n", x, z, i, island.radius);
+                shapes.insert({int(island.radius * 1000.0f), int(island.top * 1000.0f)});
+                if (x == 0 && z == 0 && i == 0) {
+                    const Mesh mesh = islandMesh(island);
+                    for (size_t v = 0; v < mesh.vertices.size(); v += 7) {
+                        const float3 q = mesh.vertices[v].position;
+                        if (!std::isfinite(q.x + q.y + q.z) || dot(mesh.vertices[v].normal, mesh.vertices[v].normal) < 0.98f) ++badMesh;
+                        else if (q.y > kIslandBase + 1.0f && std::abs(islandDistance(island, q)) > 0.05f) {
+                            ++offSurface;
+                            std::printf("  yuzey disi %.3f m, y %.1f\n", islandDistance(island, q), q.y - island.top);
+                        }
+                    }
+                }
+            }
+            for (const Piece& piece : plan.pieces) {
+                float support = 1e9f;
+                for (int i = 0; i < plan.islandCount; ++i)
+                    if (islandDistance(plan.islands[i], piece.offset + make_float3(0, 0.6f, 0)) < 0.7f)
+                        support = std::min(support, std::abs(piece.offset.y - islandTop(plan.islands[i], piece.offset.x, piece.offset.z)));
+                if (!(support < 0.6f)) {
+                    ++floating;
+                    std::printf("  havada parca %u, destek %.2f m\n", piece.prototype, support);
+                }
+            }
+        }
+        report("ada-agi-sonlu-ve-normal", badMesh == 0, badMesh);
+        report("ada-agi-mesafe-yuzeyinde", offSurface == 0, offSurface);
+        report("parca-havada-durmaz", floating == 0, floating);
+        report("ada-bicimleri-tekrarsiz", shapes.size() == islandCount, islandCount - shapes.size());
+        const Island main = planCell(describeCell(0, 0)).islands[0];
+        CollisionWorld world;
+        world.build(buildPrototypes(0));
+        const float3 above = make_float3(main.x, islandTop(main, main.x, main.z) + 6.0f, main.z);
+        const float3 landed = world.move(above, above - make_float3(0, 30.0f, 0));
+        report("ada-ustune-iner-gecmez", islandDistance(main, landed) >= CollisionWorld::radius - 0.01f &&
+               landed.y < above.y - 4.0f, size_t(std::max(0.0f, islandDistance(main, landed)) * 1000));
+        const float3 side = make_float3(main.x + main.radius * 2.0f, main.top - 20.0f, main.z);
+        const float3 hit = world.move(side, make_float3(main.x, main.top - 20.0f, main.z));
+        report("ada-duvarindan-gecmez", islandDistance(main, hit) >= CollisionWorld::radius - 0.01f,
+               size_t(std::max(0.0f, islandDistance(main, hit)) * 1000));
+    }
     std::printf("ruya dunya sonucu: %d basarisiz kosul\n", failures);
     return failures == 0 ? 0 : 1;
 }

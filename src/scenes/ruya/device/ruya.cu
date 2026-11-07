@@ -107,60 +107,73 @@ __forceinline__ __device__ float3 cloudDeck(float3 eye, float3 direction, float3
     return lerp3(sky, cloud, mask * (direction.y < 0 ? 0.78f : 0.57f));
 }
 
-// Blending over the geometric axes avoids UV seams between generated faces.
-// Slopes and roughness are filtered on the same footprint as the mineral tint.
-struct Mineral { float tint, roughness; float3 slope; };
-__forceinline__ __device__ Mineral mineralMap(float3 point, float3 normal, float footprint) {
-    const float lod = params.materialDetail == 2 ? 0.0f : log2f(fmaxf(1.0f, footprint * (float(kMaterialResolution) / 2.8f)));
-    const float3 uv = point * (1.0f / 2.8f);
-    float3 weights = make_float3(fabsf(normal.x), fabsf(normal.y), fabsf(normal.z));
-    weights = weights * weights;
-    weights = weights * weights;
-    weights = weights * (1.0f / (weights.x + weights.y + weights.z));
-    Mineral result{};
-    if (weights.x > 0.004f) {
-        const float4 m = tex2DLod<float4>(params.materialMap, uv.z, uv.y, lod);
-        result.tint += weights.x * m.x;
-        result.roughness += weights.x * m.y;
-        result.slope += make_float3(0, m.w - 0.5f, m.z - 0.5f) * weights.x;
-    }
-    if (weights.y > 0.004f) {
-        const float4 m = tex2DLod<float4>(params.materialMap, uv.x + 0.37f, uv.z, lod);
-        result.tint += weights.y * m.x;
-        result.roughness += weights.y * m.y;
-        result.slope += make_float3(m.z - 0.5f, 0, m.w - 0.5f) * weights.y;
-    }
-    if (weights.z > 0.004f) {
-        const float4 m = tex2DLod<float4>(params.materialMap, uv.x, uv.y + 0.22f, lod);
-        result.tint += weights.z * m.x;
-        result.roughness += weights.z * m.y;
-        result.slope += make_float3(m.z - 0.5f, m.w - 0.5f, 0) * weights.z;
-    }
-    return result;
+// Triplanar CC0 scans. Blending over the geometric axes avoids UV seams on
+// generated faces; the LOD follows the pixel footprint so motion stays stable.
+inline constexpr float kTextureResolution = 8192.0f;
+struct Texel { float3 color, slope; float roughness, occlusion; };
+__forceinline__ __device__ void sampleAxis(int set, float u, float v, float lod, float weight, float3 tangent,
+                                           float3 bitangent, Texel& t) {
+    const float4 a = tex2DLod<float4>(params.textures[set * 2], u, v, lod);
+    const float4 n = tex2DLod<float4>(params.textures[set * 2 + 1], u, v, lod);
+    t.color += make_float3(a.x, a.y, a.z) * weight;
+    t.roughness += a.w * weight;
+    t.occlusion += n.z * weight;
+    t.slope += (tangent * (n.x * 2.0f - 1.0f) + bitangent * (n.y * 2.0f - 1.0f)) * weight;
+}
+__forceinline__ __device__ Texel triplanar(int set, float3 p, float3 normal, float tile, float footprint, bool topOnly) {
+    const float lod = log2f(fmaxf(1.0f, footprint * (kTextureResolution / tile)));
+    const float3 uv = p * (1.0f / tile);
+    float3 w = make_float3(fabsf(normal.x), fabsf(normal.y), fabsf(normal.z));
+    w = w * w;
+    w = w * w;
+    if (topOnly) w = make_float3(0, 1, 0);
+    w = w * (1.0f / (w.x + w.y + w.z));
+    Texel t{};
+    const float sx = normal.x < 0 ? -1.0f : 1.0f;
+    const float sy = normal.y < 0 ? -1.0f : 1.0f;
+    const float sz = normal.z < 0 ? -1.0f : 1.0f;
+    if (w.x > 0.004f) sampleAxis(set, uv.z * sx, -uv.y, lod, w.x, make_float3(0, 0, sx), make_float3(0, 1, 0), t);
+    if (w.y > 0.004f) sampleAxis(set, uv.x * sy, uv.z + 0.37f, lod, w.y, make_float3(sy, 0, 0), make_float3(0, 0, -1), t);
+    if (w.z > 0.004f) sampleAxis(set, -uv.x * sz, -uv.y + 0.22f, lod, w.z, make_float3(-sz, 0, 0), make_float3(0, 1, 0), t);
+    return t;
 }
 
 __forceinline__ __device__ Surface material(const Hit& h, float footprint) {
     Surface s{};
     s.normal = h.normal;
     const float3 p = h.position + make_float3(randomUnit(h.seed) * 19.0f, 0, randomUnit(h.seed + 7) * 11.0f);
-    if (h.material == kMaterialStone || h.material == kMaterialDarkStone) {
-        const Mineral m = params.materialDetail ? mineralMap(p, h.normal, footprint)
-                                               : Mineral{0.53f, 0.67f, make_float3(0, 0, 0)};
-        const float coarse = noise(p * 0.24f);
-        const float layers = noise(make_float3(p.x * 0.18f, p.y * 2.1f + coarse, p.z * 0.18f));
-        const float layersWeight = 1.0f - smoothstepf(0.065f, 0.42f, footprint);
-        const float density = 0.71f + coarse * 0.45f + (m.tint - 0.53f) * 1.42f + (layers - 0.5f) * 0.22f * layersWeight;
-        const float3 stone = h.region == 0 ? make_float3(0.76f, 0.63f, 0.45f)
-                            : h.region == 1 ? make_float3(0.64f, 0.71f, 0.67f)
-                            : h.region == 2 ? make_float3(0.62f, 0.39f, 0.27f)
-                                            : make_float3(0.52f, 0.61f, 0.41f);
-        const float damp = smoothstepf(0.42f, 0.74f, coarse);
-        const float moss = damp * smoothstepf(0.36f, 0.86f, h.normal.y);
-        s.color = lerp3(stone * (density * (1.0f - 0.19f * damp)), make_float3(0.085f, 0.15f, 0.057f), moss * 0.62f);
-        if (h.material == kMaterialDarkStone) s.color *= 0.24f;
-        s.roughness = clampf(m.roughness + 0.10f * smoothstepf(0.001f, 0.045f, footprint) - 0.16f * damp, 0.4f, 0.93f);
-        const float3 tangentSlope = m.slope - h.normal * dot(m.slope, h.normal);
-        s.normal = normalize(h.normal - tangentSlope * 1.37f);
+    if (h.material == kMaterialStone || h.material == kMaterialDarkStone || h.material == kMaterialMasonry) {
+        const bool masonry = h.material == kMaterialMasonry;
+        Texel t = triplanar(masonry ? 2 : 0, h.position, h.normal, masonry ? 2.6f : 3.4f, footprint, false);
+        if (!masonry) {
+            // A second, larger and offset projection breaks the 3.4 m repeat on tall walls.
+            const Texel wide = triplanar(0, h.position + make_float3(41.3f, 17.9f, 23.1f), h.normal, 17.0f, footprint, false);
+            const float mix = 0.25f + 0.35f * noise(p * 0.05f);
+            t.color = lerp3(t.color, wide.color, mix);
+            t.slope = t.slope * (1.0f - 0.5f * mix) + wide.slope * (0.6f * mix);
+        }
+        const float macro = noise(p * 0.035f) * 0.6f + noise(p * 0.11f) * 0.4f;
+        const float3 tint = h.region == 0 ? make_float3(1.06f, 1.0f, 0.92f)
+                          : h.region == 1 ? make_float3(0.96f, 1.0f, 1.02f)
+                          : h.region == 2 ? make_float3(1.08f, 0.94f, 0.86f)
+                                          : make_float3(0.98f, 1.02f, 0.94f);
+        t.color = t.color * tint * (0.78f + 0.44f * macro);
+        if (!masonry) {
+            // Grass holds on ledges and the crown, never on the sheer walls.
+            const float grass = smoothstepf(0.70f, 0.88f, h.normal.y + (noise(p * 0.21f) - 0.5f) * 0.3f);
+            if (grass > 0.001f) {
+                const Texel g = triplanar(1, h.position, h.normal, 6.0f, footprint, true);
+                t.color = lerp3(t.color, g.color, grass);
+                t.roughness = lerpf(t.roughness, g.roughness, grass);
+                t.occlusion = lerpf(t.occlusion, g.occlusion, grass);
+                t.slope = lerp3(t.slope, g.slope, grass);
+            }
+        }
+        if (h.material == kMaterialDarkStone) t.color *= 0.35f;
+        s.color = t.color * lerpf(0.55f, 1.0f, t.occlusion);
+        s.roughness = clampf(t.roughness, 0.35f, 0.97f);
+        const float3 tangentSlope = t.slope - h.normal * dot(t.slope, h.normal);
+        s.normal = normalize(h.normal + tangentSlope * 0.9f);
     } else if (h.material == kMaterialBronze) {
         const float patina = smoothstepf(0.40f, 0.77f, noise(p * 1.7f));
         s.color = lerp3(make_float3(0.63f, 0.35f, 0.10f), make_float3(0.045f, 0.24f, 0.19f), patina);
@@ -250,14 +263,17 @@ __forceinline__ __device__ float3 sampleSun(unsigned& state) {
     const float sine = sqrtf(fmaxf(1.0f - cosine * cosine, 0.0f));
     return Frame::from(sunDirection()).toWorld(make_float3(cosf(2.0f * M_PIf * v) * sine, sinf(2.0f * M_PIf * v) * sine, cosine));
 }
+__forceinline__ __device__ float heightIntegral(float density, float falloff, float y, float dy, float distance) {
+    const float base = density * expf(clampf(-falloff * y, -30.0f, 8.0f));
+    const float v = falloff * dy * distance;
+    return base * distance * (fabsf(v) > 1e-4f ? (1.0f - expf(clampf(-v, -30.0f, 30.0f))) / v : 1.0f);
+}
 __forceinline__ __device__ float3 atmospheric(float3 radiance, float3 origin, float3 direction, float distance) {
-    // Analytic height fog with an approximate, unshadowed single-scatter source.
-    const float density = 0.0010f * expf(clampf(-origin.y * 0.035f, -5.0f, 3.0f));
-    const float v = direction.y * distance * 0.035f;
-    const float opticalDepth = density * distance * (fabsf(v) > 0.001f ? (1.0f - expf(clampf(-v, -20.0f, 10.0f))) / v : 1.0f);
+    const float opticalDepth = heightIntegral(0.0040f, 0.028f, origin.y, direction.y, distance) +
+                               heightIntegral(0.0019f, 0.005f, origin.y, direction.y, distance);
     const float transmittance = expf(-fmaxf(opticalDepth, 0.0f));
-    const float forward = powf(fmaxf(dot(direction, sunDirection()), 0.0f), 9.0f);
-    const float3 source = make_float3(0.12f, 0.24f, 0.28f) + make_float3(0.8f, 0.43f, 0.16f) * forward;
+    const float forward = powf(fmaxf(dot(direction, sunDirection()), 0.0f), 8.0f);
+    const float3 source = make_float3(0.26f, 0.34f, 0.40f) + make_float3(0.9f, 0.5f, 0.2f) * forward;
     return radiance * transmittance + source * (1.0f - transmittance);
 }
 
@@ -278,9 +294,10 @@ __forceinline__ __device__ float3 integrate(float3 origin, float3 direction, uns
     float footprint = 0;
     const float cone = 2.0f * length(params.V) / float(params.height);
     for (int bounce = 0; bounce <= params.bounces; ++bounce) {
-        const Hit h = traceTriangles(origin, direction, 1200.0f, bounce == 0 ? kCameraRayMask : kTransportRayMask);
+        const Hit h = traceTriangles(origin, direction, bounce == 0 ? kFarDistance : 1200.0f, bounce == 0 ? kCameraRayMask : kTransportRayMask);
         if (bounce == 0) primary = h;
-        if (h.t >= 1200.0f) {
+        if (h.t >= (bounce == 0 ? kFarDistance : 1200.0f)) {
+            if (bounce == 0) primary.t = 1200.0f;
             float3 light = environment(direction);
             if (bounce == 0) light = cloudDeck(cameraOrigin, cameraDirection, light);
             if (isSun(direction)) light += sunRadiance() * (bounce == 0 ? 1.0f : powerHeuristic(previousPdf, 1.0f / kSunSolidAngle));
@@ -320,7 +337,64 @@ __forceinline__ __device__ float3 integrate(float3 origin, float3 direction, uns
         previousPdf = pdf;
         origin = h.position + h.geometric * 0.006f;
     }
-    return atmospheric(result, cameraOrigin, cameraDirection, fminf(primary.t, 1100.0f));
+    return atmospheric(result, cameraOrigin, cameraDirection, primary.t < 1200.0f ? primary.t : 4000.0f);
+}
+inline constexpr int kAmbientRays = 4;
+inline constexpr float kAmbientReach = 10.0f;
+__forceinline__ __device__ float3 ambientDirection(int index, int count) {
+    // Cosine-weighted Fibonacci spiral, identical for every pixel and frame.
+    const float u = (float(index) + 0.5f) / float(count);
+    const float phi = float(index) * 2.39996323f;
+    const float r = sqrtf(u);
+    return make_float3(cosf(phi) * r, sinf(phi) * r, sqrtf(fmaxf(1.0f - u, 0.0f)));
+}
+__forceinline__ __device__ float3 shadeDirect(const Hit& h, const Surface& s, float3 view) {
+    const float3 light = sunDirection();
+    const float nl = dot(s.normal, light);
+    if (nl <= 0 || dot(h.geometric, light) <= 0) return make_float3(0, 0, 0);
+    if (shadowed(h.position + h.geometric * 0.006f, light, 1000.0f)) return make_float3(0, 0, 0);
+    float pdf = 0;
+    return evaluateBsdf(s, view, light, pdf) * sunRadiance() * (kSunSolidAngle * nl);
+}
+__forceinline__ __device__ float3 shadeAmbient(const Hit& h, const Surface& s, int sample) {
+    const Frame frame = Frame::from(s.normal);
+    const int count = kAmbientRays * params.spp;
+    float3 sum = make_float3(0, 0, 0);
+    for (int k = 0; k < kAmbientRays; ++k) {
+        const float3 d = frame.toWorld(ambientDirection(sample + k * params.spp, count));
+        if (dot(d, h.geometric) <= 0.0f) { sum += make_float3(0.10f, 0.09f, 0.075f); continue; }
+        sum += shadowed(h.position + h.geometric * 0.006f, d, kAmbientReach) ? make_float3(0.10f, 0.09f, 0.075f)
+                                                                            : environment(d);
+    }
+    return s.color * (1.0f - s.metal) * sum * (1.0f / float(kAmbientRays));
+}
+__forceinline__ __device__ float3 shadeLive(float3 direction, int sample, float footprintScale, Hit& primary, float3& albedo) {
+    const float cone = 2.0f * length(params.V) / float(params.height) * footprintScale;
+    const Hit h = traceTriangles(params.eye, direction, kFarDistance, kCameraRayMask);
+    primary = h;
+    if (h.t >= kFarDistance) {
+        float3 sky = cloudDeck(params.eye, direction, environment(direction));
+        if (isSun(direction)) sky += sunRadiance();
+        primary.t = 1200.0f;
+        return atmospheric(sky, params.eye, direction, 4000.0f);
+    }
+    const Surface s = material(h, h.t * cone / fmaxf(0.17f, fabsf(dot(direction, h.geometric))));
+    albedo = s.color;
+    primary.normal = s.normal;
+    const float3 view = -direction;
+    float3 color = shadeDirect(h, s, view) + shadeAmbient(h, s, sample);
+    if (h.material == kMaterialWater) {
+        const float3 mirror = reflect3(direction, s.normal);
+        const Hit r = traceTriangles(h.position + h.geometric * 0.006f, mirror, kFarDistance, kTransportRayMask);
+        float3 reflected;
+        if (r.t >= kFarDistance) reflected = atmospheric(environment(mirror), h.position, mirror, 4000.0f);
+        else {
+            const Surface rs = material(r, 0.05f);
+            reflected = atmospheric(shadeDirect(r, rs, -mirror) + rs.color * 0.2f, h.position, mirror, r.t);
+        }
+        color += fresnel(s.f0, fmaxf(dot(s.normal, view), 0.0f)) * reflected;
+    }
+    return atmospheric(color, params.eye, direction, h.t);
 }
 }
 
@@ -362,6 +436,29 @@ extern "C" __global__ void __raygen__render() {
     float3 normal = make_float3(0, 0, 0);
     Hit center{};
     center.t = 1200.0f;
+    if (params.bounces == 0) {
+        for (int sample = 0; sample < params.spp; ++sample) {
+            // Rotated grid for four samples, the pixel centre for one.
+            const float ox = params.spp == 4 ? (float(sample) + 0.5f) * 0.25f : fmodf(0.5f + float(sample) * 0.754877666f, 1.0f);
+            const float oy = params.spp == 4 ? (float((sample * 3 + 1) & 3) + 0.5f) * 0.25f : fmodf(0.5f + float(sample) * 0.569840296f, 1.0f);
+            const float x = 2.0f * (float(pixel.x) + ox) / float(params.width) - 1.0f;
+            const float y = 1.0f - 2.0f * (float(pixel.y) + oy) / float(params.height);
+            Hit primary{};
+            float3 sampleAlbedo = make_float3(0, 0, 0);
+            float3 sampleColor = shadeLive(normalize(params.W + params.U * x + params.V * y), sample,
+                                           1.0f / sqrtf(float(params.spp)), primary, sampleAlbedo);
+            if (!finite3(sampleColor)) { atomicAdd(params.badCount, 1U); sampleColor = make_float3(0, 0, 0); }
+            color += sampleColor;
+            albedo += sampleAlbedo;
+            normal += primary.t < 1200.0f ? primary.normal : make_float3(0, 0, 0);
+            if (sample == 0) center = primary;
+        }
+        color *= 1.0f / float(params.spp);
+        params.color[index] = make_float4(color.x, color.y, color.z, 1);
+        params.albedo[index] = make_float4(albedo.x, albedo.y, albedo.z, 1);
+        params.depth[index] = center.t < 1200.0f ? make_float4(center.position.x, center.position.y, center.position.z, center.t) : make_float4(0, 0, 0, -1);
+        return;
+    }
     const unsigned scramble = hash(index);
     const bool reducedIndirect = params.spp == 4 && params.sampleOffset == 0;
     for (int sample = 0; sample < params.spp; ++sample) {

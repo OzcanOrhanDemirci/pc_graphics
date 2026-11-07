@@ -1,5 +1,36 @@
 # Rüya · Sahne 14
 
+## Son revizyon · 2026-11-08 (Claude, Özcan'ın 6 maddesi)
+
+**Özcan'ın bakacağı yer:** `build\pc_graphics.exe --scene ruya`, 1–6 altı farklı adayı açar.
+Dokular için önce `python assets/ruya/fetch.py` (CC0 Poly Haven, 8K, ~390 MB).
+
+- **Dünya:** her hücre bulut denizinden yükselen tek parça kireçtaşı sütunu üretir
+  (`ruya_island.cpp`): manastır mesası, basamaklı bahçe, sütun kümesi, ağaçlı tepe.
+  Biçim tohumdan kapalı bir fonksiyon; ağ, çarpışma ve yapı yerleşimi aynı yüzeyi okur.
+  Yapılar düzleştirilmiş zemine oturur, uydu sütunlar kendi ayağı üzerinde durur.
+  Havada duran parça kalmadı (`parca-havada-durmaz`, 12×12 hücre, 0).
+- **Kopya hatası bulundu:** eski `cellSeed` tek koordinatlı (x, z) ile (−x, −z)
+  hücrelerine aynı tohumu veriyordu: dünya merkeze göre ayna kopyasıydı.
+  Düzeltildi, `ada-bicimleri-tekrarsiz` testi eski tohumla 8 tekrar buldu, şimdi 0.
+- **Dokular:** rock_face_03, aerial_grass_rock, large_sandstone_blocks_01 (CC0, 8K,
+  renk + normal + pürüzlülük/AO), triplanar, ayak izine göre mip; duvarda ikinci ölçek tekrarı kırar.
+- **Titreme:** canlıda yol izleme ve gürültü giderici kalktı. Sabit 12 alt piksel örneği,
+  güneşe tek gölge ışını, her örnekte sabit 4 ortam yönü: rastgele sayı ve kare geçmişi yok.
+  `tools/kararlilik.py`, 1280×720, bakış 2 rotası, 40 kare, 64 örnekli aynı gölgelendirmeye karşı:
+  piksel kıpırtısı **0,00121** (eski yol izleyici + gürültü giderici aynı rotada 256 örnekli
+  referansına karşı 0,00205). 4 örnek 0,00201, 8 örnek 0,00144, 16 örnek 0,00105.
+- **Sis ve mesafe:** iki katmanlı yükseklik sisi; uzak çizim 1100 → 640 m, ışık çevresi 320 m.
+  640 m'de geçirgenlik yaklaşık %4.
+- **Hız (ölçülen, RTX 4080, 2560×1440):** gizli CUDA-GL 120 kare p50 **14,84 ms**, p95 15,68 ms
+  (önceki sürüm 28,86 ms). Sabit bakışlarda 12 örnekle 16–21 ms.
+- **NE DOĞRULANMADI:** exe Özcan'ın ekranında açılmadı, gerçek fare hissi ve monitör sunumu
+  ölçülmedi. 1440p'de titreme ölçülmedi (720p ölçüldü). `--flat-material` ve
+  `--unfiltered-material` seçenekleri artık etkisiz. Aşağıdaki eski bölümler önceki sürümü anlatır.
+
+## Önceki sürüm (Codex)
+
+
 `build\pc_graphics.exe --scene ruya` sahneyi açar. Galeride **14 Rüya**.
 **1–6** genel manzarayı, havuzu, kaya yüzünü, kuleyi, koruluğu ve doğal
 kemeri gösterir. WASD ve fare uçuşu yönetir. Boşluk ve C yükselme ve

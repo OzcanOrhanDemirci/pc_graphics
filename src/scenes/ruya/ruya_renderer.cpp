@@ -1,7 +1,9 @@
 // Owns the OptiX pipeline and the frame-local optical instance table.
 // Its buffers are wiped as soon as the ray launch has finished.
 #include "scenes/ruya/ruya_renderer.h"
+#include "scenes/ruya/ruya_island.h"
 #include "scenes/ruya/ruya_material.h"
+#include "stb_image.h"
 
 #include <nvrtc.h>
 #include <optix_stubs.h>
@@ -14,6 +16,9 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <future>
+#include <map>
+#include <tuple>
 #include <sstream>
 
 #define RUYA_CUDA(call) do { const cudaError_t result_ = (call); if (result_ != cudaSuccess) { \
@@ -62,6 +67,8 @@ struct Renderer::State {
         void* gas = nullptr;
         OptixTraversableHandle handle = 0;
         unsigned long long triangleCount = 0;
+        size_t bytes = 0;
+        unsigned lastFrame = 0;
     };
     Params params{};
     FrameStats stats{};
@@ -77,7 +84,14 @@ struct Renderer::State {
     Params* deviceParams = nullptr;
     Geometry* geometries = nullptr;
     std::vector<Prototype> prototypes;
-    MaterialMap material;
+    std::array<MaterialMap, kTextureSets * 2> textures{};
+    unsigned long long* textureHandles = nullptr;
+    // Island meshes live while their cell stays in the transport set, and a
+    // short grace period after, so a cell at the boundary is not rebuilt.
+    std::vector<Prototype> islands;
+    std::vector<unsigned> freeIslands;
+    std::map<std::tuple<int, int, int>, unsigned> islandSlots;
+    unsigned frame = 0;
     size_t allocatedBytes = 0;
     OptixInstance* instances = nullptr;
     size_t instanceCapacity = 0;
@@ -273,6 +287,103 @@ struct Renderer::State {
         RUYA_OPTIX(optixDenoiserInvoke(denoiser, stream, &options, CUdeviceptr(denoiserState), denoiserStateSize,
                                      &guide, &layer, 1, 0, 0, CUdeviceptr(denoiserScratch), denoiserScratchSize));
     }
+    bool loadTextures(const std::string& root, std::string& error) {
+        static const char* names[kTextureSets] = {"rock_face_03", "aerial_grass_rock", "large_sandstone_blocks_01"};
+        struct Image { int width = 0, height = 0; unsigned char* pixels = nullptr; };
+        std::vector<std::future<Image>> jobs;
+        for (const char* name : names)
+            for (const char* map : {"diff", "nor_gl", "arm"})
+                jobs.push_back(std::async(std::launch::async, [path = root + "/assets/ruya/cc0/" + name + "_" + map + ".jpg"] {
+                    Image image;
+                    int channels = 0;
+                    image.pixels = stbi_load(path.c_str(), &image.width, &image.height, &channels, 4);
+                    return image;
+                }));
+        std::vector<Image> images;
+        for (auto& job : jobs) images.push_back(job.get());
+        bool ok = true;
+        for (const Image& image : images) ok = ok && image.pixels && image.width == image.height && image.width == images[0].width;
+        if (ok) {
+            const int side = images[0].width;
+            std::vector<unsigned char> packed(size_t(side) * side * 4);
+            for (int set = 0; set < kTextureSets && ok; ++set) {
+                const Image& color = images[set * 3];
+                const Image& normal = images[set * 3 + 1];
+                const Image& arm = images[set * 3 + 2];
+                // Colour with roughness in alpha; normal xy with occlusion in z.
+                for (size_t i = 0; i < packed.size(); i += 4) {
+                    packed[i] = color.pixels[i];
+                    packed[i + 1] = color.pixels[i + 1];
+                    packed[i + 2] = color.pixels[i + 2];
+                    packed[i + 3] = arm.pixels[i + 1];
+                }
+                ok = uploadMaterialMap(textures[set * 2], packed.data(), side, true, stream) == cudaSuccess;
+                for (size_t i = 0; i < packed.size(); i += 4) {
+                    packed[i] = normal.pixels[i];
+                    packed[i + 1] = normal.pixels[i + 1];
+                    packed[i + 2] = arm.pixels[i];
+                    packed[i + 3] = 255;
+                }
+                ok = ok && uploadMaterialMap(textures[set * 2 + 1], packed.data(), side, false, stream) == cudaSuccess;
+                allocatedBytes += 2 * size_t(side) * side * 4 * 4 / 3;
+            }
+        }
+        for (const Image& image : images) stbi_image_free(image.pixels);
+        if (!ok) { error = "Rüya textures missing or unreadable: run python assets/ruya/fetch.py"; return false; }
+        unsigned long long handles[kTextureSets * 2];
+        for (int i = 0; i < kTextureSets * 2; ++i) handles[i] = textures[i].texture;
+        allocate(reinterpret_cast<void**>(&textureHandles), sizeof(handles));
+        RUYA_CUDA(cudaMemcpyAsync(textureHandles, handles, sizeof(handles), cudaMemcpyHostToDevice, stream));
+        RUYA_CUDA(cudaStreamSynchronize(stream));
+        params.textures = textureHandles;
+        return true;
+    }
+    void releaseIsland(unsigned slot) {
+        Prototype& island = islands[slot];
+        freeCuda(island.vertices);
+        freeCuda(island.indices);
+        freeCuda(island.gas);
+        allocatedBytes -= island.bytes;
+        island = {};
+        freeIslands.push_back(slot);
+    }
+    // Builds the missing island meshes of the plans in parallel and drops
+    // islands no plan has used for the grace period.
+    void ensureIslands(const std::vector<std::pair<const Cell*, CellPlan>>& plans) {
+        std::vector<std::tuple<int, int, int>> missingKeys;
+        std::vector<const Island*> missing;
+        for (const auto& [cell, plan] : plans)
+            for (int i = 0; i < plan.islandCount; ++i) {
+                const auto key = std::make_tuple(cell->x, cell->z, i);
+                const auto found = islandSlots.find(key);
+                if (found != islandSlots.end()) islands[found->second].lastFrame = frame;
+                else { missingKeys.push_back(key); missing.push_back(&plan.islands[i]); }
+            }
+        std::vector<std::future<Mesh>> jobs;
+        for (const Island* island : missing) jobs.push_back(std::async(std::launch::async, [island] { return islandMesh(*island); }));
+        for (size_t i = 0; i < jobs.size(); ++i) {
+            const Mesh mesh = jobs[i].get();
+            if (freeIslands.empty()) {
+                if (islands.size() >= kIslandSlots) { std::fprintf(stderr, "Rüya island slots exhausted\n"); std::exit(1); }
+                freeIslands.push_back(unsigned(islands.size()));
+                islands.emplace_back();
+            }
+            const unsigned slot = freeIslands.back();
+            freeIslands.pop_back();
+            const size_t before = allocatedBytes;
+            uploadPrototype(mesh, islands[slot]);
+            islands[slot].bytes = allocatedBytes - before;
+            islands[slot].lastFrame = frame;
+            islandSlots[missingKeys[i]] = slot;
+            const Geometry geometry{islands[slot].vertices, islands[slot].indices};
+            RUYA_CUDA(cudaMemcpyAsync(geometries + kPrototypeCount + slot, &geometry, sizeof(Geometry), cudaMemcpyHostToDevice, stream));
+            RUYA_CUDA(cudaStreamSynchronize(stream));
+        }
+        for (auto it = islandSlots.begin(); it != islandSlots.end();) {
+            if (frame - islands[it->second].lastFrame > kIslandGraceFrames) { releaseIsland(it->second); it = islandSlots.erase(it); }
+            else ++it;
+        }
+    }
     void launch(unsigned record) {
         sbt.raygenRecord = CUdeviceptr(records + record);
         RUYA_OPTIX(optixLaunch(pipeline, stream, CUdeviceptr(deviceParams), sizeof(Params), &sbt, params.width, params.height, 1));
@@ -320,15 +431,14 @@ bool Renderer::init(int width, int height, const std::string& root, const std::v
     state.allocate(reinterpret_cast<void**>(&state.params.badCount), sizeof(unsigned));
     state.allocate(reinterpret_cast<void**>(&state.deviceParams), sizeof(Params));
     if (!state.compile(root, error)) { release(); return false; }
-    RUYA_CUDA(bakeMaterialMap(state.material, state.stream));
-    state.params.materialMap = state.material.texture;
-    state.allocatedBytes += kMaterialBytes;
+    if (!state.loadTextures(root, error)) { release(); return false; }
     state.prototypes.resize(meshes.size());
     std::vector<Geometry> geometries;
     for (size_t i = 0; i < meshes.size(); ++i) {
         state.uploadPrototype(meshes[i], state.prototypes[i]);
         geometries.push_back({state.prototypes[i].vertices, state.prototypes[i].indices});
     }
+    geometries.resize(kPrototypeCount + kIslandSlots, Geometry{});
     state.allocate(reinterpret_cast<void**>(&state.geometries), geometries.size() * sizeof(Geometry));
     RUYA_CUDA(cudaMemcpyAsync(state.geometries, geometries.data(), geometries.size() * sizeof(Geometry), cudaMemcpyHostToDevice, state.stream));
     state.params.geometries = state.geometries;
@@ -354,16 +464,32 @@ void Renderer::setCells(const std::vector<Cell>& visible, const std::vector<Cell
     }
     std::vector<OptixInstance> instances;
     std::vector<InstanceData> data;
-    std::vector<Piece> pieces;
-    instances.reserve(cells.size() * 12);
+    instances.reserve(cells.size() * 24);
     data.reserve(instances.capacity());
+    ++state.frame;
+    std::vector<std::pair<const Cell*, CellPlan>> plans;
+    plans.reserve(cells.size());
+    for (const Cell& cell : cells) plans.emplace_back(&cell, planCell(cell));
+    state.ensureIslands(plans);
     auto nextVisible = visible.begin();
-    for (const Cell& cell : cells) {
+    for (const auto& [cellPointer, plan] : plans) {
+        const Cell& cell = *cellPointer;
         while (nextVisible != visible.end() && cellLess(*nextVisible, cell)) ++nextVisible;
         const bool inView = nextVisible != visible.end() && nextVisible->x == cell.x && nextVisible->z == cell.z;
-        pieces.clear();
-        assembleCell(cell, pieces);
-        for (const Piece& piece : pieces) {
+        for (int i = 0; i < plan.islandCount; ++i) {
+            const unsigned slot = state.islandSlots.at(std::make_tuple(cell.x, cell.z, i));
+            OptixInstance instance{};
+            const float identity[12] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0};
+            std::memcpy(instance.transform, identity, sizeof(identity));
+            instance.instanceId = unsigned(data.size());
+            instance.visibilityMask = kTransportRayMask | (inView ? kCameraRayMask : 0);
+            instance.flags = OPTIX_INSTANCE_FLAG_DISABLE_ANYHIT;
+            instance.traversableHandle = state.islands[slot].handle;
+            if (inView) state.stats.instancedTriangles += state.islands[slot].triangleCount;
+            instances.push_back(instance);
+            data.push_back({kPrototypeCount + slot, plan.islands[i].seed, cell.region});
+        }
+        for (const Piece& piece : plan.pieces) {
             OptixInstance instance{};
             const float cosine = std::cos(piece.yaw);
             const float sine = std::sin(piece.yaw);
@@ -425,7 +551,8 @@ void Renderer::render(const Camera& camera, int spp, int bounces, int sampleOffs
     state.params.eye = camera.eye;
     cameraBasis(camera, float(state.params.width) / float(state.params.height), state.params.U, state.params.V, state.params.W);
     state.params.spp = std::clamp(spp, 1, 4096);
-    state.params.bounces = std::clamp(bounces, 1, 16);
+    state.params.bounces = std::clamp(bounces, 0, 16);
+    denoise = denoise && bounces > 0;
     state.params.sampleOffset = std::max(sampleOffset, 0);
     state.params.raw = denoise ? 0 : 1;
     state.params.exposure = exposure;
@@ -508,7 +635,9 @@ void Renderer::release() {
         if (result != cudaSuccess && result != cudaErrorCudartUnloading) std::fprintf(stderr, "Rüya stream release: %s\n", cudaGetErrorString(result));
     }
     if (state.denoiser) logOptixRelease(optixDenoiserDestroy(state.denoiser));
-    releaseMaterialMap(state.material);
+    for (MaterialMap& map : state.textures) releaseMaterialMap(map);
+    freeCuda(state.textureHandles);
+    for (const State::Prototype& island : state.islands) { freeCuda(island.vertices); freeCuda(island.indices); freeCuda(island.gas); }
     freeCuda(state.denoiserState);
     freeCuda(state.denoiserScratch);
     freeCuda(state.intensity);

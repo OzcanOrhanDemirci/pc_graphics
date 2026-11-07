@@ -865,6 +865,10 @@ std::vector<Mesh> buildPrototypes(int detail) {
     stone(result[26], make_float3(0, -12, 0), make_float3(8.5f, 19.0f, 6.5f), 23871, 8 * detail, kMaterialStone);
     stone(result[26], make_float3(-6.0f, -0.7f, 2.0f), make_float3(9.0f, 3.2f, 8.4f), 93713, 5 * detail, kMaterialStone);
     stone(result[26], make_float3(6.0f, -2.4f, -2.0f), make_float3(6.0f, 4.0f, 7.4f), 13829, 5 * detail, kMaterialStone);
+    // Built structures take the cut-stone scan instead of the cliff rock.
+    for (unsigned index : {8U, 9U, 10U, 11U, 13U, 16U, 19U, 20U, 23U})
+        for (Vertex& vertex : result[index].vertices)
+            if (vertex.material == kMaterialStone) vertex.material = kMaterialMasonry;
     return result;
 }
 
@@ -919,7 +923,7 @@ std::vector<Cell> visibleCells(const Camera& camera, float aspect, float farDist
     const float3 rightPlane = normalize(W * halfWidth - side);
     const float3 bottomPlane = normalize(W * halfHeight + up);
     const float3 topPlane = normalize(W * halfHeight - up);
-    const float margin = kCellBoundsRadius * kMaxCellScale + 24.0f;
+    const float margin = kIslandBoundsRadius;
     const int minX = int(std::floor((camera.eye.x - farDistance - margin) / kCellSize));
     const int maxX = int(std::ceil((camera.eye.x + farDistance + margin) / kCellSize));
     const int minZ = int(std::floor((camera.eye.z - farDistance - margin) / kCellSize));
@@ -928,8 +932,8 @@ std::vector<Cell> visibleCells(const Camera& camera, float aspect, float farDist
         for (int x = minX; x <= maxX; ++x) {
             const Cell cell = describeCell(x, z);
             if (cell.scale == 0) continue;
-            const float3 center = cell.offset + make_float3(0, kCellBoundsY * cell.scale, 0);
-            const float radius = kCellBoundsRadius * cell.scale;
+            const float3 center = make_float3(cell.offset.x, kIslandBoundsY, cell.offset.z);
+            const float radius = kIslandBoundsRadius;
             const float3 relative = center - camera.eye;
             if (length(relative) > farDistance + radius) continue;
             if (!fullCircle && (dot(relative, W) < -radius || dot(relative, leftPlane) < -radius ||

@@ -25,3 +25,19 @@ Kameranın çevresine 27 cm yarıçaplı bir küre koydum. Her hareket boyunca k
 ## 6 · 2026-11-07 · seçim · Taşın mikro ayrıntısını üret ve piksel alanına göre süz
 
 Taş için gözenek, ton, pürüzlülük ve kabartma eğimini sahne açılırken 4096²'lik bir haritaya ürettim. Yakın dokunun rengini gürültü giderme sonrasında yeniden uyguluyorum. Her ışında aynı ayrıntıyı baştan hesaplamak veya hep tam çözünürlüğü okumak seçeneklerdi. Süzgeçsiz denemede yakın rotada fazla değişim yükseldi. Harita tarifi ve filtre tersine çevrilebilir. Bunun bedeli, yakın temas ve hareket dizilerini yeniden karşılaştırmak.
+
+## 2026-11-08 · Canlıda yol izleme yerine sabit gölgelendirme (Claude)
+
+Hareket ederken titremenin kaynağı her karede yeniden gürültüden arındırılan 3 örnekli
+yol izlemeydi. Projenin genel kuralı da canlıda rastgele sayıyı yasaklıyor. Diğer seçenek
+yol izlemeyi koruyup zamansal birikim eklemekti; bu, hareket ve durgunluğun tek dünya
+olması kuralını bozar ve hayalet bırakır. Sabit gölgelendirme 4 kat hızlı, kazanılan
+süre 12 örneklik süper örneklemeye gitti. Geri almak `scenes/ruya.cfg`'de
+`bounces = 3`, `spp = 3` yazmak kadar ucuz; yol izleyici referans için duruyor.
+
+## 2026-11-08 · Adalar kapalı fonksiyon, çarpışma mesafe tahmini (Claude)
+
+Ada ağları hücre başına üretilip ışık çevresinde 90 kare tutuluyor. Çarpışma aynı
+fonksiyonun mesafe tahminini 20 cm adımlarla yürüyor. Diğer seçenek her adanın ağından
+CPU BVH kurmaktı: aynı yüzey iki kez saklanırdı. Ağ köşelerinin fonksiyona uzaklığı
+testte 5 cm altında.

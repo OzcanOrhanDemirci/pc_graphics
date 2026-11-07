@@ -36,3 +36,6 @@ assets/ates/_dl/
 # Dag: elevation and imagery fetched and prepared by tools/dag_veri.py, not committed (sources: assets/dag/KAYNAKLAR.md)
 assets/dag/*
 !assets/dag/KAYNAKLAR.md
+
+# Rüya: CC0 textures fetched by assets/ruya/fetch.py, not committed
+assets/ruya/cc0/

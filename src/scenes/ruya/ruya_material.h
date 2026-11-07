@@ -8,7 +8,7 @@ struct MaterialMap {
     cudaTextureObject_t texture = 0;
 };
 
-inline constexpr std::size_t kMaterialBytes = sizeof(uchar4) * ((std::size_t(kMaterialResolution) * kMaterialResolution * 4 - 1) / 3);
-cudaError_t bakeMaterialMap(MaterialMap& map, cudaStream_t stream);
+// Uploads a square power-of-two RGBA8 image and builds its full mip chain on the GPU.
+cudaError_t uploadMaterialMap(MaterialMap& map, const unsigned char* rgba, int side, bool srgb, cudaStream_t stream);
 void releaseMaterialMap(MaterialMap& map);
 }
