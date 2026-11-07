@@ -128,6 +128,11 @@ add_library(pc_core OBJECT
     src/scenes/dag/dag_renderer.cpp
     src/scenes/dag/dag_app.cpp
     src/scenes/dag/dag_live.cpp
+    src/scenes/ruya/ruya_world.cpp
+    src/scenes/ruya/ruya_world_test.cpp
+    src/scenes/ruya/ruya_renderer.cpp
+    src/scenes/ruya/ruya_app.cpp
+    src/scenes/ruya/ruya_live.cpp
     ${TP}/tinyexr/miniz.c)
 add_executable(pc_graphics src/app/main.cpp $<TARGET_OBJECTS:pc_core>)
 

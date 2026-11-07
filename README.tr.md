@@ -489,6 +489,20 @@ Tek dar hedef: **çizim mesafesi.** Kaçkar'ın gerçek doruğunda küçük, kor
 
 Ölçüler: en uzak çizilen yer 387 km, silueti göğe karşı hâlâ %3,7. Her bilinen zirveye nişanlı ışın haritaya 0,2 km içinde çarpıyor (Elbruz 299,2 / 299,0 km). Plan, kararlar, ölçümler ve doğrulanmayanlar `docs/dag/`'da. Yükseklik: Copernicus DEM ve SRTM (Terrain Tiles); renk: Sentinel-2 cloudless 2016 (EOX, CC BY 4.0).
 
+### 14 · Rüya · Kasım 2026
+
+![Sis denizinde kireçtaşı adalar, asılı bahçeler ve revaklar](assets/gallery/ruya.jpg)
+
+Kireçtaşı adalar, kemerli avlular ve asılı bahçeler arasında serbest uçuş.
+Her yerleşim koordinatından üretilir. Kamera ışınları görüş konisini,
+gölgeler ve dolaylı ışık ise ortak ağların o kare için kurulan geçici
+yerleşim tablosunu kullanır. Tablo, ışın izleme bitince silinir. Varsayılan
+görüntü 2560×1440'ta piksel başına üç örnek, üç yüzey sekmesi ve mekânsal
+gürültü giderme ile çizilir.
+
+`build\pc_graphics.exe --scene ruya` ile açılır. [Tuşlar](GOSTERI.md) ve
+[ölçümler](docs/ruya/DURUM.md).
+
 ## Sahne 1: neyi hesaplıyor
 
 | | |

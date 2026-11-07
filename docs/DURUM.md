@@ -5,6 +5,7 @@
 > `docs/tanecik/` arşiv.
 
 ## Şu an
+- **2026-11-07 · Sahne 14 “Rüya”.** Prosedürel kireçtaşı adalarında serbest uçuş ve 1440p yol izleme. Deneyler, ölçümler ve açık sınırlar [sahne kaydında](ruya/DURUM.md).
 - **2026-11-04 · Sahne 13 "Dağ": uzak çizim mesafesi.** Galeride **13 Dağ**. Kaçkar'ın gerçek doruğunda korkuluklu teras, gün batımı. LOD yok: terastan görülen her hücre üçgen, en uzak çizilen yer 387 km, Elbruz 299 km'de dürbünle seçiliyor. Ölçümler `python tools/dag_olc.py`, durum `docs/dag/DURUM.md`. Özcan canlı baktı, kabul etti, sahne kapandı.
 - **2026-10-27 (akşam) · Sahne 11 "Orman" kapandı.** Özcan: *"Tamamdır sorun çözüldü. Sahneyi burada
   noktalayabiliriz. [...] göze batan hiçbir şey yok. Gayet iyi."* Son hâli: DLSS Ray Reconstruction ile karede tek

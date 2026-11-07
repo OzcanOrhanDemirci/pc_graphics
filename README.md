@@ -596,6 +596,19 @@ Plan, decisions, measurements and what is not verified in `docs/dag/` (Turkish).
 data courtesy of the U.S. Geological Survey. Colour: Sentinel-2 cloudless 2016 by EOX IT Services GmbH (modified Copernicus Sentinel
 data 2016), CC BY 4.0.
 
+### 14 · Dream *(Rüya)* · November 2026
+
+![Limestone islands, hanging gardens and arcades over a sea of mist](assets/gallery/ruya.jpg)
+
+Fly through procedural limestone islands, arcades and gardens. Coordinates
+determine each placement. OptiX traces camera rays against the view cone and
+uses a frame-local table of shared meshes for shadows and indirect light.
+The table is cleared after tracing. The native 1440p default traces three
+samples per pixel with three surface bounces and spatial denoising.
+
+Open `build\pc_graphics.exe --scene ruya`. See [controls](DEMO.md) and
+[measurements](docs/ruya/DURUM.md).
+
 ## What scene 1 computes
 
 | | |
