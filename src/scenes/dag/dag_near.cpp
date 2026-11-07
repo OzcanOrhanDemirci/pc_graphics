@@ -21,6 +21,8 @@ struct DagDemSample {
 
 namespace {
 
+constexpr size_t kOpenEdge = 8;  // The first view faces this side of the terrace.
+
 void parallelFor(int n, const std::function<void(int)>& fn, int chunk = 1) {
     std::atomic<int> next{0};
     const int threads = std::max(1, int(std::thread::hardware_concurrency()));
@@ -331,6 +333,7 @@ static void buildPolar(DagWorld& w, DagWorld::Polar& P, const std::vector<float2
         }, 16);
     }
     P.idx.clear();
+    P.groundCells.assign(size_t(nAz) * (nR - 1), false);
     P.idx.reserve(cull ? size_t(nAz) * nR / 2 : size_t(nAz) * (nR - 1) * 2 + nAz);
     for (int j = 0; j + 1 < nR; ++j)
         for (int a = 0; a < nAz; ++a) {
@@ -349,6 +352,7 @@ static void buildPolar(DagWorld& w, DagWorld::Polar& P, const std::vector<float2
                 if (!any) continue;
                 ++kept;
             }
+            P.groundCells[size_t(j) * nAz + a] = true;
             const unsigned i00 = unsigned(j * nAz + a), i10 = unsigned(j * nAz + (a + 1) % nAz), i01 = unsigned((j + 1) * nAz + a), i11 = unsigned((j + 1) * nAz + (a + 1) % nAz);
             P.idx.push_back(make_uint3(i00, i01, i11));
             P.idx.push_back(make_uint3(i00, i11, i10));
@@ -421,6 +425,7 @@ void dagBuildNear(DagWorld& w, const Config& cfg, const std::function<DagDemSamp
         const int spans = std::max(1, int(std::ceil(len / kSpan)));
         float3 prevTop{}, prevMid{};
         for (int s = 0; s <= spans; ++s) {
+            if (e == kOpenEdge && s != 0 && s != spans) continue;
             const float t = float(s) / spans;
             const float x = p.x + ex * t, z = p.y + ez * t;
             const float g = groundAt(x, z);
@@ -429,7 +434,7 @@ void dagBuildNear(DagWorld& w, const Config& cfg, const std::function<DagDemSamp
             dagAddTube(rail, baseP, topP, 0.024f, 12);
             // a flange at the foot
             dagAddTube(rail, make_float3(x, g - 0.01f, z), make_float3(x, g + 0.015f, z), 0.07f, 16);
-            if (s > 0) {
+            if (s > 0 && e != kOpenEdge) {
                 dagAddTube(rail, prevTop, topP, 0.021f, 12);
                 dagAddTube(rail, prevMid, midP, 0.013f, 10);
             }
@@ -581,16 +586,38 @@ void dagPlaceStones(DagWorld& w, const Config& cfg) {
     std::printf("dag: %zu kaya yerlesti\n", w.stones.size());
 }
 
-// the ground's height from the near polar mesh
-float DagWorld::groundY(float x, float z) const {
-    const Polar& P = polar[0];
-    if (P.az == 0) return 0.0f;
-    const float r = std::sqrt(x * x + z * z);
+namespace {
+
+struct GroundCell {
+    float ring, azimuth;
+};
+
+GroundCell locateGroundCell(const DagWorld::Polar& P, float r, float ang) {
     const float logQ = P.logQ / (P.rings - 1);
-    const float fj = std::clamp(std::log(std::max(r, P.r0) / P.r0) / logQ, 0.0f, float(P.rings - 1) - 0.001f);
-    float ang = std::atan2(x, -z);
     if (ang < 0) ang += 6.2831853f;
-    const float fa = ang / 6.2831853f * P.az;
+    return {std::clamp(std::log(std::max(r, P.r0) / P.r0) / logQ, 0.0f, float(P.rings - 1) - 0.001f),
+            ang / 6.2831853f * P.az};
+}
+
+const DagWorld::Polar* findDrawnGround(const DagWorld::Polar (&polar)[2], float r, float ang) {
+    for (int i = 0; i < 2; ++i) {
+        const auto& P = polar[i];
+        if (P.groundCells.empty() || r > P.rOut || (i == 1 && r < P.r0)) continue;
+        const GroundCell cell = locateGroundCell(P, r, ang);
+        if (P.groundCells[size_t(cell.ring) * P.az + int(cell.azimuth) % P.az]) return &P;
+    }
+    return nullptr;
+}
+
+}  // namespace
+
+float DagWorld::groundY(float x, float z) const {
+    if (polar[0].az == 0) return 0.0f;
+    const float r = std::sqrt(x * x + z * z);
+    const float ang = std::atan2(x, -z);
+    const Polar* drawn = r >= polar[1].r0 ? findDrawnGround(polar, r, ang) : nullptr;
+    const Polar& P = drawn ? *drawn : polar[0];
+    const auto [fj, fa] = locateGroundCell(P, r, ang);
     const int j = int(fj), a0 = int(fa) % P.az, a1 = (a0 + 1) % P.az;
     const float tj = fj - j, ta = fa - std::floor(fa);
     const auto Y = [&](int jj, int aa) { return P.pos[size_t(jj) * P.az + aa].y; };
@@ -603,33 +630,25 @@ bool DagWorld::inside(float x, float z, float margin) const {
     return r + margin <= polyRadius(terrace, std::atan2(x, -z));
 }
 
-void DagWorld::keepIn(float& x, float& z, float margin) const {
-    if (terrace.empty()) return;
-    // the inward normal of each edge: pushed back inside whichever edge it crosses (a convex-enough polygon)
-    const size_t n = terrace.size();
-    for (int pass = 0; pass < 3; ++pass) {
-        bool moved = false;
-        for (size_t i = 0; i < n; ++i) {
-            const float2 p = terrace[i], q = terrace[(i + 1) % n];
+void DagWorld::moveOnGround(float3& feet, float3 step, float radius) const {
+    float x = feet.x + step.x, z = feet.z + step.z;
+    if (std::abs(x) < terraceRadius + radius && std::abs(z) < terraceRadius + radius) {
+        for (size_t i = 0; i < terrace.size(); ++i) {
+            if (i == kOpenEdge) continue;
+            const float2 p = terrace[i], q = terrace[(i + 1) % terrace.size()];
             const float ex = q.x - p.x, ez = q.y - p.y;
-            const float len = std::sqrt(ex * ex + ez * ez);
-            float nx = ez / len, nz = -ex / len;
-            // towards the centre
-            if (nx * -p.x + nz * -p.y < 0) {
-                nx = -nx;
-                nz = -nz;
-            }
-            const float d = (x - p.x) * nx + (z - p.y) * nz;   // positive inside
-            if (d < margin) {
-                // only when the point lies along this edge (a star polygon's other edges are handled by theirs)
-                const float t = ((x - p.x) * ex + (z - p.y) * ez) / (len * len);
-                if (t > -0.3f && t < 1.3f) {
-                    x += nx * (margin - d);
-                    z += nz * (margin - d);
-                    moved = true;
-                }
-            }
+            const float t = std::clamp(((x - p.x) * ex + (z - p.y) * ez) / (ex * ex + ez * ez), 0.0f, 1.0f);
+            const float dx = x - (p.x + t * ex), dz = z - (p.y + t * ez);
+            const float distanceSquared = dx * dx + dz * dz;
+            if (distanceSquared >= radius * radius) continue;
+            if (distanceSquared < 1e-8f) return;
+            const float push = radius / std::sqrt(distanceSquared) - 1.0f;
+            x += dx * push;
+            z += dz * push;
         }
-        if (!moved) break;
     }
+    // The terrain bake omits cells hidden from the summit. Stop before crossing into one.
+    if (!findDrawnGround(polar, std::sqrt(x * x + z * z), std::atan2(x, -z))) return;
+    feet.x = x;
+    feet.z = z;
 }

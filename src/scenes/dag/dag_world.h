@@ -1,6 +1,6 @@
 // Scene 13 "Dağ": the ground. The real Earth around Kaçkar's summit from assets/dag (tools/dag_veri.py), made once and kept in
 // cache/dag: every cell of the 1 arc second elevation model the terrace can see, as triangles of the far mesh (no level of
-// detail: the eye never leaves the terrace); the clip stacks of slope, sky share and sun horizon, and of the ground's
+// detail); the clip stacks of slope, sky share and sun horizon, and of the ground's
 // colour with the satellite's own sunlight taken out; the amplified ground around the terrace.
 #pragma once
 #include "core/config.h"
@@ -81,6 +81,7 @@ public:
         std::vector<float3> pos;
         std::vector<uint3> idx;
         std::vector<uint16_t> info;    // RGBA16: normal x, z, sky share, unused
+        std::vector<bool> groundCells;
     };
     Polar polar[2];
     float midRadius = 30000.0f;
@@ -108,8 +109,8 @@ public:
     // the ground under (x, z), metres from the terrace's centre: feet on it, gravity
     float groundY(float x, float z) const;
     bool inside(float x, float z, float margin) const;
-    // the point nearest to (x, z) that the railing keeps you in
-    void keepIn(float& x, float& z, float margin) const;
+    // Resolve one horizontal step shorter than the body radius against either side of the railing.
+    void moveOnGround(float3& feet, float3 step, float radius) const;
     std::string summary() const;
     const std::string& rootPath() const { return root_; }
     // the place at a point of the plane seen from this far, or null

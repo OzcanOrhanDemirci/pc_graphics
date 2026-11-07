@@ -1,6 +1,6 @@
 // Scene 13 "Dağ" inside the application: standing on a small railed terrace on Kaçkar's summit at sunset. The mouse looks
-// (captured from the start, Tab gives the cursor back), W A S D walk, Shift runs, Space jumps, C crouches, the right mouse button
-// looks through binoculars. The railing keeps you in; everything out to the air's limit of sight is the real ground.
+// (captured from the start, Tab gives the cursor back), W A S D walk, Shift runs, Alt sprints, Space jumps, C crouches, and the
+// right mouse button looks through binoculars. The gap in the railing leads onto the mountain.
 #include "app/scene.h"
 #include "app/theme.h"
 #include "scenes/dag/dag_app.h"
@@ -21,6 +21,7 @@ namespace {
 using app::L;
 
 const int kSamples[5] = {4, 8, 16, 32, 64};
+constexpr float kWalkSpeed = 1.3f;
 
 class DagLive : public app::Scene {
 public:
@@ -38,11 +39,9 @@ public:
         i.details = {
             {L("Çizim mesafesi", "Draw distance"),
              L("Ayrıntı seviyesi yok. Terastan görünebilen yeryüzünün her hücresi önceden bulunur ve üçgen olur: gerçek yükseklik "
-               "verisinin 30 metrelik hücreleri, yüzlerce kilometre ötede bile. Göz terastan çıkamadığı için hiçbir şey uzaklıkla "
-               "değişmez, belirip kaybolmaz, dürbünle bakılınca aynı dağ durur.",
+               "verisinin 30 metrelik hücreleri, yüzlerce kilometre ötede bile. Korkuluktaki açıklıktan araziye çıkabilirsin.",
                "No level of detail. Every cell of the Earth the terrace can see is found beforehand and becomes triangles: the real "
-               "elevation model's 30 metre cells, even hundreds of kilometres away. Since the eye cannot leave the terrace nothing "
-               "changes with distance, nothing pops in, and through the binoculars the same mountain stands there.")},
+               "elevation model's 30 metre cells, even hundreds of kilometres away. You can reach the mountainside through the gap in the railing.")},
             {L("Hava", "Air"),
              L("Uzaktaki yerin solması sis efekti değil: Rayleigh ve Mie saçılması, ozon, çoklu saçılma; dağların havadaki gölgesi. "
                "Dünya'nın eğriliği geometrinin içinde: uzak sırtlar ufkun arkasına batar. Güneş yere havanın süzdüğü renkle gelir: "
@@ -66,7 +65,8 @@ public:
         i.keys = {{L("Yürüyüş", "Walking"),
                    {{L("Fare", "Mouse"), L("Etrafa bak", "Look around")},
                     {"W A S D", L("Yürü", "Walk")},
-                    {"Shift", L("Hızlı yürü", "Walk faster")},
+                    {"Shift", L("Koş", "Run")},
+                    {"Alt", L("Çok hızlı koş", "Sprint")},
                     {L("Boşluk", "Space"), L("Zıpla", "Jump")},
                     {"C", L("Eğil", "Crouch")},
                     {L("Sağ tık", "Right click"), L("Dürbün (tekerlek yaklaştırır)", "Binoculars (the wheel zooms)")},
@@ -173,41 +173,12 @@ public:
             a_.cam.yaw -= in.mouseDX * sens;
             a_.cam.pitch = std::clamp(a_.cam.pitch - in.mouseDY * sens, -1.45f, 1.45f);
         }
-        auto key = [&](int kc) { return in.isDown(kc) ? 1.0f : 0.0f; };
-        const float fwd = key(GLFW_KEY_W) - key(GLFW_KEY_S), right = key(GLFW_KEY_D) - key(GLFW_KEY_A);
-        const float3 f = make_float3(-std::sin(a_.cam.yaw), 0.0f, -std::cos(a_.cam.yaw));
-        const float3 r = normalize(cross(f, make_float3(0, 1, 0)));
-        float3 want = f * fwd + r * right;
-        const float wl = length(want);
-        if (wl > 1.0f) want = want * (1.0f / wl);
-        const float speed = in.shift ? 2.6f : 1.3f;
-        want = want * (speed * (1.0f - 0.5f * crouch_));
-        vel_ += (want - vel_) * (1.0f - std::exp(-dt * 8.0f));
-        float3 p = a_.cam.feet + vel_ * dt;
-        a_.world.keepIn(p.x, p.z, 0.32f);
-        // the feet on the scree: a body does not step down into every gap between the stones (the mean ground under a stride, followed softly)
-        const float e = 0.28f;
-        const float ground = 0.2f * (a_.world.groundY(p.x, p.z) + a_.world.groundY(p.x + e, p.z) + a_.world.groundY(p.x - e, p.z) + a_.world.groundY(p.x, p.z + e) + a_.world.groundY(p.x, p.z - e));
-        vy_ -= 9.81f * dt;
-        p.y += vy_ * dt;
-        const bool onGround = p.y <= ground + 1e-3f || (vy_ <= 0.0f && p.y <= smoothFeet_ + 1e-3f);
-        if (onGround) {
-            smoothFeet_ += (ground - smoothFeet_) * (1.0f - std::exp(-dt * 10.0f));
-            p.y = smoothFeet_;
-            vy_ = 0.0f;
-            if (in.pressed(GLFW_KEY_SPACE)) vy_ = 3.2f;
-        } else {
-            smoothFeet_ = ground;
-        }
-        a_.cam.feet = p;
+        movePlayer(in, dt);
+        const float3& feet = a_.cam.feet;
         if (host.testing() && std::fmod(in.now, 1.0) < double(dt)) {
-            std::printf("dag: ayak %.2f %.2f, icerde %d, yon %.1f\n", p.x, p.z, a_.world.inside(p.x, p.z, 0.0f) ? 1 : 0, -a_.cam.yaw * 180.0f / M_PIf);
+            std::printf("dag: ayak %.2f %.2f, icerde %d, yon %.1f\n", feet.x, feet.z, a_.world.inside(feet.x, feet.z, 0.0f) ? 1 : 0, -a_.cam.yaw * 180.0f / M_PIf);
             std::fflush(stdout);
         }
-        crouch_ += ((in.isDown(GLFW_KEY_C) ? 1.0f : 0.0f) - crouch_) * (1.0f - std::exp(-dt * 10.0f));
-        const float moving = std::min(1.0f, length(vel_) / 1.3f);
-        stepPhase_ += dt * length(vel_) * 1.9f;
-        a_.cam.eyeHeight = 1.7f - 0.7f * crouch_ + 0.012f * moving * std::sin(stepPhase_ * 2.0f);
 
         a_.R.params.time = float(in.now);
         a_.render();
@@ -302,6 +273,48 @@ public:
     ~DagLive() override { unload(); }
 
 private:
+    void movePlayer(const app::Input& in, float dt) {
+        auto key = [&](int kc) { return in.isDown(kc) ? 1.0f : 0.0f; };
+        const float fwd = key(GLFW_KEY_W) - key(GLFW_KEY_S), right = key(GLFW_KEY_D) - key(GLFW_KEY_A);
+        const float3 f = make_float3(-std::sin(a_.cam.yaw), 0.0f, -std::cos(a_.cam.yaw));
+        const float3 r = normalize(cross(f, make_float3(0, 1, 0)));
+        float3 want = f * fwd + r * right;
+        const float wl = length(want);
+        if (wl > 1.0f) want = want * (1.0f / wl);
+        const bool sprint = in.isDown(GLFW_KEY_LEFT_ALT) || in.isDown(GLFW_KEY_RIGHT_ALT);
+        const float speed = kWalkSpeed * (sprint ? 10.0f : (in.shift ? 2.0f : 1.0f));
+        want = want * (speed * (1.0f - 0.5f * crouch_));
+        vel_ += (want - vel_) * (1.0f - std::exp(-dt * 8.0f));
+        constexpr float kBodyRadius = 0.32f;
+        const float3 displacement = vel_ * dt;
+        const int steps = std::max(1, int(std::ceil(length(displacement) / (kBodyRadius * 0.5f))));
+        const float3 step = displacement * (1.0f / steps);
+        float3 p = a_.cam.feet;
+        for (int i = 0; i < steps; ++i) a_.world.moveOnGround(p, step, kBodyRadius);
+        // the feet on the scree: a body does not step down into every gap between the stones (the mean ground under a stride, followed softly)
+        const float e = 0.28f;
+        const float ground = 0.2f * (a_.world.groundY(p.x, p.z) + a_.world.groundY(p.x + e, p.z) + a_.world.groundY(p.x - e, p.z) + a_.world.groundY(p.x, p.z + e) + a_.world.groundY(p.x, p.z - e));
+        vy_ -= 9.81f * dt;
+        p.y += vy_ * dt;
+        const bool onTerrace = a_.world.inside(p.x, p.z, 0.0f);
+        const bool followingGround = vy_ <= 0.0f && p.y <= smoothFeet_ + 1e-3f && (onTerrace || p.y <= ground + 0.2f);
+        const bool onGround = p.y <= ground + 1e-3f || followingGround;
+        if (onGround) {
+            smoothFeet_ += (ground - smoothFeet_) * (1.0f - std::exp(-dt * 10.0f));
+            if (!onTerrace) smoothFeet_ = std::max(smoothFeet_, ground - 0.2f);
+            p.y = smoothFeet_;
+            vy_ = 0.0f;
+            if (in.pressed(GLFW_KEY_SPACE)) vy_ = 3.2f;
+        } else {
+            smoothFeet_ = ground;
+        }
+        a_.cam.feet = p;
+        crouch_ += ((in.isDown(GLFW_KEY_C) ? 1.0f : 0.0f) - crouch_) * (1.0f - std::exp(-dt * 10.0f));
+        const float moving = std::min(1.0f, length(vel_) / kWalkSpeed);
+        stepPhase_ += dt * length(vel_) * 1.9f;
+        a_.cam.eyeHeight = 1.7f - 0.7f * crouch_ + 0.012f * moving * std::sin(stepPhase_ * 2.0f);
+    }
+
     app::SceneInfo info_ = describe();
     DagApp a_;
     uchar4* pinned_ = nullptr;

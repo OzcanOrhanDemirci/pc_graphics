@@ -90,7 +90,8 @@ if '--pencere' in sys.argv:
     good &= check('pencere FPS, 16 ornek (>= 30)', min(sixteen) >= 30.0, f'en az {min(sixteen)}')
     mem = max(float(r[3]) for r in rows)
     good &= check('bellek (<= 15 GB)', mem <= 15.0, f'{mem} GB')
-    good &= check('korkuluk: hep icerde', 'icerde 0' not in o, f"{o.count('icerde 1')} olcum")
+    outside_samples = o.count('icerde 0, yon 299.0')
+    good &= check('korkuluk açıklığından çıkış', outside_samples > 0, f'{outside_samples} ölçüm')
     good &= check('otomasyon acilis yonu 299', 'yon 299.0' in o, 'autotest')
 
 say('SONUC: ' + ('hepsi gecti' if good else 'KALAN VAR'))
