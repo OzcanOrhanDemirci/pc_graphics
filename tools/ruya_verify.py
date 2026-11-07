@@ -382,6 +382,9 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--quality-height", type=int, default=720)
     parser.add_argument("--quality-mae-limit", type=float, default=0.06)
     parser.add_argument("--temporal-frames", type=int, default=48)
+    parser.add_argument("--temporal-view", type=int, choices=range(6), default=0)
+    parser.add_argument("--temporal-width", type=int, default=960)
+    parser.add_argument("--temporal-height", type=int, default=540)
     parser.add_argument("--temporal-spp", type=int, default=64)
     parser.add_argument("--temporal-extra-limit", type=float, default=0.006)
     parser.add_argument("--temporal-ratio-limit", type=float, default=1.10)
@@ -394,8 +397,8 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
         parser.error("Kare, tekrar, örnek ve boyutlar pozitif; ısınma sıfır veya büyük olmalı")
     if not all(0 <= view <= 5 for view in options.views) or len(set(options.views)) != len(options.views):
         parser.error("Bakışlar tekrarsız 0..5 aralığında olmalı")
-    if options.temporal_frames < 3 or options.temporal_spp < 1:
-        parser.error("Zamansal ölçüm en az üç kare ve pozitif referans örneği ister")
+    if options.temporal_frames < 3 or min(options.temporal_spp, options.temporal_width, options.temporal_height) < 1:
+        parser.error("Zamansal ölçüm en az üç kare, pozitif boyutlar ve referans örneği ister")
     for name in ("quality_mae_limit", "temporal_extra_limit", "temporal_ratio_limit", "p50_limit", "p95_limit", "timeout"):
         value = getattr(options, name)
         if not math.isfinite(value) or value <= 0:
@@ -496,13 +499,14 @@ def run(options: argparse.Namespace) -> dict:
                 dump_directory = destination / f"temporal_{label}_frames"
                 csv_path = prefix.with_suffix(".csv")
                 sampling = ["--raw"] if label == "reference" else []
-                command(base + sampling + ["--width", "960", "--height", "540", "--view", "0", "--route",
+                command(base + sampling + ["--width", str(options.temporal_width), "--height", str(options.temporal_height),
+                                          "--view", str(options.temporal_view), "--route",
                                           "--frames", str(options.temporal_frames), "--warmup", "0",
                                           "--spp", str(samples), "--bounces", str(options.bounces),
                                           "--out", str(prefix), "--dump-dir", str(dump_directory),
                                           "--csv", str(csv_path)],
                         prefix.with_suffix(".txt"), options.timeout, commands)
-                results["images"].append(check_snapshot(prefix, 960, 540))
+                results["images"].append(check_snapshot(prefix, options.temporal_width, options.temporal_height))
                 records = read_rows(csv_path, options.temporal_frames)
                 for record in records:
                     if any(name not in record or not math.isfinite(record[name]) for name in CAMERA_COLUMNS):

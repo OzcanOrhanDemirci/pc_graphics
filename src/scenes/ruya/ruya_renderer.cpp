@@ -1,6 +1,7 @@
 // Owns the OptiX pipeline and the frame-local optical instance table.
 // Its buffers are wiped as soon as the ray launch has finished.
 #include "scenes/ruya/ruya_renderer.h"
+#include "scenes/ruya/ruya_material.h"
 
 #include <nvrtc.h>
 #include <optix_stubs.h>
@@ -76,9 +77,10 @@ struct Renderer::State {
     Params* deviceParams = nullptr;
     Geometry* geometries = nullptr;
     std::vector<Prototype> prototypes;
+    MaterialMap material;
     size_t allocatedBytes = 0;
     OptixInstance* instances = nullptr;
-    size_t cellCapacity = 0;
+    size_t instanceCapacity = 0;
     void* top = nullptr;
     size_t topCapacity = 0;
     void* scratch = nullptr;
@@ -89,7 +91,6 @@ struct Renderer::State {
     void* denoiserScratch = nullptr;
     size_t denoiserScratchSize = 0;
     float* intensity = nullptr;
-    float* averageColor = nullptr;
 
     void allocate(void** pointer, size_t bytes) {
         if (!bytes) return;
@@ -247,16 +248,14 @@ struct Renderer::State {
         OptixDenoiserOptions options{};
         options.guideAlbedo = 1;
         options.guideNormal = 1;
-        RUYA_OPTIX(optixDenoiserCreate(context, OPTIX_DENOISER_MODEL_KIND_AOV, &options, &denoiser));
+        RUYA_OPTIX(optixDenoiserCreate(context, OPTIX_DENOISER_MODEL_KIND_HDR, &options, &denoiser));
         OptixDenoiserSizes sizes{};
         RUYA_OPTIX(optixDenoiserComputeMemoryResources(denoiser, params.width, params.height, &sizes));
         denoiserStateSize = sizes.stateSizeInBytes;
         denoiserScratchSize = std::max(sizes.withoutOverlapScratchSizeInBytes, sizes.computeIntensitySizeInBytes);
-        denoiserScratchSize = std::max(denoiserScratchSize, sizes.computeAverageColorSizeInBytes);
         allocate(&denoiserState, denoiserStateSize);
         allocate(&denoiserScratch, denoiserScratchSize);
         allocate(reinterpret_cast<void**>(&intensity), sizeof(float));
-        allocate(reinterpret_cast<void**>(&averageColor), 3 * sizeof(float));
         RUYA_OPTIX(optixDenoiserSetup(denoiser, stream, params.width, params.height, CUdeviceptr(denoiserState), denoiserStateSize,
                                     CUdeviceptr(denoiserScratch), denoiserScratchSize));
     }
@@ -265,13 +264,11 @@ struct Renderer::State {
         guide.albedo = image(params.albedo, params.width, params.height);
         guide.normal = image(params.normal, params.width, params.height);
         OptixDenoiserLayer layer{};
-        layer.input = image(params.color, params.width, params.height);
+        layer.input = image(params.illumination, params.width, params.height);
         layer.output = image(params.filtered, params.width, params.height);
         RUYA_OPTIX(optixDenoiserComputeIntensity(denoiser, stream, &layer.input, CUdeviceptr(intensity), CUdeviceptr(denoiserScratch), denoiserScratchSize));
-        RUYA_OPTIX(optixDenoiserComputeAverageColor(denoiser, stream, &layer.input, CUdeviceptr(averageColor), CUdeviceptr(denoiserScratch), denoiserScratchSize));
         OptixDenoiserParams options{};
         options.hdrIntensity = CUdeviceptr(intensity);
-        options.hdrAverageColor = CUdeviceptr(averageColor);
         options.blendFactor = 0;
         RUYA_OPTIX(optixDenoiserInvoke(denoiser, stream, &options, CUdeviceptr(denoiserState), denoiserStateSize,
                                      &guide, &layer, 1, 0, 0, CUdeviceptr(denoiserScratch), denoiserScratchSize));
@@ -314,6 +311,7 @@ bool Renderer::init(int width, int height, const std::string& root, const std::v
     state.params.layout = sizeof(Params);
     const size_t count = size_t(width) * size_t(height);
     state.allocate(reinterpret_cast<void**>(&state.params.color), count * sizeof(float4));
+    state.allocate(reinterpret_cast<void**>(&state.params.illumination), count * sizeof(float4));
     state.allocate(reinterpret_cast<void**>(&state.params.albedo), count * sizeof(float4));
     state.allocate(reinterpret_cast<void**>(&state.params.normal), count * sizeof(float4));
     state.allocate(reinterpret_cast<void**>(&state.params.filtered), count * sizeof(float4));
@@ -322,6 +320,9 @@ bool Renderer::init(int width, int height, const std::string& root, const std::v
     state.allocate(reinterpret_cast<void**>(&state.params.badCount), sizeof(unsigned));
     state.allocate(reinterpret_cast<void**>(&state.deviceParams), sizeof(Params));
     if (!state.compile(root, error)) { release(); return false; }
+    RUYA_CUDA(bakeMaterialMap(state.material, state.stream));
+    state.params.materialMap = state.material.texture;
+    state.allocatedBytes += kMaterialBytes;
     state.prototypes.resize(meshes.size());
     std::vector<Geometry> geometries;
     for (size_t i = 0; i < meshes.size(); ++i) {
@@ -351,43 +352,50 @@ void Renderer::setCells(const std::vector<Cell>& visible, const std::vector<Cell
         state.stats.uploadMs = 0;
         return;
     }
-    if (cells.size() > state.cellCapacity) {
-        if (state.params.cells) {
-            freeCuda(const_cast<Cell*>(state.params.cells));
-            freeCuda(state.instances);
-            state.allocatedBytes -= state.cellCapacity * (sizeof(Cell) + sizeof(OptixInstance));
-        }
-        state.cellCapacity = std::max(size_t(64), state.cellCapacity);
-        while (state.cellCapacity < cells.size()) state.cellCapacity *= 2;
-        Cell* deviceCells = nullptr;
-        state.allocate(reinterpret_cast<void**>(&deviceCells), state.cellCapacity * sizeof(Cell));
-        state.params.cells = deviceCells;
-        state.allocate(reinterpret_cast<void**>(&state.instances), state.cellCapacity * sizeof(OptixInstance));
-    }
-    std::vector<OptixInstance> instances(cells.size());
+    std::vector<OptixInstance> instances;
+    std::vector<InstanceData> data;
+    std::vector<Piece> pieces;
+    instances.reserve(cells.size() * 12);
+    data.reserve(instances.capacity());
     auto nextVisible = visible.begin();
-    for (size_t i = 0; i < cells.size(); ++i) {
-        const Cell& cell = cells[i];
-        if (cell.prototype >= state.prototypes.size() || !(cell.scale > 0)) {
-            std::fprintf(stderr, "Invalid Ruya cell prototype or scale\n");
-            std::exit(1);
-        }
+    for (const Cell& cell : cells) {
         while (nextVisible != visible.end() && cellLess(*nextVisible, cell)) ++nextVisible;
         const bool inView = nextVisible != visible.end() && nextVisible->x == cell.x && nextVisible->z == cell.z;
-        OptixInstance& instance = instances[i];
-        const float cosine = std::cos(cell.yaw) * cell.scale;
-        const float sine = std::sin(cell.yaw) * cell.scale;
-        const float transform[12] = {cosine, 0, sine, cell.offset.x, 0, cell.scale, 0, cell.offset.y,
-                                     -sine, 0, cosine, cell.offset.z};
-        std::memcpy(instance.transform, transform, sizeof(transform));
-        instance.instanceId = unsigned(i);
-        instance.visibilityMask = kTransportRayMask | (inView ? kCameraRayMask : 0);
-        instance.flags = OPTIX_INSTANCE_FLAG_DISABLE_ANYHIT;
-        instance.traversableHandle = state.prototypes[cell.prototype].handle;
-        if (inView) state.stats.instancedTriangles += state.prototypes[cell.prototype].triangleCount;
+        pieces.clear();
+        assembleCell(cell, pieces);
+        for (const Piece& piece : pieces) {
+            OptixInstance instance{};
+            const float cosine = std::cos(piece.yaw);
+            const float sine = std::sin(piece.yaw);
+            const auto [x, y, z] = piece.scale;
+            const float transform[12] = {cosine*x, 0, sine*z, piece.offset.x, 0, y, 0, piece.offset.y,
+                                         -sine*x, 0, cosine*z, piece.offset.z};
+            std::memcpy(instance.transform, transform, sizeof(transform));
+            instance.instanceId = unsigned(data.size());
+            instance.visibilityMask = kTransportRayMask | (inView ? kCameraRayMask : 0);
+            instance.flags = OPTIX_INSTANCE_FLAG_DISABLE_ANYHIT;
+            instance.traversableHandle = state.prototypes[piece.prototype].handle;
+            if (inView) state.stats.instancedTriangles += state.prototypes[piece.prototype].triangleCount;
+            instances.push_back(instance);
+            data.push_back({piece.prototype, piece.seed, piece.region});
+        }
     }
-    RUYA_CUDA(cudaMemcpyAsync(const_cast<Cell*>(state.params.cells), cells.data(), cells.size() * sizeof(Cell),
-                              cudaMemcpyHostToDevice, state.stream));
+    if (data.empty()) return;
+    if (data.size() > state.instanceCapacity) {
+        if (state.params.instances) {
+            freeCuda(const_cast<InstanceData*>(state.params.instances));
+            freeCuda(state.instances);
+            state.allocatedBytes -= state.instanceCapacity * (sizeof(InstanceData) + sizeof(OptixInstance));
+        }
+        state.instanceCapacity = std::max(size_t(64), state.instanceCapacity);
+        while (state.instanceCapacity < data.size()) state.instanceCapacity *= 2;
+        InstanceData* deviceData = nullptr;
+        state.allocate(reinterpret_cast<void**>(&deviceData), state.instanceCapacity * sizeof(InstanceData));
+        state.params.instances = deviceData;
+        state.allocate(reinterpret_cast<void**>(&state.instances), state.instanceCapacity * sizeof(OptixInstance));
+    }
+    RUYA_CUDA(cudaMemcpyAsync(const_cast<InstanceData*>(state.params.instances), data.data(),
+                              data.size() * sizeof(InstanceData), cudaMemcpyHostToDevice, state.stream));
     RUYA_CUDA(cudaMemcpyAsync(state.instances, instances.data(), instances.size() * sizeof(OptixInstance),
                               cudaMemcpyHostToDevice, state.stream));
     OptixBuildInput input{};
@@ -406,7 +414,7 @@ void Renderer::setCells(const std::vector<Cell>& visible, const std::vector<Cell
                               &state.params.handle, nullptr, 0));
     RUYA_CUDA(cudaStreamSynchronize(state.stream));
     state.stats.residentBytes = state.allocatedBytes;
-    state.stats.opticalPoolBytes = state.cellCapacity * (sizeof(Cell) + sizeof(OptixInstance)) +
+    state.stats.opticalPoolBytes = state.instanceCapacity * (sizeof(InstanceData) + sizeof(OptixInstance)) +
                                    state.topCapacity + state.scratchCapacity;
     state.stats.uploadMs = float(milliseconds() - start);
 }
@@ -428,8 +436,8 @@ void Renderer::render(const Camera& camera, int spp, int bounces, int sampleOffs
     state.launch(0);
     RUYA_CUDA(cudaEventRecord(state.events[1], state.stream));
     if (state.params.handle) {
-        RUYA_CUDA(cudaMemsetAsync(const_cast<Cell*>(state.params.cells), 0, state.cellCapacity * sizeof(Cell), state.stream));
-        RUYA_CUDA(cudaMemsetAsync(state.instances, 0, state.cellCapacity * sizeof(OptixInstance), state.stream));
+        RUYA_CUDA(cudaMemsetAsync(const_cast<InstanceData*>(state.params.instances), 0, state.instanceCapacity * sizeof(InstanceData), state.stream));
+        RUYA_CUDA(cudaMemsetAsync(state.instances, 0, state.instanceCapacity * sizeof(OptixInstance), state.stream));
         RUYA_CUDA(cudaMemsetAsync(state.top, 0, state.topCapacity, state.stream));
         RUYA_CUDA(cudaMemsetAsync(state.scratch, 0, state.scratchCapacity, state.stream));
     }
@@ -480,8 +488,8 @@ bool Renderer::opticalPoolIsClear() const {
         RUYA_CUDA(cudaStreamSynchronize(state.stream));
         return std::all_of(contents.begin(), contents.end(), [](unsigned char byte) { return byte == 0; });
     };
-    return isZero(state.params.cells, state.cellCapacity * sizeof(Cell)) &&
-           isZero(state.instances, state.cellCapacity * sizeof(OptixInstance)) &&
+    return isZero(state.params.instances, state.instanceCapacity * sizeof(InstanceData)) &&
+           isZero(state.instances, state.instanceCapacity * sizeof(OptixInstance)) &&
            isZero(state.top, state.topCapacity) && isZero(state.scratch, state.scratchCapacity);
 }
 const FrameStats& Renderer::stats() const {
@@ -500,11 +508,12 @@ void Renderer::release() {
         if (result != cudaSuccess && result != cudaErrorCudartUnloading) std::fprintf(stderr, "Rüya stream release: %s\n", cudaGetErrorString(result));
     }
     if (state.denoiser) logOptixRelease(optixDenoiserDestroy(state.denoiser));
+    releaseMaterialMap(state.material);
     freeCuda(state.denoiserState);
     freeCuda(state.denoiserScratch);
     freeCuda(state.intensity);
-    freeCuda(state.averageColor);
     freeCuda(state.params.color);
+    freeCuda(state.params.illumination);
     freeCuda(state.params.albedo);
     freeCuda(state.params.normal);
     freeCuda(state.params.filtered);
@@ -512,7 +521,7 @@ void Renderer::release() {
     freeCuda(state.params.output);
     freeCuda(state.params.badCount);
     freeCuda(state.deviceParams);
-    freeCuda(const_cast<Cell*>(state.params.cells));
+    freeCuda(const_cast<InstanceData*>(state.params.instances));
     freeCuda(state.instances);
     freeCuda(state.top);
     freeCuda(state.scratch);

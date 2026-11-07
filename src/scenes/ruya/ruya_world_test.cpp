@@ -1,5 +1,6 @@
 // Test public world contracts against independent projection and geometry checks.
 #include "scenes/ruya/ruya_world.h"
+#include "scenes/ruya/ruya_collision.h"
 
 #include <algorithm>
 #include <array>
@@ -15,7 +16,7 @@ namespace {
 using Key = std::pair<int, int>;
 
 bool sameCell(const Cell& a, const Cell& b) {
-    return a.x == b.x && a.z == b.z && a.prototype == b.prototype && a.seed == b.seed &&
+    return a.x == b.x && a.z == b.z && a.region == b.region && a.seed == b.seed &&
            a.offset.x == b.offset.x && a.offset.y == b.offset.y && a.offset.z == b.offset.z &&
            a.scale == b.scale && a.yaw == b.yaw;
 }
@@ -64,12 +65,12 @@ bool identicalMesh(const Mesh& a, const Mesh& b) {
 }
 
 // This projects transformed vertices, not the culler's bounds or its plane test.
-bool projectsInside(float3 local, const Cell& cell, const Camera& camera, double aspect, double farDistance) {
+bool projectsInside(float3 local, const Piece& cell, const Camera& camera, double aspect, double farDistance) {
     const double cosine = std::cos(double(cell.yaw));
     const double sine = std::sin(double(cell.yaw));
-    const double x = cell.offset.x + cell.scale * (cosine * local.x + sine * local.z) - camera.eye.x;
-    const double y = cell.offset.y + cell.scale * local.y - camera.eye.y;
-    const double z = cell.offset.z + cell.scale * (-sine * local.x + cosine * local.z) - camera.eye.z;
+    const double x = cell.offset.x + (cosine * local.x * cell.scale.x + sine * local.z * cell.scale.z) - camera.eye.x;
+    const double y = cell.offset.y + cell.scale.y * local.y - camera.eye.y;
+    const double z = cell.offset.z + (-sine * local.x * cell.scale.x + cosine * local.z * cell.scale.z) - camera.eye.z;
     const double sy = std::sin(double(camera.yaw));
     const double cy = std::cos(double(camera.yaw));
     const double sp = std::sin(double(camera.pitch));
@@ -87,6 +88,40 @@ std::map<Key, Cell> cellMap(const std::vector<Cell>& cells) {
     std::map<Key, Cell> result;
     for (const auto& cell : cells) result[{cell.x, cell.z}] = cell;
     return result;
+}
+
+// A two-triangle wall with no thickness. Entry, free travel, sliding and
+// the outer edge are independently observable from the analytic plane.
+void collisionChecks(int& failures) {
+    const float3 normal = make_float3(0, 0, 1);
+    Mesh wall;
+    wall.vertices = {{{-4, -4, 0}, normal, 0}, {{4, -4, 0}, normal, 0},
+                     {{4, 4, 0}, normal, 0}, {{-4, 4, 0}, normal, 0}};
+    wall.indices = {make_uint3(0, 1, 2), make_uint3(0, 2, 3)};
+    const Piece panel{{-6, 3, 11}, {1.6f, 0.52f, 0.74f}, 0.7f, 0, 0, 0};
+    const std::vector<Piece> pieces{panel};
+    CollisionWorld collision;
+    collision.build({wall});
+    const auto contact = [&](float3 start, float3 end, const std::vector<Piece>& geometry) {
+        return localPoint(panel, collision.move(piecePoint(panel, start), piecePoint(panel, end), geometry));
+    };
+    const auto impact = contact({0.25f, 0.32f, 53}, {0.25f, 0.32f, -67}, pieces);
+    const auto reverse = contact({0.25f, 0.32f, -31}, {0.25f, 0.32f, 82}, pieces);
+    const auto negative = contact({0.25f, 0.32f, 53}, {0.25f, 0.32f, -67}, {});
+    const auto glide = contact({-2, 0.18f, 1.5f}, {1, 0.18f, -2}, pieces);
+    const auto edge = contact({4.09f, 0.3f, 1.5f}, {4.09f, 0.3f, 0}, pieces);
+    const auto outside = contact({4.3f, 0.3f, 1.5f}, {4.3f, 0.3f, -2}, pieces);
+    const auto report = [&](const char* name, bool ok) {
+        std::printf("[%s] ruya %s\n", ok ? "GECTI" : "KALDI", name);
+        if (!ok) ++failures;
+    };
+    const float r = CollisionWorld::radius;
+    report("carpisma-ince-duvar-hizli-cift-yon", std::abs(impact.z * panel.scale.z - r) < 0.004f &&
+                                               std::abs(reverse.z * panel.scale.z + r) < 0.004f);
+    report("carpisma-negatif-kontrol-duvarsiz-gecer", negative.z < -66.9f);
+    report("carpisma-duvar-boyunca-kayma", std::abs(glide.x - 1.0f) < 0.004f &&
+                                          std::abs(glide.z * panel.scale.z - r) < 0.004f);
+    report("carpisma-kenar-ve-acik-bosluk", edge.x > 4.09f && edge.z > 0.08f && outside.z < -1.99f);
 }
 }
 
@@ -214,17 +249,18 @@ int testWorld() {
         for (int z = centerZ - 8; z <= centerZ + 8; ++z) {
             for (int x = centerX - 8; x <= centerX + 8; ++x) {
                 const auto cell = describeCell(x, z);
-                if (cell.prototype >= prototypes.size()) {
-                    ++missed;
-                    continue;
-                }
-                const auto& mesh = prototypes[cell.prototype];
+                std::vector<Piece> pieces;
+                assembleCell(cell, pieces);
                 bool inside = false;
-                for (size_t vertex = 0; vertex < mesh.vertices.size(); vertex += 17) {
-                    if (projectsInside(mesh.vertices[vertex].position, cell, probe, kAspect, kTestFar)) {
-                        inside = true;
-                        break;
+                for (const auto& piece : pieces) {
+                    const auto& mesh = prototypes.at(piece.prototype);
+                    for (size_t vertex = 0; vertex < mesh.vertices.size(); vertex += 17) {
+                        if (projectsInside(mesh.vertices[vertex].position, piece, probe, kAspect, kTestFar)) {
+                            inside = true;
+                            break;
+                        }
                     }
+                    if (inside) break;
                 }
                 if (!inside) continue;
                 ++projected;
@@ -234,6 +270,49 @@ int testWorld() {
     }
     report("frustum-bagimsiz-kose-izdusumu", missed == 0 && projected > 0, missed);
     report("gorunurlukte-tekrar-yok", duplicate == 0, duplicate);
+
+    std::array<std::set<std::array<unsigned, kPrototypeCount>>, 4> layouts;
+    std::array<float3, kPrototypeCount> lower{}, upper{};
+    for (size_t i = 0; i < prototypes.size(); ++i) {
+        lower[i] = upper[i] = prototypes[i].vertices.front().position;
+        for (const auto& vertex : prototypes[i].vertices) {
+            const auto p = vertex.position;
+            lower[i] = make_float3(std::min(lower[i].x, p.x), std::min(lower[i].y, p.y), std::min(lower[i].z, p.z));
+            upper[i] = make_float3(std::max(upper[i].x, p.x), std::max(upper[i].y, p.y), std::max(upper[i].z, p.z));
+        }
+    }
+    std::vector<Piece> pieces, regenerated;
+    size_t badAssembly = 0, emptyCells = 0;
+    float largestBound = 0;
+    for (int z = -16; z < 16; ++z) for (int x = -16; x < 16; ++x) {
+        const Cell cell = describeCell(x, z);
+        pieces.clear();
+        regenerated.clear();
+        assembleCell(cell, pieces);
+        assembleCell(describeCell(x, z), regenerated);
+        if (pieces.size() != regenerated.size() ||
+            (!pieces.empty() && std::memcmp(pieces.data(), regenerated.data(), pieces.size() * sizeof(Piece)) != 0)) ++badAssembly;
+        if (pieces.empty()) { ++emptyCells; continue; }
+        std::array<unsigned, kPrototypeCount> signature{};
+        for (const Piece& piece : pieces) {
+            const unsigned i = piece.prototype;
+            ++signature.at(i);
+            for (unsigned k = 0; k < 8; ++k) {
+                const float3 corner = make_float3(k & 1 ? lower[i].x : upper[i].x, k & 2 ? lower[i].y : upper[i].y,
+                                                  k & 4 ? lower[i].z : upper[i].z);
+                const float3 p = piecePoint(piece, corner) - cell.offset - make_float3(0, kCellBoundsY * cell.scale, 0);
+                largestBound = std::max(largestBound, length(p) / cell.scale);
+            }
+        }
+        layouts[cell.region].insert(signature);
+    }
+    size_t distinct = 0;
+    for (const auto& region : layouts) distinct += region.size();
+    report("yerlesim-bilesen-sayilari-farkli", distinct > 96, distinct);
+    report("yerlesim-bayt-ayni", badAssembly == 0, badAssembly);
+    report("yerlesim-bos-koridor", emptyCells > 120 && emptyCells < 450, emptyCells);
+    report("yerlesim-donusumlu-kose-siniri", largestBound < kCellBoundsRadius, size_t(largestBound * 1000));
+    collisionChecks(failures);
 
     Camera level;
     level.yaw = 0;

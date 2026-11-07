@@ -9,6 +9,7 @@
 #include <cuda_gl_interop.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -49,7 +50,7 @@ app::SceneInfo describe() {
     info.accent = 0xC4AB7D;
     info.keys = {{L("Uçuş", "Flight"),
         {{L("Fare", "Mouse"), L("Etrafa bak; dönüş hızı sınırlıdır", "Look around; rotation speed is limited")},
-         {"W A S D", L("Serbest uç", "Fly freely")},
+         {"W A S D", L("Serbest uç, katı yüzeyler kamerayı durdurur", "Fly freely, solid surfaces stop the camera")},
          {L("Boşluk | C", "Space | C"), L("Yüksel | alçal", "Ascend | descend")},
          {"Shift", L("Hızlı uç", "Fly faster")},
          {L("Tekerlek", "Wheel"), L("Görüş açısı: 36–48°", "Field of view: 36–48°")},
@@ -104,8 +105,8 @@ public:
         const float up = float(input.isDown(GLFW_KEY_SPACE)) - float(input.isDown(GLFW_KEY_C));
         if (looking_) {
             run_.camera.fovY = std::clamp(run_.camera.fovY - input.scroll * 2.0f, 36.0f, kFovY);
-            moveCamera(run_.camera, settled ? input.mouseDX : 0.0f, settled ? input.mouseDY : 0.0f,
-                       speed * forward, speed * right, speed * up, dt);
+            run_.move(settled ? input.mouseDX : 0.0f, settled ? input.mouseDY : 0.0f,
+                      speed * forward, speed * right, speed * up, dt);
         }
         run_.render();
         present();
@@ -206,7 +207,7 @@ int testLive(const std::string& root) {
         std::string capturePath() override { return {}; }
         bool testing() const override { return true; }
         const std::string& rootPath;
-        std::vector<std::string> settings{"width=640", "height=360"};
+        std::vector<std::string> settings{"width=2560", "height=1440"};
         bool captured = false;
     } host(root);
     auto fail = [](const char* message) {
@@ -236,7 +237,7 @@ int testLive(const std::string& root) {
     for (int frame = 0; frame < 3; ++frame) scene->frame(host, input);
     int width = 0, height = 0;
     const GLuint texture = scene->texture(width, height);
-    if (!texture || width != 640 || height != 360 || !host.captured) return fail("CUDA-GL veya fare yakalama baslamadi");
+    if (!texture || width != 2560 || height != 1440 || !host.captured) return fail("CUDA-GL veya fare yakalama baslamadi");
     std::vector<unsigned char> glPixels(size_t(width) * height * 4);
     glBindTexture(GL_TEXTURE_2D, texture);
     glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, glPixels.data());
@@ -255,6 +256,23 @@ int testLive(const std::string& root) {
     rendererPixels = scene->image(width, height);
     if (host.captured || std::memcmp(glPixels.data(), rendererPixels, glPixels.size()) != 0)
         return fail("imlec birakilinca kamera yerinde kalmadi");
+    input = {};
+    input.dt = 1.0 / 30.0;
+    input.pressedKeys = {GLFW_KEY_TAB, GLFW_KEY_R};
+    scene->frame(host, input);
+    input.pressedKeys.clear();
+    input.down = [](int key) { return key == GLFW_KEY_W; };
+    std::vector<double> times;
+    for (int frame = -24; frame < 120; ++frame) {
+        input.mouseDX = frame < 60 ? 18.0f : -18.0f;
+        const auto start = std::chrono::steady_clock::now();
+        scene->frame(host, input);
+        if (frame >= 0) times.push_back(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count());
+    }
+    std::sort(times.begin(), times.end());
+    const double p50 = (times[59] + times[60]) * 0.5;
+    const double p95 = times[113];
+    std::printf("Ruya gizli CUDA-GL 2560x1440: %zu kare, p50 %.3f ms, p95 %.3f ms\n", times.size(), p50, p95);
     scene->unload();
     if (glIsTexture(texture)) return fail("GL dokusu kapatmada kaldi");
     std::puts("Ruya: gizli GL, isci is parcaciginda yukleme, piksel esligi, ucus girdisi, Tab ve kapatma gecti");

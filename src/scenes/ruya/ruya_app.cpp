@@ -65,8 +65,15 @@ bool Run::init(const std::string& root, const std::vector<std::string>& override
     std::printf("Ruya: %zu uretim prototipi, %llu benzersiz ucgen, %dx%d, %d spp, %d sekme\n",
                 prototypes.size(), geometryTriangles, width, height, spp, bounces);
     if (!renderer.init(width, height, root, prototypes, error)) return false;
+    collision_.build(std::move(prototypes));
     camera = view(0);
     return true;
+}
+
+void Run::move(float dx, float dy, float forward, float right, float up, float dt) {
+    const float3 start = camera.eye;
+    moveCamera(camera, dx, dy, forward, right, up, dt);
+    camera.eye = collision_.move(start, camera.eye);
 }
 
 void Run::render() {
@@ -74,10 +81,16 @@ void Run::render() {
     auto selected = visibleCells(camera, float(width) / height, kFarDistance, fullWorld);
     added = 0;
     evicted = 0;
-    for (const auto& cell : selected)
-        if (std::none_of(cells.begin(), cells.end(), [&](const Cell& previous) { return sameCell(previous, cell); })) ++added;
-    for (const auto& cell : cells)
-        if (std::none_of(selected.begin(), selected.end(), [&](const Cell& next) { return sameCell(next, cell); })) ++evicted;
+    auto previous = cells.begin();
+    for (const Cell& cell : selected) {
+        while (previous != cells.end() && std::pair{previous->z, previous->x} < std::pair{cell.z, cell.x}) {
+            ++previous;
+            ++evicted;
+        }
+        if (previous != cells.end() && sameCell(*previous, cell)) ++previous;
+        else ++added;
+    }
+    evicted += unsigned(cells.end() - previous);
     cells = std::move(selected);
     const auto transport = offscreen && !fullWorld ? visibleCells(camera, float(width) / height, kFarDistance, true)
                                                   : std::vector<Cell>{};
@@ -98,17 +111,18 @@ bool Run::save(const std::string& prefix) const {
 void Run::release() {
     cells.clear();
     cells.shrink_to_fit();
+    collision_ = CollisionWorld{};
     renderer.release();
 }
 
 Camera Run::view(int index) {
     Camera camera;
     switch (index) {
-    case 1: camera.eye = make_float3(18, 9, 28); camera.yaw = -0.45f; camera.pitch = 0.12f; break;
+    case 1: camera.eye = make_float3(369, -13, 12); camera.yaw = -0.34f; camera.pitch = -0.39f; break;
     case 2: camera.eye = make_float3(-26, 4, -12); camera.yaw = 1.35f; camera.pitch = 0.08f; break;
-    case 3: camera.eye = make_float3(14, -35, 65); camera.yaw = -0.15f; camera.pitch = 0.3f; break;
-    case 4: camera.eye = make_float3(84, 50, 142); camera.yaw = -0.38f; camera.pitch = -0.22f; break;
-    case 5: camera.eye = make_float3(-80, 14, 45); camera.yaw = 0.7f; camera.pitch = 0.08f; break;
+    case 3: camera.eye = make_float3(9, 2, 410); camera.yaw = -0.56f; camera.pitch = -0.16f; break;
+    case 4: camera.eye = make_float3(-185, 27, 130); camera.yaw = -0.33f; camera.pitch = -0.29f; break;
+    case 5: camera.eye = make_float3(-119, 7, -58); camera.yaw = 0.34f; camera.pitch = 0.03f; break;
     default: break;
     }
     return camera;
@@ -126,6 +140,7 @@ int cli(int argc, char** argv) {
     int view = 0;
     bool route = false;
     bool lifecycle = false;
+    bool impact = false;
     bool test = false;
     bool liveTest = false;
     bool customYaw = false;
@@ -162,8 +177,10 @@ int cli(int argc, char** argv) {
         else if (option == "--raw") run.denoise = false;
         else if (option == "--no-offscreen" || option == "--no-proxy") run.offscreen = false;
         else if (option == "--flat-material") run.materialDetail = 0;
+        else if (option == "--unfiltered-material") run.materialDetail = 2;
         else if (option == "--full-world") run.fullWorld = true;
         else if (option == "--route") route = true;
+        else if (option == "--impact") impact = true;
         else if (option == "--lifecycle") lifecycle = true;
         else if (option == "--test") test = true;
         else if (option == "--test-live") liveTest = true;
@@ -171,7 +188,8 @@ int cli(int argc, char** argv) {
         else if (option == "--help") {
             std::puts("Ruya: --headless [--width 2560 --height 1440 --spp 3 --bounces 3 --detail 2]\n"
                       "  --frames N --warmup N --view 0..5 --out UZANTISIZ_YOL --csv YOL\n"
-                      "  --route --raw --sample-offset N --no-offscreen --full-world --flat-material\n"
+                      "  --route --impact --raw --sample-offset N --no-offscreen --full-world\n"
+                      "  --flat-material --unfiltered-material\n"
                       "  --yaw RAD --pitch RAD --exposure EV --lifecycle --test --test-live --dump-dir DOSYA\n"
                       "  --detail 0 en dusuk yogunluktur (1 ile ayni)");
             return 0;
@@ -190,6 +208,32 @@ int cli(int argc, char** argv) {
     run.camera = Run::view(view);
     if (customYaw) run.camera.yaw = yaw;
     if (customPitch) run.camera.pitch = std::clamp(pitch, -1.45f, 1.45f);
+    if (impact) {
+        const int samples = run.spp;
+        const bool denoise = run.denoise;
+        run.spp = 1;
+        run.denoise = false;
+        const auto probeDepth = [&] {
+            run.render();
+            return run.renderer.depth();
+        };
+        const size_t center = size_t(run.height / 2) * run.width + run.width / 2;
+        const float before = probeDepth()[center].w;
+        if (!(before > 0.5f && before < 60.0f)) return failUsage("Carpisma deneyi icin kameranin onunde yakin yuzey yok");
+        const float3 origin = run.camera.eye;
+        const float attempted = before + 0.65f;
+        run.move(0, 0, 36, 0, 0, attempted / 36);
+        const float travelled = length(run.camera.eye - origin);
+        const auto depth = probeDepth();
+        const float after = depth[center].w;
+        float nearest = after;
+        for (const float4 hit : depth) if (hit.w > 0.0f) nearest = std::min(nearest, hit.w);
+        std::printf("Ruya carpisma: OptiX oncesi %.4f m, komut %.4f m, hareket %.4f m, merkez %.4f m, en yakin %.4f m\n",
+                    before, attempted, travelled, after, nearest);
+        if (travelled >= attempted - 0.20f || !(after >= 0.265f && after <= 1.40f) || nearest < 0.265f) return 1;
+        run.spp = samples;
+        run.denoise = denoise;
+    }
     std::ofstream log;
     if (!csv.empty()) {
         if (!ensureParent(csv)) return 1;
@@ -200,7 +244,7 @@ int cli(int argc, char** argv) {
     for (int index = -warmup; index < frames; ++index) {
         if (route && index >= 0) {
             const float mouse = index < frames / 2 ? 50.0f : -50.0f;
-            moveCamera(run.camera, mouse, 4.0f * std::sin(float(index) * 0.017f), 6.0f, 2.0f, 0.0f, 1.0f / 30.0f);
+            run.move(mouse, 4.0f * std::sin(float(index) * 0.017f), 6.0f, 2.0f, 0.0f, 1.0f / 30.0f);
         }
         run.render();
         const auto& stats = run.renderer.stats();

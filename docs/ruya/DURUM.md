@@ -1,18 +1,25 @@
 # Rüya · Sahne 14
 
 `build\pc_graphics.exe --scene ruya` sahneyi açar. Galeride **14 Rüya**.
-**5** açık bahçeleri yukarıdan, **6** revak ve avluyu yakından gösterir.
-WASD ve fare uçuşu yönetir. Boşluk ve C yükselme ve alçalma, Shift hızlı
-uçuş, Tab imleci bırakma ve alma içindir. Fare dönüşü 0,85 rad/s ile sınırlı.
-Dikey görüş açısı tekerlekle 36°–48° arasında değişir.
+**1–6** genel manzarayı, havuzu, kaya yüzünü, kuleyi, koruluğu ve doğal
+kemeri gösterir. WASD ve fare uçuşu yönetir. Boşluk ve C yükselme ve
+alçalma, Shift hızlı uçuş, Tab imleci bırakma ve alma içindir. Fare dönüşü
+0,85 rad/s ile sınırlı. Dikey görüş açısı tekerlekle 36°–48° arasında değişir.
 
 ## Dünya ve görüntü
 
-On altı üretim kalıbı kireçtaşı kütleleri, manastırlar, açık bahçeler ve kaya
-kuleleri kurar. Varsayılan ayrıntıda ölçülen kalıp geometrisi **7.629.802
-benzersiz üçgen**. Yerleştirilmiş üçgen sayısı bu ağların sahnedeki
-kopyalarını sayar. Kayalar, derzler, yapraklar, bronz ve havuz yüzeyi
-prosedüreldir. Galeri görseli sahnenin kendi çizdiği karedir.
+Koordinat dört bölge tarifinden birini seçer. Yirmi yedi bileşen geometrisi
+varsayılan ayrıntıda toplam **2.382.774 üçgen** içerir. Arazi, yapı ve ağaç
+ayrı yerleşir. Çekirdek kaya kemerleri, ince sahanlıklar, koruluklar ve
+ayrık taş grupları silueti değiştirir. Bazı koordinatlar açık uçuş koridoru
+bırakır. 32×32 koordinat örneğinde 250 hücre boş, 774 hücre dolu. Konum
+ve açıyı saymadan 502 ayrı bileşen sayımı bulundu. Tekrar üretimde
+yerleşim baytları eşleşti. Galeri görseli sahnenin kendi çizdiği karedir.
+
+Kamera 27 cm yarıçaplı bir küredir. Hareketin tamamını çizilen üçgenlere
+karşı tarar. Temastan sonra yüzey boyunca kayabilir. Aynı geometrinin CPU
+ağaçları bellekte durur. Hücreye özel çarpışma yerleşimleri hareket
+sorgusu sırasında üretilir.
 
 Kamera, görüş konisini kesebilecek hücreleri koordinatlarından seçer.
 Örtülme hesabından önce kullanılan konservatif sınır bütün adayı kapsar.
@@ -30,10 +37,14 @@ kapanana kadar bellektedir. Diskte dünya durumu tutulmaz.
 
 Varsayılan 2560×1440 çizim üç sabit kamera örneği, üç yüzey sekmesi,
 son gök ışını, güneş diski örneklemesi ve MIS kullanır. Lambert ve GGX
-malzeme yolları OptiX üzerinde çalışır. Gözenek ve ince kabartma ayak
-izine göre süzülür. AOV gürültü giderici mekânsaldır ve kare geçmişi
-taşımaz. Sis yaklaşık yükseklik saçılmasıdır. Havuz opak yansıtıcı bir
-yüzeydir. Su iletimi, kostik ve hacimde gölge izleme uygulanmadı.
+arasındaki örnek dağılımı malzemenin yansıtma oranına göre değişir. Taş
+için ton, pürüzlülük ve iki kabartma eğimi açılışta GPU'da 4096×4096
+olarak üretilir. Pikselin yüzeydeki izdüşümüne göre 13 mip seviyesi
+arasında süzülür. OptiX HDR gürültü gidericisi kare geçmişi taşımaz.
+Taş renginin bir bölümü gürültü giderme sonrasında yeniden uygulanır.
+Gök ve sis yaklaşık atmosfer modeli kullanır. Bulut örtüleri birincil
+gök ışınlarında analitik katmanlardır. Havuz opak yansıtıcı yüzeydir.
+[NVIDIA OptiX 9.1 kılavuzu](https://raytracing-docs.nvidia.com/optix9/guide/index.html)
 
 ## Ölçüm düzeni
 
@@ -46,7 +57,10 @@ bir ölçümdür. Ölçüm sırasında pencere veya ses açılmadı.
 cmd /c build.bat
 .\build\pc_graphics.exe --scene ruya --test-live
 python tools/ruya_verify.py --self-test
-python tools/ruya_verify.py --mode all --frames 300 --warmup 30 --repeats 3 --temporal-spp 512
+python tools/ruya_verify.py --mode all --frames 200 --warmup 35 --repeats 2 --reference-spp 256 --temporal-spp 512
+.\build\pc_graphics.exe --scene ruya --headless --view 2 --impact --out captures/ruya/temas
+.\build\pc_graphics.exe --scene ruya --headless --view 2 --impact --flat-material --out captures/ruya/temas_haritasiz
+python tools/ruya_verify.py --mode temporal --temporal-view 2 --temporal-frames 20 --temporal-width 2560 --temporal-height 1440 --temporal-spp 256
 ```
 
 Python ölçümleri NumPy, Pillow ve OpenEXR kullanır. FLIP kuruluysa görüntü
@@ -54,9 +68,53 @@ farkı ayrıca kaydedilir. Her koşu komutu, çalıştırılabilir dosyanın kar
 kaynak karmaları, GPU bilgisi, ham kare süreleri ve çıkış kodu manifestte.
 Başarı eşiği tutmazsa araç çıkış kodu 1 verir ve verileri saklar.
 
-## Son sürümün ölçümü · 2026-11-07
+## Uçuş geri bildirimi sonrası ölçüm · 2026-11-07
 
-Son kaynak ve çalıştırılabilir dosya ile ölçüm `captures/ruya/final_stratified/`.
+`captures/ruya/revision_final/` altı sabit bakışın iki tekrarını ve
+200 karelik uçuşu içerir. Toplam **2.600 native 1440p kare** ve
+**0 sonlu olmayan örnek**. Yol izleme, kamera ve ışık tabloları,
+gürültü giderme ile son renk dönüşümü süreye dahildir.
+
+| Ölçüm | p50 | p95 |
+| --- | ---: | ---: |
+| En ağır sabit bakış, iki tekrar | 30,22–30,29 ms | 30,90–32,01 ms |
+| Uçuş, 200 kare | 23,80 ms | 26,29 ms |
+| Gizli CUDA–OpenGL, 120 kare | 28,86 ms | 30,13 ms |
+| İlk sürüm, aynı 180 karelik girdi | 31,78 ms | 35,73 ms |
+| Yeni sürüm, aynı 180 karelik girdi | 24,31 ms | 26,64 ms |
+
+İki sürüm aynı başlangıç pozu, girdi, çözünürlük ve örnek sayısını
+kullandı. Dünya üretimi değiştiği için GPU'ya verilen geometri farklı.
+Bu iki koşu `revision_baseline/route.csv` ve
+`revision_final/route_equal_180.csv` içinde. Gizli CUDA–OpenGL turu
+çarpışma hesabını ve görüntü aktarımını da içerir. Gerçek monitör
+sunumu ayrıca ölçülmedi.
+
+960×540 başlangıç uçuşunda 512 örneğe göre fazla piksel değişimi
+**0,00535** ve ikinci fark oranı **0,984**. 1440p yakın kaya uçuşunda
+256 örneğe göre **0,01105** ve **0,985**. Yakın uçuşun 0,006 eşiği
+açık. Aynı 48 karelik 960×540 yakın yolda süzgeçsiz 4K okuma 0,01411
+fazla değişim üretti. Filtreli yol aynı referansa göre 0,01079.
+İki ayrı 512 örnekli referans aynı yakın yolda birbirine göre 0,00692
+fark verdi. Bu değerler kabul eşiğini değiştirmiyor.
+
+1440p temas deneyinde GPU merkez ışını başlangıç yüzeyini 18,56 m'de
+gördü. 19,21 m ileri komutunda kamera 18,15 m hareket etti. Son kadrajda
+görülen en yakın yüzey 0,629 m. İnce duvar deneyi 27 cm temas yarıçapını,
+duvar boyunca kaymayı ve açık boşluktan geçişi ayrı sınadı. Duvar
+çıkarılınca aynı hareket hedefe ulaştı. Altı sabit görüntüde 256 örnekli
+ham referansa göre sRGB ortalama fark 0,00290–0,00831. Işık maskesi
+kontrolleri ve 20 boşaltıp yeniden üretme çevrimi geçti.
+
+Dört örnekli aday yakın sabit bakışta 34 ms üstüne çıktı. Taşın ağırlığına
+göre ışın seçen üç örnekli aday hem kare süresinde hem aynı yakın
+rotadaki hareket ölçüsünde öne geçti. Ayrı A/B/B/A denemesinde erken
+ışın sonlandırma ve son sekmeyi gölge sorgusuna indirme birlikte yaklaşık
+3,5 ms daha yavaştı. Bu değişiklikler üretim sürümüne alınmadı.
+
+## İlk sürümün ölçümü · 2026-11-07
+
+369312a sürümünün ölçümü `captures/ruya/final_stratified/`.
 Altı sabit kadraj, kadraj başına üç ayrı süreçte 300 kare ve 300 karelik
 uçuş rotası toplam **5.700 native 1440p kare**. Kaydedilen sonlu olmayan
 örnek sayısı **0**.

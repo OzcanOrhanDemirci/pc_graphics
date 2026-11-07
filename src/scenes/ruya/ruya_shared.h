@@ -10,20 +10,22 @@
 #endif
 
 namespace ruya {
-inline constexpr float kCellSize = 72.0f;
+inline constexpr float kCellSize = 92.0f;
 inline constexpr float kFarDistance = 1100.0f;
 inline constexpr float kFovY = 48.0f;
 inline constexpr float kTurnRate = 0.85f;
-inline constexpr int kPrototypeCount = 16;
+inline constexpr int kPrototypeCount = 27;
 inline constexpr unsigned kCameraRayMask = 1;
 inline constexpr unsigned kTransportRayMask = 2;
-inline constexpr float kCellBoundsY = -20.0f;
-inline constexpr float kCellBoundsRadius = 64.0f;
+inline constexpr float kCellBoundsY = -18.0f;
+inline constexpr float kCellBoundsRadius = 84.0f;
+inline constexpr float kMaxCellScale = 1.38f;
 inline constexpr unsigned kMaterialStone = 0;
 inline constexpr unsigned kMaterialDarkStone = 1;
 inline constexpr unsigned kMaterialBronze = 2;
 inline constexpr unsigned kMaterialLeaf = 3;
 inline constexpr unsigned kMaterialWater = 4;
+inline constexpr int kMaterialResolution = 4096;
 
 HD unsigned hash(unsigned x) {
     x ^= x >> 16;
@@ -48,20 +50,31 @@ struct Geometry {
 };
 struct Cell {
     int x, z;
-    unsigned prototype, seed;
+    unsigned region, seed;
     float3 offset;
     float scale, yaw;
 };
+struct Piece {
+    float3 offset;
+    float3 scale;
+    float yaw;
+    unsigned prototype, seed, region;
+};
+struct InstanceData { unsigned prototype, seed, region; };
 HD Cell describeCell(int x, int z) {
     Cell c{};
     c.x = x;
     c.z = z;
     c.seed = cellSeed(x, z);
-    c.prototype = c.seed % kPrototypeCount;
-    c.offset = make_float3(x * kCellSize + (randomUnit(c.seed + 1) - 0.5f) * 17.0f,
-                          (randomUnit(c.seed + 2) - 0.5f) * 76.0f,
-                          z * kCellSize + (randomUnit(c.seed + 3) - 0.5f) * 17.0f);
-    c.scale = 0.80f + 0.38f * randomUnit(c.seed + 4);
+    const int rx = int(floorf((float(x) + 0.8f * randomUnit(c.seed + 17)) / 4.0f));
+    const int rz = int(floorf((float(z) + 0.8f * randomUnit(c.seed + 23)) / 4.0f));
+    c.region = cellSeed(rx + 91, rz - 73) % 4U;
+    const float vacancy = c.region == 2 ? 0.41f : 0.18f;
+    c.offset = make_float3(x * kCellSize + (randomUnit(c.seed + 1) - 0.5f) * 46.0f,
+                          (randomUnit(c.seed + 2) - 0.5f) * 83.0f + (float(c.region) - 1.5f) * 13.0f,
+                          z * kCellSize + (randomUnit(c.seed + 3) - 0.5f) * 46.0f);
+    c.scale = randomUnit(c.seed + 11) < vacancy && (x != 0 || z != 0)
+                  ? 0.0f : lerpf(0.65f, kMaxCellScale, randomUnit(c.seed + 4));
     c.yaw = randomUnit(c.seed + 5) * (2.0f * M_PIf);
     return c;
 }
@@ -86,8 +99,10 @@ struct Params {
     float exposure;
     float3 eye, U, V, W;
     const Geometry* geometries;
-    const Cell* cells;
+    const InstanceData* instances;
+    unsigned long long materialMap;
     float4* color;
+    float4* illumination;
     float4* albedo;
     float4* normal;
     float4* filtered;
@@ -99,7 +114,8 @@ struct Params {
 static_assert(sizeof(Vertex) == 28);
 static_assert(sizeof(Geometry) == 16);
 static_assert(sizeof(Cell) == 36);
-static_assert(sizeof(Params) == 168);
+static_assert(sizeof(InstanceData) == 12);
+static_assert(sizeof(Params) == 184);
 static_assert(offsetof(Params, geometries) == 96);
 static_assert(std::is_trivially_copyable_v<Params>);
 #endif

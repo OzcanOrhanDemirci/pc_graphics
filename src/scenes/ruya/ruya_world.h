@@ -10,6 +10,10 @@ struct Mesh {
     std::vector<uint3> indices;
 };
 std::vector<Mesh> buildPrototypes(int detail = 2);
+// Appends the same composition for a coordinate regardless of camera or lighting.
+void assembleCell(const Cell& cell, std::vector<Piece>& pieces);
+float3 piecePoint(const Piece& piece, float3 local);
+float3 localPoint(const Piece& piece, float3 world);
 std::vector<Cell> visibleCells(const Camera& camera, float aspect, float farDistance = kFarDistance,
                                bool fullCircle = false);
 void cameraBasis(const Camera& camera, float aspect, float3& U, float3& V, float3& W);

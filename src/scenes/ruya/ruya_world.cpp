@@ -793,55 +793,78 @@ void monument(Mesh& mesh, unsigned seed, int detail, unsigned prototype) {
     }
 }
 
-void reshape(Mesh& mesh, float3 scale) {
-    for (Vertex& vertex : mesh.vertices) {
-        vertex.position *= scale;
-        vertex.normal = normalize(make_float3(vertex.normal.x / scale.x, vertex.normal.y / scale.y,
-                                               vertex.normal.z / scale.z));
-    }
-}
 }
 
 std::vector<Mesh> buildPrototypes(int detail) {
     detail = std::clamp(detail, 1, 4);
     std::vector<Mesh> result(kPrototypeCount);
-    for (unsigned prototype = 0; prototype < unsigned(kPrototypeCount); ++prototype) {
-        Mesh& mesh = result[prototype];
-        mesh.vertices.reserve(size_t(180000) * size_t(detail));
-        mesh.indices.reserve(size_t(120000) * size_t(detail));
-        const unsigned seed = hash(prototype + 0x52555941U);
-        if (prototype < 8U) {
-            island(mesh, seed, detail);
-            geology(mesh, seed, detail);
-            arcade(mesh, prototype, detail);
-            chapel(mesh, prototype, detail);
-            tower(mesh, prototype, detail);
-            courtyard(mesh, seed, detail);
-            garden(mesh, seed, detail, prototype);
-        } else if (prototype < 12U) {
-            island(mesh, seed, detail, IslandKind::Garden);
-            fracturedGeology(mesh, seed, detail, IslandKind::Garden);
-            openGarden(mesh, seed, detail, prototype);
+    for (unsigned index = 0; index < 8; ++index) {
+        const unsigned seed = hash(index + 0x52555941U);
+        const auto kind = index < 3 ? IslandKind::Monastery : index < 6 ? IslandKind::Garden : IslandKind::Monument;
+        if (index < 3 || index >= 6) {
+            island(result[index], seed, detail, kind);
+            if (index < 2) geology(result[index], seed, detail);
+            else fracturedGeology(result[index], seed, detail, kind);
         } else {
-            island(mesh, seed, detail, IslandKind::Monument);
-            fracturedGeology(mesh, seed, detail, IslandKind::Monument);
-            monument(mesh, seed, detail, prototype);
+            // Chalk shelves are stacked and offset, with a broken overhang at one end.
+            const int shelves = 3 + int(index - 3);
+            for (int ledge = 0; ledge < shelves; ++ledge) {
+                const unsigned key = seed + unsigned(ledge) * 367U;
+                const float scale = 1.0f - 0.12f * ledge;
+                const float3 center = make_float3(2.2f * ledge, -2.9f - ledge * 4.3f, 0.8f * ledge);
+                stone(result[index], center, make_float3(23.0f * scale, 3.0f + ledge * 0.3f, 17.0f * scale),
+                      key, 7 * detail, kMaterialStone);
+                for (int outcrop = 0; outcrop < 11; ++outcrop) {
+                    const float angle = kTau * (outcrop + randomUnit(key + unsigned(outcrop))) / 11.0f;
+                    const float3 point = center + make_float3(std::cos(angle) * 21.0f, -1.6f, std::sin(angle) * 15.6f) * scale;
+                    stone(result[index], point, make_float3(4.8f, 1.8f, 2.6f) * scale, key + unsigned(outcrop),
+                          2 * detail, ledge % 3 == 2 ? kMaterialDarkStone : kMaterialStone);
+                }
+            }
         }
-        for (int rock = 0; rock < 80 + 20 * detail; ++rock) {
-            const unsigned key = seed + unsigned(rock) * 811U;
-            const float angle = kTau * randomUnit(key);
-            const float radius = 18.0f + 2.6f * randomUnit(key + 1U);
-            const float size = 0.14f + 0.55f * randomUnit(key + 2U);
-            const float3 center = make_float3(std::cos(angle) * radius, size * 0.32f,
-                                              std::sin(angle) * radius);
-            stone(mesh, center, make_float3(size, size * 0.55f, size * 0.8f), key, 1, kMaterialStone);
-        }
-        if (prototype >= 8U && prototype < 12U)
-            reshape(mesh, make_float3(1.04f + float(prototype % 2U) * 0.09f, 1.0f, 0.88f + float(prototype % 3U) * 0.07f));
-        if (prototype >= 12U)
-            reshape(mesh, make_float3(0.64f + float(prototype % 3U) * 0.06f, 1.0f,
-                                      0.72f + float(prototype % 2U) * 0.08f));
     }
+    arcade(result[8], 0, detail);
+    chapel(result[9], 1, detail);
+    tower(result[10], 6, detail);
+    courtyard(result[11], 87641, detail);
+    garden(result[12], 61411, detail, 0);
+    brokenGallery(result[13], 51431, detail, 3);
+    olive(result[14], make_float3(0, 0, 0), 5.2f, 51577, detail);
+    cypress(result[15], make_float3(0, 0, 0), 8.3f, 8761, detail);
+    monument(result[16], 19641, detail, 13);
+    openGarden(result[17], 61473, detail, 8);
+    fractureShard(result[18], make_float3(0, -13, 0), make_float3(4.2f, 17.0f, 4.1f), 17641);
+    const float3 left = make_float3(-8.5f, 0, 0);
+    const float3 right = make_float3(8.5f, 0, 0);
+    column(result[19], left, 10.7f, 1.2f, detail);
+    column(result[19], right, 10.7f, 1.2f, detail);
+    arch(result[19], left, right, 9.5f, 8.4f, 19.0f);
+    chapel(result[20], 2, detail);
+    stone(result[21], make_float3(0, -5, 0), make_float3(10.0f, 7.0f, 6.0f), 2314, 4, kMaterialStone);
+    stone(result[22], make_float3(0, 0, 0), make_float3(1.6f, 0.94f, 1.2f), 713, 3, kMaterialStone);
+    arcSlab(result[23], make_float3(0, 0, 0), 9.5f, 4.5f, 0.6f, -0.9f, 1.8f, 72, kMaterialStone, 0.19f);
+    // The arch underside stays open. Abutments taper independently into the cloud layer.
+    for (int side : {-1, 1}) {
+        const float x = side * 17.0f;
+        stone(result[24], make_float3(x, -11.0f, 0), make_float3(8.0f, 22.0f, 9.5f), 937U + unsigned(side),
+              6 * detail, kMaterialStone);
+        stone(result[24], make_float3(x + side * 2.5f, -30.0f, 1.5f), make_float3(6.4f, 13.0f, 6.0f),
+              5891U + unsigned(side), 4 * detail, kMaterialDarkStone);
+    }
+    arch(result[24], make_float3(-17, -15, 0), make_float3(17, -15, 0), 4.0f, 12.0f, 3.8f + 15.0f);
+    stone(result[24], make_float3(0, 1.0f, 0), make_float3(24.5f, 1.55f, 8.7f), 9971, 6 * detail, kMaterialStone);
+    // Interlocking cut blocks form a suspended aqueduct. No physical support is implied.
+    for (int bay = -2; bay <= 2; ++bay) {
+        const float x = float(bay) * 12.0f;
+        const float3 a = make_float3(x - 6.0f, -8.5f, 0), b = make_float3(x + 6.0f, -8.5f, 0);
+        arch(result[25], a, b, 0.0f, 6.6f, 8.6f);
+        column(result[25], a, 1.2f + 1.8f * randomUnit(713U + unsigned(bay)), 0.85f, detail);
+        box(result[25], make_float3(x, 0.36f, 0), make_float3(5.97f, 0, 0), make_float3(0, 0.27f, 0),
+            make_float3(0, 0, 1.9f), kMaterialStone);
+    }
+    stone(result[26], make_float3(0, -12, 0), make_float3(8.5f, 19.0f, 6.5f), 23871, 8 * detail, kMaterialStone);
+    stone(result[26], make_float3(-6.0f, -0.7f, 2.0f), make_float3(9.0f, 3.2f, 8.4f), 93713, 5 * detail, kMaterialStone);
+    stone(result[26], make_float3(6.0f, -2.4f, -2.0f), make_float3(6.0f, 4.0f, 7.4f), 13829, 5 * detail, kMaterialStone);
     return result;
 }
 
@@ -896,7 +919,7 @@ std::vector<Cell> visibleCells(const Camera& camera, float aspect, float farDist
     const float3 rightPlane = normalize(W * halfWidth - side);
     const float3 bottomPlane = normalize(W * halfHeight + up);
     const float3 topPlane = normalize(W * halfHeight - up);
-    const float margin = kCellBoundsRadius * 1.18f + 9.0f;
+    const float margin = kCellBoundsRadius * kMaxCellScale + 24.0f;
     const int minX = int(std::floor((camera.eye.x - farDistance - margin) / kCellSize));
     const int maxX = int(std::ceil((camera.eye.x + farDistance + margin) / kCellSize));
     const int minZ = int(std::floor((camera.eye.z - farDistance - margin) / kCellSize));
@@ -904,6 +927,7 @@ std::vector<Cell> visibleCells(const Camera& camera, float aspect, float farDist
     for (int z = minZ; z <= maxZ; ++z)
         for (int x = minX; x <= maxX; ++x) {
             const Cell cell = describeCell(x, z);
+            if (cell.scale == 0) continue;
             const float3 center = cell.offset + make_float3(0, kCellBoundsY * cell.scale, 0);
             const float radius = kCellBoundsRadius * cell.scale;
             const float3 relative = center - camera.eye;
