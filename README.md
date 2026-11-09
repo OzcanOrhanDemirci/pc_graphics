@@ -601,10 +601,12 @@ data 2016), CC BY 4.0.
 ![Limestone islands, hanging gardens and arcades over a sea of mist](assets/gallery/ruya.jpg)
 
 Fly through procedural limestone islands, arcades and gardens. Coordinates
-determine each placement. OptiX traces camera rays against the view cone and
-uses a frame-local table of shared meshes for shadows and indirect light.
-The table is cleared after tracing. The native 1440p default traces three
-samples per pixel with three surface bounces and spatial denoising.
+determine each placement; islands group into massifs around a hero stack.
+Every surface wears a CC0 Poly Haven scan (4K and 8K). OptiX traces camera
+rays against the view cone and uses a frame-local table of shared meshes for
+shadows. The native 1440p default shades twelve fixed sub-pixel samples with
+sun and sky light, no random numbers, no denoiser and no frame history.
+Island meshes are built on worker threads ahead of the flight.
 
 Open `build\pc_graphics.exe --scene ruya`. See [controls](DEMO.md) and
 [measurements](docs/ruya/DURUM.md).
@@ -900,7 +902,8 @@ Private repository. All rights reserved. Scene 5's amphora profiles are written 
 (2019), vector profiles of the University of Southampton's drawings (P. Copeland, *Roman Amphorae: a digital resource*,
 2014), CC BY 4.0, https://doi.org/10.5284/1050896; its scanned textures (Poly Haven, ambientCG) are CC0 and fetched by
 `assets/koy/fetch.py` (`assets/koy/LICENSES.md`). Scene 11's scans (Poly Haven, ambientCG) are CC0 too, fetched by
-`assets/orman/fetch.py` (sources in `docs/orman/VARLIK.md`). Third-party components are fetched at build time under their own licences:
+`assets/orman/fetch.py` (sources in `docs/orman/VARLIK.md`). Scene 14's scans (Poly Haven) are CC0, fetched by
+`assets/ruya/fetch.py` (`assets/ruya/KAYNAKLAR.md`). Third-party components are fetched at build time under their own licences:
 the NVIDIA CUDA redistributables and OptiX SDK headers, the NVIDIA DLSS SDK (NVIDIA RTX SDK licence), GLFW (zlib), stb
 (public domain), tinyexr (BSD), cgltf (MIT). The IBM Plex
 fonts in `assets/fonts` are under the SIL Open Font License (`assets/fonts/LICENSE.txt`). Earthquake records: ESM, the

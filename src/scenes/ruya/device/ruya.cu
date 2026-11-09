@@ -232,7 +232,7 @@ __forceinline__ __device__ Texel rockSurface(const Hit& h, float3 p, const Footp
     }
     return rock;
 }
-struct CardLookup { float u, v; float2 dx, dy; int set; float lod; };
+struct CardLookup { float u, v; float2 dx, dy; int set; };
 __forceinline__ __device__ CardLookup cardLookup(const Hit& h, const Footprint& f) {
     const unsigned atlas = (h.meta >> kCardAtlasShift) & 1U;
     const float4 r = cardRect(atlas, (h.meta >> kCardCellShift) & 3U);
@@ -248,16 +248,16 @@ __forceinline__ __device__ CardLookup cardLookup(const Hit& h, const Footprint& 
     c.v = r.y + h.cardV * rangeV;
     c.dx = make_float2(dot(f.major, axisU) * rangeU / lengthU, dot(f.major, axisV) * rangeV / lengthV);
     c.dy = make_float2(dot(f.minor, axisU) * rangeU / lengthU, dot(f.minor, axisV) * rangeV / lengthV);
-    const float side = params.textureSide[c.set];
-    c.lod = log2f(fmaxf(1.0f, side * fmaxf(fmaxf(fabsf(c.dx.x), fabsf(c.dx.y)), fmaxf(fabsf(c.dy.x), fabsf(c.dy.y)))));
     return c;
 }
-// Mip averaging lowers alpha towards the atlas coverage; the threshold follows it so that
-// distant sprigs keep their area instead of thinning into flickering specks.
-__forceinline__ __device__ bool cardOpaque(const Hit& h, const Footprint& f) {
+// The mip keeps the mean alpha, which is the leaf's share of the footprint. A pixel's samples
+// test it against cut values spread evenly over (0, 1), so the share of samples that stop on the
+// card equals that coverage at any distance, and a leaf edge crossing a sample changes the pixel
+// by one sample's weight instead of switching it.
+__forceinline__ __device__ bool cardOpaque(const Hit& h, const Footprint& f, float cut) {
     const CardLookup c = cardLookup(h, f);
     const float4 n = tex2DGrad<float4>(params.textures[c.set * 2 + 1], c.u, c.v, c.dx, c.dy);
-    return n.w >= lerpf(0.5f, 0.2f, smoothstepf(2.0f, 6.0f, c.lod));
+    return n.w > cut;
 }
 
 __forceinline__ __device__ void applyTexel(Surface& s, const Hit& h, const Texel& t, float relief, float minOcclusion) {
@@ -349,7 +349,7 @@ __forceinline__ __device__ Surface material(const Hit& h, const Footprint& f) {
 
 // Camera rays pass through the cut-out parts of leaf cards. Light transport keeps
 // them opaque, which is what gives a crown its dark interior.
-__forceinline__ __device__ Hit traceVisible(float3 origin, float3 direction, float tmax, float cone) {
+__forceinline__ __device__ Hit traceVisible(float3 origin, float3 direction, float tmax, float cone, float cut) {
     float travelled = 0.0f;
     Hit h{};
     for (int step = 0; step < 3; ++step) {
@@ -358,7 +358,7 @@ __forceinline__ __device__ Hit traceVisible(float3 origin, float3 direction, flo
         if (h.t >= remaining) { h.t = tmax; return h; }
         h.t += travelled;
         if (h.material != kMaterialLeafCard || step == 2) return h;
-        if (cardOpaque(h, rayFootprint(direction, h.geometric, h.t * cone))) return h;
+        if (cardOpaque(h, rayFootprint(direction, h.geometric, h.t * cone), cut)) return h;
         travelled = h.t + 0.004f;
         origin = h.position + direction * 0.004f;
     }
@@ -436,13 +436,16 @@ __forceinline__ __device__ float heightIntegral(float density, float falloff, fl
     const float v = falloff * dy * distance;
     return base * distance * (fabsf(v) > 1e-4f ? (1.0f - expf(clampf(-v, -30.0f, 30.0f))) / v : 1.0f);
 }
-__forceinline__ __device__ float3 atmospheric(float3 radiance, float3 origin, float3 direction, float distance) {
+__forceinline__ __device__ float fogTransmittance(float3 origin, float3 direction, float distance) {
     // The nearer fog is thinned so islands within a few hundred metres keep their contrast;
     // from kFarDistance outwards it is at full strength and still hides the far cut-off.
     const float thin = lerpf(0.62f, 1.0f, smoothstepf(120.0f, 560.0f, distance));
     const float opticalDepth = (heightIntegral(0.0040f, 0.028f, origin.y, direction.y, distance) +
                                 heightIntegral(0.0019f, 0.005f, origin.y, direction.y, distance)) * thin;
-    const float transmittance = expf(-fmaxf(opticalDepth, 0.0f));
+    return expf(-fmaxf(opticalDepth, 0.0f));
+}
+__forceinline__ __device__ float3 atmospheric(float3 radiance, float3 origin, float3 direction, float distance) {
+    const float transmittance = fogTransmittance(origin, direction, distance);
     const float forward = powf(fmaxf(dot(direction, sunDirection()), 0.0f), 8.0f);
     const float3 source = make_float3(0.26f, 0.34f, 0.40f) + make_float3(0.9f, 0.5f, 0.2f) * forward;
     return radiance * transmittance + source * (1.0f - transmittance);
@@ -465,7 +468,7 @@ __forceinline__ __device__ float3 integrate(float3 origin, float3 direction, uns
     float footprint = 0;
     const float cone = 2.0f * length(params.V) / float(params.height);
     for (int bounce = 0; bounce <= params.bounces; ++bounce) {
-        const Hit h = bounce == 0 ? traceVisible(origin, direction, kFarDistance, cone)
+        const Hit h = bounce == 0 ? traceVisible(origin, direction, kFarDistance, cone, next(random))
                                   : traceTriangles(origin, direction, 1200.0f, kTransportRayMask);
         if (bounce == 0) primary = h;
         if (h.t >= (bounce == 0 ? kFarDistance : 1200.0f)) {
@@ -512,7 +515,7 @@ __forceinline__ __device__ float3 integrate(float3 origin, float3 direction, uns
     }
     return atmospheric(result, cameraOrigin, cameraDirection, primary.t < 1200.0f ? primary.t : 4000.0f);
 }
-inline constexpr int kAmbientRays = 3;
+inline constexpr int kAmbientRays = 2;
 inline constexpr float kAmbientReach = 10.0f;
 __forceinline__ __device__ float3 ambientDirection(int index, int count) {
     // Cosine-weighted Fibonacci spiral, identical for every pixel and frame.
@@ -532,7 +535,7 @@ __forceinline__ __device__ float3 shadeDirect(const Hit& h, const Surface& s, fl
     float pdf = 0;
     return evaluateBsdf(s, view, light, pdf) * sunRadiance() * (kSunSolidAngle * nl);
 }
-__forceinline__ __device__ float3 shadeAmbient(const Hit& h, const Surface& s, int sample) {
+__forceinline__ __device__ float3 shadeAmbient(const Hit& h, const Surface& s, int sample, int rays) {
     if (h.material == kMaterialLeafCard || h.material == kMaterialLeaf) {
         // Rays through a crown are the costliest in the scene and mostly hit more leaves,
         // so foliage takes its sky exposure from where the card sits in the crown.
@@ -540,25 +543,34 @@ __forceinline__ __device__ float3 shadeAmbient(const Hit& h, const Surface& s, i
         return s.color * environment(s.normal) * open;
     }
     const Frame frame = Frame::from(s.normal);
-    const int count = kAmbientRays * params.spp;
+    const int count = rays * params.spp;
     float3 sum = make_float3(0, 0, 0);
-    for (int k = 0; k < kAmbientRays; ++k) {
+    for (int k = 0; k < rays; ++k) {
         const float3 d = frame.toWorld(ambientDirection(sample + k * params.spp, count));
         if (dot(d, h.geometric) <= 0.0f) { sum += make_float3(0.10f, 0.09f, 0.075f); continue; }
         sum += shadowed(h.position + h.geometric * 0.006f, d, kAmbientReach) ? make_float3(0.10f, 0.09f, 0.075f)
                                                                             : environment(d);
     }
-    return s.color * (1.0f - s.metal) * sum * (1.0f / float(kAmbientRays));
+    return s.color * (1.0f - s.metal) * sum * (1.0f / float(rays));
 }
-// A pixel's samples nearly always land on one surface, and the scans are already filtered
-// to the whole pixel footprint, so that surface is evaluated once and reused by its samples.
+// A pixel's samples nearly always land on one surface, and its scans are filtered to a
+// footprint, so the surface is evaluated once per quarter of the pixel, filtered to that
+// quarter, and reused by the quarter's samples. Leaf cards are shaded per sample.
 inline constexpr unsigned kNoSurface = 0xFFFFFFFFU;
+// Where the fog has left less than this share of the contrast, one evaluation serves the
+// pixel and one ambient ray per sample is enough.
+inline constexpr float kQuarterFog = 0.55f;
 __forceinline__ __device__ unsigned surfaceKey(const Hit& h) {
     return h.material == kMaterialLeafCard ? kNoSurface : hash(h.seed ^ (h.material << 24) ^ (h.region << 28));
 }
-__forceinline__ __device__ float3 shadeLive(float3 direction, int sample, Surface& cached, unsigned& cachedKey, Hit& primary, float3& albedo) {
-    const float cone = 2.0f * length(params.V) / float(params.height);
-    const Hit h = traceVisible(params.eye, direction, kFarDistance, cone);
+// quarter is the sample's quarter of the pixel, or -1 when the pixel is not split.
+__forceinline__ __device__ float3 shadeLive(float3 direction, int sample, float cut, int quarter,
+                                           Surface& cached, unsigned& cachedKey, Hit& primary, float3& albedo) {
+    // A surface shaded for one sample is filtered to that sample's share of the pixel, as brute-force
+    // supersampling does; the reference shades every sample so.
+    const float pixelCone = 2.0f * length(params.V) / float(params.height);
+    const float sampleCone = pixelCone * rsqrtf(float(params.spp));
+    const Hit h = traceVisible(params.eye, direction, kFarDistance, sampleCone, cut);
     primary = h;
     if (h.t >= kFarDistance) {
         float3 sky = cloudDeck(params.eye, direction, environment(direction));
@@ -566,8 +578,12 @@ __forceinline__ __device__ float3 shadeLive(float3 direction, int sample, Surfac
         primary.t = 1200.0f;
         return atmospheric(sky, params.eye, direction, 4000.0f);
     }
-    const unsigned key = surfaceKey(h);
-    if (key == kNoSurface || key != cachedKey) {
+    const unsigned surfaceId = surfaceKey(h);
+    const bool clear = params.reference || fogTransmittance(params.eye, direction, h.t) > kQuarterFog;
+    const bool split = quarter >= 0 && clear;
+    const unsigned key = surfaceId == kNoSurface ? kNoSurface : split ? hash(surfaceId + unsigned(quarter)) : surfaceId;
+    if (params.reference || key == kNoSurface || key != cachedKey) {
+        const float cone = params.reference || key == kNoSurface ? sampleCone : split ? pixelCone * 0.5f : pixelCone;
         cached = material(h, rayFootprint(direction, h.geometric, h.t * cone));
         cachedKey = key;
     }
@@ -575,7 +591,7 @@ __forceinline__ __device__ float3 shadeLive(float3 direction, int sample, Surfac
     albedo = s.color;
     primary.normal = s.normal;
     const float3 view = -direction;
-    float3 color = shadeDirect(h, s, view) + shadeAmbient(h, s, sample);
+    float3 color = shadeDirect(h, s, view) + shadeAmbient(h, s, sample, clear ? kAmbientRays : 1);
     if (h.material == kMaterialWater) {
         const float3 mirror = reflect3(direction, s.normal);
         const Hit r = traceTriangles(h.position + h.geometric * 0.006f, mirror, kFarDistance, kTransportRayMask);
@@ -647,16 +663,22 @@ extern "C" __global__ void __raygen__render() {
     if (params.bounces == 0) {
         Surface surface{};
         unsigned surfaceId = kNoSurface;
+        // Samples are visited a quarter at a time so that each quarter's surface is evaluated once.
+        const int quarters = params.spp >= 8 ? 4 : 1;
+        for (int quarter = 0; quarter < quarters; ++quarter)
         for (int sample = 0; sample < params.spp; ++sample) {
             // Rotated grid for four samples, the pixel centre for one.
             const float ox = params.spp == 4 ? (float(sample) + 0.5f) * 0.25f : fmodf(0.5f + float(sample) * 0.754877666f, 1.0f);
             const float oy = params.spp == 4 ? (float((sample * 3 + 1) & 3) + 0.5f) * 0.25f : fmodf(0.5f + float(sample) * 0.569840296f, 1.0f);
+            if (quarters == 4 && int(ox * 2.0f) + 2 * int(oy * 2.0f) != quarter) continue;
             const float x = 2.0f * (float(pixel.x) + ox) / float(params.width) - 1.0f;
             const float y = 1.0f - 2.0f * (float(pixel.y) + oy) / float(params.height);
             Hit primary{};
             float3 sampleAlbedo = make_float3(0, 0, 0);
-            float3 sampleColor = shadeLive(normalize(params.W + params.U * x + params.V * y), sample,
-                                           surface, surfaceId, primary, sampleAlbedo);
+            // Stratified alpha cuts, rotated by a fixed per-pixel value that never changes between frames.
+            const float cut = fmodf((float(sample) + 0.5f) / float(params.spp) + randomUnit(index ^ 0x5C3A9E1DU), 1.0f);
+            float3 sampleColor = shadeLive(normalize(params.W + params.U * x + params.V * y), sample, cut,
+                                           quarters == 4 ? quarter : -1, surface, surfaceId, primary, sampleAlbedo);
             if (!finite3(sampleColor)) { atomicAdd(params.badCount, 1U); sampleColor = make_float3(0, 0, 0); }
             color += sampleColor;
             albedo += sampleAlbedo;

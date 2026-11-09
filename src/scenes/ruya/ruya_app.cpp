@@ -97,8 +97,12 @@ void Run::render() {
     cells = std::move(selected);
     const auto transport = offscreen && !fullWorld ? visibleCells(camera, float(width) / height, kFarDistance, true)
                                                   : std::vector<Cell>{};
-    renderer.setCells(cells, transport);
-    renderer.render(camera, spp, bounces, sampleOffset, denoise, exposure, materialDetail);
+    // Cells within reach of the flight in the next seconds, nearest first.
+    auto ahead = visibleCells(camera, float(width) / height, kFarDistance + kStreamAhead, true);
+    const auto distance = [&](const Cell& cell) { return std::hypot(cell.offset.x - camera.eye.x, cell.offset.z - camera.eye.z); };
+    std::stable_sort(ahead.begin(), ahead.end(), [&](const Cell& a, const Cell& b) { return distance(a) < distance(b); });
+    renderer.setCells(cells, transport, ahead);
+    renderer.render(camera, spp, bounces, sampleOffset, denoise, exposure, materialDetail, reference);
     frameMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
 }
 
@@ -154,6 +158,11 @@ int cli(int argc, char** argv) {
     bool customYaw = false;
     bool customPitch = false;
     float yaw = 0, pitch = 0;
+    bool customEye = false;
+    float3 eye{};
+    // A straight flight: forward, right, up (m/s) and mouse x per frame, at 30 frames per second.
+    bool drift = false;
+    float driftForward = 0, driftRight = 0, driftUp = 0, driftTurn = 0;
     auto failUsage = [](const std::string& message) {
         std::fprintf(stderr, "Ruya: %s\n", message.c_str());
         return 2;
@@ -162,6 +171,17 @@ int cli(int argc, char** argv) {
         const std::string option = argv[index];
         auto value = [&]() { return index + 1 < argc ? std::string(argv[++index]) : std::string(); };
         auto number = [&](auto& target) { return parseNumber(value(), target); };
+        auto numbers = [&](std::initializer_list<float*> targets) {
+            const std::string text = value();
+            size_t begin = 0;
+            for (float* target : targets) {
+                if (begin > text.size()) return false;
+                const size_t end = std::min(text.find(',', begin), text.size());
+                if (!parseNumber(text.substr(begin, end - begin), *target) || !std::isfinite(*target)) return false;
+                begin = end + 1;
+            }
+            return begin == text.size() + 1;
+        };
         if (option == "--scene") { if (value() != "ruya") return failUsage("Yanlis sahne"); }
         else if (option == "--headless") {}
         else if (option == "--root") root = value();
@@ -182,6 +202,12 @@ int cli(int argc, char** argv) {
             if (!parseNumber(text, parsed)) return failUsage("Gecersiz deger: " + option);
             overrides.push_back(option.substr(2) + "=" + text);
         }
+        else if (option == "--eye") { customEye = true; if (!numbers({&eye.x, &eye.y, &eye.z})) return failUsage("Gecersiz goz: X,Y,Z"); }
+        else if (option == "--drift") {
+            drift = true;
+            if (!numbers({&driftForward, &driftRight, &driftUp, &driftTurn})) return failUsage("Gecersiz suzulme: ILERI,SAG,YUKARI,FARE_X");
+        }
+        else if (option == "--reference") run.reference = true;
         else if (option == "--raw") run.denoise = false;
         else if (option == "--no-offscreen" || option == "--no-proxy") run.offscreen = false;
         else if (option == "--flat-material") run.materialDetail = 0;
@@ -199,6 +225,8 @@ int cli(int argc, char** argv) {
                       "  --route --impact --raw --sample-offset N --no-offscreen --full-world\n"
                       "  --flat-material --unfiltered-material\n"
                       "  --yaw RAD --pitch RAD --exposure EV --lifecycle --test --test-live --dump-dir DOSYA\n"
+                      "  --eye X,Y,Z --drift ILERI,SAG,YUKARI,FARE_X (duz rota, 30 kare/s)\n"
+                      "  --reference (her ornek kendi yuzeyini kendi izinde golgeler: kaba kuvvet referansi)\n"
                       "  --detail 0 en dusuk yogunluktur (1 ile ayni)");
             return 0;
         }
@@ -214,6 +242,7 @@ int cli(int argc, char** argv) {
         return 1;
     }
     run.camera = Run::view(view);
+    if (customEye) run.camera.eye = eye;
     if (customYaw) run.camera.yaw = yaw;
     if (customPitch) run.camera.pitch = std::clamp(pitch, -1.45f, 1.45f);
     if (impact) {
@@ -247,13 +276,14 @@ int cli(int argc, char** argv) {
         if (!ensureParent(csv)) return 1;
         log.open(csv);
         if (!log) return failUsage("CSV acilamadi: " + csv);
-        log << "view,frame,gpu_trace_ms,gpu_denoise_ms,gpu_display_ms,upload_ms,frame_ms,cells,triangles,resident_bytes,free_bytes,bad_samples,added,evicted,x,y,z,yaw,pitch,width,height,spp,bounces,transport_cells,optical_pool_bytes\n";
+        log << "view,frame,gpu_trace_ms,gpu_denoise_ms,gpu_display_ms,upload_ms,frame_ms,cells,triangles,resident_bytes,free_bytes,bad_samples,added,evicted,x,y,z,yaw,pitch,width,height,spp,bounces,transport_cells,optical_pool_bytes,streamed_cells,waited_cells,resident_cells\n";
     }
     for (int index = -warmup; index < frames; ++index) {
         if (route && index >= 0) {
             const float mouse = index < frames / 2 ? 50.0f : -50.0f;
             run.move(mouse, 4.0f * std::sin(float(index) * 0.017f), 6.0f, 2.0f, 0.0f, 1.0f / 30.0f);
         }
+        if (drift && index >= 0) run.move(driftTurn, 0.0f, driftForward, driftRight, driftUp, 1.0f / 30.0f);
         run.render();
         const auto& stats = run.renderer.stats();
         if (stats.badSamples != 0) {
@@ -266,7 +296,8 @@ int cli(int argc, char** argv) {
                 << stats.uploadMs << ',' << run.frameMs << ',' << stats.cells << ',' << stats.instancedTriangles << ','
                 << stats.residentBytes << ',' << stats.freeBytes << ',' << stats.badSamples << ',' << run.added << ',' << run.evicted << ','
                 << run.camera.eye.x << ',' << run.camera.eye.y << ',' << run.camera.eye.z << ',' << run.camera.yaw << ',' << run.camera.pitch << ','
-                << run.width << ',' << run.height << ',' << run.spp << ',' << run.bounces << ',' << stats.transportCells << ',' << stats.opticalPoolBytes << '\n';
+                << run.width << ',' << run.height << ',' << run.spp << ',' << run.bounces << ',' << stats.transportCells << ',' << stats.opticalPoolBytes << ','
+                << stats.streamedCells << ',' << stats.waitedCells << ',' << stats.residentCells << '\n';
             if (!log) { std::fprintf(stderr, "CSV yazma hatasi\n"); return 1; }
         }
         if (index == frames - 1)

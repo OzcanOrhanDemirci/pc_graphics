@@ -66,6 +66,11 @@ inline constexpr int kSetRock = 0, kSetGroundFar = 1, kSetMasonry = 2, kSetCliff
 inline constexpr int kTextureSets = 11;
 inline constexpr unsigned kIslandSlots = 2048;
 inline constexpr unsigned kIslandGraceFrames = 90;
+// Island meshes are built this far beyond the light-transport ring, so a cell is
+// ready well before it can be seen; at the 36 m/s flight limit that is several seconds.
+inline constexpr float kStreamAhead = 240.0f;
+// GPU upload of cells built ahead stops once a frame has spent this long on it.
+inline constexpr float kStreamUploadMs = 2.0f;
 
 HD unsigned hash(unsigned x) {
     x ^= x >> 16;
@@ -204,12 +209,16 @@ struct FrameStats {
     unsigned cells = 0, transportCells = 0;
     size_t opticalPoolBytes = 0;
     unsigned long long instancedTriangles = 0;
+    // Island streaming: cells uploaded this frame, and those the frame had to wait for.
+    unsigned streamedCells = 0, waitedCells = 0, residentCells = 0;
 };
 struct Params {
     OptixTraversableHandle handle;
     unsigned width, height, layout;
     int spp, bounces, sampleOffset;
     int raw, materialDetail;
+    // Brute-force reference: every sample shades its own surface at its own footprint.
+    int reference;
     float exposure;
     float3 eye, U, V, W;
     const Geometry* geometries;

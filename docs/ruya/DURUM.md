@@ -1,223 +1,85 @@
 # Rüya · Sahne 14
 
-## Son revizyon · 2026-11-08 (Claude, Özcan'ın 6 maddesi)
+## Revizyon · 2026-11-10 (Özcan'ın 3 maddesi)
 
-**Özcan'ın bakacağı yer:** `build\pc_graphics.exe --scene ruya`, 1–6 altı farklı adayı açar.
-Dokular için önce `python assets/ruya/fetch.py` (CC0 Poly Haven, 8K, ~390 MB).
+**Özcan'ın bakacağı yer:** önce `python assets/ruya/fetch.py` (CC0 Poly Haven taramaları,
+11 set, 4K ve 8K), sonra `build\pc_graphics.exe --scene ruya`. 1–6 altı bakış, Shift hızlı uçuş.
 
-- **Dünya:** her hücre bulut denizinden yükselen tek parça kireçtaşı sütunu üretir
-  (`ruya_island.cpp`): manastır mesası, basamaklı bahçe, sütun kümesi, ağaçlı tepe.
-  Biçim tohumdan kapalı bir fonksiyon; ağ, çarpışma ve yapı yerleşimi aynı yüzeyi okur.
-  Yapılar düzleştirilmiş zemine oturur, uydu sütunlar kendi ayağı üzerinde durur.
-  Havada duran parça kalmadı (`parca-havada-durmaz`, 12×12 hücre, 0).
-- **Kopya hatası bulundu:** eski `cellSeed` tek koordinatlı (x, z) ile (−x, −z)
-  hücrelerine aynı tohumu veriyordu: dünya merkeze göre ayna kopyasıydı.
-  Düzeltildi, `ada-bicimleri-tekrarsiz` testi eski tohumla 8 tekrar buldu, şimdi 0.
-- **Dokular:** rock_face_03, aerial_grass_rock, large_sandstone_blocks_01 (CC0, 8K,
-  renk + normal + pürüzlülük/AO), triplanar, ayak izine göre mip; duvarda ikinci ölçek tekrarı kırar.
-- **Titreme:** canlıda yol izleme ve gürültü giderici kalktı. Sabit 12 alt piksel örneği,
-  güneşe tek gölge ışını, her örnekte sabit 4 ortam yönü: rastgele sayı ve kare geçmişi yok.
-  `tools/kararlilik.py`, 1280×720, bakış 2 rotası, 40 kare, 64 örnekli aynı gölgelendirmeye karşı:
-  piksel kıpırtısı **0,00121** (eski yol izleyici + gürültü giderici aynı rotada 256 örnekli
-  referansına karşı 0,00205). 4 örnek 0,00201, 8 örnek 0,00144, 16 örnek 0,00105.
-- **Sis ve mesafe:** iki katmanlı yükseklik sisi; uzak çizim 1100 → 640 m, ışık çevresi 320 m.
-  640 m'de geçirgenlik yaklaşık %4.
-- **Hız (ölçülen, RTX 4080, 2560×1440):** gizli CUDA-GL 120 kare p50 **14,84 ms**, p95 15,68 ms
-  (önceki sürüm 28,86 ms). Sabit bakışlarda 12 örnekle 16–21 ms.
-- **NE DOĞRULANMADI:** exe Özcan'ın ekranında açılmadı, gerçek fare hissi ve monitör sunumu
-  ölçülmedi. 1440p'de titreme ölçülmedi (720p ölçüldü). `--flat-material` ve
-  `--unfiltered-material` seçenekleri artık etkisiz. Aşağıdaki eski bölümler önceki sürümü anlatır.
+**Üç parça ne değiştirdi** (sahnenin fikri, ışığı ve sisi aynı):
 
-## Önceki sürüm (Codex)
+1. **Adalar** (155b498): ızgaraya serpilmiş yuvarlak somunlar yerine eklemli, oyuklu,
+   kırık başlıklı sütun birleşimleri; beş hücrelik masifler bir ana sütunun çevresinde,
+   aralarında kıvrılan boş koridorlar; tepe, sahanlık ve duvarda sık bitki.
+2. **Gerçek malzeme** (576f169): her yüzey CC0 Poly Haven taraması (kaya, katman, zemin,
+   kesme taş 8K; kabuk, çatı, ahşap, metal, iki yaprak atlası 4K), ışın izine göre anizotrop
+   süzme; taçlar alfa kesmeli dal kartları.
+3. **Titreme ve takılma** (bu commit):
+   - Yaprak alfası pikselin 12 örneğinde (0, 1) aralığına eşit dağıtılmış eşiklerle sınanıyor
+     (sabit, kareden kareye değişmez); yaprak alfası ve dokusu örneğin kendi payında süzülüyor.
+   - Yüzey pikselin her çeyreğinde bir kez değerlendiriliyor (önceden piksel başına bir);
+     sisin kontrastın %45'inden fazlasını aldığı yerde tek değerlendirme ve tek ortam ışını.
+   - Ortam ışını örnek başına 3 → 2; doku anizotropisi 2 → 16.
+   - Ada ağları sekiz işçi iş parçacığında ışık çevresinin 240 m ötesine kadar önceden
+     üretiliyor, GPU'ya ada ada karede en çok ~2 ms bütçeyle yükleniyor, ön ısıtılmış bellek
+     havuzundan (2 GiB). Işık çevresindeki hücre hazır değilse kare bekler (yalnız ilk kare
+     ve 1–6 sıçramaları); görüntü zamanlamaya bağlı değil.
 
+**Ölçüm yöntemi.** `python tools/ruya_titreme.py --out KLASOR -- ROTA`: canlı (12 örnek) ile aynı
+gölgelendirmenin 128 örnekli kaba kuvvet referansı (`--reference`: her örnek kendi yüzeyini
+kendi payında gölgeler), sonra `tools/kararlilik.py --isi`. 1440p, 24 kare. Rotalar:
+(a) `--route`; (b) alçak uçuş sütunlar arası `--view 1 --eye 858.79,20,-105.96 --pitch 0 --drift 12,0,0,0`;
+(c) taç ve çimen önünde yanal kayma `--view 3 --eye 84.6,1.5,493.4 --drift 0,3,0,0`.
+Kayıtlar `captures/ruya/revize_titreme/` (once_*, amb_* = son hâl; `isi_once_sonra_*.jpg`,
+`kirp_*_once_sonra_ref.png`). Taban (0,00121) eski sahnede ölçülmüştü; yeni sahne çok daha
+sık bitki ve doku taşıdığından aynı rotada referansın kendi değişimi iki katı (0,042'ye karşı 0,020).
+Büyük kaydırmada bu ölçü canlıyla referans arasındaki durağan farkı (ör. bulanıklık) da sayar.
 
-`build\pc_graphics.exe --scene ruya` sahneyi açar. Galeride **14 Rüya**.
-**1–6** genel manzarayı, havuzu, kaya yüzünü, kuleyi, koruluğu ve doğal
-kemeri gösterir. WASD ve fare uçuşu yönetir. Boşluk ve C yükselme ve
-alçalma, Shift hızlı uçuş, Tab imleci bırakma ve alma içindir. Fare dönüşü
-0,85 rad/s ile sınırlı. Dikey görüş açısı tekerlekle 36°–48° arasında değişir.
+| Kıpırtı (ölçülen) | piksel ort | p99 | 8×8 blok | FLIP | yeşil (taç/çimen) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| (a) rota, önce → sonra | 0,00681 → **0,00386** | 0,080 → 0,038 | 0,00291 → 0,00112 | 0,0237 → 0,0138 | 0,0200 → 0,0082 |
+| (b) alçak uçuş | 0,00091 → **0,00081** | 0,0101 → 0,0078 | 0,00016 → 0,00013 | 0,0063 → 0,0058 | 0,0146 → 0,0087 |
+| (c) yanal kayma | 0,01202 → **0,00798** | 0,101 → 0,055 | 0,00226 → 0,00125 | 0,0367 → 0,0281 | 0,0294 → 0,0110 |
 
-## Dünya ve görüntü
+"Yeşil": referansta yeşili baskın pikseller (yaklaşık taç/çimen maskesi). FLIP her rotada
+düştü: kararlılık bulanıklaşarak gelmedi (kırpımlar da aynı).
+**Hedef tutmadı:** rota (a) 0,00386, tabanın (0,00121) üstünde. 12 örnekte her yüzeyi ayrı
+gölgelemek bile 0,00323'te kalıyor (+7 ms); kalan fark taç kenarı, ince korkuluk ve yaprak
+katmanlarında 12 örneğin kendisi.
 
-Koordinat dört bölge tarifinden birini seçer. Yirmi yedi bileşen geometrisi
-varsayılan ayrıntıda toplam **2.382.774 üçgen** içerir. Arazi, yapı ve ağaç
-ayrı yerleşir. Çekirdek kaya kemerleri, ince sahanlıklar, koruluklar ve
-ayrık taş grupları silueti değiştirir. Bazı koordinatlar açık uçuş koridoru
-bırakır. 32×32 koordinat örneğinde 250 hücre boş, 774 hücre dolu. Konum
-ve açıyı saymadan 502 ayrı bileşen sayımı bulundu. Tekrar üretimde
-yerleşim baytları eşleşti. Galeri görseli sahnenin kendi çizdiği karedir.
+| Kare süresi, RTX 4080, 1440p, 12 örnek (ölçülen) | p50 | p95 | en uzun | upload_ms en uzun |
+| --- | ---: | ---: | ---: | ---: |
+| (a) `--route --frames 200 --warmup 5`, önce (576f169, 2 koşu) | 25,8–26,0 | 33,6–33,9 | 49,5–50,6 | 21,7–22,7 |
+| (a) sonra (3 koşu) | **24,2–24,3** | **31,6–31,7** | 34,5–36,0 | **2,3–2,4** |
+| (b) alçak uçuş 200 kare, önce → sonra | 25,5 → 23,7 | 27,1 → 25,1 | 59,1 → 27,0 | 34,4 → 2,3 |
+| 36 m/s ileri 300 kare, önce → sonra | 18,8 → 16,6 | 28,3 → 20,2 | 50,8 → 23,1 | 35,6 → 2,5 |
 
-Kamera 27 cm yarıçaplı bir küredir. Hareketin tamamını çizilen üçgenlere
-karşı tarar. Temastan sonra yüzey boyunca kayabilir. Aynı geometrinin CPU
-ağaçları bellekte durur. Hücreye özel çarpışma yerleşimleri hareket
-sorgusu sırasında üretilir.
+Sonra: hiçbir karede 5 ms üstü yükleme yok, hiçbir uçuş karesi hücre beklemedi. GPU tahsisi
+6,7–6,9 GB (havuzun boş kısmı hariç; havuz 2 GiB, en yüksek kullanım 1,44 GiB).
+`--scene ruya --test`, `--lifecycle` ve gizli `--test-live` geçti; yeni test `ada-akisi-dogrudan-ile-ayni`
+iş parçacığında üretilen ağların doğrudan üretimle bayt bayt aynı olduğunu sınıyor (bozuk
+üreticiyle 30 farkla kaldı).
 
-Kamera, görüş konisini kesebilecek hücreleri koordinatlarından seçer.
-Örtülme hesabından önce kullanılan konservatif sınır bütün adayı kapsar.
-Kamera hareket ettiğinde hücrenin biçimi, tohumu, ölçeği ve dönüşü değişmez.
-Bu seçim için ayrıntı seviyesi geçişi kullanılmaz.
+**Yapılmayan:** normal haritası için Toksvig/LEAN (ısı haritasında parlama odağı görülmedi,
+ölçülmedi); ince geometri (korkuluk) ve gölge kenarı için ayrı düzeltme; örnek sayısını artırma.
+Piksel başına döndürülmüş alt piksel deseni denendi, etkisizdi (0,00435 → 0,00438), geri alındı.
 
-Işığın kadraj dışına ulaşması için yaklaşık 1,1 km yarıçaplı aday çevrenin
-ortak ağları kısa ömürlü bir OptiX tablosunda yer alır. Kamera ışınlarının
-erişimi ayrı bir maskeyle sınırlıdır. Bu kararla “bakılan dünya” tanımına
-görüntüye ışık taşıyabilecek çevre de girer. Çevre adaylarının geçici GPU
-verisi vardır. GPU ışın izlemeyi bitirince hücre kayıtları, yerleşimler,
-hızlandırma tablosu ve çalışma tamponu sıfırlanır. Sıfırlanmış tampon
-kapasitesi yeniden kullanılır. Kalıp ağları ve görüntü tamponları sahne
-kapanana kadar bellektedir. Diskte dünya durumu tutulmaz.
+**NE DOĞRULANMADI:** canlı ekran açılmadı; gerçek fare hissi, monitör sunumu ve 1–6 sıçramasındaki
+bekleme süresi gözle görülmedi. Bir ağacın içine uçulduğunda (ekranı dolduran yaprak) kare ~38 ms
+ölçüldü; bütçe dışı. Kare süreleri koşudan koşuya ~1 ms oynuyor.
 
-Varsayılan 2560×1440 çizim üç sabit kamera örneği, üç yüzey sekmesi,
-son gök ışını, güneş diski örneklemesi ve MIS kullanır. Lambert ve GGX
-arasındaki örnek dağılımı malzemenin yansıtma oranına göre değişir. Taş
-için ton, pürüzlülük ve iki kabartma eğimi açılışta GPU'da 4096×4096
-olarak üretilir. Pikselin yüzeydeki izdüşümüne göre 13 mip seviyesi
-arasında süzülür. OptiX HDR gürültü gidericisi kare geçmişi taşımaz.
-Taş renginin bir bölümü gürültü giderme sonrasında yeniden uygulanır.
-Gök ve sis yaklaşık atmosfer modeli kullanır. Bulut örtüleri birincil
-gök ışınlarında analitik katmanlardır. Havuz opak yansıtıcı yüzeydir.
-[NVIDIA OptiX 9.1 kılavuzu](https://raytracing-docs.nvidia.com/optix9/guide/index.html)
+## Önceki sürüm · 2026-11-08 (Claude, Özcan'ın 6 maddesi)
 
-## Ölçüm düzeni
+- Canlıda yol izleme ve gürültü giderici kalktı: sabit 12 alt piksel örneği, güneşe tek gölge
+  ışını, sabit ortam yönleri. 720p kıpırtı 0,00121 (eski yol izleyici 0,00205).
+- Her hücre bulut denizinden yükselen tek parça kireçtaşı sütunu; tohum (x, z) / (−x, −z)
+  ayna kopyası hatası düzeltildi. Sis iki katmanlı, uzak çizim 640 m.
+- Gizli CUDA-GL 120 kare p50 14,84 ms (o sürümün dokusuz hâli).
 
-RTX 4080, sürücü 621.01, 16.376 MiB. Kayıtlarda CUDA olay süreleri ve
-CPU duvar saati ayrı. Toplam kare süresine görünür hücre seçimi, geçici
-ışık tablosu, çizim ve gürültü giderme dahil. Monitör sunum süresi ayrı
-bir ölçümdür. Ölçüm sırasında pencere veya ses açılmadı.
+## Önceki sürüm · 2026-11-07 (Codex)
 
-```powershell
-cmd /c build.bat
-.\build\pc_graphics.exe --scene ruya --test-live
-python tools/ruya_verify.py --self-test
-python tools/ruya_verify.py --mode all --frames 200 --warmup 35 --repeats 2 --reference-spp 256 --temporal-spp 512
-.\build\pc_graphics.exe --scene ruya --headless --view 2 --impact --out captures/ruya/temas
-.\build\pc_graphics.exe --scene ruya --headless --view 2 --impact --flat-material --out captures/ruya/temas_haritasiz
-python tools/ruya_verify.py --mode temporal --temporal-view 2 --temporal-frames 20 --temporal-width 2560 --temporal-height 1440 --temporal-spp 256
-```
-
-Python ölçümleri NumPy, Pillow ve OpenEXR kullanır. FLIP kuruluysa görüntü
-farkı ayrıca kaydedilir. Her koşu komutu, çalıştırılabilir dosyanın karması,
-kaynak karmaları, GPU bilgisi, ham kare süreleri ve çıkış kodu manifestte.
-Başarı eşiği tutmazsa araç çıkış kodu 1 verir ve verileri saklar.
-
-## Uçuş geri bildirimi sonrası ölçüm · 2026-11-07
-
-`captures/ruya/revision_final/` altı sabit bakışın iki tekrarını ve
-200 karelik uçuşu içerir. Toplam **2.600 native 1440p kare** ve
-**0 sonlu olmayan örnek**. Yol izleme, kamera ve ışık tabloları,
-gürültü giderme ile son renk dönüşümü süreye dahildir.
-
-| Ölçüm | p50 | p95 |
-| --- | ---: | ---: |
-| En ağır sabit bakış, iki tekrar | 30,22–30,29 ms | 30,90–32,01 ms |
-| Uçuş, 200 kare | 23,80 ms | 26,29 ms |
-| Gizli CUDA–OpenGL, 120 kare | 28,86 ms | 30,13 ms |
-| İlk sürüm, aynı 180 karelik girdi | 31,78 ms | 35,73 ms |
-| Yeni sürüm, aynı 180 karelik girdi | 24,31 ms | 26,64 ms |
-
-İki sürüm aynı başlangıç pozu, girdi, çözünürlük ve örnek sayısını
-kullandı. Dünya üretimi değiştiği için GPU'ya verilen geometri farklı.
-Bu iki koşu `revision_baseline/route.csv` ve
-`revision_final/route_equal_180.csv` içinde. Gizli CUDA–OpenGL turu
-çarpışma hesabını ve görüntü aktarımını da içerir. Gerçek monitör
-sunumu ayrıca ölçülmedi.
-
-960×540 başlangıç uçuşunda 512 örneğe göre fazla piksel değişimi
-**0,00535** ve ikinci fark oranı **0,984**. 1440p yakın kaya uçuşunda
-256 örneğe göre **0,01105** ve **0,985**. Yakın uçuşun 0,006 eşiği
-açık. Aynı 48 karelik 960×540 yakın yolda süzgeçsiz 4K okuma 0,01411
-fazla değişim üretti. Filtreli yol aynı referansa göre 0,01079.
-İki ayrı 512 örnekli referans aynı yakın yolda birbirine göre 0,00692
-fark verdi. Bu değerler kabul eşiğini değiştirmiyor.
-
-1440p temas deneyinde GPU merkez ışını başlangıç yüzeyini 18,56 m'de
-gördü. 19,21 m ileri komutunda kamera 18,15 m hareket etti. Son kadrajda
-görülen en yakın yüzey 0,629 m. İnce duvar deneyi 27 cm temas yarıçapını,
-duvar boyunca kaymayı ve açık boşluktan geçişi ayrı sınadı. Duvar
-çıkarılınca aynı hareket hedefe ulaştı. Altı sabit görüntüde 256 örnekli
-ham referansa göre sRGB ortalama fark 0,00290–0,00831. Işık maskesi
-kontrolleri ve 20 boşaltıp yeniden üretme çevrimi geçti.
-
-Dört örnekli aday yakın sabit bakışta 34 ms üstüne çıktı. Taşın ağırlığına
-göre ışın seçen üç örnekli aday hem kare süresinde hem aynı yakın
-rotadaki hareket ölçüsünde öne geçti. Ayrı A/B/B/A denemesinde erken
-ışın sonlandırma ve son sekmeyi gölge sorgusuna indirme birlikte yaklaşık
-3,5 ms daha yavaştı. Bu değişiklikler üretim sürümüne alınmadı.
-
-## İlk sürümün ölçümü · 2026-11-07
-
-369312a sürümünün ölçümü `captures/ruya/final_stratified/`.
-Altı sabit kadraj, kadraj başına üç ayrı süreçte 300 kare ve 300 karelik
-uçuş rotası toplam **5.700 native 1440p kare**. Kaydedilen sonlu olmayan
-örnek sayısı **0**.
-
-| RTX 4080 ölçümü | Sonuç |
-| --- | --- |
-| Sabit kadrajların medyanı | 26,86–33,38 ms, yaklaşık 30–37 FPS karşılığı |
-| Uçuş rotası | p50 29,39 ms, p95 34,11 ms, en uzun 34,79 ms |
-| En ağır yakın bakış, üç tekrar | p50 33,35 / 33,30 / 33,38 ms |
-| Başlangıç kadrajı, bağımsız süreç duvar saati | 27,43 ve 27,94 ms/kare, 301 ile 1 karenin farkı |
-| En yoğun ölçülen kare | 211 kamera hücresi, 105.496.621 yerleştirilmiş üçgen |
-| Uygulamanın en yüksek GPU tahsisi | 1.481.931.076 bayt, yaklaşık 1,38 GiB |
-
-33,33 ms p50 iç sınırı en ağır yakın bakışın iki tekrarında yaklaşık
-0,02–0,05 ms aşıldı. Uçuş p95 40 ms sınırının içinde. Süreler ısınma,
-dosyaya kare yazma ve monitör sunumunu dışarıda tutar. Ayrı süreç duvar
-saati karşılaştırmasının ham kaydı `external_wall.json`. Kartın toplam
-kullanımı bu kontrolün öncesinde 615, sonrasında 614 MiB ölçüldü.
-
-Altı kadrajın 640×360, 32 örnekli ham HDR çıktısı kamera maskesi
-kaldırılan aynı çevreyle **birebir eşleşti**. Işığa görüş dışı adayları
-kapatan negatif kontrolde altı çıktı da değişti. NRMSE 0,0194–0,7676.
-İlk kadrajın ayrı süreçte tekrarı aynı EXR karmasını verdi. Referans aynı
-çevre yarıçapını ve aynı yüzey integratörünü kullanır.
-
-1280×720 sabit görüntü testinde 128 örnekli ham referansa göre sRGB MAE
-0,00568–0,01376, FLIP 0,02853–0,05306. 960×540, 48 karelik uçuş dizisinde
-512 örnekli referansa göre fazla piksel değişimi **0,01163**. Önceden
-konan 0,006 hedefi açık. İkinci fark oranı 0,972 ile 1,10 sınırını geçti.
-İki bağımsız 512 örnek dizisi arasındaki farkın 0,00619 olması bu hedefi
-yeniden tanımlamıyor. Hareket metriği örnek gürültüsünün yanında mekânsal
-gürültü gidericinin ayrıntı farkını da ölçüyor.
-
-Gizli OpenGL sınaması aynı son ikiliyle geçti. Canlı sahnenin ürettiği
-doku, renderer'ın CPU'ya indirilen karesiyle bayt düzeyinde eşleşti.
-`live_hidden_final.txt` ve GPU boşaltma kontrolü `smoke.txt` içinde.
-
-## Deneyler ve seçimler
-
-- İlk taslakta görüş dışı adalar elipsoit vekillerdi. A/B/A ölçümünde bu
-  sorguyu kapatmak, iki 1440p bakışta izleme süresini 6,5–11,6 ms azalttı
-  ve ışığı değiştirdi. Aynı deneyde üçgen kopyalarını yaklaşık 90 milyondan
-  50 milyona indirmek yalnızca 0,2–0,3 ms kazandırdı. İlk ölçümler
-  `captures/ruya/ablation_initial/` içinde.
-- Her ışına ayrı ayrıntılı ada sorgusu kuran DDA denemesi iki bakışta
-  54,85 ve 108,22 ms sürdü. Yakın bakışta tam çevreyle ham HDR farkı
-  0,01934 NRMSE ölçüldü. Frustum çıkışından başlayan aday aynı çıktıyı
-  verdi ve daha yavaş çalıştı. Bu yollar geçici OptiX tablosuyla değiştirildi.
-  Deneyler `captures/ruya/exact_optimization/` içinde.
-- Üç örnekli, aynı sahne ve kamerada SER 41,1–51,9 ms ölçüldü. O deneyin
-  eş koşul tabanı 29,6–35,6 ms idi. Hızlı matematik 27,4–33,3 ms ölçüldü.
-  Ham HDR'de NRMSE 0,0086–0,0249, görüntülenen sRGB'de ortalama fark
-  0,000098–0,000198 idi. Hızlı matematik seçildi. Ham HDR farkı kayda geçti.
-  AOV ve HDR gidericinin süreleri yakındı. AOV dünya normali kılavuzuyla
-  seçildi. Kayıtlar `captures/ruya/shader_trial/` ve `quality_trial/` içinde.
-- Aynı 48 karede ham 64 örnekli referansın 512 örnekliye göre fazla piksel
-  değişimi 0,01133. İki bağımsız 512 örnekli referans arasında 0,00619.
-  512 örnekli aynı referansa karşı ilk üç örnek 0,01271, merkezlenmiş
-  üçlü 0,01185, merkezlenmiş ve ilk sekmesi katmanlanmış üçlü 0,01163.
-  Yakın bakışın 120 karelik A/B/B/A turunda p50 33,14 / 33,10 / 33,01 /
-  33,13 ms. Son desen seçildi. `sample_trial/` ve `strata_trial/`.
-
-## Doğrulama ve açık sınırlar
-
-- Dünya testleri kalıp geometrisinin sonlu değerlerini, normallerini,
-  üçgen alanını, sınırlarını ve bayt düzeyinde yeniden üretimini sınar.
-  Kamera seçiminden bağımsız köşe izdüşümü ve negatif kontroller var.
-- GPU yaşam döngüsü sınaması boşaltılan dünyada ilk ışınların geometriye
-  vurmadığını, 20 yeniden üretimde aynı HDR ve tahsis boyutunu denetler.
-  GPU optik tamponları okunur. Dolu tampon negatif kontrol olarak kullanılır.
-- Gizli ve odaksız GLFW bağlamında gerçek sahne yükleme işçisi, CUDA-GL
-  piksel eşitliği, sentetik uçuş girdisi, Tab ve GL kaynağının kapatılması
-  sınandı. Gerçek fare hareketinin hissi ve monitördeki sunum hızı açık.
-- Geometri ve ışık testleri görünümün sanatsal değerlendirmesini kapatmaz.
-  Özellikle çok yakındaki kaya ve bitkide sentetik görünüm kalıyor.
+- İlk sahne: 27 ortak prototip, koordinattan yerleşim, kare başına geçici OptiX yerleşim
+  tablosu (kamera ve ışık maskeleri ayrı), 3 örnek + 3 sekme + OptiX gürültü giderici.
+- Uçuş 200 kare p50 23,80 ms, p95 26,29 ms; en ağır sabit bakış p50 ~30,2 ms.
+- Kamera 27 cm yarıçaplı küre, çizilen üçgenlere karşı çarpışır; 20 boşaltma/yeniden üretme
+  döngüsünde HDR baytları aynı.
+- Ayrıntılı kayıtlar ve deneyler git geçmişinde (`docs/ruya/DURUM.md`, 576f169 ve öncesi).

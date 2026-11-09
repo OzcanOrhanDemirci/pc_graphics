@@ -427,15 +427,22 @@ namespace {
 // generations replace an LRU: a cell seen in the last few frames stays.
 class PlanCache {
 public:
+    // Planning runs outside the lock so that worker threads plan cells in parallel;
+    // two threads racing on one cell compute equal plans and the first one is kept.
     std::shared_ptr<const CellPlan> get(const Cell& cell) {
         const std::pair<int, int> key{cell.x, cell.z};
+        std::shared_ptr<const CellPlan> plan;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            const auto found = current_.find(key);
+            if (found != current_.end()) return found->second;
+            const auto old = previous_.find(key);
+            if (old != previous_.end()) plan = old->second;
+        }
+        if (!plan) plan = std::make_shared<const CellPlan>(planCell(cell));
         std::lock_guard<std::mutex> lock(mutex_);
         const auto found = current_.find(key);
         if (found != current_.end()) return found->second;
-        std::shared_ptr<const CellPlan> plan;
-        const auto old = previous_.find(key);
-        if (old != previous_.end()) plan = old->second;
-        else plan = std::make_shared<const CellPlan>(planCell(cell));
         if (current_.size() >= kGeneration) {
             previous_ = std::move(current_);
             current_.clear();

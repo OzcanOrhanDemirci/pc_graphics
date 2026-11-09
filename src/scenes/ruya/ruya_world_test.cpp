@@ -2,6 +2,7 @@
 #include "scenes/ruya/ruya_world.h"
 #include "scenes/ruya/ruya_collision.h"
 #include "scenes/ruya/ruya_island.h"
+#include "scenes/ruya/ruya_streaming.h"
 
 #include <algorithm>
 #include <array>
@@ -505,6 +506,40 @@ int testWorld() {
             }
             std::printf("ruya ada agi uretimi: %zu ada, ort %.2f ms, en kotu %.2f ms, ort %zu ucgen\n",
                         meshes, totalMs / std::max<size_t>(meshes, 1), worstMs, triangles / std::max<size_t>(meshes, 1));
+        }
+        {
+            // Worker threads must build exactly what the direct path builds, whatever the order:
+            // requested nearest first, collected and waited for in reverse. The control compares
+            // each cell with its neighbour and must see every mesh differ.
+            std::vector<Cell> cells;
+            for (int z = -3; z < 3; ++z) for (int x = -3; x < 3; ++x) {
+                const Cell cell = describeCell(x, z);
+                if (cell.scale != 0) cells.push_back(cell);
+            }
+            std::map<std::pair<int, int>, IslandBuilder::Result> streamed;
+            {
+                IslandBuilder builder(4);
+                builder.request(cells);
+                for (auto cell = cells.rbegin(); cell != cells.rend(); ++cell) {
+                    for (IslandBuilder::Result& result : builder.collect()) streamed[{result.cell.x, result.cell.z}] = std::move(result);
+                    if (!streamed.count({cell->x, cell->z})) streamed[{cell->x, cell->z}] = builder.wait(*cell);
+                }
+            }
+            size_t differ = 0, compared = 0, controlSame = 0;
+            for (size_t c = 0; c < cells.size(); ++c) {
+                const CellPlan plan = planCell(cells[c]);
+                const IslandBuilder::Result& result = streamed.at({cells[c].x, cells[c].z});
+                if (result.meshes.size() != size_t(plan.islandCount) || result.plan->pieces.size() != plan.pieces.size()) { ++differ; continue; }
+                const IslandBuilder::Result& neighbour = streamed.at({cells[(c + 1) % cells.size()].x, cells[(c + 1) % cells.size()].z});
+                for (int i = 0; i < plan.islandCount; ++i) {
+                    const unsigned long long direct = fingerprint(islandMesh(plan.islands[i]));
+                    if (fingerprint(result.meshes[size_t(i)]) != direct) ++differ;
+                    if (size_t(i) < neighbour.meshes.size() && fingerprint(neighbour.meshes[size_t(i)]) == direct) ++controlSame;
+                    ++compared;
+                }
+            }
+            report("ada-akisi-dogrudan-ile-ayni", compared > 20 && differ == 0, differ);
+            report("ada-akisi-kontrolu-farki-gorur", controlSame == 0, controlSame);
         }
         std::printf("ruya parca dagilimi (12x12 hucre):");
         for (size_t p = 0; p < pieceHistogram.size(); ++p)

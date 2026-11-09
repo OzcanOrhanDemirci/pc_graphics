@@ -60,7 +60,7 @@ cudaError_t uploadMaterialMap(MaterialMap& map, const unsigned char* rgba, int s
     sampler.readMode = cudaReadModeNormalizedFloat;
     sampler.normalizedCoords = 1;
     sampler.sRGB = srgb ? 1 : 0;
-    sampler.maxAnisotropy = 2;
+    sampler.maxAnisotropy = 16;
     sampler.maxMipmapLevelClamp = float(levels - 1);
     return cudaCreateTextureObject(&map.texture, &resource, &sampler, nullptr);
 }

@@ -494,11 +494,13 @@ Tek dar hedef: **çizim mesafesi.** Kaçkar'ın gerçek doruğunda küçük, kor
 ![Sis denizinde kireçtaşı adalar, asılı bahçeler ve revaklar](assets/gallery/ruya.jpg)
 
 Kireçtaşı adalar, kemerli avlular ve asılı bahçeler arasında serbest uçuş.
-Her yerleşim koordinatından üretilir. Kamera ışınları görüş konisini,
-gölgeler ve dolaylı ışık ise ortak ağların o kare için kurulan geçici
-yerleşim tablosunu kullanır. Tablo, ışın izleme bitince silinir. Varsayılan
-görüntü 2560×1440'ta piksel başına üç örnek, üç yüzey sekmesi ve mekânsal
-gürültü giderme ile çizilir.
+Her yerleşim koordinatından üretilir; adalar bir ana sütunun çevresinde
+masifler kurar. Her yüzeyde CC0 Poly Haven taraması var (4K ve 8K). Kamera
+ışınları görüş konisini, gölgeler ortak ağların o kare için kurulan geçici
+yerleşim tablosunu kullanır. Varsayılan görüntü 2560×1440'ta piksel başına
+on iki sabit örnekle güneş ve gök ışığıyla çizilir: rastgele sayı, gürültü
+giderici ve kare geçmişi yok. Ada ağları uçuşun önünde işçi iş
+parçacıklarında üretilir.
 
 `build\pc_graphics.exe --scene ruya` ile açılır. [Tuşlar](GOSTERI.md) ve
 [ölçümler](docs/ruya/DURUM.md).
@@ -783,7 +785,8 @@ third_party/fetch.sh  bağımlılıkları indirir; klasörün kendisi git'te de�
 Southampton Üniversitesi çizimlerinin vektör profilleri (P. Copeland, *Roman Amphorae: a digital resource*, 2014), CC BY
 4.0, https://doi.org/10.5284/1050896; taranmış dokuları (Poly Haven, ambientCG) CC0, `assets/koy/fetch.py` indirir
 (`assets/koy/LICENSES.md`). Sahne 11'in taramaları (Poly Haven, ambientCG) da CC0, `assets/orman/fetch.py` indirir
-(kaynakları `docs/orman/VARLIK.md`). Üçüncü taraf bileşenler derleme sırasında kendi lisanslarıyla indirilir: NVIDIA
+(kaynakları `docs/orman/VARLIK.md`). Sahne 14'ün taramaları (Poly Haven) CC0, `assets/ruya/fetch.py` indirir
+(`assets/ruya/KAYNAKLAR.md`). Üçüncü taraf bileşenler derleme sırasında kendi lisanslarıyla indirilir: NVIDIA
 CUDA dağıtım arşivleri ve OptiX SDK başlıkları, NVIDIA DLSS SDK (NVIDIA RTX SDK lisansı), GLFW (zlib), stb (kamu
 malı), tinyexr (BSD), cgltf (MIT). `assets/fonts`
 altındaki IBM Plex yazı tipleri SIL Open Font License ile (`assets/fonts/LICENSE.txt`). Deprem kayıtları: ESM,

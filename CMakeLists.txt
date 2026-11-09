@@ -135,6 +135,7 @@ add_library(pc_core OBJECT
     src/scenes/ruya/ruya_material.cu
     src/scenes/ruya/ruya_world_test.cpp
     src/scenes/ruya/ruya_renderer.cpp
+    src/scenes/ruya/ruya_streaming.cpp
     src/scenes/ruya/ruya_app.cpp
     src/scenes/ruya/ruya_live.cpp
     ${TP}/tinyexr/miniz.c)

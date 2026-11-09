@@ -3,6 +3,7 @@
 #include "scenes/ruya/ruya_renderer.h"
 #include "scenes/ruya/ruya_island.h"
 #include "scenes/ruya/ruya_material.h"
+#include "scenes/ruya/ruya_streaming.h"
 #include "stb_image.h"
 
 #include <nvrtc.h>
@@ -18,8 +19,8 @@
 #include <fstream>
 #include <future>
 #include <map>
-#include <tuple>
 #include <sstream>
+#include <thread>
 
 #define RUYA_CUDA(call) do { const cudaError_t result_ = (call); if (result_ != cudaSuccess) { \
     std::fprintf(stderr, "CUDA %s:%d %s: %s\n", __FILE__, __LINE__, #call, cudaGetErrorString(result_)); std::exit(1); } } while (0)
@@ -56,6 +57,9 @@ void freeCuda(void* pointer) {
 void logOptixRelease(OptixResult result) {
     if (result != OPTIX_SUCCESS) std::fprintf(stderr, "Rüya OptiX release: %s\n", optixGetErrorString(result));
 }
+// Island meshes resident around the camera peaked at 1.44 GiB in 36 m/s flights; the pool
+// starts above that so that flight never waits for device memory to grow.
+constexpr size_t kIslandPoolReserve = size_t(2048) << 20;
 bool cellLess(const Cell& a, const Cell& b) {
     return a.z < b.z || (a.z == b.z && a.x < b.x);
 }
@@ -85,6 +89,7 @@ struct Renderer::State {
     FrameStats stats{};
     std::string device;
     cudaStream_t stream = nullptr;
+    cudaMemPool_t islandPool = nullptr;
     std::array<cudaEvent_t, 4> events{};
     OptixDeviceContext context = nullptr;
     OptixModule module = nullptr;
@@ -97,11 +102,22 @@ struct Renderer::State {
     std::vector<Prototype> prototypes;
     std::array<MaterialMap, kTextureSets * 2> textures{};
     unsigned long long* textureHandles = nullptr;
-    // Island meshes live while their cell stays in the transport set, and a
-    // short grace period after, so a cell at the boundary is not rebuilt.
+    // A cell joins as soon as a worker has built it; its islands are uploaded one by one
+    // and the cell is drawn once all of them are on the GPU. It stays while it is in the
+    // ahead set, and a short grace period after, so a cell at the boundary is not rebuilt.
+    struct ResidentCell {
+        std::shared_ptr<const CellPlan> plan;
+        std::vector<Mesh> pending;
+        std::vector<unsigned> slots;
+        unsigned lastFrame = 0;
+        bool complete() const { return pending.empty() || slots.size() == pending.size(); }
+    };
     std::vector<Prototype> islands;
     std::vector<unsigned> freeIslands;
-    std::map<std::tuple<int, int, int>, unsigned> islandSlots;
+    std::map<std::pair<int, int>, ResidentCell> residentCells;
+    std::unique_ptr<IslandBuilder> builder;
+    // Measured upload cost, milliseconds per triangle, for the frame budget.
+    double uploadRate = 1e-5;
     unsigned frame = 0;
     size_t allocatedBytes = 0;
     OptixInstance* instances = nullptr;
@@ -117,7 +133,8 @@ struct Renderer::State {
     size_t denoiserScratchSize = 0;
     float* intensity = nullptr;
 
-    void allocate(void** pointer, size_t bytes) {
+    // Pooled memory comes from the island pool in stream order; the rest from cudaMalloc.
+    void allocate(void** pointer, size_t bytes, bool pooled = false) {
         if (!bytes) return;
         size_t freeBytes = 0;
         size_t totalBytes = 0;
@@ -126,8 +143,20 @@ struct Renderer::State {
             std::fprintf(stderr, "Rüya GPU memory margin exhausted: requested %zu, free %zu\n", bytes, freeBytes);
             std::exit(1);
         }
-        RUYA_CUDA(cudaMalloc(pointer, bytes));
+        if (pooled) RUYA_CUDA(cudaMallocFromPoolAsync(pointer, bytes, islandPool, stream));
+        else RUYA_CUDA(cudaMalloc(pointer, bytes));
+        if (reinterpret_cast<uintptr_t>(*pointer) % OPTIX_ACCEL_BUFFER_BYTE_ALIGNMENT) {
+            std::fprintf(stderr, "Rüya GPU allocation is not aligned for OptiX\n");
+            std::exit(1);
+        }
         allocatedBytes += bytes;
+    }
+    void freeDevice(void* pointer, bool pooled) {
+        if (!pooled) { freeCuda(pointer); return; }
+        if (!pointer) return;
+        const cudaError_t result = cudaFreeAsync(pointer, stream);
+        if (result != cudaSuccess && result != cudaErrorCudartUnloading)
+            std::fprintf(stderr, "Rüya CUDA pool release: %s\n", cudaGetErrorString(result));
     }
     void reserve(void** pointer, size_t& capacity, size_t requested) {
         if (capacity >= requested) return;
@@ -218,9 +247,9 @@ struct Renderer::State {
         sbt.hitgroupRecordCount = 1;
         return true;
     }
-    void uploadPrototype(const Mesh& mesh, Prototype& prototype) {
-        allocate(reinterpret_cast<void**>(&prototype.vertices), mesh.vertices.size() * sizeof(Vertex));
-        allocate(reinterpret_cast<void**>(&prototype.indices), mesh.indices.size() * sizeof(uint3));
+    void uploadPrototype(const Mesh& mesh, Prototype& prototype, bool pooled = false) {
+        allocate(reinterpret_cast<void**>(&prototype.vertices), mesh.vertices.size() * sizeof(Vertex), pooled);
+        allocate(reinterpret_cast<void**>(&prototype.indices), mesh.indices.size() * sizeof(uint3), pooled);
         RUYA_CUDA(cudaMemcpyAsync(prototype.vertices, mesh.vertices.data(), mesh.vertices.size() * sizeof(Vertex), cudaMemcpyHostToDevice, stream));
         RUYA_CUDA(cudaMemcpyAsync(prototype.indices, mesh.indices.data(), mesh.indices.size() * sizeof(uint3), cudaMemcpyHostToDevice, stream));
         CUdeviceptr vertices = CUdeviceptr(prototype.vertices);
@@ -245,9 +274,9 @@ struct Renderer::State {
         void* temporary = nullptr;
         void* output = nullptr;
         size_t* compactedSize = nullptr;
-        allocate(&temporary, sizes.tempSizeInBytes);
-        allocate(&output, sizes.outputSizeInBytes);
-        allocate(reinterpret_cast<void**>(&compactedSize), sizeof(size_t));
+        allocate(&temporary, sizes.tempSizeInBytes, pooled);
+        allocate(&output, sizes.outputSizeInBytes, pooled);
+        allocate(reinterpret_cast<void**>(&compactedSize), sizeof(size_t), pooled);
         OptixAccelEmitDesc emit{};
         emit.type = OPTIX_PROPERTY_TYPE_COMPACTED_SIZE;
         emit.result = CUdeviceptr(compactedSize);
@@ -256,15 +285,15 @@ struct Renderer::State {
         size_t compactedBytes = 0;
         RUYA_CUDA(cudaMemcpyAsync(&compactedBytes, compactedSize, sizeof(size_t), cudaMemcpyDeviceToHost, stream));
         RUYA_CUDA(cudaStreamSynchronize(stream));
-        freeCuda(temporary);
+        freeDevice(temporary, pooled);
         allocatedBytes -= sizes.tempSizeInBytes;
-        freeCuda(compactedSize);
+        freeDevice(compactedSize, pooled);
         allocatedBytes -= sizeof(size_t);
         if (compactedBytes < sizes.outputSizeInBytes && compactedBytes > 0) {
-            allocate(&prototype.gas, compactedBytes);
+            allocate(&prototype.gas, compactedBytes, pooled);
             RUYA_OPTIX(optixAccelCompact(context, stream, prototype.handle, CUdeviceptr(prototype.gas), compactedBytes, &prototype.handle));
             RUYA_CUDA(cudaStreamSynchronize(stream));
-            freeCuda(output);
+            freeDevice(output, pooled);
             allocatedBytes -= sizes.outputSizeInBytes;
         } else prototype.gas = output;
         prototype.triangleCount = mesh.indices.size();
@@ -360,49 +389,103 @@ struct Renderer::State {
     }
     void releaseIsland(unsigned slot) {
         Prototype& island = islands[slot];
-        freeCuda(island.vertices);
-        freeCuda(island.indices);
-        freeCuda(island.gas);
+        freeDevice(island.vertices, true);
+        freeDevice(island.indices, true);
+        freeDevice(island.gas, true);
         allocatedBytes -= island.bytes;
         island = {};
         freeIslands.push_back(slot);
     }
-    // Builds the missing island meshes of the plans in parallel and drops
-    // islands no plan has used for the grace period.
-    void ensureIslands(const std::vector<std::pair<const Cell*, std::shared_ptr<const CellPlan>>>& plans) {
-        std::vector<std::tuple<int, int, int>> missingKeys;
-        std::vector<const Island*> missing;
-        for (const auto& [cell, plan] : plans)
-            for (int i = 0; i < plan->islandCount; ++i) {
-                const auto key = std::make_tuple(cell->x, cell->z, i);
-                const auto found = islandSlots.find(key);
-                if (found != islandSlots.end()) islands[found->second].lastFrame = frame;
-                else { missingKeys.push_back(key); missing.push_back(&plan->islands[i]); }
-            }
-        std::vector<std::future<Mesh>> jobs;
-        for (const Island* island : missing) jobs.push_back(std::async(std::launch::async, [island] { return islandMesh(*island); }));
-        for (size_t i = 0; i < jobs.size(); ++i) {
-            const Mesh mesh = jobs[i].get();
-            if (freeIslands.empty()) {
-                if (islands.size() >= kIslandSlots) { std::fprintf(stderr, "Rüya island slots exhausted\n"); std::exit(1); }
-                freeIslands.push_back(unsigned(islands.size()));
-                islands.emplace_back();
-            }
-            const unsigned slot = freeIslands.back();
-            freeIslands.pop_back();
-            const size_t before = allocatedBytes;
-            uploadPrototype(mesh, islands[slot]);
-            islands[slot].bytes = allocatedBytes - before;
-            islands[slot].lastFrame = frame;
-            islandSlots[missingKeys[i]] = slot;
-            const Geometry geometry{islands[slot].vertices, islands[slot].indices};
-            RUYA_CUDA(cudaMemcpyAsync(geometries + kPrototypeCount + slot, &geometry, sizeof(Geometry), cudaMemcpyHostToDevice, stream));
-            RUYA_CUDA(cudaStreamSynchronize(stream));
+    void uploadIsland(ResidentCell& cell) {
+        if (freeIslands.empty()) {
+            if (islands.size() >= kIslandSlots) { std::fprintf(stderr, "Rüya island slots exhausted\n"); std::exit(1); }
+            freeIslands.push_back(unsigned(islands.size()));
+            islands.emplace_back();
         }
-        for (auto it = islandSlots.begin(); it != islandSlots.end();) {
-            if (frame - islands[it->second].lastFrame > kIslandGraceFrames) { releaseIsland(it->second); it = islandSlots.erase(it); }
-            else ++it;
+        const unsigned slot = freeIslands.back();
+        freeIslands.pop_back();
+        const Mesh& mesh = cell.pending[cell.slots.size()];
+        const double begin = milliseconds();
+        const size_t before = allocatedBytes;
+        uploadPrototype(mesh, islands[slot], true);
+        islands[slot].bytes = allocatedBytes - before;
+        const Geometry geometry{islands[slot].vertices, islands[slot].indices};
+        RUYA_CUDA(cudaMemcpyAsync(geometries + kPrototypeCount + slot, &geometry, sizeof(Geometry), cudaMemcpyHostToDevice, stream));
+        RUYA_CUDA(cudaStreamSynchronize(stream));
+        cell.slots.push_back(slot);
+        uploadRate = 0.8 * uploadRate + 0.2 * (milliseconds() - begin) / double(std::max<size_t>(mesh.indices.size(), 1));
+        if (cell.slots.size() == cell.pending.size()) {
+            cell.pending.clear();
+            cell.pending.shrink_to_fit();
+            ++stats.streamedCells;
         }
+    }
+    void admit(IslandBuilder::Result& result) {
+        ResidentCell& cell = residentCells[{result.cell.x, result.cell.z}];
+        cell.plan = std::move(result.plan);
+        cell.pending = std::move(result.meshes);
+        cell.lastFrame = frame;
+    }
+    // Makes every required cell resident, waiting for it if it is not built yet, then
+    // uploads islands built ahead, nearest first, within the frame budget.
+    void streamCells(const std::vector<Cell>& required, const std::vector<Cell>& ahead) {
+        stats.streamedCells = 0;
+        stats.waitedCells = 0;
+        std::vector<Cell> wanted;
+        for (const std::vector<Cell>* list : {&required, &ahead})
+            for (const Cell& cell : *list) {
+                const auto found = residentCells.find({cell.x, cell.z});
+                if (found != residentCells.end()) found->second.lastFrame = frame;
+            }
+        for (const Cell& cell : ahead)
+            if (!residentCells.count({cell.x, cell.z})) wanted.push_back(cell);
+        builder->request(wanted);
+        for (IslandBuilder::Result& result : builder->collect()) admit(result);
+        for (const Cell& cell : required) {
+            auto found = residentCells.find({cell.x, cell.z});
+            if (found == residentCells.end()) {
+                IslandBuilder::Result result = builder->wait(cell);
+                admit(result);
+                found = residentCells.find({cell.x, cell.z});
+                ++stats.waitedCells;
+            }
+            while (!found->second.complete()) uploadIsland(found->second);
+        }
+        // A frame that had to wait (the first one, or a jump to a view) has already
+        // stalled, so it settles the whole ahead ring and later frames start warm.
+        if (stats.waitedCells > 0)
+            for (const Cell& cell : ahead) {
+                auto found = residentCells.find({cell.x, cell.z});
+                if (found == residentCells.end()) {
+                    IslandBuilder::Result result = builder->wait(cell);
+                    admit(result);
+                    found = residentCells.find({cell.x, cell.z});
+                }
+                while (!found->second.complete()) uploadIsland(found->second);
+            }
+        // An island is started only while its predicted cost fits the budget, except
+        // the first of a frame, so one frame pays for at most one large island.
+        const double start = milliseconds();
+        for (const Cell& cell : ahead) {
+            const auto found = residentCells.find({cell.x, cell.z});
+            if (found == residentCells.end()) continue;
+            ResidentCell& resident = found->second;
+            bool spent = false;
+            while (!resident.complete()) {
+                const double used = milliseconds() - start;
+                const double cost = uploadRate * double(resident.pending[resident.slots.size()].indices.size());
+                if (used > 0.05 && used + cost > kStreamUploadMs) { spent = true; break; }
+                uploadIsland(resident);
+            }
+            if (spent) break;
+        }
+        for (auto it = residentCells.begin(); it != residentCells.end();) {
+            if (frame - it->second.lastFrame > kIslandGraceFrames) {
+                for (unsigned slot : it->second.slots) releaseIsland(slot);
+                it = residentCells.erase(it);
+            } else ++it;
+        }
+        stats.residentCells = unsigned(residentCells.size());
     }
     void launch(unsigned record) {
         sbt.raygenRecord = CUdeviceptr(records + record);
@@ -431,6 +514,21 @@ bool Renderer::init(int width, int height, const std::string& root, const std::v
     state.device = device.name;
     if (device.major != 8 || device.minor != 9) { error = "Rüya targets the local Ada SM89 device"; release(); return false; }
     RUYA_CUDA(cudaStreamCreateWithFlags(&state.stream, cudaStreamNonBlocking));
+    {
+        // Growing device memory can stall a cudaMalloc for tens of milliseconds, so island
+        // meshes come from a pool that is grown once here and keeps what it is given back.
+        cudaMemPoolProps pool{};
+        pool.allocType = cudaMemAllocationTypePinned;
+        pool.location.type = cudaMemLocationTypeDevice;
+        pool.location.id = 0;
+        RUYA_CUDA(cudaMemPoolCreate(&state.islandPool, &pool));
+        cuuint64_t keep = ~cuuint64_t(0);
+        RUYA_CUDA(cudaMemPoolSetAttribute(state.islandPool, cudaMemPoolAttrReleaseThreshold, &keep));
+        void* reserve = nullptr;
+        RUYA_CUDA(cudaMallocFromPoolAsync(&reserve, kIslandPoolReserve, state.islandPool, state.stream));
+        RUYA_CUDA(cudaFreeAsync(reserve, state.stream));
+        RUYA_CUDA(cudaStreamSynchronize(state.stream));
+    }
     for (cudaEvent_t& event : state.events) RUYA_CUDA(cudaEventCreate(&event));
     RUYA_OPTIX(optixInit());
     OptixDeviceContextOptions contextOptions{};
@@ -463,13 +561,14 @@ bool Renderer::init(int width, int height, const std::string& root, const std::v
     RUYA_CUDA(cudaMemcpyAsync(state.geometries, geometries.data(), geometries.size() * sizeof(Geometry), cudaMemcpyHostToDevice, state.stream));
     state.params.geometries = state.geometries;
     state.setupDenoiser();
+    state.builder = std::make_unique<IslandBuilder>(std::clamp(std::thread::hardware_concurrency() / 3, 2U, 8U));
     RUYA_CUDA(cudaStreamSynchronize(state.stream));
     state.stats.residentBytes = state.allocatedBytes;
     error.clear();
     return true;
 }
 
-void Renderer::setCells(const std::vector<Cell>& visible, const std::vector<Cell>& transport) {
+void Renderer::setCells(const std::vector<Cell>& visible, const std::vector<Cell>& transport, const std::vector<Cell>& ahead) {
     if (!state_) return;
     State& state = *state_;
     const double start = milliseconds();
@@ -487,18 +586,15 @@ void Renderer::setCells(const std::vector<Cell>& visible, const std::vector<Cell
     instances.reserve(cells.size() * 24);
     data.reserve(instances.capacity());
     ++state.frame;
-    std::vector<std::pair<const Cell*, std::shared_ptr<const CellPlan>>> plans;
-    plans.reserve(cells.size());
-    for (const Cell& cell : cells) plans.emplace_back(&cell, cachedPlan(cell));
-    state.ensureIslands(plans);
+    state.streamCells(cells, ahead.empty() ? cells : ahead);
     auto nextVisible = visible.begin();
-    for (const auto& [cellPointer, planPointer] : plans) {
-        const Cell& cell = *cellPointer;
-        const CellPlan& plan = *planPointer;
+    for (const Cell& cell : cells) {
+        const State::ResidentCell& resident = state.residentCells.at({cell.x, cell.z});
+        const CellPlan& plan = *resident.plan;
         while (nextVisible != visible.end() && cellLess(*nextVisible, cell)) ++nextVisible;
         const bool inView = nextVisible != visible.end() && nextVisible->x == cell.x && nextVisible->z == cell.z;
         for (int i = 0; i < plan.islandCount; ++i) {
-            const unsigned slot = state.islandSlots.at(std::make_tuple(cell.x, cell.z, i));
+            const unsigned slot = resident.slots[size_t(i)];
             OptixInstance instance{};
             const float identity[12] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0};
             std::memcpy(instance.transform, identity, sizeof(identity));
@@ -566,7 +662,7 @@ void Renderer::setCells(const std::vector<Cell>& visible, const std::vector<Cell
     state.stats.uploadMs = float(milliseconds() - start);
 }
 
-void Renderer::render(const Camera& camera, int spp, int bounces, int sampleOffset, bool denoise, float exposure, int materialDetail) {
+void Renderer::render(const Camera& camera, int spp, int bounces, int sampleOffset, bool denoise, float exposure, int materialDetail, bool reference) {
     if (!state_) return;
     State& state = *state_;
     state.params.eye = camera.eye;
@@ -578,6 +674,7 @@ void Renderer::render(const Camera& camera, int spp, int bounces, int sampleOffs
     state.params.raw = denoise ? 0 : 1;
     state.params.exposure = exposure;
     state.params.materialDetail = materialDetail;
+    state.params.reference = reference ? 1 : 0;
     RUYA_CUDA(cudaEventRecord(state.events[0], state.stream));
     RUYA_CUDA(cudaMemsetAsync(state.params.badCount, 0, sizeof(unsigned), state.stream));
     RUYA_CUDA(cudaMemcpyAsync(state.deviceParams, &state.params, sizeof(Params), cudaMemcpyHostToDevice, state.stream));
@@ -651,6 +748,7 @@ const std::string& Renderer::deviceName() const {
 void Renderer::release() {
     if (!state_) return;
     State& state = *state_;
+    state.builder.reset();
     if (state.stream) {
         const cudaError_t result = cudaStreamSynchronize(state.stream);
         if (result != cudaSuccess && result != cudaErrorCudartUnloading) std::fprintf(stderr, "Rüya stream release: %s\n", cudaGetErrorString(result));
@@ -658,7 +756,19 @@ void Renderer::release() {
     if (state.denoiser) logOptixRelease(optixDenoiserDestroy(state.denoiser));
     for (MaterialMap& map : state.textures) releaseMaterialMap(map);
     freeCuda(state.textureHandles);
-    for (const State::Prototype& island : state.islands) { freeCuda(island.vertices); freeCuda(island.indices); freeCuda(island.gas); }
+    for (const State::Prototype& island : state.islands) {
+        state.freeDevice(island.vertices, true);
+        state.freeDevice(island.indices, true);
+        state.freeDevice(island.gas, true);
+    }
+    if (state.stream) {
+        const cudaError_t result = cudaStreamSynchronize(state.stream);
+        if (result != cudaSuccess && result != cudaErrorCudartUnloading) std::fprintf(stderr, "Rüya pool release: %s\n", cudaGetErrorString(result));
+    }
+    if (state.islandPool) {
+        const cudaError_t result = cudaMemPoolDestroy(state.islandPool);
+        if (result != cudaSuccess && result != cudaErrorCudartUnloading) std::fprintf(stderr, "Rüya pool destroy: %s\n", cudaGetErrorString(result));
+    }
     freeCuda(state.denoiserState);
     freeCuda(state.denoiserScratch);
     freeCuda(state.intensity);
