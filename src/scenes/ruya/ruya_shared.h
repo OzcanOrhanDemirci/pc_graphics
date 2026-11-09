@@ -72,6 +72,71 @@ struct Piece {
     unsigned prototype, seed, region;
 };
 struct InstanceData { unsigned prototype, seed, region; };
+// The world is laid out in massifs of kMassifCells cells square. Each massif
+// has one hero stack; winding empty corridors separate the massifs.
+inline constexpr int kMassifCells = 5;
+inline constexpr float kCorridorHalfWidth = 62.0f;
+
+HD int floorDivide(int a, int b) {
+    const int q = a / b;
+    return ((a % b) != 0 && ((a < 0) != (b < 0))) ? q - 1 : q;
+}
+HD void cellJitter(int x, int z, unsigned seed, float& wx, float& wz) {
+    wx = x * kCellSize + (randomUnit(seed + 1) - 0.5f) * 42.0f;
+    wz = z * kCellSize + (randomUnit(seed + 3) - 0.5f) * 42.0f;
+}
+HD void massifHeroCell(int mx, int mz, int& cx, int& cz) {
+    const unsigned h = hash(hash(unsigned(mx) * 0x9e3779b9U + 0x48455230U) ^ unsigned(mz) * 0x85ebca6bU);
+    cx = mx * kMassifCells + 1 + int(h % 3U);
+    cz = mz * kMassifCells + 1 + int((h >> 11) % 3U);
+}
+struct MassifInfo {
+    float heroX, heroZ, distance;
+    bool isHero;
+};
+// Closest hero stack to a cell, searched over the neighbouring massifs.
+HD MassifInfo nearestHero(int x, int z) {
+    const int mx = floorDivide(x, kMassifCells);
+    const int mz = floorDivide(z, kMassifCells);
+    float wx, wz;
+    cellJitter(x, z, cellSeed(x, z), wx, wz);
+    MassifInfo best{};
+    best.distance = 1e9f;
+    for (int j = -1; j <= 1; ++j)
+        for (int i = -1; i <= 1; ++i) {
+            int hx, hz;
+            massifHeroCell(mx + i, mz + j, hx, hz);
+            float hwx, hwz;
+            cellJitter(hx, hz, cellSeed(hx, hz), hwx, hwz);
+            const float d = sqrtf((hwx - wx) * (hwx - wx) + (hwz - wz) * (hwz - wz));
+            if (d < best.distance) {
+                best.distance = d;
+                best.heroX = hwx;
+                best.heroZ = hwz;
+                best.isHero = hx == x && hz == z;
+            }
+        }
+    return best;
+}
+// Distance from a world point to the centre line of the nearest corridor.
+HD float corridorDistance(float wx, float wz) {
+    const float period = float(kMassifCells) * kCellSize;
+    const auto line = [](float along, float phase) {
+        return 60.0f * (0.62f * sinf(along * 0.00505f + phase) + 0.38f * sinf(along * 0.0123f + 2.1f * phase));
+    };
+    const auto nearest = [&](float across, float along, unsigned salt) {
+        const float start = floorf((across + 0.5f * kCellSize) / period);
+        float distance = 1e9f;
+        for (int k = 0; k <= 1; ++k) {
+            const float index = start + float(k);
+            const float phase = 6.2831853f * randomUnit(unsigned(int(index)) * 0x9e3779b9U + salt);
+            const float center = index * period - 0.5f * kCellSize + line(along, phase);
+            distance = fminf(distance, fabsf(across - center));
+        }
+        return distance;
+    };
+    return fminf(nearest(wz, wx, 0x434fU), nearest(wx, wz, 0x5252U));
+}
 HD Cell describeCell(int x, int z) {
     Cell c{};
     c.x = x;
@@ -80,10 +145,20 @@ HD Cell describeCell(int x, int z) {
     const int rx = int(floorf((float(x) + 0.8f * randomUnit(c.seed + 17)) / 4.0f));
     const int rz = int(floorf((float(z) + 0.8f * randomUnit(c.seed + 23)) / 4.0f));
     c.region = cellSeed(rx + 91, rz - 73) % 4U;
-    const float vacancy = c.region == 2 ? 0.30f : 0.20f;
-    c.offset = make_float3(x * kCellSize + (randomUnit(c.seed + 1) - 0.5f) * 28.0f, 0.0f,
-                          z * kCellSize + (randomUnit(c.seed + 3) - 0.5f) * 28.0f);
-    c.scale = randomUnit(c.seed + 11) < vacancy && (x != 0 || z != 0) ? 0.0f : 1.0f;
+    float wx, wz;
+    cellJitter(x, z, c.seed, wx, wz);
+    const MassifInfo hero = nearestHero(x, z);
+    // Cells lean towards their hero, so a massif tightens at its core.
+    const float closeness = expf(-(hero.distance * hero.distance) / (170.0f * 170.0f));
+    if (!hero.isHero && hero.distance > 1.0f) {
+        const float pull = 24.0f * closeness / hero.distance;
+        wx += (hero.heroX - wx) * pull;
+        wz += (hero.heroZ - wz) * pull;
+    }
+    c.offset = make_float3(wx, 0.0f, wz);
+    const bool corridor = corridorDistance(float(x) * kCellSize, float(z) * kCellSize) < kCorridorHalfWidth;
+    const bool pocket = !hero.isHero && closeness < 0.6f && randomUnit(c.seed + 11) < 0.07f;
+    c.scale = (corridor || pocket) && !hero.isHero && (x != 0 || z != 0) ? 0.0f : 1.0f;
     c.yaw = randomUnit(c.seed + 5) * (2.0f * M_PIf);
     return c;
 }

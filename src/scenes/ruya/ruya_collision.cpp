@@ -141,9 +141,9 @@ float3 CollisionWorld::move(float3 start, float3 target) const {
     std::vector<Piece> pieces;
     std::vector<Island> islands;
     for (const Cell& cell : visibleCells(probe, 1, distance + radius, true)) {
-        const CellPlan plan = planCell(cell);
-        pieces.insert(pieces.end(), plan.pieces.begin(), plan.pieces.end());
-        islands.insert(islands.end(), plan.islands, plan.islands + plan.islandCount);
+        const auto plan = cachedPlan(cell);
+        pieces.insert(pieces.end(), plan->pieces.begin(), plan->pieces.end());
+        islands.insert(islands.end(), plan->islands, plan->islands + plan->islandCount);
     }
     return moveOverIslands(start, move(start, target, pieces), islands);
 }

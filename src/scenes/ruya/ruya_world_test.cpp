@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -313,6 +314,46 @@ int testWorld() {
     report("yerlesim-bayt-ayni", badAssembly == 0, badAssembly);
     report("yerlesim-bos-koridor", emptyCells > 120 && emptyCells < 450, emptyCells);
     report("yerlesim-donusumlu-kose-siniri", largestBound < kIslandBoundsRadius, size_t(largestBound * 1000));
+    {
+        // Composition: heroes exist, massifs rise toward them, plans are stable through the cache.
+        size_t heroMissing = 0;
+        for (int mz = -4; mz < 4; ++mz) for (int mx = -4; mx < 4; ++mx) {
+            int hx, hz;
+            massifHeroCell(mx, mz, hx, hz);
+            if (describeCell(hx, hz).scale == 0) ++heroMissing;
+        }
+        report("kahraman-ada-her-masifte", heroMissing == 0, heroMissing);
+        double nearTop = 0, farTop = 0;
+        size_t nearCount = 0, farCount = 0, cacheMismatch = 0, islandOutside = 0;
+        for (int z = -14; z < 14; ++z) for (int x = -14; x < 14; ++x) {
+            const Cell cell = describeCell(x, z);
+            if (cell.scale == 0) continue;
+            const CellPlan plan = planCell(cell);
+            const auto cached = cachedPlan(cell);
+            if (plan.pieces.size() != cached->pieces.size() || plan.islandCount != cached->islandCount ||
+                (!plan.pieces.empty() && std::memcmp(plan.pieces.data(), cached->pieces.data(), plan.pieces.size() * sizeof(Piece)) != 0))
+                ++cacheMismatch;
+            const float distance = nearestHero(x, z).distance;
+            if (distance < 170.0f) { nearTop += plan.islands[0].top; ++nearCount; }
+            else if (distance > 300.0f) { farTop += plan.islands[0].top; ++farCount; }
+            if (std::abs(x) < 7 && std::abs(z) < 7 && (x + z) % 3 == 0)
+                for (int i = 0; i < plan.islandCount; ++i)
+                    for (const Vertex& v : islandMesh(plan.islands[i]).vertices)
+                        if (length(v.position - make_float3(cell.offset.x, kIslandBoundsY, cell.offset.z)) > kIslandBoundsRadius) ++islandOutside;
+        }
+        report("masif-kahramana-yukselir", nearCount > 0 && farCount > 0 && nearTop / nearCount > farTop / farCount + 15.0,
+               size_t(std::max(0.0, nearTop / std::max<size_t>(nearCount, 1) - farTop / std::max<size_t>(farCount, 1))));
+        report("onbellekli-plan-ayni", cacheMismatch == 0, cacheMismatch);
+        report("ada-agi-sinir-kuresinde", islandOutside == 0, islandOutside);
+        Camera probe;
+        const auto carried = visibleCells(probe, kAspect, kFarDistance, true);
+        size_t instances = 0;
+        for (const Cell& cell : carried) {
+            const auto plan = cachedPlan(cell);
+            instances += plan->pieces.size() + size_t(plan->islandCount);
+        }
+        std::printf("ruya tasima kumesi: %zu hucre, %zu IAS ornegi\n", carried.size(), instances);
+    }
     collisionChecks(failures);
 
     Camera level;
@@ -360,6 +401,25 @@ int testWorld() {
         size_t offSurface = 0;
         size_t floating = 0;
         size_t badMesh = 0;
+        size_t pieceCount = 0;
+        std::array<size_t, kPrototypeCount> pieceHistogram{};
+        size_t onWalls = 0;
+        size_t liftedCaught = 0;
+        size_t liftedTried = 0;
+        // Footing samples: the lowest non-leaf vertices of each prototype (roots or
+        // base slab). Every sample must hold rock, so a tower on the edge or a pine
+        // on the wall fails if any of its corners stand on air.
+        std::array<std::vector<float3>, kPrototypeCount> footings;
+        for (size_t p = 0; p < prototypes.size(); ++p) {
+            float lowest = 1e30f;
+            for (const Vertex& vertex : prototypes[p].vertices)
+                if (vertex.material != kMaterialLeaf) lowest = std::min(lowest, vertex.position.y);
+            std::vector<float3> band;
+            for (const Vertex& vertex : prototypes[p].vertices)
+                if (vertex.material != kMaterialLeaf && vertex.position.y < lowest + 0.3f) band.push_back(vertex.position);
+            const size_t stride = std::max<size_t>(band.size() / 16, 1);
+            for (size_t i = 0; i < band.size(); i += stride) footings[p].push_back(band[i]);
+        }
         std::set<std::pair<int, int>> shapes;
         size_t islandCount = 0;
         for (int z = -6; z < 6; ++z) for (int x = -6; x < 6; ++x) {
@@ -383,19 +443,66 @@ int testWorld() {
                 }
             }
             for (const Piece& piece : plan.pieces) {
-                float support = 1e9f;
-                for (int i = 0; i < plan.islandCount; ++i)
-                    if (islandDistance(plan.islands[i], piece.offset + make_float3(0, 0.6f, 0)) < 0.7f)
-                        support = std::min(support, std::abs(piece.offset.y - islandTop(plan.islands[i], piece.offset.x, piece.offset.z)));
-                if (!(support < 0.6f)) {
+                ++pieceHistogram[piece.prototype];
+                bool held = true;
+                float worst = -1e9f;
+                for (const float3& local : footings[piece.prototype]) {
+                    const float3 world = piecePoint(piece, local);
+                    float support = 1e9f;
+                    for (int i = 0; i < plan.islandCount; ++i) support = std::min(support, islandDistance(plan.islands[i], world));
+                    worst = std::max(worst, support);
+                    held = held && support < 0.7f;
+                }
+                if (!held) {
                     ++floating;
-                    std::printf("  havada parca %u, destek %.2f m\n", piece.prototype, support);
+                    std::printf("  havada parca %u, destek %.2f m\n", piece.prototype, worst);
+                }
+                if (piece.prototype == kProtoPineCling || piece.prototype == kProtoPineLean ||
+                    piece.prototype == kProtoLedgeTuft) ++onWalls;
+                // The same scan must notice a piece lifted off its rock.
+                if (++pieceCount % 37 == 0) {
+                    Piece lifted = piece;
+                    lifted.offset.y += 200.0f;
+                    float support = -1e9f;
+                    for (const float3& local : footings[piece.prototype]) {
+                        float nearest = 1e9f;
+                        for (int i = 0; i < plan.islandCount; ++i)
+                            nearest = std::min(nearest, islandDistance(plan.islands[i], piecePoint(lifted, local)));
+                        support = std::max(support, nearest);
+                    }
+                    ++liftedTried;
+                    if (support >= 0.7f) ++liftedCaught;
                 }
             }
         }
+        {
+            // Mesh generation is a frame-time cost; print it so a regression is visible in the log.
+            double totalMs = 0, worstMs = 0;
+            size_t meshes = 0, triangles = 0;
+            for (int z = -4; z < 4; ++z) for (int x = -4; x < 4; ++x) {
+                const CellPlan plan = planCell(describeCell(x, z));
+                for (int i = 0; i < plan.islandCount; ++i) {
+                    const auto begin = std::chrono::steady_clock::now();
+                    const Mesh mesh = islandMesh(plan.islands[i]);
+                    const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - begin).count();
+                    totalMs += ms;
+                    worstMs = std::max(worstMs, ms);
+                    triangles += mesh.indices.size();
+                    ++meshes;
+                }
+            }
+            std::printf("ruya ada agi uretimi: %zu ada, ort %.2f ms, en kotu %.2f ms, ort %zu ucgen\n",
+                        meshes, totalMs / std::max<size_t>(meshes, 1), worstMs, triangles / std::max<size_t>(meshes, 1));
+        }
+        std::printf("ruya parca dagilimi (12x12 hucre):");
+        for (size_t p = 0; p < pieceHistogram.size(); ++p)
+            if (pieceHistogram[p]) std::printf(" %zu=%zu", p, pieceHistogram[p]);
+        std::printf(" toplam %zu\n", pieceCount);
         report("ada-agi-sonlu-ve-normal", badMesh == 0, badMesh);
         report("ada-agi-mesafe-yuzeyinde", offSurface == 0, offSurface);
         report("parca-havada-durmaz", floating == 0, floating);
+        report("parca-duvar-bitkisi-var", onWalls > 48, onWalls);
+        report("kaldirilan-parca-yakalanir", liftedTried > 0 && liftedCaught == liftedTried, liftedTried - liftedCaught);
         report("ada-bicimleri-tekrarsiz", shapes.size() == islandCount, islandCount - shapes.size());
         const Island main = planCell(describeCell(0, 0)).islands[0];
         CollisionWorld world;

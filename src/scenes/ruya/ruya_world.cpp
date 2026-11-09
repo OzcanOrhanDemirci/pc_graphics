@@ -170,47 +170,6 @@ float rimRadius(float angle, unsigned seed) {
                    0.075f * std::sin(angle * 5.0f - float(seed % 17U)));
 }
 
-enum class IslandKind { Monastery, Garden, Monument };
-
-void island(Mesh& mesh, unsigned seed, int detail, IslandKind kind = IslandKind::Monastery) {
-    const int around = 128 * detail;
-    const int rows = 48 * detail;
-    surface(mesh, around, rows, kMaterialStone,
-            [&](float u, float v) {
-                const float t = clampf(v, 0.0f, 1.0f);
-                const float angle = u * kTau;
-                const float exponent = kind == IslandKind::Garden ? 0.40f : 0.56f;
-                const float taper = std::pow(std::max(0.0f, 1.0f - t), exponent);
-                const float3 sample = make_float3(std::cos(angle) * 4.0f, t * 13.0f, std::sin(angle) * 4.0f);
-                const float broad = noise(sample, seed);
-                const float ridge = std::sin(angle * 13.0f + 3.3f * broad + t * 2.0f);
-                const float joint = std::pow(std::max(0.0f, std::cos(angle * 7.0f + float(seed % 7U))), 18.0f);
-                const float strata = kind == IslandKind::Monastery
-                    ? 0.075f * std::sin(t * 33.0f + 1.6f * broad) + 0.11f * std::exp(-sqr((t - 0.12f) / 0.035f))
-                    : 0.12f * noise(sample * make_float3(0.9f, 0.45f, 0.9f) + make_float3(0, broad * 2.0f, 0), seed + 3U);
-                const float radius = rimRadius(angle, seed) * taper *
-                                     (1.0f + std::sin(M_PIf * t) * (0.19f * broad + 0.09f * ridge - 0.22f * joint + strata));
-                const float depth = kind == IslandKind::Monastery ? 60.0f + 14.0f * randomUnit(seed + 1U)
-                                  : kind == IslandKind::Garden ? 43.0f + 18.0f * randomUnit(seed + 1U)
-                                                              : 69.0f + 12.0f * randomUnit(seed + 1U);
-                const float y = -depth * t + 1.1f * std::sin(t * M_PIf) * noise(sample * 2.0f, seed + 1U);
-                const float bend = std::sin(M_PIf * t);
-                return make_float3(std::cos(angle) * radius + bend * (4.5f + 2.0f * broad), y,
-                                   std::sin(angle) * radius + bend * 4.0f * std::sin(t * 5.0f + float(seed % 5U)));
-            },
-            [](float u, float v) { return make_float3(std::cos(u * kTau), -0.3f - 0.7f * v, std::sin(u * kTau)); });
-    surface(mesh, around, 24 * detail, kMaterialStone,
-            [&](float u, float v) {
-                const float angle = u * kTau;
-                const float radius = rimRadius(angle, seed) * v;
-                const float3 point = make_float3(std::cos(angle) * radius, 0, std::sin(angle) * radius);
-                const float relief = 0.22f * noise(point * 0.8f, seed) * smoothstepf(16.4f, 18.0f, radius) *
-                                     smoothstepf(0.0f, 0.12f, 1.0f - v);
-                return point + make_float3(0, relief, 0);
-            },
-            [](float, float) { return make_float3(0, 1, 0); });
-}
-
 void ring(Mesh& mesh, float radius, float width, float y, float height, int segments, unsigned material) {
     for (int side = 0; side != 4; ++side) {
         surface(mesh, segments, 1, material,
@@ -250,39 +209,6 @@ void arcSlab(Mesh& mesh, float3 center, float radius, float width, float height,
         const float u = float(end);
         if (end == 0) quad(mesh, point(u, 0, 0), point(u, 0, 1), point(u, 1, 1), point(u, 1, 0), material);
         else quad(mesh, point(u, 0, 0), point(u, 1, 0), point(u, 1, 1), point(u, 0, 1), material);
-    }
-}
-
-void geology(Mesh& mesh, unsigned seed, int detail) {
-    const float depth = 60.0f + 14.0f * randomUnit(seed + 1U);
-    for (int ledge = 0; ledge < 5; ++ledge) {
-        const unsigned key = seed + unsigned(ledge) * 2971U;
-        const float angle = kTau * randomUnit(key);
-        const float y = -4.0f - float(ledge) * 4.8f;
-        const float radius = 14.0f - float(ledge) * 0.8f;
-        const float width = 22.0f - float(ledge) * 1.4f;
-        arcSlab(mesh, make_float3(0, y, 0), radius, width,
-                0.9f + randomUnit(key + 2U), angle, 0.9f + randomUnit(key + 3U), 40 * detail,
-                ledge % 3 == 0 ? kMaterialDarkStone : kMaterialStone, 0.35f);
-    }
-    for (int rock = 0; rock < 85; ++rock) {
-        const unsigned key = seed + unsigned(rock) * 1013U;
-        const float angle = kTau * randomUnit(key);
-        const float t = 0.03f + 0.66f * randomUnit(key + 1U);
-        const float radius = rimRadius(angle, seed) * std::pow(1.0f - t, 0.56f);
-        const float bend = std::sin(M_PIf * t);
-        const float3 center = make_float3(std::cos(angle) * radius + 4.5f * bend, -depth * t,
-                                          std::sin(angle) * radius + bend * 4.0f * std::sin(t * 5.0f + float(seed % 5U)));
-        const float size = 0.65f + 2.2f * randomUnit(key + 2U);
-        stone(mesh, center, make_float3(size, size * (0.4f + 0.55f * randomUnit(key + 3U)), size * 0.85f),
-              key, detail, rock % 8 == 0 ? kMaterialDarkStone : kMaterialStone);
-    }
-    for (int spur = 0; spur < 3; ++spur) {
-        const unsigned key = seed + unsigned(spur) * 4001U;
-        const float angle = kTau * randomUnit(key);
-        const float3 center = make_float3(std::cos(angle) * 17.0f, -18.0f - float(spur) * 9.0f,
-                                          std::sin(angle) * 17.0f);
-        stone(mesh, center, make_float3(4.5f, 7.0f + float(spur), 4.0f), key, detail * 2, kMaterialStone);
     }
 }
 
@@ -497,65 +423,7 @@ void tower(Mesh& mesh, unsigned prototype, int detail) {
          0.06f, 8, kMaterialBronze);
 }
 
-void leaf(Mesh& mesh, float3 base, float3 direction, float width, float span) {
-    direction = safeNormal(direction, make_float3(0, 1, 0));
-    float3 tangent;
-    float3 bitangent;
-    makeBasis(direction, tangent, bitangent);
-    surface(mesh, 4, 4, kMaterialLeaf,
-            [&](float u, float v) {
-                const float theta = kTau * u;
-                const float profile = std::sin(M_PIf * clampf(v, 0.0f, 1.0f));
-                const float3 center = base + direction * (span * v) + bitangent * (0.23f * span * v * v);
-                return center + tangent * (width * profile * std::cos(theta)) +
-                       bitangent * (0.055f * width * profile * std::sin(theta));
-            },
-            [&](float u, float) { return tangent * std::cos(kTau * u) + bitangent * std::sin(kTau * u); });
-}
-
-void foliage(Mesh& mesh, float3 center, float3 radius, unsigned seed, int leaves, float leafScale) {
-    for (int index = 0; index < leaves; ++index) {
-        const unsigned key = seed + unsigned(index) * 823U;
-        const float angle = kTau * randomUnit(key);
-        const float vertical = 2.0f * randomUnit(key + 1U) - 1.0f;
-        const float horizontal = std::sqrt(std::max(0.0f, 1.0f - vertical * vertical));
-        const float radial = 0.25f + 0.75f * std::cbrt(randomUnit(key + 2U));
-        const float3 normal = make_float3(horizontal * std::cos(angle), vertical, horizontal * std::sin(angle));
-        const float3 point = center + normal * radius * radial;
-        const float tilt = randomUnit(key + 3U);
-        const float3 direction = normal + make_float3(0, 0.3f + 0.5f * tilt, 0);
-        leaf(mesh, point, direction, leafScale * (0.13f + 0.075f * tilt), leafScale * (0.40f + 0.28f * tilt));
-    }
-}
-
-void olive(Mesh& mesh, float3 base, float height, unsigned seed, int detail) {
-    const float3 bend = make_float3(0.35f * std::sin(float(seed % 17U)), height * 0.44f, 0.32f);
-    tube(mesh, base, base + bend, 0.21f, 10 * detail, kMaterialDarkStone);
-    const int branches = 5;
-    for (int branch = 0; branch < branches; ++branch) {
-        const unsigned key = seed + unsigned(branch) * 277U;
-        const float angle = kTau * (float(branch) / float(branches) + randomUnit(key) * 0.16f);
-        const float reach = 1.3f + 1.1f * randomUnit(key + 1U);
-        const float3 elbow = base + bend + make_float3(std::cos(angle) * reach * 0.6f, height * 0.19f,
-                                                       std::sin(angle) * reach * 0.6f);
-        const float3 end = base + make_float3(std::cos(angle) * reach, height * (0.75f + 0.20f * randomUnit(key + 2U)),
-                                              std::sin(angle) * reach);
-        tube(mesh, base + bend * 0.80f, elbow, 0.11f, 8, kMaterialDarkStone);
-        tube(mesh, elbow, end, 0.065f, 7, kMaterialDarkStone);
-        foliage(mesh, end, make_float3(1.28f, 0.90f, 1.15f), key, 100 + 35 * detail, 0.85f);
-    }
-}
-
-void cypress(Mesh& mesh, float3 base, float height, unsigned seed, int detail) {
-    tube(mesh, base, base + make_float3(0.10f, height * 0.95f, 0), 0.13f, 10, kMaterialDarkStone);
-    for (int tier = 0; tier < 10; ++tier) {
-        const float v = float(tier) / 10.0f;
-        const float radius = (0.9f + 0.45f * std::sin(v * M_PIf)) * (1.0f - v * 0.72f);
-        const float3 center = base + make_float3(0.10f * v, height * (0.22f + 0.73f * v), 0);
-        foliage(mesh, center, make_float3(radius, height * 0.12f, radius), seed + unsigned(tier) * 1103U,
-                35 + detail * 10, 0.80f);
-    }
-}
+#include "scenes/ruya/ruya_plants.inl"
 
 void gardenBed(Mesh& mesh, float3 center, float angle, unsigned seed, int detail) {
     const float3 along = make_float3(std::cos(angle), 0, std::sin(angle));
@@ -564,18 +432,13 @@ void gardenBed(Mesh& mesh, float3 center, float angle, unsigned seed, int detail
         kMaterialStone);
     box(mesh, center + make_float3(0, 0.615f, 0), along * 1.63f, make_float3(0, 0.045f, 0), across * 0.83f,
         kMaterialDarkStone);
-    for (int plant = 0; plant < 10; ++plant) {
+    for (int plant = 0; plant < 8; ++plant) {
         const unsigned key = seed + unsigned(plant) * 613U;
         const float x = (randomUnit(key) - 0.5f) * 2.9f;
         const float z = (randomUnit(key + 1U) - 0.5f) * 1.3f;
-        const float3 base = center + along * x + across * z + make_float3(0, 0.65f, 0);
-        const float height = 0.50f + randomUnit(key + 2U) * 0.65f;
-        tube(mesh, base, base + make_float3(0, height, 0), 0.022f, 5, kMaterialLeaf);
-        for (int frond = 0; frond < 8 + detail * 2; ++frond) {
-            const float phase = kTau * float(frond) / float(8 + detail * 2);
-            const float3 direction = make_float3(std::cos(phase), 0.3f + float(frond % 3) * 0.35f, std::sin(phase));
-            leaf(mesh, base + make_float3(0, height * 0.48f, 0), direction, 0.21f, 0.78f);
-        }
+        const float size = 0.42f + randomUnit(key + 2U) * 0.3f;
+        canopy(mesh, center + along * x + across * z + make_float3(0, 0.65f + size * 0.5f, 0),
+               make_float3(size, size * 0.8f, size), key, detail);
     }
 }
 
@@ -602,32 +465,8 @@ void garden(Mesh& mesh, unsigned seed, int detail, unsigned prototype) {
         const unsigned key = seed + unsigned(shrub) * 811U;
         const float angle = kTau * randomUnit(key);
         const float radius = rimRadius(angle, seed) * (0.86f + 0.045f * randomUnit(key + 1U));
-        const float3 center = make_float3(radius * std::cos(angle), 0.5f, radius * std::sin(angle));
-        foliage(mesh, center, make_float3(1.3f, 0.7f, 1.1f), key, 80 + detail * 12, 1.0f);
-    }
-    // Adjacent vines form curtains and reveal intermediate ledges; isolated
-    // single-pixel strings cannot carry the scale of the hanging gardens.
-    for (int vine = 0; vine < 68; ++vine) {
-        const unsigned key = seed + unsigned(vine) * 1063U;
-        const float group = float(vine / 9) / 8.0f;
-        const float angle = group * kTau + float(vine % 9) * 0.019f + randomUnit(key) * 0.012f;
-        const float radius = rimRadius(angle, seed) - 0.15f;
-        const float vineLength = 5.0f + 12.0f * randomUnit(key + 1U);
-        float3 previous = make_float3(radius * std::cos(angle), 0.15f, radius * std::sin(angle));
-        const int segments = 18;
-        for (int segment = 1; segment <= segments; ++segment) {
-            const float v = float(segment) / float(segments);
-            const float wander = angle + 0.022f * std::sin(v * 9.0f + randomUnit(key + 2U) * 4.0f);
-            const float r = radius * (1.0f - 0.095f * v);
-            const float3 point = make_float3(r * std::cos(wander), -v * vineLength,
-                                              r * std::sin(wander));
-            tube(mesh, previous, point, 0.018f, 5, kMaterialDarkStone);
-            const float side = segment % 2 ? 1.0f : -1.0f;
-            const float3 direction = make_float3(-std::sin(angle) * side, -0.45f, std::cos(angle) * side);
-            leaf(mesh, point, direction, 0.24f, 0.68f);
-            leaf(mesh, point + make_float3(0, -0.12f, 0), -direction + make_float3(0, -1.1f, 0), 0.20f, 0.62f);
-            previous = point;
-        }
+        shrub3(mesh, make_float3(radius * std::cos(angle), 0, radius * std::sin(angle)),
+               0.9f + 0.5f * randomUnit(key + 2U), key, detail);
     }
 }
 
@@ -684,32 +523,6 @@ void fractureShard(Mesh& mesh, float3 center, float3 size, unsigned seed) {
         quad(mesh, lower[side], lower[next], upper[next], upper[side], kMaterialStone);
         quad(mesh, center + make_float3(0, size.y * 0.58f, 0), upper[side], upper[next], upper[next], kMaterialStone);
         quad(mesh, center - make_float3(0, size.y * 0.58f, 0), lower[next], lower[side], lower[side], kMaterialStone);
-    }
-}
-
-void fracturedGeology(Mesh& mesh, unsigned seed, int detail, IslandKind kind) {
-    const float depth = kind == IslandKind::Garden ? 43.0f + 18.0f * randomUnit(seed + 1U)
-                                                  : 69.0f + 12.0f * randomUnit(seed + 1U);
-    for (int shard = 0; shard < 95; ++shard) {
-        const unsigned key = seed + unsigned(shard) * 1307U;
-        const float angle = kTau * randomUnit(key);
-        const float t = 0.03f + 0.69f * randomUnit(key + 1U);
-        const float exponent = kind == IslandKind::Garden ? 0.40f : 0.56f;
-        const float radius = rimRadius(angle, seed) * std::pow(1.0f - t, exponent) * 0.94f;
-        const float bend = std::sin(t * M_PIf);
-        const float3 center = make_float3(radius * std::cos(angle) + bend * 4.5f, -depth * t,
-                                          radius * std::sin(angle) + bend * 4.0f * std::sin(t * 5.0f + float(seed % 5U)));
-        const float size = 0.8f + 2.5f * randomUnit(key + 2U);
-        fractureShard(mesh, center, make_float3(size, size * (1.5f + randomUnit(key + 3U)), size * 0.85f), key);
-    }
-    const int ledges = kind == IslandKind::Garden ? 4 : 2;
-    for (int ledge = 0; ledge < ledges; ++ledge) {
-        const unsigned key = seed + unsigned(ledge) * 2161U;
-        const float y = -3.8f - float(ledge) * 7.7f;
-        const float radius = 13.5f - float(ledge) * 1.2f;
-        arcSlab(mesh, make_float3(0, y, 0), radius, 21.0f - float(ledge) * 2.0f,
-                0.72f + randomUnit(key) * 0.6f, kTau * randomUnit(key + 1U), 0.65f + randomUnit(key + 2U) * 0.8f,
-                40 * detail, kMaterialStone, 0.42f);
     }
 }
 
@@ -788,8 +601,7 @@ void monument(Mesh& mesh, unsigned seed, int detail, unsigned prototype) {
         const unsigned key = seed + unsigned(shrub) * 647U;
         const float angle = kTau * randomUnit(key);
         const float radius = 16.0f + randomUnit(key + 1U) * 3.0f;
-        foliage(mesh, make_float3(radius * std::cos(angle), 0.40f, radius * std::sin(angle)),
-                make_float3(1.2f, 0.65f, 1.0f), key, 75, 0.90f);
+        shrub3(mesh, make_float3(radius * std::cos(angle), 0, radius * std::sin(angle)), 1.1f, key, detail);
     }
 }
 
@@ -798,73 +610,24 @@ void monument(Mesh& mesh, unsigned seed, int detail, unsigned prototype) {
 std::vector<Mesh> buildPrototypes(int detail) {
     detail = std::clamp(detail, 1, 4);
     std::vector<Mesh> result(kPrototypeCount);
-    for (unsigned index = 0; index < 8; ++index) {
-        const unsigned seed = hash(index + 0x52555941U);
-        const auto kind = index < 3 ? IslandKind::Monastery : index < 6 ? IslandKind::Garden : IslandKind::Monument;
-        if (index < 3 || index >= 6) {
-            island(result[index], seed, detail, kind);
-            if (index < 2) geology(result[index], seed, detail);
-            else fracturedGeology(result[index], seed, detail, kind);
-        } else {
-            // Chalk shelves are stacked and offset, with a broken overhang at one end.
-            const int shelves = 3 + int(index - 3);
-            for (int ledge = 0; ledge < shelves; ++ledge) {
-                const unsigned key = seed + unsigned(ledge) * 367U;
-                const float scale = 1.0f - 0.12f * ledge;
-                const float3 center = make_float3(2.2f * ledge, -2.9f - ledge * 4.3f, 0.8f * ledge);
-                stone(result[index], center, make_float3(23.0f * scale, 3.0f + ledge * 0.3f, 17.0f * scale),
-                      key, 7 * detail, kMaterialStone);
-                for (int outcrop = 0; outcrop < 11; ++outcrop) {
-                    const float angle = kTau * (outcrop + randomUnit(key + unsigned(outcrop))) / 11.0f;
-                    const float3 point = center + make_float3(std::cos(angle) * 21.0f, -1.6f, std::sin(angle) * 15.6f) * scale;
-                    stone(result[index], point, make_float3(4.8f, 1.8f, 2.6f) * scale, key + unsigned(outcrop),
-                          2 * detail, ledge % 3 == 2 ? kMaterialDarkStone : kMaterialStone);
-                }
-            }
-        }
-    }
     arcade(result[8], 0, detail);
     chapel(result[9], 1, detail);
     tower(result[10], 6, detail);
     courtyard(result[11], 87641, detail);
     garden(result[12], 61411, detail, 0);
     brokenGallery(result[13], 51431, detail, 3);
-    olive(result[14], make_float3(0, 0, 0), 5.2f, 51577, detail);
-    cypress(result[15], make_float3(0, 0, 0), 8.3f, 8761, detail);
     monument(result[16], 19641, detail, 13);
     openGarden(result[17], 61473, detail, 8);
-    fractureShard(result[18], make_float3(0, -13, 0), make_float3(4.2f, 17.0f, 4.1f), 17641);
     const float3 left = make_float3(-8.5f, 0, 0);
     const float3 right = make_float3(8.5f, 0, 0);
     column(result[19], left, 10.7f, 1.2f, detail);
     column(result[19], right, 10.7f, 1.2f, detail);
     arch(result[19], left, right, 9.5f, 8.4f, 19.0f);
     chapel(result[20], 2, detail);
-    stone(result[21], make_float3(0, -5, 0), make_float3(10.0f, 7.0f, 6.0f), 2314, 4, kMaterialStone);
-    stone(result[22], make_float3(0, 0, 0), make_float3(1.6f, 0.94f, 1.2f), 713, 3, kMaterialStone);
     arcSlab(result[23], make_float3(0, 0, 0), 9.5f, 4.5f, 0.6f, -0.9f, 1.8f, 72, kMaterialStone, 0.19f);
-    // The arch underside stays open. Abutments taper independently into the cloud layer.
-    for (int side : {-1, 1}) {
-        const float x = side * 17.0f;
-        stone(result[24], make_float3(x, -11.0f, 0), make_float3(8.0f, 22.0f, 9.5f), 937U + unsigned(side),
-              6 * detail, kMaterialStone);
-        stone(result[24], make_float3(x + side * 2.5f, -30.0f, 1.5f), make_float3(6.4f, 13.0f, 6.0f),
-              5891U + unsigned(side), 4 * detail, kMaterialDarkStone);
-    }
-    arch(result[24], make_float3(-17, -15, 0), make_float3(17, -15, 0), 4.0f, 12.0f, 3.8f + 15.0f);
-    stone(result[24], make_float3(0, 1.0f, 0), make_float3(24.5f, 1.55f, 8.7f), 9971, 6 * detail, kMaterialStone);
-    // Interlocking cut blocks form a suspended aqueduct. No physical support is implied.
-    for (int bay = -2; bay <= 2; ++bay) {
-        const float x = float(bay) * 12.0f;
-        const float3 a = make_float3(x - 6.0f, -8.5f, 0), b = make_float3(x + 6.0f, -8.5f, 0);
-        arch(result[25], a, b, 0.0f, 6.6f, 8.6f);
-        column(result[25], a, 1.2f + 1.8f * randomUnit(713U + unsigned(bay)), 0.85f, detail);
-        box(result[25], make_float3(x, 0.36f, 0), make_float3(5.97f, 0, 0), make_float3(0, 0.27f, 0),
-            make_float3(0, 0, 1.9f), kMaterialStone);
-    }
-    stone(result[26], make_float3(0, -12, 0), make_float3(8.5f, 19.0f, 6.5f), 23871, 8 * detail, kMaterialStone);
-    stone(result[26], make_float3(-6.0f, -0.7f, 2.0f), make_float3(9.0f, 3.2f, 8.4f), 93713, 5 * detail, kMaterialStone);
-    stone(result[26], make_float3(6.0f, -2.4f, -2.0f), make_float3(6.0f, 4.0f, 7.4f), 13829, 5 * detail, kMaterialStone);
+    buildVegetation(result, detail);
+    // Prototypes were modelled off their pivot; placement wants the pivot at the footprint.
+    for (unsigned index : {8U, 9U, 10U, 13U, 20U, 23U}) recenter(result[index]);
     // Built structures take the cut-stone scan instead of the cliff rock.
     for (unsigned index : {8U, 9U, 10U, 11U, 13U, 16U, 19U, 20U, 23U})
         for (Vertex& vertex : result[index].vertices)

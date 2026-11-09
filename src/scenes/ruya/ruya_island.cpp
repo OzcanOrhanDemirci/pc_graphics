@@ -1,18 +1,22 @@
-// Islands are polar height functions: a rim radius per angle and depth below
-// the rim, and a top height per point. Each kind keeps its own ranges, so a
-// spire field, a monastery mesa, a terraced garden and a wooded crown read as
-// different places, while seeds keep any two islands of a kind apart.
+// Islands are polar height functions: a wall radius per angle and depth below
+// the rim, and a top height per point. The plan is a union of convex columns,
+// so corners and re-entrant joints stay sharp; the side profile, bedding and
+// shelves are read in absolute height so that neighbouring stacks share strata.
 #include "scenes/ruya/ruya_island.h"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <mutex>
 
 namespace ruya {
 namespace {
 constexpr float kTau = 2.0f * M_PIf;
-constexpr int kWallRows = 150;
+constexpr float kBedSpacing = 4.2f;
+constexpr float kShelfRamp = 0.32f;
+constexpr float kDepthRows[] = {0.0f, 0.3f, 0.7f, 1.1f, 1.6f, 2.2f, 2.9f, 3.7f, 4.6f, 5.6f, 6.7f, 8.0f, 9.4f, 11.0f, 12.8f, 14.8f};
+constexpr int kDepthRowCount = int(sizeof(kDepthRows) / sizeof(kDepthRows[0]));
+// Below this height only cloud can see the rock: the bedding fades out.
+constexpr float kBeddingBottom = -120.0f;
 
 float valueNoise(float3 p, unsigned seed) {
     const float fx = std::floor(p.x);
@@ -50,46 +54,188 @@ float smooth(float a, float b, float x) {
     const float t = std::clamp((x - a) / (b - a), 0.0f, 1.0f);
     return t * t * (3.0f - 2.0f * t);
 }
-
-// Radius of the wall at an angle and a depth below the rim.
-float wallRadius(const Island& island, float angle, float depth) {
-    float shape = 1.0f;
-    for (int k = 0; k < 6; ++k) shape += island.lobes[k] * std::sin(float(k + 2) * angle + island.phases[k]);
-    const float y = island.top - depth;
-    const float span = std::max(island.top - kIslandBase, 1.0f);
-    const float widening = 1.0f + island.flare * std::pow(std::clamp(depth / span, 0.0f, 1.0f), 1.25f);
-    const float c = std::cos(angle) * island.radius * 0.085f;
-    const float s = std::sin(angle) * island.radius * 0.085f;
-    // Stretched along y, the noise reads as rain fluting on limestone.
-    // Ridged noise gives sharp crests between the flutes.
-    const float flute = 0.5f - std::abs(2.0f * fbm(make_float3(c, y * 0.018f, s), island.seed + 5U, 4) - 1.0f);
-    // Sharpened sine: hard ledges where softer beds weathered back.
-    const float phase = std::sin(y * 0.31f + 5.0f * valueNoise(make_float3(c * 0.5f, y * 0.04f, s * 0.5f), island.seed + 9U));
-    const float bands = phase > 0 ? std::pow(phase, 0.35f) : -std::pow(-phase, 3.0f);
-    const float lip = 1.0f - 0.035f * std::exp(-depth / 2.2f);
-    // Metre-scale relief is absolute, so small stacks are as rough up close as large ones.
-    const float3 q = make_float3(std::cos(angle) * island.radius, y, std::sin(angle) * island.radius);
-    const float relief = 1.1f * (fbm(q * 0.11f, island.seed + 13U, 5) - 0.5f) + 0.35f * (valueNoise(q * 0.55f, island.seed + 17U) - 0.5f);
-    return island.radius * (shape * widening * lip + island.gully * 2.0f * flute + island.strata * bands) + relief;
+float positiveAngle(float angle) {
+    const float wrapped = std::fmod(angle, kTau);
+    return wrapped < 0 ? wrapped + kTau : wrapped;
 }
-float topHeightRaw(const Island& island, float x, float z, float rimRadius) {
+
+float columnExit(const Column& column, float c, float s) {
+    float exit = 1e9f;
+    for (int k = 0; k < column.sides; ++k) {
+        const float facing = column.nx[k] * c + column.nz[k] * s;
+        if (facing > 1e-4f) exit = std::min(exit, column.d[k] / facing);
+    }
+    return exit;
+}
+void columnExits(const Island& island, float c, float s, float* exits) {
+    for (int i = 0; i < island.columnCount; ++i) exits[i] = columnExit(island.columns[i], c, s);
+}
+// Radius of the column union at a height. Shelves are columns with a finite top.
+float planRadius(const Island& island, const float* exits, float y) {
+    float core = 0;
+    for (int i = 0; i < island.coreColumns; ++i) core = std::max(core, exits[i]);
+    float radius = core;
+    for (int i = island.coreColumns; i < island.columnCount; ++i) {
+        const float weight = 1.0f - smooth(island.columns[i].topY - kShelfRamp, island.columns[i].topY, y);
+        if (weight > 0) radius = std::max(radius, lerpf(core, std::max(core, exits[i]), weight));
+    }
+    return radius;
+}
+float profileAt(const Profile& profile, float depth) {
+    if (depth <= profile.depth[0]) return profile.scale[0];
+    for (int i = 1; i < profile.count; ++i)
+        if (depth <= profile.depth[i]) {
+            const float t = (depth - profile.depth[i - 1]) / (profile.depth[i] - profile.depth[i - 1]);
+            return lerpf(profile.scale[i - 1], profile.scale[i], t);
+        }
+    return profile.scale[profile.count - 1];
+}
+
+float bedHardness(int k) {
+    const float h = randomUnit(hash(unsigned(k) * 0x85ebca6bU + 0x7ab51fU));
+    return std::pow(h, 1.4f);
+}
+struct Bed {
+    int index;
+    float bottom, top, hardness, hardnessAbove;
+};
+Bed bedAt(float y) {
+    const int k = bedIndexAt(y);
+    return {k, bedFloor(k), bedFloor(k + 1), bedHardness(k), bedHardness(k + 1)};
+}
+// Hash of a block along a bed. The block count is an integer so the seam at 2 pi wraps.
+float blockValue(const Island& island, int bed, float angle, float width) {
+    const int count = std::max(6, int(std::round(kTau * island.radius / width)));
+    const float v = positiveAngle(angle) / kTau * float(count);
+    const float f = std::floor(v);
+    const int block = int(f) % count;
+    const auto at = [&](int b) {
+        return randomUnit(hash(unsigned(b) * 0x9e3779b9U ^ hash(unsigned(bed) * 0x85ebca6bU + island.seed)));
+    };
+    const float edge = std::min(0.16f / width, 0.5f);
+    return lerpf(at(block), at((block + 1) % count), smooth(1.0f - edge, 1.0f, v - f));
+}
+// Radial offset of the bedding at a point: hard beds stand out, a recessed
+// parting runs under each bed, and the top of a bed is a narrow flat ledge.
+float bedOffset(const Island& island, float angle, float depth, const Bed& bed, float y) {
+    if (depth <= 0.2f || y < kBeddingBottom) return 0;
+    const float fade = smooth(0.2f, 1.6f, depth) * smooth(kBeddingBottom, kBeddingBottom + 30.0f, y);
+    const float width = 2.0f + 3.2f * randomUnit(hash(unsigned(bed.index) + 0x51edU));
+    const float standOut = island.strata * bed.hardness * (0.35f + 0.85f * blockValue(island, bed.index, angle, width));
+    const float block = 0.38f * (blockValue(island, bed.index + 7777, angle, width * 0.62f) - 0.5f) * (0.5f + bed.hardness);
+    const float recess = island.strata * bed.hardness * 0.55f;
+    const float recessAbove = island.strata * bed.hardnessAbove * 0.55f;
+    const float above = y - bed.bottom;
+    const float below = bed.top - y;
+    float offset;
+    if (above <= 0.3f) offset = -recess;
+    else if (above <= 0.42f) offset = lerpf(-recess, standOut, (above - 0.3f) / 0.12f);
+    else if (below >= 0.25f) offset = standOut + block;
+    else offset = lerpf(standOut + block, -recessAbove, 1.0f - below / 0.25f);
+    return offset * fade;
+}
+float jointOffset(const Island& island, float angle, float y) {
+    float offset = 0;
+    for (int i = 0; i < island.jointCount; ++i) {
+        const Joint& joint = island.joints[i];
+        const float across = std::abs(std::remainder(angle - joint.angle, kTau)) * island.radius;
+        if (across >= joint.width) continue;
+        const float along = smooth(joint.bottomY - 12.0f, joint.bottomY + 10.0f, y);
+        offset = std::min(offset, -joint.depth * (1.0f - smooth(joint.width * 0.12f, joint.width, across)) * along);
+    }
+    return offset;
+}
+float alcoveOffset(const Island& island, float angle, float y) {
+    float offset = 0;
+    for (int i = 0; i < island.alcoveCount; ++i) {
+        const Alcove& alcove = island.alcoves[i];
+        if (y > alcove.topY || y < alcove.bottomY) continue;
+        const float across = std::abs(std::remainder(angle - alcove.angle, kTau));
+        if (across >= alcove.halfAngle) continue;
+        const float roof = 1.0f - smooth(alcove.topY - 1.4f, alcove.topY, y);
+        const float floor = smooth(alcove.bottomY, alcove.bottomY + 2.5f, y);
+        offset = std::min(offset, -alcove.depth * (1.0f - smooth(alcove.halfAngle * 0.55f, alcove.halfAngle, across)) * roof * floor);
+    }
+    return offset;
+}
+// Metre-scale rock independent of the island's size; fades where cloud hides it.
+float wallRelief(const Island& island, float c, float s, float virtualY, float depth) {
+    if (depth > 140.0f) return 0;
+    const float fade = 1.0f - smooth(100.0f, 140.0f, depth);
+    const float rx = c * island.radius;
+    const float rz = s * island.radius;
+    const float flute = fbm(make_float3(rx * 0.14f, virtualY * 0.035f, rz * 0.14f), island.seed + 5U, 2) - 0.5f;
+    const float grain = valueNoise(make_float3(rx * 0.55f, virtualY * 0.42f, rz * 0.55f), island.seed + 17U) - 0.5f;
+    return (0.8f * flute + 0.6f * grain) * fade;
+}
+float wallRadiusAt(const Island& island, float angle, float c, float s, const float* exits, float depth, float y, const Bed& bed) {
+    const float virtualY = island.top - depth;
+    float radius = planRadius(island, exits, y) * profileAt(island.profile, depth);
+    radius += (blockValue(island, 0x7fff, angle, 3.4f) - 0.5f) * island.capBreak * (1.0f - smooth(1.0f, 4.0f, depth));
+    radius += bedOffset(island, angle, depth, bed, y);
+    radius += jointOffset(island, angle, y);
+    radius += alcoveOffset(island, angle, y);
+    radius += wallRelief(island, c, s, virtualY, depth);
+    return radius;
+}
+// The rim radius does not depend on height, which keeps wall and crown from
+// depending on each other; bedding and alcoves vanish at zero depth.
+float rimRadiusAt(const Island& island, float angle) {
+    const float c = std::cos(angle);
+    const float s = std::sin(angle);
+    float exits[kIslandMaxColumns];
+    columnExits(island, c, s, exits);
+    return wallRadiusAt(island, angle, c, s, exits, 0.0f, kColumnFullHeight, Bed{});
+}
+float wallRadiusBelowRim(const Island& island, float angle, float depth, float y) {
+    const float c = std::cos(angle);
+    const float s = std::sin(angle);
+    float exits[kIslandMaxColumns];
+    columnExits(island, c, s, exits);
+    return wallRadiusAt(island, angle, c, s, exits, depth, y, bedAt(y));
+}
+
+float forestField(const Island& island, float x, float z) {
+    return valueNoise(make_float3(x * 0.021f, 2.7f, z * 0.021f), island.seed + 61U);
+}
+// Height of the top surface before structure sites are levelled.
+float crownHeight(const Island& island, float x, float z, float rim) {
     const float dx = x - island.x;
     const float dz = z - island.z;
-    const float s = std::sqrt(dx * dx + dz * dz) / std::max(rimRadius, 1.0f);
-    const float inside = std::min(s, 1.0f);
-    float h = island.dome * island.radius * (1.0f - inside * inside);
+    const float reach = std::sqrt(dx * dx + dz * dz);
+    const float s = reach / std::max(rim, 1.0f);
+    float h = island.top + island.tiltX * dx + island.tiltZ * dz;
+    h += island.undulate * (fbm(make_float3(x * 0.05f, 0.0f, z * 0.05f), island.seed + 21U, 3) - 0.5f) * 2.0f;
+    h += 0.35f * (valueNoise(make_float3(x * 0.38f, 1.7f, z * 0.38f), island.seed + 33U) - 0.5f);
     if (island.terrace > 0) {
-        const float v = h / island.terrace;
-        const float step = std::floor(v);
-        h = island.terrace * (step + smooth(0.78f, 1.0f, v - step));
+        // Three stepped tiers follow the plan polygon inwards from the rim.
+        const float riser = std::min(1.1f / std::max(island.radius, 1.0f), 0.04f);
+        const float in = 1.0f - std::min(s, 1.0f);
+        for (float boundary : {0.16f, 0.40f, 0.64f}) h += island.terrace * smooth(boundary - riser, boundary + riser, in);
     }
-    h += island.top + 2.2f * (fbm(make_float3(x * 0.045f, 0.0f, z * 0.045f), island.seed + 21U, 4) - 0.5f) +
-         0.45f * (valueNoise(make_float3(x * 0.31f, 1.7f, z * 0.31f), island.seed + 33U) - 0.5f);
-    if (s > 0.84f) h -= 3.4f * (s - 0.84f) * (s - 0.84f) / (0.16f * 0.16f);
+    if (island.plates > 0) {
+        // Bare rock plates break the crown; they keep away from the rim, which
+        // must stay the crown's lowest line for the wall to meet it.
+        const float fade = 1.0f - smooth(0.70f, 0.86f, s);
+        if (fade > 0) {
+            const float v = fbm(make_float3(x * 0.043f, 5.1f, z * 0.043f), island.seed + 45U, 2) * 5.0f;
+            const float step = std::floor(v);
+            const float rocky = 1.0f - smooth(0.45f, 0.65f, forestField(island, x, z));
+            h += island.plates * fade * (0.35f + 0.65f * rocky) * (step + smooth(0.82f, 1.0f, v - step));
+        }
+    }
+    // The edge is broken caprock: whole blocks stand lower than their neighbours.
+    const float edge = std::max(1.0f - s, 0.0f) * rim;
+    if (edge < 2.6f) {
+        const float angle = std::atan2(dz, dx);
+        const float chip = std::max(blockValue(island, 0x7ffe, angle, 4.1f) - 0.45f, 0.0f) * 2.6f * island.capBreak;
+        const float t = 1.0f - edge / 2.6f;
+        h -= chip * smooth(0.0f, 1.0f, t) + 0.55f * t * t;
+    }
     return h;
 }
-float topAt(const Island& island, float x, float z, float rimRadius) {
-    float h = topHeightRaw(island, x, z, rimRadius);
+float topAt(const Island& island, float x, float z, float rim) {
+    float h = crownHeight(island, x, z, rim);
     for (int i = 0; i < island.siteCount; ++i) {
         const Site& site = island.sites[i];
         const float d = std::hypot(x - site.x, z - site.z);
@@ -97,21 +243,69 @@ float topAt(const Island& island, float x, float z, float rimRadius) {
     }
     return h;
 }
-float rimRadiusAt(const Island& island, float x, float z) {
-    return wallRadius(island, std::atan2(z - island.z, x - island.x), 0.0f);
-}
 
-// The footprint of each structure prototype, measured from its own mesh once.
-const std::array<float, kPrototypeCount>& prototypeRadii() {
-    static std::array<float, kPrototypeCount> radii{};
-    static std::once_flag once;
-    std::call_once(once, [] {
-        const auto meshes = buildPrototypes(1);
-        for (size_t i = 0; i < meshes.size(); ++i)
-            for (const Vertex& v : meshes[i].vertices)
-                radii[i] = std::max(radii[i], std::hypot(v.position.x, v.position.z));
-    });
-    return radii;
+void addColumn(Island& island, float ox, float oz, float radius, int sides, unsigned seed, float topY) {
+    Column& column = island.columns[island.columnCount++];
+    column.topY = topY;
+    column.sides = std::min(sides, kIslandMaxSides);
+    const float phase = kTau * randomUnit(seed);
+    for (int k = 0; k < column.sides; ++k) {
+        const unsigned key = seed + unsigned(k) * 37U;
+        const float a = phase + kTau * (float(k) + 0.7f * (randomUnit(key + 1U) - 0.5f)) / float(column.sides);
+        column.nx[k] = std::cos(a);
+        column.nz[k] = std::sin(a);
+        const float distance = radius * lerpf(0.84f, 1.14f, randomUnit(key + 2U));
+        column.d[k] = std::max(distance + column.nx[k] * ox + column.nz[k] * oz, 0.18f * radius);
+    }
+}
+void setProfile(Island& island, std::initializer_list<std::pair<float, float>> keys, float jitter) {
+    Profile& profile = island.profile;
+    profile.count = 0;
+    for (const auto& [depth, scale] : keys) {
+        const unsigned key = island.seed + 71U * unsigned(profile.count);
+        profile.depth[profile.count] = depth;
+        profile.scale[profile.count] = scale * (profile.count < 2 ? 1.0f : 1.0f + jitter * (randomUnit(key) - 0.5f));
+        ++profile.count;
+    }
+}
+float meanCoreRadius(const Island& island) {
+    float mean = 0;
+    constexpr int kSamples = 180;
+    for (int i = 0; i < kSamples; ++i) {
+        const float angle = kTau * float(i) / float(kSamples);
+        const float c = std::cos(angle);
+        const float s = std::sin(angle);
+        float core = 0;
+        for (int k = 0; k < island.coreColumns; ++k) core = std::max(core, columnExit(island.columns[k], c, s));
+        mean += core;
+    }
+    return mean / float(kSamples);
+}
+float maxReach(const Island& island) {
+    float reach = 0;
+    constexpr int kSamples = 180;
+    for (int i = 0; i < kSamples; ++i) {
+        const float angle = kTau * float(i) / float(kSamples);
+        const float c = std::cos(angle);
+        const float s = std::sin(angle);
+        for (int k = 0; k < island.columnCount; ++k) reach = std::max(reach, columnExit(island.columns[k], c, s));
+    }
+    return reach;
+}
+void scaleColumns(Island& island, float factor) {
+    for (int i = 0; i < island.columnCount; ++i)
+        for (int k = 0; k < island.columns[i].sides; ++k) island.columns[i].d[k] *= factor;
+}
+}  // namespace
+
+int bedIndexAt(float y) {
+    int k = int(std::floor(y / kBedSpacing));
+    while (bedFloor(k) > y) --k;
+    while (bedFloor(k + 1) <= y) ++k;
+    return k;
+}
+float bedFloor(int k) {
+    return kBedSpacing * float(k) + 3.0f * (randomUnit(hash(unsigned(k) * 0x9e3779b9U + 0x6265U)) - 0.5f);
 }
 
 Island makeIsland(float x, float z, unsigned seed, unsigned kind, float radius, float top) {
@@ -119,59 +313,149 @@ Island makeIsland(float x, float z, unsigned seed, unsigned kind, float radius, 
     island.x = x;
     island.z = z;
     island.seed = seed;
+    island.kind = kind;
     island.radius = radius;
     island.top = top;
     const auto draw = [&](unsigned k) { return randomUnit(seed + 613U * k); };
+    const float tiltMagnitude = kind == kKindSpire ? 0.05f : 0.018f;
+    island.tiltX = tiltMagnitude * (2.0f * draw(1) - 1.0f);
+    island.tiltZ = tiltMagnitude * (2.0f * draw(2) - 1.0f);
+    int extraColumns = 0;
+    int coreSides = 6;
     switch (kind) {
-    case 0:  // monastery mesa: sheer walls, nearly flat crown
-        island.flare = lerpf(0.08f, 0.30f, draw(1));
-        island.gully = lerpf(0.035f, 0.075f, draw(2));
-        island.strata = lerpf(0.016f, 0.034f, draw(3));
-        island.dome = lerpf(0.01f, 0.06f, draw(4));
+    case kKindMesa:  // Meteora: sheer blocks and a flat cap
+        setProfile(island, {{0.0f, 1.0f}, {1.4f, 1.022f}, {2.0f, 0.965f}, {16.0f, 0.955f}, {60.0f, 1.02f}, {130.0f, 1.14f}, {300.0f, 1.3f}}, 0.08f);
+        island.strata = lerpf(1.1f, 2.0f, draw(3));
+        island.capBreak = lerpf(0.5f, 0.95f, draw(4));
+        island.undulate = lerpf(0.6f, 1.1f, draw(5));
+        island.plates = lerpf(0.5f, 0.9f, draw(6));
+        extraColumns = 2 + int(draw(7) * 3.0f);
+        coreSides = 5 + int(draw(8) * 3.0f);
         break;
-    case 1:  // terraced garden: stepped crown, broad base
-        island.flare = lerpf(0.20f, 0.45f, draw(1));
-        island.gully = lerpf(0.025f, 0.05f, draw(2));
-        island.strata = lerpf(0.018f, 0.032f, draw(3));
-        island.dome = lerpf(0.30f, 0.48f, draw(4));
-        island.terrace = lerpf(3.2f, 5.5f, draw(5));
+    case kKindTerrace:  // stepped garden: wide tiers carved around a smaller core
+        setProfile(island, {{0.0f, 1.0f}, {1.2f, 1.018f}, {1.9f, 0.975f}, {26.0f, 1.04f}, {90.0f, 1.2f}, {220.0f, 1.45f}}, 0.08f);
+        island.strata = lerpf(1.0f, 1.7f, draw(3));
+        island.capBreak = lerpf(0.4f, 0.75f, draw(4));
+        island.undulate = lerpf(0.5f, 0.9f, draw(5));
+        island.plates = lerpf(0.2f, 0.45f, draw(6));
+        island.terrace = lerpf(2.6f, 4.0f, draw(9));
+        extraColumns = 1 + int(draw(7) * 3.0f);
         break;
-    case 2:  // spire: slender, deeply fluted
-        island.flare = lerpf(0.30f, 0.65f, draw(1));
-        island.gully = lerpf(0.08f, 0.15f, draw(2));
-        island.strata = lerpf(0.012f, 0.03f, draw(3));
-        island.dome = lerpf(0.10f, 0.35f, draw(4));
+    case kKindSpire:  // Zhangjiajie: slender quartzite with deep joints and a waist
+        setProfile(island, {{0.0f, 1.0f}, {1.1f, 1.04f}, {1.7f, 0.97f}, {18.0f, 1.08f}, {34.0f, 0.92f}, {90.0f, 1.32f}, {230.0f, 2.0f}}, 0.12f);
+        island.strata = lerpf(1.2f, 2.1f, draw(3));
+        island.capBreak = lerpf(0.5f, 1.0f, draw(4));
+        island.undulate = lerpf(0.3f, 0.6f, draw(5));
+        island.plates = lerpf(0.6f, 1.1f, draw(6));
+        extraColumns = int(draw(7) * 2.0f);
+        coreSides = 4 + int(draw(8) * 2.0f);
         break;
-    default:  // wooded crown: rounded, softer walls
-        island.flare = lerpf(0.15f, 0.35f, draw(1));
-        island.gully = lerpf(0.04f, 0.08f, draw(2));
-        island.strata = lerpf(0.008f, 0.02f, draw(3));
-        island.dome = lerpf(0.18f, 0.32f, draw(4));
+    default:  // wooded crown: Guilin karst, a steep cone with a soft green cap
+        setProfile(island, {{0.0f, 1.0f}, {1.0f, 1.025f}, {1.6f, 0.98f}, {14.0f, 1.03f}, {36.0f, 1.14f}, {96.0f, 1.3f}, {220.0f, 1.5f}}, 0.1f);
+        island.strata = lerpf(0.9f, 1.5f, draw(3));
+        island.capBreak = lerpf(0.4f, 0.8f, draw(4));
+        island.undulate = lerpf(1.2f, 2.0f, draw(5));
+        island.plates = lerpf(0.15f, 0.4f, draw(6));
+        extraColumns = 2 + int(draw(7) * 2.0f);
         break;
     }
-    const float roughness = kind == 2 ? 0.10f : kind == 0 ? 0.075f : 0.12f;
-    for (int k = 0; k < 6; ++k) {
-        island.lobes[k] = 1.7f * roughness * (draw(10U + unsigned(k)) * 2.0f - 0.7f) / float(k + 1);
-        island.phases[k] = kTau * draw(20U + unsigned(k));
+    addColumn(island, radius * 0.12f * (draw(10) - 0.5f), radius * 0.12f * (draw(11) - 0.5f), radius * 0.82f, coreSides, seed + 101U, kColumnFullHeight);
+    for (int i = 0; i < extraColumns && island.columnCount < kIslandMaxColumns - 2; ++i) {
+        const unsigned key = 20U + unsigned(i) * 5U;
+        const float angle = kTau * (float(i) + 0.6f * draw(key)) / float(std::max(extraColumns, 1));
+        const float offset = radius * lerpf(0.26f, 0.5f, draw(key + 1U));
+        const float columnRadius = radius * lerpf(0.5f, 0.74f, draw(key + 2U));
+        addColumn(island, std::cos(angle) * offset, std::sin(angle) * offset, columnRadius, 4 + int(draw(key + 3U) * 3.0f),
+                  seed + 151U * unsigned(i + 2), kColumnFullHeight);
+    }
+    island.coreColumns = island.columnCount;
+    scaleColumns(island, radius / std::max(meanCoreRadius(island), 1.0f));
+    // Shelves are lower columns, snapped to a bedding plane so they read as beds.
+    const int shelves = kind == kKindTerrace ? 3 : kind == kKindMesa ? 1 + int(draw(30) * 2.0f) : kind == kKindWooded ? 1 + int(draw(30) * 2.0f) : int(draw(30) * 1.5f);
+    for (int i = 0; i < shelves && island.columnCount < kIslandMaxColumns; ++i) {
+        const unsigned key = 40U + unsigned(i) * 5U;
+        const float depth = kind == kKindTerrace ? 7.0f + 9.0f * float(i) + 4.0f * draw(key) : lerpf(8.0f, 40.0f, draw(key));
+        const float shelfY = bedFloor(bedIndexAt(top - depth));
+        const float angle = kTau * (float(i) + draw(key + 1U)) / float(std::max(shelves, 1));
+        const float offset = radius * lerpf(0.42f, 0.62f, draw(key + 2U));
+        addColumn(island, std::cos(angle) * offset, std::sin(angle) * offset, radius * lerpf(0.6f, 0.82f, draw(key + 3U)),
+                  4 + int(draw(key + 4U) * 3.0f), seed + 977U * unsigned(i + 1), shelfY);
+    }
+    // Nothing may reach past the bound the neighbour spacing was computed for.
+    const float reach = maxReach(island);
+    if (reach > radius * kIslandMaxReach) scaleColumns(island, radius * kIslandMaxReach / reach);
+    const int joints = kind == kKindSpire ? 7 + int(draw(50) * 5.0f) : 9 + int(draw(50) * 7.0f);
+    for (int i = 0; i < joints && island.jointCount < kIslandMaxJoints; ++i) {
+        const unsigned key = 60U + unsigned(i) * 4U;
+        Joint& joint = island.joints[island.jointCount++];
+        joint.angle = kTau * (float(i) + 0.8f * draw(key)) / float(joints);
+        joint.width = lerpf(0.55f, 1.9f, draw(key + 1U));
+        joint.depth = lerpf(1.4f, kind == kKindSpire ? 3.0f : 3.8f, draw(key + 2U));
+        joint.bottomY = top - lerpf(18.0f, 150.0f, draw(key + 3U));
+    }
+    const int alcoves = kind == kKindMesa || kind == kKindSpire ? 2 + int(draw(70) * 3.0f) : 1 + int(draw(70) * 2.0f);
+    for (int i = 0; i < alcoves && island.alcoveCount < kIslandMaxAlcoves; ++i) {
+        const unsigned key = 90U + unsigned(i) * 5U;
+        Alcove& alcove = island.alcoves[island.alcoveCount++];
+        alcove.angle = kTau * draw(key);
+        alcove.halfAngle = lerpf(0.16f, 0.52f, draw(key + 1U));
+        alcove.topY = top - lerpf(6.0f, 46.0f, draw(key + 2U));
+        alcove.bottomY = alcove.topY - lerpf(5.0f, 18.0f, draw(key + 3U));
+        alcove.depth = lerpf(2.2f, 7.0f, draw(key + 4U)) * std::min(radius / 26.0f, 1.2f);
     }
     return island;
 }
 
-void addSite(Island& island, float x, float z, float radius) {
-    if (island.siteCount == 4) return;
-    const float rim = rimRadiusAt(island, x, z);
-    island.sites[island.siteCount++] = {x, z, radius, topHeightRaw(island, x, z, rim)};
-}
+void addIslandSite(Island& island, float x, float z, float radius) {
+    if (island.siteCount == kIslandMaxSites) return;
+    const float rim = rimRadiusAt(island, std::atan2(z - island.z, x - island.x));
+    island.sites[island.siteCount++] = {x, z, radius, crownHeight(island, x, z, rim)};
 }
 
-float islandTop(const Island& island, float x, float z) { return topAt(island, x, z, rimRadiusAt(island, x, z)); }
+float islandTop(const Island& island, float x, float z) {
+    return topAt(island, x, z, rimRadiusAt(island, std::atan2(z - island.z, x - island.x)));
+}
+float islandRimRadius(const Island& island, float angle) { return rimRadiusAt(island, angle); }
+float islandRimHeight(const Island& island, float angle) {
+    const float rim = rimRadiusAt(island, angle);
+    return topAt(island, island.x + std::cos(angle) * rim, island.z + std::sin(angle) * rim, rim);
+}
+float islandWallRadius(const Island& island, float angle, float y) {
+    const float depth = std::max(islandRimHeight(island, angle) - y, 0.0f);
+    return wallRadiusBelowRim(island, angle, depth, y);
+}
+float bedLedgeWidth(const Island& island, float angle, int k, float& radius) {
+    const float y = bedFloor(k + 1);
+    const float rimY = islandRimHeight(island, angle);
+    if (y >= rimY) return 0;
+    radius = wallRadiusBelowRim(island, angle, rimY - y + 0.02f, y + 0.02f);
+    const float below = wallRadiusBelowRim(island, angle, rimY - y + 0.32f, y - 0.32f);
+    return below - radius;
+}
+bool columnShelf(const Island& island, int column, float angle, float& inner, float& outer) {
+    if (column < island.coreColumns || column >= island.columnCount) return false;
+    const float c = std::cos(angle);
+    const float s = std::sin(angle);
+    const float exit = columnExit(island.columns[column], c, s);
+    float core = 0;
+    for (int i = 0; i < island.coreColumns; ++i) core = std::max(core, columnExit(island.columns[i], c, s));
+    if (exit <= core) return false;
+    const float rimY = islandRimHeight(island, angle);
+    const float scale = profileAt(island.profile, rimY - island.columns[column].topY);
+    inner = core * scale;
+    outer = exit * scale;
+    return true;
+}
 
 float islandDistance(const Island& island, float3 p) {
     const float angle = std::atan2(p.z - island.z, p.x - island.x);
-    const float rim = wallRadius(island, angle, 0.0f);
-    const float rimY = topAt(island, island.x + std::cos(angle) * rim, island.z + std::sin(angle) * rim, rim);
+    const float rim = rimRadiusAt(island, angle);
+    const float c = std::cos(angle);
+    const float s = std::sin(angle);
+    const float rimY = topAt(island, island.x + c * rim, island.z + s * rim, rim);
     const float r = std::hypot(p.x - island.x, p.z - island.z);
-    const float wall = r - wallRadius(island, angle, std::max(rimY - p.y, 0.0f));
+    const float depth = std::max(rimY - p.y, 0.0f);
+    const float wall = r - (depth > 0 ? wallRadiusBelowRim(island, angle, depth, p.y) : rim);
     // Outside the rim circle the crown no longer bounds the rock: the wall
     // below the rim may bulge past it.
     const float crown = r <= rim ? p.y - topAt(island, p.x, p.z, rim) : p.y - rimY;
@@ -187,37 +471,79 @@ float3 islandGradient(const Island& island, float3 p) {
 }
 
 Mesh islandMesh(const Island& island) {
-    const int around = std::clamp(int(std::round(kTau * island.radius / 0.5f)) & ~3, 128, 512);
-    const int rings = std::clamp(int(island.radius / 0.6f), 16, 66);
-    const int rows = rings + kWallRows;
+    const int around = std::clamp(int(std::round(kTau * island.radius / 0.42f)) & ~3, 120, 600);
+    const int rings = std::clamp(int(island.radius / 0.55f), 16, 58);
+    std::vector<float> cosines(around), sines(around), rim(around), rimY(around);
+    std::vector<float> exits(size_t(around) * kIslandMaxColumns);
+    float lowestRim = 1e9f;
+    for (int i = 0; i < around; ++i) {
+        const float angle = kTau * float(i) / float(around);
+        cosines[i] = std::cos(angle);
+        sines[i] = std::sin(angle);
+        columnExits(island, cosines[i], sines[i], &exits[size_t(i) * kIslandMaxColumns]);
+        rim[i] = wallRadiusAt(island, angle, cosines[i], sines[i], &exits[size_t(i) * kIslandMaxColumns], 0.0f, kColumnFullHeight, Bed{});
+        rimY[i] = topAt(island, island.x + cosines[i] * rim[i], island.z + sines[i] * rim[i], rim[i]);
+        lowestRim = std::min(lowestRim, rimY[i]);
+    }
+    // Wall rows: fixed depths under the rim, then world heights aligned with
+    // the bedding and shelves, so a sharp bedding plane falls on one row.
+    std::vector<float> levels;
+    const float start = lowestRim - kDepthRows[kDepthRowCount - 1] - 0.8f;
+    constexpr float kVisibleBottom = -105.0f;
+    for (int bed = bedIndexAt(start); bedFloor(bed + 1) > kVisibleBottom; --bed) {
+        const float top = bedFloor(bed + 1);
+        const float bottom = bedFloor(bed);
+        if (top < start) {
+            levels.push_back(top);
+            levels.push_back(top - 0.25f);
+        }
+        const float spacing = (top > start - 40.0f ? 1.1f : 1.8f) * std::clamp(island.radius / 30.0f, 1.0f, 1.5f);
+        for (float y = top - 0.25f - spacing; y > bottom + 0.45f; y -= spacing)
+            if (y < start) levels.push_back(y);
+        if (bottom < start) {
+            levels.push_back(bottom + 0.42f);
+            levels.push_back(bottom + 0.3f);
+        }
+    }
+    for (int i = island.coreColumns; i < island.columnCount; ++i) {
+        levels.push_back(island.columns[i].topY);
+        levels.push_back(island.columns[i].topY - kShelfRamp);
+    }
+    for (int i = 0; i < island.alcoveCount; ++i) {
+        levels.push_back(island.alcoves[i].topY);
+        levels.push_back(island.alcoves[i].topY - 1.4f);
+        levels.push_back(island.alcoves[i].bottomY + 2.5f);
+        levels.push_back(island.alcoves[i].bottomY);
+    }
+    for (float y = kVisibleBottom - 3.0f; y > kIslandBase + 2.0f; y -= (y < -150.0f ? 14.0f : 6.0f)) levels.push_back(y);
+    levels.push_back(kIslandBase);
+    std::sort(levels.begin(), levels.end(), std::greater<float>());
+    levels.erase(std::remove_if(levels.begin(), levels.end(), [&](float y) { return y > start; }), levels.end());
+    levels.erase(std::unique(levels.begin(), levels.end(), [](float a, float b) { return std::abs(a - b) < 0.05f; }), levels.end());
+    const int wallRows = kDepthRowCount + int(levels.size());
+    const int rows = rings + wallRows;
     Mesh mesh;
     mesh.vertices.reserve(size_t(around) * rows + 1);
     mesh.indices.reserve(size_t(around) * rows * 2);
-    std::vector<float> rim(around);
-    std::vector<float> rimY(around);
-    for (int i = 0; i < around; ++i) {
-        const float angle = kTau * float(i) / float(around);
-        rim[i] = wallRadius(island, angle, 0.0f);
-        rimY[i] = topAt(island, island.x + std::cos(angle) * rim[i], island.z + std::sin(angle) * rim[i], rim[i]);
-    }
-    mesh.vertices.push_back({make_float3(island.x, islandTop(island, island.x, island.z), island.z), {}, kMaterialStone});
-    for (int row = 1; row <= rows; ++row) {
+    mesh.vertices.push_back({make_float3(island.x, topAt(island, island.x, island.z, rimRadiusAt(island, 0.0f)), island.z), {}, kMaterialStone});
+    for (int row = 1; row <= rings; ++row)
         for (int i = 0; i < around; ++i) {
-            const float angle = kTau * float(i) / float(around);
-            const float c = std::cos(angle);
-            const float s = std::sin(angle);
-            float3 p;
-            if (row <= rings) {
-                const float radius = rim[i] * float(row) / float(rings);
-                p = make_float3(island.x + c * radius, 0, island.z + s * radius);
-                p.y = topAt(island, p.x, p.z, rim[i]);
-            } else {
-                const float t = float(row - rings) / float(kWallRows);
-                const float depth = (rimY[i] - kIslandBase) * (0.25f * t + 0.75f * t * t * t);
-                const float radius = wallRadius(island, angle, depth);
-                p = make_float3(island.x + c * radius, rimY[i] - depth, island.z + s * radius);
-            }
+            const float radius = rim[i] * float(row) / float(rings);
+            float3 p = make_float3(island.x + cosines[i] * radius, 0, island.z + sines[i] * radius);
+            p.y = topAt(island, p.x, p.z, rim[i]);
             mesh.vertices.push_back({p, {}, kMaterialStone});
+        }
+    for (int row = 0; row < wallRows; ++row) {
+        const bool byDepth = row < kDepthRowCount;
+        const float level = byDepth ? 0.0f : levels[row - kDepthRowCount];
+        const Bed levelBed = byDepth ? Bed{} : bedAt(level);
+        for (int i = 0; i < around; ++i) {
+            const float y = byDepth ? rimY[i] - kDepthRows[row] : level;
+            const float depth = byDepth ? kDepthRows[row] : rimY[i] - level;
+            const float angle = kTau * float(i) / float(around);
+            const float radius = wallRadiusAt(island, angle, cosines[i], sines[i], &exits[size_t(i) * kIslandMaxColumns], depth, y,
+                                              byDepth ? bedAt(y) : levelBed);
+            mesh.vertices.push_back({make_float3(island.x + cosines[i] * radius, y, island.z + sines[i] * radius), {}, kMaterialStone});
         }
     }
     const auto index = [&](int row, int i) { return row == 0 ? 0U : unsigned(1 + (row - 1) * around + (i % around)); };
@@ -246,106 +572,5 @@ Mesh islandMesh(const Island& island) {
         mesh.vertices[i].normal = l > 1e-12f ? n * (sign / l) : make_float3(0, 1, 0);
     }
     return mesh;
-}
-
-CellPlan planCell(const Cell& cell) {
-    CellPlan plan;
-    if (cell.scale == 0) return plan;
-    const auto draw = [&](unsigned channel) { return randomUnit(cell.seed + 877U * channel); };
-    const unsigned kind = cell.region;
-    const float radius = kind == 0 ? lerpf(21.0f, 31.0f, draw(1)) : kind == 1 ? lerpf(27.0f, 38.0f, draw(1))
-                       : kind == 2 ? lerpf(9.0f, 14.0f, draw(1)) : lerpf(25.0f, 36.0f, draw(1));
-    const float top = kind == 0 ? lerpf(6.0f, 42.0f, draw(2)) : kind == 1 ? lerpf(-6.0f, 16.0f, draw(2))
-                    : kind == 2 ? lerpf(20.0f, 64.0f, draw(2)) : lerpf(-2.0f, 26.0f, draw(2));
-    Island main = makeIsland(cell.offset.x, cell.offset.z, cell.seed, kind, radius, top);
-    const auto& radii = prototypeRadii();
-    const auto place = [&](unsigned prototype, float x, float z, float yaw, float scale, float y) {
-        plan.pieces.push_back({make_float3(x, y, z), make_float3(scale, scale, scale), yaw, prototype,
-                               hash(cell.seed + prototype * 167U + unsigned(plan.pieces.size())), cell.region});
-    };
-    // Structures choose their site first; the crown is levelled under them.
-    struct Pending { unsigned prototype; float x, z, yaw, scale; };
-    std::vector<Pending> structures;
-    const auto structure = [&](unsigned prototype, float along, float angle, float wanted) {
-        const float limit = 0.5f * main.radius / std::max(radii[prototype], 1.0f);
-        const float scale = std::min(wanted, limit);
-        if (scale < 0.25f) return;
-        const float reach = along * wallRadius(main, angle, 0.0f);
-        const float x = main.x + std::cos(angle) * reach;
-        const float z = main.z + std::sin(angle) * reach;
-        addSite(main, x, z, radii[prototype] * scale);
-        structures.push_back({prototype, x, z, cell.yaw + angle, scale});
-    };
-    const float heading = cell.yaw;
-    if (kind == 0) {
-        const unsigned designs[5] = {8, 9, 16, 19, 20};
-        structure(designs[unsigned(draw(3) * 5) % 5], 0.12f, heading, lerpf(0.6f, 0.85f, draw(4)));
-        if (draw(5) < 0.7f) structure(10, 0.58f, heading + 2.3f, lerpf(0.55f, 0.75f, draw(6)));
-        if (draw(7) < 0.4f) structure(13, 0.55f, heading - 2.0f, 0.6f);
-    } else if (kind == 1) {
-        structure(11, 0.0f, heading, lerpf(0.8f, 1.05f, draw(3)));
-        if (draw(4) < 0.6f) structure(12, 0.6f, heading + 1.9f + draw(5), 0.6f);
-    } else if (kind == 2) {
-        if (draw(3) < 0.45f) structure(10, 0.0f, heading, 0.5f);
-    } else {
-        structure(draw(3) < 0.5f ? 17U : 12U, 0.2f, heading, lerpf(0.55f, 0.75f, draw(4)));
-    }
-    for (const Pending& s : structures)
-        place(s.prototype, s.x, s.z, s.yaw, s.scale, islandTop(main, s.x, s.z) - 0.3f);
-    if (kind == 1 && draw(9) < 0.6f) {
-        const float x = main.x + std::cos(heading + 3.6f) * 0.45f * main.radius;
-        const float z = main.z + std::sin(heading + 3.6f) * 0.45f * main.radius;
-        place(23, x, z, heading, 0.85f, islandTop(main, x, z) - 0.15f);
-    }
-    plan.islands[plan.islandCount++] = main;
-    // Satellite stacks stand on their own feet beside the main island.
-    const int satellites = kind == 2 ? 2 + int(draw(30) * 3) : draw(30) < 0.5f ? 1 + int(draw(31) * 2) : 0;
-    for (int i = 0; i < satellites && plan.islandCount < 5; ++i) {
-        const unsigned key = 40U + unsigned(i) * 7U;
-        const float r = kind == 2 ? lerpf(6.0f, 12.0f, draw(key)) : lerpf(5.0f, 11.0f, draw(key));
-        const float angle = kTau * (float(i) + draw(key + 1)) / float(satellites);
-        float distance = main.radius * 1.15f + r + lerpf(5.0f, 16.0f, draw(key + 2));
-        distance = std::min(distance, kCellSize * 0.5f - r - 6.0f);
-        bool clear = distance > main.radius * 1.12f + r;
-        for (int j = 1; j < plan.islandCount && clear; ++j)
-            clear = std::hypot(main.x + std::cos(angle) * distance - plan.islands[j].x,
-                               main.z + std::sin(angle) * distance - plan.islands[j].z) > r + plan.islands[j].radius * 1.2f + 3.0f;
-        if (!clear) continue;
-        const float height = top + (kind == 2 ? lerpf(-40.0f, 14.0f, draw(key + 3)) : lerpf(-30.0f, 8.0f, draw(key + 3)));
-        Island satellite = makeIsland(main.x + std::cos(angle) * distance, main.z + std::sin(angle) * distance,
-                                      hash(cell.seed + key), 2, r, height);
-        plan.islands[plan.islandCount++] = satellite;
-        if (draw(key + 4) < 0.5f)
-            place(15, satellite.x, satellite.z, draw(key + 5) * kTau, lerpf(0.5f, 0.9f, draw(key + 6)),
-                  islandTop(satellite, satellite.x, satellite.z) - 0.2f);
-    }
-    // Trees and loose stones on the main crown, kept off the levelled sites.
-    const int trees = kind == 3 ? 16 + int(draw(50) * 10) : kind == 1 ? 6 + int(draw(50) * 6)
-                    : kind == 0 ? 2 + int(draw(50) * 4) : 1 + int(draw(50) * 2);
-    for (int tree = 0; tree < trees; ++tree) {
-        const unsigned key = 72U + unsigned(tree) * 5U;
-        const float angle = draw(key) * kTau;
-        const float along = std::sqrt(lerpf(0.04f, 0.6f, draw(key + 1)));
-        const float reach = along * wallRadius(main, angle, 0.0f);
-        const float x = main.x + std::cos(angle) * reach;
-        const float z = main.z + std::sin(angle) * reach;
-        bool free = true;
-        for (int i = 0; i < main.siteCount; ++i)
-            free = free && std::hypot(x - main.sites[i].x, z - main.sites[i].z) > main.sites[i].radius + 2.0f;
-        if (!free) continue;
-        const bool cypress = kind == 3 ? draw(key + 2) < 0.35f : draw(key + 2) < 0.6f;
-        place(cypress ? 15U : 14U, x, z, draw(key + 4) * kTau, lerpf(0.55f, 1.35f, draw(key + 3)),
-              islandTop(main, x, z) - 0.25f);
-    }
-    for (int rock = 0; rock < 5; ++rock) {
-        const unsigned key = 155U + unsigned(rock) * 4U;
-        const float angle = draw(key) * kTau;
-        const float along = lerpf(0.55f, 0.78f, draw(key + 2));
-        const float reach = along * wallRadius(main, angle, 0.0f);
-        const float x = main.x + std::cos(angle) * reach;
-        const float z = main.z + std::sin(angle) * reach;
-        place(22, x, z, angle, lerpf(0.3f, 0.85f, draw(key + 1)), islandTop(main, x, z) - 0.2f);
-    }
-    return plan;
 }
 }

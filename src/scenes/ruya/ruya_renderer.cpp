@@ -349,15 +349,15 @@ struct Renderer::State {
     }
     // Builds the missing island meshes of the plans in parallel and drops
     // islands no plan has used for the grace period.
-    void ensureIslands(const std::vector<std::pair<const Cell*, CellPlan>>& plans) {
+    void ensureIslands(const std::vector<std::pair<const Cell*, std::shared_ptr<const CellPlan>>>& plans) {
         std::vector<std::tuple<int, int, int>> missingKeys;
         std::vector<const Island*> missing;
         for (const auto& [cell, plan] : plans)
-            for (int i = 0; i < plan.islandCount; ++i) {
+            for (int i = 0; i < plan->islandCount; ++i) {
                 const auto key = std::make_tuple(cell->x, cell->z, i);
                 const auto found = islandSlots.find(key);
                 if (found != islandSlots.end()) islands[found->second].lastFrame = frame;
-                else { missingKeys.push_back(key); missing.push_back(&plan.islands[i]); }
+                else { missingKeys.push_back(key); missing.push_back(&plan->islands[i]); }
             }
         std::vector<std::future<Mesh>> jobs;
         for (const Island* island : missing) jobs.push_back(std::async(std::launch::async, [island] { return islandMesh(*island); }));
@@ -467,13 +467,14 @@ void Renderer::setCells(const std::vector<Cell>& visible, const std::vector<Cell
     instances.reserve(cells.size() * 24);
     data.reserve(instances.capacity());
     ++state.frame;
-    std::vector<std::pair<const Cell*, CellPlan>> plans;
+    std::vector<std::pair<const Cell*, std::shared_ptr<const CellPlan>>> plans;
     plans.reserve(cells.size());
-    for (const Cell& cell : cells) plans.emplace_back(&cell, planCell(cell));
+    for (const Cell& cell : cells) plans.emplace_back(&cell, cachedPlan(cell));
     state.ensureIslands(plans);
     auto nextVisible = visible.begin();
-    for (const auto& [cellPointer, plan] : plans) {
+    for (const auto& [cellPointer, planPointer] : plans) {
         const Cell& cell = *cellPointer;
+        const CellPlan& plan = *planPointer;
         while (nextVisible != visible.end() && cellLess(*nextVisible, cell)) ++nextVisible;
         const bool inView = nextVisible != visible.end() && nextVisible->x == cell.x && nextVisible->z == cell.z;
         for (int i = 0; i < plan.islandCount; ++i) {
