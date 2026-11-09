@@ -32,8 +32,38 @@ inline constexpr unsigned kMaterialBronze = 2;
 inline constexpr unsigned kMaterialLeaf = 3;
 inline constexpr unsigned kMaterialWater = 4;
 inline constexpr unsigned kMaterialMasonry = 5;
-// CC0 texture sets: rock, grass ground, cut stone. Two maps each.
-inline constexpr int kTextureSets = 3;
+inline constexpr unsigned kMaterialBark = 6;
+inline constexpr unsigned kMaterialRoof = 7;
+inline constexpr unsigned kMaterialWood = 8;
+inline constexpr unsigned kMaterialLeafCard = 9;
+// A vertex keeps the material id in the low byte. Leaf cards use the rest:
+// corner u, corner v, atlas, atlas cell, and a per-card colour value.
+inline constexpr unsigned kMaterialIdMask = 0xFFU;
+inline constexpr unsigned kCardCornerU = 1U << 8;
+inline constexpr unsigned kCardCornerV = 1U << 9;
+inline constexpr unsigned kCardAtlasShift = 10;
+inline constexpr unsigned kCardCellShift = 11;
+inline constexpr unsigned kCardTintShift = 16;
+inline constexpr unsigned kCardOpenShift = 24;
+HD unsigned materialId(unsigned material) { return material & kMaterialIdMask; }
+// Atlas cells holding whole sprigs (u0, v0, u1, v1); atlas 0 is broadleaf, 1 is needles.
+HD float4 cardRect(unsigned atlas, unsigned cell) {
+    if (atlas == 0) {
+        if (cell == 0) return make_float4(0.215f, 0.12f, 0.56f, 0.68f);
+        if (cell == 1) return make_float4(0.52f, 0.02f, 0.84f, 0.55f);
+        if (cell == 2) return make_float4(0.00f, 0.30f, 0.255f, 0.60f);
+        return make_float4(0.00f, 0.00f, 0.39f, 0.30f);
+    }
+    if (cell == 0) return make_float4(0.309f, 0.406f, 0.641f, 0.775f);
+    if (cell == 1) return make_float4(0.645f, 0.457f, 0.951f, 0.83f);
+    if (cell == 2) return make_float4(0.654f, 0.053f, 0.936f, 0.369f);
+    return make_float4(0.189f, 0.053f, 0.408f, 0.311f);
+}
+HD bool isFoliage(unsigned material) { return materialId(material) == kMaterialLeaf || materialId(material) == kMaterialLeafCard; }
+// CC0 scan sets, two GPU maps each: colour + roughness, and normal + AO + height (alpha cut for leaf sets).
+inline constexpr int kSetRock = 0, kSetGroundFar = 1, kSetMasonry = 2, kSetCliff = 3, kSetGrass = 4, kSetBark = 5,
+                     kSetRoof = 6, kSetWood = 7, kSetMetal = 8, kSetBroadleaf = 9, kSetNeedle = 10;
+inline constexpr int kTextureSets = 11;
 inline constexpr unsigned kIslandSlots = 2048;
 inline constexpr unsigned kIslandGraceFrames = 90;
 
@@ -193,13 +223,14 @@ struct Params {
     float4* depth;
     uchar4* output;
     unsigned* badCount;
+    float textureSide[kTextureSets];
 };
 #if !defined(__CUDACC_RTC__)
 static_assert(sizeof(Vertex) == 28);
 static_assert(sizeof(Geometry) == 16);
 static_assert(sizeof(Cell) == 36);
 static_assert(sizeof(InstanceData) == 12);
-static_assert(sizeof(Params) == 184);
+static_assert(sizeof(Params) == 232);
 static_assert(offsetof(Params, geometries) == 96);
 static_assert(std::is_trivially_copyable_v<Params>);
 #endif

@@ -37,10 +37,10 @@ const std::array<std::vector<float3>, kPrototypeCount>& prototypeRoots() {
         for (size_t p = 0; p < meshes.size(); ++p) {
             float lowest = 1e30f;
             for (const Vertex& v : meshes[p].vertices)
-                if (v.material != kMaterialLeaf) lowest = std::min(lowest, v.position.y);
+                if (!isFoliage(v.material)) lowest = std::min(lowest, v.position.y);
             std::vector<float3> band;
             for (const Vertex& v : meshes[p].vertices)
-                if (v.material != kMaterialLeaf && v.position.y < lowest + 0.3f) band.push_back(v.position);
+                if (!isFoliage(v.material) && v.position.y < lowest + 0.3f) band.push_back(v.position);
             const size_t stride = std::max<size_t>(band.size() / 64, 1);
             for (size_t i = 0; i < band.size(); i += stride) roots[p].push_back(band[i]);
         }

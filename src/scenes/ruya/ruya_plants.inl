@@ -1,8 +1,7 @@
-// Plant and scatter prototypes. Foliage is built from broad crown forms: opaque
-// lobes carry the volume and coverage, and leaf pads about half a metre wide
-// break the silhouette. Nothing here is thin enough to fall below a pixel at
-// the distances fog allows, which is what kept fixed-sample foliage stable.
-// Every plant has a dark root that starts underground; placement embeds it.
+// Plant and scatter prototypes. A crown is a dark, opaque inner volume wrapped in
+// alpha-cut sprig cards showing scanned leaves: the cards make the silhouette and
+// the volume keeps the interior dense and stable. Every plant has a dark root that
+// starts underground; placement embeds it.
 
 void fractureShard(Mesh& mesh, float3 center, float3 size, unsigned seed);
 
@@ -22,7 +21,7 @@ void limb(Mesh& mesh, float3 a, float3 mid, float3 b, float radiusA, float radiu
         makeBasis(axis, tangent, bitangent);
         return tangent * std::cos(u * kTau) + bitangent * std::sin(u * kTau);
     };
-    surface(mesh, sides, segments, kMaterialDarkStone,
+    surface(mesh, sides, segments, kMaterialBark,
             [&](float u, float v) { return center(v) + radial(u, v) * lerpf(radiusA, radiusB, clampf(v, 0.0f, 1.0f)); },
             radial);
 }
@@ -47,46 +46,57 @@ void lobe(Mesh& mesh, float3 center, float3 radius, unsigned seed, int detail) {
             });
 }
 
-// A flat, slightly cupped pad of leaves, facing roughly along outward.
-void leafPad(Mesh& mesh, float3 center, float3 outward, float radius, unsigned seed) {
-    const float3 up = safeNormal(outward * 0.92f + make_float3(0, 0.3f, 0), make_float3(0, 1, 0));
-    float3 tangent, bitangent;
-    makeBasis(up, tangent, bitangent);
-    constexpr int kSides = 6;
+constexpr unsigned kAtlasBroad = 0U;
+constexpr unsigned kAtlasNeedle = 1U;
+
+// One alpha-cut sprig card, base to tip along `axis`, with the face bowed slightly outward.
+void sprigCard(Mesh& mesh, float3 base, float3 axis, float3 side, float3 facing, unsigned atlas, unsigned cell, unsigned tint, unsigned open) {
     const unsigned first = unsigned(mesh.vertices.size());
-    mesh.vertices.push_back({center + up * (radius * 0.16f), up, kMaterialLeaf});
-    for (int side = 0; side < kSides; ++side) {
-        const unsigned key = seed + unsigned(side) * 53U;
-        const float angle = kTau * (float(side) + 0.5f * randomUnit(key)) / float(kSides);
-        const float3 spoke = tangent * std::cos(angle) + bitangent * std::sin(angle);
-        const float reach = radius * (0.75f + 0.35f * randomUnit(key + 1U));
-        const float3 point = center + spoke * reach - up * (radius * 0.2f * randomUnit(key + 2U));
-        mesh.vertices.push_back({point, safeNormal(up * 0.75f + spoke * 0.4f, up), kMaterialLeaf});
-    }
-    for (unsigned side = 0; side < kSides; ++side)
-        triangle(mesh, first, first + 1U + side, first + 1U + (side + 1U) % kSides);
+    const unsigned material = kMaterialLeafCard | (atlas << kCardAtlasShift) | (cell << kCardCellShift) | (tint << kCardTintShift) | (open << kCardOpenShift);
+    const float3 tip = base + axis;
+    const float3 sideNormal = side * (0.35f / std::max(length(side), 1e-4f));
+    mesh.vertices.push_back({tip - side, safeNormal(facing - sideNormal, facing), material});
+    mesh.vertices.push_back({tip + side, safeNormal(facing + sideNormal, facing), material | kCardCornerU});
+    mesh.vertices.push_back({base + side, safeNormal(facing + sideNormal, facing), material | kCardCornerU | kCardCornerV});
+    mesh.vertices.push_back({base - side, safeNormal(facing - sideNormal, facing), material | kCardCornerV});
+    triangle(mesh, first, first + 1U, first + 2U);
+    triangle(mesh, first, first + 2U, first + 3U);
 }
 
-// A crown: lobes inside for coverage, pads on the shell for silhouette.
-void canopy(Mesh& mesh, float3 center, float3 radius, unsigned seed, int detail) {
+// A crown: a dark core for density, sprig cards on the shell for the silhouette.
+void canopy(Mesh& mesh, float3 center, float3 radius, unsigned seed, int detail, unsigned atlas = kAtlasBroad) {
     const float size = std::max({radius.x, radius.y, radius.z});
     const int lobes = std::clamp(int(size * 1.8f) + 2, 2, 8);
     for (int index = 0; index < lobes; ++index) {
         const unsigned key = seed + unsigned(index) * 491U;
-        const float3 offset = make_float3(randomUnit(key) - 0.5f, randomUnit(key + 1U) - 0.5f, randomUnit(key + 2U) - 0.5f) * radius * 1.05f;
-        const float scale = 0.5f + 0.2f * randomUnit(key + 3U);
+        const float3 offset = make_float3(randomUnit(key) - 0.5f, randomUnit(key + 1U) - 0.5f, randomUnit(key + 2U) - 0.5f) * radius * 0.6f;
+        const float scale = 0.3f + 0.12f * randomUnit(key + 3U);
         lobe(mesh, center + offset, radius * scale, key + 5U, detail);
     }
-    const int pads = int(std::min(size * size * 26.0f + 34.0f, 260.0f));
-    const float padRadius = std::max(0.17f, 0.13f + 0.05f * size);
-    for (int index = 0; index < pads; ++index) {
+    const int cards = int(std::min(size * size * 60.0f + 50.0f, 320.0f));
+    const float sprig = atlas == kAtlasNeedle ? std::clamp(0.40f + 0.13f * size, 0.45f, 0.85f)
+                                              : std::clamp(0.45f + 0.15f * size, 0.5f, 0.95f);
+    for (int index = 0; index < cards; ++index) {
         const unsigned key = seed + 7919U + unsigned(index) * 263U;
         const float theta = kTau * randomUnit(key);
         const float vertical = 2.0f * randomUnit(key + 1U) - 1.0f;
         const float horizontal = std::sqrt(std::max(0.0f, 1.0f - vertical * vertical));
         const float3 direction = make_float3(horizontal * std::cos(theta), vertical, horizontal * std::sin(theta));
-        const float shell = 0.82f + 0.3f * randomUnit(key + 2U);
-        leafPad(mesh, center + direction * radius * shell, direction, padRadius * (0.8f + 0.5f * randomUnit(key + 3U)), key + 11U);
+        const float shell = 0.66f + 0.46f * randomUnit(key + 2U);
+        const float3 wobble = make_float3(randomUnit(key + 4U) - 0.5f, randomUnit(key + 5U) - 0.5f, randomUnit(key + 6U) - 0.5f);
+        // Sprigs reach out from the crown and hang a little; the face looks outward and up to catch the light.
+        const float3 reach = safeNormal(direction * 0.9f + wobble * 1.1f + make_float3(0, atlas == kAtlasNeedle ? 0.25f : -0.2f, 0), direction);
+        const float3 facing = safeNormal(direction * 0.55f + make_float3(0, 0.75f, 0) + wobble * 0.6f, make_float3(0, 1, 0));
+        const float3 side = safeNormal(cross(facing, reach), make_float3(1, 0, 0));
+        const float3 flatFacing = safeNormal(cross(reach, side), facing);
+        const float scale = sprig * (0.75f + 0.5f * randomUnit(key + 3U));
+        const unsigned openness = unsigned(std::clamp((shell - 0.66f) / 0.46f * 0.8f + 0.2f + 0.3f * vertical, 0.0f, 1.0f) * 15.0f);
+        // Half the card width: keeps the leaves in the cell at their photographed shape.
+        const unsigned cell = hash(key + 8U) & 3U;
+        const float4 rect = cardRect(atlas, cell);
+        const float halfWidth = 0.5f * scale * (rect.z - rect.x) / (rect.w - rect.y);
+        sprigCard(mesh, center + direction * radius * shell - reach * (scale * 0.45f), reach * scale, side * halfWidth, flatFacing,
+                  atlas, cell, hash(key + 9U) & 255U, openness);
     }
 }
 
@@ -116,7 +126,7 @@ void cypress(Mesh& mesh, float3 base, float height, unsigned seed, int detail) {
         const float v = float(tier) / float(kTiers - 1);
         const float radius = height * 0.135f * (1.0f - 0.72f * v) * (0.9f + 0.25f * std::sin(M_PIf * v));
         const float3 center = base + make_float3(0.12f * v, height * (0.20f + 0.70f * v), 0);
-        canopy(mesh, center, make_float3(radius, height * 0.15f, radius), seed + unsigned(tier) * 1103U, detail);
+        canopy(mesh, center, make_float3(radius, height * 0.15f, radius), seed + unsigned(tier) * 1103U, detail, kAtlasNeedle);
     }
 }
 
@@ -141,10 +151,10 @@ void pineFlat(Mesh& mesh, float3 base, float height, unsigned seed, int detail) 
             const float bias = clump == 0 ? 0.0f : clump == 1 ? -0.42f : 0.42f;
             const float3 at = end + make_float3(std::cos(heading + 1.57f * bias) * wide * bias, 0.04f * height * float(clump % 2),
                                                  std::sin(heading + 1.57f * bias) * wide * bias * 0.8f);
-            canopy(mesh, at, make_float3(wide * 0.66f, height * 0.058f, wide * 0.56f), key + 7U + unsigned(clump) * 13U, detail);
+            canopy(mesh, at, make_float3(wide * 0.66f, height * 0.058f, wide * 0.56f), key + 7U + unsigned(clump) * 13U, detail, kAtlasNeedle);
         }
     }
-    canopy(mesh, top + make_float3(0, height * 0.03f, 0), make_float3(height * 0.15f, height * 0.08f, height * 0.13f), seed + 77U, detail);
+    canopy(mesh, top + make_float3(0, height * 0.03f, 0), make_float3(height * 0.15f, height * 0.08f, height * 0.13f), seed + 77U, detail, kAtlasNeedle);
 }
 
 // A cliff pine: rooted in the rock at the origin, growing out along +x.
@@ -165,7 +175,7 @@ void pineCling(Mesh& mesh, float reach, float height, unsigned seed, int detail)
         const float wide = lerpf(0.34f, 0.18f, t) * height;
         for (int clump = 0; clump < 2; ++clump)
             canopy(mesh, end + make_float3(0, height * 0.05f * float(clump), wide * 0.25f * (clump ? 1.0f : -1.0f)),
-                   make_float3(wide * 0.7f, height * 0.08f, wide * 0.6f), key + 3U + unsigned(clump) * 17U, detail);
+                   make_float3(wide * 0.7f, height * 0.08f, wide * 0.6f), key + 3U + unsigned(clump) * 17U, detail, kAtlasNeedle);
     }
 }
 

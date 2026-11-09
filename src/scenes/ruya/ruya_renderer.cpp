@@ -30,6 +30,17 @@ namespace ruya {
 namespace {
 struct alignas(OPTIX_SBT_RECORD_ALIGNMENT) Record { char header[OPTIX_SBT_RECORD_HEADER_SIZE]; };
 static_assert(sizeof(Record) == OPTIX_SBT_RECORD_HEADER_SIZE);
+struct Image { int width = 0, height = 0; unsigned char* pixels = nullptr; };
+// Fetched maps are JPG when the source offers one, PNG otherwise.
+Image loadImage(const std::string& path, int components) {
+    Image image;
+    int channels = 0;
+    for (const char* extension : {".jpg", ".png"}) {
+        image.pixels = stbi_load((path + extension).c_str(), &image.width, &image.height, &channels, components);
+        if (image.pixels) break;
+    }
+    return image;
+}
 double milliseconds() {
     return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count();
 }
@@ -287,49 +298,58 @@ struct Renderer::State {
         RUYA_OPTIX(optixDenoiserInvoke(denoiser, stream, &options, CUdeviceptr(denoiserState), denoiserStateSize,
                                      &guide, &layer, 1, 0, 0, CUdeviceptr(denoiserScratch), denoiserScratchSize));
     }
+    // Sets may differ in resolution; the maps of one set must match. Images are decoded a
+    // set at a time so that host memory stays near one 8K set instead of the whole library.
     bool loadTextures(const std::string& root, std::string& error) {
-        static const char* names[kTextureSets] = {"rock_face_03", "aerial_grass_rock", "large_sandstone_blocks_01"};
-        struct Image { int width = 0, height = 0; unsigned char* pixels = nullptr; };
-        std::vector<std::future<Image>> jobs;
-        for (const char* name : names)
-            for (const char* map : {"diff", "nor_gl", "arm"})
-                jobs.push_back(std::async(std::launch::async, [path = root + "/assets/ruya/cc0/" + name + "_" + map + ".jpg"] {
-                    Image image;
-                    int channels = 0;
-                    image.pixels = stbi_load(path.c_str(), &image.width, &image.height, &channels, 4);
-                    return image;
-                }));
-        std::vector<Image> images;
-        for (auto& job : jobs) images.push_back(job.get());
-        bool ok = true;
-        for (const Image& image : images) ok = ok && image.pixels && image.width == image.height && image.width == images[0].width;
-        if (ok) {
-            const int side = images[0].width;
-            std::vector<unsigned char> packed(size_t(side) * side * 4);
-            for (int set = 0; set < kTextureSets && ok; ++set) {
-                const Image& color = images[set * 3];
-                const Image& normal = images[set * 3 + 1];
-                const Image& arm = images[set * 3 + 2];
-                // Colour with roughness in alpha; normal xy with occlusion in z.
-                for (size_t i = 0; i < packed.size(); i += 4) {
-                    packed[i] = color.pixels[i];
-                    packed[i + 1] = color.pixels[i + 1];
-                    packed[i + 2] = color.pixels[i + 2];
-                    packed[i + 3] = arm.pixels[i + 1];
+        // Order follows the kSet* indices in ruya_shared.h; keep in step with assets/ruya/fetch.py.
+        static const char* const names[kTextureSets] = {
+            "rock_face_03", "aerial_grass_rock", "large_sandstone_blocks_01", "cliff_side", "leafy_grass", "pine_bark",
+            "clay_roof_tiles", "weathered_planks", "rust_coarse_01", "tree_small_02_leaves", "fir_tree_01_twig"};
+        const auto freeImage = [](Image& image) { stbi_image_free(image.pixels); image.pixels = nullptr; };
+        const double started = milliseconds();
+        size_t decodedPeak = 0;
+        for (int set = 0; set < kTextureSets; ++set) {
+            const bool leaves = set == kSetBroadleaf || set == kSetNeedle;
+            const std::string base = root + "/assets/ruya/cc0/" + names[set] + "_";
+            const auto decode = [&](const char* suffix, int components) {
+                return std::async(std::launch::async, [path = base + suffix, components] { return loadImage(path, components); });
+            };
+            auto colorJob = decode("diff", 4);
+            auto normalJob = decode("nor_gl", 4);
+            auto armJob = decode("arm", 4);
+            auto extraJob = decode(leaves ? "alpha" : "disp", 1);
+            Image color = colorJob.get(), normal = normalJob.get(), arm = armJob.get(), extra = extraJob.get();
+            const int side = color.width;
+            const bool valid = color.pixels && normal.pixels && arm.pixels && extra.pixels && color.height == side &&
+                               normal.width == side && normal.height == side && arm.width == side && arm.height == side &&
+                               extra.width == side && extra.height == side && (side & (side - 1)) == 0;
+            bool ok = valid;
+            if (ok) {
+                const size_t count = size_t(side) * side;
+                decodedPeak = std::max(decodedPeak, count * (4 + 4 + 4 + 1));
+                std::vector<unsigned char> packed(count * 4);
+                // Colour with roughness in alpha; normal xy with occlusion in z, height or alpha cut in w.
+                for (size_t i = 0; i < count; ++i) {
+                    packed[i * 4] = color.pixels[i * 4];
+                    packed[i * 4 + 1] = color.pixels[i * 4 + 1];
+                    packed[i * 4 + 2] = color.pixels[i * 4 + 2];
+                    packed[i * 4 + 3] = arm.pixels[i * 4 + 1];
                 }
                 ok = uploadMaterialMap(textures[set * 2], packed.data(), side, true, stream) == cudaSuccess;
-                for (size_t i = 0; i < packed.size(); i += 4) {
-                    packed[i] = normal.pixels[i];
-                    packed[i + 1] = normal.pixels[i + 1];
-                    packed[i + 2] = arm.pixels[i];
-                    packed[i + 3] = 255;
+                for (size_t i = 0; i < count; ++i) {
+                    packed[i * 4] = normal.pixels[i * 4];
+                    packed[i * 4 + 1] = normal.pixels[i * 4 + 1];
+                    packed[i * 4 + 2] = arm.pixels[i * 4];
+                    packed[i * 4 + 3] = extra.pixels[i];
                 }
                 ok = ok && uploadMaterialMap(textures[set * 2 + 1], packed.data(), side, false, stream) == cudaSuccess;
-                allocatedBytes += 2 * size_t(side) * side * 4 * 4 / 3;
+                allocatedBytes += 2 * count * 4 * 4 / 3;
+                params.textureSide[set] = float(side);
             }
+            for (Image* image : {&color, &normal, &arm, &extra}) freeImage(*image);
+            if (!ok) { error = std::string("Rüya texture set missing or unreadable: ") + names[set] + "; run python assets/ruya/fetch.py"; return false; }
         }
-        for (const Image& image : images) stbi_image_free(image.pixels);
-        if (!ok) { error = "Rüya textures missing or unreadable: run python assets/ruya/fetch.py"; return false; }
+        std::printf("Ruya dokular: %.1f s, en buyuk set cozumu %.0f MiB\n", (milliseconds() - started) / 1000.0, decodedPeak / 1048576.0);
         unsigned long long handles[kTextureSets * 2];
         for (int i = 0; i < kTextureSets * 2; ++i) handles[i] = textures[i].texture;
         allocate(reinterpret_cast<void**>(&textureHandles), sizeof(handles));

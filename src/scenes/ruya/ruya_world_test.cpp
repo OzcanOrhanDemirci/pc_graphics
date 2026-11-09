@@ -35,7 +35,7 @@ bool validMesh(const Mesh& mesh, size_t& invalid) {
                                     double(vertex.normal.y) * vertex.normal.y +
                                     double(vertex.normal.z) * vertex.normal.z;
         if (!finiteVector(vertex.position) || !finiteVector(vertex.normal) ||
-            normalLength < 0.98 || normalLength > 1.02 || vertex.material > kMaterialMasonry) ++invalid;
+            normalLength < 0.98 || normalLength > 1.02 || materialId(vertex.material) > kMaterialLeafCard) ++invalid;
     }
     for (const auto triangle : mesh.indices) {
         if (triangle.x >= mesh.vertices.size() || triangle.y >= mesh.vertices.size() ||
@@ -56,6 +56,18 @@ bool validMesh(const Mesh& mesh, size_t& invalid) {
         const double ny = abz * acx - abx * acz;
         const double nz = abx * acy - aby * acx;
         if (!(nx * nx + ny * ny + nz * nz > 1e-20)) ++invalid;
+        // The closest-hit program divides by this UV area, and the corners index the atlas cell.
+        const unsigned first = mesh.vertices[triangle.x].material;
+        if (materialId(first) == kMaterialLeafCard) {
+            const auto corner = [&](unsigned index, unsigned bit) { return (mesh.vertices[index].material & bit) ? 1 : 0; };
+            const int du1 = corner(triangle.y, kCardCornerU) - corner(triangle.x, kCardCornerU);
+            const int dv1 = corner(triangle.y, kCardCornerV) - corner(triangle.x, kCardCornerV);
+            const int du2 = corner(triangle.z, kCardCornerU) - corner(triangle.x, kCardCornerU);
+            const int dv2 = corner(triangle.z, kCardCornerV) - corner(triangle.x, kCardCornerV);
+            if (du1 * dv2 == dv1 * du2) ++invalid;
+            const float4 rect = cardRect((first >> kCardAtlasShift) & 1U, (first >> kCardCellShift) & 3U);
+            if (!(rect.x >= 0.0f && rect.y >= 0.0f && rect.z <= 1.0f && rect.w <= 1.0f && rect.x < rect.z && rect.y < rect.w)) ++invalid;
+        }
     }
     return invalid == 0;
 }
@@ -413,10 +425,10 @@ int testWorld() {
         for (size_t p = 0; p < prototypes.size(); ++p) {
             float lowest = 1e30f;
             for (const Vertex& vertex : prototypes[p].vertices)
-                if (vertex.material != kMaterialLeaf) lowest = std::min(lowest, vertex.position.y);
+                if (!isFoliage(vertex.material)) lowest = std::min(lowest, vertex.position.y);
             std::vector<float3> band;
             for (const Vertex& vertex : prototypes[p].vertices)
-                if (vertex.material != kMaterialLeaf && vertex.position.y < lowest + 0.3f) band.push_back(vertex.position);
+                if (!isFoliage(vertex.material) && vertex.position.y < lowest + 0.3f) band.push_back(vertex.position);
             const size_t stride = std::max<size_t>(band.size() / 16, 1);
             for (size_t i = 0; i < band.size(); i += stride) footings[p].push_back(band[i]);
         }

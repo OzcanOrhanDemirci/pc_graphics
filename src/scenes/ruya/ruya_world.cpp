@@ -284,7 +284,7 @@ void arcade(Mesh& mesh, unsigned prototype, int detail) {
         arcSlab(mesh, make_float3(0, baseY - 0.35f, 0), ringRadius, 3.7f, 0.46f, storyStart, storySweep,
                 96 * detail, kMaterialStone);
         arcSlab(mesh, make_float3(0, baseY - 0.40f, 0), ringRadius, 4.0f, 0.12f, storyStart, storySweep,
-                96 * detail, kMaterialDarkStone);
+                96 * detail, kMaterialWood);
         const float step = storySweep / float(bays);
         for (int bay = 0; bay < bays; ++bay) {
             const float angle = storyStart + float(bay) * step;
@@ -389,7 +389,7 @@ void chapel(Mesh& mesh, unsigned prototype, int detail) {
                 const float y = height + 1.95f - std::abs(x) * 0.55f;
                 const float z = -4.0f + (float(tile) + 0.5f) * 8.0f / 15.0f;
                 box(mesh, center + make_float3(x, y, z), across * 0.36f, up * 0.095f,
-                    make_float3(0, 0, 0.285f), kMaterialDarkStone);
+                    make_float3(0, 0, 0.285f), kMaterialRoof);
             }
     }
     tube(mesh, center + make_float3(0, height + 2.02f, -4.15f), center + make_float3(0, height + 2.02f, 4.15f),
@@ -417,7 +417,7 @@ void tower(Mesh& mesh, unsigned prototype, int detail) {
     for (int tier = 0; tier != 7; ++tier) {
         const float radius = 2.8f * (1.0f - float(tier) / 7.5f);
         box(mesh, center + make_float3(0, height + float(tier) * 0.28f, 0), make_float3(radius, 0, 0),
-            make_float3(0, 0.17f, 0), make_float3(0, 0, radius), kMaterialDarkStone);
+            make_float3(0, 0.17f, 0), make_float3(0, 0, radius), kMaterialRoof);
     }
     tube(mesh, center + make_float3(0, height + 1.9f, 0), center + make_float3(0, height + 3.4f, 0),
          0.06f, 8, kMaterialBronze);
