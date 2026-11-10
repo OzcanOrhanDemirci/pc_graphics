@@ -69,6 +69,25 @@ __forceinline__ __device__ bool shadowed(float3 origin, float3 direction, float 
     return mode == 2;
 }
 
+// Coarse island facets often tilt a few degrees away from the interpolated normal. Under a
+// grazing sun a facet turned away from it would be shadowed by its own neighbours in hard
+// triangles while its shading normal says it is lit. On such facets the shadow ray leaves
+// from above the triangle's vertices, which is the smooth surface the normals describe: a
+// vertex within kFacetReach of the hit rises at most kFacetReach * sin(tilt) along the normal.
+// Facets that face the sun squarely keep their own origin and with it their contact shadows.
+inline constexpr float kTerminatorFade = 0.3f;
+inline constexpr float kFacetReach = 2.5f;
+__forceinline__ __device__ float3 sunRayOrigin(const Hit& h, float3 light) {
+    const float lifted = 1.0f - smoothstepf(0.0f, kTerminatorFade, dot(h.geometric, light));
+    const float rise = lifted > 0.0f ? kFacetReach * length(cross(h.normal, h.geometric)) : 0.0f;
+    return h.position + h.normal * (rise * lifted) + h.geometric * 0.006f;
+}
+// Whether the surface can see the sun at all: a leaf card by its own plane, anything else by
+// the smooth surface its normals describe, not by the facet that approximates it.
+__forceinline__ __device__ bool facesSun(const Hit& h, float3 light) {
+    return dot(h.material == kMaterialLeafCard ? h.geometric : h.normal, light) > 0;
+}
+
 __forceinline__ __device__ float4 noiseGradient(float3 p) {
     const int x = int(floorf(p.x));
     const int y = int(floorf(p.y));
@@ -218,7 +237,9 @@ __forceinline__ __device__ Texel groundSurface(const Hit& h, float3 p, const Foo
 __forceinline__ __device__ Texel rockSurface(const Hit& h, float3 p, const Footprint& f) {
     // Masks are mostly 0 or 1, so a pixel usually pays for a single scan. The rotated
     // copy breaks the repeat of the base layer; the strata scan carries the large forms.
-    const float turn = smoothstepf(0.40f, 0.60f, noise(p * 0.045f));
+    // On walls the base tile repeats exactly vertically, so its mask must change within a
+    // couple of tiles or a tall column shows the same block stacked down its face.
+    const float turn = smoothstepf(0.40f, 0.60f, noise(p * 0.16f));
     const float layer = smoothstepf(0.47f, 0.60f, noise(p * 0.021f));
     Texel rock;
     if (layer >= 0.98f) rock = scan(kSetCliff, h.position + make_float3(11.7f, 5.3f, 37.9f), h.normal, 13.0f, 0.0f, f);
@@ -281,8 +302,11 @@ __forceinline__ __device__ Surface material(const Hit& h, const Footprint& f) {
     if (h.material == kMaterialStone || h.material == kMaterialDarkStone) {
         Texel t = rockSurface(h, p, f);
         t.color = t.color * tint * macro;
-        // Soil holds on ledges and the crown, never on the sheer walls.
-        const float grass = smoothstepf(0.70f, 0.88f, h.normal.y + (noise(p * 0.21f) - 0.5f) * 0.3f);
+        // Soil holds on ledges and the crown, never on the sheer walls. The vertex normal at a
+        // ledge lip averages the ledge with the wall below it and would carry soil onto the
+        // wall facet, so the facet itself must also be flatter than about 45 degrees.
+        const float grass = smoothstepf(0.70f, 0.88f, h.normal.y + (noise(p * 0.21f) - 0.5f) * 0.3f) *
+                            smoothstepf(0.50f, 0.70f, h.geometric.y);
         if (grass > 0.001f) t = heightPick(t, groundSurface(h, p, f), grass, 0.2f);
         if (h.material == kMaterialDarkStone) t.color *= 0.35f;
         applyTexel(s, h, t, 1.35f, 0.35f);
@@ -489,10 +513,10 @@ __forceinline__ __device__ float3 integrate(float3 origin, float3 direction, uns
         const float3 view = -direction;
         const float3 light = sampleSun(random);
         const float nl = dot(s.normal, light);
-        if (nl > 0 && dot(h.geometric, light) > 0) {
+        if (nl > 0 && facesSun(h, light)) {
             float bsdfPdf = 0;
             const float3 bsdf = evaluateBsdf(s, view, light, bsdfPdf);
-            if (!shadowed(h.position + h.geometric * 0.006f, light, 1000.0f)) {
+            if (!shadowed(sunRayOrigin(h, light), light, 1000.0f)) {
                 const float sunPdf = 1.0f / kSunSolidAngle;
                 result += throughput * bsdf * sunRadiance() * (nl * powerHeuristic(sunPdf, bsdfPdf) / sunPdf);
             }
@@ -516,7 +540,6 @@ __forceinline__ __device__ float3 integrate(float3 origin, float3 direction, uns
     return atmospheric(result, cameraOrigin, cameraDirection, primary.t < 1200.0f ? primary.t : 4000.0f);
 }
 inline constexpr int kAmbientRays = 2;
-inline constexpr float kAmbientReach = 10.0f;
 __forceinline__ __device__ float3 ambientDirection(int index, int count) {
     // Cosine-weighted Fibonacci spiral, identical for every pixel and frame.
     const float u = (float(index) + 0.5f) / float(count);
@@ -527,11 +550,11 @@ __forceinline__ __device__ float3 ambientDirection(int index, int count) {
 __forceinline__ __device__ float3 shadeDirect(const Hit& h, const Surface& s, float3 view) {
     const float3 light = sunDirection();
     const float nl = dot(s.normal, light);
-    if (nl <= 0 || dot(h.geometric, light) <= 0) {
+    if (nl <= 0 || !facesSun(h, light)) {
         if (h.material != kMaterialLeafCard || shadowed(h.position - h.geometric * 0.006f, light, 1000.0f)) return make_float3(0, 0, 0);
         return leafTransmission(s, fabsf(nl)) * sunRadiance() * kSunSolidAngle;
     }
-    if (shadowed(h.position + h.geometric * 0.006f, light, 1000.0f)) return make_float3(0, 0, 0);
+    if (shadowed(sunRayOrigin(h, light), light, 1000.0f)) return make_float3(0, 0, 0);
     float pdf = 0;
     return evaluateBsdf(s, view, light, pdf) * sunRadiance() * (kSunSolidAngle * nl);
 }
@@ -548,7 +571,7 @@ __forceinline__ __device__ float3 shadeAmbient(const Hit& h, const Surface& s, i
     for (int k = 0; k < rays; ++k) {
         const float3 d = frame.toWorld(ambientDirection(sample + k * params.spp, count));
         if (dot(d, h.geometric) <= 0.0f) { sum += make_float3(0.10f, 0.09f, 0.075f); continue; }
-        sum += shadowed(h.position + h.geometric * 0.006f, d, kAmbientReach) ? make_float3(0.10f, 0.09f, 0.075f)
+        sum += shadowed(h.position + h.geometric * 0.006f, d, params.ambientReach) ? make_float3(0.10f, 0.09f, 0.075f)
                                                                             : environment(d);
     }
     return s.color * (1.0f - s.metal) * sum * (1.0f / float(rays));
@@ -582,8 +605,9 @@ __forceinline__ __device__ float3 shadeLive(float3 direction, int sample, float 
     const bool clear = params.reference || fogTransmittance(params.eye, direction, h.t) > kQuarterFog;
     const bool split = quarter >= 0 && clear;
     const unsigned key = surfaceId == kNoSurface ? kNoSurface : split ? hash(surfaceId + unsigned(quarter)) : surfaceId;
-    if (params.reference || key == kNoSurface || key != cachedKey) {
-        const float cone = params.reference || key == kNoSurface ? sampleCone : split ? pixelCone * 0.5f : pixelCone;
+    const bool ownSurface = params.reference || params.perSampleShading || key == kNoSurface;
+    if (ownSurface || key != cachedKey) {
+        const float cone = ownSurface ? sampleCone : split ? pixelCone * 0.5f : pixelCone;
         cached = material(h, rayFootprint(direction, h.geometric, h.t * cone));
         cachedKey = key;
     }

@@ -8,6 +8,7 @@
 #include <cmath>
 #include <map>
 #include <mutex>
+#include <set>
 #include <utility>
 
 namespace ruya {
@@ -16,37 +17,62 @@ constexpr float kTau = 2.0f * M_PIf;
 constexpr float kIslandGap = 14.0f;
 constexpr float kMinRadius = 7.0f;
 
-// The footprint of each structure prototype, measured from its own mesh once.
-const std::array<float, kPrototypeCount>& prototypeRadii() {
-    static std::array<float, kPrototypeCount> radii{};
-    static std::once_flag once;
-    std::call_once(once, [] {
-        const auto meshes = buildPrototypes(1);
-        for (size_t i = 0; i < meshes.size(); ++i)
-            for (const Vertex& v : meshes[i].vertices)
-                radii[i] = std::max(radii[i], std::hypot(v.position.x, v.position.z));
-    });
-    return radii;
+constexpr float kFootprintStep = 0.25f;
+
+// Ground samples of a prototype's solid triangles, one per 0.25 m of its own plan.
+// Samples run across each triangle so a wall seen edge-on still marks its cells.
+std::vector<float3> solidGroundSamples(const Mesh& mesh) {
+    std::set<std::pair<int, int>> seen;
+    std::vector<float3> samples;
+    for (const uint3 t : mesh.indices) {
+        const Vertex& a = mesh.vertices[t.x];
+        const Vertex& b = mesh.vertices[t.y];
+        const Vertex& c = mesh.vertices[t.z];
+        if (isFoliage(a.material)) continue;
+        const float longest = std::max({length(b.position - a.position), length(c.position - a.position),
+                                        length(c.position - b.position)});
+        const int n = std::max(1, int(std::ceil(longest / kFootprintStep)));
+        for (int i = 0; i <= n; ++i)
+            for (int j = 0; j <= n - i; ++j) {
+                const float u = float(i) / float(n);
+                const float v = float(j) / float(n);
+                const float3 p = a.position * (1.0f - u - v) + b.position * u + c.position * v;
+                if (seen.insert({int(std::floor(p.x / kFootprintStep)), int(std::floor(p.z / kFootprintStep))}).second)
+                    samples.push_back(p);
+            }
+    }
+    return samples;
 }
-// Root points of each prototype: its lowest non-leaf vertices, thinned out.
-const std::array<std::vector<float3>, kPrototypeCount>& prototypeRoots() {
-    static std::array<std::vector<float3>, kPrototypeCount> roots;
+
+// What placement needs to know about each prototype, measured from its own mesh once.
+struct PrototypeMeasures {
+    std::array<float, kPrototypeCount> radii{};                   // plan radius of the whole mesh
+    std::array<std::vector<float3>, kPrototypeCount> roots;       // lowest non-leaf vertices, thinned out
+    std::array<std::vector<float3>, kPrototypeCount> footprints;  // solid ground samples (structures only)
+};
+const PrototypeMeasures& prototypeMeasures() {
+    static PrototypeMeasures measures;
     static std::once_flag once;
     std::call_once(once, [] {
         const auto meshes = buildPrototypes(1);
         for (size_t p = 0; p < meshes.size(); ++p) {
             float lowest = 1e30f;
-            for (const Vertex& v : meshes[p].vertices)
+            for (const Vertex& v : meshes[p].vertices) {
+                measures.radii[p] = std::max(measures.radii[p], std::hypot(v.position.x, v.position.z));
                 if (!isFoliage(v.material)) lowest = std::min(lowest, v.position.y);
+            }
             std::vector<float3> band;
             for (const Vertex& v : meshes[p].vertices)
                 if (!isFoliage(v.material) && v.position.y < lowest + 0.3f) band.push_back(v.position);
             const size_t stride = std::max<size_t>(band.size() / 64, 1);
-            for (size_t i = 0; i < band.size(); i += stride) roots[p].push_back(band[i]);
+            for (size_t i = 0; i < band.size(); i += stride) measures.roots[p].push_back(band[i]);
+            if (isStructurePrototype(unsigned(p))) measures.footprints[p] = solidGroundSamples(meshes[p]);
         }
     });
-    return roots;
+    return measures;
 }
+const std::array<float, kPrototypeCount>& prototypeRadii() { return prototypeMeasures().radii; }
+const std::array<std::vector<float3>, kPrototypeCount>& prototypeRoots() { return prototypeMeasures().roots; }
 
 struct Sequence {
     unsigned seed;
@@ -122,21 +148,22 @@ struct Scatter {
     struct Disc { float x, z, radius; };
     std::vector<Disc> taken;
 
-    void place(unsigned prototype, float x, float z, float y, float yaw, float scale) {
-        plan.pieces.push_back({make_float3(x, y, z), make_float3(scale, scale, scale), yaw, prototype,
+    // Height is scaled by `stretch` on top of the uniform scale.
+    void place(unsigned prototype, float x, float z, float y, float yaw, float scale, float stretch = 1.0f) {
+        plan.pieces.push_back({make_float3(x, y, z), make_float3(scale, scale * stretch, scale), yaw, prototype,
                                hash(cell.seed + prototype * 167U + unsigned(plan.pieces.size())), cell.region});
     }
     // A plant or rock is added only if every root point is in the rock, which
     // also drops candidates over a joint, an alcove or the cap's undercut.
-    bool placeHeld(unsigned prototype, float x, float z, float y, float yaw, float scale) {
+    bool placeHeld(unsigned prototype, float x, float z, float y, float yaw, float scale, float stretch = 1.0f) {
         const float c = std::cos(yaw);
         const float s = std::sin(yaw);
         for (const float3& root : prototypeRoots()[prototype]) {
-            const float3 world = make_float3(x + scale * (c * root.x + s * root.z), y + scale * root.y,
+            const float3 world = make_float3(x + scale * (c * root.x + s * root.z), y + scale * stretch * root.y,
                                              z + scale * (-s * root.x + c * root.z));
             if (islandDistance(island, world) > 0.3f) return false;
         }
-        place(prototype, x, z, y, yaw, scale);
+        place(prototype, x, z, y, yaw, scale, stretch);
         return true;
     }
     bool free(float x, float z, float radius) const {
@@ -311,7 +338,34 @@ void dressWalls(Scatter& scatter, float richness) {
         }
     }
 }
+
+// Structures keep this much open ground (in footprint cells) between one another.
+constexpr int kStructureClearance = 2;
+// Height factors for towers, spread so that cells whose (x + 2z) differ mod 7, which
+// holds for every pair of adjacent cells, get towers of clearly different height.
+constexpr float kTowerStretch[7] = {1.09f, 0.80f, 1.02f, 1.24f, 0.87f, 1.17f, 0.95f};
 }  // namespace
+
+bool isStructurePrototype(unsigned prototype) {
+    switch (prototype) {
+        case 8: case 9: case 10: case 11: case 12: case 13: case 16: case 17: case 19: case 20: case 23: return true;
+        default: return false;
+    }
+}
+
+std::vector<std::pair<int, int>> structureFootprint(const Piece& piece) {
+    std::vector<std::pair<int, int>> cells;
+    if (piece.prototype >= kPrototypeCount) return cells;
+    const auto& samples = prototypeMeasures().footprints[piece.prototype];
+    cells.reserve(samples.size());
+    for (const float3& local : samples) {
+        const float3 world = piecePoint(piece, local);
+        cells.push_back({int(std::floor(world.x / kFootprintGrid)), int(std::floor(world.z / kFootprintGrid))});
+    }
+    std::sort(cells.begin(), cells.end());
+    cells.erase(std::unique(cells.begin(), cells.end()), cells.end());
+    return cells;
+}
 
 CellPlan planCell(const Cell& cell) {
     CellPlan plan;
@@ -321,44 +375,67 @@ CellPlan planCell(const Cell& cell) {
     const unsigned kind = traits.kind;
     Island main = makeIsland(cell.offset.x, cell.offset.z, cell.seed, kind, traits.radius, traits.top);
     const auto& radii = prototypeRadii();
-    struct Pending { unsigned prototype; float x, z, yaw, scale; };
+    struct Pending { unsigned prototype; float x, z, yaw, scale, stretch; };
     std::vector<Pending> structures;
-    const auto structure = [&](unsigned prototype, float along, float angle, float wanted) {
+    // Ground under every structure so far, widened by the clearance: a new one may not touch it.
+    std::set<std::pair<int, int>> occupied;
+    const auto touchesOccupied = [&](const Piece& candidate) {
+        const auto cells = structureFootprint(candidate);
+        for (const auto& ground : cells)
+            if (occupied.count(ground)) return true;
+        return false;
+    };
+    const auto occupy = [&](const Piece& piece) {
+        for (const auto& [gx, gz] : structureFootprint(piece))
+            for (int dz = -kStructureClearance; dz <= kStructureClearance; ++dz)
+                for (int dx = -kStructureClearance; dx <= kStructureClearance; ++dx) occupied.insert({gx + dx, gz + dz});
+    };
+    const auto structure = [&](unsigned prototype, float along, float angle, float wanted, float stretch = 1.0f) {
         const float limit = 0.55f * main.radius / std::max(radii[prototype], 1.0f);
         const float scale = std::min(wanted, limit);
         if (scale < 0.3f) return;
         const float footprint = radii[prototype] * scale;
-        // Pull the site inward until its whole footprint stands on the crown.
-        for (float t = along; t >= 0.0f; t -= 0.12f) {
-            const float reach = t * islandRimRadius(main, angle);
-            const float x = main.x + std::cos(angle) * reach;
-            const float z = main.z + std::sin(angle) * reach;
-            bool inside = true;
-            for (int k = 0; k < 12 && inside; ++k) {
-                const float a = kTau * float(k) / 12.0f;
-                const float px = x + std::cos(a) * footprint;
-                const float pz = z + std::sin(a) * footprint;
-                const float at = std::atan2(pz - main.z, px - main.x);
-                inside = std::hypot(px - main.x, pz - main.z) < 0.9f * islandRimRadius(main, at);
+        // Pull the site inward until its whole footprint stands on the crown and clear of
+        // the structures already placed; a blocked bearing is swung aside before giving up.
+        for (const float swing : {0.0f, 0.4f, -0.4f, 0.8f, -0.8f})
+            for (float t = along; t >= 0.0f; t -= 0.12f) {
+                const float bearing = angle + swing;
+                const float reach = t * islandRimRadius(main, bearing);
+                const float x = main.x + std::cos(bearing) * reach;
+                const float z = main.z + std::sin(bearing) * reach;
+                bool inside = true;
+                for (int k = 0; k < 12 && inside; ++k) {
+                    const float a = kTau * float(k) / 12.0f;
+                    const float px = x + std::cos(a) * footprint;
+                    const float pz = z + std::sin(a) * footprint;
+                    const float at = std::atan2(pz - main.z, px - main.x);
+                    inside = std::hypot(px - main.x, pz - main.z) < 0.9f * islandRimRadius(main, at);
+                }
+                if (!inside) continue;
+                const Piece candidate{make_float3(x, 0.0f, z), make_float3(scale, scale * stretch, scale), cell.yaw + bearing,
+                                      prototype, 0, 0};
+                if (touchesOccupied(candidate)) continue;
+                occupy(candidate);
+                addIslandSite(main, x, z, footprint + 0.6f);
+                structures.push_back({prototype, x, z, cell.yaw + bearing, scale, stretch});
+                return;
             }
-            if (!inside) continue;
-            addIslandSite(main, x, z, footprint + 0.6f);
-            structures.push_back({prototype, x, z, cell.yaw + angle, scale});
-            return;
-        }
     };
+    // Towers differ in height from every neighbouring cell's tower.
+    const float towerStretch = kTowerStretch[((cell.x + 2 * cell.z) % 7 + 7) % 7] * lerpf(0.985f, 1.015f, draw(10));
     const float heading = cell.yaw;
     if (kind == kKindMesa) {
         const unsigned designs[5] = {8, 9, 16, 19, 20};
         // The main building holds the centre; a tower stands at the outer corner.
         structure(designs[unsigned(draw(3) * 5) % 5], 0.14f, heading, lerpf(0.75f, 1.05f, draw(4)));
-        if (draw(5) < 0.75f || traits.hero) structure(kProtoTower, 0.72f, heading + 2.4f + draw(6), std::min(lerpf(0.7f, 0.95f, draw(7)), main.radius / 28.0f));
+        if (draw(5) < 0.75f || traits.hero)
+            structure(kProtoTower, 0.72f, heading + 2.4f + draw(6), std::min(lerpf(0.7f, 0.95f, draw(7)), main.radius / 28.0f), towerStretch);
         if (draw(8) < 0.5f) structure(13, 0.58f, heading - 2.1f, 0.75f);
     } else if (kind == kKindTerrace) {
         structure(11, 0.0f, heading, lerpf(0.85f, 1.1f, draw(3)));
         if (draw(4) < 0.7f) structure(12, 0.62f, heading + 1.9f + draw(5), 0.55f);
     } else if (kind == kKindSpire) {
-        if (draw(3) < 0.4f && main.radius > 9.0f) structure(kProtoTower, 0.05f, heading, 0.5f);
+        if (draw(3) < 0.4f && main.radius > 9.0f) structure(kProtoTower, 0.05f, heading, lerpf(0.42f, 0.62f, draw(11)), towerStretch);
     } else {
         structure(draw(3) < 0.5f ? 17U : 12U, 0.22f, heading, lerpf(0.55f, 0.8f, draw(4)));
         if (traits.hero && draw(5) < 0.6f) structure(kProtoChapel, 0.6f, heading + 2.8f, 0.9f);
@@ -367,13 +444,14 @@ CellPlan planCell(const Cell& cell) {
 
     Scatter scatter{plan, cell, plan.islands[0], Sequence{hash(cell.seed + 0x44524553U)}, {}};
     for (const Pending& s : structures) {
-        if (!scatter.placeHeld(s.prototype, s.x, s.z, islandTop(main, s.x, s.z) - 0.3f, s.yaw, s.scale)) continue;
+        if (!scatter.placeHeld(s.prototype, s.x, s.z, islandTop(main, s.x, s.z) - 0.3f, s.yaw, s.scale, s.stretch)) continue;
         scatter.claim(s.x, s.z, std::min(radii[s.prototype] * s.scale * 0.6f + 1.5f, 9.0f));
     }
     if (kind == kKindTerrace && draw(9) < 0.6f) {
         const float x = main.x + std::cos(heading + 3.6f) * 0.45f * main.radius;
         const float z = main.z + std::sin(heading + 3.6f) * 0.45f * main.radius;
-        if (scatter.free(x, z, 8.5f) && scatter.placeHeld(23, x, z, islandTop(main, x, z) - 0.15f, heading, 0.85f))
+        const Piece arc{make_float3(x, 0.0f, z), make_float3(0.85f, 0.85f, 0.85f), heading, 23U, 0, 0};
+        if (scatter.free(x, z, 8.5f) && !touchesOccupied(arc) && scatter.placeHeld(23, x, z, islandTop(main, x, z) - 0.15f, heading, 0.85f))
             scatter.claim(x, z, 7.0f);
     }
     const float richness = kind == kKindWooded ? 0.95f : kind == kKindTerrace ? 0.85f : kind == kKindMesa ? 0.75f : 0.65f;

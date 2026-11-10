@@ -327,27 +327,42 @@ struct Renderer::State {
         RUYA_OPTIX(optixDenoiserInvoke(denoiser, stream, &options, CUdeviceptr(denoiserState), denoiserStateSize,
                                      &guide, &layer, 1, 0, 0, CUdeviceptr(denoiserScratch), denoiserScratchSize));
     }
-    // Sets may differ in resolution; the maps of one set must match. Images are decoded a
-    // set at a time so that host memory stays near one 8K set instead of the whole library.
+    // Sets may differ in resolution; the maps of one set must match. Two sets are in hand at
+    // a time: they decode side by side, and the set after them starts once the first is
+    // uploaded and freed, so host memory stays near two 8K sets instead of the whole library.
     bool loadTextures(const std::string& root, std::string& error) {
         // Order follows the kSet* indices in ruya_shared.h; keep in step with assets/ruya/fetch.py.
         static const char* const names[kTextureSets] = {
             "rock_face_03", "aerial_grass_rock", "large_sandstone_blocks_01", "cliff_side", "leafy_grass", "pine_bark",
             "clay_roof_tiles", "weathered_planks", "rust_coarse_01", "tree_small_02_leaves", "fir_tree_01_twig"};
+        struct Decoded { Image color, normal, arm, extra; };
+        const auto isLeaves = [](int set) { return set == kSetBroadleaf || set == kSetNeedle; };
+        const auto decodeSet = [&](int set) {
+            const std::string base = root + "/assets/ruya/cc0/" + names[set] + "_";
+            const char* extra = isLeaves(set) ? "alpha" : "disp";
+            return std::async(std::launch::async, [base, extra] {
+                const auto decode = [&](const char* suffix, int components) {
+                    return std::async(std::launch::async, [path = base + suffix, components] { return loadImage(path, components); });
+                };
+                auto colorJob = decode("diff", 4);
+                auto normalJob = decode("nor_gl", 4);
+                auto armJob = decode("arm", 4);
+                auto extraJob = decode(extra, 1);
+                return Decoded{colorJob.get(), normalJob.get(), armJob.get(), extraJob.get()};
+            });
+        };
         const auto freeImage = [](Image& image) { stbi_image_free(image.pixels); image.pixels = nullptr; };
         const double started = milliseconds();
-        size_t decodedPeak = 0;
+        constexpr int kSetsInHand = 2;
+        std::array<size_t, kTextureSets> decodedBytes{};
+        std::array<std::future<Decoded>, kTextureSets> pending;
+        for (int set = 0; set < kSetsInHand; ++set) pending[set] = decodeSet(set);
         for (int set = 0; set < kTextureSets; ++set) {
-            const bool leaves = set == kSetBroadleaf || set == kSetNeedle;
-            const std::string base = root + "/assets/ruya/cc0/" + names[set] + "_";
-            const auto decode = [&](const char* suffix, int components) {
-                return std::async(std::launch::async, [path = base + suffix, components] { return loadImage(path, components); });
-            };
-            auto colorJob = decode("diff", 4);
-            auto normalJob = decode("nor_gl", 4);
-            auto armJob = decode("arm", 4);
-            auto extraJob = decode(leaves ? "alpha" : "disp", 1);
-            Image color = colorJob.get(), normal = normalJob.get(), arm = armJob.get(), extra = extraJob.get();
+            Decoded decoded = pending[set].get();
+            Image& color = decoded.color;
+            Image& normal = decoded.normal;
+            Image& arm = decoded.arm;
+            Image& extra = decoded.extra;
             const int side = color.width;
             const bool valid = color.pixels && normal.pixels && arm.pixels && extra.pixels && color.height == side &&
                                normal.width == side && normal.height == side && arm.width == side && arm.height == side &&
@@ -355,7 +370,7 @@ struct Renderer::State {
             bool ok = valid;
             if (ok) {
                 const size_t count = size_t(side) * side;
-                decodedPeak = std::max(decodedPeak, count * (4 + 4 + 4 + 1));
+                decodedBytes[set] = count * (4 + 4 + 4 + 1);
                 std::vector<unsigned char> packed(count * 4);
                 // Colour with roughness in alpha; normal xy with occlusion in z, height or alpha cut in w.
                 for (size_t i = 0; i < count; ++i) {
@@ -376,9 +391,20 @@ struct Renderer::State {
                 params.textureSide[set] = float(side);
             }
             for (Image* image : {&color, &normal, &arm, &extra}) freeImage(*image);
-            if (!ok) { error = std::string("Rüya texture set missing or unreadable: ") + names[set] + "; run python assets/ruya/fetch.py"; return false; }
+            if (!ok) {
+                for (int later = set + 1; later < std::min(set + kSetsInHand, kTextureSets); ++later) {
+                    Decoded unused = pending[later].get();
+                    for (Image* image : {&unused.color, &unused.normal, &unused.arm, &unused.extra}) freeImage(*image);
+                }
+                error = std::string("Rüya texture set missing or unreadable: ") + names[set] + "; run python assets/ruya/fetch.py";
+                return false;
+            }
+            if (set + kSetsInHand < kTextureSets) pending[set + kSetsInHand] = decodeSet(set + kSetsInHand);
         }
-        std::printf("Ruya dokular: %.1f s, en buyuk set cozumu %.0f MiB\n", (milliseconds() - started) / 1000.0, decodedPeak / 1048576.0);
+        size_t decodedPeak = 0;
+        for (int set = 0; set + 1 < kTextureSets; ++set) decodedPeak = std::max(decodedPeak, decodedBytes[set] + decodedBytes[set + 1]);
+        std::printf("Ruya dokular: %.1f s, ayni anda cozulen iki set en cok %.0f MiB\n", (milliseconds() - started) / 1000.0,
+                    decodedPeak / 1048576.0);
         unsigned long long handles[kTextureSets * 2];
         for (int i = 0; i < kTextureSets * 2; ++i) handles[i] = textures[i].texture;
         allocate(reinterpret_cast<void**>(&textureHandles), sizeof(handles));
@@ -538,6 +564,8 @@ bool Renderer::init(int width, int height, const std::string& root, const std::v
     state.params.width = unsigned(width);
     state.params.height = unsigned(height);
     state.params.layout = sizeof(Params);
+    state.params.ambientReach = ShadingOptions{}.ambientReach;
+    state.params.perSampleShading = 0;
     const size_t count = size_t(width) * size_t(height);
     state.allocate(reinterpret_cast<void**>(&state.params.color), count * sizeof(float4));
     state.allocate(reinterpret_cast<void**>(&state.params.illumination), count * sizeof(float4));
@@ -660,6 +688,12 @@ void Renderer::setCells(const std::vector<Cell>& visible, const std::vector<Cell
     state.stats.opticalPoolBytes = state.instanceCapacity * (sizeof(InstanceData) + sizeof(OptixInstance)) +
                                    state.topCapacity + state.scratchCapacity;
     state.stats.uploadMs = float(milliseconds() - start);
+}
+
+void Renderer::setShading(const ShadingOptions& options) {
+    if (!state_) return;
+    state_->params.ambientReach = options.ambientReach;
+    state_->params.perSampleShading = options.perSampleShading ? 1 : 0;
 }
 
 void Renderer::render(const Camera& camera, int spp, int bounces, int sampleOffset, bool denoise, float exposure, int materialDetail, bool reference) {

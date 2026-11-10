@@ -4,8 +4,9 @@
                                [--live-args "..."] -- ROTA_SECENEKLERI
 
 Canlı: sahnenin ayarı (12 örnek, bounces 0). Referans: aynı rota, --spp REF --reference (her örnek kendi yüzeyini
-kendi izinde gölgeler). Kareler KLASOR/live_XXXX.png ve ref_XXXX.png olur, EXR'ler silinir, sonra
-tools/kararlilik.py --isi çalışır; ısı haritası 1600 genişlikte JPG'ye de çevrilir.
+kendi izinde gölgeler). Kareler KLASOR/live_XXXX.png ve ref_XXXX.png olur, EXR'ler silinir. Canlı koşu ayrıca
+--dump-depth ile kare başına derinlik ve kamerayı depth_XXXX.bin yazar; sonra tools/kararlilik.py --isi
+--hareket-telafili çalışır; ısı haritası 1600 genişlikte JPG'ye de çevrilir.
 """
 import argparse
 import os
@@ -34,6 +35,8 @@ def collect(raw, out, prefix):
         path = os.path.join(raw, name)
         if name.endswith(".png"):
             os.replace(path, os.path.join(out, prefix + name[len("frame_"):]))
+        elif name.startswith("depth_") and name.endswith(".bin"):
+            os.replace(path, os.path.join(out, name))
         else:
             os.remove(path)
     os.rmdir(raw)
@@ -53,9 +56,9 @@ def main():
     route = a.route[1:] if a.route[:1] == ["--"] else a.route
     os.makedirs(a.out, exist_ok=True)
     for name in os.listdir(a.out):
-        if name.startswith(("live_", "ref_")) and name.endswith(".png"):
+        if (name.startswith(("live_", "ref_")) and name.endswith(".png")) or (name.startswith("depth_") and name.endswith(".bin")):
             os.remove(os.path.join(a.out, name))
-    collect(render(a.exe, os.path.join(a.out, "live"), a.frames, shlex.split(a.live_args), route), a.out, "live_")
+    collect(render(a.exe, os.path.join(a.out, "live"), a.frames, ["--dump-depth"] + shlex.split(a.live_args), route), a.out, "live_")
     if a.keep_ref:
         for name in sorted(os.listdir(a.keep_ref)):
             if name.startswith("ref_") and name.endswith(".png"):
@@ -64,7 +67,7 @@ def main():
         collect(render(a.exe, os.path.join(a.out, "ref"), a.frames, ["--spp", str(a.ref_spp), "--reference"], route), a.out, "ref_")
     with open(os.path.join(a.out, "komut.txt"), "w", encoding="utf-8") as f:
         f.write(" ".join(sys.argv) + "\n")
-    subprocess.run([sys.executable, os.path.join(HERE, "kararlilik.py"), a.out, "--isi"], check=True)
+    subprocess.run([sys.executable, os.path.join(HERE, "kararlilik.py"), a.out, "--isi", "--hareket-telafili"], check=True)
     heat = Image.open(os.path.join(a.out, "kipirti_isi.png")).convert("RGB")
     heat.resize((1600, round(1600 * heat.height / heat.width)), Image.LANCZOS).save(os.path.join(a.out, "isi.jpg"), quality=90)
 

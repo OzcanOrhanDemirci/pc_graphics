@@ -233,13 +233,18 @@ struct Params {
     uchar4* output;
     unsigned* badCount;
     float textureSide[kTextureSets];
+    // Live shading choices (defaults: 10 m, 0). Reach of the ambient occlusion rays, and
+    // whether every sample evaluates its own surface at its own footprint instead of sharing
+    // one evaluation per quarter of the pixel.
+    float ambientReach;
+    int perSampleShading;
 };
 #if !defined(__CUDACC_RTC__)
 static_assert(sizeof(Vertex) == 28);
 static_assert(sizeof(Geometry) == 16);
 static_assert(sizeof(Cell) == 36);
 static_assert(sizeof(InstanceData) == 12);
-static_assert(sizeof(Params) == 232);
+static_assert(sizeof(Params) == 240);
 static_assert(offsetof(Params, geometries) == 96);
 static_assert(std::is_trivially_copyable_v<Params>);
 #endif

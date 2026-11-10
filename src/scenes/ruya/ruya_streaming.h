@@ -5,6 +5,7 @@
 #include "scenes/ruya/ruya_island.h"
 
 #include <condition_variable>
+#include <exception>
 #include <map>
 #include <set>
 #include <memory>
@@ -34,6 +35,9 @@ public:
     Result wait(const Cell& cell);
 
 private:
+    struct Registry;
+    static Registry& registry();
+    void stop();
     using Key = std::pair<int, int>;
     static Result build(const Cell& cell);
     void work();
@@ -45,6 +49,7 @@ private:
     std::set<Key> running_;
     std::map<Key, Result> done_;
     bool stop_ = false;
+    std::exception_ptr error_;
     std::vector<std::thread> threads_;
 };
 }

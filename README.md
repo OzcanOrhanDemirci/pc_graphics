@@ -605,7 +605,8 @@ determine each placement; islands group into massifs around a hero stack.
 Every surface wears a CC0 Poly Haven scan (4K and 8K). OptiX traces camera
 rays against the view cone and uses a frame-local table of shared meshes for
 shadows. The native 1440p default shades twelve fixed sub-pixel samples with
-sun and sky light, no random numbers, no denoiser and no frame history.
+sun and sky light, no denoiser and no frame history. Leaf alpha thresholds and
+dithering use a frame-invariant pixel hash.
 Island meshes are built on worker threads ahead of the flight.
 
 Open `build\pc_graphics.exe --scene ruya`. See [controls](DEMO.md) and

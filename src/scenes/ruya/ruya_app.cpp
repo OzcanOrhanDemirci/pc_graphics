@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <exception>
 #include <fstream>
 #include <system_error>
 
@@ -33,6 +34,27 @@ bool ensureParent(const std::string& path) {
     return !error;
 }
 bool sameCell(const Cell& a, const Cell& b) { return a.x == b.x && a.z == b.z; }
+
+// Measurement capture: the frame's camera and the view-space depth of each pixel's centre sample (-1 for sky),
+// which tools/kararlilik.py --hareket-telafili uses to reproject the previous frame.
+// Layout: u32 width, u32 height, float eye[3], W[3], U[3], V[3], then width*height floats of depth.
+bool writeDepth(const std::string& path, const Run& run) {
+    const Camera& camera = run.camera;
+    float3 U, V, W;
+    cameraBasis(camera, float(run.width) / float(run.height), U, V, W);
+    const auto hits = run.renderer.depth();
+    std::vector<float> depth(hits.size());
+    for (size_t index = 0; index < hits.size(); ++index)
+        depth[index] = hits[index].w < 0.0f ? -1.0f : dot(make_float3(hits[index].x, hits[index].y, hits[index].z) - camera.eye, W);
+    const unsigned size[2] = {unsigned(run.width), unsigned(run.height)};
+    const float pose[12] = {camera.eye.x, camera.eye.y, camera.eye.z, W.x, W.y, W.z, U.x, U.y, U.z, V.x, V.y, V.z};
+    std::ofstream file(path, std::ios::binary);
+    file.write(reinterpret_cast<const char*>(size), sizeof(size));
+    file.write(reinterpret_cast<const char*>(pose), sizeof(pose));
+    file.write(reinterpret_cast<const char*>(depth.data()), std::streamsize(depth.size() * sizeof(float)));
+    file.flush();
+    return bool(file);
+}
 }
 
 bool Run::init(const std::string& root, const std::vector<std::string>& overrides, std::string& error) {
@@ -62,12 +84,27 @@ bool Run::init(const std::string& root, const std::vector<std::string>& override
         error = "Ruya ayarlari izin verilen araligin disinda";
         return false;
     }
+    // Shading choices to try live (--set ambient_reach=6, --set per_sample_shading=1).
+    ShadingOptions shading;
+    int perSample = shading.perSampleShading ? 1 : 0;
+    if (const auto entry = config.values.find("ambient_reach"); entry != config.values.end() &&
+        (!parseNumber(entry->second, shading.ambientReach) || !(shading.ambientReach >= 0.5f && shading.ambientReach <= 100.0f))) {
+        error = "Gecersiz ambient_reach (0.5..100 m)";
+        return false;
+    }
+    if (const auto entry = config.values.find("per_sample_shading"); entry != config.values.end() &&
+        (!parseNumber(entry->second, perSample) || (perSample != 0 && perSample != 1))) {
+        error = "Gecersiz per_sample_shading (0 ya da 1)";
+        return false;
+    }
+    shading.perSampleShading = perSample == 1;
     auto prototypes = buildPrototypes(detail);
     geometryTriangles = 0;
     for (const auto& mesh : prototypes) geometryTriangles += mesh.indices.size();
     std::printf("Ruya: %zu uretim prototipi, %llu benzersiz ucgen, %dx%d, %d spp, %d sekme\n",
                 prototypes.size(), geometryTriangles, width, height, spp, bounces);
     if (!renderer.init(width, height, root, prototypes, error)) return false;
+    renderer.setShading(shading);
     collision_.build(std::move(prototypes));
     camera = view(0);
     return true;
@@ -140,7 +177,7 @@ Camera Run::view(int index) {
     return camera;
 }
 
-int cli(int argc, char** argv) {
+int cli(int argc, char** argv) try {
     Run run;
     std::string root = PROJECT_ROOT;
     std::string out;
@@ -155,6 +192,7 @@ int cli(int argc, char** argv) {
     bool impact = false;
     bool test = false;
     bool liveTest = false;
+    bool dumpDepth = false;
     bool customYaw = false;
     bool customPitch = false;
     float yaw = 0, pitch = 0;
@@ -189,6 +227,7 @@ int cli(int argc, char** argv) {
         else if (option == "--out") out = value();
         else if (option == "--csv") csv = value();
         else if (option == "--dump-dir") dumpDirectory = value();
+        else if (option == "--dump-depth") dumpDepth = true;
         else if (option == "--frames") { if (!number(frames)) return failUsage("Gecersiz kare sayisi"); }
         else if (option == "--warmup") { if (!number(warmup)) return failUsage("Gecersiz isinma sayisi"); }
         else if (option == "--view") { if (!number(view)) return failUsage("Gecersiz bakis"); }
@@ -225,9 +264,12 @@ int cli(int argc, char** argv) {
                       "  --route --impact --raw --sample-offset N --no-offscreen --full-world\n"
                       "  --flat-material --unfiltered-material\n"
                       "  --yaw RAD --pitch RAD --exposure EV --lifecycle --test --test-live --dump-dir DOSYA\n"
+                      "  --dump-depth (--dump-dir ile: kare basina derinlik ve kamera, hareket telafili kipirti olcusu icin)\n"
                       "  --eye X,Y,Z --drift ILERI,SAG,YUKARI,FARE_X (duz rota, 30 kare/s)\n"
                       "  --reference (her ornek kendi yuzeyini kendi izinde golgeler: kaba kuvvet referansi)\n"
-                      "  --detail 0 en dusuk yogunluktur (1 ile ayni)");
+                      "  --detail 0 en dusuk yogunluktur (1 ile ayni)\n"
+                      "  --set ambient_reach=M (ortam isini erimi, 10) --set per_sample_shading=1 --set spp=16\n"
+                      "    (canli pencerede de gecerli: pc_graphics.exe --scene ruya --set ...)");
             return 0;
         }
         else return failUsage("Bilinmeyen secenek: " + option);
@@ -308,6 +350,10 @@ int cli(int argc, char** argv) {
             char name[32];
             std::snprintf(name, sizeof(name), "/frame_%04d", index);
             if (!run.save(dumpDirectory + name)) { std::fprintf(stderr, "Dizi karesi yazilamadi\n"); return 1; }
+            if (dumpDepth) {
+                std::snprintf(name, sizeof(name), "/depth_%04d.bin", index);
+                if (!writeDepth(dumpDirectory + name, run)) { std::fprintf(stderr, "Derinlik karesi yazilamadi\n"); return 1; }
+            }
         }
     }
     if (!out.empty() && !run.save(out)) { std::fprintf(stderr, "Ruya kare kaydedilemedi\n"); return 1; }
@@ -342,5 +388,11 @@ int cli(int argc, char** argv) {
     }
     run.release();
     return 0;
+} catch (const std::exception& error) {
+    std::fprintf(stderr, "Ruya: %s\n", error.what());
+    return 1;
+} catch (...) {
+    std::fprintf(stderr, "Ruya: bilinmeyen hata\n");
+    return 1;
 }
 }

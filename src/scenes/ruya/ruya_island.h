@@ -67,6 +67,13 @@ struct CellPlan {
     Island islands[5];
     std::vector<Piece> pieces;
 };
+// Built structures (walls, towers, paving) as opposed to plants and rocks.
+bool isStructurePrototype(unsigned prototype);
+// Ground cells, kFootprintGrid metres square, under the solid part of a placed
+// structure: sorted and unique. Empty for any other prototype.
+inline constexpr float kFootprintGrid = 0.5f;
+std::vector<std::pair<int, int>> structureFootprint(const Piece& piece);
+
 // planCell is pure; cachedPlan keeps its results for cells in use.
 CellPlan planCell(const Cell& cell);
 std::shared_ptr<const CellPlan> cachedPlan(const Cell& cell);

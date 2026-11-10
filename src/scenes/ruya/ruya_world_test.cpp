@@ -138,6 +138,104 @@ void collisionChecks(int& failures) {
                                           std::abs(glide.z * panel.scale.z - r) < 0.004f);
     report("carpisma-kenar-ve-acik-bosluk", edge.x > 4.09f && edge.z > 0.08f && outside.z < -1.99f);
 }
+
+// No two structures of one cell may share ground: the cells under their solid
+// geometry, on a 0.5 m world grid, must be disjoint. The footprint itself is
+// checked against the prototype's own vertices (within one cell) so it cannot silently shrink.
+void structureOverlapChecks(const std::vector<Mesh>& prototypes, int& failures) {
+    size_t pairs = 0, overlapping = 0, structures = 0, uncovered = 0;
+    std::array<bool, kPrototypeCount> covered{};
+    std::array<size_t, kPrototypeCount> perPrototype{};
+    for (int z = -16; z < 16; ++z)
+        for (int x = -16; x < 16; ++x) {
+            const CellPlan plan = planCell(describeCell(x, z));
+            std::vector<std::pair<const Piece*, std::vector<Key>>> marked;
+            for (const Piece& piece : plan.pieces) {
+                if (!isStructurePrototype(piece.prototype)) continue;
+                marked.push_back({&piece, structureFootprint(piece)});
+                ++structures;
+                ++perPrototype[piece.prototype];
+                if (covered[piece.prototype]) continue;
+                covered[piece.prototype] = true;
+                for (const Vertex& vertex : prototypes[piece.prototype].vertices) {
+                    if (isFoliage(vertex.material)) continue;
+                    const float3 world = piecePoint(piece, vertex.position);
+                    const int gx = int(std::floor(world.x / kFootprintGrid));
+                    const int gz = int(std::floor(world.z / kFootprintGrid));
+                    bool near = false;
+                    for (int dz = -1; dz <= 1 && !near; ++dz)
+                        for (int dx = -1; dx <= 1 && !near; ++dx)
+                            near = std::binary_search(marked.back().second.begin(), marked.back().second.end(), Key{gx + dx, gz + dz});
+                    if (!near) ++uncovered;
+                }
+            }
+            for (size_t i = 0; i < marked.size(); ++i)
+                for (size_t j = i + 1; j < marked.size(); ++j) {
+                    ++pairs;
+                    std::vector<Key> shared;
+                    std::set_intersection(marked[i].second.begin(), marked[i].second.end(), marked[j].second.begin(),
+                                          marked[j].second.end(), std::back_inserter(shared));
+                    if (shared.empty()) continue;
+                    if (++overlapping <= 5)
+                        std::printf("  yapi cakismasi hucre %d %d: prototip %u ile %u, %zu kare (%.1f m2)\n", x, z,
+                                    marked[i].first->prototype, marked[j].first->prototype, shared.size(),
+                                    double(shared.size()) * kFootprintGrid * kFootprintGrid);
+                }
+        }
+    std::printf("ruya yapi ayak izi: %zu yapi, %zu cift; prototip basina:", structures, pairs);
+    for (size_t p = 0; p < perPrototype.size(); ++p)
+        if (perPrototype[p]) std::printf(" %zu=%zu", p, perPrototype[p]);
+    std::printf("\n");
+    const bool footprintOk = structures > 100 && uncovered == 0;
+    std::printf("[%s] ruya yapi-ayak-izi-govdeyi-kaplar: %zu\n", footprintOk ? "GECTI" : "KALDI", uncovered);
+    const bool ok = pairs > 20 && overlapping == 0;
+    std::printf("[%s] ruya yapi-ayak-izleri-cakismaz: %zu\n", ok ? "GECTI" : "KALDI", overlapping);
+    if (!footprintOk) ++failures;
+    if (!ok) ++failures;
+}
+
+// Neighbouring islands must not carry the same tower: two towers look alike when
+// both their width and height factors lie within 5 percent of each other.
+void towerRepeatChecks(int& failures) {
+    constexpr float kLikeness = 0.05f;
+    const auto towerOf = [](int x, int z, float3& scale) {
+        const Cell cell = describeCell(x, z);
+        if (cell.scale == 0) return false;
+        for (const Piece& piece : planCell(cell).pieces)
+            if (piece.prototype == kProtoTower) {
+                scale = piece.scale;
+                return true;
+            }
+        return false;
+    };
+    const auto alike = [&](float3 a, float3 b) {
+        return std::abs(a.x - b.x) <= kLikeness * std::max(a.x, b.x) && std::abs(a.y - b.y) <= kLikeness * std::max(a.y, b.y);
+    };
+    size_t towers = 0, pairs = 0, twins = 0;
+    std::set<std::pair<int, int>> twinned;
+    for (int z = -16; z < 16; ++z)
+        for (int x = -16; x < 16; ++x) {
+            float3 scale;
+            if (!towerOf(x, z, scale)) continue;
+            ++towers;
+            // Each unordered neighbour pair is visited once, from its lower cell.
+            for (const auto [dx, dz] : {std::pair{1, 0}, std::pair{0, 1}, std::pair{1, 1}, std::pair{1, -1}}) {
+                float3 other;
+                if (!towerOf(x + dx, z + dz, other)) continue;
+                ++pairs;
+                if (!alike(scale, other)) continue;
+                ++twins;
+                twinned.insert({x, z});
+                twinned.insert({x + dx, z + dz});
+            }
+        }
+    const double rate = pairs ? double(twins) / double(pairs) : 1.0;
+    std::printf("ruya kule tekrari: %zu kule, %zu komsu cift, %zu ayni gorunumlu cift (%.1f%%), ikizi olan kule %zu\n",
+                towers, pairs, twins, 100.0 * rate, twinned.size());
+    const bool ok = towers > 40 && pairs > 10 && rate < 0.05;
+    std::printf("[%s] ruya kule-komsuda-tekrarlanmaz: %zu\n", ok ? "GECTI" : "KALDI", twins);
+    if (!ok) ++failures;
+}
 }
 
 int testWorld() {
@@ -368,6 +466,8 @@ int testWorld() {
         std::printf("ruya tasima kumesi: %zu hucre, %zu IAS ornegi\n", carried.size(), instances);
     }
     collisionChecks(failures);
+    structureOverlapChecks(prototypes, failures);
+    towerRepeatChecks(failures);
 
     Camera level;
     level.yaw = 0;

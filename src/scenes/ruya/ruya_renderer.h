@@ -6,6 +6,11 @@
 #include <vector>
 
 namespace ruya {
+// Live shading choices that trade time for stability; the defaults are the scene's look.
+struct ShadingOptions {
+    float ambientReach = 10.0f;     // metres an ambient occlusion ray looks for cover
+    bool perSampleShading = false;  // every sample evaluates its own surface at its own footprint
+};
 class Renderer {
 public:
     Renderer();
@@ -21,6 +26,7 @@ public:
     // The GPU instance data survives through one render call.
     void setCells(const std::vector<Cell>& visible, const std::vector<Cell>& transport = {},
                   const std::vector<Cell>& ahead = {});
+    void setShading(const ShadingOptions& options);
     void render(const Camera& camera, int spp = 3, int bounces = 3, int sampleOffset = 0,
                 bool denoise = true, float exposure = 0.0f, int materialDetail = 1, bool reference = false);
     void download(std::vector<unsigned char>& rgba) const;

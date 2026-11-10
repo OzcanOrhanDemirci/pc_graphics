@@ -498,8 +498,9 @@ Her yerleşim koordinatından üretilir; adalar bir ana sütunun çevresinde
 masifler kurar. Her yüzeyde CC0 Poly Haven taraması var (4K ve 8K). Kamera
 ışınları görüş konisini, gölgeler ortak ağların o kare için kurulan geçici
 yerleşim tablosunu kullanır. Varsayılan görüntü 2560×1440'ta piksel başına
-on iki sabit örnekle güneş ve gök ışığıyla çizilir: rastgele sayı, gürültü
-giderici ve kare geçmişi yok. Ada ağları uçuşun önünde işçi iş
+on iki sabit örnekle güneş ve gök ışığıyla çizilir: gürültü giderici ve kare
+geçmişi yok. Yaprak alfa eşiği ve dither, kareden bağımsız sabit piksel hash'i
+kullanır. Ada ağları uçuşun önünde işçi iş
 parçacıklarında üretilir.
 
 `build\pc_graphics.exe --scene ruya` ile açılır. [Tuşlar](GOSTERI.md) ve
