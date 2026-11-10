@@ -3,6 +3,25 @@
 > Tek kaynak durum panosu. Plan ve Özcan'ın sözleri `docs/yikim/PLAN.md`'de.
 
 ## Şu an
+- **2026-11-07 · Yıkım performansı.** Kutuların yüz ve kenar temasları analitik
+  hesaplanıyor. Yıkım topunun teması küre yüzeyinden geliyor. Kırılan bağlar
+  iş listesinden düşüyor ve bağımsız bağ hesapları birbirini beklemiyor.
+  Fizik saati kare başına tek adıma bağlı olmadan, saniyede 2.400 alt adımla
+  ilerliyor. Hasar rengi ve görüntünün OpenGL'e aktarımı GPU'da kalıyor.
+  [Temas çokgeni yöntemi, GDC 2007](https://box2d.org/files/ErinCatto_ContactManifolds_GDC2007.pdf) ·
+  [CUDA koşullu grafik döngüleri](https://docs.nvidia.com/cuda/cuda-programming-guide/04-special-topics/cuda-graphs.html#conditional-graph-nodes)
+
+  **Doğrulama · hafif.** Release derlemesi ve `--scene yikim --test` ile
+  34/36. Başlangıçta da kalan iki konsol kontrolü aynı sayıları verdi.
+  `--scene yikim --test temas` çapraz iki ince çubukta 2,0495 m ölçtü.
+  Kutu teması kapatılınca çubuk 1,0927 m'ye düştü ve test kaldı. Sabit
+  pozda, aynı kamerayla üç görüntü modunun 1080p PNG'leri eski sürümle
+  birebir eşleşti.
+
+  **Kapanış.** Özcan, *"Bu benim için yeterli bir seviye. Test edebilirim."*
+  En ağır yüklerdeki anlık kare ve fizik saati farkı ertelendi (deferred).
+  Denemek için `build\pc_graphics.exe --scene yikim`.
+
 - **🏁 2026-10-02 (gece) · Sahne tamamlandı.** Özcan: *"Tamamdır. Yıkım sahnemiz tamamlandı. Yeni bir sahne tasarımına
   geçeceğiz ama onu artık yeni oturumda yapalım."* Açık kalanlar (istenirse): gökdelenin göçüşünde 24. sn sonrası ikinci
   bir belirlenimsizlik kaynağı; sismik kulede arayüz geçişinin gökdelenden uzun sürmesi; evin ayakta 19-21 ms'si.

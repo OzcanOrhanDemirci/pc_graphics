@@ -145,6 +145,26 @@ void testStacks(const Config&) {
     report("kule + piramit: 30 sn'de cokme", drop < 0.01, "%.4f m", drop, "< %.2f m", 0.01);
 }
 
+// Neither bar has a sampled point over the crossing. The overlap polygon has
+// four edge intersections and no original corners inside the other face.
+void testCrossingBars(const Config&) {
+    PhysWorld world;
+    const int support = world.addBody(polyBox(d3(0, 2.0, 0), d3(0.022, 0.025, 0.74)), 1000.0f, true);
+    const int falling = world.addBody(polyBox(d3(0, 2.32, 0), d3(0.74, 0.025, 0.022)), 1000.0f, false);
+    applyParams(world);
+    world.upload();
+    bool touched = false;
+    for (int frame = 0; frame < 30; ++frame) {
+        world.step(kDt);
+        for (const auto& patch : world.patchesOf(falling))
+            touched |= patch.other == support && patch.force > 0.0f;
+    }
+    world.download();
+    const double height = world.pos[falling].y;
+    report("capraz cubuklar: temas sonrasi yukseklik", touched && height > 2.02 && height < 2.12,
+           "%.4f m", height, "2.02..2.12 m (%g)", 2.05);
+}
+
 void testSlope(const Config&) {
     {
         PhysWorld w;
@@ -565,7 +585,7 @@ int runYikimTests(const Config& cfg, const std::string& only) {
     g_cfg = &cfg;
     std::printf("YIKIM fizik testleri (alt adim %d)\n", cfg.i("phys.substeps", 20));
     struct T { const char* name; void (*fn)(const Config&); };
-    const T tests[] = {{"dusme", testFallTiming}, {"dusme", testFreeFall}, {"yigin", testStacks}, {"egim", testSlope},
+    const T tests[] = {{"dusme", testFallTiming}, {"dusme", testFreeFall}, {"yigin", testStacks}, {"temas", testCrossingBars}, {"egim", testSlope},
                        {"konsol", testCantilever}, {"mafsal", testHinge}, {"enerji", testEnergy}, {"determinizm", testDeterminism}, {"cerceve", testFrame}, {"bina", testBuilding}, {"kontrol", testControls},
                        {"dongu", testQuakeLoop}};
     for (const T& t : tests)

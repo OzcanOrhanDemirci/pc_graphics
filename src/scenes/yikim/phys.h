@@ -11,6 +11,7 @@
 #pragma once
 #include "scenes/yikim/geom.h"
 
+#include <span>
 #include <string>
 #include <vector>
 
@@ -83,6 +84,8 @@ struct DevWorld;   // device arrays (phys.cu)
 
 class PhysWorld {
 public:
+    static constexpr int kMaxSubsteps = 1024;
+
     PhysWorld();
     ~PhysWorld();
     void clear();
@@ -92,7 +95,8 @@ public:
     int addInterface(const InterfaceDesc& d);
     void upload();                 // to the GPU; colours the interface graph
     void step(float dt);           // one frame: broad phase once, then params.substeps substeps
-    void stepBegin(float dt, void* afterEvent);   // the same, queued: returns at once (afterEvent: a cudaEvent_t to wait for)
+    // Queue count substeps of h seconds. An optional ground path contains one position per substep.
+    void stepBegin(float h, int count, void* afterEvent, std::span<const double3> groundPath = {});
     void stepEnd();                // waits for a queued step; anything reading or changing the state comes after it
     void download();               // positions, rotations, velocities to the host arrays below
     void settle(float seconds, float ramp, float dt);   // gravity ramped up, then rest; time restarts at 0
@@ -109,8 +113,7 @@ public:
     // it at x with orientation q, moving at v and w, with its own mass again
     void parkBody(int b);
     void launchBody(int b, double3 x, float4 q, float3 v, float3 w);
-    std::vector<float> damage();   // per body: share of its interfaces' fibres cracked or broken (display)
-    PhysStats stats();             // counts (reads the fibres back: not every frame)
+    PhysStats stats();             // counts reduced on the device
     // per fibre, in interfaceDescs order: flags (1 cracked, 2 crushed, 4 broken) and last force (interface frame:
     // x normal, >0 tension; y, z shear), N
     void fibres(std::vector<unsigned>& flags, std::vector<float3>& force);
@@ -121,6 +124,8 @@ public:
 
     // write the 3x4 object-to-world transform of body (first + i) into an array of OptixInstance (stride bytes)
     void writeTransforms(void* instances, size_t strideBytes, int first, int count, void* stream = nullptr);
+    // Write each rendered body's damage fraction to its field in a strided device array. Body 0 is the ground.
+    void writeDamage(void* first, size_t strideBytes, void* stream) const;
     // display, the reinforcing bars: two thin prisms per reinforced fibre (6 float3 vertices each, NaN when not shown):
     // across a crack wider than minGap while the fibre holds, stubs out of both faces once it is gone (m)
     int barPrisms() const;
@@ -150,17 +155,17 @@ private:
     int lastPairs_ = 0;
     int frame_ = 0;
     bool pending_ = false;
+    bool islandsDirty_ = true;
     float pendingDt_ = 0.0f;
-    float gravityNow_ = 9.81f;
     float lastH_ = 0.0f;
     std::vector<char> graphKey_;
-    std::vector<double3> groundSteps_;
     double3 groundTarget_ = {0, 0, 0}, groundPrev_ = {0, 0, 0};
     std::vector<std::vector<int>> colours_;
     std::vector<int> colourOffset_;
     int maxDegree_ = 0;
     void solveInterfaces(float h, void* stream);
     void contacts(float h, void* stream);
+    void captureSubsteps(float h);
     void freeDevice();
     void writeBody(int b);         // the host state of one body to the GPU (pose, previous pose, velocities, mass, kinematic)
 };

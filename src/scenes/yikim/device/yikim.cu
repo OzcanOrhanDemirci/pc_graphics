@@ -3,7 +3,6 @@
 //                     sky light from one cosine-sampled ray (sky, or the ground plane below the horizon, lit by the
 //                     sun and the sky without occlusion: one cheap bounce). Accumulates; writes the tone-mapped image,
 //                     and the denoiser's guides: first-hit albedo and normal, and where each pixel's point was a frame ago.
-//   __raygen__prep    the accumulation as the denoiser's input (means of beauty, albedo, normal)
 //   __raygen__tonemap the denoised image to the display (AgX, sRGB, dither)
 #include <optix.h>
 #include "scenes/yikim/yikim_params.h"
@@ -227,13 +226,23 @@ extern "C" __global__ void __raygen__render() {
     float4 acc = params.samples > 0 ? params.accum[pix] : make_float4(0, 0, 0, 0);
     acc = acc + make_float4(sum.x, sum.y, sum.z, 0.0f);
     params.accum[pix] = acc;
-    if (params.albedoAcc) {
-        const float4 a = params.samples > 0 ? params.albedoAcc[pix] : make_float4(0, 0, 0, 0);
-        const float4 nn = params.samples > 0 ? params.normalAcc[pix] : make_float4(0, 0, 0, 0);
-        params.albedoAcc[pix] = a + make_float4(sumAlb.x, sumAlb.y, sumAlb.z, 0.0f);
-        params.normalAcc[pix] = nn + make_float4(sumN.x, sumN.y, sumN.z, 0.0f);
+    const float4 albedo = (params.samples > 0 ? params.albedoAcc[pix] : make_float4(0, 0, 0, 0)) +
+                          make_float4(sumAlb.x, sumAlb.y, sumAlb.z, 0.0f);
+    const float4 normal = (params.samples > 0 ? params.normalAcc[pix] : make_float4(0, 0, 0, 0)) +
+                          make_float4(sumN.x, sumN.y, sumN.z, 0.0f);
+    params.albedoAcc[pix] = albedo;
+    params.normalAcc[pix] = normal;
+    const float inv = 1.0f / float(max(params.samples + params.spp, 1u));
+    if (params.denoised) {
+        // Give OptiX the means and camera-space normal while the sums are still in registers.
+        params.dnIn[pix] = make_float4(acc.x * inv, acc.y * inv, acc.z * inv, 1.0f);
+        params.dnAlbedo[pix] = make_float4(albedo.x * inv, albedo.y * inv, albedo.z * inv, 1.0f);
+        const float3 nm = make_float3(normal.x, normal.y, normal.z);
+        const float l = sqrtf(dot(nm, nm));
+        const float3 nw = l > 1e-6f ? nm * (1.0f / l) : make_float3(0, 0, 0);
+        params.dnNormal[pix] = make_float4(dot(nw, C.right), dot(nw, C.up), -dot(nw, C.fwd), 0.0f);
+        return;
     }
-    const float inv = 1.0f / float(params.samples + params.spp);
     float3 col = make_float3(acc.x, acc.y, acc.z) * (inv * params.exposure);
     col = agx(col);
     // TPDF dither so the sky does not band
@@ -241,23 +250,6 @@ extern "C" __global__ void __raygen__render() {
     params.output[pix] = make_uchar4((unsigned char)(saturate(srgbOetf(col.x) + dn) * 255.0f + 0.5f),
                                      (unsigned char)(saturate(srgbOetf(col.y) + dn) * 255.0f + 0.5f),
                                      (unsigned char)(saturate(srgbOetf(col.z) + dn) * 255.0f + 0.5f), 255);
-}
-
-// the denoiser's input: means over the samples so far (params.samples counts this frame's too); normals in camera space,
-// x right, y up, z towards the camera (the OptiX 9.1 guide and optixDenoiserInvoke's docs; optix_types.h's comment says
-// world space for these models, the other two win; measured 2026-10-12 in scene 1: the space changes the output < 0.1/255)
-extern "C" __global__ void __raygen__prep() {
-    const uint3 ix = optixGetLaunchIndex();
-    const unsigned int pix = ix.y * params.width + ix.x;
-    const float inv = 1.0f / float(max(params.samples, 1u));
-    const float4 a = params.accum[pix], al = params.albedoAcc[pix], n = params.normalAcc[pix];
-    params.dnIn[pix] = make_float4(a.x * inv, a.y * inv, a.z * inv, 1.0f);
-    params.dnAlbedo[pix] = make_float4(al.x * inv, al.y * inv, al.z * inv, 1.0f);
-    const float3 nm = make_float3(n.x, n.y, n.z);
-    const float l = sqrtf(dot(nm, nm));
-    const float3 nw = l > 1e-6f ? nm * (1.0f / l) : make_float3(0, 0, 0);
-    const YCamera& C = params.cam;
-    params.dnNormal[pix] = make_float4(dot(nw, C.right), dot(nw, C.up), -dot(nw, C.fwd), 0.0f);
 }
 
 // the denoised image to the display, as __raygen__render does with the raw one

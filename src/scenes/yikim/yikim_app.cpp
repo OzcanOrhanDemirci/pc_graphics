@@ -299,7 +299,6 @@ static int runClip(YikimApp& app, double seconds, double still, unsigned spp, co
         const bool shoot = clip ? (k % 2 == 0) : (k == frames);
         if (!shoot) continue;
         app.renderer.updateWorld(app.world);
-        app.renderer.setDamage(app.world.damage());
         app.world.download();
         app.renderer.params().groundY = float(app.world.pos[0].y);
         app.renderer.params().groundShift = make_float2(float(app.world.pos[0].x), float(app.world.pos[0].z));

@@ -1,16 +1,17 @@
 // Scene 3 "Yikim" inside the application: a reinforced-concrete apartment block, earthquakes of magnitude 3 to 9,
-// explosive charges under the mouse. The physics steps on its own stream while the picture of the previous step is
-// drawn (one step a frame at most, on a 60 Hz tick: when a step costs more, the world slows a little instead of the
-// frame rate collapsing).
+// explosive charges under the mouse. A physics batch consumes wall time in fixed-size substeps while the renderer draws
+// its starting state.
 #include "app/scene.h"
 #include "app/theme.h"
 #include "core/image_io.h"
 #include "scenes/yikim/fly_camera.h"
 #include "scenes/yikim/yikim_app.h"
 
+#include <windows.h>
+#include <GL/gl.h>
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
-
+#include <cuda_gl_interop.h>
 #include <cuda_runtime.h>
 
 namespace {
@@ -32,9 +33,9 @@ public:
                           "a wrecking ball hits wherever you click.");
         i.details = {
             {L("Kendi fizik çözücümüz", "Our own physics solver"),
-             L("Oyun motoru ya da hazır fizik kütüphanesi yok: ekran kartında XPBD, karede 40 alt adım. Her parçanın kendi kabuğu, "
+             L("Oyun motoru ya da hazır fizik kütüphanesi yok. Ekran kartında XPBD, saniyede 2.400 alt adım. Her parçanın kendi kabuğu, "
                "kütlesi ve eylemsizliği var: apartman 3.006, gökdelen 8.404, ev 456 parça.",
-               "No game engine and no ready-made physics library: XPBD on the graphics card, 40 substeps a frame. Every piece has "
+               "Our GPU runs XPBD at 2,400 substeps a second. Every piece has "
                "its own hull, mass and inertia: 3,006 in the apartment block, 8,404 in the tower, 456 in the house.")},
             {L("Beton ve donatı", "Concrete and steel"),
              L("Parçalar liflerle birbirine bağlı. Beton çekmede çatlar, basınçta ezilir; donatı akar ve 6 cm uzayınca kopar. "
@@ -144,6 +145,8 @@ public:
     }
 
     void frame(app::Host& host, const app::Input& in) override {
+        y_.world.stepEnd();
+        bool resetClock = false;
         if (rebuildIn_ > 0 && --rebuildIn_ == 0) {   // shown first ("kuruluyor"), done the frame after
             y_.build();
             y_.renderer.uploadWorld(y_.world);
@@ -154,6 +157,7 @@ public:
                 newBuilding_ = false;
             }
             camMoved_ = true;
+            resetClock = true;
             host.toast(buildingName(building_) + std::string(L(" kuruldu", " is up")));
         }
         // keys
@@ -161,10 +165,13 @@ public:
             y_.renderer.denoiseMode = (y_.renderer.denoiseMode + 1) % 3;
             host.toast(y_.renderer.denoiseMode == 0   ? L("Gürültü giderici kapalı: ham görüntü", "Denoising off: the raw picture")
                        : y_.renderer.denoiseMode == 1 ? L("Gürültü giderici: hızlı süzgeç", "Denoising: the fast filter")
-                                                      : L("Gürültü giderici: yapay zekâ (en temiz, fiziği yavaşlatır)",
-                                                          "Denoising: AI (cleanest, slows the physics)"));
+                                                      : L("Gürültü giderici: yapay zekâ", "Denoising: AI"));
         }
-        if (in.pressed(GLFW_KEY_P)) { paused_ = !paused_; host.toast(paused_ ? L("Zaman durdu", "Time paused") : L("Zaman akıyor", "Time runs")); }
+        if (in.pressed(GLFW_KEY_P)) {
+            paused_ = !paused_;
+            resetClock = true;
+            host.toast(paused_ ? L("Zaman durdu", "Time paused") : L("Zaman akıyor", "Time runs"));
+        }
         if (in.pressed(GLFW_KEY_B)) {
             y_.renderer.showBars = !y_.renderer.showBars;
             camMoved_ = true;
@@ -224,7 +231,6 @@ public:
         }
         // draw the current state while the GPU computes the next one: the transforms are read first (an event), the
         // step waits for them, the render runs on its own stream meanwhile
-        if (++frameNo_ % 10 == 0) y_.renderer.setDamage(y_.world.damage());
         y_.renderer.updateWorld(y_.world);
         {
             YikimParams& P = y_.renderer.params();
@@ -232,30 +238,30 @@ public:
             P.groundY = float(g.y);
             P.groundShift = make_float2(float(g.x), float(g.z));
         }
-        bool stepped = false;
-        if (!paused_) {
-            tick_ += realDt;
-            if (tick_ >= 1.0 / 60.0) {
-                tick_ = std::min(tick_ - 1.0 / 60.0, 1.0 / 60.0);   // no backlog
-                const double dt = kSpeeds[speedIdx_] / 60.0;
-                y_.driveQuake(y_.world.time + dt);
-                y_.world.stepBegin(float(dt), y_.renderer.transformsDone());
-                stepped = true;
-                camMoved_ = true;
-            }
+        if (resetClock) {
+            debt_ = 0.0;
+            lastBatch_ = 0;
         }
+        if (in.now - lastStats_ > 0.5) { stats_ = y_.world.stats(); lastStats_ = in.now; }
+        const bool stepped = !paused_ && stepPhysics(resetClock ? 0.0 : double(realDt));
+        camMoved_ |= stepped;
         // a still world under a still camera gathers samples; anything moving starts afresh
         y_.renderer.render(camMoved_ ? spp_ : spp_ * 2, !camMoved_ && y_.renderer.params().samples < 4096);
         camMoved_ = false;
-        y_.renderer.downloadTo(pinned_);
-        if (stepped) y_.world.stepEnd();
-        if (in.now - lastStats_ > 0.5) { stats_ = y_.world.stats(); lastStats_ = in.now; }
+        publishPicture();
     }
 
     const void* image(int& w, int& h) override {
         w = int(y_.width);
         h = int(y_.height);
         return pinned_;
+    }
+
+    unsigned texture(int& w, int& h) override {
+        if (!textureReady_) return 0;
+        w = int(y_.width);
+        h = int(y_.height);
+        return texture_;
     }
 
     void status(app::Status& s) override {
@@ -349,12 +355,18 @@ public:
     }
 
     void screenshot(app::Host& host) override {
+        if (textureReady_) y_.renderer.downloadTo(pinned_);
         const std::string path = host.capturePath() + ".png";
         writePNG(path, int(y_.width), int(y_.height), reinterpret_cast<const unsigned char*>(pinned_));
         host.toast(L("Ekran görüntüsü kaydedildi", "Screenshot saved"));
     }
 
     void unload() override {
+        y_.world.stepEnd();
+        releaseTextureResource();
+        if (texture_ && glfwGetCurrentContext()) glDeleteTextures(1, &texture_);
+        texture_ = 0;
+        textureReady_ = false;
         y_.renderer.shutdown();
         y_.world.clear();
         if (pinned_) cudaFreeHost(pinned_);
@@ -364,6 +376,67 @@ public:
     ~YikimLive() override { unload(); }
 
 private:
+    void releaseTextureResource() {
+        if (!textureResource_) return;
+        const cudaError_t result = cudaGraphicsUnregisterResource(textureResource_);
+        if (result != cudaSuccess) std::fprintf(stderr, "Yikim texture release: %s\n", cudaGetErrorString(result));
+        textureResource_ = nullptr;
+    }
+
+    bool stepPhysics(double elapsed) {
+        constexpr double kNominalTick = 1.0 / 60.0;
+        constexpr double kMaxDebt = 0.25;
+        constexpr float kBatchBudgetMs = 30.0f;
+        const int nominalSubsteps = std::clamp(y_.world.params.substeps, 1, PhysWorld::kMaxSubsteps);
+        const double quantum = kNominalTick / nominalSubsteps;
+        debt_ = std::min(kMaxDebt, debt_ + elapsed);
+        int limit = std::min(2 * nominalSubsteps, PhysWorld::kMaxSubsteps);
+        if (lastBatch_ > 0 && y_.world.lastMs > 0.0f) {
+            const float budget = kBatchBudgetMs * lastBatch_ / y_.world.lastMs;
+            limit = int(std::clamp(budget, 1.0f, float(limit)));
+        }
+        const int count = std::min(int(debt_ / quantum), limit);
+        if (count == 0) return false;
+        debt_ -= quantum * count;
+        lastBatch_ = count;
+        const float h = float(kNominalTick * kSpeeds[speedIdx_]) / nominalSubsteps;
+        groundPath_.clear();
+        if (y_.quakeOn) {
+            for (int i = 0; i < count; ++i) {
+                y_.driveQuake(y_.world.time + double(h) * (i + 1));
+                groundPath_.push_back(y_.world.groundPos());
+            }
+        }
+        y_.world.stepBegin(h, count, y_.renderer.transformsDone(), groundPath_);
+        return true;
+    }
+
+    void publishPicture() {
+        if (!texture_ && glfwGetCurrentContext()) {
+            constexpr GLenum kClampToEdge = 0x812f;
+            glGenTextures(1, &texture_);
+            glBindTexture(GL_TEXTURE_2D, texture_);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, kClampToEdge);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, kClampToEdge);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, y_.width, y_.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+            glBindTexture(GL_TEXTURE_2D, 0);
+            const cudaError_t result = cudaGraphicsGLRegisterImage(&textureResource_, texture_, GL_TEXTURE_2D,
+                                                                   cudaGraphicsRegisterFlagsWriteDiscard);
+            if (result != cudaSuccess) {
+                std::fprintf(stderr, "Yikim texture registration: %s\n", cudaGetErrorString(result));
+                cudaGetLastError();
+                textureResource_ = nullptr;
+            }
+        }
+        textureReady_ = textureResource_ && y_.renderer.copyToTexture(textureResource_);
+        if (!textureReady_) {
+            releaseTextureResource();
+            y_.renderer.downloadTo(pinned_);
+        }
+    }
+
     // the next quake's length: the magnitude's own (the notch), one chosen on the slider, or until stopped
     enum class Length { Own, Chosen, Endless };
     Length length_ = Length::Own;
@@ -429,10 +502,15 @@ private:
     YikimApp y_;
     FlyCamera fly_;
     uchar4* pinned_ = nullptr;
+    GLuint texture_ = 0;
+    cudaGraphicsResource_t textureResource_ = nullptr;
+    bool textureReady_ = false;
     unsigned spp_ = 6;
-    int magnitude_ = 6, speedIdx_ = 0, frameNo_ = 0, rebuildIn_ = 0;
+    int magnitude_ = 6, speedIdx_ = 0, rebuildIn_ = 0;
     bool paused_ = false, looking_ = false, camMoved_ = true;
-    double tick_ = 0.0, lastStats_ = -1.0;
+    double debt_ = 0.0, lastStats_ = -1.0;
+    int lastBatch_ = 0;
+    std::vector<double3> groundPath_;
     static const char* magnitudeName(int m) {   // how a magnitude feels
         switch (m) {
         case 3: return L("Zayıf", "Weak");

@@ -4,6 +4,7 @@
 #include "scenes/yikim/phys.h"
 
 #include <cub/device/device_radix_sort.cuh>
+#include <cuda/atomic>
 #include <cuda_runtime.h>
 
 #include <algorithm>
@@ -58,6 +59,23 @@ struct DPatch {           // the contact points of one pair of bodies, for frict
     float radius;         // spread of the points about the centre (torsional friction)
 };
 
+struct GroundStep {
+    double3 position;
+    float3 velocity;
+};
+
+struct StepInput {
+    int frame;
+    int count;
+    int substep;
+    float gravity;
+};
+
+constexpr int kIslandFaces = 32;
+constexpr int kIslandColours = 32;
+constexpr int kDependencyThreads = 128;
+constexpr int kContactLists = 5;
+
 struct DevWorld {
     int n = 0;
     double3 *x = nullptr, *xPrev = nullptr;
@@ -83,6 +101,8 @@ struct DevWorld {
     int* cntPrev = nullptr;   // each body's contact pairs in the last substep (the shares, see finishPair)
     // shapes
     int *sampleStart = nullptr, *sampleCount = nullptr, *planeStart = nullptr, *planeCount = nullptr;
+    unsigned char* axisBoxes = nullptr;
+    float* sphereRadius = nullptr;
     float3* samples = nullptr;
     float4* planes = nullptr;
     // the samples in chunks of up to kChunkMax lying close together (pointsVsHull): per chunk its local box's centre
@@ -94,11 +114,29 @@ struct DevWorld {
     DInterface* ifc = nullptr;
     int* aliveC = nullptr;   // each interface's living fibres as the substep began: what the narrow phase reads, the
                              // interfaces running alongside it (read live, a bond breaking meanwhile went either way)
+    int* bodyBonds = nullptr;
+    int* topologyDirty = nullptr;
     DFiber* fib = nullptr;
+    float3* compliance = nullptr;  // axial, shear and steel XPBD compliance for this step size
+    int3* counts = nullptr;         // live interfaces, broken fibres, cracked fibres
     int nBars = 0;
     int2* bars = nullptr;            // display: the reinforced fibres (fibre, interface)
     float3* ifcNB = nullptr;         // display: each interface's normal in body b's frame, pointing out of b
     int* colourList = nullptr;
+    int4* faceDependencies = nullptr;
+    int4* liveDependencies = nullptr;
+    int* liveFaces = nullptr;
+    int* nLiveFaces = nullptr;
+    int* faceDone = nullptr;
+    int dependencyThreads = 0;
+    int* faceColour = nullptr;
+    int nColours = 0;
+    int* islandParent = nullptr;
+    int* islandFaceCount = nullptr;
+    int* islandFaces = nullptr;
+    int* faceIsland = nullptr;
+    int* smallIslands = nullptr;
+    int* nSmallIslands = nullptr;
     int *adjStart = nullptr, *adjList = nullptr;
     PhysMaterial* mats = nullptr;
     // broad phase
@@ -107,12 +145,17 @@ struct DevWorld {
     void* sortTemp = nullptr;
     size_t sortTempBytes = 0;
     int2* pairs = nullptr;
+    signed char* pairSeparation = nullptr;   // last rejecting box axis for this batch's pair
     int* nPairs = nullptr;
     int maxPairs = 0;
     unsigned* active = nullptr;   // the narrow phase's pairs (kNarrow): the small ones from the front, the big from the back
-    int* nActive = nullptr;       // [0] small, [1] big
+    uint2* boxActive = nullptr;
+    unsigned* sphereActive = nullptr;
+    int* nActive = nullptr;       // small hulls, large hulls, box faces, box edges, spheres
     DPatch* patches = nullptr;
     int* nPatches = nullptr;
+    int* groundBodies = nullptr;
+    int* nGroundBodies = nullptr;
     int maxPatches = 0;
     unsigned long long* anchorKey = nullptr;   // friction anchors, by pair
     int* anchorFrame = nullptr;
@@ -129,11 +172,11 @@ struct DevWorld {
     cudaEvent_t fork = nullptr, join = nullptr;
     cudaStream_t ifcStream = nullptr;          // the interfaces' branch (high priority: their kernels are a serial chain)
     cudaEvent_t ifcFork = nullptr, ifcJoin = nullptr;
-    double3* groundPath = nullptr;   // the ground's position at the end of each substep of this frame
-    int* pairsHost = nullptr;        // page-locked: the pair count read back after a step
-    int* frameDev = nullptr;
-    float* gravityDev = nullptr;     // this frame's gravity (ramped up while a world settles)
-    int maxSubsteps = 0;
+    GroundStep* groundPath = nullptr;
+    GroundStep* groundHost = nullptr;
+    int* stepResults = nullptr;     // page-locked pair count and topology change flag
+    StepInput* step = nullptr;
+    StepInput* stepHost = nullptr;
     cudaGraph_t graph = nullptr;
     cudaGraphExec_t graphExec = nullptr;
 };
@@ -172,27 +215,21 @@ __device__ __forceinline__ float genInvMass(float im, float3 iI, float4 q, float
 // 0.45 -> 1.43 s). What is left is Rayleigh's other half: mass-proportional damping of the motion relative to the
 // ground, zeta = alpha / (2 omega), for bodies still bonded to something (debris falls free), with its deceleration
 // capped (a toppling bonded block is not held back by more than a few percent of g).
-__device__ __forceinline__ bool hasLivingInterface(const DevWorld& W, int i) {
-    for (int k = W.adjStart[i]; k < W.adjStart[i + 1]; ++k)
-        if (W.ifc[W.adjList[k]].alive > 0) return true;
-    return false;
-}
-
 // one thread per body (and per interface: the copy of its living fibres, aliveC)
 __global__ void kIntegrate(DevWorld W, float h, int substep, float maxSpeed, float alpha, float capLin, float capAng) {
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < W.nIfc) W.aliveC[i] = W.ifc[i].alive;
     if (i >= W.n) return;
-    const float g = *W.gravityDev;
-    const double3 groundPos = W.groundPath[substep];
+    const float g = W.step->gravity;
+    const GroundStep ground = W.groundPath[substep >= 0 ? substep : W.step->substep];
     W.vOld[i] = W.v[i];
     W.wOld[i] = W.w[i];
     W.xPrev[i] = W.x[i];
     W.qPrev[i] = W.q[i];
     if (W.kin[i]) {
         if (i == 0) {
-            W.x[0] = groundPos;
-            W.v[0] = diff3(groundPos, W.xPrev[0]) * (1.0f / h);
+            W.x[0] = ground.position;
+            W.v[0] = ground.velocity;
         }
         W.xc[i] = W.x[i];
         W.qc[i] = W.q[i];
@@ -200,15 +237,16 @@ __global__ void kIntegrate(DevWorld W, float h, int substep, float maxSpeed, flo
     }
     float3 v = W.v[i];
     float3 wv = W.w[i];
-    if (alpha > 0.0f && hasLivingInterface(W, i)) {
-        const float3 vr = v - W.v[0];   // relative to the ground (the ground body's velocity is this substep's)
-        const float vl = length(vr), wl = length(wv);
-        if (vl > 0.0f) v = v - vr * (fminf(alpha * h * vl, capLin * h) / vl);
-        if (wl > 0.0f) wv = wv * (1.0f - fminf(alpha * h * wl, capAng * h) / wl);
+    if (alpha > 0.0f && W.bodyBonds[i] > 0) {
+        // All blocks need the same velocity, even if they run before the ground body is integrated.
+        const float3 vr = v - ground.velocity;
+        const float vl = lengthSq(vr), wl = lengthSq(wv);
+        if (vl > 0.0f) v -= vr * fminf(alpha * h, capLin * h * rsqrtf(vl));
+        if (wl > 0.0f) wv = wv * (1.0f - fminf(alpha * h, capAng * h * rsqrtf(wl)));
     }
     v.y -= g * h;
-    const float sp = length(v);
-    if (sp > maxSpeed) v = v * (maxSpeed / sp);   // guard, never reached by sane motion
+    const float sp = lengthSq(v);
+    if (sp > maxSpeed * maxSpeed) v = v * (maxSpeed * rsqrtf(sp));
     W.v[i] = v;
     W.x[i] = W.x[i] + d3(v * h);
     W.xc[i] = W.x[i];
@@ -216,11 +254,13 @@ __global__ void kIntegrate(DevWorld W, float h, int substep, float maxSpeed, flo
     const float4 q = W.q[i];
     const float3 iI = W.invI[i];
     float3 wl = qrotInv(q, wv);
-    const float3 Iw = make_float3(iI.x > 0 ? wl.x / iI.x : 0.0f, iI.y > 0 ? wl.y / iI.y : 0.0f, iI.z > 0 ? wl.z / iI.z : 0.0f);
+    const float3 Iw = make_float3(iI.x > 0 ? __fdividef(wl.x, iI.x) : 0.0f, iI.y > 0 ? __fdividef(wl.y, iI.y) : 0.0f,
+                                 iI.z > 0 ? __fdividef(wl.z, iI.z) : 0.0f);
     wl = wl - cross(wl, Iw) * iI * h;
     float3 w = qrot(q, wl);
-    const float ws = length(w);
-    if (ws > 200.0f) w = w * (200.0f / ws);
+    constexpr float kMaxAngularSpeed = 200.0f;
+    const float ws = lengthSq(w);
+    if (ws > kMaxAngularSpeed * kMaxAngularSpeed) w = w * (kMaxAngularSpeed * rsqrtf(ws));
     W.w[i] = w;
     W.q[i] = qaddRot(q, w * h);
     W.qc[i] = W.q[i];
@@ -257,133 +297,7 @@ __device__ __forceinline__ Mat3 invInertiaWorld(const Mat3& R, float3 iI) {   //
     return m;
 }
 
-struct IfcBody {         // one side of an interface during its solve
-    float im;
-    Mat3 R, Iinv;
-    float3 dx, dth;      // accumulated correction (world)
-    __device__ float w(float3 r, float3 n) const { const float3 rn = cross(r, n); return im + dot(rn, Iinv.mul(rn)); }
-    __device__ void push(float3 r, float3 p) {   // impulse p at lever r
-        if (im <= 0.0f) return;
-        dx = dx + p * im;
-        dth = dth + Iinv.mul(cross(r, p));
-    }
-    __device__ float3 moved(float3 r) const { return dx + cross(dth, r); }
-};
-
-// (Tried and measured: one warp per interface, lanes loading the fibres at once and walking them in lockstep, gave the
-// same 11.6 ms: the cost is the 13 colours x 2 passes x 40 substeps of small kernels, each as long as its longest
-// interface's serial walk, not memory waiting. 13 colours is the colouring's lower bound, the most interfaces on a body.)
-__global__ void kSolveInterfaces(DevWorld W, const int* list, int count, float h, int iter) {
-    const int t = blockIdx.x * blockDim.x + threadIdx.x;
-    if (t >= count) return;
-    const int k = list[t];
-    const DInterface I = W.ifc[k];
-    if (I.alive <= 0) return;
-    const int a = I.a, b = I.b;
-    const float4 qa = W.q[a], qb = W.q[b];
-    IfcBody A, B;
-    A.im = W.invMass[a]; B.im = W.invMass[b];
-    A.R = rotMat(qa); B.R = rotMat(qb);
-    A.Iinv = invInertiaWorld(A.R, W.invI[a]); B.Iinv = invInertiaWorld(B.R, W.invI[b]);
-    A.dx = A.dth = B.dx = B.dth = make_float3(0, 0, 0);
-    const float3 xab = diff3(W.x[b], W.x[a]);   // b's centre from a's
-    const float4 qI = qmul(qa, I.qI);
-    const float3 n = qrot(qI, make_float3(1, 0, 0)), t1 = qrot(qI, make_float3(0, 1, 0)), t2 = qrot(qI, make_float3(0, 0, 1));
-    const PhysMaterial M = W.mats[I.mat];
-    const float hh = h * h;
-    int alive = 0;
-    for (int f = I.first; f < I.first + I.count; ++f) {
-        DFiber F = W.fib[f];
-        if (F.flags & F_BROKEN) continue;
-        // the multipliers the earlier passes of this substep applied (XPBD accumulates them; capacities bound the
-        // total: measured, bounding each pass alone let two passes carry twice the yield moment)
-        const float lam0 = iter == 0 ? 0.0f : -F.force.x * hh;
-        const float l10 = iter == 0 ? 0.0f : -F.force.y * hh, l20 = iter == 0 ? 0.0f : -F.force.z * hh;
-        const float3 ra = A.R.mul(F.rA), rb = B.R.mul(F.rB);
-        const float wn = A.w(ra, n) + B.w(rb, n);
-        // ---- normal (axial) part
-        float3 sep = xab + rb + B.moved(rb) - ra - A.moved(ra);
-        const float C = dot(sep, n) - F.plastic.x;
-        float fn = 0.0f;   // total normal force this substep, >0 tension
-        if (wn > 0.0f) {
-            float at = 1.0f / (F.kn * hh);
-            float dl = -(C + at * lam0) / (wn + at);
-            float lamT = lam0 + dl;
-            fn = -lamT / hh;
-            if (fn > 0.0f && !(F.flags & F_CRACKED) && fn > F.crackF) F.flags |= F_CRACKED;
-            if (fn > 0.0f && (F.flags & F_CRACKED)) {
-                if (F.kSteel <= 0.0f) {
-                    // an open crack without bars: no tension, and an opening is a gap, not a permanent offset
-                    lamT = 0.0f;
-                    fn = 0.0f;
-                    if (C > M.openBreak) F.flags |= F_BROKEN;
-                } else {
-                    at = 1.0f / (F.kSteel * hh);
-                    lamT = lam0 - (C + at * lam0) / (wn + at);
-                    fn = -lamT / hh;
-                    if (fn > F.capSteel) {   // the bars yield
-                        fn = F.capSteel;
-                        lamT = -fn * hh;
-                        F.plastic.x += C + wn * (lamT - lam0) + at * lamT;
-                    }
-                }
-            } else if (fn < 0.0f) {
-                const float cap = (F.flags & F_CRUSHED) ? F.capC * M.residual : F.capC;
-                if (-fn > cap) {   // the concrete crushes
-                    fn = -cap;
-                    lamT = cap * hh;
-                    F.plastic.x += C + wn * (lamT - lam0) + at * lamT;
-                    if (F.plastic.x < -M.crushStart * F.len) F.flags |= F_CRUSHED;
-                }
-            }
-            dl = lamT - lam0;
-            const float3 p = n * dl;   // on b; -p on a
-            B.push(rb, p);
-            A.push(ra, p * -1.0f);
-        }
-        if (F.plastic.x > M.steelBreak || F.plastic.x < -M.crushBreak * F.len) F.flags |= F_BROKEN;
-        F.force = make_float3(fn, 0.0f, 0.0f);
-        // ---- shear part (two tangents), after the normal correction
-        if (!(F.flags & F_BROKEN)) {
-            sep = xab + rb + B.moved(rb) - ra - A.moved(ra);
-            const float c1 = dot(sep, t1) - F.plastic.y, c2 = dot(sep, t2) - F.plastic.z;
-            const float at = 1.0f / (F.ks * hh);
-            const float g1 = c1 + at * l10, g2 = c2 + at * l20;
-            const float gl = sqrtf(g1 * g1 + g2 * g2);
-            if (gl > 1e-14f) {
-                const float3 dir = (t1 * g1 + t2 * g2) * (1.0f / gl);
-                const float ws = A.w(ra, dir) + B.w(rb, dir);
-                if (ws > 0.0f) {
-                    float n1 = l10 - g1 / (ws + at), n2 = l20 - g2 / (ws + at);   // total multipliers
-                    const float S = sqrtf(n1 * n1 + n2 * n2) / hh;
-                    const float cap = ((F.flags & F_CRACKED) ? 0.0f : F.capCoh) + M.mu * fmaxf(0.0f, -fn) + F.capDowel;
-                    if (S > cap) {   // slips: cohesion is gone, friction and dowels hold what they can
-                        const float sc = cap / S;
-                        n1 *= sc;
-                        n2 *= sc;
-                        F.plastic.y += c1 + ws * (n1 - l10) + at * n1;
-                        F.plastic.z += c2 + ws * (n2 - l20) + at * n2;
-                        F.flags |= F_CRACKED;
-                    }
-                    const float3 p = t1 * (n1 - l10) + t2 * (n2 - l20);
-                    B.push(rb, p);
-                    A.push(ra, p * -1.0f);
-                    F.force.y = -n1 / hh;
-                    F.force.z = -n2 / hh;
-                }
-            }
-            if (F.plastic.y * F.plastic.y + F.plastic.z * F.plastic.z > M.slipBreak * M.slipBreak) F.flags |= F_BROKEN;
-        }
-        if (F.flags & F_BROKEN) F.force = make_float3(0, 0, 0);
-        W.fib[f].plastic = F.plastic;
-        W.fib[f].force = F.force;
-        W.fib[f].flags = F.flags;
-        if (!(F.flags & F_BROKEN)) ++alive;
-    }
-    if (A.im > 0.0f) { W.x[a] = W.x[a] + d3(A.dx); W.q[a] = qaddRot(qa, A.dth); }
-    if (B.im > 0.0f) { W.x[b] = W.x[b] + d3(B.dx); W.q[b] = qaddRot(qb, B.dth); }
-    if (alive != I.alive) W.ifc[k].alive = alive;
-}
+#include "scenes/yikim/phys_interfaces.cuh"
 
 // ------------------------------------------------------------------------------------------------------------
 // contacts
@@ -674,7 +588,7 @@ __device__ int anchorSlot(DevWorld& W, int a, int b, int frame, bool& fresh) {
 
 // between frames: the entries touched in the last two frames out of the table, the table emptied ...
 __global__ void kAnchorsGather(DevWorld W) {
-    const int frame = *W.frameDev;
+    const int frame = W.step->frame;
     for (int s = blockIdx.x * blockDim.x + threadIdx.x; s < W.anchorCap; s += gridDim.x * blockDim.x) {
         const unsigned long long k = W.anchorKey[s];
         if (k == ANCHOR_EMPTY) continue;
@@ -841,6 +755,7 @@ __device__ void finishPair(DevWorld& W, int a, int b, const PairState& S, const 
 // lanes: with 8 lanes four pairs share a warp, and each wait.)
 template <int T>
 __device__ __forceinline__ float tileSum(float v) {
+    if constexpr (T == 1) return v;
     const unsigned m = tileMask<T>();
     for (int o = T / 2; o > 0; o >>= 1) v += __shfl_down_sync(m, v, o, T);
     return __shfl_sync(m, v, 0, T);
@@ -849,6 +764,7 @@ template <int T>
 __device__ __forceinline__ float3 tileSum3(float3 v) { return make_float3(tileSum<T>(v.x), tileSum<T>(v.y), tileSum<T>(v.z)); }
 template <int T>
 __device__ __forceinline__ float tileMax(float v) {
+    if constexpr (T == 1) return v;
     const unsigned m = tileMask<T>();
     for (int o = T / 2; o > 0; o >>= 1) v = fmaxf(v, __shfl_down_sync(m, v, o, T));
     return __shfl_sync(m, v, 0, T);
@@ -862,7 +778,10 @@ __device__ void tileReduce(PairState& S, PatchAcc& acc) {
     acc.maxC = tileMax<T>(acc.maxC);
 }
 template <int T>
-__device__ __forceinline__ float tileBcast(float v) { return __shfl_sync(tileMask<T>(), v, 0, T); }
+__device__ __forceinline__ float tileBcast(float v) {
+    if constexpr (T == 1) return v;
+    return __shfl_sync(tileMask<T>(), v, 0, T);
+}
 template <int T>
 __device__ __forceinline__ float3 tileBcast3(float3 v) { return make_float3(tileBcast<T>(v.x), tileBcast<T>(v.y), tileBcast<T>(v.z)); }
 template <int T>
@@ -875,7 +794,7 @@ __device__ void frictionOnLane0(DevWorld& W, int a, int b, int frame, PairState&
     S.da = tileBcast3<T>(S.da); S.db = tileBcast3<T>(S.db);
     S.qa = tileBcast4<T>(S.qa); S.qb = tileBcast4<T>(S.qb);
     S.lamT = tileBcast<T>(S.lamT);
-    S.slot = __shfl_sync(tileMask<T>(), S.slot, 0, T);
+    if constexpr (T > 1) S.slot = __shfl_sync(tileMask<T>(), S.slot, 0, T);
 }
 
 // Do the two bodies' boxes (their hulls and contact samples lie inside them) overlap by more than tol along every
@@ -910,6 +829,9 @@ __device__ bool boxesOverlapBeyond(const DevWorld& W, const double3* X, const fl
     return true;
 }
 
+#include "scenes/yikim/phys_box_contacts.cuh"
+#include "scenes/yikim/phys_sphere_contacts.cuh"
+
 // ---- narrow phase, one thread per pair of the broad phase: the pairs whose boxes overlap past what contact ignores,
 // listed for kContacts (most pairs end here; a warp per pair spent its 32 lanes on the same box test).
 // A bonded pair touches face to face by design: contact only past BOND_OVERLAP. Skipping it altogether let a crushed,
@@ -926,24 +848,61 @@ __global__ void kNarrow(DevWorld W, PhysParams prm) {
     const int lane = threadIdx.x & 31;
     for (int base = blockIdx.x * blockDim.x; base < np; base += gridDim.x * blockDim.x) {   // whole blocks a round (the ballot)
         const int i = base + threadIdx.x;
-        bool keep = false, bnd = false, big = false;
+        int kind = -1;
+        unsigned feature = 0;
+        bool bnd = false;
         if (i < np) {
             const int2 pr = W.pairs[i];
-            if (boxesOverlapBeyond(W, W.xc, W.qc, pr.x, pr.y, prm.slop - 1e-5f)) {
+            const bool boxes = W.axisBoxes[pr.x] && W.axisBoxes[pr.y];
+            const float radiusA = W.sphereRadius[pr.x], radiusB = W.sphereRadius[pr.y];
+            const bool spherePair = radiusA > 0.0f ? radiusB > 0.0f || W.axisBoxes[pr.y] : radiusB > 0.0f && W.axisBoxes[pr.x];
+            BoxAxis contact{-1, 1.0f};
+            bool overlap = false;
+            if (spherePair) {
+                const bool sphereA = radiusA > 0.0f;
+                const int sphere = sphereA ? pr.x : pr.y, other = sphereA ? pr.y : pr.x;
+                const auto hit = sphereContact(diff3(W.xc[sphere], W.xc[other]), W.sphereRadius[sphere], W.sphereRadius[other],
+                                               W.qc[other], W.localC[other], W.localH[other]);
+                overlap = hit.depth > prm.slop;
+            } else if (boxes) {
+                const BoxPose a = boxPose(W, pr.x, W.qc[pr.x]), b = boxPose(W, pr.y, W.qc[pr.y]);
+                const float3 delta = diff3(W.xc[pr.x], W.xc[pr.y]) + a.centre - b.centre;
+                const float slop = fmaxf(0.0f, prm.slop);
+                const int previous = W.pairSeparation[i];
+                if (!stillSeparated(a, b, delta, previous, slop)) {
+                    int separatedBy;
+                    contact = findBoxAxis(a, b, delta, slop, separatedBy);
+                    W.pairSeparation[i] = static_cast<signed char>(separatedBy);
+                }
+                overlap = contact.feature >= 0;
+            } else {
+                overlap = boxesOverlapBeyond(W, W.xc, W.qc, pr.x, pr.y, prm.slop - 1e-5f);
+            }
+            if (overlap) {
                 bnd = bonded(W, pr.x, pr.y, W.aliveC);
-                keep = !bnd || boxesOverlapBeyond(W, W.xc, W.qc, pr.x, pr.y, BOND_OVERLAP - 1e-5f);
-                big = W.sampleCount[W.shape[pr.x]] + W.sampleCount[W.shape[pr.y]] > kBigPair;
+                if (spherePair && !bnd) {
+                    kind = 4;
+                } else if (boxes && !bnd) {
+                    kind = contact.feature < kBoxFaceCount ? 2 : 3;
+                    feature = unsigned(contact.feature) * 2u + (contact.sign < 0.0f);
+                } else if (!bnd || boxesOverlapBeyond(W, W.xc, W.qc, pr.x, pr.y, BOND_OVERLAP - 1e-5f)) {
+                    kind = W.sampleCount[W.shape[pr.x]] + W.sampleCount[W.shape[pr.y]] > kBigPair;
+                }
             }
         }
-        for (int list = 0; list < 2; ++list) {   // a warp's entries of each list in one atomic
-            const bool mine = keep && big == (list == 1);
+        for (int list = 0; list < kContactLists; ++list) {   // a warp's entries of each list in one atomic
+            const bool mine = kind == list;
             const unsigned m = __ballot_sync(0xffffffffu, mine);
             if (m == 0u) continue;
             const int leader = __ffs(m) - 1;
             int at = 0;
             if (lane == leader) at = atomicAdd(&W.nActive[list], __popc(m));
             at = __shfl_sync(0xffffffffu, at, leader) + __popc(m & ((1u << lane) - 1u));
-            if (mine) W.active[list == 0 ? at : W.maxPairs - 1 - at] = unsigned(i) | (bnd ? 0x80000000u : 0u);
+            if (mine) {
+                if (list == 4) W.sphereActive[at] = unsigned(i);
+                else if (list >= 2) W.boxActive[list == 2 ? at : W.maxPairs - 1 - at] = make_uint2(unsigned(i), feature);
+                else W.active[list == 0 ? at : W.maxPairs - 1 - at] = unsigned(i) | (bnd ? 0x80000000u : 0u);
+            }
         }
     }
 }
@@ -1005,7 +964,7 @@ __device__ void contactPair(DevWorld& W, unsigned entry, int lane, float h, cons
 static_assert(kTile < 32, "the big pairs are the whole warp's");
 template <int T>
 __global__ void __launch_bounds__(128, 4) kContacts(DevWorld W, float h, PhysParams prm) {
-    const int frame = *W.frameDev;
+    const int frame = W.step->frame;
     const bool big = T == 32;
     const int na = W.nActive[big ? 1 : 0];
     const int lane = threadIdx.x & (T - 1);
@@ -1014,21 +973,32 @@ __global__ void __launch_bounds__(128, 4) kContacts(DevWorld W, float h, PhysPar
         contactPair<T>(W, W.active[big ? W.maxPairs - 1 - k : k], lane, h, prm, frame);
 }
 
+__global__ void findGroundBodiesKernel(DevWorld W) {
+    const int i = blockIdx.x * blockDim.x + threadIdx.x;
+    bool reaches = false;
+    if (i > 0 && i < W.n && !W.kin[i]) {
+        float3 r0, r1, r2;
+        qmat(W.qc[i], r0, r1, r2);
+        const float3 c = W.localC[i], hh = W.localH[i];
+        const float yc = float(W.xc[i].y) + dot(r1, c);
+        const float ext = fabsf(r1.x) * hh.x + fabsf(r1.y) * hh.y + fabsf(r1.z) * hh.z;
+        reaches = yc - ext <= float(W.xc[0].y) + 0.01f;
+    }
+    const unsigned mask = __ballot_sync(0xffffffffu, reaches);
+    if (!reaches) return;
+    const int lane = threadIdx.x & 31;
+    const int leader = __ffs(mask) - 1;
+    const int start = lane == leader ? atomicAdd(W.nGroundBodies, __popc(mask)) : 0;
+    W.groundBodies[__shfl_sync(mask, start, leader) + __popc(mask & ((1u << lane) - 1u))] = i;
+}
+
 __global__ void kGround(DevWorld W, float h, PhysParams prm) {
-    const int frame = *W.frameDev;
+    const int frame = W.step->frame;
     const int lane = threadIdx.x & 31;
     const int warps = (gridDim.x * blockDim.x) >> 5;
-    const float gy = float(W.xc[0].y);
-    for (int i = (blockIdx.x * blockDim.x + threadIdx.x) >> 5; i < W.n; i += warps) {
-        if (i == 0 || W.kin[i]) continue;
-        const float3 c = W.localC[i], hh = W.localH[i];
-        {   // the lowest point of the local box decides whether to look at the samples at all
-            float3 r0, r1, r2;
-            qmat(W.qc[i], r0, r1, r2);
-            const float yc = float(W.xc[i].y) + dot(r1, c);
-            const float ext = fabsf(r1.x) * hh.x + fabsf(r1.y) * hh.y + fabsf(r1.z) * hh.z;
-            if (yc - ext > gy + 0.01f) continue;
-        }
+    const int count = *W.nGroundBodies;
+    for (int entry = (blockIdx.x * blockDim.x + threadIdx.x) >> 5; entry < count; entry += warps) {
+        const int i = W.groundBodies[entry];
         const bool bnd = bonded(W, i, 0);   // held by its foundation: contact only past BOND_OVERLAP (see kNarrow)
         const float tol = bnd ? BOND_OVERLAP : 0.0f;
         PairState S = loadPair(W, i, 0);
@@ -1057,24 +1027,20 @@ __global__ void kGround(DevWorld W, float h, PhysParams prm) {
     }
 }
 
-__global__ void kApply(DevWorld W, float relax) {
+__global__ void applyPositionsKernel(DevWorld W, float relax, float h) {
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= W.n) return;
     const int c = W.cnt[i];
-    float3 dx, dth;
-    takeAccum(W, i, dx, dth);
-    if (c > 0 && !W.kin[i]) {   // the pairs' shares are in already (finishPair)
+    if (c > 0) {   // the pairs' shares are in already (finishPair)
+        float3 dx, dth;
+        takeAccum(W, i, dx, dth);
         const float s = c > 1 ? relax : 1.0f;
         W.x[i] = W.x[i] + d3(dx * s);
         W.q[i] = qaddRot(W.q[i], dth * s);
     }
     W.cntPrev[i] = max(c, 1);
     W.cnt[i] = 0;
-}
-
-__global__ void kVelocities(DevWorld W, float h) {
-    const int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i >= W.n || W.kin[i]) return;
+    if (W.kin[i]) return;
     W.v[i] = diff3(W.x[i], W.xPrev[i]) * (1.0f / h);
     float4 dq = qmul(W.q[i], qconj(W.qPrev[i]));
     float3 w = make_float3(dq.x, dq.y, dq.z) * (2.0f / h);
@@ -1141,17 +1107,18 @@ __global__ void kPatchVelocities(DevWorld W, float h, PhysParams prm, float g) {
     }
 }
 
-__global__ void kApplyVel(DevWorld W) {
+__global__ void applyVelocitiesKernel(DevWorld W, cudaGraphConditionalHandle again, bool advance) {
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= W.n) return;
     const int c = W.cnt[i];
-    float3 dv, dw;
-    takeAccum(W, i, dv, dw);
-    if (c > 0 && !W.kin[i]) {   // shares already taken (kPatchVelocities)
+    if (c > 0) {   // shares already taken (kPatchVelocities)
+        float3 dv, dw;
+        takeAccum(W, i, dv, dw);
         W.v[i] = W.v[i] + dv;
         W.w[i] = W.w[i] + dw;
     }
     W.cnt[i] = 0;
+    if (i == 0 && advance) cudaGraphSetConditional(again, ++W.step->substep < W.step->count);
 }
 
 // ------------------------------------------------------------------------------------------------------------
@@ -1200,78 +1167,14 @@ __global__ void kSweep(DevWorld W) {
         // tower's collapse: ~100 thousand world-box pairs)
         if (!boxesOverlapBeyond(W, W.x, W.q, i, j, -1e-4f, W.grow[i], W.grow[j])) continue;
         const int slot = atomicAdd(W.nPairs, 1);
-        if (slot < W.maxPairs) W.pairs[slot] = make_int2(i, j);
+        if (slot < W.maxPairs) {
+            W.pairs[slot] = make_int2(i, j);
+            W.pairSeparation[slot] = -1;
+        }
     }
 }
 
-// transforms for the renderer: OptixInstance.transform is the first 12 floats (3x4 rows)
-// Display: the reinforcing bars. A reinforced fibre owns two thin prisms (6 vertices each). While it holds and its crack
-// is wider than minGap, one spans the crack (anchor on a to anchor on b). Once it is gone and the faces are apart, a
-// stub sticks out of each face, bent a little (the bars of a failed member, stripped of their concrete). A prism not
-// shown is NaN: OptiX skips it.
-__device__ void barPrism(float3* v, float3 p0, float3 p1, float r) {
-    const float3 d = p1 - p0;
-    float3 u, w;
-    makeBasis(d * (1.0f / fmaxf(length(d), 1e-9f)), u, w);
-    for (int k = 0; k < 3; ++k) {
-        const float a = k * 2.0943951f;
-        const float3 o = (u * cosf(a) + w * sinf(a)) * r;
-        v[k] = p0 + o;
-        v[k + 3] = p1 + o;
-    }
-}
-__device__ void barNone(float3* v) {
-    const float nan = __int_as_float(0x7fc00000);
-    for (int k = 0; k < 6; ++k) v[k] = make_float3(nan, nan, nan);
-}
-__device__ unsigned barHash(unsigned x) {
-    x ^= x >> 16; x *= 0x7feb352du; x ^= x >> 15; x *= 0x846ca68bu; x ^= x >> 16;
-    return x;
-}
-__device__ float3 barBend(float3 n, unsigned h, float most) {
-    float3 t, b;
-    makeBasis(n, t, b);
-    const float a = (h & 0xffffu) * (6.2831853f / 65536.0f), s = most * float((h >> 16) & 0xffu) / 255.0f;
-    return normalize(n + (t * cosf(a) + b * sinf(a)) * s);
-}
-__global__ void kBars(DevWorld W, float3* v, float r, float minGap, float stub) {
-    const int t = blockIdx.x * blockDim.x + threadIdx.x;
-    if (t >= W.nBars) return;
-    const int2 e = W.bars[t];
-    const DFiber F = W.fib[e.x];
-    const DInterface I = W.ifc[e.y];
-    float3* v0 = v + size_t(t) * 12;
-    float3* v1 = v0 + 6;
-    const float4 qa = W.q[I.a], qb = W.q[I.b];
-    const float3 pa = f3(W.x[I.a]) + qrot(qa, F.rA), pb = f3(W.x[I.b]) + qrot(qb, F.rB);
-    const float gap = length(pb - pa);
-    if (!(F.flags & F_BROKEN)) {
-        if (gap > minGap) barPrism(v0, pa, pb, r);
-        else barNone(v0);
-        barNone(v1);
-    } else if (gap > 3.0f * minGap) {
-        const unsigned h1 = barHash(unsigned(e.x) * 2u + 1u), h2 = barHash(unsigned(e.x) * 2u + 2u);
-        const float3 na = qrot(qmul(qa, I.qI), make_float3(1, 0, 0)), nb = qrot(qb, W.ifcNB[e.y]);
-        barPrism(v0, pa, pa + barBend(na, h1, 0.35f) * (stub * (0.6f + 0.4f * float(h2 >> 24) / 255.0f)), r);
-        barPrism(v1, pb, pb + barBend(nb, h2, 0.35f) * (stub * (0.6f + 0.4f * float(h1 >> 24) / 255.0f)), r);
-    } else {
-        barNone(v0);
-        barNone(v1);
-    }
-}
-
-__global__ void kTransforms(DevWorld W, char* base, size_t stride, int first, int count) {
-    const int k = blockIdx.x * blockDim.x + threadIdx.x;
-    if (k >= count) return;
-    const int i = first + k;
-    float3 r0, r1, r2;
-    qmat(W.q[i], r0, r1, r2);
-    const float3 x = f3(W.x[i]);
-    float* m = reinterpret_cast<float*>(base + stride * size_t(k));
-    m[0] = r0.x; m[1] = r0.y; m[2] = r0.z; m[3] = x.x;
-    m[4] = r1.x; m[5] = r1.y; m[6] = r1.z; m[7] = x.y;
-    m[8] = r2.x; m[9] = r2.y; m[10] = r2.z; m[11] = x.z;
-}
+#include "scenes/yikim/phys_display.cuh"
 
 // ------------------------------------------------------------------------------------------------------------
 // host
@@ -1323,16 +1226,21 @@ void PhysWorld::freeDevice() {
     if (!d_) return;
     void* ptrs[] = {d_->x, d_->xPrev, d_->q, d_->qPrev, d_->xc, d_->qc, d_->v, d_->w, d_->vOld, d_->wOld, d_->invMass, d_->invI, d_->kin, d_->shape,
                     d_->localC, d_->localH, d_->lo, d_->hi, d_->grow, d_->acc, d_->cnt, d_->cntPrev, d_->sampleStart, d_->sampleCount, d_->planeStart,
-                    d_->planeCount, d_->samples, d_->planes, d_->chunkC, d_->chunkH, d_->chunkStart, d_->chunkCount, d_->ifc, d_->aliveC, d_->fib, d_->colourList, d_->adjStart, d_->adjList, d_->mats,
-                    d_->keys, d_->keysSorted, d_->ids, d_->idsSorted, d_->sortTemp, d_->pairs, d_->nPairs, d_->active, d_->nActive, d_->patches, d_->nPatches, d_->anchorKey, d_->anchorFrame, d_->anchorSlide, d_->anchorA, d_->anchorB, d_->anchorKeep, d_->nAnchorKeep, d_->bars, d_->ifcNB};
+                    d_->planeCount, d_->samples, d_->planes, d_->axisBoxes, d_->sphereRadius, d_->chunkC, d_->chunkH, d_->chunkStart, d_->chunkCount, d_->ifc, d_->aliveC, d_->fib, d_->compliance, d_->colourList, d_->adjStart, d_->adjList, d_->mats,
+                    d_->faceDependencies, d_->liveDependencies, d_->liveFaces, d_->nLiveFaces, d_->faceDone,
+                    d_->faceColour, d_->islandParent, d_->islandFaceCount, d_->islandFaces, d_->faceIsland, d_->smallIslands, d_->nSmallIslands,
+                    d_->bodyBonds, d_->topologyDirty,
+                    d_->keys, d_->keysSorted, d_->ids, d_->idsSorted, d_->sortTemp, d_->pairs, d_->pairSeparation, d_->nPairs, d_->active, d_->boxActive, d_->sphereActive, d_->nActive, d_->patches, d_->nPatches,
+                    d_->groundBodies, d_->nGroundBodies, d_->anchorKey, d_->anchorFrame, d_->anchorSlide, d_->anchorA, d_->anchorB, d_->anchorKeep, d_->nAnchorKeep, d_->bars, d_->ifcNB, d_->counts};
     for (void* p : ptrs)
         if (p) cudaFree(p);
     if (d_->graphExec) cudaGraphExecDestroy(d_->graphExec);
     if (d_->graph) cudaGraphDestroy(d_->graph);
     if (d_->groundPath) cudaFree(d_->groundPath);
-    if (d_->frameDev) cudaFree(d_->frameDev);
-    if (d_->gravityDev) cudaFree(d_->gravityDev);
-    if (d_->pairsHost) cudaFreeHost(d_->pairsHost);
+    if (d_->step) cudaFree(d_->step);
+    if (d_->stepHost) cudaFreeHost(d_->stepHost);
+    if (d_->groundHost) cudaFreeHost(d_->groundHost);
+    if (d_->stepResults) cudaFreeHost(d_->stepResults);
     if (d_->stream) cudaStreamDestroy(d_->stream);
     if (d_->side) cudaStreamDestroy(d_->side);
     if (d_->ifcStream) cudaStreamDestroy(d_->ifcStream);
@@ -1422,6 +1330,23 @@ int PhysWorld::addInterface(const InterfaceDesc& d) {
     return int(interfaceDescs.size()) - 1;
 }
 
+static bool isAxisBox(const Poly& shape) {
+    if (shape.faces.size() != 6) return false;
+    unsigned seen = 0;
+    for (const PolyFace& face : shape.faces) {
+        if (face.v.size() != 4) return false;
+        const double normal[] = {face.n.x, face.n.y, face.n.z};
+        int axis = -1;
+        for (int i = 0; i < 3; ++i) {
+            if (std::abs(std::abs(normal[i]) - 1.0) < 1e-7) axis = i;
+            else if (std::abs(normal[i]) >= 1e-7) return false;
+        }
+        if (axis < 0) return false;
+        seen |= 1u << (2 * axis + (normal[axis] < 0.0));
+    }
+    return seen == 0x3fu;
+}
+
 void PhysWorld::upload() {
     freeDevice();
     d_ = new DevWorld();
@@ -1443,11 +1368,15 @@ void PhysWorld::upload() {
     W.kin = dupload(kinematic);
     // shapes: one per body; contact samples = corners + points along long edges + a grid on big faces
     std::vector<int> shapeIdx(n), ss(n), sc(n), ps(n), pc(n), chs(n), chn(n);
+    std::vector<unsigned char> axisBoxes(n);
+    std::vector<float> sphereRadius(n);
     std::vector<float3> samples, lc(n), lh(n);
     std::vector<float4> planes, chunkC, chunkH;
     for (int i = 0; i < n; ++i) {
         shapeIdx[i] = i;
         const Poly& P = shapes[i];
+        axisBoxes[i] = isAxisBox(P);
+        sphereRadius[i] = info[i].sphere;
         ss[i] = int(samples.size());
         ps[i] = int(planes.size());
         // per face: corners and edge points pulled a few millimetres into the face, so that a corner standing
@@ -1515,6 +1444,8 @@ void PhysWorld::upload() {
     W.sampleCount = dupload(sc);
     W.planeStart = dupload(ps);
     W.planeCount = dupload(pc);
+    W.axisBoxes = dupload(axisBoxes);
+    W.sphereRadius = dupload(sphereRadius);
     W.samples = dupload(samples);
     W.planes = dupload(planes);
     W.chunkC = dupload(chunkC);
@@ -1592,18 +1523,26 @@ void PhysWorld::upload() {
     W.ifc = dupload(ifc);
     W.aliveC = dmalloc<int>(ifc.size());
     W.fib = dupload(fib);
+    W.compliance = dmalloc<float3>(W.nFib);
+    W.counts = dmalloc<int3>(1);
     W.nBars = int(bars.size());
     W.bars = dupload(bars);
     W.ifcNB = dupload(ifcNB);
     W.mats = dupload(materials);
     std::vector<int> adjStart(n + 1, 0), adjList;
+    std::vector<int> liveBonds(n, 0);
     for (int i = 0; i < n; ++i) {
         adjStart[i] = int(adjList.size());
-        for (int k : adj[i]) adjList.push_back(k);
+        for (int k : adj[i]) {
+            adjList.push_back(k);
+            liveBonds[i] += ifc[k].alive > 0;
+        }
     }
     adjStart[n] = int(adjList.size());
     W.adjStart = dupload(adjStart);
     W.adjList = dupload(adjList);
+    W.bodyBonds = dupload(liveBonds);
+    W.topologyDirty = dmalloc<int>(1);
     // greedy colouring: interfaces sharing a moving body get different colours
     colours_.clear();
     std::vector<int> colourOf(ifc.size(), -1);
@@ -1634,10 +1573,35 @@ void PhysWorld::upload() {
     std::vector<int> flat;
     colourOffset_.clear();
     for (auto& c : colours_) {
+        std::stable_sort(c.begin(), c.end(), [&](int a, int b) { return ifc[a].count > ifc[b].count; });
         colourOffset_.push_back(int(flat.size()));
         flat.insert(flat.end(), c.begin(), c.end());
     }
     W.colourList = dupload(flat);
+    W.nColours = int(colours_.size());
+    if (W.nIfc > 0) {
+        int device = 0, cooperative = 0, sms = 0, residentBlocks = 0;
+        PCHECK(cudaGetDevice(&device));
+        PCHECK(cudaDeviceGetAttribute(&cooperative, cudaDevAttrCooperativeLaunch, device));
+        PCHECK(cudaDeviceGetAttribute(&sms, cudaDevAttrMultiProcessorCount, device));
+        const int threads = W.nIfc <= 2048 ? 32 : kDependencyThreads;
+        PCHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&residentBlocks, solveDependencyWorldKernel, threads, 0));
+        if (cooperative && blocks(W.nIfc, threads) <= residentBlocks * sms) {
+            W.dependencyThreads = threads;
+            W.faceDependencies = dupload(orderInterfaceDependencies(adj, ifc, colourOf, kinematic));
+            W.liveDependencies = dmalloc<int4>(W.nIfc);
+            W.liveFaces = dmalloc<int>(W.nIfc);
+            W.nLiveFaces = dmalloc<int>(1);
+            W.faceDone = dmalloc<int>(W.nIfc);
+        }
+    }
+    W.faceColour = dupload(colourOf);
+    W.islandParent = dmalloc<int>(n);
+    W.islandFaceCount = dmalloc<int>(n);
+    W.islandFaces = dmalloc<int>(size_t(n) * kIslandFaces);
+    W.faceIsland = dmalloc<int>(W.nIfc);
+    W.smallIslands = dmalloc<int>(n);
+    W.nSmallIslands = dmalloc<int>(1);
     // broad phase buffers
     W.keys = dmalloc<float>(n);
     W.keysSorted = dmalloc<float>(n);
@@ -1647,12 +1611,17 @@ void PhysWorld::upload() {
     PCHECK(cudaMalloc(&W.sortTemp, std::max<size_t>(W.sortTempBytes, 16)));
     W.maxPairs = std::max(1 << 16, n * 64);
     W.pairs = dmalloc<int2>(W.maxPairs);
+    W.pairSeparation = dmalloc<signed char>(W.maxPairs);
     W.nPairs = dmalloc<int>(1);
     W.active = dmalloc<unsigned>(W.maxPairs);
-    W.nActive = dmalloc<int>(2);
+    W.boxActive = dmalloc<uint2>(W.maxPairs);
+    W.sphereActive = dmalloc<unsigned>(W.maxPairs);
+    W.nActive = dmalloc<int>(kContactLists);
     W.maxPatches = std::max(1 << 16, n * 32);
     W.patches = dmalloc<DPatch>(W.maxPatches);
     W.nPatches = dmalloc<int>(1);
+    W.groundBodies = dmalloc<int>(n);
+    W.nGroundBodies = dmalloc<int>(1);
     W.anchorCap = 1;
     while (W.anchorCap < W.maxPatches * 2) W.anchorCap <<= 1;
     W.anchorKey = dmalloc<unsigned long long>(W.anchorCap);
@@ -1680,12 +1649,13 @@ void PhysWorld::upload() {
     PCHECK(cudaEventCreateWithFlags(&W.ifcJoin, cudaEventDisableTiming));
     PCHECK(cudaEventCreateWithFlags(&W.fork, cudaEventDisableTiming));
     PCHECK(cudaEventCreateWithFlags(&W.join, cudaEventDisableTiming));
-    W.maxSubsteps = 1024;
-    W.groundPath = dmalloc<double3>(W.maxSubsteps);
-    W.frameDev = dmalloc<int>(1);
-    W.gravityDev = dmalloc<float>(1);
-    PCHECK(cudaMallocHost(reinterpret_cast<void**>(&W.pairsHost), sizeof(int)));
+    W.groundPath = dmalloc<GroundStep>(kMaxSubsteps);
+    W.step = dmalloc<StepInput>(1);
+    PCHECK(cudaMallocHost(&W.groundHost, kMaxSubsteps * sizeof(GroundStep)));
+    PCHECK(cudaMallocHost(&W.stepHost, sizeof(StepInput)));
+    PCHECK(cudaMallocHost(&W.stepResults, 2 * sizeof(int)));
     pending_ = false;
+    islandsDirty_ = true;
     graphKey_.clear();
     PCHECK(cudaEventCreate(&W.e0));
     PCHECK(cudaEventCreate(&W.e1));
@@ -1698,18 +1668,24 @@ void PhysWorld::upload() {
 }
 
 // the contact pairs of a substep: the narrow phase, then the big pairs on the side branch alongside the small ones
-#define kContactBlocks 2048
+constexpr int kContactBlocks = 512;
+constexpr int kBoxFaceBlocks = 1024;
+constexpr int kBoxEdgeBlocks = 256;
+constexpr int kSphereContactBlocks = 32;
 #define kNarrowBlocks 1024
 void PhysWorld::contacts(float h, void* stream) {
     DevWorld& W = *d_;
     cudaStream_t st = static_cast<cudaStream_t>(stream);
-    PCHECK(cudaMemsetAsync(W.nActive, 0, 2 * sizeof(int), st));
+    PCHECK(cudaMemsetAsync(W.nActive, 0, kContactLists * sizeof(int), st));
     kNarrow<<<std::max(1, std::min(blocks(W.maxPairs, 128), kNarrowBlocks)), 128, 0, st>>>(W, params);
     PCHECK(cudaEventRecord(W.fork, st));
     PCHECK(cudaStreamWaitEvent(W.side, W.fork, 0));
-    kContacts<32><<<kContactBlocks / 4, 128, 0, W.side>>>(W, h, params);
+    kContacts<32><<<kContactBlocks, 128, 0, W.side>>>(W, h, params);
+    solveSphereContactsKernel<<<kSphereContactBlocks, 128, 0, W.side>>>(W, h, params);
     PCHECK(cudaEventRecord(W.join, W.side));
     kContacts<kTile><<<kContactBlocks, 128, 0, st>>>(W, h, params);
+    solveBoxContactsKernel<false><<<kBoxFaceBlocks, kBoxContactThreads, 0, st>>>(W, h, params);
+    solveBoxContactsKernel<true><<<kBoxEdgeBlocks, kBoxContactThreads, 0, st>>>(W, h, params);
     PCHECK(cudaStreamWaitEvent(st, W.join, 0));
 }
 
@@ -1718,39 +1694,96 @@ void PhysWorld::contacts(float h, void* stream) {
 void PhysWorld::solveInterfaces(float h, void* stream) {
     DevWorld& W = *d_;
     const int C = int(colours_.size());
-    for (int it = 0; it < std::max(1, params.interfaceIters); ++it)
+    int iterations = std::max(1, params.interfaceIters);
+    cudaStream_t st = static_cast<cudaStream_t>(stream);
+    if (W.nIfc == 0) return;
+    if (W.faceDependencies) {
+        PCHECK(cudaMemsetAsync(W.faceDone, 0, size_t(W.nIfc) * sizeof(int), st));
+        void* args[] = {&W, &h, &iterations};
+        PCHECK(cudaLaunchCooperativeKernel(reinterpret_cast<const void*>(solveDependencyWorldKernel),
+                                          blocks(W.nIfc, W.dependencyThreads), W.dependencyThreads, args, 0, st));
+        return;
+    }
+    if (W.nColours <= kIslandColours)
+        solveIslandInterfacesKernel<<<std::min(blocks(W.n, 4), 512), 128, 0, st>>>(W, h, iterations);
+    for (int it = 0; it < iterations; ++it)
         for (int k = 0; k < C; ++k) {
             const int c = k;
-            kSolveInterfaces<<<blocks(int(colours_[c].size()), 64), 64, 0, static_cast<cudaStream_t>(stream)>>>(W, W.colourList + colourOffset_[c],
+            solveLargeInterfacesKernel<<<blocks(int(colours_[c].size()), 64), 64, 0, st>>>(W, W.colourList + colourOffset_[c],
                                                                                                              int(colours_[c].size()), h, it);
         }
 }
 
 void PhysWorld::step(float dt) {
-    stepBegin(dt, nullptr);
+    const int count = std::clamp(params.substeps, 1, kMaxSubsteps);
+    stepBegin(dt / count, count, nullptr);
     stepEnd();
 }
 
-// the step's GPU work is queued and the call returns: a renderer can draw the previous state meanwhile (its own stream).
-// after: an event the step waits for first (the renderer's transforms of the state being overwritten).
-void PhysWorld::stepBegin(float dt, void* after) {
+void PhysWorld::captureSubsteps(float h) {
+    DevWorld& W = *d_;
+    if (W.graphExec) PCHECK(cudaGraphExecDestroy(W.graphExec));
+    if (W.graph) PCHECK(cudaGraphDestroy(W.graph));
+    PCHECK(cudaGraphCreate(&W.graph, 0));
+    cudaGraphConditionalHandle again = 0;
+    PCHECK(cudaGraphConditionalHandleCreate(&again, W.graph, 1, cudaGraphCondAssignDefault));
+    cudaGraphNodeParams loop{cudaGraphNodeTypeConditional};
+    loop.conditional.handle = again;
+    loop.conditional.type = cudaGraphCondTypeWhile;
+    loop.conditional.size = 1;
+    cudaGraphNode_t loopNode = nullptr;
+    PCHECK(cudaGraphAddNode(&loopNode, W.graph, nullptr, nullptr, 0, &loop));
+    cudaStream_t st = W.stream;
+    PCHECK(cudaStreamBeginCaptureToGraph(st, loop.conditional.phGraph_out[0], nullptr, nullptr, 0, cudaStreamCaptureModeThreadLocal));
+    kIntegrate<<<blocks(std::max(W.n, W.nIfc)), 128, 0, st>>>(W, h, -1, params.maxSpeed, params.dampAlpha, params.dampCapLin, params.dampCapAng);
+    // Contacts read the integrated poses while the interfaces correct the live poses.
+    PCHECK(cudaMemsetAsync(W.nPatches, 0, sizeof(int), st));
+    PCHECK(cudaEventRecord(W.ifcFork, st));
+    PCHECK(cudaStreamWaitEvent(W.ifcStream, W.ifcFork, 0));
+    PCHECK(cudaMemsetAsync(W.nGroundBodies, 0, sizeof(int), W.ifcStream));
+    findGroundBodiesKernel<<<blocks(W.n), 128, 0, W.ifcStream>>>(W);
+    solveInterfaces(h, W.ifcStream);
+    kGround<<<std::min(blocks(W.n * 32, 128), 512), 128, 0, W.ifcStream>>>(W, h, params);
+    PCHECK(cudaEventRecord(W.ifcJoin, W.ifcStream));
+    contacts(h, st);
+    PCHECK(cudaStreamWaitEvent(st, W.ifcJoin, 0));
+    applyPositionsKernel<<<blocks(W.n), 128, 0, st>>>(W, params.relax, h);
+    kPatchVelocities<<<256, 128, 0, st>>>(W, h, params, params.gravity);
+    applyVelocitiesKernel<<<blocks(W.n), 128, 0, st>>>(W, again, true);
+    cudaGraph_t captured = nullptr;
+    PCHECK(cudaStreamEndCapture(st, &captured));
+    PCHECK(cudaGraphInstantiate(&W.graphExec, W.graph, cudaGraphInstantiateFlagUseNodePriority));
+}
+
+void PhysWorld::stepBegin(float h, int count, void* after, std::span<const double3> groundPath) {
     if (!uploaded_) upload();
     if (pending_) stepEnd();
     DevWorld& W = *d_;
     const int n = W.n;
-    const int S = std::min(std::max(1, params.substeps), W.maxSubsteps);
-    const float h = dt / S;
+    const int S = std::clamp(count, 1, kMaxSubsteps);
+    const float dt = h * S;
+    if (!groundPath.empty() && groundPath.size() != size_t(S)) {
+        std::fprintf(stderr, "Yikim: expected %d ground positions, got %zu\n", S, groundPath.size());
+        std::abort();
+    }
     lastH_ = h;
     cudaStream_t st = W.stream;
     if (after) PCHECK(cudaStreamWaitEvent(st, static_cast<cudaEvent_t>(after), 0));
     // this frame's inputs: where the ground is at the end of each substep, and the frame number (friction anchors)
-    groundSteps_.resize(S);
-    for (int s = 0; s < S; ++s) groundSteps_[s] = groundPrev_ + (groundTarget_ - groundPrev_) * (double(s + 1) / S);
-    PCHECK(cudaMemcpyAsync(W.groundPath, groundSteps_.data(), S * sizeof(double3), cudaMemcpyHostToDevice, st));
-    PCHECK(cudaMemcpyAsync(W.frameDev, &frame_, sizeof(int), cudaMemcpyHostToDevice, st));
-    gravityNow_ = params.gravity * gravityScale;
-    PCHECK(cudaMemcpyAsync(W.gravityDev, &gravityNow_, sizeof(float), cudaMemcpyHostToDevice, st));
+    double3 previous = groundPrev_;
+    for (int s = 0; s < S; ++s) {
+        const double3 next = groundPath.empty() ? groundPrev_ + (groundTarget_ - groundPrev_) * (double(s + 1) / S) : groundPath[s];
+        W.groundHost[s] = {next, diff3(next, previous) * (1.0f / h)};
+        previous = next;
+    }
+    groundTarget_ = previous;
+    *W.stepHost = {frame_, S, 0, params.gravity * gravityScale};
+    PCHECK(cudaMemcpyAsync(W.groundPath, W.groundHost, S * sizeof(GroundStep), cudaMemcpyHostToDevice, st));
+    PCHECK(cudaMemcpyAsync(W.step, W.stepHost, sizeof(StepInput), cudaMemcpyHostToDevice, st));
     PCHECK(cudaEventRecord(W.e0, st));
+    if (W.nFib > 0) prepareComplianceKernel<<<blocks(W.nFib), 128, 0, st>>>(W, h * h);
+    if (islandsDirty_) prepareInterfaceIslands(W, st);
+    PCHECK(cudaMemsetAsync(W.topologyDirty, 0, sizeof(int), st));
     PCHECK(cudaMemsetAsync(W.nAnchorKeep, 0, sizeof(int), st));
     kAnchorsGather<<<512, 256, 0, st>>>(W);
     kAnchorsPlace<<<256, 128, 0, st>>>(W);
@@ -1759,40 +1792,17 @@ void PhysWorld::stepBegin(float dt, void* after) {
     cub::DeviceRadixSort::SortPairs(W.sortTemp, W.sortTempBytes, W.keys, W.keysSorted, W.ids, W.idsSorted, n, 0, sizeof(float) * 8, st);
     PCHECK(cudaMemsetAsync(W.nPairs, 0, sizeof(int), st));
     kSweep<<<blocks(n), 128, 0, st>>>(W);
-    // the substeps: captured once as a graph, replayed every frame (recaptured when a setting or dt changes)
+    // The device loop changes the batch length without rebuilding the graph or changing h.
     std::vector<char> key(sizeof(PhysParams) + sizeof(float));
     std::memcpy(key.data(), &params, sizeof(PhysParams));
     std::memcpy(key.data() + sizeof(PhysParams), &h, sizeof(float));
     if (key != graphKey_ || !W.graphExec) {
-        if (W.graphExec) { cudaGraphExecDestroy(W.graphExec); W.graphExec = nullptr; }
-        if (W.graph) { cudaGraphDestroy(W.graph); W.graph = nullptr; }
-        PCHECK(cudaStreamBeginCapture(st, cudaStreamCaptureModeThreadLocal));
-        for (int s = 0; s < S; ++s) {
-            kIntegrate<<<blocks(std::max(n, W.nIfc)), 128, 0, st>>>(W, h, s, params.maxSpeed, params.dampAlpha, params.dampCapLin, params.dampCapAng);
-            // the interfaces correct the poses on their branch while the contacts work on the copy taken after the
-            // integration (Jacobi between the two: the contacts' corrections are added in kApply). Each interface
-            // colour is a small kernel on a few SMs, one after another: the rest of the GPU had nothing to do
-            // (measured in the tower's collapse: the substep's contacts 0.3-0.5 ms, its 26 interface kernels 0.2 ms)
-            // The ground contacts follow the interfaces on their branch (they read the copy too).
-            PCHECK(cudaMemsetAsync(W.nPatches, 0, sizeof(int), st));
-            PCHECK(cudaEventRecord(W.ifcFork, st));
-            PCHECK(cudaStreamWaitEvent(W.ifcStream, W.ifcFork, 0));
-            solveInterfaces(h, W.ifcStream);
-            kGround<<<std::min(blocks(n * 32, 128), 2048), 128, 0, W.ifcStream>>>(W, h, params);
-            PCHECK(cudaEventRecord(W.ifcJoin, W.ifcStream));
-            contacts(h, st);
-            PCHECK(cudaStreamWaitEvent(st, W.ifcJoin, 0));
-            kApply<<<blocks(n), 128, 0, st>>>(W, params.relax);
-            kVelocities<<<blocks(n), 128, 0, st>>>(W, h);
-            kPatchVelocities<<<256, 128, 0, st>>>(W, h, params, params.gravity);
-            kApplyVel<<<blocks(n), 128, 0, st>>>(W);
-        }
-        PCHECK(cudaStreamEndCapture(st, &W.graph));
-        PCHECK(cudaGraphInstantiate(&W.graphExec, W.graph, cudaGraphInstantiateFlagUseNodePriority));
+        captureSubsteps(h);
         graphKey_ = key;
     }
     PCHECK(cudaGraphLaunch(W.graphExec, st));
-    PCHECK(cudaMemcpyAsync(W.pairsHost, W.nPairs, sizeof(int), cudaMemcpyDeviceToHost, st));
+    PCHECK(cudaMemcpyAsync(W.stepResults, W.nPairs, sizeof(int), cudaMemcpyDeviceToHost, st));
+    PCHECK(cudaMemcpyAsync(W.stepResults + 1, W.topologyDirty, sizeof(int), cudaMemcpyDeviceToHost, st));
     PCHECK(cudaEventRecord(W.e1, st));
     pending_ = true;
     pendingDt_ = dt;
@@ -1804,7 +1814,8 @@ void PhysWorld::stepEnd() {
     PCHECK(cudaEventSynchronize(W.e1));
     PCHECK(cudaEventElapsedTime(&lastMs, W.e0, W.e1));
     PCHECK(cudaGetLastError());
-    lastPairs_ = std::min(*W.pairsHost, W.maxPairs);
+    lastPairs_ = std::min(W.stepResults[0], W.maxPairs);
+    islandsDirty_ = W.stepResults[1] != 0;
     groundPrev_ = groundTarget_;
     time += pendingDt_;
     ++frame_;
@@ -1816,11 +1827,13 @@ void PhysWorld::profile(float dt) {
     if (!uploaded_) upload();
     DevWorld& W = *d_;
     const int n = W.n;
-    const int S = std::min(std::max(1, params.substeps), W.maxSubsteps);
+    const int S = std::clamp(params.substeps, 1, kMaxSubsteps);
     const float h = dt / S;
     cudaStream_t st = W.stream;
-    groundSteps_.assign(S, groundPrev_);
-    PCHECK(cudaMemcpyAsync(W.groundPath, groundSteps_.data(), S * sizeof(double3), cudaMemcpyHostToDevice, st));
+    std::fill_n(W.groundHost, S, GroundStep{groundPrev_, make_float3(0, 0, 0)});
+    *W.stepHost = {frame_, S, 0, params.gravity * gravityScale};
+    PCHECK(cudaMemcpyAsync(W.groundPath, W.groundHost, S * sizeof(GroundStep), cudaMemcpyHostToDevice, st));
+    PCHECK(cudaMemcpyAsync(W.step, W.stepHost, sizeof(StepInput), cudaMemcpyHostToDevice, st));
     const char* names[] = {"genis faz", "integrate", "arayuz renkleri", "temas ciftleri", "zemin", "uygula+hiz", "yama hizlari",
                            "sonum+uygula"};
     const int G = 8;
@@ -1838,6 +1851,8 @@ void PhysWorld::profile(float dt) {
         ms[g] += t;
     };
     timed(0, [&] {
+        if (W.nFib > 0) prepareComplianceKernel<<<blocks(W.nFib), 128, 0, st>>>(W, h * h);
+        prepareInterfaceIslands(W, st);
         kBoxes<<<blocks(n), 128, 0, st>>>(W, dt, params.margin);
         cub::DeviceRadixSort::SortPairs(W.sortTemp, W.sortTempBytes, W.keys, W.keysSorted, W.ids, W.idsSorted, n, 0, sizeof(float) * 8, st);
         cudaMemsetAsync(W.nPairs, 0, sizeof(int), st);
@@ -1852,7 +1867,7 @@ void PhysWorld::profile(float dt) {
         });
         if (s == 0) {   // the contact pass's parts, each alone on this substep's state (their sums undone after; the
                         // friction anchors keep what the extra passes wrote)
-            float part[3] = {};
+            float part[5] = {};
             auto clock = [&](int k, auto fn) {
                 cudaEventRecord(ev[0], st);
                 fn();
@@ -1865,29 +1880,39 @@ void PhysWorld::profile(float dt) {
                 cudaMemsetAsync(W.cnt, 0, size_t(n) * sizeof(int), st);
                 cudaMemsetAsync(W.nPatches, 0, sizeof(int), st);
             };
-            cudaMemsetAsync(W.nActive, 0, 2 * sizeof(int), st);
+            cudaMemsetAsync(W.nActive, 0, kContactLists * sizeof(int), st);
             clock(0, [&] { kNarrow<<<std::max(1, std::min(blocks(W.maxPairs, 128), kNarrowBlocks)), 128, 0, st>>>(W, params); });
-            int na[2] = {};
-            cudaMemcpy(na, W.nActive, 2 * sizeof(int), cudaMemcpyDeviceToHost);
+            int na[kContactLists] = {};
+            cudaMemcpy(na, W.nActive, sizeof(na), cudaMemcpyDeviceToHost);
             clock(1, [&] { kContacts<kTile><<<kContactBlocks, 128, 0, st>>>(W, h, params); });
             undo();
-            clock(2, [&] { kContacts<32><<<kContactBlocks / 4, 128, 0, st>>>(W, h, params); });
+            clock(2, [&] { kContacts<32><<<kContactBlocks, 128, 0, st>>>(W, h, params); });
             undo();
-            std::printf("      temas parcalari (1 alt adim): kutu testleri %.3f ms, %d kucuk cift %.3f ms, %d buyuk cift %.3f ms\n", part[0], na[0], part[1],
-                        na[1], part[2]);
+            clock(3, [&] {
+                solveBoxContactsKernel<false><<<kBoxFaceBlocks, kBoxContactThreads, 0, st>>>(W, h, params);
+                solveBoxContactsKernel<true><<<kBoxEdgeBlocks, kBoxContactThreads, 0, st>>>(W, h, params);
+            });
+            undo();
+            clock(4, [&] { solveSphereContactsKernel<<<kSphereContactBlocks, 128, 0, st>>>(W, h, params); });
+            undo();
+            std::printf("      temas parcalari (1 alt adim): kutu testleri %.3f ms, %d kucuk cift %.3f ms, %d buyuk cift %.3f ms, %d kutu cifti %.3f ms, "
+                        "%d kure cifti %.3f ms\n", part[0], na[0], part[1], na[1], part[2], na[2] + na[3], part[3], na[4], part[4]);
         }
         timed(3, [&] {
             cudaMemsetAsync(W.nPatches, 0, sizeof(int), st);
             contacts(h, st);
         });
-        timed(4, [&] { kGround<<<std::min(blocks(n * 32, 128), 2048), 128, 0, st>>>(W, h, params); });
+        timed(4, [&] {
+            PCHECK(cudaMemsetAsync(W.nGroundBodies, 0, sizeof(int), st));
+            findGroundBodiesKernel<<<blocks(n), 128, 0, st>>>(W);
+            kGround<<<std::min(blocks(n * 32, 128), 512), 128, 0, st>>>(W, h, params);
+        });
         timed(5, [&] {
-            kApply<<<blocks(n), 128, 0, st>>>(W, params.relax);
-            kVelocities<<<blocks(n), 128, 0, st>>>(W, h);
+            applyPositionsKernel<<<blocks(n), 128, 0, st>>>(W, params.relax, h);
         });
         timed(6, [&] { kPatchVelocities<<<256, 128, 0, st>>>(W, h, params, params.gravity); });
         timed(7, [&] {
-            kApplyVel<<<blocks(n), 128, 0, st>>>(W);
+            applyVelocitiesKernel<<<blocks(n), 128, 0, st>>>(W, 0, false);
         });
     }
     float tot = 0;
@@ -1897,6 +1922,7 @@ void PhysWorld::profile(float dt) {
     std::printf("= %.2f ms\n", tot);
     cudaEventDestroy(ev[0]);
     cudaEventDestroy(ev[1]);
+    islandsDirty_ = true;
 }
 
 // load a freshly built world gently: gravity ramps from zero (smoothstep) over ramp seconds, then the world rests for
@@ -1923,18 +1949,10 @@ void PhysWorld::download() {
 }
 
 void PhysWorld::breakBody(int b) {
-    if (!uploaded_) return;
-    std::vector<DInterface> ifc(d_->nIfc);
-    PCHECK(cudaMemcpy(ifc.data(), d_->ifc, ifc.size() * sizeof(DInterface), cudaMemcpyDeviceToHost));
-    for (size_t k = 0; k < ifc.size(); ++k)
-        if (ifc[k].a == b || ifc[k].b == b) {
-            ifc[k].alive = 0;
-            std::vector<DFiber> f(ifc[k].count);
-            PCHECK(cudaMemcpy(f.data(), d_->fib + ifc[k].first, f.size() * sizeof(DFiber), cudaMemcpyDeviceToHost));
-            for (DFiber& x : f) x.flags |= F_BROKEN | F_CRACKED;
-            PCHECK(cudaMemcpy(d_->fib + ifc[k].first, f.data(), f.size() * sizeof(DFiber), cudaMemcpyHostToDevice));
-        }
-    PCHECK(cudaMemcpy(d_->ifc, ifc.data(), ifc.size() * sizeof(DInterface), cudaMemcpyHostToDevice));
+    if (!uploaded_ || b < 0 || b >= d_->n) return;
+    breakInterfacesKernel<<<1, 128, 0, d_->stream>>>(*d_, b);
+    PCHECK(cudaStreamSynchronize(d_->stream));
+    islandsDirty_ = true;
 }
 
 void PhysWorld::setVelocity(int b, float3 v, float3 w) {
@@ -1998,22 +2016,6 @@ void PhysWorld::launchBody(int b, double3 x, float4 q, float3 v, float3 w) {
     if (uploaded_) writeBody(b);
 }
 
-std::vector<float> PhysWorld::damage() {
-    std::vector<float> dmg(info.size(), 0.0f), cnt(info.size(), 0.0f);
-    if (!uploaded_ || !d_->nFib) return dmg;
-    std::vector<DFiber> fib(d_->nFib);
-    PCHECK(cudaMemcpy(fib.data(), d_->fib, fib.size() * sizeof(DFiber), cudaMemcpyDeviceToHost));
-    size_t f = 0;
-    for (const InterfaceDesc& d : interfaceDescs)
-        for (size_t k = 0; k < d.fibers.size(); ++k, ++f) {
-            const float x = (fib[f].flags & F_BROKEN) ? 1.0f : (fib[f].flags & (F_CRACKED | F_CRUSHED)) ? 0.5f : 0.0f;
-            dmg[d.a] += x; dmg[d.b] += x;
-            cnt[d.a] += 1.0f; cnt[d.b] += 1.0f;
-        }
-    for (size_t i = 0; i < dmg.size(); ++i) dmg[i] = cnt[i] > 0 ? dmg[i] / cnt[i] : 0.0f;
-    return dmg;
-}
-
 PhysStats PhysWorld::stats() {
     PhysStats s;
     s.bodies = int(info.size());
@@ -2023,19 +2025,20 @@ PhysStats PhysWorld::stats() {
     s.ms = lastMs;
     s.pairs = lastPairs_;
     if (!uploaded_) return s;
-    std::vector<DInterface> ifc(d_->nIfc);
-    std::vector<DFiber> fib(d_->nFib);
-    if (!ifc.empty()) PCHECK(cudaMemcpy(ifc.data(), d_->ifc, ifc.size() * sizeof(DInterface), cudaMemcpyDeviceToHost));
-    if (!fib.empty()) PCHECK(cudaMemcpy(fib.data(), d_->fib, fib.size() * sizeof(DFiber), cudaMemcpyDeviceToHost));
-    s.fibres = int(fib.size());
-    for (const DInterface& I : ifc) s.alive += I.alive > 0;
-    for (const DFiber& F : fib) {
-        if (F.flags & F_BROKEN) ++s.broken;
-        if (F.flags & F_CRACKED) ++s.cracked;
+    constexpr int kCountThreads = 128;
+    const int work = std::max(d_->nIfc, d_->nFib);
+    int3 counts{};
+    if (work > 0) {
+        PCHECK(cudaMemsetAsync(d_->counts, 0, sizeof(int3), d_->stream));
+        countDamageKernel<<<std::min(blocks(work, kCountThreads), 128), kCountThreads, 0, d_->stream>>>(*d_);
+        PCHECK(cudaMemcpyAsync(&counts, d_->counts, sizeof(int3), cudaMemcpyDeviceToHost, d_->stream));
     }
-    int nc = 0;
-    PCHECK(cudaMemcpy(&nc, d_->nPatches, sizeof(int), cudaMemcpyDeviceToHost));
-    s.contacts = nc;
+    PCHECK(cudaMemcpyAsync(&s.contacts, d_->nPatches, sizeof(int), cudaMemcpyDeviceToHost, d_->stream));
+    PCHECK(cudaStreamSynchronize(d_->stream));
+    s.fibres = d_->nFib;
+    s.alive = counts.x;
+    s.broken = counts.y;
+    s.cracked = counts.z;
     return s;
 }
 
@@ -2088,4 +2091,12 @@ void PhysWorld::writeBars(void* verts, float radius, float minGap, float stub, v
 void PhysWorld::writeTransforms(void* instances, size_t stride, int first, int count, void* stream) {
     if (!uploaded_ || count <= 0) return;
     kTransforms<<<blocks(count), 128, 0, static_cast<cudaStream_t>(stream)>>>(*d_, static_cast<char*>(instances), stride, first, count);
+}
+
+void PhysWorld::writeDamage(void* first, size_t strideBytes, void* stream) const {
+    if (!uploaded_ || d_->n <= 1) return;
+    constexpr int kDamageThreads = 128;
+    writeDamageKernel<<<blocks(d_->n - 1, kDamageThreads), kDamageThreads, 0, static_cast<cudaStream_t>(stream)>>>(
+        *d_, static_cast<char*>(first), strideBytes);
+    PCHECK(cudaGetLastError());
 }

@@ -4,6 +4,7 @@
 #include <optix_stack_size.h>
 #include <optix_stubs.h>
 
+#include <cstddef>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
@@ -67,6 +68,7 @@ bool YikimRenderer::init(unsigned int width, unsigned int height, const std::str
     p_.accum = ualloc<float4>(size_t(width) * height);
     p_.output = ualloc<uchar4>(size_t(width) * height);
     YCUDA(cudaMalloc(reinterpret_cast<void**>(&dParams_), sizeof(YikimParams)));
+    YCUDA(cudaMallocHost(&launchParams_, sizeof(YikimParams)));
     dPickBody_ = ualloc<int>(1);
     dPickHit_ = ualloc<float4>(1);
     p_.pickBody = dPickBody_;
@@ -114,7 +116,6 @@ bool YikimRenderer::createDenoiser() {
     dnPrevOut_ = ualloc<float4>(size_t(w_) * h_);
     dnIntensity_ = ualloc<float>(1);
     dnAvg_ = ualloc<float>(3);
-    p_.denoised = dnOut_;
     YOPTIX(optixDenoiserSetup(dn_, stream_, w_, h_, CUdeviceptr(dnState_), dnStateSize_, CUdeviceptr(dnScratch_), dnScratchSize_));
     YCUDA(cudaStreamSynchronize(stream_));
     return true;
@@ -122,10 +123,6 @@ bool YikimRenderer::createDenoiser() {
 
 // the accumulation's means -> denoiser (with last frame's output and the motion guide) -> the display
 void YikimRenderer::runDenoiser() {
-    OptixShaderBindingTable sbt = sbt_;
-    sbt.raygenRecord = rgPrep_;
-    YCUDA(cudaMemcpyAsync(reinterpret_cast<void*>(dParams_), &p_, sizeof(YikimParams), cudaMemcpyHostToDevice, stream_));
-    YOPTIX(optixLaunch(pipeline_, stream_, dParams_, sizeof(YikimParams), &sbt, w_, h_, 1));
     OptixDenoiserLayer layer{};
     layer.input = yimage(p_.dnIn, w_, h_);
     layer.output = yimage(dnOut_, w_, h_);
@@ -157,9 +154,10 @@ void YikimRenderer::runDenoiser() {
     dp.temporalModeUsePreviousLayers = dnHistory_ ? 1u : 0u;
     YOPTIX(optixDenoiserInvoke(dn_, stream_, &dp, CUdeviceptr(dnState_), dnStateSize_, &g, &layer, 1, 0, 0, CUdeviceptr(dnScratch_), dnScratchSize_));
     // this output and its internal guide are the next frame's history
-    YCUDA(cudaMemcpyAsync(dnPrevOut_, dnOut_, size_t(w_) * h_ * sizeof(float4), cudaMemcpyDeviceToDevice, stream_));
+    std::swap(dnOut_, dnPrevOut_);
     std::swap(dnGuideA_, dnGuideB_);
     dnHistory_ = true;
+    OptixShaderBindingTable sbt = sbt_;
     sbt.raygenRecord = rgTone_;
     YOPTIX(optixLaunch(pipeline_, stream_, dParams_, sizeof(YikimParams), &sbt, w_, h_, 1));
 }
@@ -204,7 +202,7 @@ bool YikimRenderer::compileDevice(std::string& log) {
     OptixModule module = nullptr;
     OptixResult r = optixModuleCreate(ctx_, &mco, &pco, ir.data(), ir.size(), olog, &olen, &module);
     if (r != OPTIX_SUCCESS) { log = std::string("optixModuleCreate: ") + optixGetErrorString(r) + "\n" + olog; return false; }
-    OptixProgramGroupDesc d[6];
+    OptixProgramGroupDesc d[5];
     std::memset(d, 0, sizeof(d));
     d[0].kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
     d[0].raygen.module = module;
@@ -216,20 +214,17 @@ bool YikimRenderer::compileDevice(std::string& log) {
     d[3].raygen.entryFunctionName = "__raygen__pick";
     d[4].kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
     d[4].raygen.module = module;
-    d[4].raygen.entryFunctionName = "__raygen__prep";
-    d[5].kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
-    d[5].raygen.module = module;
-    d[5].raygen.entryFunctionName = "__raygen__tonemap";
-    std::vector<OptixProgramGroup> groups(6);
+    d[4].raygen.entryFunctionName = "__raygen__tonemap";
+    std::vector<OptixProgramGroup> groups(5);
     OptixProgramGroupOptions go{};
     olen = sizeof(olog);
-    r = optixProgramGroupCreate(ctx_, d, 6, &go, olog, &olen, groups.data());
+    r = optixProgramGroupCreate(ctx_, d, unsigned(groups.size()), &go, olog, &olen, groups.data());
     if (r != OPTIX_SUCCESS) { log = std::string("optixProgramGroupCreate: ") + optixGetErrorString(r) + "\n" + olog; return false; }
     OptixPipelineLinkOptions lo{};
     lo.maxTraceDepth = 1;
     OptixPipeline pipeline = nullptr;
     olen = sizeof(olog);
-    r = optixPipelineCreate(ctx_, &pco, &lo, groups.data(), 6, olog, &olen, &pipeline);
+    r = optixPipelineCreate(ctx_, &pco, &lo, groups.data(), unsigned(groups.size()), olog, &olen, &pipeline);
     if (r != OPTIX_SUCCESS) { log = std::string("optixPipelineCreate: ") + optixGetErrorString(r) + "\n" + olog; return false; }
     YOPTIX(optixPipelineSetStackSizeFromCallDepths(pipeline, 1, 0, 0, 0, 2));
     YCUDA(cudaDeviceSynchronize());
@@ -249,8 +244,7 @@ bool YikimRenderer::compileDevice(std::string& log) {
     record(groups_[1], miss_);
     record(groups_[2], hit_);
     record(groups_[3], rgPick_);
-    record(groups_[4], rgPrep_);
-    record(groups_[5], rgTone_);
+    record(groups_[4], rgTone_);
     sbt_ = {};
     sbt_.raygenRecord = rg_;
     sbt_.missRecordBase = miss_;
@@ -322,7 +316,7 @@ void YikimRenderer::uploadWorld(const PhysWorld& w) {
     const int n = int(w.info.size());
     std::vector<YMesh> meshes;
     std::vector<OptixInstance> inst;
-    bodies_.clear();
+    std::vector<YBody> bodies;
     for (int i = 1; i < n; ++i) {
         // the hull as triangles (fans over its faces), in the body frame
         std::vector<float3> pos;
@@ -385,7 +379,7 @@ void YikimRenderer::uploadWorld(const PhysWorld& w) {
         b.damage = 0.0f;
         b.sphere = w.info[i].sphere;
         b.glass = w.info[i].glass ? 1.0f : 0.0f;
-        bodies_.push_back(b);
+        bodies.push_back(b);
     }
     bodyInstances_ = int(inst.size());
     // the bars: one more instance in the world frame, its own mesh and colour (rusty steel)
@@ -425,7 +419,7 @@ void YikimRenderer::uploadWorld(const PhysWorld& w) {
         b.damage = 0.0f;
         b.sphere = 0.0f;
         b.glass = 0.0f;
-        bodies_.push_back(b);
+        bodies.push_back(b);
     }
     instanceCount_ = int(inst.size());
     xfPrev_ = ualloc<float>(size_t(std::max(bodyInstances_, 1)) * 12);
@@ -439,8 +433,8 @@ void YikimRenderer::uploadWorld(const PhysWorld& w) {
     dInstances_ = ualloc<OptixInstance>(inst.size());
     YCUDA(cudaMemcpy(dInstances_, inst.data(), inst.size() * sizeof(OptixInstance), cudaMemcpyHostToDevice));
     worldBuffers_.push_back(dInstances_);
-    dBodies_ = ualloc<YBody>(bodies_.size());
-    YCUDA(cudaMemcpy(dBodies_, bodies_.data(), bodies_.size() * sizeof(YBody), cudaMemcpyHostToDevice));
+    dBodies_ = ualloc<YBody>(bodies.size());
+    YCUDA(cudaMemcpy(dBodies_, bodies.data(), bodies.size() * sizeof(YBody), cudaMemcpyHostToDevice));
     worldBuffers_.push_back(dBodies_);
     p_.meshes = dm;
     p_.bodies = dBodies_;
@@ -459,15 +453,11 @@ void YikimRenderer::buildIAS() {
     OptixAccelBuildOptions ao{};
     ao.buildFlags = OPTIX_BUILD_FLAG_PREFER_FAST_BUILD;
     ao.operation = OPTIX_BUILD_OPERATION_BUILD;
-    OptixAccelBufferSizes sz{};
-    YOPTIX(optixAccelComputeMemoryUsage(ctx_, &ao, &bi, 1, &sz));
-    if (sz.tempSizeInBytes > iasTempSize_) {
-        if (iasTemp_) cudaFree(iasTemp_);
+    if (!iasOut_) {
+        OptixAccelBufferSizes sz{};
+        YOPTIX(optixAccelComputeMemoryUsage(ctx_, &ao, &bi, 1, &sz));
         YCUDA(cudaMalloc(&iasTemp_, sz.tempSizeInBytes));
         iasTempSize_ = sz.tempSizeInBytes;
-    }
-    if (sz.outputSizeInBytes > iasOutSize_) {
-        if (iasOut_) cudaFree(iasOut_);
         YCUDA(cudaMalloc(&iasOut_, sz.outputSizeInBytes));
         iasOutSize_ = sz.outputSizeInBytes;
     }
@@ -487,17 +477,12 @@ void YikimRenderer::updateWorld(PhysWorld& w) {
     w.writeTransforms(dInstances_, sizeof(OptixInstance), 1, bodyInstances_, stream_);
     if (!havePrev_) keep();
     havePrev_ = true;
+    w.writeDamage(reinterpret_cast<char*>(dBodies_) + offsetof(YBody, damage), sizeof(YBody), stream_);
     if (barPrisms_) w.writeBars(barVerts_, showBars ? barRadius : 0.0f, showBars ? barGap : 1e30f, barStub, stream_);
     YCUDA(cudaEventRecord(evXf_, stream_));   // the state has been read: a queued physics step may overwrite it now
     if (barPrisms_ && buildBars())
         YCUDA(cudaMemcpyAsync(&dInstances_[bodyInstances_].traversableHandle, &barGas_, sizeof(barGas_), cudaMemcpyHostToDevice, stream_));
     buildIAS();
-}
-
-void YikimRenderer::setDamage(const std::vector<float>& d) {
-    if (bodies_.empty()) return;
-    for (size_t i = 0; i < bodies_.size(); ++i) bodies_[i].damage = i + 1 < d.size() ? d[i + 1] : 0.0f;
-    YCUDA(cudaMemcpyAsync(dBodies_, bodies_.data(), bodies_.size() * sizeof(YBody), cudaMemcpyHostToDevice, stream_));
 }
 
 void YikimRenderer::render(unsigned int spp, bool accumulate) {
@@ -512,7 +497,9 @@ void YikimRenderer::render(unsigned int spp, bool accumulate) {
     p_.prevCam = prevCam_;
     p_.groundShiftPrev = prevShift_;
     p_.groundYPrev = prevGroundY_;
-    YCUDA(cudaMemcpyAsync(reinterpret_cast<void*>(dParams_), &p_, sizeof(YikimParams), cudaMemcpyHostToDevice, stream_));
+    p_.denoised = denoiseMode == 2 ? dnOut_ : nullptr;
+    *launchParams_ = p_;
+    YCUDA(cudaMemcpyAsync(reinterpret_cast<void*>(dParams_), launchParams_, sizeof(YikimParams), cudaMemcpyHostToDevice, stream_));
     YCUDA(cudaEventRecord(e0_, stream_));
     YOPTIX(optixLaunch(pipeline_, stream_, dParams_, sizeof(YikimParams), &sbt_, w_, h_, 1));
     YCUDA(cudaEventRecord(eMid_, stream_));
@@ -550,7 +537,8 @@ void YikimRenderer::render(unsigned int spp, bool accumulate) {
 
 int YikimRenderer::pick(float x, float y, float4& hit) {
     p_.pickPixel = make_float2(x, y);
-    YCUDA(cudaMemcpyAsync(reinterpret_cast<void*>(dParams_), &p_, sizeof(YikimParams), cudaMemcpyHostToDevice, stream_));
+    *launchParams_ = p_;
+    YCUDA(cudaMemcpyAsync(reinterpret_cast<void*>(dParams_), launchParams_, sizeof(YikimParams), cudaMemcpyHostToDevice, stream_));
     OptixShaderBindingTable sbt = sbt_;
     sbt.raygenRecord = rgPick_;
     YOPTIX(optixLaunch(pipeline_, stream_, dParams_, sizeof(YikimParams), &sbt, 1, 1, 1));
@@ -564,6 +552,21 @@ int YikimRenderer::pick(float x, float y, float4& hit) {
 void YikimRenderer::downloadTo(uchar4* dst) {
     YCUDA(cudaMemcpyAsync(dst, p_.output, size_t(w_) * h_ * sizeof(uchar4), cudaMemcpyDeviceToHost, stream_));
     YCUDA(cudaStreamSynchronize(stream_));
+}
+
+bool YikimRenderer::copyToTexture(cudaGraphicsResource_t resource) {
+    const cudaError_t mapped = cudaGraphicsMapResources(1, &resource, stream_);
+    if (mapped != cudaSuccess) {
+        std::fprintf(stderr, "Yikim texture map: %s\n", cudaGetErrorString(mapped));
+        cudaGetLastError();
+        return false;
+    }
+    cudaArray_t array = nullptr;
+    YCUDA(cudaGraphicsSubResourceGetMappedArray(&array, resource, 0, 0));
+    const size_t pitch = size_t(w_) * sizeof(uchar4);
+    YCUDA(cudaMemcpy2DToArrayAsync(array, 0, 0, p_.output, pitch, pitch, h_, cudaMemcpyDeviceToDevice, stream_));
+    YCUDA(cudaGraphicsUnmapResources(1, &resource, stream_));
+    return true;
 }
 
 void YikimRenderer::download(std::vector<uchar4>& out) {
@@ -589,7 +592,7 @@ void YikimRenderer::shutdown() {
     groups_.clear();
     void* bufs[] = {p_.accum, p_.output, p_.albedoAcc, p_.normalAcc, p_.motion, p_.gbuf, p_.dnIn, p_.dnAlbedo, p_.dnNormal, dPickBody_, dPickHit_,
                     dnState_, dnScratch_, dnGuideA_, dnGuideB_, dnOut_, dnPrevOut_, dnIntensity_, dnAvg_,
-                    reinterpret_cast<void*>(dParams_), reinterpret_cast<void*>(rg_), reinterpret_cast<void*>(rgPick_), reinterpret_cast<void*>(rgPrep_),
+                    reinterpret_cast<void*>(dParams_), reinterpret_cast<void*>(rg_), reinterpret_cast<void*>(rgPick_),
                     reinterpret_cast<void*>(rgTone_), reinterpret_cast<void*>(miss_), reinterpret_cast<void*>(hit_)};
     for (void* b : bufs)
         if (b) cudaFree(b);
@@ -599,7 +602,11 @@ void YikimRenderer::shutdown() {
     dnState_ = dnScratch_ = dnGuideA_ = dnGuideB_ = nullptr;
     dnOut_ = dnPrevOut_ = nullptr;
     dnIntensity_ = dnAvg_ = nullptr;
-    dParams_ = rg_ = rgPick_ = rgPrep_ = rgTone_ = miss_ = hit_ = 0;
+    dParams_ = rg_ = rgPick_ = rgTone_ = miss_ = hit_ = 0;
+    if (launchParams_) {
+        YCUDA(cudaFreeHost(launchParams_));
+        launchParams_ = nullptr;
+    }
     for (cudaEvent_t* e : {&e0_, &e1_, &evXf_, &eMid_})
         if (*e) { cudaEventDestroy(*e); *e = nullptr; }
     if (stream_) cudaStreamDestroy(stream_);

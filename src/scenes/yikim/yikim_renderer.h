@@ -18,12 +18,13 @@ public:
     void shutdown();
     bool compileDevice(std::string& log);
     void uploadWorld(const PhysWorld& w);              // meshes, instances, colours (after the world is built)
-    void updateWorld(PhysWorld& w);                    // transforms and bars from the physics, top level rebuilt
+    void updateWorld(PhysWorld& w);                    // transforms, damage and bars from the physics, top level rebuilt
     void* transformsDone() const { return evXf_; }     // a cudaEvent_t recorded after updateWorld read the state
-    void setDamage(const std::vector<float>& perBody); // display tint, per body (index = body)
     void render(unsigned int spp, bool accumulate);    // adds spp samples (accumulate) or starts afresh; denoises if on
     void download(std::vector<uchar4>& out);
     void downloadTo(uchar4* hostPinned);                 // width * height pixels
+    // Copy the resolved RGBA8 image to a registered OpenGL texture, ordered on the render stream.
+    [[nodiscard]] bool copyToTexture(cudaGraphicsResource_t resource);
     // the body under render pixel (x, y): index, or 0 the ground, -1 the sky; hit point and distance in hit
     int pick(float x, float y, float4& hit);
     YikimParams& params() { return p_; }
@@ -31,8 +32,7 @@ public:
     float barRadius = 0.01f, barGap = 0.005f, barStub = 0.25f;   // the reinforcing bars (m), see PhysWorld::writeBars
     bool showBars = true;
     // 0 the raw image: grain where the sky light and the sun's disc are sampled with a few rays a frame while things move;
-    // 1 our own filter (yikim_filter.h), ~1 ms; 2 the OptiX AI denoiser (temporal AOV with albedo, normal and motion
-    // guides): cleaner still, but 9.7 ms at 1080p, and it shares the GPU with the physics (measured: 40 fps).
+    // 1 our own filter (yikim_filter.h); 2 the OptiX temporal denoiser with albedo, normal and motion guides.
     int denoiseMode = 0;
     void filterPasses(int n) { filter_.passes = n; }
     float denoiseMs = 0.0f;
@@ -47,7 +47,8 @@ private:
     OptixPipeline pipeline_ = nullptr;
     std::vector<OptixProgramGroup> groups_;
     OptixShaderBindingTable sbt_{};
-    CUdeviceptr rg_ = 0, rgPick_ = 0, rgPrep_ = 0, rgTone_ = 0, miss_ = 0, hit_ = 0, dParams_ = 0;
+    CUdeviceptr rg_ = 0, rgPick_ = 0, rgTone_ = 0, miss_ = 0, hit_ = 0, dParams_ = 0;
+    YikimParams* launchParams_ = nullptr;
     int* dPickBody_ = nullptr;
     float4* dPickHit_ = nullptr;
     cudaStream_t stream_ = nullptr;
@@ -84,7 +85,6 @@ private:
     void *iasTemp_ = nullptr, *iasOut_ = nullptr;
     size_t iasTempSize_ = 0, iasOutSize_ = 0;
     YBody* dBodies_ = nullptr;
-    std::vector<YBody> bodies_;
     void freeWorld();
     void buildIAS();
 };
