@@ -124,6 +124,16 @@ int OrmanAssets::texture(const std::string& path, Kind kind, float cutoff, bool 
     else
         std::memcpy(levels[0].px.data(), data, levels[0].px.size());
     stbi_image_free(data);
+    if (kind == SpecGloss) {
+        for (size_t i = 0; i < size_t(w) * h; ++i) {
+            unsigned char* q = &levels[0].px[i * 4];
+            q[1] = (unsigned char)(255 - q[3]);
+            q[0] = 255;
+            q[2] = 0;
+            q[3] = 255;
+        }
+        kind = Linear;
+    }
 
     static float lin[256];
     static bool linReady = false;
@@ -209,7 +219,7 @@ int OrmanAssets::addMaterial(const OMaterial& m, const std::string& name) {
     return int(materials.size()) - 1;
 }
 
-bool OrmanAssets::loadModel(const std::string& id, bool solid) {
+bool OrmanAssets::loadModel(const std::string& id, bool solid, bool whole) {
     const std::string dir = root + "/" + id;
     const std::string path = findFile(dir, {".gltf"});
     if (path.empty()) {
@@ -244,7 +254,20 @@ bool OrmanAssets::loadModel(const std::string& id, bool solid) {
             const auto& pbr = gm->pbr_metallic_roughness;
             m.tint = make_float3(pbr.base_color_factor[0], pbr.base_color_factor[1], pbr.base_color_factor[2]);
             m.roughness = pbr.roughness_factor;
-            const std::string alb = imagePath(pbr.base_color_texture);
+            std::string alb = imagePath(pbr.base_color_texture);
+            if (gm->has_pbr_specular_glossiness) {
+                // an older file's specular workflow (Sketchfab keeps it): its diffuse is the colour, its glossiness the
+                // roughness turned over
+                const auto& sg = gm->pbr_specular_glossiness;
+                m.tint = make_float3(sg.diffuse_factor[0], sg.diffuse_factor[1], sg.diffuse_factor[2]);
+                m.roughness = 1.0f - sg.glossiness_factor;
+                alb = imagePath(sg.diffuse_texture);
+                const std::string spec = imagePath(sg.specular_glossiness_texture);
+                if (!spec.empty()) {
+                    const int t = texture(spec, SpecGloss);
+                    if (t >= 0) m.arm = textures[t].tex;
+                }
+            }
             if (!alb.empty()) {
                 const int t = texture(alb, Albedo);
                 if (t >= 0) {
@@ -302,6 +325,12 @@ bool OrmanAssets::loadModel(const std::string& id, bool solid) {
     };
 
     int made = 0;
+    OProtoCPU one;   // whole: every mesh in it
+    one.asset = id;
+    one.name = id;
+    one.solid = solid;
+    one.bmin = make_float3(1e30f, 1e30f, 1e30f);
+    one.bmax = make_float3(-1e30f, -1e30f, -1e30f);
     for (cgltf_size ni = 0; ni < data->nodes_count; ++ni) {
         const cgltf_node* node = &data->nodes[ni];
         if (!node->mesh) continue;
@@ -313,23 +342,35 @@ bool OrmanAssets::loadModel(const std::string& id, bool solid) {
         }
         float m[16];
         cgltf_node_transform_world(node, m);
-        // the variants stand side by side in the file: each one at its own origin (the root's translation dropped)
-        const cgltf_node* top = node;
-        while (top->parent) top = top->parent;
-        float tm[16];
-        cgltf_node_transform_world(top, tm);
-        m[12] -= tm[12];
-        m[13] -= tm[13];
-        m[14] -= tm[14];
-        OProtoCPU p;
-        p.asset = id;
-        p.name = node->name ? node->name : id;
-        p.solid = solid;
-        p.bmin = make_float3(1e30f, 1e30f, 1e30f);
-        p.bmax = make_float3(-1e30f, -1e30f, -1e30f);
+        if (!whole) {
+            // the variants stand side by side in the file: each one at its own origin (the root's translation dropped)
+            const cgltf_node* top = node;
+            while (top->parent) top = top->parent;
+            float tm[16];
+            cgltf_node_transform_world(top, tm);
+            m[12] -= tm[12];
+            m[13] -= tm[13];
+            m[14] -= tm[14];
+        }
+        OProtoCPU single;
+        OProtoCPU& p = whole ? one : single;
+        if (!whole) {
+            p.asset = id;
+            p.name = node->name ? node->name : id;
+            p.solid = solid;
+            p.bmin = make_float3(1e30f, 1e30f, 1e30f);
+            p.bmax = make_float3(-1e30f, -1e30f, -1e30f);
+        }
         for (cgltf_size pi = 0; pi < node->mesh->primitives_count; ++pi) {
             const cgltf_primitive& pr = node->mesh->primitives[pi];
             if (pr.type != cgltf_primitive_type_triangles) continue;
+            if (p.geoms.size() >= ORMAN_MAX_INPUTS) break;
+            // a clear film (an eye's cornea: blended, nearly transparent, no texture) is left out: the forest cuts what it
+            // blends, and it would cover the eye
+            if (const cgltf_material* gm = pr.material)
+                if (gm->alpha_mode == cgltf_alpha_mode_blend && !gm->pbr_metallic_roughness.base_color_texture.texture &&
+                    gm->pbr_metallic_roughness.base_color_factor[3] < 0.5f)
+                    continue;
             const cgltf_accessor *ap = nullptr, *an = nullptr, *at = nullptr;
             for (cgltf_size a = 0; a < pr.attributes_count; ++a) {
                 const cgltf_attribute& at0 = pr.attributes[a];
@@ -373,11 +414,14 @@ bool OrmanAssets::loadModel(const std::string& id, bool solid) {
             }
             g.material = material(pr.material);
             p.geoms.push_back(std::move(g));
-            if (p.geoms.size() >= ORMAN_MAX_INPUTS) break;
         }
-        if (p.geoms.empty()) continue;
+        if (whole || p.geoms.empty()) continue;
         byAsset[id].push_back(int(protos.size()));
         protos.push_back(std::move(p));
+        ++made;
+    }
+    if (whole && !one.geoms.empty()) {
+        protos.push_back(std::move(one));
         ++made;
     }
     cgltf_free(data);

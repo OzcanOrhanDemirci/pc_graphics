@@ -48,8 +48,10 @@ public:
     std::map<std::string, std::vector<int>> byAsset;   // asset id -> its prototypes
     std::vector<std::string> missing;                  // asked for, not on disk
 
-    // a glTF model's variants as prototypes; false (and in missing) if it is not there
-    bool loadModel(const std::string& id, bool solid);
+    // a glTF model's variants as prototypes; false (and in missing) if it is not there. whole: every mesh of the file one
+    // prototype as the file lays them out (a creature's body, eyes, teeth and claws), left out of byAsset (the world's
+    // rules do not place it)
+    bool loadModel(const std::string& id, bool solid, bool whole = false);
     // a tiling material (Poly Haven texture or ambientCG set) for the ground; -1 if not there
     int loadMaterial(const std::string& id);
     // a leaf atlas (ambientCG's LeafSet): its material cut by its opacity map, and each leaf's place in it (u0, v0, u1,
@@ -60,7 +62,9 @@ public:
     void release();
 
 private:
-    enum Kind { Albedo, Normal, Linear, Alpha };
+    // SpecGloss: a specular-glossiness map (KHR_materials_pbrSpecularGlossiness: glossiness in alpha) read as an ORM map
+    // (no occlusion, roughness 1 - glossiness, no metal)
+    enum Kind { Albedo, Normal, Linear, Alpha, SpecGloss };
     std::map<std::string, int> texIndex_;
     int texture(const std::string& path, Kind kind, float cutoff = 0.5f, bool alphaChannel = false);
 };
