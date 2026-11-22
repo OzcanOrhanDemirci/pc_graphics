@@ -5,6 +5,10 @@
 //   pc_graphics.exe --scene fener --headless --live N --out captures/x      N live frames at 30 fps: timings + frames
 //   pc_graphics.exe --scene fener --headless --journey N --every k --out captures/x   the walk A -> B, N frames at 30 fps
 //   pc_graphics.exe --scene fener --headless --player-test                   the player walked by script, frames saved
+//   pc_graphics.exe --scene fener --headless --loop N --seconds T --frames K --out captures/x
+//            a seamless loop: N stills (K jittered frames each) over T seconds, out/frame_0000.png ...; the waves are
+//            rounded to periods that divide T (water.loop), the lamp is left to the settings (two beams: the picture
+//            repeats every lamp.period / 2 s); the eye is adapted once, at the first moment
 //   pc_graphics.exe --scene fener --map captures/harita.png                  top-down map (islands, forest, A, B, the walk)
 //   pc_graphics.exe --scene fener --kararlilik --yol a|yolculuk --kare N --out captures/kararlilik/fener_a
 //            steadiness and sharpness (Koy PLAN §9): N live frames of a path as the window draws them (TAA, jitter, the eye's
@@ -37,6 +41,8 @@ int runFenerCli(int argc, char** argv) {
     bool playerTest = false;
     int pview = 0;   // 1 surface only, 2 volume only, 3 depth, 4 normals
     int stab = 0, stabRef = 128;
+    int loopFrames = 0;
+    float loopSeconds = 0.0f;
     float stabFps = 41.0f, stabStart = 300.0f;
     std::string stabPath = "a";
     float t0 = -1.0f;
@@ -67,13 +73,22 @@ int runFenerCli(int argc, char** argv) {
         else if (a == "--hiz") stabFps = std::stof(next());
         else if (a == "--bas") stabStart = std::stof(next());
         else if (a == "--yol") stabPath = next();
+        else if (a == "--loop") { loopFrames = std::stoi(next()); headless = true; }
+        else if (a == "--seconds") loopSeconds = std::stof(next());
         else { std::printf("unknown option %s\n", a.c_str()); return 2; }
     }
     if (!headless && mapOut.empty()) {
         std::printf("fener: --headless (--frames, --live, --journey, --player-test) or --map (the live scene opens from the application)\n");
         return 2;
     }
-    app.still = headless && frames > 0;
+    if (loopFrames > 0 && loopSeconds <= 0.0f) {
+        std::printf("fener: --loop needs --seconds\n");
+        return 2;
+    }
+    if (loopFrames > 0) app.overrides.push_back("water.loop=" + std::to_string(loopSeconds));
+    const int loopAcc = frames > 0 ? frames : 64;
+    if (loopFrames > 0) frames = 0;
+    app.still = headless && (frames > 0 || loopFrames > 0);
     if (stab > 0) { frames = 0; live = 0; journeyFrames = 0; }
     app.loadConfig();
     app.renderer.init(app.width, app.height, app.root, unsigned(app.cfg.i("volume.scale", 1)));
@@ -98,7 +113,25 @@ int runFenerCli(int argc, char** argv) {
         app.journey.d = std::min(atMeters, app.journey.length());
         app.applyJourney();
     }
-    if (headless && frames > 0) {
+    if (headless && loopFrames > 0) {
+        const std::string o = out.empty() ? app.root + "/captures/fener_loop_" + stamp() : out;
+        std::filesystem::create_directories(o);
+        app.setTime(t0);
+        app.frame(0);   // OptiX's lazy compilation
+        app.renderer.resetHistory();
+        for (int k = 0; k < loopAcc; ++k) app.frame(unsigned(k));
+        app.adaptExposure(0.0f, true);   // the eye adapted once: the exposure stays the same through the loop
+        const double s0 = fnow();
+        for (int n = 0; n < loopFrames; ++n) {
+            app.setTime(t0 + loopSeconds * float(n) / float(loopFrames));
+            app.renderer.resetHistory();
+            for (int k = 0; k < loopAcc; ++k) app.frame(unsigned(k));
+            char nm[32];
+            std::snprintf(nm, sizeof(nm), "/frame_%04d", n);
+            app.save(o + nm);
+        }
+        std::printf("loop: %d frames over %.2f s, %d samples each, %.1f s\n", loopFrames, loopSeconds, loopAcc, fnow() - s0);
+    } else if (headless && frames > 0) {
         app.setTime(t0);
         app.frame(0);   // first launch: OptiX finishes its lazy compilation
         app.renderer.resetHistory();

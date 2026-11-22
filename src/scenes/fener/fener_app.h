@@ -149,6 +149,7 @@ struct FenerApp {
         p.nightSky = cfg.v3("sky.night", make_float3(0.0010f, 0.0014f, 0.0022f));
         p.waterDeep = cfg.v3("water.deep", make_float3(0.0004f, 0.0008f, 0.0010f));
         p.moonGlintK = cfg.f("water.moon_glint", 13.0f);
+        p.waveLoop = cfg.f("water.loop", 0.0f);
         p.volLampSamples = cfg.i("volume.lamp_samples", 8);
         p.volMoonSamples = cfg.i("volume.moon_samples", 4);
         p.volBeamScale = cfg.f("volume.beam_scale", 2.6f);

@@ -63,6 +63,7 @@ struct FenerParams {
     unsigned int frameIndex;             // ever increasing: noise decorrelation
     int histRead;                        // which ping-pong buffer holds the history
     float time;                          // seconds: waves, beam rotation, drizzle
+    float waveLoop;                      // > 0: every wave's period divides this many seconds (a seamless loop)
 
     // ---- scene
     OptixTraversableHandle handle;

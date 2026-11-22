@@ -283,7 +283,11 @@ static __forceinline__ __device__ float3 waveNormal(float x, float z, float foot
         const float kx = cosf(ang), kz = sinf(ang);
         const float kk = 2.0f * M_PIf / wl;
         const float A = steep * wl / (2.0f * M_PIf) * (0.6f + 0.6f * h3);
-        const float om = sqrtf(9.81f * kk);
+        float om = sqrtf(9.81f * kk);
+        if (params.waveLoop > 0.0f) {   // a loop: the nearest whole number of periods in waveLoop seconds (at least one)
+            const float turn = 6.2831853f / params.waveLoop;
+            om = fmaxf(1.0f, rintf(om / turn)) * turn;
+        }
         const float ph = kk * (x * kx + z * kz) - om * params.time + 6.2831853f * hashF(k * 7u + 5u);
         const float fd = expf(-sqr(foot / (wl * 0.22f)));
         const float s = -A * kk * (sinf(ph) + 0.7f * sinf(2.0f * ph)) * fd;
