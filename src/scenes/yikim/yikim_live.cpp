@@ -117,6 +117,18 @@ public:
         }
         case 1: {
             y_.root = host.root();
+            handMissing_ = false;
+            for (int r = 0; r < quakeCount(); ++r) {   // the records fetch.py downloads; the one by hand only costs magnitudes 3 and 4
+                if (quakeRecordByHand(r)) {
+                    handMissing_ = handMissing_ || !quakeRecordPresent(r, y_.root);
+                    continue;
+                }
+                if (!quakeRecordPresent(r, y_.root)) {
+                    st.error = L("assets/deprem/ içindeki deprem kayıtları yok. İndirmek için: python assets/deprem/fetch.py",
+                                 "The earthquake records in assets/deprem/ are missing. To fetch them: python assets/deprem/fetch.py");
+                    return;
+                }
+            }
             y_.overrides = host.overrides();
             y_.loadConfig();
             y_.scenario = "none";
@@ -324,8 +336,10 @@ public:
             c.title = L("Büyüklük", "Magnitude");
             for (int m = quakeMagnitudeMin(); m <= quakeMagnitudeMax(); ++m) c.items.push_back(std::to_string(m));
             c.active = magnitude_ - quakeMagnitudeMin();
-            if (const QuakeMagnitude* q = quakeMagnitude(magnitude_))
+            if (const QuakeMagnitude* q = quakeMagnitude(magnitude_)) {
                 c.detail = std::string(magnitudeName(magnitude_)) + L(" · tepe ivmesi ", " · peak acceleration ") + num(q->pgaG, q->pgaG < 0.1 ? 3 : 2) + " g";
+                if (handMissing_ && quakeRecordByHand(q->record)) c.detail += L(" · kaydı elle indirilmeli", " · its record must be fetched by hand");
+            }
             s.controls.push_back(c);
         }
         const double own = quakeOwnSeconds(magnitude_);
@@ -510,9 +524,20 @@ private:
             if (!y_.quake.stopping()) y_.stopQuake(y_.world.time);
             return;
         }
-        if (y_.startQuake(magnitude_, seconds(), y_.world.time))
-            host.toast(L("Deprem: büyüklük ", "Earthquake: magnitude ") + std::to_string(magnitude_) + " · " + magnitudeName(magnitude_) +
-                       (seconds() < 0.0 ? std::string(L(" · durdurana kadar", " · until stopped")) : " · " + theme::num(seconds(), 0) + L(" sn", " s")));
+        const QuakeMagnitude* q = quakeMagnitude(magnitude_);
+        if (q && quakeRecordByHand(q->record)) handMissing_ = !quakeRecordPresent(q->record, y_.root);
+        if (q && quakeRecordByHand(q->record) && handMissing_) {   // the record downloaded by hand (assets/deprem/fetch.py)
+            host.toast(L("Büyüklük ", "Magnitude ") + std::to_string(magnitude_) +
+                       L(": kaydı (2020 Bayraklı, AFAD TADAS) elle indirilir; nasıl yapılacağını python assets/deprem/fetch.py yazar",
+                         ": its record (2020 Bayrakli, AFAD TADAS) is fetched by hand; python assets/deprem/fetch.py says how"));
+            return;
+        }
+        if (!y_.startQuake(magnitude_, seconds(), y_.world.time)) {
+            host.toast(L("Deprem kaydı okunamadı (ayrıntı konsolda)", "The earthquake record could not be read (see the console)"));
+            return;
+        }
+        host.toast(L("Deprem: büyüklük ", "Earthquake: magnitude ") + std::to_string(magnitude_) + " · " + magnitudeName(magnitude_) +
+                   (seconds() < 0.0 ? std::string(L(" · durdurana kadar", " · until stopped")) : " · " + theme::num(seconds(), 0) + L(" sn", " s")));
     }
 
     app::SceneInfo info_ = describe();
@@ -524,6 +549,7 @@ private:
     bool textureReady_ = false;
     unsigned spp_ = 6;
     int magnitude_ = 6, speedIdx_ = 0, rebuildIn_ = 0;
+    bool handMissing_ = false;   // the record fetched by hand (quakeRecordByHand) is not there: its magnitudes say so
     bool paused_ = false, looking_ = false, camMoved_ = true;
     double debt_ = 0.0, lastStats_ = -1.0;
     int lastBatch_ = 0;

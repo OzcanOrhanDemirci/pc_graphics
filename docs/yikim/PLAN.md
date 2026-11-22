@@ -47,7 +47,7 @@ Varsayılan (Özcan'a söylendi, itiraz gelmedi): sahnede insan yok.
 ## 2 · Veri
 
 Özcan'ın isteğiyle araştırma yalnız gerekli veriye indirildi: gerçek deprem ivme kayıtları (kaynak ve lisansıyla,
-`assets/deprem/` ve DURUM'da). Malzeme ve kesit sayıları makul varsayım (beton ~C16, düz donatı, 30×50 kolon,
+`assets/deprem/fetch.py` ve DURUM'da). Malzeme ve kesit sayıları makul varsayım (beton ~C16, düz donatı, 30×50 kolon,
 12 cm döşeme, 3 m kat); eğlence ve kararlılık için ayarlanabilir, `scenes/yikim.cfg`.
 
 ## 3 · Hedef: göz neye inanır?

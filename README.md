@@ -825,9 +825,10 @@ Nothing is installed and the graphics driver is not touched: CUDA comes as NVIDI
 cmd /c build.bat                 :: configures once, then builds build\pc_graphics.exe (the one program)
 ```
 
-Five scenes read open data that is fetched rather than committed; run the script once before opening the scene:
+Six scenes read open data that is fetched rather than committed; run the script once before opening the scene:
 
 ```bat
+python assets/deprem/fetch.py    :: 3 · Collapse: earthquake records (ESM; the Bayrakli record by hand from AFAD TADAS, the script says how)
 python assets/koy/fetch.py       :: 5 · The Island: CC0 scans (Poly Haven, ambientCG)
 python tools/olcek_veri.py       :: 7 · Scale: maps, stars, galaxies, the cosmic web (sources: assets/olcek/KAYNAKLAR.md)
 python assets/orman/fetch.py     :: 11 · Rainforest: CC0 scans (sources: docs/orman/VARLIK.md)
@@ -924,8 +925,8 @@ Mountain), that data keeps its own licence and credit, listed below and in [NOTI
 - **Scene 13's elevation and colour:** Copernicus DEM GLO-30, © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH
   2014-2018, provided under COPERNICUS by the European Union and ESA; Mapzen Terrain Tiles (SRTM, U.S. Geological
   Survey); Sentinel-2 cloudless 2016 by EOX IT Services GmbH (modified Copernicus Sentinel data 2016), CC BY 4.0.
-- **Earthquake records** (scene 3): ESM, the Engineering Strong-Motion database (Mascandola et al., doi
-  10.13127/esm.3), and AFAD TADAS.
+- **Earthquake records** (scene 3, fetched by `assets/deprem/fetch.py`): ESM, the Engineering Strong-Motion database
+  (Mascandola et al., doi 10.13127/esm.3), and AFAD TADAS; original network TK (doi 10.7914/SN/TK).
 - **Colour science:** the CIE colour-matching functions and illuminants (CIE, CC BY-SA 4.0).
 - **Fonts:** IBM Plex, SIL Open Font License 1.1 ([assets/fonts/LICENSE.txt](assets/fonts/LICENSE.txt)).
 - **Fetched at build time** under their own licences: the NVIDIA CUDA redistributables, the OptiX SDK headers and the

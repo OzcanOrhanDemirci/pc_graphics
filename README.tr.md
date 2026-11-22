@@ -803,9 +803,10 @@ Hiçbir şey kurulmaz ve ekran kartı sürücüsüne dokunulmaz: CUDA, NVIDIA'n�
 cmd /c build.bat                 :: bir kez yapılandırır, sonra build\pc_graphics.exe'yi (tek program) derler
 ```
 
-Beş sahne, depoya işlenmeyip indirilen açık veriler okur; sahneyi açmadan önce betiğini bir kez çalıştır:
+Altı sahne, depoya işlenmeyip indirilen açık veriler okur; sahneyi açmadan önce betiğini bir kez çalıştır:
 
 ```bat
+python assets/deprem/fetch.py    :: 3 · Yıkım: deprem kayıtları (ESM; Bayraklı kaydı AFAD TADAS'tan elle, betik nasıl yapılacağını yazar)
 python assets/koy/fetch.py       :: 5 · Ada: CC0 taramalar (Poly Haven, ambientCG)
 python tools/olcek_veri.py       :: 7 · Ölçek: haritalar, yıldızlar, galaksiler, kozmik ağ (kaynaklar: assets/olcek/KAYNAKLAR.md)
 python assets/orman/fetch.py     :: 11 · Orman: CC0 taramalar (kaynaklar: docs/orman/VARLIK.md)
@@ -901,8 +902,8 @@ lisansını ve atfını korur; aşağıda ve [NOTICE.md](NOTICE.md)'de listeli.
 - **Sahne 13'ün yüksekliği ve rengi:** Copernicus DEM GLO-30, © DLR e.V. 2010-2014 ve © Airbus Defence and Space GmbH
   2014-2018, provided under COPERNICUS by the European Union and ESA; Mapzen Terrain Tiles (SRTM, U.S. Geological
   Survey); Sentinel-2 cloudless 2016 by EOX IT Services GmbH (modified Copernicus Sentinel data 2016), CC BY 4.0.
-- **Deprem kayıtları** (sahne 3): ESM, Engineering Strong-Motion veritabanı (Mascandola ve ark., doi
-  10.13127/esm.3), ve AFAD TADAS.
+- **Deprem kayıtları** (sahne 3, `assets/deprem/fetch.py` indirir): ESM, Engineering Strong-Motion veritabanı
+  (Mascandola ve ark., doi 10.13127/esm.3), ve AFAD TADAS; özgün ağ TK (doi 10.7914/SN/TK).
 - **Renk bilimi:** CIE renk eşleme fonksiyonları ve aydınlatıcıları (CIE, CC BY-SA 4.0).
 - **Yazı tipleri:** IBM Plex, SIL Open Font License 1.1 ([assets/fonts/LICENSE.txt](assets/fonts/LICENSE.txt)).
 - **Derleme sırasında indirilenler**, kendi lisanslarıyla: NVIDIA CUDA dağıtım arşivleri, OptiX SDK başlıkları ve DLSS

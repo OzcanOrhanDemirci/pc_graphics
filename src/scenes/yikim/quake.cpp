@@ -7,7 +7,7 @@
 
 static bool loadComponent(const std::string& path, double& dt, std::vector<double>& a, std::string& err) {
     std::ifstream in(path);
-    if (!in) { err = "cannot read " + path; return false; }
+    if (!in) { err = "cannot read " + path + " (python assets/deprem/fetch.py)"; return false; }
     dt = 0;
     a.clear();
     std::string line;
@@ -58,7 +58,9 @@ double3 QuakeRecord::displacement(double t) const {
     return disp[i] * (1.0 - w) + disp[i + 1] * w;
 }
 
-struct QuakeFiles { const char* name; const char* e; const char* n; const char* u; };
+// fetched by assets/deprem/fetch.py, not committed; byHand: AFAD TADAS gives it only after a guest login in the browser,
+// so the script says how to get it instead of fetching it
+struct QuakeFiles { const char* name; const char* e; const char* n; const char* u; bool byHand = false; };
 static const QuakeFiles kQuakes[] = {
     {"2023 Kahramanmaras, Pazarcik (TK.4614)", "TK.4614..HNE.D.INT-20230206_0000008.ACC.MP.ASC", "TK.4614..HNN.D.INT-20230206_0000008.ACC.MP.ASC",
      "TK.4614..HNZ.D.INT-20230206_0000008.ACC.MP.ASC"},
@@ -68,7 +70,8 @@ static const QuakeFiles kQuakes[] = {
      "A.YPT.00.HNZ.D.TK-1999-0077.ACC.MP.ASC"},
     {"1999 Kocaeli, Izmit (TK.4101)", "TK.4101..HNE.D.TK-1999-0077.ACC.MP.ASC", "TK.4101..HNN.D.TK-1999-0077.ACC.MP.ASC",
      "TK.4101..HNZ.D.TK-1999-0077.ACC.MP.ASC"},
-    {"2020 Sisam, Bayrakli (TK.3513)", "20201030115124_3513_mp_Acc_E.asc", "20201030115124_3513_mp_Acc_N.asc", "20201030115124_3513_mp_Acc_U.asc"},
+    {"2020 Sisam, Bayrakli (TK.3513)", "20201030115124_3513_mp_Acc_E.asc", "20201030115124_3513_mp_Acc_N.asc", "20201030115124_3513_mp_Acc_U.asc",
+     true},
 };
 
 // Peak ground accelerations follow ground-motion models only loosely (about 15 km away, firm ground); the waveforms
@@ -260,6 +263,14 @@ bool quakePlay(int magnitude, double seconds, const std::string& root, QuakePlay
 
 int quakeCount() { return int(sizeof(kQuakes) / sizeof(kQuakes[0])); }
 std::string quakeName(int i) { return i >= 0 && i < quakeCount() ? kQuakes[i].name : std::string(); }
+bool quakeRecordPresent(int i, const std::string& root) {
+    if (i < 0 || i >= quakeCount()) return false;
+    const std::string d = root + "/assets/deprem/";
+    for (const char* f : {kQuakes[i].e, kQuakes[i].n, kQuakes[i].u})
+        if (!std::ifstream(d + f)) return false;
+    return true;
+}
+bool quakeRecordByHand(int i) { return i >= 0 && i < quakeCount() && kQuakes[i].byHand; }
 bool quakeLoad(int i, const std::string& root, QuakeRecord& q, std::string& err) {
     if (i < 0 || i >= quakeCount()) { err = "no such record"; return false; }
     const std::string d = root + "/assets/deprem/";

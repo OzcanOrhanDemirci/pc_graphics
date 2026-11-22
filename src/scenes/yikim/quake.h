@@ -20,9 +20,11 @@ struct QuakeRecord {
     bool load(const std::string& east, const std::string& north, const std::string& up, std::string& err);
 };
 
-// the records shipped in assets/deprem: index -> (name, files)
+// the records in assets/deprem (fetched by assets/deprem/fetch.py, not committed): index -> (name, files)
 int quakeCount();
 std::string quakeName(int i);
+bool quakeRecordPresent(int i, const std::string& root);   // its three files are there
+bool quakeRecordByHand(int i);                             // downloaded by hand (fetch.py says how), not by the script
 bool quakeLoad(int i, const std::string& root, QuakeRecord& q, std::string& err);
 
 // Earthquakes by magnitude, 3 to 9: what the building feels from a quake of that size some 15 km away. Each is made

@@ -62,7 +62,7 @@ scenes/<sahne>.cfg   sahnelerin ayarları (anahtar = değer; --set anahtar=değe
 assets/
   fonts/      IBM Plex Sans, Serif, Mono (SIL Open Font License, LICENSE.txt)
   gallery/    galeri resimleri, <sahne>.jpg
-  deprem/     Yıkım'ın deprem kayıtları (ESM, AFAD TADAS)
+  deprem/     Yıkım'ın deprem kayıtları (ESM, AFAD TADAS); depoda yalnız fetch.py, kayıtları o indirir (Bayraklı elle)
 docs/         Türkçe çalışma günlüğü: bu dosya, DURUM.md, sahne klasörleri (PLAN, DURUM), images/ (README görselleri)
 tools/        Python araçları: EXR istatistikleri, FLIP karşılaştırması, temas tabakaları, değer etütleri
 ```

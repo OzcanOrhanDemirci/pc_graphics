@@ -37,3 +37,8 @@ assets/ates/_dl/
 assets/dag/*
 !assets/dag/KAYNAKLAR.md
 
+
+# Yıkım: earthquake records fetched by assets/deprem/fetch.py (Bayraklı by hand, the script says how), not committed
+# (sources and credit: NOTICE.md)
+assets/deprem/*
+!assets/deprem/fetch.py

@@ -601,6 +601,13 @@ ESM (esm-db.eu, işlenmiş MP, hesapsız indirilebilir) ve AFAD TADAS (misafir g
 PGA başlıkla karşılaştırıldı. Kullanılacaklar: **Pazarcık TK.4614** (2023, ESM MP, PGA 2,25 g; ham AFAD kaydında
 6,8 cm/s² sabit kayma var, sürmek için ESM işlenmişi), Antakya TK.3123 (2023), Yarımca YPT ve İzmit TK.4101 (1999),
 Bayraklı TK.3513 (2020, AFAD mp). Atıf: ESM (Mascandola ve diğ. 2026, doi 10.13127/esm.3) ve AFAD TADAS.
+**2026-11-22'den beri depoda değiller** (yeniden dağıtım lisansı belirtilmemiş; depo açılıyor): `python
+assets/deprem/fetch.py` dört ESM kaydını ESM'nin web servisinden indirir, her dosyayı sahnenin ayarlandığı kopyanın
+SHA-256'sıyla denetler. ESM her indirmede bir başlık satırına (`DATA_TIMESTAMP_YYYYMMDD_HHMMSS:`) indirme anını yazar;
+özet o satır dışarıda bırakılarak alınır, ayrıştırıcı iki nokta üst üsteli satırları zaten atlar (sayılar birebir aynı,
+denetlendi). Bayraklı yalnız TADAS'ta (ESM'de Sisam depreminin TK kaydı yok) ve misafir girişi istiyor: elle indirilir,
+betik adımları yazar ve dosyaları tam özetle denetler. ESM kayıtları yoksa sahne açılmaz ve betiği söyler; yalnız
+Bayraklı yoksa sahne açılır, 3 ve 4 (onun dalgası) kaydın elle indirileceğini söyler.
 İki kez integre (yamuk), işlenmiş kayıtlarda hız ve yer değiştirme sonda sıfıra döner (Pazarcık PGD 0,5-0,6 m, PGV
 0,93 m/s; Yarımca PGD 0,81 m). Zemin her karenin sonundaki konuma gider, alt adımlarda doğrusal; kayıt `deprem.offset`
 saniyesinden, 1 sn'de yumuşak girişle başlar. Not: uygulamanın yazdığı PGA yatay vektör tepesi (Pazarcık 3,0 g;
