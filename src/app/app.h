@@ -74,6 +74,7 @@ private:
     void drawFailed(double now);
     void drawDetails(const ui::Rect& area, float alpha);
     float keyCaps(float x, float y, const std::string& keys, float height, float alpha = 1.0f, bool dark = false);
+    float keyCapsWidth(const std::string& keys, float height);   // what keyCaps draws, without drawing it
     float keyHint(float x, float y, const std::string& keys, const std::string& what);
     void saveFramebuffer(const std::string& path);
     bool consume(int key);

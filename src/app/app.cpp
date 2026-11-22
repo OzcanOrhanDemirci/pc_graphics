@@ -545,6 +545,7 @@ int App::run(const Options& opt) {
             }
             wait(0.8);
             shot(infos_[s].id + "_galeride");
+            key(GLFW_KEY_A); wait(0.6); shot(infos_[s].id + "_ayrintilar"); key(GLFW_KEY_A); wait(0.4);   // how it is made
             if (infos_[s].id == "yikim") { mouse(0.88f, 0.735f); wait(0.3); shot("galeri_dugme"); click(); }   // the "open" button
             else key(GLFW_KEY_ENTER);
             wait(0.25); shot(infos_[s].id + "_yukleniyor");

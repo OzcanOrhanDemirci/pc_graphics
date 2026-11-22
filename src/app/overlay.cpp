@@ -37,11 +37,30 @@ std::vector<std::string> splitCaps(const std::string& keys) {
 
 // ---------------------------------------------------------------------------------------------------
 // small pieces
-// key caps; dark: on a button in the accent colour (dark ink on a slightly darker cap)
+// key caps, split at "|"; dark: on a button in the accent colour (dark ink on a slightly darker cap). Three tokens are
+// words between caps, not caps: "+" (together: "Ctrl|+|Sol tık"), "/" (either: "Sol tık|/|G") and "–" (a range: "3|–|9")
+namespace {
+bool capJoiner(const std::string& k) { return k == "+" || k == "/" || k == "–"; }
+}   // namespace
+
+float App::keyCapsWidth(const std::string& keys, float height) {
+    const ui::TextStyle t = theme::mono(S_, 14.5f);
+    float w = 0.0f;
+    for (const std::string& k : splitCaps(keys))
+        w += (capJoiner(k) ? ui::measure(k, theme::small(S_)) + S_(6) : std::max(height, ui::measure(k, t) + S_(18))) + S_(6);
+    return keys.empty() ? 0.0f : w - S_(6);
+}
+
 float App::keyCaps(float x, float y, const std::string& keys, float height, float alpha, bool dark) {
     const ui::TextStyle t = theme::mono(S_, 14.5f, dark ? ui::hex(0x0B0B0C, 0.85f * alpha) : ui::withAlpha(theme::text(), alpha));
     float cx = x;
     for (const std::string& k : splitCaps(keys)) {
+        if (capJoiner(k)) {
+            const ui::TextStyle j = theme::small(S_, dark ? ui::hex(0x0B0B0C, 0.7f * alpha) : ui::withAlpha(theme::muted(), alpha));
+            ui::text(cx + S_(3), y + 0.5f * (height - ui::lineHeight(j)), k, j);
+            cx += ui::measure(k, j) + S_(6) + S_(6);
+            continue;
+        }
         const float w = std::max(height, ui::measure(k, t) + S_(18));
         const ui::Rect r{cx, y, w, height};
         if (dark) {
@@ -100,8 +119,10 @@ void App::drawGallery(double now) {
         const std::string countTr = n < 10 ? std::string(tr[n]) : std::to_string(n);
         const std::string countEn = n < 10 ? std::string(en[n]) : std::to_string(n) + " scenes";
         ui::textWrapped(x0, y, S_(700),
-                        L("Ekran kartında, oyun motoru kullanmadan, baştan sona kendi kodumuzla kurulmuş " + countTr + " sahne. Her biri tek bir soruya odaklanır.",
-                          countEn + " on the graphics card, built from scratch in our own code, without a game engine. Each one is about a single question."),
+                        L("Oyun motoru kullanmadan, ekran kartında baştan sona kendi kodumuzla kurulmuş " + countTr +
+                              " sahne. Her biri tek bir dar alana odaklanır ve o alanda gidilebilecek en uca gitmeyi dener.",
+                          countEn + " built from scratch on the GPU in our own code, without a game engine. Each one keeps to a single narrow "
+                                    "subject and tries to take it as far as it will go."),
                         theme::body(S_, ui::withAlpha(theme::muted(), appear)), 1.5f);
     }
 
@@ -370,8 +391,8 @@ void App::drawBusy(double now, const Status& st) {
     const ui::TextStyle noteT = theme::small(S_, ui::withAlpha(theme::muted(), in));
     const ui::TextStyle labelT = theme::small(S_, ui::withAlpha(theme::text(), 0.9f * in));
     const ui::TextStyle pctT = theme::mono(S_, 15.0f, ui::withAlpha(theme::text(), 0.9f * in));
-    const std::string note = L("Görüntü bilerek durduruldu: eski dokular karttan silindi, yenileri yükleniyor",
-                               "The picture is held on purpose: the old textures left the card, the new ones are loading");
+    const std::string note = L("Görüntü bilerek durduruldu: eski dokular kart belleğinden çıkarıldı, yenileri yükleniyor",
+                               "The picture is held on purpose: the old textures are out of GPU memory, the new ones are loading");
     const float pad = S_(34), bw = std::max(S_(560), ui::measure(note, noteT));
     const float h = pad + ui::lineHeight(titleT) + S_(12) + ui::lineHeight(noteT) + S_(30) + S_(4) + S_(18) + ui::lineHeight(labelT) + pad;
     const ui::Rect P{view_.x + 0.5f * (view_.w - bw - 2 * pad), view_.y + 0.5f * (view_.h - h) + (1.0f - easeOut(in)) * S_(14), bw + 2 * pad, h};
@@ -457,11 +478,7 @@ void App::drawHud(double now, const Status& st) {
     float trackW = S_(300);
     for (const Control& c : st.controls)
         if (c.kind == Control::Kind::Choice && c.items.size() > 3) trackW = std::max(trackW, choiceWidth(c) - S_(90));
-    auto capsWidth = [&](const std::string& keys, float hh) {
-        float w = 0.0f;
-        for (const std::string& k : splitCaps(keys)) w += std::max(hh, ui::measure(k, theme::mono(S_, 14.5f)) + S_(18)) + S_(6);
-        return keys.empty() ? 0.0f : w - S_(6);
-    };
+    auto capsWidth = [&](const std::string& keys, float hh) { return keyCapsWidth(keys, hh); };
     for (const Control& c : st.controls) {
         if (c.kind == Control::Kind::Choice) contentW = std::max(contentW, choiceWidth(c));
         if (c.kind == Control::Kind::Slider) contentW = std::max(contentW, trackW + S_(22) + std::max(S_(70), ui::measure(c.text, valueT)));
@@ -599,11 +616,7 @@ void App::drawHud(double now, const Status& st) {
         const float hh = S_(30);
         float tw = 0.0f;
         const ui::TextStyle ht = theme::small(S_);
-        auto hintW = [&](const std::string& keys, const std::string& what) {
-            float w = 0.0f;
-            for (const std::string& k : splitCaps(keys)) w += std::max(hh, ui::measure(k, theme::mono(S_, 14.5f)) + S_(18)) + S_(6);
-            return w - S_(6) + S_(10) + ui::measure(what, ht);
-        };
+        auto hintW = [&](const std::string& keys, const std::string& what) { return keyCapsWidth(keys, hh) + S_(10) + ui::measure(what, ht); };
         const std::string kKeys = L("Tuşlar", "Keys"), kHide = L("Gizle", "Hide"), kGallery = L("Galeri", "Gallery");
         tw = hintW("F1", kKeys) + hintW("H", kHide) + hintW("Esc", kGallery) + 2 * S_(26);
         const ui::Rect R{W - m - tw - 2 * S_(18), H - m - hh - 2 * S_(16) + slide, tw + 2 * S_(18), hh + 2 * S_(16)};
@@ -653,11 +666,11 @@ void App::drawHelp(double now) {
     ui::rect(ui::Rect{0, 0, W, H}, ui::hex(0x000000, 0.58f));
     std::vector<KeyGroup> groups = si.keys, left, right;
     KeyGroup general{L("Genel", "General"),
-                     {{"Esc", L("Galeriye dön (yardım açıkken: kapat)", "Back to the gallery (with this open: close it)")},
-                      {"F1", L("Bu tuş listesi", "This list of keys")},
+                     {{"Esc", L("Galeriye dön", "Back to the gallery")},
+                      {"F1", L("Bu yardımı aç / kapat", "This help on / off")},
                       {"H", L("Arayüzü gizle / göster", "Hide / show the interface")},
-                      {"F12", L("Ekran görüntüsü (captures/)", "Screenshot (captures/)")}}};
-    if (si.reloadable) general.items.push_back({"F5", L("Ayarları ve programları yeniden yükle", "Reload the settings and programs")});
+                      {"F12", L("Ekran görüntüsü al (captures/)", "Save a screenshot (captures/)")}}};
+    if (si.reloadable) general.items.push_back({"F5", L("Ayarları ve GPU programlarını yeniden yükle", "Reload the settings and GPU programs")});
     groups.push_back(general);
     {
         float hl = 0.0f, hr = 0.0f;
@@ -669,14 +682,23 @@ void App::drawHelp(double now) {
     }
     const ui::TextStyle head = theme::caption(S_, theme::faint());
     const ui::TextStyle desc = theme::small(S_, theme::text());
-    const float rowH = S_(40), capCol = S_(250), colW = S_(640), gapCol = S_(70);
+    const float rowH = S_(40), colW = S_(640), gapCol = S_(70), capGap = S_(22);
+    // each column's caps as wide as its widest keys (right-aligned there), the words after them
+    auto capColumn = [&](const std::vector<KeyGroup>& gs) {
+        float w = S_(110);
+        for (const KeyGroup& g : gs)
+            for (const KeyHelp& k : g.items) w = std::max(w, keyCapsWidth(k.keys, S_(30)));
+        return w;
+    };
     auto colHeight = [&](const std::vector<KeyGroup>& gs) {
         float h = 0;
         for (const KeyGroup& g : gs) h += S_(44) + g.items.size() * rowH + S_(22);
         return h;
     };
+    const bool sub = !si.subtitle.empty();
+    const float headH = S_(150) + (sub ? S_(40) : 0.0f);
     const float bodyH = std::max(colHeight(left), colHeight(right));
-    const float pw = 2 * colW + gapCol + 2 * S_(56), ph = S_(56) + S_(150) + bodyH + S_(70);
+    const float pw = 2 * colW + gapCol + 2 * S_(56), ph = S_(56) + headH + bodyH + S_(70);
     const ui::Rect P{0.5f * (W - pw), 0.5f * (H - ph), pw, ph};
     ui::shadow(P, S_(24), S_(60), ui::hex(0x000000, 0.7f));
     ui::panel(P, ui::hex(0x0E1013, 0.96f), theme::glassBorder(), S_(24), std::max(1.0f, S_(1)));
@@ -685,18 +707,21 @@ void App::drawHelp(double now) {
     y += S_(40);
     ui::text(x - S_(2), y, si.title, theme::display(S_, 52.0f));
     y += S_(100);
+    if (sub) {   // what the scene is about, under its name
+        ui::text(x, y - S_(26), si.subtitle, theme::serif(S_, 24.0f, theme::muted()));
+        y += S_(40);
+    }
     ui::rect(ui::Rect{x, y - S_(18), P.w - 2 * S_(56), std::max(1.0f, S_(1))}, ui::hex(0xFFFFFF, 0.08f));
     auto column = [&](float cx, float cy, const std::vector<KeyGroup>& gs) {
+        const float capCol = capColumn(gs), room = colW - capCol - capGap;
         for (const KeyGroup& g : gs) {
             ui::text(cx, cy, g.title, head);
             cy += S_(44);
             for (const KeyHelp& k : g.items) {
-                // caps right-aligned in their column, the words after
-                float capsW = 0.0f;
-                for (const std::string& c : splitCaps(k.keys)) capsW += std::max(S_(30), ui::measure(c, theme::mono(S_, 14.5f)) + S_(18)) + S_(6);
-                capsW -= S_(6);
-                keyCaps(cx + capCol - capsW, cy, k.keys, S_(30));
-                ui::text(cx + capCol + S_(22), cy + 0.5f * (S_(30) - ui::lineHeight(desc)), k.what, desc);
+                keyCaps(cx + capCol - keyCapsWidth(k.keys, S_(30)), cy, k.keys, S_(30));
+                ui::TextStyle d = desc;   // a long line a little smaller rather than into the next column
+                if (const float w = ui::measure(k.what, d); w > room) d.size *= std::max(0.8f, room / w);
+                ui::text(cx + capCol + capGap, cy + 0.5f * (S_(30) - ui::lineHeight(d)), k.what, d);
                 cy += rowH;
             }
             cy += S_(22);
@@ -705,7 +730,7 @@ void App::drawHelp(double now) {
     column(x, y, left);
     column(x + colW + gapCol, y, right);
     const ui::TextStyle ft = theme::small(S_, theme::faint());
-    const std::string foot = L("F1 ya da Esc ile kapanır", "F1 or Esc closes it");
+    const std::string foot = L("F1 ya da Esc ile kapanır", "F1 or Esc to close");
     ui::text(P.x + P.w - S_(56) - ui::measure(foot, ft), P.y + P.h - S_(52), foot, ft);
 }
 
