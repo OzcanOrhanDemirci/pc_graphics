@@ -13,6 +13,9 @@
 //   pc_graphics.exe --scene koy --dalgacik --out captures/koy/dalgacik/x --cam .. --look ..   ripples off and on, one exposure
 //   pc_graphics.exe --scene koy --test [ad]               the physics tests (Snell's window, colour at depth, visibility, ...)
 //   pc_graphics.exe --scene koy --map captures/koy/harita.png   the trial area from above (the same floor function)
+//   pc_graphics.exe --scene koy --loop N --seconds T [--ref --refn n] [--cam .. --look ..] --out captures/koy/dongu
+//            a seamless loop: N frames over T seconds, out/frame_0000.png ...; the sea's frequencies are rounded to
+//            multiples of 2 pi / T (ocean.loop = T), the eye adapted once at the first moment
 //   options: --set key=value, --width W, --height H, --spp 1|4|8|16, --edge N, --filter 0..3
 #include "scenes/koy/koy_app.h"
 #include "core/gpu_stats.h"
@@ -648,6 +651,7 @@ int runKoyCli(int argc, char** argv) {
     KoyApp app;
     std::string mode, out, path = "sabit", testName, mapOut;
     int frames = 120, refN = 4, timing = 0;
+    float loopSeconds = 0.0f;
     float breathe = 0.0f;   // --nefes S: seconds of breathing before each still (the bubbles)
     float t0 = 0.0f, fps = 41.0f;
     bool camGiven = false, ref = false, worker = false, liveOnly = false, fromFloor = false;
@@ -675,6 +679,8 @@ int runKoyCli(int argc, char** argv) {
         else if (a == "--yerden") fromFloor = true;   // --cam / --look y: metres over the sand there
         else if (a == "--yol") path = next();
         else if (a == "--kare") frames = std::stoi(next());
+        else if (a == "--loop") { mode = "loop"; frames = std::stoi(next()); }
+        else if (a == "--seconds") loopSeconds = std::stof(next());
         else if (a == "--refn") refN = std::stoi(next());
         else if (a == "--hiz") fps = std::stof(next());
         else if (a == "--t") t0 = std::stof(next());
@@ -693,6 +699,13 @@ int runKoyCli(int argc, char** argv) {
     if (mode.empty()) {
         std::printf("koy: --headless, --kararlilik, --zaman N, --doku, --yokla, --test, --map (canli sahne uygulamadan acilir)\n");
         return 2;
+    }
+    if (mode == "loop") {
+        if (loopSeconds <= 0.0f) {
+            std::printf("koy: --loop needs --seconds\n");
+            return 2;
+        }
+        app.overrides.push_back("ocean.loop=" + std::to_string(loopSeconds));
     }
     app.loadConfig();
     if (fromFloor) {   // the given heights are over the sand
@@ -920,6 +933,22 @@ int runKoyCli(int argc, char** argv) {
             std::printf("doku kiyas %d: kamera kumun %.2f m ustunde, en yakin yuzey %.2f m -> %s_%02d_*.png\n", int(c),
                         app.diver.pos.y - koyFloor(app.cfg, app.diver.pos.x, app.diver.pos.z), d, o.c_str(), int(c));
         }
+    } else if (mode == "loop") {
+        const std::string o = out.empty() ? app.root + "/captures/koy/dongu_" + stamp() : out;
+        std::filesystem::create_directories(o);
+        app.stepWorld(t0);
+        app.frame();
+        app.adaptExposure(0.0f, true);   // the eye adapted once: the exposure stays the same through the loop
+        const double s0 = know();
+        for (int k = 0; k < frames; ++k) {
+            app.stepWorld(t0 + loopSeconds * float(k) / float(frames));
+            app.frame();
+            if (ref) app.renderer.renderReference(refN);
+            char nm[32];
+            std::snprintf(nm, sizeof(nm), "/frame_%04d", k);
+            app.save(o + nm);
+        }
+        std::printf("dongu: %d kare, %.2f sn, %.1f sn surdu -> %s\n", frames, loopSeconds, know() - s0, o.c_str());
     } else if (mode == "still") {
         app.stepWorld(t0);
         app.frame();
