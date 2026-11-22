@@ -3,6 +3,13 @@
 //   pc_graphics.exe --scene heykel --headless [--aday 0..5|all] [--spp 128] [--w 1280 --h 720] [--zoom 1,10,100]
 //                   [--px 0.5,0.45] [--out captures/heykel_etut] [--set key=value]
 //       the candidates' first view and zoom steps, path traced, to PNG (the study's frames, and timings)
+//   pc_graphics.exe --scene heykel --sonsuz 150 [--nokta 0.5,-0.5,0] [--kat 9] [--seviye 12] [--egim 0,0] [--spp 64]
+//                   [--w 1920 --h 1080] [--out captures/heykel_sonsuz]
+//       an endless zoom (a seamless loop): the Menger is the same picture zoomed --kat times about a point of its own
+//       similarity (fractal units; 0.5,-0.5,0 is the fixed point of two of its sub-cube maps, on the cut: 9 times), so
+//       N frames from --seviye to --kat times that close on themselves. The camera looks at the point along the cut's
+//       normal, turned by --egim (yaw, pitch degrees); the light, the spot and the eye light follow the view (all in
+//       proportion to the distance), so frame N would be frame 0
 #include "scenes/heykel/heykel_app.h"
 #include "core/image_io.h"
 
@@ -1229,6 +1236,48 @@ int stabilityFrames(HeykelApp& app, int cand, const std::string& mode, D3 target
 // it backing through a wall after turning round inside) and never away from it (zooming towards the dark room, the
 // camera flew off and the sculpture was lost). Each walk ends with the wheel turned out in small steps, as the window
 // does over its frames: the camera must reach the first view, without a jump on the way (--set test.seed=N for others).
+// --sonsuz: the endless zoom (see the top of the file)
+int endlessZoom(HeykelApp& app, int frames, D3 pf, float factor, float from, float2 tilt, int spp, const std::string& out) {
+    app.setCandidate(app.sculpture());
+    const hk::Shape& s = app.world.s;
+    const hk::M3 R = transpose(s.orient);   // fractal -> world
+    const D3 p = d3(s.center) + mulD(R, pf * double(s.scale));
+    // looking at the cut face square on (its normal points out of the stone, towards the cut-away half), then turned
+    const float3 n = normalize(s.cutSize);
+    const float3 fw = normalize(mul(R, n * -1.0f));
+    float yaw = std::atan2(fw.x, -fw.z), pitch = std::asin(std::clamp(fw.y, -1.0f, 1.0f));
+    yaw += tilt.x * kDeg;
+    pitch += tilt.y * kDeg;
+    app.yaw = yaw;
+    app.pitch = pitch;
+    float3 r, u, f;
+    app.cameraBasis(r, u, f);
+    const double homeDist = length(app.homePos - app.homeFocus);
+    std::filesystem::create_directories(out);
+    std::printf("sonsuz: nokta (dunya) %.6f %.6f %.6f, yaw %.2f pitch %.2f, x%g -> x%g, %d kare, %d ornek\n", p.x, p.y, p.z, yaw / kDeg,
+                pitch / kDeg, from, from * factor, frames, spp);
+    const double t0 = nowS();
+    for (int k = 0; k < frames; ++k) {
+        const double lv = double(from) * std::pow(double(factor), double(k) / frames);
+        const double dist = homeDist / lv;
+        app.level = float(lv);
+        app.focus = p;
+        app.camPos = p - d3(f) * dist;
+        app.defaultLight();
+        app.aimLight(p);
+        app.lampDir = app.lampGoal = app.lightDir;   // the same light at every scale (no search for a clear line)
+        app.resetSamples();
+        for (int left = spp; left > 0; left -= 8) app.addSamples(std::min(left, 8));
+        app.resolve();
+        cudaDeviceSynchronize();
+        char name[64];
+        std::snprintf(name, sizeof(name), "/frame_%04d", k);
+        app.save(out + name);
+    }
+    std::printf("sonsuz: %d kare %.1f sn -> %s\n", frames, nowS() - t0, out.c_str());
+    return 0;
+}
+
 int testCamera(HeykelApp& app) {
     app.setCandidate(app.sculpture());
     unsigned int seed = unsigned(app.cfg.f("test.seed", 777.0f));
@@ -1375,6 +1424,10 @@ int runHeykelCli(int argc, char** argv) {
     std::string stability;
     int frames = 24;
     unsigned int seed = 1u;
+    int endless = 0;
+    D3 endlessPoint = d3(0.5, -0.5, 0.0);
+    float endlessFactor = 9.0f, endlessFrom = 12.0f;
+    float2 endlessTilt{0.0f, 0.0f};
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         auto next = [&]() { return i + 1 < argc ? std::string(argv[++i]) : std::string(); };
@@ -1393,6 +1446,11 @@ int runHeykelCli(int argc, char** argv) {
         else if (a == "--hareket") moving = true;
         else if (a == "--kararlilik") stability = next();
         else if (a == "--kare") frames = std::stoi(next());
+        else if (a == "--sonsuz") endless = std::stoi(next());
+        else if (a == "--nokta") { const auto v = floats(next()); if (v.size() == 3) endlessPoint = d3(v[0], v[1], v[2]); }
+        else if (a == "--kat") endlessFactor = std::stof(next());
+        else if (a == "--seviye") endlessFrom = std::stof(next());
+        else if (a == "--egim") { const auto v = floats(next()); if (v.size() == 2) endlessTilt = make_float2(v[0], v[1]); }
         else if (a == "--hedef") {   // a world point to zoom straight at (the tour's dives)
             std::stringstream ss(next());
             char c;
@@ -1406,6 +1464,13 @@ int runHeykelCli(int argc, char** argv) {
     app.buildCandidates();
     if (test == "pert") return testPerturbation(app);
     if (test == "kamera") return testCamera(app);
+    if (endless > 0) {
+        app.init();
+        setPNGCompression(1);
+        const int rc = endlessZoom(app, endless, endlessPoint, endlessFactor, endlessFrom, endlessTilt, spp, out);
+        app.release();
+        return rc;
+    }
     if (!stability.empty()) {
         app.init();
         setPNGCompression(1);
