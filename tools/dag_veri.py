@@ -1,13 +1,19 @@
 """Scene 13 "Dag": the real ground around Kackar's summit, fetched and prepared (assets/dag/, not committed; sources in
-assets/dag/KAYNAKLAR.md).
+assets/dag/KAYNAKLAR.md). Needs numpy, rasterio and opencv-python.
 
+  python tools/dag_veri.py all        every step below in order (dem, mosaic, dem90, imgfetch, imgbuild, rocks), skipping
+                                      the steps whose results are there; re-runnable. Tens of GB of downloads the first time
+  python tools/dag_veri.py check      only checks that every file the scene reads is there, downloads nothing
   python tools/dag_veri.py dem        Copernicus DEM tiles (GLO-30, GLO-90 where GLO-30 is not public), re-runnable
   python tools/dag_veri.py mosaic     the tiles as one lat/lon grid at 1 arc second: assets/dag/dem_1s.u16
+  python tools/dag_veri.py dem90      where GLO-30 is not public (Armenia, Azerbaijan and their border cells, Ararat among them):
+                                      Mapzen's Terrain Tiles (SRTM, zoom 12, about 29 m) in place of GLO-90 in dem_1s.u16
   python tools/dag_veri.py imgfetch   Sentinel-2 cloudless 2016 web map tiles, re-runnable
   python tools/dag_veri.py imgbuild   the ground's colour as clip levels around the summit: assets/dag/a0.rgb8 ...
   python tools/dag_veri.py rocks      Poly Haven's rock scans (CC0), md5 checked: assets/dag/cc0/
-  python tools/dag_veri.py dem90      where GLO-30 is not public (Armenia, Azerbaijan and their border cells, Ararat among them):
-                                      Mapzen's Terrain Tiles (SRTM, zoom 12, about 29 m) in place of GLO-90 in dem_1s.u16
+  --lang tr|en                        the language of the messages (default: the application's, from user.cfg)
+
+The messages follow the application's language (tools/dil.py).
 """
 import concurrent.futures as cf
 import json
@@ -18,9 +24,34 @@ import time
 import urllib.error
 import urllib.request
 
-import numpy as np
-
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import dil  # noqa: E402
+from dil import say  # noqa: E402
+
+HELP_TR = """Sahne 13 "Dağ": Kaçkar doruğunun çevresindeki gerçek yeryüzü, indirilir ve hazırlanır (assets/dag/, depoya
+işlenmez; kaynaklar assets/dag/KAYNAKLAR.md). numpy, rasterio ve opencv-python gerekir.
+
+  python tools/dag_veri.py all        aşağıdaki bütün adımlar sırayla (dem, mosaic, dem90, imgfetch, imgbuild, rocks); sonucu
+                                      yerinde olan adım atlanır, yeniden çalıştırılabilir. İlk seferde onlarca GB indirme
+  python tools/dag_veri.py check      yalnız sahnenin okuduğu her dosyanın yerinde olduğunu denetler, hiçbir şey indirmez
+  python tools/dag_veri.py dem        Copernicus DEM paftaları (GLO-30; GLO-30'un açık olmadığı yerde GLO-90), yeniden
+                                      çalıştırılabilir
+  python tools/dag_veri.py mosaic     paftalar 1 yay saniyelik tek bir enlem/boylam ızgarasında: assets/dag/dem_1s.u16
+  python tools/dag_veri.py dem90      GLO-30'un açık olmadığı yerde (Ermenistan, Azerbaycan ve sınır hücreleri, Ağrı dahil)
+                                      dem_1s.u16'da GLO-90 yerine Mapzen Terrain Tiles (SRTM, zoom 12, yaklaşık 29 m)
+  python tools/dag_veri.py imgfetch   Sentinel-2 cloudless 2016 harita paftaları, yeniden çalıştırılabilir
+  python tools/dag_veri.py imgbuild   yerin rengi, doruğun çevresinde iç içe düzeyler: assets/dag/a0.rgb8 ...
+  python tools/dag_veri.py rocks      Poly Haven'ın kaya taramaları (CC0), md5 denetimli: assets/dag/cc0/
+  --lang tr|en                        iletilerin dili (öntanımlı: uygulamanınki, user.cfg'den)
+"""
+
+dil.choose(dil.take_lang(sys.argv))
+try:
+    import numpy as np
+except ImportError:
+    sys.exit(say('numpy gerekli: pip install numpy rasterio opencv-python', 'numpy is needed: pip install numpy rasterio opencv-python'))
+
 ROOT = os.path.dirname(HERE)
 OUT = os.path.join(ROOT, 'assets', 'dag')
 DL = os.path.join(OUT, '_dl')
@@ -93,16 +124,22 @@ def one_dem(cell):
 
 def cmd_dem():
     cells = [(la, lo) for la in range(LAT_MIN, LAT_MAX) for lo in range(LON_MIN, LON_MAX) if tile_near(la, lo) <= RADIUS_KM]
-    print(len(cells), 'cells within', RADIUS_KM, 'km', flush=True)
-    done = {}
+    print(say(f'{len(cells)} hücre {RADIUS_KM:.0f} km içinde', f'{len(cells)} cells within {RADIUS_KM:.0f} km'), flush=True)
+    done, hows = {}, []
     t0 = time.time()
     with cf.ThreadPoolExecutor(12) as ex:
         for k, (cell, res, how) in enumerate(ex.map(one_dem, cells)):
             done[f'{cell[0]},{cell[1]}'] = res
+            hows.append(how)
             if k % 10 == 0:
                 print(k, cell, res, how, f'{time.time() - t0:.0f} s', flush=True)
     vals = list(done.values())
-    print('GLO-30', vals.count(30), 'GLO-90', vals.count(90), 'none (sea)', vals.count(0), f'{time.time() - t0:.0f} s', flush=True)
+    s = f'{time.time() - t0:.0f} s'
+    print(say(f'GLO-30 {vals.count(30)}, GLO-90 {vals.count(90)}, yok (deniz) {vals.count(0)}, {s}',
+              f'GLO-30 {vals.count(30)}, GLO-90 {vals.count(90)}, none (sea) {vals.count(0)}, {s}'), flush=True)
+    if 'fail' in hows:
+        sys.exit(say(f'{hows.count("fail")} pafta indirilemedi. Bağlantı var mı? Sonra yeniden çalıştırın: indirilmiş olan atlanır.',
+                     f'{hows.count("fail")} tiles could not be downloaded. Is the connection up? Then run this again: what is there is skipped.'))
     with open(os.path.join(DL, 'dem_index.json'), 'w') as f:
         json.dump(done, f, indent=0)
 
@@ -148,7 +185,7 @@ def cmd_mosaic():
     with open(os.path.join(OUT, 'dem_1s.json'), 'w') as f:
         json.dump({'width': w, 'height': h, 'lat_top': LAT_MAX, 'lon_left': LON_MIN, 'per_degree': 3600, 'code': 'u16: h = v / 8 - 500',
                    'sources': src.tolist()}, f)
-    print('mosaic', w, h, f'{time.time() - t0:.0f} s')
+    print(say(f'mozaik {w} x {h}, {time.time() - t0:.0f} s', f'mosaic {w} x {h}, {time.time() - t0:.0f} s'))
 
 
 # the ground's colour: Sentinel-2 cloudless 2016 (EOX), CC BY 4.0 for that year's layer (from 2018 on they are NC: not used)
@@ -226,7 +263,7 @@ def cmd_imgfetch():
                 for dx in (-1, 0, 1):
                     wide.add((y + dy, x + dx))
         jobs = [(z, y, x) for (y, x) in sorted(tiles) if (y, x) in wide]
-        print(name, 'zoom', z, len(tiles), 'tiles,', len(jobs), 'with land', flush=True)
+        print(say(f'{name} zoom {z}: {len(tiles)} pafta, {len(jobs)} tanesinde kara', f'{name} zoom {z}: {len(tiles)} tiles, {len(jobs)} with land'), flush=True)
         got = {'have': 0, 'got': 0, 'none': 0, 'fail': 0}
         with cf.ThreadPoolExecutor(10) as ex:
             for k, r in enumerate(ex.map(one_img, jobs)):
@@ -309,7 +346,7 @@ def cmd_dem90():
         meta = json.load(f)
     src = meta['sources']
     cells = [(LAT_MIN + i, LON_MIN + j) for i, r in enumerate(src) for j, v in enumerate(r) if v == 90]
-    print(len(cells), 'cells', cells, flush=True)
+    print(say(f'{len(cells)} hücre: {cells}', f'{len(cells)} cells: {cells}'), flush=True)
     z = 12
     t0 = time.time()
     jobs = set()
@@ -320,7 +357,7 @@ def cmd_dem90():
             for x in range(int(xa[0]) - 1, int(xb[0]) + 2):
                 jobs.add((z, y, x))
     jobs = sorted(jobs)
-    print(len(jobs), 'tiles', flush=True)
+    print(say(f'{len(jobs)} pafta', f'{len(jobs)} tiles'), flush=True)
     got = {'have': 0, 'got': 0, 'none': 0, 'fail': 0}
     with cf.ThreadPoolExecutor(12) as ex:
         for k, r in enumerate(ex.map(one_terrarium, jobs)):
@@ -329,7 +366,8 @@ def cmd_dem90():
                 print(' ', k, got, f'{time.time() - t0:.0f} s', flush=True)
     print(got, f'{time.time() - t0:.0f} s', flush=True)
     if got['fail'] or got['none']:
-        raise SystemExit('tiles missing: the cells stay as they are')
+        raise SystemExit(say('paftalar eksik: hücreler olduğu gibi kalır. Bağlantı var mı? Sonra yeniden çalıştırın.',
+                             'tiles missing: the cells stay as they are. Is the connection up? Then run this again.'))
     m = np.memmap(os.path.join(OUT, 'dem_1s.u16'), dtype=np.uint16, mode='r+', shape=(meta['height'], meta['width']))
     tdir = os.path.join(DL, 'terrarium', str(z))
     for lat, lon in cells:
@@ -349,7 +387,7 @@ def cmd_dem90():
             for tx in range(ta, tb + 1):
                 a = cv2.imread(os.path.join(tdir, f'{ty}_{tx}.png'), cv2.IMREAD_COLOR)
                 if a is None:
-                    raise SystemExit(f'no tile {ty} {tx}')
+                    raise SystemExit(say(f'pafta yok: {ty} {tx}', f'no tile {ty} {tx}'))
                 a = a.astype(np.float32)
                 # Terrarium: (red * 256 + green + blue / 256) - 32768, OpenCV reads BGR
                 canvas[(ty - tc) * 256:(ty - tc + 1) * 256, (tx - ta) * 256:(tx - ta + 1) * 256] = a[:, :, 2] * 256.0 + a[:, :, 1] + a[:, :, 0] / 256.0 - 32768.0
@@ -358,14 +396,15 @@ def cmd_dem90():
         flat = cv2.erode((cv2.absdiff(old, cv2.blur(old, (5, 5))) < 0.02).astype(np.uint8), np.ones((3, 3), np.uint8)) > 0
         merged = np.where(flat, old, new)
         d = new - old
-        print(f'cell {lat} {lon}: SRTM - GLO-90 mean {d.mean():.2f} m, std {d.std():.2f} m, max {new.max():.0f} m, flat share {flat.mean():.3f}', flush=True)
+        print(say(f'hücre {lat} {lon}: SRTM - GLO-90 ortalama {d.mean():.2f} m, sapma {d.std():.2f} m, en yüksek {new.max():.0f} m, düz payı {flat.mean():.3f}',
+                  f'cell {lat} {lon}: SRTM - GLO-90 mean {d.mean():.2f} m, std {d.std():.2f} m, max {new.max():.0f} m, flat share {flat.mean():.3f}'), flush=True)
         m[r0:r0 + 3600, c0:c0 + 3600] = np.clip(np.round((merged + 500.0) * 8.0), 0, 65535).astype(np.uint16)
         src[lat - LAT_MIN][lon - LON_MIN] = 31
     m.flush()
     meta['sources'] = src
     with open(os.path.join(OUT, 'dem_1s.json'), 'w') as f:
         json.dump(meta, f)
-    print('done', f'{time.time() - t0:.0f} s', flush=True)
+    print(say(f'tamam, {time.time() - t0:.0f} s', f'done, {time.time() - t0:.0f} s'), flush=True)
 
 
 def ph_get(url, path, md5):
@@ -377,7 +416,7 @@ def ph_get(url, path, md5):
     with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=300) as r:
         b = r.read()
     if hashlib.md5(b).hexdigest() != md5:
-        raise RuntimeError('md5: ' + url)
+        raise SystemExit(say(f'ÖZET TUTMADI (md5): {url}', f'HASH MISMATCH (md5): {url}'))
     with open(path, 'wb') as f:
         f.write(b)
     return 'got'
@@ -412,19 +451,61 @@ def cmd_rocks():
             print(pid, m, ph_get(e['url'], os.path.join(md, f'{fn}.jpg'), e['md5']), flush=True)
 
 
+ROCK_FILES = ([f'cc0/{n}_{m}.jpg' for n in ('kayaA', 'kayaB') for m in ('albedo', 'normal', 'disp')] +
+              [f'cc0/{p}/{f}' for p in ('boulder_01', 'rock_07', 'rock_09') for f in (f'{p}.gltf', 'albedo.jpg', 'normal.jpg')])
+LEVEL_FILES = [f'{name}.rgb8' for name, _, _, _ in LEVELS] + ['renk.json']
+
+
+def have(rel):
+    return os.path.exists(os.path.join(OUT, rel))
+
+
+def dem90_left():
+    """cells of dem_1s.u16 still on GLO-90 that dem90 replaces (none when the mosaic is not there)"""
+    if not have('dem_1s.json'):
+        return 0
+    with open(os.path.join(OUT, 'dem_1s.json')) as f:
+        return sum(v == 90 for r in json.load(f)['sources'] for v in r)
+
+
+def cmd_check():
+    missing = [r for r in ['dem_1s.u16', 'dem_1s.json'] + LEVEL_FILES + ROCK_FILES if not have(r)]
+    for r in missing:
+        print(say(f'  yok: assets/dag/{r}', f'  missing: assets/dag/{r}'))
+    left = dem90_left()
+    if left:
+        print(say(f'  dem_1s.u16: {left} hücre hâlâ GLO-90 (adım: dem90)', f'  dem_1s.u16: {left} cells still on GLO-90 (step: dem90)'))
+    if missing or left:
+        sys.exit(say('eksik var; hazırlamak için: python tools/dag_veri.py all', 'something is missing; to prepare it: python tools/dag_veri.py all'))
+    print(say('hepsi yerinde', 'all present'))
+
+
+def cmd_all():
+    """every step in order; a step whose results are there is skipped (the downloads skip what is there anyway)"""
+    dem_done = have('dem_1s.u16') and have('dem_1s.json')
+    steps = [('dem', cmd_dem, not dem_done), ('mosaic', cmd_mosaic, not dem_done), ('dem90', cmd_dem90, None),
+             ('imgfetch', cmd_imgfetch, not all(have(r) for r in LEVEL_FILES)), ('imgbuild', cmd_imgbuild, None),
+             ('rocks', cmd_rocks, not all(have(r) for r in ROCK_FILES))]
+    for name, fn, needed in steps:
+        if needed is None:   # decided only now: on what the steps before it left
+            needed = dem90_left() > 0 if name == 'dem90' else not all(have(r) for r in LEVEL_FILES)
+        if not needed:
+            print(say(f'== {name}: yerinde, atlandı', f'== {name}: there, skipped'), flush=True)
+            continue
+        print(f'== {name}', flush=True)
+        fn()
+    print(say('tamam: assets/dag/ hazır', 'done: assets/dag/ is ready'))
+
+
+COMMANDS = {'all': cmd_all, 'check': cmd_check, 'dem': cmd_dem, 'mosaic': cmd_mosaic, 'dem90': cmd_dem90, 'imgfetch': cmd_imgfetch,
+            'imgbuild': cmd_imgbuild, 'rocks': cmd_rocks}
+
 if __name__ == '__main__':
     what = sys.argv[1] if len(sys.argv) > 1 else ''
-    if what == 'dem':
-        cmd_dem()
-    elif what == 'mosaic':
-        cmd_mosaic()
-    elif what == 'imgfetch':
-        cmd_imgfetch()
-    elif what == 'imgbuild':
-        cmd_imgbuild()
-    elif what == 'rocks':
-        cmd_rocks()
-    elif what == 'dem90':
-        cmd_dem90()
-    else:
-        print(__doc__)
+    if what not in COMMANDS:
+        print(say(HELP_TR, __doc__))
+        sys.exit(0 if what in ('', '-h', '--help', 'help') else 2)
+    try:
+        COMMANDS[what]()
+    except ImportError as e:
+        sys.exit(say(f'{e.name} gerekli: pip install numpy rasterio opencv-python', f'{e.name} is needed: pip install numpy rasterio opencv-python'))

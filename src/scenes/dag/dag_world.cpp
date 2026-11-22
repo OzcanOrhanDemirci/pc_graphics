@@ -229,8 +229,8 @@ bool DagWorld::prepare(const std::string& root, const Config& cfg) {
     };
     Dem dem;
     if (!dem.open(assets + "/dem_1s.u16")) {
-        error = app::L("assets/dag/dem_1s.u16 yok. Hazırlamak için: python tools/dag_veri.py dem, ardından mosaic",
-                       "assets/dag/dem_1s.u16 is missing. To prepare it: python tools/dag_veri.py dem, then mosaic");
+        error = app::L("assets/dag/dem_1s.u16 yok. Hazırlamak için: python tools/dag_veri.py all",
+                       "assets/dag/dem_1s.u16 is missing. To prepare it: python tools/dag_veri.py all");
         return false;
     }
     const Geo geo(lat0, lon0);
@@ -381,8 +381,8 @@ bool DagWorld::prepare(const std::string& root, const Config& cfg) {
                 const float cell = ac[k], half = cell * n * 0.5f;
                 std::ifstream in(assets + "/" + aname[k] + ".rgb8", std::ios::binary);
                 if (!in) {
-                    error = "assets/dag/" + aname[k] + app::L(".rgb8 yok. Hazırlamak için: python tools/dag_veri.py imgfetch, ardından imgbuild",
-                                                              ".rgb8 is missing. To prepare it: python tools/dag_veri.py imgfetch, then imgbuild");
+                    error = "assets/dag/" + aname[k] + app::L(".rgb8 yok. Hazırlamak için: python tools/dag_veri.py all",
+                                                              ".rgb8 is missing. To prepare it: python tools/dag_veri.py all");
                     dem.close();
                     return false;
                 }
