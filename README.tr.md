@@ -105,7 +105,7 @@ Sahne iki sanat turundan geçti. İlki *"ışık doğru mu?"* sorusunu yanıtlad
 İkincisi *"göz bir bakışta ne görüyor?"* sorusunu yanıtladı: karanlık oda, beş yarık, on dört kristal, sıcak denge.
 İkisi arasında çizici değişmedi; sahne değişti.
 
-| İlk ışık (1. aşama) | Canlı kip, 24 fps |
+| İlk ışık (1. aşama) | Canlı kip |
 | --- | --- |
 | ![İlk doğrulanmış kare: üç yarık, zeminde ışık bıçakları, pus](docs/images/first-light.jpg) | ![Aynı sahne canlı kipte: 1280×720 çizilip yapay zekâyla 1440p'ye büyütülmüş](docs/images/live.jpg) |
 
@@ -113,7 +113,7 @@ Sahne iki sanat turundan geçti. İlki *"ışık doğru mu?"* sorusunu yanıtlad
 
 Playdead'in *Inside*'ı tarzında bir gece: dönen huzmeyi taşıyacak kadar yoğun sis, kara köknar silüetleri, tek bir
 sıcak pencereyle neredeyse tek renkli bir palet. Herhangi bir 3B'den önce çizilen üç değer etüdünden seçilmiş iki
-sabit bakış: ormanlı bir adadan "Pencere" ve uzak bir burundan "Yücelik". Boşluk kamerayı ikisi arasında 778 m orman
+sabit bakış: ormanlı bir adadan "Pencere" ve uzak bir burundan "Yücelik". Boşluk kamerayı ikisi arasında 782 m orman
 içinden yürütür, ormanın karanlığı için göz uyumuyla; Tab küçük bir birinci şahıs yürüyüşe çevirir.
 
 ![Sahne 2: sakin denizin üstünde siste fenerin huzmesi, iki kara köknarın arasından](docs/images/fener.jpg)
@@ -290,11 +290,11 @@ içindeki ışık ve görünüş komut satırı kareleriyle tartıldı, canlı y
 | ![Ortasından kesilmiş beyaz bir Menger süngeri, koyu bir kaidede madalyon gibi dik: kesitte altı köşeli yıldızlar, soldan ışık](docs/images/heykel-1.jpg) |
 |---|
 | ![Yüz kat yakın: kesitin yıldızları, süngerin içine giden bir tünel, içeride kare galeriler](docs/images/heykel-100.jpg) |
-| ![On bin kat yakın, ekranın genişliği 0,15 mm: yıldızlar ve kare tüneller sürüyor](docs/images/heykel-10000.jpg) |
+| ![On bin kat yakın, ekranın genişliği yaklaşık 0,13 mm: yıldızlar ve kare tüneller sürüyor](docs/images/heykel-10000.jpg) |
 
 Yalnız geometrinin sahnesi: köşegeninden kesilmiş, karanlık bir odada kaidede dik duran beyaz, mat bir Menger süngeri;
 kesitte altı köşeli yıldızlar. Herhangi bir noktasına yaklaş: on bin kata kadar yeni yıldızlar ve kare tüneller açılır.
-Orada ekranın genişliği 0,15 mm, iki saç teli kadardır.
+Orada ekranın genişliği yaklaşık 0,13 mm, iki saç teli kadardır.
 
 - **Vektör çizim kadar keskin:** her noktada yalnız en az dört piksel büyüklüğündeki delikler çizilir (daha küçükleri
   yalnız gren olurdu); yaklaştıkça bir sonraki düzeyin delikleri gerçek kare tüneller olarak merkezlerinden genişleyerek
@@ -490,7 +490,7 @@ kafes; her oda tek yönlü aynadan bir kutu, kendi ışığı ve eşyasıyla; he
 demeti olarak sürer (*Interstellar*'ın tesseract'ı gibi). İki oda sütunu arasındaki bir kuyudan yavaşça aşağı düşeriz.
 
 - **Fizikten tek yönlü duvar:** duvar yarım inç gri float cam (veri sayfası: görünür geçirgenlik %18), içte 45 nm gümüş
-  film (Johnson ve Christy 1972, ince filmin Airy toplamları), dışta yansıma önleyici kaplama. İçeride %94,5 döner, ışık
+  film (Johnson ve Christy 1972, ince filmin Airy toplamları), dışta yansıma önleyici kaplama. İçeride %94,4 döner, ışık
   sonsuza dek dolaşır; dışarıdan cam %4 yansıtır; içinden iki yönde de %0,7 geçer (karşılıklılık böyle ister: tek
   yönlülük yalnız aydınlık içeriyle karanlık dışarının farkı). İnce gümüş maviyi kırmızıdan çok geçirir: derin
   yansımalar kendiliğinden kehribara döner. Bağımsız bir hesapla (Abelès matrisleri) 1e-6'ya dek denetlendi.
@@ -639,6 +639,8 @@ Foton geçişinin katkısı, aynı 512 örnekte:
 | Gürültü giderici | 8192 örneğe kadar yapay zekâ, sonra ham görüntü | her karede zamansal model |
 | Sahne 1, kristaller | saniyede ~8 örnek | **24 fps** |
 | Sahne 1, natürmort (ilk ışık ayarı) | saniyede ~16-20 örnek | 26-35 fps |
+
+Hızlar Ekim 2026'da RTX 4080'de, 2560×1440'ta ölçüldü.
 
 Boşluk tuşu ikisi arasında geçer. Canlı kipte su dalgalanır, toz ve köpükler süzülür.
 

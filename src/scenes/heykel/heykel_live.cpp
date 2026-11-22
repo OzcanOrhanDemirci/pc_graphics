@@ -41,10 +41,10 @@ public:
         i.subtitle = L("Kesilmiş bir Menger süngeri, on bin kat yakın", "A cut Menger sponge, ten thousand times closer");
         i.description = L("Karanlık bir odada, kaidenin üstünde ortasından kesilmiş beyaz bir küp durur; kesitte altı köşeli yıldızlar "
                           "vardır. Tekerlekle imlece doğru yaklaşırsın; yıldızların ve kare tünellerin içinden yenileri açılır. "
-                          "On bin katta ekran 0,15 mm genişliğindedir, yapı orada da sürer.",
+                          "On bin katta ekran yaklaşık 0,13 mm genişliğindedir, yapı orada da sürer.",
                           "A white cube cut through its middle stands on a plinth in a dark room, six-pointed stars in the cut. The "
                           "wheel takes you towards the cursor, and new stars and square tunnels open inside them. At ten thousand "
-                          "times the screen is 0.15 mm across, and the structure goes on.");
+                          "times the screen is about 0.13 mm across, and the structure goes on.");
         i.details = {
             {L("Formülden gelen biçim", "A shape from a formula"),
              L("Heykel bir Menger süngerinin yarısıdır: küp, uzun köşegenine dik olarak tam ortasından kesilmiş, altıgen kesit "
@@ -260,7 +260,7 @@ public:
         if (tour_) s.chips.push_back({L("Tur · dalış ", "Tour · dive ") + std::to_string(dive_ + 1) + "/" + std::to_string(kDiveCount), true});
         const float lv = h_.level;
         s.metrics.push_back({L("Yakınlaşma", "Zoom"), "×" + (lv < 10.0f ? num(lv, 1) : thousands(int(std::lround(lv))))});
-        // what the screen's width is at the focus: about 1.5 m at the first view, 0.15 mm (two hairs) at 10,000 times
+        // what the screen's width is at the focus: about 1.26 m at the first view, about 0.13 mm (two hairs) at 10,000 times
         {
             float3 r, u, f;
             h_.cameraBasis(r, u, f);

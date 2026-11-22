@@ -51,7 +51,7 @@ then steps back and the raw picture remains.
 
 **Try:** press **P**: the rainbows, the prism's spectrum and the water patterns disappear; all of them come from a
 separate photon pass. Turn the denoiser off with **D** and wait a minute: without it the picture converges to the same
-image. Go live with **Space**: it is drawn at 1280×720 and the AI scales it to 2560×1440, about 24 frames a second; the
+image. Go live with **Space**: it is drawn at 1280×720 and the AI scales it to 2560×1440; the
 difference shows most in the prism. Here **F12** also writes a linear EXR next to the PNG. Settings in
 `scenes/altinsaat.cfg` (sun, haze, white balance, exposure, glow; **F5** applies them at once).
 
@@ -62,7 +62,7 @@ black firs and one warm window stand dark against them. It opens at view A, "Win
 | Key | What it does |
 |---|---|
 | *Scene* | |
-| **Space** | walk A ↔ B through the forest (778 m, ~70 s); press it on the way to turn back |
+| **Space** | walk A ↔ B through the forest (782 m, ~77 s); press it on the way to turn back |
 | **B** | jump to the other view |
 | **P** | pause / resume time |
 | **← / →** | time 1 s back / forward |
@@ -96,7 +96,7 @@ loading, the building settles under its own weight. The point is the physics.
 | **P** | pause / resume time |
 | *Ball and building* | |
 | **Left click** | throw a cast steel wrecking ball at what you clicked (at most one a second); the physics decides what breaks and topples |
-| **↑ / ↓** | the ball's power (the **Ball** slider on the panel): the left end half a tonne at 29 km/h, the notch balanced at 4.2 t, the right end a **meteor**, overdone on purpose (5 m across, 514 t, 396 km/h) |
+| **↑ / ↓** | the ball's power (the **Ball** slider on the panel): the left end half a tonne at 29 km/h, the notch balanced at 4.2 t, the right end a **meteor**, overdone on purpose (5 m across, 520 t, 396 km/h) |
 | **R** | rebuild the building |
 | *Camera* | |
 | **Right click** + **Mouse** | hold to look around |
@@ -216,7 +216,7 @@ is.
 | **F** | depth of field: macro / all sharp |
 
 **Try:** watch the tour first (**T**). Then wheel into the edge of a star, stopping at every decade; drag the light to a
-raking angle. At ten thousand times the screen is 0.15 mm across, and the structure goes on. Settings in
+raking angle. At ten thousand times the screen is about 0.13 mm across, and the structure goes on. Settings in
 `scenes/heykel.cfg` (**F5**).
 
 ## 07 · Scale — from a beach to the universe's edge and Planck

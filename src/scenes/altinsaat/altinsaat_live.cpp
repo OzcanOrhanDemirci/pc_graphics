@@ -65,11 +65,10 @@ public:
             {L("Durağan ve canlı kip", "Still and live mode"),
              L("Durağan kipte örnekler sınırsız birikir. OptiX'in yapay zekâ gürültü gidericisi, albedo ve normal kılavuzuyla "
                "görüntüyü 8.192 örneğe kadar temizler, sonra ham görüntü gösterilir; kostikler gökkuşakları bulanmasın diye "
-               "gürültü gidericiye girmez. Canlı kipte 1280×720 çizilir, OptiX'in zamansal modeli 2560×1440'a büyütür: saniyede "
-               "yaklaşık 24 kare.",
+               "gürültü gidericiye girmez. Canlı kipte 1280×720 çizilir, OptiX'in zamansal modeli 2560×1440'a büyütür.",
                "In still mode samples accumulate without end. OptiX's AI denoiser, guided by albedo and normals, cleans the image up "
                "to 8,192 samples, then the raw image is shown; the caustics bypass the denoiser so the rainbows stay sharp. In live "
-               "mode the scene is drawn at 1280×720 and OptiX's temporal model scales it up to 2560×1440: about 24 frames a second.")},
+               "mode the scene is drawn at 1280×720 and OptiX's temporal model scales it up to 2560×1440.")},
             {L("Motor ve donanım", "Engine and hardware"),
              L("C++20, CUDA ve OptiX 9.1 ile yazıldı; oyun motoru yok, ışınlar RTX 4080'in ışın izleme çekirdeklerinde izlenir. "
                "Işınlar gölgelendirmeden önce çarptıkları malzemeye göre yeniden gruplanır (OptiX SER); bu olmadan kare altı kat "

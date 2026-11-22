@@ -49,11 +49,11 @@ public:
                "never ends; distant rooms fade into the haze.")},
             {L("Tek yönlü cam duvar", "One-way glass walls"),
              L("Her oda, iç yüzünde 45 nm gümüş film olan 12,7 mm'lik gri camdan bir küptür. 550 nm'de duvar içeriden gelen "
-               "ışığın %94,5'ini geri döndürür, dışarıdan %4,1'ini yansıtır ve iki yönde de yalnız %0,71'ini geçirir. Tek "
+               "ışığın %94,4'ünü geri döndürür, dışarıdan %4,1'ini yansıtır ve iki yönde de yalnız %0,71'ini geçirir. Tek "
                "yönlülük, aydınlık içeriyle karanlık dışarının farkından doğar. Değerler ince film formülüyle, gümüşün ölçülmüş "
                "optik sabitlerinden (Johnson ve Christy, 1972) ve camın veri sayfasından hesaplanır.",
                "Each room is a cube of 12.7 mm grey glass with a 45 nm silver film on its inner face. At 550 nm the wall "
-               "returns 94.5% of the light from inside, reflects 4.1% from outside and lets only 0.71% through either way. The "
+               "returns 94.4% of the light from inside, reflects 4.1% from outside and lets only 0.71% through either way. The "
                "one-way look comes from a bright inside against a dark outside. The values follow from thin-film optics, "
                "silver's measured constants (Johnson and Christy, 1972) and the glass's data sheet.")},
             {L("Odanın içinde sonsuz yansıma", "Endless reflections in a room"),

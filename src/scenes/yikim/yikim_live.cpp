@@ -76,10 +76,10 @@ public:
                "are integrated twice into the ground's motion. For longer or endless shaking that part becomes a seamless loop.")},
             {L("Yıkım topu", "Wrecking ball"),
              L("Tıkladığın noktaya kameranın yanından döküm çelik bir top gelir. Çubuk boyunu ve hızını birlikte ayarlar: saatte "
-               "29 km giden 0,5 tondan, 5 m çaplı, 514 tonluk ve saatte 396 km giden, bilerek abartılmış bir göktaşına. Top da "
+               "29 km giden 0,5 tondan, 5 m çaplı, 520 tonluk ve saatte 396 km giden, bilerek abartılmış bir göktaşına. Top da "
                "öteki parçalar gibi bir cisimdir; neyin kırılıp devrileceğine çözücü karar verir.",
                "A cast steel ball flies from beside the camera to where you click. The slider sets its size and speed together: "
-               "from half a tonne at 29 km/h to a meteor, overdone on purpose, 5 m across, 514 tonnes at 396 km/h. The ball is a "
+               "from half a tonne at 29 km/h to a meteor, overdone on purpose, 5 m across, 520 tonnes at 396 km/h. The ball is a "
                "body like the others; the solver decides what breaks and topples.")}};
         i.tags = {L("Katı cisim fiziği", "Rigid-body physics"), L("Gerçek deprem kaydı", "Real quake records"), L("Işın izleme", "Ray tracing")};
         i.image = "assets/gallery/yikim.jpg";

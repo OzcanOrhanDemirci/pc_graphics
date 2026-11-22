@@ -105,7 +105,7 @@ The scene went through two art passes. The first answered *"is the light right?"
 image. The second answered *"what does the eye see at a glance?"*: a dark room, five slits, fourteen crystals, warm
 balance. The renderer did not change between them; the scene did.
 
-| First light (phase 1) | Live mode, 24 fps |
+| First light (phase 1) | Live mode |
 | --- | --- |
 | ![The first verified frame: three slits, light blades on the floor, haze](docs/images/first-light.jpg) | ![The same scene in live mode, rendered at 1280×720 and upscaled to 1440p by the AI denoiser](docs/images/live.jpg) |
 
@@ -113,7 +113,7 @@ balance. The renderer did not change between them; the scene did.
 
 A night in the manner of Playdead's *Inside*: fog thick enough to carry a rotating beam, black fir silhouettes, a
 near-monochrome palette with one warm window. Two fixed views, chosen from three value studies drawn before any 3D:
-"the window" from a forested island and "the height" from a far headland. Space walks the camera 778 m between them
+"the window" from a forested island and "the height" from a far headland. Space walks the camera 782 m between them
 through the forest, with eye adaptation for the darkness inside it; Tab turns it into a small first-person walk.
 
 ![Scene 2: the lighthouse's beam in fog over a calm sea, framed by two black firs](docs/images/fener.jpg)
@@ -299,11 +299,11 @@ live yet. Everything in `docs/koy/DURUM.md`.
 | ![A white Menger sponge cut through its middle, stood up as a medallion on a dark plinth: six-pointed stars in the cut, lit from the left](docs/images/heykel-1.jpg) |
 |---|
 | ![A hundred times closer: the cut's stars, a tunnel going into the sponge, square galleries inside](docs/images/heykel-100.jpg) |
-| ![Ten thousand times closer, the screen 0.15 mm across: stars and square tunnels go on](docs/images/heykel-10000.jpg) |
+| ![Ten thousand times closer, the screen about 0.13 mm across: stars and square tunnels go on](docs/images/heykel-10000.jpg) |
 
 The scene of geometry and nothing else: a white, matte Menger sponge cut along its diagonal, stood up on a plinth in
 a dark room; six-pointed stars in the cut. Zoom towards any point of it: new stars and square tunnels open down to ten
-thousand times, where the screen is 0.15 mm across (about two hairs).
+thousand times, where the screen is about 0.13 mm across (about two hairs).
 
 - **As sharp as a vector drawing:** at every point only holes at least four pixels wide are drawn (smaller ones would
   only be grain); as you come closer the next level's holes open as true square tunnels widening from their centres, so
@@ -508,7 +508,7 @@ down a shaft between two columns of rooms.
 
 - **One-way walls from physics:** a room's wall is half-inch grey float glass (its data sheet: 18% visible transmission)
   with a 45 nm silver film on the inside (Johnson and Christy 1972, the thin film's Airy sums) and an antireflection coat
-  outside. Inside, 94.5% comes back and the light goes round without end; from outside the glass reflects 4%; through it,
+  outside. Inside, 94.4% comes back and the light goes round without end; from outside the glass reflects 4%; through it,
   0.7% either way (the same both ways, as reciprocity wants: the one-way look is only the bright inside against the dark
   outside). Thin silver lets blue through more than red: the deep reflections turn amber, with no setting. Checked
   against an independent calculation (Abelès matrices) to 1e-6.
@@ -651,6 +651,8 @@ What the photon pass contributes, at the same 512 samples per pixel:
 | Denoiser | AI denoiser while under 8192 samples, then the raw image | temporal model every frame |
 | Scene 1, crystals | ~8 samples/s | **24 fps** |
 | Scene 1, still life (first lighting) | ~16 to 20 samples/s | 26 to 35 fps |
+
+The speeds were measured on the RTX 4080 at 2560×1440 in October 2026.
 
 Space switches between them. In live mode the water ripples and the dust and bubbles drift.
 

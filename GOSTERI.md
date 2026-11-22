@@ -48,7 +48,7 @@ ham görüntü kalır.
 
 **Dene:** **P**'ye bas: gökkuşakları, prizmanın tayfı ve su desenleri kaybolur; hepsi ayrı bir foton hesabından gelir.
 **D** ile gürültü gidericiyi kapat, bir dakika bekle: onsuz da aynı görüntüye varılır. **Boşluk** ile canlıya geç:
-1280×720 çizilir, yapay zekâ 2560×1440'a büyütür, saniyede yaklaşık 24 kare; farkı en çok prizmada görürsün. **F12**
+1280×720 çizilir, yapay zekâ 2560×1440'a büyütür; farkı en çok prizmada görürsün. **F12**
 burada PNG'nin yanına doğrusal bir EXR de yazar. Ayarlar `scenes/altinsaat.cfg`'de (güneş, pus, beyaz dengesi,
 pozlama, parlama; **F5** ile anında).
 
@@ -59,7 +59,7 @@ sıcak pencere onlara karşı kararır. "Pencere" bakışında (A) açılır; ö
 | Tuş | Ne yapar |
 |---|---|
 | *Sahne* | |
-| **Boşluk** | A ↔ B arasında ormanın içinden yürü (778 m, ~70 sn); yoldayken basarsan geri döner |
+| **Boşluk** | A ↔ B arasında ormanın içinden yürü (782 m, ~77 sn); yoldayken basarsan geri döner |
 | **B** | öbür bakışa atla |
 | **P** | zamanı durdur / sürdür |
 | **← / →** | zamanı 1 sn geri / ileri al |
@@ -92,7 +92,7 @@ ağırlığıyla oturur. Odak fizik.
 | **P** | zamanı durdur / sürdür |
 | *Top ve bina* | |
 | **Sol tık** | tıkladığın yere döküm çelik bir yıkım topu at (saniyede en çok bir); neyin kırılıp devrileceğine fizik karar verir |
-| **↑ / ↓** | topun gücü (paneldeki **Top** çubuğu): sol uç 0,5 t ve saatte 29 km, çentik dengeli 4,2 t, sağ uç bilerek abartılmış bir **göktaşı** (5 m çap, 514 t, saatte 396 km) |
+| **↑ / ↓** | topun gücü (paneldeki **Top** çubuğu): sol uç 0,5 t ve saatte 29 km, çentik dengeli 4,2 t, sağ uç bilerek abartılmış bir **göktaşı** (5 m çap, 520 t, saatte 396 km) |
 | **R** | binayı yeniden kur |
 | *Kamera* | |
 | **Sağ tık** + **Fare** | basılı tutup etrafa bak |
@@ -207,7 +207,7 @@ durunca gördüğünle aynıdır. Sağ üstte yakınlaşma ve ekranın o an kaç
 | **F** | netlik alanı: makro / hepsi net |
 
 **Dene:** önce **T** ile turu izle. Sonra bir yıldızın kenarına tekerlekle in, her onda bir katta dur; ışığı yatık bir
-açıya sürükle. On bin katta ekran 0,15 mm genişliğindedir, yapı orada da sürer. Ayarlar `scenes/heykel.cfg`'de
+açıya sürükle. On bin katta ekran yaklaşık 0,13 mm genişliğindedir, yapı orada da sürer. Ayarlar `scenes/heykel.cfg`'de
 (**F5** ile).
 
 ## 07 · Ölçek — bir sahilden evrenin kenarına ve Planck boyuna

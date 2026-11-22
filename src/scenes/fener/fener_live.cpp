@@ -52,10 +52,10 @@ public:
                "has a soft ceiling. The moon's disc is 0.55° (the real one 0.26°). A faint lobe tilted downwards sweeps the "
                "forest and the sea.")},
             {L("Göz uyumu ve renk", "Eye adaptation and colour"),
-             L("Sık ormanın içi açık bakışlardan yaklaşık 4,8 EV daha karanlıktır. Göz bu farkın yarısına 1,5 saniyede uyar: orman "
+             L("Sık ormanın içi açık bakışlardan çok daha karanlıktır. Göz bu farkın yarısına 1,5 saniyede uyar: orman "
                "yine karanlık hissettirir ama okunur. Renk RGB'de hesaplanır (tayfsal değil), ACES eğrisiyle ekrana indirilir, "
                "siyahlara hafif soğuk bir ton eklenir. 8 bitlik ekranda bant oluşmasın diye her piksele çok az mavi gürültü katılır.",
-               "Inside the dense forest it is about 4.8 EV darker than in the open views. The eye adapts to half that difference "
+               "Inside the dense forest it is much darker than in the open views. The eye adapts to half that difference "
                "in 1.5 seconds, so the forest still feels dark but reads. Colour is computed in RGB (not spectral), brought to "
                "the screen with the ACES curve, with a slight cold tint in the blacks. A trace of blue noise in every pixel "
                "keeps an 8-bit screen free of banding.")},
@@ -68,10 +68,10 @@ public:
                "of seven kinds of fir; the ray-tracing hardware reuses the same meshes to carry hundreds of millions of "
                "triangles.")},
             {L("Yürüyüş ve oyuncu kipi", "The walk and player mode"),
-             L("Boşluk kamerayı iki bakış arasında 778 m'lik bir yoldan ormanın içinden yürütür; yumuşak kalkar, yumuşak durur. "
+             L("Boşluk kamerayı iki bakış arasında 782 m'lik bir yoldan ormanın içinden yürütür; yumuşak kalkar, yumuşak durur. "
                "Tab birinci şahıs kipine geçer: yer yüksekliği adaların kendi fonksiyonundan gelir, ağaç gövdeleri, kule ve kulübe "
                "engeldir, derin suda yüzersin. Dünyada oyuncu için ayrıca kurulmuş bir şey yoktur.",
-               "Space walks the camera 778 m through the forest between the two views, easing off and easing to a stop. Tab "
+               "Space walks the camera 782 m through the forest between the two views, easing off and easing to a stop. Tab "
                "switches to first person: the ground height comes from the islands' own functions, tree trunks, the tower and "
                "the cabin are in the way, and in deep water you swim. Nothing in the world was built for the player.")}};
         i.tags = {L("Hacimsel ışık", "Volumetric light"), L("Zamansal birikim", "Temporal accumulation"),
