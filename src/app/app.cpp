@@ -206,7 +206,7 @@ void App::pace(float fps) {
     const int interval = fps > 0.0f ? std::max(1, int(hz / fps + 0.5)) : 0;
     paceInterval_ = interval;
     pacePeriod_ = interval > 0 ? interval / hz : 0.0;
-    glfwSwapInterval(interval > 0 ? 1 : 0);
+    glfwSwapInterval(1);   // always whole frames: a swap without vsync can tear on a full-screen flip
 }
 
 void App::closeScene() {
@@ -302,7 +302,6 @@ void App::frameLoading(double now) {
             modeT0_ = now;
             sceneT0_ = sceneLast_ = now;
             keyQueue_.clear();
-            glfwSwapInterval(0);
             return;
         }
     }
@@ -473,7 +472,7 @@ int App::run(const Options& opt) {
         win_ = glfwCreateWindow(1280, 720, "pc_graphics", nullptr, nullptr);
     } else {
         // full screen is a borderless window the size of the monitor, not an exclusive mode: no mode switch, so
-        // nothing to restore if the program dies, and a screen being captured or streamed does not break up (11-22)
+        // nothing to restore if the program dies (11-22)
         int mx = 0, my = 0;
         glfwGetMonitorPos(mon, &mx, &my);
         glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);

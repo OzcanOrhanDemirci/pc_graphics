@@ -115,7 +115,8 @@ public:
     virtual std::string capturePath() = 0;    // captures/<id>_<date_time> (no extension)
     virtual const std::vector<std::string>& overrides() const = 0;   // --set key=value, for the scene's settings
     // Present every n-th refresh, n chosen so the rate is nearest fps (165 Hz, 41 -> every 4th: 41.25 fps, even frame
-    // times); 0: as fast as the scene draws (the default). Reset to the gallery's when the scene closes.
+    // times); 0: as fast as the scene draws (the default), still each frame whole at a refresh (vsync, so it never
+    // tears; with G-SYNC that is no wait below the panel's top rate). Reset to the gallery's when the scene closes.
     virtual void pace(float fps) { (void)fps; }
     // a test run (--autotest): the user's own saved state is neither read nor written
     virtual bool testing() const { return false; }
