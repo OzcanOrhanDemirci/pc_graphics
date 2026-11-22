@@ -3,6 +3,7 @@
 //   pc_graphics.exe                         the gallery, full screen on the primary monitor
 //   pc_graphics.exe --scene <id>            straight into a scene (altinsaat, fener, yikim); Esc leads to the gallery
 //   pc_graphics.exe --windowed              in a 1280x720 window
+//   pc_graphics.exe --size <w>x<h>          in a window of that size (the screens of another shape: 1024x768, 3440x1440)
 //   pc_graphics.exe --autotest              the whole application once through by script, screens to captures/arayuz/
 //   pc_graphics.exe --autotest-only <id>    the same, but of the scenes only that one (laboratuvar/kup: of it only the cube;
 //                                           laboratuvar/kup1m: a million cubes' fine pass to the end)
@@ -41,6 +42,10 @@ int main(int argc, char** argv) {
         auto next = [&]() { return i + 1 < argc ? std::string(argv[++i]) : std::string(); };
         if (a == "--scene") scene = next();
         else if (a == "--windowed") opt.windowed = true;
+        else if (a == "--size") {
+            opt.windowed = true;
+            std::sscanf(next().c_str(), "%dx%d", &opt.windowW, &opt.windowH);
+        }
         else if (a == "--autotest") opt.autotest = true;
         else if (a == "--autotest-only") { opt.autotest = true; opt.autotestOnly = next(); }
         else if (a == "--set") opt.overrides.push_back(next());

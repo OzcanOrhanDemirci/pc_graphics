@@ -21,6 +21,7 @@ namespace app {
 struct Options {
     std::string root;
     bool windowed = false;
+    int windowW = 1280, windowH = 720;
     bool autotest = false;
     std::string autotestOnly;             // --autotest-only id: the gallery steps, then only that scene
     std::string startScene;               // --scene id: straight into it

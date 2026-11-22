@@ -433,14 +433,14 @@ void App::autotestStep(double now) {
             if (virtualLeft_) leftClick_ = true;
             return;
         case 11:   // a click on a panel control by id (a choice's item: key), where it was last drawn; "@ac", "@ayrintilar":
-                   // the gallery's buttons
+                   // the gallery's buttons (item 1: the pointer only over it, no click)
         case 12:   // a press on a slider's track at fx (0..1); let go with a 10
             if (s.name == "@ac" || s.name == "@ayrintilar") {
                 const ui::Rect& r = s.name == "@ac" ? openButton_ : detailsButton_;
                 virtualMouse_ = true;
                 virtualX_ = r.x + 0.5f * r.w;
                 virtualY_ = r.y + 0.5f * r.h;
-                leftClick_ = true;
+                leftClick_ = s.key != 1;
                 return;
             }
             for (const PanelHit& h : panelHits_) {
@@ -469,7 +469,9 @@ int App::run(const Options& opt) {
     GLFWmonitor* mon = glfwGetPrimaryMonitor();
     const GLFWvidmode* vm = glfwGetVideoMode(mon);
     if (opt.windowed) {
-        win_ = glfwCreateWindow(1280, 720, "pc_graphics", nullptr, nullptr);
+        // larger than the screen: without a frame, which Windows would cut to the screen's size
+        if (opt.windowW > vm->width || opt.windowH > vm->height) glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
+        win_ = glfwCreateWindow(std::max(320, opt.windowW), std::max(240, opt.windowH), "pc_graphics", nullptr, nullptr);
     } else {
         // full screen is a borderless window the size of the monitor, not an exclusive mode: no mode switch, so
         // nothing to restore if the program dies (11-22)
@@ -549,7 +551,7 @@ int App::run(const Options& opt) {
             wait(0.8);
             shot(infos_[s].id + "_galeride");
             key(GLFW_KEY_A); wait(0.6); shot(infos_[s].id + "_ayrintilar"); key(GLFW_KEY_A); wait(0.4);   // how it is made
-            if (infos_[s].id == "yikim") { mouse(0.88f, 0.735f); wait(0.3); shot("galeri_dugme"); click(); }   // the "open" button
+            if (infos_[s].id == "yikim") { control("@ac", 1); wait(0.3); shot("galeri_dugme"); control("@ac", 0); }   // the Open button
             else key(GLFW_KEY_ENTER);
             wait(0.25); shot(infos_[s].id + "_yukleniyor");
             running(); wait(5.0); log(infos_[s].id); shot(infos_[s].id + "_arayuz");

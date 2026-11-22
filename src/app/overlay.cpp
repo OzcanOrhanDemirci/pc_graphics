@@ -86,7 +86,18 @@ float App::keyHint(float x, float y, const std::string& keys, const std::string&
 
 // ---------------------------------------------------------------------------------------------------
 void App::drawGallery(double now) {
+    // The gallery is laid out for 2560x1440, and a screen of another shape gets its own scale and arrangement (11-22:
+    // at 1024x768 the picture shrank to a stamp and the buttons ran off the screen). Narrower than the design (4:3,
+    // 5:4, 16:10, a small window) it is scaled by its width, so the picture keeps its room beside the list, and keeps
+    // at least 1300 of the design's lines; the picture's words then go under it and the buttons down to the key line,
+    // so the details have the whole column (over the picture alone they were cut off at 16:10). Wider (21:9) keeps the
+    // design's size, the picture no taller than the room above its words, the whole in the middle.
+    const theme::Scale keep = S_;
+    S_.s = std::min({float(fbw_) / 2060.0f, float(fbh_) / 1300.0f, std::max(0.7f, float(fbh_) / 1440.0f)});
     const float W = float(fbw_), H = float(fbh_);
+    const float cardW = std::min(W - S_(1010) - S_(150), (H - S_(196) - S_(455)) * 16.0f / 9.0f);
+    const float ox = std::max(0.0f, 0.5f * (W - (S_(1010) + cardW + S_(150))));
+    const bool narrow = cardW < S_(1300);
     ui::begin(fbw_, fbh_);
     ui::clear(ui::Color{0.04f, 0.045f, 0.05f, 1.0f});
     const SceneInfo& cur = infos_[selected_];
@@ -104,7 +115,7 @@ void App::drawGallery(double now) {
     ui::rectGradient(ui::Rect{0, 0, W, H * 0.16f}, ui::hex(0x08090B, 0.55f), ui::hex(0x08090B, 0.0f));
 
     // left: the title of the whole thing, then the scenes
-    const float x0 = S_(150);
+    const float x0 = S_(150) + ox;
     const float lift = (1.0f - easeOut(appear)) * S_(24);
     float y = S_(196) + lift;
     ui::text(x0, y, L("PC_GRAPHICS  ·  SAHNELER", "PC_GRAPHICS  ·  SCENES"), theme::caption(S_, theme::faint()));
@@ -164,7 +175,7 @@ void App::drawGallery(double now) {
     }
 
     // right: the picture, large, with its name and tags over it
-    const float cardX = S_(1010), cardW = W - cardX - S_(150), cardH = cardW * 9.0f / 16.0f, cardY = S_(196) + lift;
+    const float cardX = S_(1010) + ox, cardH = cardW * 9.0f / 16.0f, cardY = S_(196) + lift;
     const ui::Rect card{cardX, cardY, cardW, cardH};
     ui::shadow(card, S_(20), S_(46), ui::hex(0x000000, 0.65f * appear));
     const float zoom = 1.02f + 0.025f * float(0.5 + 0.5 * std::sin(now * 0.09));
@@ -195,13 +206,15 @@ void App::drawGallery(double now) {
         }
     }
 
-    // over the picture, when asked for: how it is made
-    if (detailsOpen > 0.003f) drawDetails(card, detailsOpen);
+    // under the picture: what it is, and the ways in (how it is made; open it). Narrow: the words under the picture
+    // and the buttons above the key line, the details then covering both picture and words
+    const float by = H - S_(84), bh = S_(66);
+    const float y2 = narrow ? by - S_(66) - bh : card.y + card.h + S_(46);
 
-    // under the picture: what it is, and the ways in (how it is made; open it)
-    const float y2 = card.y + card.h + S_(46);
+    // over the picture, when asked for: how it is made
+    if (detailsOpen > 0.003f) drawDetails(narrow ? ui::Rect{card.x, card.y, card.w, y2 - S_(36) - card.y} : card, detailsOpen);
+
     {
-        const float bh = S_(66);
         const ui::TextStyle bt = {ui::Font::SansSemiBold, S_(21.0f), ui::hex(0x0B0B0C), 0.0f, false};
         const float mx = float(mouseX_), my = float(mouseY_);
         auto capW = [&](const std::string& k) { return std::max(S_(30), ui::measure(k, theme::mono(S_, 14.5f)) + S_(18)); };
@@ -230,14 +243,21 @@ void App::drawGallery(double now) {
             keyCaps(detailsButton_.x + bw - capW("A") - S_(22), detailsButton_.y + 0.5f * (bh - S_(30)), "A", S_(30), appear);
         }
     }
-    ui::textWrapped(card.x, y2 - S_(4), detailsButton_.x - S_(48) - card.x, cur.description,
-                    theme::body(S_, ui::withAlpha(theme::muted(), appear * swap)), 1.5f, 3);
+    if (narrow) {
+        const ui::TextStyle dt = theme::body(S_, ui::withAlpha(theme::muted(), appear * swap * (1.0f - detailsOpen)));
+        const float dy = card.y + card.h + S_(40);
+        const int lines = std::clamp(int((y2 - S_(30) - dy) / (1.5f * ui::lineHeight(dt))), 1, 6);
+        ui::textWrapped(card.x, dy, card.w, cur.description, dt, 1.5f, lines);
+    } else {
+        ui::textWrapped(card.x, y2 - S_(4), detailsButton_.x - S_(48) - card.x, cur.description,
+                        theme::body(S_, ui::withAlpha(theme::muted(), appear * swap)), 1.5f, 3);
+    }
 
     // the language, top right: two segments, the one in use filled
     {
         const ui::TextStyle lt = theme::mono(S_, 15.0f);
         const float h = S_(38), segW = S_(58), gap = S_(4);
-        const float x = W - S_(150) - (2 * segW + gap + 2 * S_(4)), y = S_(110) + lift;
+        const float x = W - ox - S_(150) - (2 * segW + gap + 2 * S_(4)), y = S_(110) + lift;
         const ui::Rect pill{x, y, 2 * segW + gap + 2 * S_(4), h + 2 * S_(4)};
         ui::panel(pill, ui::hex(0xFFFFFF, 0.05f * appear), ui::hex(0xFFFFFF, 0.14f * appear), pill.h * 0.5f, std::max(1.0f, S_(1)));
         const char* names[2] = {"TR", "EN"};
@@ -255,7 +275,6 @@ void App::drawGallery(double now) {
     }
 
     // the bottom line: keys on the left, the machine on the right
-    const float by = H - S_(84);
     ui::rect(ui::Rect{x0 - S_(26), by - S_(26), W - 2 * (x0 - S_(26)), std::max(1.0f, S_(1))}, ui::hex(0xFFFFFF, 0.07f * appear));
     float bx = x0;
     bx += keyHint(bx, by, "↑|↓", L("Seç", "Select")) + S_(34);
@@ -265,9 +284,10 @@ void App::drawGallery(double now) {
     bx += keyHint(bx, by, "Esc", details_ ? L("Ayrıntıları kapat", "Hide details") : L("Çık", "Quit"));
     const std::string sys = gpuName_ + "  ·  OptiX 9.1  ·  CUDA 13.4  ·  " + std::to_string(fbw_) + "×" + std::to_string(fbh_);
     const ui::TextStyle st = theme::mono(S_, 14.0f, theme::faint());
-    ui::text(W - S_(150) - ui::measure(sys, st), by + 0.5f * (S_(30) - ui::lineHeight(st)), sys, st);
+    ui::text(W - ox - S_(150) - ui::measure(sys, st), by + 0.5f * (S_(30) - ui::lineHeight(st)), sys, st);
     drawToasts(now);
     ui::end();
+    S_ = keep;
 }
 
 // the gallery's "Ayrıntılar": how the selected scene is made, over its picture, in two columns balanced by height
