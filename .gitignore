@@ -37,5 +37,3 @@ assets/ates/_dl/
 assets/dag/*
 !assets/dag/KAYNAKLAR.md
 
-# Rüya: CC0 textures fetched by assets/ruya/fetch.py, not committed
-assets/ruya/cc0/

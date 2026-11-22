@@ -296,12 +296,3 @@ A small railed terrace: **W A S D** walk, **Shift** faster, **Space** jumps, **C
 - **3** and turn east: Kaçkar's own shadow in the air, a triangle out to the horizon.
 
 Plan, measurements and status in `docs/dag/` (Turkish). Settings in `scenes/dag.cfg` (F5).
-
-## 14 · Dream
-
-Use **WASD** to fly among the islands and **mouse** to look. **Space / C**
-ascend and descend, **Shift** increases flight speed, and the **wheel**
-sets the vertical field of view between 36° and 48°. **Tab** releases or
-captures the cursor. **1–6** choose views, **R** returns to the start, and
-**↑ / ↓** change exposure. **5** overlooks the gardens and **6** approaches
-an arcade. Settings are in `scenes/ruya.cfg`, results in `docs/ruya/DURUM.md`.

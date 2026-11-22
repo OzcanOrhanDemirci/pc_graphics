@@ -281,12 +281,3 @@ Küçük, korkuluklu bir terastasın: **W A S D** yürür, **Shift** hızlı, **
 - **3** ile doğuya dön: Kaçkar'ın kendi gölgesi havada, ufka kadar üçgen.
 
 Plan, ölçümler ve durum `docs/dag/`. Ayarlar `scenes/dag.cfg` (F5 ile).
-
-## 14 · Rüya
-
-Sis denizinin üstündeki adalar arasında **WASD** ile uç. **Fare** bakışı
-döndürür, **Boşluk / C** yükseltir ve alçaltır, **Shift** uçuşu hızlandırır.
-**Tekerlek** dikey görüş açısını 36°–48° arasında değiştirir. **Tab** imleci
-bırakır veya geri alır. **1–6** hazır bakışlar, **R** başlangıç, **↑ / ↓**
-pozlamadır. **5** bahçeleri yukarıdan, **6** bir revak ve avluyu yakından
-gösterir. Ayarlar `scenes/ruya.cfg`, ölçümler `docs/ruya/DURUM.md`.

@@ -19,4 +19,3 @@ sınırlar. Daha uzun alt adımlarla da denedim. Sönüm testinde yeni bir hata
 Eski tek-adım davranışına dönmek için sahnenin zaman biriktirme bölümünü
 geri almak gerekir.
 
-Rüya'nın dünya üretimi, görüş dışı ışık ve görüntü kararları: [Rüya kararları](ruya/decisions.md).
