@@ -52,7 +52,7 @@ deterministic spectral ray tracer under water (5), distance estimation into a fr
 a camera that crosses 62 orders of magnitude on real data (7), light baked beforehand and drawn through tessellation
 (8), analytic tracers for a mirror labyrinth and an endless lattice (9, 10), OptiX with DLSS Ray Reconstruction for a
 dense forest (11), a fire on its own gas and wood physics (12), and terrain drawn to 387 km with no level of detail (13). The OptiX programs are compiled at run time with
-NVRTC; in the scenes that allow it, F5 reloads them after an edit, without a rebuild.
+NVRTC, and F5 reloads them after an edit, without a rebuild.
 
 The scenes were made one after another, and the later ones follow rules the earlier ones taught. The picture must be
 clean in motion: no grain and no shimmer, so live views give every pixel the same fixed samples every frame instead

@@ -2,67 +2,93 @@
 
 # pc_graphics
 
-**Ekran kartında sanat yönetimli sahneler; her birinin tek, dar bir hedefi var: doğru ışık, sonra güzellik, sonra fizik.**
+**Ekran kartında, motorsuz yazılmış on üç sanat yönetimli sahne. Her biri tek, dar bir konunun içinde kalıyor.**
 
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-00599C?logo=cplusplus&logoColor=white)](https://isocpp.org)
 [![CUDA](https://img.shields.io/badge/CUDA-13.4-76B900?logo=nvidia&logoColor=white)](https://developer.nvidia.com/cuda-toolkit)
 [![OptiX](https://img.shields.io/badge/OptiX-9.1-76B900?logo=nvidia&logoColor=white)](https://developer.nvidia.com/rtx/ray-tracing/optix)
-[![GPU](https://img.shields.io/badge/denendi-RTX%204080-76B900?logo=nvidia&logoColor=white)](#derleme)
+[![GPU](https://img.shields.io/badge/ayarland%C4%B1-RTX%204080-76B900?logo=nvidia&logoColor=white)](#derleme)
 [![Platform](https://img.shields.io/badge/platform-Windows%2011-0078D4?logo=windows&logoColor=white)](#derleme)
-[![Ekran](https://img.shields.io/badge/%C3%A7%C4%B1kt%C4%B1-2560%C3%971440%20SDR-555)](#durağan-ve-canlı)
-[![Lisans](https://img.shields.io/badge/lisans-t%C3%BCm%20haklar%C4%B1%20sakl%C4%B1d%C4%B1r-lightgrey)](#lisans)
+[![Ekran](https://img.shields.io/badge/%C3%A7%C4%B1kt%C4%B1-2560%C3%971440-555)](#derleme)
+[![Lisans](https://img.shields.io/badge/lisans-MIT-blue)](#lisans)
 
-[Uygulama](#uygulama) · [Sahneler](#sahneler) · [Sahne 1 ayrıntı](#sahne-1-neyi-hesaplıyor) · [Sahne 3 ayrıntı](#sahne-3-fizik) · [Derleme](#derleme) · [Çalıştırma](#çalıştırma) · [Düzen](#depo-düzeni)
+[Sahneler](#sahneler) · [Uygulama](#uygulama) · [Sahneler ayrıntılı](#sahneler-ayrıntılı) · [Derleme](#derleme) · [Çalıştırma](#çalıştırma) · [Düzen](#depo-düzeni) · [Lisans](#lisans)
 
 *[English](README.md)*
 
 </div>
 
+> **Bu proje hakkında.** pc_graphics, yapay zekânın sınırlarını keşfetmek ve neler yapabildiğini görmek için
+> geliştirilmiş; bilim, mühendislik ve sanat odaklı bir projedir. Her sahne tek bir dar alan için tasarlandı: o alanda
+> yapay zekânın bilimi, mühendisliği ve sanatı nereye kadar götürebildiğini görmek ve o alanın en iyisine ulaşmak
+> için. Her şey tek bir sisteme göre yazılıp ayarlandı (16 GB'lık RTX 4080, 2560×1440 ekran); başka donanımda
+> performans sorunları yaşanabilir.
+>
+> **About this project.** pc_graphics is a project in science, engineering and art, built to explore the limits of
+> AI and to see what it can do. Each scene is designed around one narrow field: to find out how far AI can take the
+> science, the engineering and the art of that field, and to aim for the best work there is in it. Everything is
+> written and tuned for a single system (an RTX 4080 with 16 GB, driving a 2560×1440 monitor); on other hardware the
+> scenes may run slowly or not at all.
+
 ---
 
-![Sahne 1: beş yarıktan giren güneş, huzmelere asılı on dört kristal prizma, Ando betonuna saçılan tayflar](docs/images/rainbows.jpg)
+## Sahneler
 
-Bilgisayar grafiğini sanat yönetimi olarak çalışmak için kişisel bir atölye: bir dizi sahne, her biri kendi
-oturumunda tek ve dar bir hedefle. Oyun motoru da değil, performans testi de değil. İlk sahne ışığın matematiksel
-olarak doğru olmasıyla, ikincisi güzellikle, üçüncüsü fizikle ilgiliydi: gerçek hissettiren bir binanın gerçek
-hissettiren biçimde yıkılması. Dördüncüsü bir ağır çekim fotoğraf masası: sıvılar ve taneler, ince hesaplanıp ağır
-çekimde izlenir.
+| | |
+| :---: | :---: |
+| [![Sahne 1, Altın Saat](assets/gallery/altinsaat.jpg)](#1--altın-saatte-cam-ve-taş--ekim-2026)<br>**1 · Altın Saat** · tayfsal ışık | [![Sahne 2, Fener](assets/gallery/fener.jpg)](#2--fener--ekim-2026)<br>**2 · Fener** · siste ışık |
+| [![Sahne 3, Yıkım](assets/gallery/yikim.jpg)](#3--yıkım--ekim-2026)<br>**3 · Yıkım** · katı cisimler ve kırılma | [![Sahne 4, Laboratuvar](assets/gallery/laboratuvar.jpg)](#4--laboratuvar--ekim-2026)<br>**4 · Laboratuvar** · sıvılar ve taneler |
+| [![Sahne 5, Ada](assets/gallery/koy.jpg)](#5--ada--ekim-2026)<br>**5 · Ada** · su altında berraklık | [![Sahne 6, Heykel](assets/gallery/heykel.jpg)](#6--heykel--ekim-2026)<br>**6 · Heykel** · geometri |
+| [![Sahne 7, Ölçek](assets/gallery/olcek.jpg)](#7--ölçek--ekim-2026)<br>**7 · Ölçek** · 62 büyüklük mertebesi | [![Sahne 8, Denizaltı](assets/gallery/denizalti.jpg)](#8--denizaltı--ekim-2026)<br>**8 · Denizaltı** · atmosfer |
+| [![Sahne 9, Ayna](assets/gallery/ayna.jpg)](#9--ayna--ekim-2026)<br>**9 · Ayna** · yansıma | [![Sahne 10, Kuyu](assets/gallery/kuyu.jpg)](#10--kuyu--ekim-2026)<br>**10 · Kuyu** · sonsuzluk |
+| [![Sahne 11, Orman](assets/gallery/orman.jpg)](#11--orman--ekim-2026)<br>**11 · Orman** · yoğunluk | [![Sahne 12, Ateş](assets/gallery/ates.jpg)](#12--ateş--ekim-2026)<br>**12 · Ateş** · fizik olarak ateş |
+| [![Sahne 13, Dağ](assets/gallery/dag.jpg)](#13--dağ--kasım-2026)<br>**13 · Dağ** · çizim mesafesi | |
 
-Hepsi tek bir makine için (2560×1440 IPS monitörü süren bir RTX 4080) C++, CUDA ve OptiX ile yazıldı; altında motor
-yok. Sahne 1 spektral bir yol izleyicidir: referans görüntüye yakınsayan **durağan kip** ve NVIDIA'nın yapay zekâ
-gürültü gidericisiyle saniyede 20-30 kare tutan **canlı kip**. Sahne 2 gerçek zamanlı, hacimsel bir gece. Sahne 3
-kendi yazdığımız bir katı cisim ve kırılma çözücüsü; sade bir gündüz ışın izleyicisiyle çiziliyor. Sahne 4 bir tanecik
-çözücüsü (sıvılar, taneler, kopabilen bağlar); hızlı anları arka planda ince hesaplanır ve video olarak değil, fizik
-olarak saklanır. Sahne 5 su altında: ışığı yüzeyin üstünde havada da süren deterministik, tayfsal bir ışın izleyici;
-küçük bir adanın iskelesinden bir batığa ve maviye inen bir halata uzanan bir yol. Sahne 6 yalnız geometri: bir
-kaidede duran, on bin kat yakınına inilen bir Menger süngeri. Sahne 7 ölçek: Çandarlı'da bir kumsaldan, gerçek
-veriyle evrenin kenarına ve ışığın altında aletin gözüyle Planck uzunluğuna, 62 onluk. Sahne 8 bir denizaltının
-kontrol odası: bütün ışığı önceden ışın izlemeyle pişirilmiş, ekran kartının bütün gücü görüntüye gidiyor. Sahne 9
-yansıma: krom bir kürenin içinden görülen, Endülüs kemerli bir ayna labirenti; her ayna arkası gümüşlenmiş bir float
-cam, yansımanın yansımasının yansıması odanın kendisi kadar keskin.
+## Bu nedir
+
+Tek bir Windows programında on üç sahne; C++20, CUDA ve OptiX 9.1 ile yazıldı, altında oyun motoru yok. Her sahnenin
+çizicisi kendine ait: ortak bir çizici yok, her biri konusuna göre seçildi. Foton haritalamalı tayfsal bir yol izleyici
+(1), gerçek zamanlı hacimsel bir gece (2), bir katı cisim ve kırılma çözücüsü (3), sıvılar ve taneler için bir tanecik
+çözücüsü (4), su altında deterministik, tayfsal bir ışın izleyici (5), on bin kat yakınına inilen bir fraktalda uzaklık
+kestirimi (6), gerçek veriyle 62 büyüklük mertebesini geçen bir kamera (7), önceden pişirilip tessellation ile çizilen
+ışık (8), bir ayna labirenti ve sonsuz bir kafes için analitik izleyiciler (9, 10), sık bir orman için OptiX ve DLSS Ray
+Reconstruction (11), kendi gaz ve odun fiziğiyle yanan bir ateş (12) ve ayrıntı seviyesi kullanmadan 387 km'ye kadar
+çizilen bir arazi (13). OptiX programları çalışma anında NVRTC ile derlenir; buna izin veren sahnelerde bir
+değişiklikten sonra F5 onları yeniden derlemeye gerek kalmadan yeniden yükler.
+
+Sahneler birbiri ardına yapıldı; sonrakiler, öncekilerin öğrettiği kurallara uyuyor. Görüntü hareket hâlinde de temiz
+olmalı: gren yok, kıpırtı yok. Bu yüzden canlı görüntülerde her piksel, zamansal bir süzgecin yumuşattığı gürültü
+yerine her karede aynı sabit örnekleri alır; ancak kamera durunca netleşen bir görüntü sayılmaz. Netlik TAA'dan değil
+süper örneklemeden gelir; yaprakları pikselden ince olan orman ise DLSS Ray Reconstruction kullanır. Kare süreleri GPU
+zaman damgalarıyla ölçülür, titreme de yalnız gözle değerlendirilmez, yakınsamış bir referansa karşı ölçülür. Dokular
+ve modeller açık lisanslı (CC0 ya da atıflı CC BY); gerçek bir taraması olan hiçbir şey elle çizilmez.
+
+**Nasıl yapıldı.** Her sahnenin ne için olduğuna ve nasıl görüneceğine ben karar veriyorum, sonucu kendi ekranımda
+değerlendiriyorum. Kodu yapay zekâ, Claude Code ile, uzun çalışma oturumlarında yazıyor; her sahnenin planı, kararları
+ve ölçümleri [docs/](docs/) altındaki kendi klasöründe duruyor, denenip bırakılanlar ve doğrulanmayanlar da dahil.
 
 ## Uygulama
 
-On bir sahne tek bir programda yaşıyor. Program bir galeriyle açılır; sahne bir yükleme ekranının arkasında yüklenir
-(programları derlenir, dünyası kurulur; bunlar ayrı bir iş parçacığında yapıldığı için pencere canlı kalır) ve sonra hepsi
-için aynı olan bir arayüzün altında çalışır: kim ve ne sol altta, süreler sağ üstte, çıkış yolu sağ altta, tuşlar F1'de.
-Sol alttaki panel fareyle kullanılır: sahne oraya seçenek sıraları, kaydırma çubukları ve düğmeler koyabilir (Yıkım'da
-büyüklük, süre, başlat/durdur). Galeride her sahnenin kısa bir açıklaması ve **Ayrıntılar**'da nasıl yapıldığı var.
-Esc her zaman geri götürür; kapanan sahne ekran kartını bütünüyle geri verir. Uygulama Türkçe ya da İngilizce
-(galeride sağ üstte TR | EN, ya da L); seçim hatırlanır.
+On üç sahnenin hepsi tek bir programda. Program bir galeriyle açılır: sahneler numaralı bir listede, seçilen sahne
+yanında büyük, kısa bir açıklamayla; **Ayrıntılar**'da (A) nasıl yapıldığı. Sahne bir yükleme ekranının arkasında
+yüklenir: GPU programları derlenir, dünyası ayrı bir iş parçacığında kurulur, böylece pencere canlı kalır. Sonra her
+sahne aynı arayüzle çalışır: adı ve durumu sol altta, sahnenin kendi denetimleri varsa onlarla birlikte (Yıkım'da
+depremin büyüklüğü ve süresi, Laboratuvar'da deney); kare süresi, GPU gücü ve belleği sağ üstte; tuşları **F1**'de. Esc
+her zaman geri götürür; kapanan sahne ekran kartını bütünüyle geri verir. Ekrandaki her şey Türkçe ya da İngilizce (L
+ya da galeride sağ üstte TR | EN).
 
 | Galeri | Ayrıntılar: nasıl yapıldı |
 | --- | --- |
-| ![Galeri: sahneler numaralı bir listede, seçilen sağda büyük, açıklaması, ayrıntılar ve açma düğmeleri](docs/images/app-gallery.jpg) | ![Galerinin ayrıntılar paneli: sahne 3'ün çözücüsü, malzemesi, depremleri, yıkım topu, determinizmi, görüntüsü](docs/images/app-details.jpg) |
+| ![Galeri: sahneler numaralı bir listede, seçilen sağda büyük, açıklaması, Ayrıntılar ve Aç düğmeleri](docs/images/app-gallery.jpg) | ![Resmin üstünde Ayrıntılar paneli: sahnenin nasıl yapıldığı, iki sütunda](docs/images/app-details.jpg) |
+| **Çalışan bir sahne** | **Tuşları (F1)** |
+| ![Arayüzün altında çalışan bir sahne: sol altta adı ve denetimleri, sağ üstte süreler](docs/images/app-scene.jpg) | ![Yardım paneli: sahnenin tuşları gruplar hâlinde, yanında genel tuşlar](docs/images/app-help.jpg) |
 
-![Sahne 3, büyüklük 7 deprem sırasında: sahnenin adı ve durumu, tıklanan büyüklükler, süre çubuğu, durdurma düğmesi, sarsıntının ilerlemesi, süreler](docs/images/app-scene.jpg)
+Görünüm tek bir aile: adlar için IBM Plex Serif, metin için Sans, sayılar ve tuşlar için Mono; resmin üstünde koyu cam
+paneller ve her sahneye ışığından alınmış tek bir vurgu rengi. Bir sahne; çizicisi, ayarları ve GPU programlarıyla bir
+klasör, artı sahne kaydında tek bir satırdır. Sözleşmeyi ve yeni bir sahnenin nasıl ekleneceğini
+[docs/MIMARI.md](docs/MIMARI.md) anlatıyor.
 
-Görünüm tek bir yazı ailesiyle kurulu, IBM Plex: adlar için Serif, sözcükler için Sans, sayılar ve tuşlar için Mono.
-Resimlerin üstünde koyu cam paneller ve her sahneye ışığından alınmış tek bir vurgu rengi: sıcak altın, soğuk mavi,
-güvenlik turuncusu, deniz yeşili, deniz mavisi, lavanta, gül, gece kırmızısı, ayna camı. Bir sahne; renderer'ı, ayarları ve OptiX programlarıyla bir klasör ve sahne kaydında tek bir
-satırdır; sözleşme ve yeni sahne eklemek [docs/MIMARI.md](docs/MIMARI.md)'de.
-
-## Sahneler
+## Sahneler ayrıntılı
 
 ### 1 · Altın saatte cam ve taş · Ekim 2026
 
@@ -338,6 +364,49 @@ yaklaşırsın: dışarı evrenin kenarına, içeri Planck uzunluğuna. 62 onluk
 
 Plan, kararlar, plandan ayrılanlar ve ölçümler `docs/olcek/`'te.
 
+#### İkinci seçenek: Hız
+
+| ![Işık hızının %90'ında enerji gözü: önde ısınıp kırmızı bir parıltıya dönen kozmik arka plan, öne toplanan Samanyolu şeridi ve Macellan Bulutları](docs/images/olcek-hiz-enerji.jpg) | ![Beş dokuzda evrenin ilk ışığı önde turuncu bir güneş gibi doğuyor: görünür banda kaymış kozmik arka plan](docs/images/olcek-hiz-ilk-isik.jpg) |
+|---|---|
+| ![Işık hızının %76'sında Andromeda'ya frenleyiş: maviye kaymış, sapınçla bükülmüş galaksi, altta Üçgen](docs/images/olcek-hiz-andromeda.jpg) | ![Gezegeninin yörüngesinden dürbünle Proxima Centauri: lekeli, turuncu bir kırmızı cüce](docs/images/olcek-hiz-proxima.jpg) |
+| ![İtki altında roket, yandan: arkada foton roketinin ışığı, cam kubbenin altında yolcu](docs/images/olcek-hiz-roket.jpg) | ![Samanyolu ölçeğinde harita: yoldaki roket](docs/images/olcek-hiz-samanyolu.jpg) |
+
+Roketle Dünya'dan Proxima Centauri'ye, oradan Andromeda'ya: özel görelilik eksiksiz, hiçbir şey ışınlanmıyor, zaman hep
+gerçek (hızlandırma yok: yolculuğun süresi uzaklığın kendisi).
+
+- **Yolculuk:** W itki, S fren, Boşluk panelde seçilen hedefe otomatik varış (Proxima ya da Andromeda, istenen anda;
+  başka bir yöne giderken önce durup döner). Proxima, 4,25 ışık yılı: senin saatinde 15,2 dakika, Dünya'nınkinde 4,25
+  yıl. Andromeda, 2,4 milyon ışık yılı: 72 dakika, 2,4 milyon yıl.
+- **İtki:** durağanken 1 g ve hep artarak: bir dakikada ışık hızının %1'i, iki dakikada %10'u, beş buçuk dakikada %99'u,
+  sekiz dakikada 21 dokuz (1 − β = 10⁻²¹), 11 milyon g'de. 1.638 dilimde sabit tutulur, her dilimde sabit ivmenin kapalı
+  formülleriyle, hız açısı (rapidity) üzerinden (1 − β basamaklarını korur); bağımsız bir denetleyici (mpmath, 50
+  basamak) 1,5 × 10⁻¹⁵'e kadar aynı sonucu veriyor.
+- **Roketin gözü:** her pikselin ışını durgun çerçeveye geri çevrilir (sapınç), ışığı bir kara cisminki gibi Doppler
+  kaymasıyla CIE 1931 tablolarından geçer:
+  - 109.400 yıldız; Samanyolu'nun dağınık ışığı (ESO/S. Brunier panoraması, yıldızları çıkarılmış, bir pikselin
+    izdüşümü kadar geniş mip düzeylerinde);
+  - Güneş'in dipolüyle kozmik mikrodalga arka plan (Planck 2018);
+  - galaksiler (dışarıdan Samanyolu, M31, M33, 2MRS);
+  - Güneş, bugünün bulutlarıyla Dünya, Ay;
+  - Proxima ve b'si, Alpha Centauri A ve B, ölçülmüş yerlerinde (Gaia DR3, Akeson ve ark. 2021).
+
+  Hız arttıkça gök öne toplanır; ışık hızının yarısı geçilince geride kalan Güneş sapınçla öne döner, mavi-beyaz. Beş
+  dokuz civarında kozmik arka plan önde kırmızı bir güneş gibi doğar, sonra turuncu, beyaz ve mavi olur; daha ötede
+  ışığı görünür banttan çıkar. Göz bir gözün uyduğu gibi uyar (karanlıkta yarı yarıya, gün ışığında bütünüyle, baktığı
+  yüze göre) ve kendi kamaşması var.
+- **Enerji gözü** (başta açık; E): her bandın ışığı, tepesinin düştüğü banda göre sahte renkte (mikrodalgadan gama
+  ışınlarına). Başlangıçta sıfırlanır: arka planın durağanken parıltısı çıkarılır, hareketin getirdiği görünür. Bir
+  gösterge tam öndeki ışığın tepesinin nerede olduğunu gösterir.
+- **Yandan:** Dünya'nın çerçevesinde bir harita. Kamera 14 m'lik roketi izler (γ kat kısa), yıldızlararası ortamın
+  noktaları ışık çizgileri olarak akar, 1-6 tuşları ölçeğin durakları arasında atlar.
+- **Duraklar:** yerdurağan yörünge yarıçapından Dünya; Proxima'nın lekeli, parlamalı yüzü 1,69° genişlikte, gezegeni b,
+  Alpha Centauri A ve B (−6,8 ve −5,5) ve Kraliçe takımyıldızında (Cassiopeia) bizim Güneş; 100.000 ışık yılından 70°
+  genişlikte Andromeda.
+- **Beş grafik:** hız ve γ; uzay-zaman (roketin ızgarası ışık çizgisine doğru katlanır); yol (iki cetvel); saatler
+  (seninki, Dünya'nınki, görüldüğü hâliyle Dünya'nınki); bedel (enerji, bir foton roketinin yakıtı, önden gelen ışık).
+
+Plan ve ölçümler `docs/olcek/hiz/` içinde.
+
 ### 8 · Denizaltı · Ekim 2026
 
 | ![Kontrol odası gece kırmızısında: iskelede dalış istasyonunun çarkları ve derinlik göstergeleri, ortada harita masası ve lambasının beyaz havuzu, kule merdiveni, periskop kuyuları](docs/images/denizalti-oda.jpg) | ![Kıça bakış: sancakta döner şalterli iç haberleşme panoları, ortada harita masası, iskelede dalış istasyonu, tavanda boru ve kablo hatları](docs/images/denizalti-kic.jpg) |
@@ -478,6 +547,36 @@ kat bitki örtüsüyle; ekran kartının bütün gücü ne kadar çok şey oldu�
 
 Plan, kararlar, ölçümler ve doğrulanmayanlar `docs/orman/` içinde.
 
+### 12 · Ateş · Ekim 2026
+
+| ![Gece ocağın başında ayakta: kütüklerin ve köz yatağının üstünde alev, onun aydınlattığı taşlar ve zemin](docs/images/ates-ocak.jpg) | ![Yanına çömelmiş: kızgın közlerin üstündeki bir kütükte alevin mavi dibi](docs/images/ates-comelmis.jpg) |
+|---|---|
+| ![Ocağın yanında alçaktan: gecenin önünde dipleri mavi alevler, kütüklerin arasında közler](docs/images/ates-alcak.jpg) | ![Ocağa yukarıdan bakış: közlerin üstünde çapraz kütükler, kenarları boyunca alevler, çevrede taşlar](docs/images/ates-kor.jpg) |
+
+Odağı *bilimsel ve hipergerçekçi* bir ateş; 3B sahnelerde ateş çoğunlukla bir simgeden ibarettir. Aysız bir gecede
+açık havada, taş bir ocakta odun ateşi yanıyor ve yaptığı hiçbir şey elle çizilmiyor. W A S D ile ocağın
+çevresinde yürünür, C ile çömelinir, R ateşi yeniden kurar.
+
+- **Gaz:** sıcak gaz ocağın üstünde 7,5 mm'lik bir ızgarada akar (128 × 192 × 128): kaldırma kuvveti, ısının
+  genleştirdiği hacim, havanın değişen yoğunluğu. Odunun uçucuları oksijenle karıştıkları hızda yanar; is yakıt
+  tarafında oluşur, alev cephesinde yanar ve Planck yasasıyla ışır; alevin mavisi CH*, C2 Swan ve CO2* bantlarından
+  gelir.
+- **Odun:** her kütük yamalara bölünür, her yama yüzeyinden özüne katmanlanır: ısınır, kurur ve Di Blasi'nin üç
+  tepkimesiyle gaza, katrana ve kömüre ayrışır. Kömür yüzeyinde yanar (közler), külü onu örter; kütükler ve közler
+  ışınımlarıyla birbirini sıcak tutar.
+- **Işık ve kıvılcımlar:** taşlar, zemin ve kütükler gazın kendi ışımasıyla aydınlanır, gölgeleri ışın izlemeyle
+  (OptiX); kareleri NVIDIA'nın DLSS Ray Reconstruction'ı doğal çözünürlükte toplar. Her kıvılcım, bir çıtırtıyla
+  fırlayan ya da kızgın bir kabuktan kopan bir kömür pulu; gaz onu taşır, karşılaştığı oksijenle yanar.
+- **Temiz siyah:** dither, ekranın kod değerlerinde sabit mavi gürültüdür ve siyaha yaklaştıkça söner; gece göğü her
+  pikselde 0 okunur, canlı görüntü de 16 alt piksel × 64 ışık örnekli bir referanstan fazla titremez.
+- 2560 × 1440'ta saniyede yaklaşık 40 kare; 25 ms'nin 16 kadarı simülasyon.
+- **Plandan dar kapandı:** plan başında durulacak bir ateşti: kibritle yakılan, beslenen, üflenen, boğulup közlerinden
+  yeniden alevlenen. Görünüşüne ulaşıldı, dinamiğine ulaşılmadı (kibrit çırayı tutuşturamadı, üflemek görünmedi,
+  kütükler dağılıp köz yatağına dönmedi); sahne izlenecek bir ateş olarak kapandı ve bu hareketler çıkarıldı. Kendi
+  hâline bırakılınca yaklaşık 8-9 kW'la yanar.
+
+Plan, kararlar, ölçümler ve doğrulanmayanlar `docs/ates/` içinde.
+
 ### 13 · Dağ · Kasım 2026
 
 | | |
@@ -485,26 +584,30 @@ Plan, kararlar, ölçümler ve doğrulanmayanlar `docs/orman/` içinde.
 | ![İlk bakış: Karadeniz'in üstünde güneş, suda güneş yolu, pusta solan sırt sırt dağlar](docs/images/dag-gunes.jpg) | ![Dürbünle: iki tepesiyle Elbruz, 299 km ötede, karında son ışık](docs/images/dag-elbruz.jpg) |
 | ![Doğuya bakış: Kaçkar'ın havadaki gölgesi ufka kadar, yanında aydınlık doruklar](docs/images/dag-golge.jpg) | ![Korkuluktan: alçak güneşte kaya ve taşlar, aşağıda vadi](docs/images/dag-kaya.jpg) |
 
-Tek dar hedef: **çizim mesafesi.** Kaçkar'ın gerçek doruğunda küçük, korkuluklu bir teras, gün batımı. Göz terastan çıkamıyor ve bu her şeyi belirliyor: oyunlar uzağı ayrıntı seviyesiyle çizer, çünkü oyuncu her yere gidebilir. Burada 1 yay saniyesi yükseklik modelinin terastan görülebilen her hücresi bir kez bulunup üçgen olur ve hiç değişmez: belirme, atlama olamaz, dürbünle (30 kata kadar) aynı dağ durur. 146 milyon üçgen, saniyede 60 kare.
+Tek dar hedef: **çizim mesafesi.** Kuzeydoğu Türkiye'de, Kaçkar'ın gerçek doruğunda küçük, korkuluklu bir teras, gün
+batımı. Göz terastan çıkamıyor ve bu her şeyi belirliyor. Oyunlar uzağı ayrıntı seviyeleriyle çizer, çünkü oyuncu her
+yere gidebilir. Burada 1 yay saniyelik yükseklik modelinin terastan görülebilen her hücresi bir kez bulunup üçgene
+dönüşür ve bir daha değişmez: hiçbir şey birden belirip yer değiştiremez, dürbünle (30 kata kadar) bakınca da orada aynı
+dağ durur. 146 milyon üçgen, saniyede 60 kare.
 
-Ölçüler: en uzak çizilen yer 387 km, silueti göğe karşı hâlâ %3,7. Her bilinen zirveye nişanlı ışın haritaya 0,2 km içinde çarpıyor (Elbruz 299,2 / 299,0 km). Plan, kararlar, ölçümler ve doğrulanmayanlar `docs/dag/`'da. Yükseklik: Copernicus DEM ve SRTM (Terrain Tiles); renk: Sentinel-2 cloudless 2016 (EOX, CC BY 4.0).
+- **Gerçek zemin.** Copernicus GLO-30 yükseklik verisi, açık olmadığı yerde SRTM; uydunun kendi güneşi çıkarılmış
+  Sentinel-2 bulutsuz renk; havanın olağan ışık kırılması hesaba katılmış bir küre. Panel dürbünün neye baktığını
+  adıyla söyler.
+- **Ölçüldü.** Çizilen en uzak yer 387 km, silueti göğe karşı hâlâ %3,7. Adı bilinen her doruğa nişanlanan ışın ona
+  haritanın 0,2 km yakınında çarpar: Elbruz 299,2 km, haritada 299,0. Terasın hiçbir yerinden atılan ışın zeminin
+  içinden geçmez (3 milyon denendi; bilerek fazla budanmış bir ağda 163.000'i geçmişti).
+- **Solma fizikten.** Rayleigh, Mie, ozon, çoklu saçılım, dağların havadaki gölgeleri; sabit göz için bir kez
+  hesaplanan tablolarda. Arazi gölgeleri her hücre için güneşe doğru kesin bir ufuk; terasa yakın kaya kendi gölgesini
+  ışınla izler.
+- **Yakını taranmış.** Taşlık ve kaya yüzleri (Poly Haven, CC0) hem geometride hem gölgelendirmede, taranmış kayaların
+  1500 kopyası.
+- **Pikselde on altı sabit ışın.** Zamansal birikim yok, gren yok. Canlı görüntü 64 ışınlık referansa karşı: ikinci fark
+  oranı 1,01.
 
-### 14 · Rüya · Kasım 2026
-
-![Sis denizinde kireçtaşı adalar, asılı bahçeler ve revaklar](assets/gallery/ruya.jpg)
-
-Kireçtaşı adalar, kemerli avlular ve asılı bahçeler arasında serbest uçuş.
-Her yerleşim koordinatından üretilir; adalar bir ana sütunun çevresinde
-masifler kurar. Her yüzeyde CC0 Poly Haven taraması var (4K ve 8K). Kamera
-ışınları görüş konisini, gölgeler ortak ağların o kare için kurulan geçici
-yerleşim tablosunu kullanır. Varsayılan görüntü 2560×1440'ta piksel başına
-on iki sabit örnekle güneş ve gök ışığıyla çizilir: gürültü giderici ve kare
-geçmişi yok. Yaprak alfa eşiği ve dither, kareden bağımsız sabit piksel hash'i
-kullanır. Ada ağları uçuşun önünde işçi iş
-parçacıklarında üretilir.
-
-`build\pc_graphics.exe --scene ruya` ile açılır. [Tuşlar](GOSTERI.md) ve
-[ölçümler](docs/ruya/DURUM.md).
+Plan, kararlar, ölçümler ve doğrulanmayanlar `docs/dag/` içinde. Yükseklik: Copernicus DEM, © DLR e.V. 2010-2014 ve
+© Airbus Defence and Space GmbH 2014-2018, provided under COPERNICUS by the European Union and ESA; Mapzen Terrain
+Tiles, SRTM terrain data courtesy of the U.S. Geological Survey. Renk: Sentinel-2 cloudless 2016 by EOX IT Services GmbH
+(modified Copernicus Sentinel data 2016), CC BY 4.0.
 
 ## Sahne 1: neyi hesaplıyor
 
@@ -685,32 +788,43 @@ determinizm, sönüm, deprem döngüsü) fiziksel akıl sağlığı denetimleri,
 
 ## Derleme
 
-**Gerekenler:** Windows 11, OptiX 9.1'i taşıyan sürücüyle bir NVIDIA RTX GPU (RTX 4080 ve 617.14 sürücüsüyle
-denendi), C++ iş yüküyle Visual Studio 2026 (MSVC 14.51, içindeki CMake ve Ninja), Git Bash, araçlar için Python 3
-(`numpy`, `pillow`, `OpenEXR`, `flip-evaluator`).
+**Gerekenler:** Windows 11, OptiX 9.1'i taşıyan bir sürücüyle NVIDIA RTX ekran kartı (16 GB'lık RTX 4080'e göre
+ayarlandı; birkaç sahne o belleğin çoğunu istiyor), C++ iş yüküyle Visual Studio 2026 (MSVC 14.51, içindeki CMake ve
+Ninja), Git Bash, veri betikleri ve araçlar için Python 3 (`numpy`, `pillow`, `OpenEXR`, `flip-evaluator`).
 
 ```bash
-bash third_party/fetch.sh        # CUDA 13.4.2 dağıtım arşivleri, OptiX 9.1 başlıkları, GLFW, stb (stb_truetype dahil), tinyexr
+bash third_party/fetch.sh        # CUDA 13.4 dağıtım arşivleri, OptiX 9.1 başlıkları, DLSS SDK, GLFW, stb, tinyexr, cgltf, GL başlıkları
 ```
 
-Hiçbir şey kurulmaz ve ekran kartı sürücüsüne dokunulmaz: CUDA, NVIDIA'nın bileşen arşivleri olarak git'e
-işlenmeyen `third_party/` klasörüne iner.
+Hiçbir şey kurulmaz ve ekran kartı sürücüsüne dokunulmaz: CUDA, NVIDIA'nın bileşen arşivleri olarak git'e işlenmeyen
+`third_party/` klasörüne iner.
 
 ```bat
 cmd /c build.bat                 :: bir kez yapılandırır, sonra build\pc_graphics.exe'yi (tek program) derler
 ```
 
-OptiX cihaz programları (`src/scenes/<sahne>/device/`) çalışma anında NVRTC ile derlenir; onları düzenlemek yeniden
-derleme istemez: sahnede **F5**'e bas.
+Beş sahne, depoya işlenmeyip indirilen açık veriler okur; sahneyi açmadan önce betiğini bir kez çalıştır:
+
+```bat
+python assets/koy/fetch.py       :: 5 · Ada: CC0 taramalar (Poly Haven, ambientCG)
+python tools/olcek_veri.py       :: 7 · Ölçek: haritalar, yıldızlar, galaksiler, kozmik ağ (kaynaklar: assets/olcek/KAYNAKLAR.md)
+python assets/orman/fetch.py     :: 11 · Orman: CC0 taramalar (kaynaklar: docs/orman/VARLIK.md)
+python assets/ates/fetch.py      :: 12 · Ateş: CC0 taramalar (kaynaklar: docs/ates/VARLIK.md)
+python tools/dag_veri.py         :: 13 · Dağ: yükseklik ve uydu görüntüsü (kaynaklar: assets/dag/KAYNAKLAR.md)
+```
+
+Denizaltı (8) ışığını ilk açılışta pişirir; bu birkaç dakika sürer, sonuç `cache/` altında saklanır. OptiX cihaz
+programları (`src/scenes/<sahne>/device/`) çalışma anında NVRTC ile derlenir; onları düzenlemek yeniden derleme
+istemez: sahnede **F5**'e bas.
 
 ## Çalıştırma
 
 ```bat
 build\pc_graphics.exe                       :: galeri, birincil monitörde kenarlıksız tam ekran
-build\pc_graphics.exe --scene yikim         :: doğrudan bir sahneye (altinsaat, fener, yikim, laboratuvar); Esc galeriye götürür
+build\pc_graphics.exe --scene koy           :: klasör adıyla doğrudan bir sahneye; Esc galeriye götürür
 build\pc_graphics.exe --windowed            :: 1280x720 pencerede
 build\pc_graphics.exe --set anahtar=deger   :: sahnelerin bir ayarı (scenes/<sahne>.cfg), tekrarlanabilir
-build\pc_graphics.exe --lang en             :: İngilizce (ya da tr); yoksa galeride son seçilen
+build\pc_graphics.exe --lang en             :: İngilizce (ya da tr); verilmezse galeride son seçilen
 build\pc_graphics.exe --autotest            :: bütün uygulama bir kez, betikle; ekranlar captures\arayuz altına
 ```
 
@@ -720,80 +834,76 @@ build\pc_graphics.exe --autotest            :: bütün uygulama bir kez, betikle
 | F1 | sahnenin tuşları |
 | H | arayüzü gizle |
 | F12 | sahnenin ekran görüntüsü (`captures\<sahne>_<tarih>`; sahne 1 doğrusal EXR de yazar) |
-| F5 | sahnenin ayarlarını yeniden oku, OptiX programlarını yeniden derle (sahne 1 ve 2) |
-| ↑ ↓, 1-4, Enter, fare | galeride seç ve aç |
+| F5 | sahnenin ayarlarını ve GPU programlarını yeniden yükle |
+| ↑ ↓, sayı tuşları, Enter, fare | galeride seç ve aç |
 | A | galeride sahnenin ayrıntıları (nasıl yapıldı) |
-| L | galeride dil: Türkçe ↔ İngilizce (sağ üstte TR \| EN) |
+| L | dil: Türkçe ↔ İngilizce |
 
-| Sahne 1 · Altın Saat | Sahne 2 · Fener | Sahne 3 · Yıkım | Sahne 4 · Laboratuvar |
-| --- | --- | --- | --- |
-| Boşluk durağan ↔ canlı · C sonraki kamera · ↑ ↓ pozlama · ← → odak · R sıfırla · P, V, N, D, G fotonlar, pus, doğrudan ışık örneklemesi, gürültü giderici, güneş lekeleri · 1-5 güzel, albedo, normal, kostikler, maliyet | Boşluk A ↔ B yürü · B öbür bakışa atla · P zamanı durdur · ← → zaman ∓1 sn · ↑ ↓ pozlama · 1-5 görünümler · Tab birinci şahıs (WASD, fare, Shift koş, Boşluk zıpla) | panelde Yapı: apartman, gökdelen, ev · 3-9 büyüklük · ← → süre (en sonda: durdurana kadar) · Boşluk başlat ya da durdur (panelde fareyle de) · T ağır çekim · P durdur · sol tık yıkım topu (saniyede en çok bir) · ↑ ↓ topun gücü · R baştan kur · sağ tık bak · WASD, E/Q uç · Shift hızlı · tekerlek yakınlaş · B donatı · G gürültü giderici | 1-5 deney · Boşluk dök, akıt, durdur · sol tık iğne, ateş; balda ve kumda sürükle: gezdir · B çelik bilye · T hız ×1, ×1/10, ×1/100 · P durdur ya da oynat · ← → kayıtta adım · sağ tık bak · WASD, E/Q uç · R yeniden kur |
-
-Sahnelerin araçları pencere olmadan, aynı programdan çalışır:
+Her sahnenin kendi tuşları içindeyken F1'de; [GOSTERI.md](GOSTERI.md) on üç sahnenin hepsini bir gösteri için adım adım
+anlatıyor (İngilizcesi: [DEMO.md](DEMO.md)). Sahnelerin ölçüm araçları aynı programdan, pencere olmadan çalışır; örneğin:
 
 ```bat
-build\pc_graphics.exe --headless --spp 2048 --denoise --out captures\ad            :: sahne 1 (--scene altinsaat ile de)
-build\pc_graphics.exe --headless --live 80 --out captures\live\ad
-build\pc_graphics.exe --selftest
-build\pc_graphics.exe --scene fener --headless --frames 64 --out captures\ad
-build\pc_graphics.exe --scene fener --map captures\harita.png
-build\pc_graphics.exe --scene yikim --test                                          :: çözücünün fizik testleri
-build\pc_graphics.exe --scene yikim --clip sarsinti --seconds 40 --set deprem.magnitude=7 --out captures\yikim\ad
-build\pc_graphics.exe --scene laboratuvar --still --deney balon --tetik --kayit --t 0.024 --spp 192 --out captures\x.png
-build\pc_graphics.exe --scene laboratuvar --lab-test                                :: deneylerin ölçümleri
+build\pc_graphics.exe --scene altinsaat --headless --spp 2048 --denoise --out captures\ad     :: yakınsamış bir durağan kare
+build\pc_graphics.exe --scene altinsaat --selftest                                            :: tayf öz testleri
+build\pc_graphics.exe --scene yikim --test                                                    :: çözücünün fizik testleri
+build\pc_graphics.exe --scene laboratuvar --lab-test                                          :: deneylerin ölçümleri
+build\pc_graphics.exe --scene koy --test                                                      :: Snell penceresi, derinlikte renk, ...
+build\pc_graphics.exe --scene olcek --test olcek-hassasiyet                                   :: kayan noktada 62 mertebe
 ```
 
-Her sahnenin listesi `src/scenes/<sahne>/<sahne>_app.cpp` başında. Gösteri için kısa rehber: [GOSTERI.md](GOSTERI.md) (İngilizcesi [DEMO.md](DEMO.md)).
+Her sahnenin tam listesi `src/scenes/<sahne>/<sahne>_app.cpp` dosyasının başında.
 
 ## Depo düzeni
 
 ```
 src/
   app/                uygulama: pencere, galeri, yükleme, sahnenin üstündeki arayüz, yardım, sahne kaydı
-  ui/                 arayüz kiti: yuvarlak paneller, gölgeler, resimler, IBM Plex metin (OpenGL 2, tek GLSL programı)
+  ui/                 arayüz kiti: yuvarlak paneller, gölgeler, resimler, IBM Plex metin (OpenGL, tek GLSL programı)
   core/               sahnelerin ortak parçaları: ayar dosyaları, resim okuma-yazma, GPU ölçümleri (NVML), ışıltı
   shared/             konak ve cihaz kodunun ortak başlıkları: vektörler, ton eşleme, tayflar
   scenes/
-    altinsaat/        sahne 1: spektral yol izleyici, foton ızgarası, yapay zekâ gürültü giderici; device/ OptiX programları
-    fener/            sahne 2: dünya üretimi, gerçek zamanlı ışık hattı, oyuncu; device/
-    yikim/            sahne 3: kabuklar, ekran kartı çözücüsü (phys.cu), bina, depremler, testler, gürültü süzgeci; device/
-    laboratuvar/      sahne 4: tanecik çözücüsü, sıvı yüzeyleri, deneyler, kayıtlar, balistik; device/
-    koy/              sahne 5: deterministik tayfsal ışın izleyici, ada, su altı, batık, amforalar; device/
-    heykel/           sahne 6: Menger süngeri, pertürbasyonla on bin kat yakınlaşma (CUDA)
-    olcek/            sahne 7: çapa ağacı, katman saatleri, CUDA çizici, haritalar, yoğunluk haritaları, çöl ve dip
-    denizalti/        sahne 8: oda ve teçhizat kiti, çıkartma atlası, OptiX fırını (device/), OpenGL 4.6 tessellation hattı (glsl/)
-    ayna/             sahne 9: ızgara izleyici, labirent, hüzmeler, ışık haritaları, pus, malzemeler (CUDA)
-    kuyu/             sahne 10: sonsuz kafes, tek yönlü duvarlar, odaların içi, yapının ışık tablosu (CUDA)
-    orman/            sahne 11: glTF taramaları, ormanın yerleşimi, karo ve simit, pişmiş yoklama ızgarası, DLSS-RR; device/
+    altinsaat/        1  · tayfsal yol izleyici, foton ızgarası, yapay zekâ gürültü giderici; device/ OptiX programları
+    fener/            2  · dünya üretimi, gerçek zamanlı hacimsel ışık, yürüyüş ve oyuncu; device/
+    yikim/            3  · kabuklar, GPU çözücüsü (phys.cu), yapılar, depremler, testler, gürültü süzgeci; device/
+    laboratuvar/      4  · tanecik çözücüsü, sıvı yüzeyleri, deneyler, kayıtlar, balistik; device/
+    koy/              5  · deterministik tayfsal ışın izleyici, ada, su altı, batık, amforalar; device/
+    heykel/           6  · uzaklık kestirimiyle Menger süngeri, pertürbasyonla on bin kat yakınlaşma (CUDA)
+    olcek/            7  · çapa ağacı, katman saatleri, CUDA çizici, haritalar, yoğunluk haritaları; ikinci seçenek Hız
+    denizalti/        8  · oda ve teçhizat kiti, çıkartma atlası, OptiX fırını (device/), OpenGL 4.6 tessellation (glsl/)
+    ayna/             9  · ızgara izleyici, labirent, hüzmeler, ışık haritaları, pus, malzemeler (CUDA)
+    kuyu/             10 · sonsuz kafes, tek yönlü duvarlar, odaların içi, yapının ışık tablosu (CUDA)
+    orman/            11 · glTF taramaları, ormanın yerleşimi, karo ve simit, pişmiş yoklama ızgarası, DLSS-RR; device/
+    ates/             12 · gaz ızgarası, yanan odun, közler ve kıvılcımlar, katı cisim olarak kütükler, DLSS-RR; device/
+    dag/              13 · yükseklik karoları, yakın zemin, atmosfer, dürbün; device/
 scenes/               sahnelerin ayarları (<sahne>.cfg)
-assets/               yazı tipleri (IBM Plex), galeri resimleri, mavi gürültü dokusu, deprem kayıtları (ESM, AFAD TADAS)
-tools/                EXR istatistikleri, FLIP ve RMSE karşılaştırması, gürültü haritaları, temas tabakaları, prizma planlayıcı, değer etütleri;
-                      Ölçek'in verisi (olcek_bugun.py: bugünün gökyüzü, olcek_veri.py: haritalar, yıldızlar, galaksiler, ağ; çıktısı git dışı)
-docs/                 Türkçe çalışma günlüğü: uygulamanın durumu ve mimarisi; her sahneye bir klasör (plan, durum)
-third_party/fetch.sh  bağımlılıkları indirir; klasörün kendisi git'te değil
+assets/               yazı tipleri (IBM Plex), galeri resimleri, mavi gürültü dokusu, deprem kayıtları; sahne sahne indirme betikleri
+tools/                ölçüm ve veri betikleri: EXR istatistikleri, FLIP ve RMSE karşılaştırması, titreme, temas tabakaları,
+                      Ölçek'in ve Dağ'ın verisi (çıktıları git'e işlenmez)
+docs/                 Türkçe çalışma günlüğü: uygulamanın durumu ve mimarisi; her sahne için planı, durumu ve ölçümleri,
+                      doğrulanmayanlar da dahil
+third_party/fetch.sh  bağımlılıkları indirir; klasörün kendisi git'e işlenmez
 ```
-
-## Sıradaki sahneler
-
-- Konuşuldu, başlatılmadı: motorsuz, küçük ama tam bir oyun, fenerin dünyasında (feneri yeniden yak, huzme bulmacada,
-  karanlıkta tehlike).
-- Sahne 3'e hâlâ toz (sahne 2'nin sis düzeneği başlangıç noktası), daha pürüzlü kırık yüzeyler ve cam eklenebilir;
-  bilerek bunlarsız kapandı: hedefi fizikti.
 
 ## Lisans
 
-Özel depo. Tüm hakları saklıdır. Sahne 5'in amfora profilleri koda şuradan yazıldı: ArchAIDE konsorsiyumu (2019),
-Southampton Üniversitesi çizimlerinin vektör profilleri (P. Copeland, *Roman Amphorae: a digital resource*, 2014), CC BY
-4.0, https://doi.org/10.5284/1050896; taranmış dokuları (Poly Haven, ambientCG) CC0, `assets/koy/fetch.py` indirir
-(`assets/koy/LICENSES.md`). Sahne 11'in taramaları (Poly Haven, ambientCG) da CC0, `assets/orman/fetch.py` indirir
-(kaynakları `docs/orman/VARLIK.md`). Sahne 14'ün taramaları (Poly Haven) CC0, `assets/ruya/fetch.py` indirir
-(`assets/ruya/KAYNAKLAR.md`). Üçüncü taraf bileşenler derleme sırasında kendi lisanslarıyla indirilir: NVIDIA
-CUDA dağıtım arşivleri ve OptiX SDK başlıkları, NVIDIA DLSS SDK (NVIDIA RTX SDK lisansı), GLFW (zlib), stb (kamu
-malı), tinyexr (BSD), cgltf (MIT). `assets/fonts`
-altındaki IBM Plex yazı tipleri SIL Open Font License ile (`assets/fonts/LICENSE.txt`). Deprem kayıtları: ESM,
-Engineering Strong-Motion veritabanı (Mascandola ve diğ., doi 10.13127/esm.3) ve AFAD TADAS.
+Kod [MIT lisansıyla](LICENSE) açık; sahnelerden alınmış görüntüler olan `docs/` ve `assets/gallery/` altındaki resimler
+de öyle. Bir resim üçüncü tarafın verisini gösteriyorsa (Ölçek'te yıldızlar ve Dünya, Dağ'da dağlar), o veri kendi
+lisansını ve atfını korur; aşağıda ve [NOTICE.md](NOTICE.md)'de listeli.
 
-Claude Code (Anthropic) ile uzun otonom oturumlarda geliştirildi; her kararın arkasındaki ölçümler
-[docs/DURUM.md](docs/DURUM.md) (uygulama), [docs/altinsaat/DURUM.md](docs/altinsaat/DURUM.md),
-[docs/fener/DURUM.md](docs/fener/DURUM.md) ve [docs/yikim/DURUM.md](docs/yikim/DURUM.md)'de, sahne 1'de işin nerede yanlış
-gittiğinin dürüst dökümü [docs/altinsaat/SINIRLAR.md](docs/altinsaat/SINIRLAR.md)'de.
+- **Taramalar** (sahne 5, 11, 12 ve 13'ün dokuları ve modelleri): Poly Haven ve ambientCG, CC0; yukarıdaki betikler
+  indirir, depoya işlenmez.
+- **Sahne 5'in amfora profilleri**, koda yazıldı: ArchAIDE konsorsiyumu (2019), Southampton Üniversitesi çizimlerinin
+  vektör profilleri (P. Copeland, *Roman Amphorae: a digital resource*, 2014), CC BY 4.0,
+  https://doi.org/10.5284/1050896.
+- **Sahne 7'nin verisi:** Copernicus Sentinel-2; NASA Blue Marble, GIBS (MODIS, VIIRS) ve LRO; JPL DE440; Minor Planet
+  Center; HYG yıldız veritabanı v4.1 (CC BY-SA 4.0); 2MASS Redshift Survey; Gaia DR3; ESO/S. Brunier'nin Samanyolu
+  panoraması (CC BY 4.0). Lisanslarıyla tam liste [assets/olcek/KAYNAKLAR.md](assets/olcek/KAYNAKLAR.md)'de.
+- **Sahne 13'ün yüksekliği ve rengi:** Copernicus DEM GLO-30, © DLR e.V. 2010-2014 ve © Airbus Defence and Space GmbH
+  2014-2018, provided under COPERNICUS by the European Union and ESA; Mapzen Terrain Tiles (SRTM, U.S. Geological
+  Survey); Sentinel-2 cloudless 2016 by EOX IT Services GmbH (modified Copernicus Sentinel data 2016), CC BY 4.0.
+- **Deprem kayıtları** (sahne 3): ESM, Engineering Strong-Motion veritabanı (Mascandola ve ark., doi
+  10.13127/esm.3), ve AFAD TADAS.
+- **Renk bilimi:** CIE renk eşleme fonksiyonları ve aydınlatıcıları (CIE, CC BY-SA 4.0).
+- **Yazı tipleri:** IBM Plex, SIL Open Font License 1.1 ([assets/fonts/LICENSE.txt](assets/fonts/LICENSE.txt)).
+- **Derleme sırasında indirilenler**, kendi lisanslarıyla: NVIDIA CUDA dağıtım arşivleri, OptiX SDK başlıkları ve DLSS
+  SDK (NVIDIA lisansları), GLFW (zlib), stb (kamu malı), tinyexr (BSD), cgltf (MIT), Khronos GL başlıkları (MIT).
