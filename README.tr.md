@@ -792,7 +792,8 @@ ben değerlendirdim.
 
 **Gerekenler:** Windows 11, OptiX 9.1'i taşıyan bir sürücüyle NVIDIA RTX ekran kartı (16 GB'lık RTX 4080'e göre
 ayarlandı; birkaç sahne o belleğin çoğunu istiyor), C++ iş yüküyle Visual Studio 2026 (MSVC 14.51, içindeki CMake ve
-Ninja), Git Bash, veri betikleri ve araçlar için Python 3 (`numpy`, `pillow`, `OpenEXR`, `flip-evaluator`).
+Ninja), Git Bash, veri betikleri ve araçlar için Python 3 (`numpy`, `pillow`, `scipy`, `rasterio`, `opencv-python`,
+`OpenEXR`, `flip-evaluator`).
 
 ```bash
 bash third_party/fetch.sh        # CUDA 13.4 dağıtım arşivleri, OptiX 9.1 başlıkları, DLSS SDK, GLFW, stb, tinyexr, cgltf, GL başlıkları
@@ -813,8 +814,12 @@ python assets/koy/fetch.py       :: 5 · Ada: CC0 taramalar (Poly Haven, ambient
 python tools/olcek_veri.py       :: 7 · Ölçek: haritalar, yıldızlar, galaksiler, kozmik ağ (kaynaklar: assets/olcek/KAYNAKLAR.md)
 python assets/orman/fetch.py     :: 11 · Orman: CC0 taramalar (kaynaklar: docs/orman/VARLIK.md)
 python assets/ates/fetch.py      :: 12 · Ateş: CC0 taramalar (kaynaklar: docs/ates/VARLIK.md)
-python tools/dag_veri.py         :: 13 · Dağ: yükseklik ve uydu görüntüsü (kaynaklar: assets/dag/KAYNAKLAR.md)
+python tools/dag_veri.py all     :: 13 · Dağ: yükseklik ve uydu görüntüsü (kaynaklar: assets/dag/KAYNAKLAR.md)
 ```
+
+Her biri yeniden çalıştırılabilir, yerinde olanı atlar. `--help` bir betiğin neyi nasıl indirdiğini yazar; `--check`
+(`tools/` içindeki ikisinde `check`) yalnız yerinde olanı denetler, hiçbir şey indirmez. İletileri uygulamanın diline
+(galeride seçilen) uyar, ya da `--lang tr`.
 
 Denizaltı (8) ışığını ilk açılışta pişirir; bu birkaç dakika sürer, sonuç `cache/` altında saklanır. OptiX cihaz
 programları (`src/scenes/<sahne>/device/`) çalışma anında NVRTC ile derlenir; onları düzenlemek yeniden derleme

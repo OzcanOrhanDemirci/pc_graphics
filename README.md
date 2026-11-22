@@ -814,7 +814,8 @@ judged by me, from clips.
 
 **Requirements:** Windows 11, an NVIDIA RTX GPU with a driver that ships OptiX 9.1 (tuned on an RTX 4080 with 16 GB;
 several scenes need most of that memory), Visual Studio 2026 with the C++ workload (MSVC 14.51, its bundled CMake and
-Ninja), Git Bash, and Python 3 for the data scripts and tools (`numpy`, `pillow`, `OpenEXR`, `flip-evaluator`).
+Ninja), Git Bash, and Python 3 for the data scripts and tools (`numpy`, `pillow`, `scipy`, `rasterio`, `opencv-python`,
+`OpenEXR`, `flip-evaluator`).
 
 ```bash
 bash third_party/fetch.sh        # CUDA 13.4 redistributables, OptiX 9.1 headers, DLSS SDK, GLFW, stb, tinyexr, cgltf, GL headers
@@ -835,8 +836,12 @@ python assets/koy/fetch.py       :: 5 · The Island: CC0 scans (Poly Haven, ambi
 python tools/olcek_veri.py       :: 7 · Scale: maps, stars, galaxies, the cosmic web (sources: assets/olcek/KAYNAKLAR.md)
 python assets/orman/fetch.py     :: 11 · Rainforest: CC0 scans (sources: docs/orman/VARLIK.md)
 python assets/ates/fetch.py      :: 12 · Fire: CC0 scans (sources: docs/ates/VARLIK.md)
-python tools/dag_veri.py         :: 13 · Mountain: elevation and imagery (sources: assets/dag/KAYNAKLAR.md)
+python tools/dag_veri.py all     :: 13 · Mountain: elevation and imagery (sources: assets/dag/KAYNAKLAR.md)
 ```
+
+Each is re-runnable and skips what is already there. `--help` says what a script fetches and how; `--check` (`check`
+for the two in `tools/`) only checks what is there and downloads nothing. Their messages follow the application's
+language (set in the gallery), or `--lang en`.
 
 The Submarine (8) bakes its light the first time it opens, which takes a few minutes, and keeps it in `cache/`.
 The OptiX device programs (`src/scenes/<scene>/device/`) are compiled at run time with NVRTC, so editing them needs no
