@@ -276,7 +276,7 @@ video dışa aktarma. Hepsi ileride konuşulabilir; tasarım kapı kapatmaz.
 
 - "grafik devam" gelince bu plan doğrudan uygulanır (Özcan 10-03: *"ben grafik devam yazarım. Sen direk planı uygulamaya
   geçersin"*): K0'dan başla, Durak 1'e kadar kendi başına ilerle.
-- Yaklaşık 30 dakikada bir commit + push (depo PRIVATE). Commit mesajları Türkçe, oturumun atıf satırlarıyla. Sıra:
+- Yaklaşık 30 dakikada bir commit + push (o gün depo özeldi). Commit mesajları Türkçe, oturumun atıf satırlarıyla. Sıra:
   hafıza → `claude_memory` commit/push → proje commit/push.
 - **Doğrulanan yol, Özcan'ın gördüğü yol:** her görsel karar canlı pencerede, hareket hâlinde ölçülür; durağan kareyle
   yetinilmez (hafıza `genel/feedback_gpu_ve_grafik.md` §19).

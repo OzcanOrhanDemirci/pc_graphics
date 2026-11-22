@@ -2,7 +2,7 @@
 
 > **Onaylı (Özcan, 2026-10-28).** Tek kaynak plan; durum ve ölçümler `docs/ates/DURUM.md`'de. Sıradaki iş §7
 > (iyileştirme turu). Hafızada görev kartı `project_ates_gorevi.md` (hafıza arşivinde) (Özcan'ın brief'i birebir orada); önce
-> `genel/feedback_gpu_ve_grafik.md` §37-38 ve `grafik/project_pc_graphics.md` okunur.
+> `genel/feedback_gpu_ve_grafik.md` (işin değdiği başlık) ve `grafik/project_pc_graphics.md` okunur.
 
 ## 0 · Hedef (değişmez)
 
@@ -53,7 +53,7 @@ tıkandığı ve soğuk odun ısıyı çektiği için söner. Her senaryo bir te
    - kömürleşme hızı ~0,65 mm/dk mertebesi (Eurocode 5, yumuşak odun, standart yangın).
 3. **Kör test:** gece kamp ateşi fotoğrafları ve video kareleri ile bizimkiler karışık; referanslar yalnız yerelde,
    Özcan onaylar. Videoda aynı ölçüler (alev boyu dağılımı, puf frekansı, renk histogramı) ikisinde de çıkarılır.
-   **Özcan'a giden her klip bu kıyastan geçmiş olur** (rüzgârın dersi, [[gpu-ve-grafik]] §38).
+   **Özcan'a giden her klip bu kıyastan geçmiş olur** (Orman'daki rüzgârın dersi, [[gpu-ve-grafik]]).
 4. **Görüntü gürültüsü yok:** simülasyon dondurulur, aynı an canlı ve referans çizilir (`tools/titreme.py`); ateşin
    kendi titremesi fiziktir, ölçünün dışında kalır. Taban Orman'ın DLSS değeri.
 5. **Kare süresi** (GPU zaman damgası): 1440p'de hedef ≥ 40 FPS, en kötü anda ≥ 30 (bütçe F0'da ölçülür).

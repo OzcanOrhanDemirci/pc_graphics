@@ -31,6 +31,7 @@ devamı: **yumuşak cisim ve sıvı**, her şey tanecik. Özcan (2026-10-02), bi
 - Görünüm ve ton: *"Gerçekçi insan derisi ve yüz ise tamamen önemsiz, bununla hiç uğraşma. Deri renk olarak falan
   gerçekçi olabilir ama yüzü olmasa bile olur [...] Amaç gerçekçi insan yapmak değil hatta çok gerçekçi insan olursa bu
   gore a bile dönebilir hoş değil, amaç adam doğramak değil parçacık fiziğini ve insan fiziğini düzgün yapmak."*
+  (Bu sınırı Özcan 2026-10-03'te geri aldı: Doom düzeyinde parçalanma kabul.)
 - Ölçek: *"aşırı çok sudan ziyade parçacık sayısının çok fazla olup o performansı miktara değil, detaya ve fiziğe
   harcamayı tercih ederim."*
 - Cam görünüm: *"Ben jöle adam istemiyorum dedim ama içindeki sıvı görünür fikri mantıklı geldi. Amaç parçacık fiziği

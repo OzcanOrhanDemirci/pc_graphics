@@ -148,5 +148,5 @@ Tahmin: 8-12 oturum. Her faz sonunda DURUM güncellenir; faz Özcan "tamam" deme
   Özcan'a kısa klip (`SendUserFile`), görsel seçeneklerde `AskUserQuestion`.
 - Fizik dışı (sanat) ayarlar adıyla işaretlenir (kodda ve DURUM'da).
 - Commit kuralı: doğrulama ile commit aynı komut satırında durmaz. Commit mesajları Türkçe, oturumun atıf satırlarıyla.
-  Sıra: hafıza → `claude_memory` commit/push → proje commit/push (GitHub PRIVATE `pc_graphics`).
+  Sıra: hafıza → `claude_memory` commit/push → proje commit/push (GitHub `pc_graphics`).
 - İş özetleri "NE DOĞRULANMADI" ve "Hafıza itildi: evet/hayır" ile biter. Uzun çizgi kullanma.

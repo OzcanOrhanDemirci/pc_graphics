@@ -14,7 +14,7 @@ hafif rüzgâr yazılmıştı. Özcan rüzgârı yapay buldu (*"deprem veya bitk
 kapattı: *"yoğunluktan fiziğe ve güzel orman yapmaya döndük. Amacımızdan çıkıyoruz. [...] En son rüzgarsız o sabit ve
 beğendiğim ormana dönelim. Bu sahneyi kapatalım. Orman çok açık uçlu bir sahne."* Sahne bu kapanıştaki hâlinde kalır.
 O denemeden yalnız iki düzeltme ana dalda: T-Rex provasının indirdiği modeller ormana saçılmıyor, `tools/titreme.py`
-değişmeyen referansta sıfıra bölmüyor. Rüzgâr ve planı (ölçümleriyle) yerel `orman-ruzgar` dalında, itilmedi.
+değişmeyen referansta sıfıra bölmüyor. Rüzgâr denemesi geri alındı; dalı 11-16'da silindi.
 
 ## Özcan: nasıl açılır, ne denenir
 

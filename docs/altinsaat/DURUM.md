@@ -8,7 +8,7 @@
 
 ## Şu an
 - **2026-10-01 · Sahne 1 kapandı.** Özcan: "daha güzel olmuş"; "sanat dizaynı, görsel etkileyicilik ayrı bir kavram".
-  Proje `pc_graphics` deposuna taşındı (GitHub PRIVATE): bilgisayarda sanat yönetimli sahneler için kalıcı ev.
+  Proje `pc_graphics` deposuna taşındı (GitHub): bilgisayarda sanat yönetimli sahneler için kalıcı ev.
   Sıradaki fikir: *Inside* tarzı deniz feneri. Tetikleyici "grafik devam".
 - **2026-10-01, Özcan'ın geri bildirimi:** "teknik olarak etkileyici ama görsel olarak değil: ışık var, küp var". Kısa tur
   (motor aynı): karanlık oda, 5 yarık, huzmelere asılı 14 kristal prizma (`crystal.count`), sıcak beyaz dengesi, güçlü

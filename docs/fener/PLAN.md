@@ -31,8 +31,8 @@ Sahne tarifi (birebir):
   [...] Sahnenin arkasında sanki devasa bir dünya varmış da biz kameranın bulunduğu adadan karşı adaya bakarken sadece
   küçük bir kısmını görüyoruz aslında hissi."*
 
-Özcan'ın eskizi ve referanslar: `docs/fener/ref/` (eskiz `ozcan_eskiz.png`: fener ortada, kulübe sağda, aralarında
-patika, ışık dönüyor, kamera alt ortada, arada su). Kaynak klasör: Masaüstü `inside tarzı grafik`.
+Özcan'ın eskizi `docs/fener/ref/ozcan_eskiz.png` (fener ortada, kulübe sağda, aralarında
+patika, ışık dönüyor, kamera alt ortada, arada su). Oyunlardan alınan referans kareleri telifli olduğu için depoda tutulmuyor.
 
 ### Özcan'ın kararları (2026-10-01, AskUserQuestion)
 | Soru | Karar |
@@ -142,5 +142,5 @@ karesi aynı; yeni cihaz programı da fırın testinden geçer; sahne 1 değişm
 - Sanat kararı Özcan'da; kısa yorumları birçok denemeye bedel (hafıza `genel/feedback_gpu_ve_grafik.md` §13). Erken ve sık kare göster
   (`SendUserFile`), görsel seçeneklerde `AskUserQuestion`.
 - Commit kuralı: doğrulama ile commit aynı komut satırında durmaz. Commit mesajları Türkçe, oturumun atıf satırlarıyla.
-  Sıra: hafıza → `claude_memory` commit/push → proje commit/push (GitHub PRIVATE `pc_graphics`).
+  Sıra: hafıza → `claude_memory` commit/push → proje commit/push (GitHub `pc_graphics`).
 - İş özetleri "NE DOĞRULANMADI" ve "Hafıza itildi: evet/hayır" ile biter. Uzun çizgi kullanma.

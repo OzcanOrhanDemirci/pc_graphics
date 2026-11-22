@@ -3,7 +3,7 @@
 > Tek kaynak plan. 2026-10-05 gecesi Özcan'la uzun bir konuşmayla yazıldı; konuşmanın tamamı hafızada
 > `project_grafik_fikirler.md` (hafıza arşivinde) sonundaki "🔬 Fikir: mikroskopla maddenin içine" bloğundan itibaren. Durum ve
 > ölçümler `docs/olcek/DURUM.md`'de. Bağlam sıkıştırılırsa önce bu dosyayı, sonra hafızada `genel/feedback_gpu_ve_grafik.md`
-> §19 (kıpraşma), §21 (netlik), §28 (derin yakınlaşma, Heykel) ve `grafik/project_pc_graphics.md`'yi oku.
+> "Ölçmek: kare süresi, A/B ve titreme" ile "Geometri, SDF ve fraktal" başlıklarını ve `grafik/project_pc_graphics.md`'yi oku.
 >
 > **Yetki (Özcan, her sahnede):** *"En iyi sonucu elde etmek için her şey serbest ve tamamen özgürsün. Yani planda
 > değişiklik yapabilir, her türlü aracı kullanabilir, indirebilir, araştırabilirsin."* pc_graphics'in üst amacı: bir yapay
@@ -12,7 +12,7 @@
 
 ## 1 · Görev ve Özcan'ın sözleri
 
-Sahneler ikişer: 1-2 ışık, 3-4 fizik, 5 netlik, 6 geometri. **7, Heykel'in kardeşi: ölçek.** Dar alan: **ölçeği doğru
+O güne kadarki sahneler: 1-2 ışık, 3-4 fizik, 5 netlik, 6 geometri (sonradan ikili düzen şart olmaktan çıktı). **7, Heykel'in kardeşi: ölçek.** Dar alan: **ölçeği doğru
 vermek, o hissi doğru vermek.** İnsan ölçeğinden başlayıp dışarı kozmik ağa, içeri Planck uzunluğuna; kesintisiz,
 yalnız tekerlekle.
 

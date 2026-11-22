@@ -2,7 +2,7 @@
 
 > Amfora geometrisi, amfora ve kemer malzemesi, deniz kabuğu katmanı için bulunan, ölçülen ve seçilen kaynaklar.
 > 2026-10-04, A0 alt ajanı (kod yazılmadı, kaynak koda ve git'e dokunulmadı). İndirilen dosyalar yalnız oturumun geçici
-> klasöründe: `%USERPROFILE%\AppData\Local\Temp\claude\C--Users-%USERNAME%\050265b6-0aa5-4cbf-a8e3-2c6f1601756d\scratchpad\amfora_a0\`
+> klasöründe: `(geçici bir çalışma klasörü)\amfora_a0\`
 > (oturumla silinebilir; kalıcı adresler ve SHA-256 değerleri aşağıda). Lisans kuralı: model ve doku için yalnız CC0 ya da
 > CC BY (NC ve ND yok). Gerçek fotoğraflar `BASVURU.md` §12-13'te. Hedef: kamera 30 cm'den bakarken tekstel ≤ 0,2 mm,
 > yani 8K bir doku en çok ≈1,64 m'lik alanı kaplamalı (16K ise ≈3,28 m).

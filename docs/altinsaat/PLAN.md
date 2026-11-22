@@ -46,8 +46,7 @@ gürültüsüz, kenar yumuşatmalı, fiziksel olarak doğru ışık; canlı modd
   yanıt gelmezse en iyi yargınla devam et ve kararı `docs/DURUM.md`'ye yaz. Bitirince: gösteri, `docs/SINIRLAR.md`
   raporu, hafıza hasadı.
 
-- Özcan Orhan Demirci, İzmir, Flutter/Android geliştirici, donanım meraklısı. İletişim **Türkçe**. Hafıza deposu
-  `C:/dev/claude_memory/hafiza/` (indeks otomatik yüklenir); oturum başında `git pull`, ritüel orada yazılı.
+- İletişim **Türkçe**. Hafıza deposu `C:/dev/claude_memory/hafiza/`; indeksi `MEMORY.md`.
 - **İşe başlamadan oku:** hafızadaki `genel/feedback_gpu_ve_grafik.md` (bir önceki grafik projesinin dersleri:
   profil önce, önizleme ürünle aynı kaynaktan, kare süresi zaman damgasından, SDF alt sınırı, cihazda görmeden
   bitmez) ve `genel/feedback_olcum_ve_denetim_kulturu.md`.
