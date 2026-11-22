@@ -79,9 +79,9 @@ ya da galeride sağ üstte TR | EN).
 
 | Galeri | Ayrıntılar: nasıl yapıldı |
 | --- | --- |
-| ![Galeri: sahneler numaralı bir listede, seçilen sağda büyük, açıklaması, Ayrıntılar ve Aç düğmeleri](docs/images/app-gallery.jpg) | ![Resmin üstünde Ayrıntılar paneli: sahnenin nasıl yapıldığı, iki sütunda](docs/images/app-details.jpg) |
+| ![Galeri: sahneler numaralı bir listede, seçilen sağda büyük, açıklaması, Ayrıntılar ve Aç düğmeleri](docs/images/app-gallery-tr.jpg) | ![Resmin üstünde Ayrıntılar paneli: sahnenin nasıl yapıldığı, iki sütunda](docs/images/app-details-tr.jpg) |
 | **Çalışan bir sahne** | **Tuşları (F1)** |
-| ![Arayüzün altında çalışan bir sahne: sol altta adı ve denetimleri, sağ üstte süreler](docs/images/app-scene.jpg) | ![Yardım paneli: sahnenin tuşları gruplar hâlinde, yanında genel tuşlar](docs/images/app-help.jpg) |
+| ![Arayüzün altında çalışan bir sahne: sol altta adı ve denetimleri, sağ üstte süreler](docs/images/app-scene-tr.jpg) | ![Yardım paneli: sahnenin tuşları gruplar hâlinde, yanında genel tuşlar](docs/images/app-help-tr.jpg) |
 
 Görünüm tek bir aile: adlar için IBM Plex Serif, metin için Sans, sayılar ve tuşlar için Mono; resmin üstünde koyu cam
 paneller ve her sahneye ışığından alınmış tek bir vurgu rengi. Bir sahne; çizicisi, ayarları ve GPU programlarıyla bir
