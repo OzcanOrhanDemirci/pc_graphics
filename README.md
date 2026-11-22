@@ -80,8 +80,8 @@ Everything on screen is in Turkish or English (L, or TR | EN at the top right of
 | The gallery | Details: how it was made |
 | --- | --- |
 | ![The gallery: the scenes in a numbered list, the selected one large on the right, its description and the Details and Open buttons](docs/images/app-gallery.jpg) | ![The Details panel over the picture: how the scene is made, in two columns](docs/images/app-details.jpg) |
-| **A running scene** | **Its keys (F1)** |
-| ![A running scene under the interface: its name and controls at the bottom left, timings at the top right](docs/images/app-scene.jpg) | ![The help panel: the scene's keys in groups, the general keys beside them](docs/images/app-help.jpg) |
+| **A running scene** (Turkish interface) | **Its keys, F1** (Turkish interface) |
+| ![A running scene under the Turkish interface: its name and controls at the bottom left, timings at the top right](docs/images/app-scene-tr.jpg) | ![The help panel in Turkish: the scene's keys in groups, the general keys beside them](docs/images/app-help-tr.jpg) |
 
 The look is one family: IBM Plex Serif for names, Sans for text, Mono for numbers and keys; dark glass panels over the
 picture, and one accent colour per scene, taken from its light. A scene is a folder with its renderer, its settings and
