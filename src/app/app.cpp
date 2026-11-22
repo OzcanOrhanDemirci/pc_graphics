@@ -469,13 +469,17 @@ int App::run(const Options& opt) {
     if (!glfwInit()) { std::printf("glfwInit failed\n"); return 1; }
     GLFWmonitor* mon = glfwGetPrimaryMonitor();
     const GLFWvidmode* vm = glfwGetVideoMode(mon);
-    glfwWindowHint(GLFW_AUTO_ICONIFY, GLFW_FALSE);   // losing focus must not minimise it (a minimised window's swap can stall)
     if (opt.windowed) {
         win_ = glfwCreateWindow(1280, 720, "pc_graphics", nullptr, nullptr);
     } else {
+        // full screen is a borderless window the size of the monitor, not an exclusive mode: no mode switch, so
+        // nothing to restore if the program dies, and a screen being captured or streamed does not break up (11-22)
+        int mx = 0, my = 0;
+        glfwGetMonitorPos(mon, &mx, &my);
         glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
-        glfwWindowHint(GLFW_REFRESH_RATE, vm->refreshRate);
-        win_ = glfwCreateWindow(vm->width, vm->height, "pc_graphics", mon, nullptr);
+        glfwWindowHint(GLFW_POSITION_X, mx);
+        glfwWindowHint(GLFW_POSITION_Y, my);
+        win_ = glfwCreateWindow(vm->width, vm->height, "pc_graphics", nullptr, nullptr);
     }
     if (!win_) { std::printf("window creation failed\n"); return 1; }
     glfwMakeContextCurrent(win_);
