@@ -2,68 +2,93 @@
 
 # pc_graphics
 
-**Art-directed scenes on the GPU, each with one narrow goal: correct light, then beauty, then physics.**
+**Thirteen art-directed scenes on the GPU, written without an engine. Each one keeps to a single narrow subject.**
 
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-00599C?logo=cplusplus&logoColor=white)](https://isocpp.org)
 [![CUDA](https://img.shields.io/badge/CUDA-13.4-76B900?logo=nvidia&logoColor=white)](https://developer.nvidia.com/cuda-toolkit)
 [![OptiX](https://img.shields.io/badge/OptiX-9.1-76B900?logo=nvidia&logoColor=white)](https://developer.nvidia.com/rtx/ray-tracing/optix)
-[![GPU](https://img.shields.io/badge/tested%20on-RTX%204080-76B900?logo=nvidia&logoColor=white)](#building)
+[![GPU](https://img.shields.io/badge/tuned%20for-RTX%204080-76B900?logo=nvidia&logoColor=white)](#building)
 [![Platform](https://img.shields.io/badge/platform-Windows%2011-0078D4?logo=windows&logoColor=white)](#building)
-[![Display](https://img.shields.io/badge/output-2560%C3%971440%20SDR-555)](#two-modes)
-[![Licence](https://img.shields.io/badge/licence-all%20rights%20reserved-lightgrey)](#licence)
+[![Display](https://img.shields.io/badge/output-2560%C3%971440-555)](#building)
+[![Licence](https://img.shields.io/badge/licence-MIT-blue)](#licence)
 
-[The application](#the-application) · [Scenes](#scenes) · [Scene 1 in depth](#what-scene-1-computes) · [Scene 3 in depth](#scene-3-the-physics) · [Building](#building) · [Running](#running) · [Layout](#repository-layout)
+[The scenes](#the-scenes) · [The application](#the-application) · [Scenes in depth](#scenes-in-depth) · [Building](#building) · [Running](#running) · [Layout](#repository-layout) · [Licence](#licence)
 
 *[Türkçe](README.tr.md)*
 
 </div>
 
+> **About this project.** pc_graphics is a project in science, engineering and art, built to explore the limits of
+> AI and to see what it can do. Each scene is designed around one narrow field: to find out how far AI can take the
+> science, the engineering and the art of that field, and to aim for the best work there is in it. Everything is
+> written and tuned for a single system (an RTX 4080 with 16 GB, driving a 2560×1440 monitor); on other hardware the
+> scenes may run slowly or not at all.
+>
+> **Bu proje hakkında.** pc_graphics, yapay zekânın sınırlarını keşfetmek ve neler yapabildiğini görmek için
+> geliştirilmiş; bilim, mühendislik ve sanat odaklı bir projedir. Her sahne tek bir dar alan için tasarlandı: o alanda
+> yapay zekânın bilimi, mühendisliği ve sanatı nereye kadar götürebildiğini görmek ve o alanın en iyisine ulaşmak
+> için. Her şey tek bir sisteme göre yazılıp ayarlandı (16 GB'lık RTX 4080, 2560×1440 ekran); başka donanımda
+> performans sorunları yaşanabilir.
+
 ---
 
-![Scene 1: sunlight through five slits, fourteen hanging crystal prisms scattering spectra over Ando-style concrete](docs/images/rainbows.jpg)
+## The scenes
 
-A personal workshop for computer graphics as art direction: a series of scenes, each in its own session with one
-narrow goal. It is not a game engine and it is not a benchmark. The first scene was about light being mathematically
-right, the second about beauty, the third about physics: a building that feels real coming down in a way that feels
-real. The fourth is a high-speed photography table: liquids and grains, computed finely, watched in slow motion.
+| [![Scene 1, Golden Hour](assets/gallery/altinsaat.jpg)](#1--glass-and-stone-at-golden-hour-altın-saatte-cam-ve-taş--october-2026)<br>**1 · Golden Hour** · spectral light | [![Scene 2, Lighthouse](assets/gallery/fener.jpg)](#2--lighthouse-fener--october-2026)<br>**2 · Lighthouse** · light in fog |
+| :---: | :---: |
+| [![Scene 3, Collapse](assets/gallery/yikim.jpg)](#3--collapse-yıkım--october-2026)<br>**3 · Collapse** · rigid bodies and fracture | [![Scene 4, Laboratory](assets/gallery/laboratuvar.jpg)](#4--laboratory-laboratuvar--october-2026)<br>**4 · Laboratory** · liquids and grains |
+| [![Scene 5, The Island](assets/gallery/koy.jpg)](#5--the-island-ada--october-2026)<br>**5 · The Island** · clarity under water | [![Scene 6, The Sculpture](assets/gallery/heykel.jpg)](#6--the-sculpture-heykel--october-2026)<br>**6 · The Sculpture** · geometry |
+| [![Scene 7, Scale](assets/gallery/olcek.jpg)](#7--scale-ölçek--october-2026)<br>**7 · Scale** · 62 orders of magnitude | [![Scene 8, The Submarine](assets/gallery/denizalti.jpg)](#8--the-submarine-denizaltı--october-2026)<br>**8 · The Submarine** · atmosphere |
+| [![Scene 9, The Mirror](assets/gallery/ayna.jpg)](#9--the-mirror-ayna--october-2026)<br>**9 · The Mirror** · reflection | [![Scene 10, The Well](assets/gallery/kuyu.jpg)](#10--the-well-kuyu--october-2026)<br>**10 · The Well** · infinity |
+| [![Scene 11, The Forest](assets/gallery/orman.jpg)](#11--the-forest-orman--october-2026)<br>**11 · The Forest** · density | [![Scene 12, The Fire](assets/gallery/ates.jpg)](#12--the-fire-ateş--october-2026)<br>**12 · The Fire** · fire as physics |
+| [![Scene 13, The Mountain](assets/gallery/dag.jpg)](#13--the-mountain-dağ--november-2026)<br>**13 · The Mountain** · draw distance | |
 
-Everything is written for one machine (an RTX 4080 driving a 2560×1440 IPS monitor) in C++, CUDA and OptiX, with no
-engine underneath. Scene 1 is a spectral path tracer with a **still mode** that accumulates towards a reference image
-and a **live mode** that keeps 20 to 30 frames per second with NVIDIA's AI denoiser. Scene 2 is a real-time volumetric
-night. Scene 3 is a rigid-body and fracture solver of its own, drawn by a plain daylight ray tracer. Scene 4 is a
-particle solver (fluids, grains, breakable bonds) whose fast moments are recomputed finely in the background and
-kept as physics, not video. Scene 5 is under water: a deterministic spectral ray tracer whose light goes on through
-the air above the surface, along a lane from a small island's pier to a wreck and a rope into the blue. Scene 6 is
-geometry alone: a Menger sponge on a plinth, zoomed into ten thousand times. Scene 7 is scale: from a beach at
-Çandarlı out to the edge of the universe with real data, and in, below the light, through the instrument's eye to the
-Planck length, 62 decades. Scene 8 is a submarine's control room: all its light traced and baked beforehand, the
-graphics card's whole strength going to the picture. Scene 9 is reflection: a mirror labyrinth of Moorish arches, seen
-from inside a chrome sphere, every mirror a pane of float glass silvered behind, the reflection of the reflection of the
-reflection as sharp as the room itself.
+## What this is
+
+Thirteen scenes in one Windows program, in C++20, CUDA and OptiX 9.1, with no game engine underneath. Each scene has
+its own renderer, chosen for its subject rather than shared: a spectral path tracer with photon mapping (1), a
+real-time volumetric night (2), a rigid-body and fracture solver (3), a particle solver for liquids and grains (4), a
+deterministic spectral ray tracer under water (5), distance estimation into a fractal ten thousand times closer (6),
+a camera that crosses 62 orders of magnitude on real data (7), light baked beforehand and drawn through tessellation
+(8), analytic tracers for a mirror labyrinth and an endless lattice (9, 10), OptiX with DLSS Ray Reconstruction for a
+dense forest (11), a fire on its own gas and wood physics (12), and terrain drawn to 387 km with no level of detail (13). The OptiX programs are compiled at run time with
+NVRTC; in the scenes that allow it, F5 reloads them after an edit, without a rebuild.
+
+The scenes were made one after another, and the later ones follow rules the earlier ones taught. The picture must be
+clean in motion: no grain and no shimmer, so live views give every pixel the same fixed samples every frame instead
+of noise that a temporal filter smooths away, and an image that only becomes sharp when the camera stops does not
+count. Sharpness comes from supersampling rather than TAA; the forest, whose leaves are finer than a pixel, uses DLSS
+Ray Reconstruction instead. Frame times are measured with GPU timestamps, and
+flicker is measured against a converged reference, not judged by eye alone. Textures and models come from open
+licences (CC0, or CC BY with credit); nothing is drawn by hand where a real scan exists.
+
+**How it was made.** I decide what each scene is for and how it should look, and I judge the result on my own
+screen. The code is written by AI, with Claude Code, in long working sessions; each scene's plan, decisions and
+measurements are kept in its folder under [docs/](docs/) (in Turkish), including what was tried and dropped and what
+was not verified.
 
 ## The application
 
-The twelve scenes live in one program. It opens on a gallery; a scene loads behind a loading screen (its programs
-compile and its world is built on a worker thread, so the window stays alive) and then runs under an interface that is
-the same for all of them: who and what at the bottom left, timings at the top right, the way out at the bottom right,
-the keys on F1. The panel at the bottom left takes the mouse: a scene can put rows of choices, sliders and buttons there
-(in Yıkım the magnitude, the length, start and stop). The gallery gives each scene a short description, and how it was
-made under **Details**. Esc always leads back, and a scene that closes gives the GPU back entirely. The application
-speaks Turkish or English (TR | EN at the top right of the gallery, or L); the choice is remembered.
+One program holds all thirteen scenes. It opens on a gallery: the scenes in a numbered list, the selected one large
+beside it with a short description, and under **Details** (A) how it was made. A scene loads behind a loading screen,
+its GPU programs compiled and its world built on a worker thread so the window stays responsive, and then runs under
+the same interface everywhere: its name and state at the bottom left, with the scene's own controls where it has any
+(the earthquake's magnitude and length in Collapse, the experiment in Laboratory); frame time, GPU power and memory at
+the top right; its keys on **F1**. Esc always leads back, and a scene that closes gives the GPU back entirely.
+Everything on screen is in Turkish or English (L, or TR | EN at the top right of the gallery).
 
 | The gallery | Details: how it was made |
 | --- | --- |
-| ![The gallery: the scenes in a numbered list, the selected one large on the right, its description, the details and open buttons](docs/images/app-gallery.jpg) | ![The gallery's details panel: scene 3's solver, material, earthquakes, wrecking ball, determinism and picture](docs/images/app-details.jpg) |
+| ![The gallery: the scenes in a numbered list, the selected one large on the right, its description and the Details and Open buttons](docs/images/app-gallery.jpg) | ![The Details panel over the picture: how the scene is made, in two columns](docs/images/app-details.jpg) |
+| **A running scene** | **Its keys (F1)** |
+| ![A running scene under the interface: its name and controls at the bottom left, timings at the top right](docs/images/app-scene.jpg) | ![The help panel: the scene's keys in groups, the general keys beside them](docs/images/app-help.jpg) |
 
-![Scene 3 during a magnitude 7 earthquake: the scene's name and state, clickable magnitudes, the length slider, the stop button, the shaking's progress, timings](docs/images/app-scene.jpg)
+The look is one family: IBM Plex Serif for names, Sans for text, Mono for numbers and keys; dark glass panels over the
+picture, and one accent colour per scene, taken from its light. A scene is a folder with its renderer, its settings and
+its GPU programs, plus one line in the scene registry; [docs/MIMARI.md](docs/MIMARI.md) (Turkish) describes the
+contract and how to add one.
 
-The look is one family for everything, IBM Plex: Serif for names, Sans for words, Mono for numbers and keys. Dark glass
-panels over the pictures, and one accent colour per scene, taken from its light: warm gold, cold blue, safety orange,
-sea green, sea blue, lavender, rose, night red, mirror glass.
-A scene is a folder with its renderer, its settings and its OptiX programs, plus one line in the scene registry;
-[docs/MIMARI.md](docs/MIMARI.md) (Turkish) describes the contract and how to add one.
-
-## Scenes
+## Scenes in depth
 
 ### 1 · Glass and stone at golden hour *(Altın saatte cam ve taş)* · October 2026
 
@@ -596,22 +621,6 @@ Plan, decisions, measurements and what is not verified in `docs/dag/` (Turkish).
 data courtesy of the U.S. Geological Survey. Colour: Sentinel-2 cloudless 2016 by EOX IT Services GmbH (modified Copernicus Sentinel
 data 2016), CC BY 4.0.
 
-### 14 · Dream *(Rüya)* · November 2026
-
-![Limestone islands, hanging gardens and arcades over a sea of mist](assets/gallery/ruya.jpg)
-
-Fly through procedural limestone islands, arcades and gardens. Coordinates
-determine each placement; islands group into massifs around a hero stack.
-Every surface wears a CC0 Poly Haven scan (4K and 8K). OptiX traces camera
-rays against the view cone and uses a frame-local table of shared meshes for
-shadows. The native 1440p default shades twelve fixed sub-pixel samples with
-sun and sky light, no denoiser and no frame history. Leaf alpha thresholds and
-dithering use a frame-invariant pixel hash.
-Island meshes are built on worker threads ahead of the flight.
-
-Open `build\pc_graphics.exe --scene ruya`. See [controls](DEMO.md) and
-[measurements](docs/ruya/DURUM.md).
-
 ## What scene 1 computes
 
 | | |
@@ -801,12 +810,12 @@ judged by Özcan from clips, not by the author's eye.
 
 ## Building
 
-**Requirements:** Windows 11, an NVIDIA RTX GPU with a driver that ships OptiX 9.1 (tested on an RTX 4080 with
-driver 617.14), Visual Studio 2026 with the C++ workload (MSVC 14.51, its bundled CMake and Ninja), Git Bash, and
-Python 3 for the tools (`numpy`, `pillow`, `OpenEXR`, `flip-evaluator`).
+**Requirements:** Windows 11, an NVIDIA RTX GPU with a driver that ships OptiX 9.1 (tuned on an RTX 4080 with 16 GB;
+several scenes need most of that memory), Visual Studio 2026 with the C++ workload (MSVC 14.51, its bundled CMake and
+Ninja), Git Bash, and Python 3 for the data scripts and tools (`numpy`, `pillow`, `OpenEXR`, `flip-evaluator`).
 
 ```bash
-bash third_party/fetch.sh        # CUDA 13.4.2 redistributables, OptiX 9.1 headers, GLFW, stb (incl. stb_truetype), tinyexr
+bash third_party/fetch.sh        # CUDA 13.4 redistributables, OptiX 9.1 headers, DLSS SDK, GLFW, stb, tinyexr, cgltf, GL headers
 ```
 
 Nothing is installed and the graphics driver is not touched: CUDA comes as NVIDIA's per-component archives into
@@ -816,6 +825,17 @@ Nothing is installed and the graphics driver is not touched: CUDA comes as NVIDI
 cmd /c build.bat                 :: configures once, then builds build\pc_graphics.exe (the one program)
 ```
 
+Five scenes read open data that is fetched rather than committed; run the script once before opening the scene:
+
+```bat
+python assets/koy/fetch.py       :: 5 · The Island: CC0 scans (Poly Haven, ambientCG)
+python tools/olcek_veri.py       :: 7 · Scale: maps, stars, galaxies, the cosmic web (sources: assets/olcek/KAYNAKLAR.md)
+python assets/orman/fetch.py     :: 11 · The Forest: CC0 scans (sources: docs/orman/VARLIK.md)
+python assets/ates/fetch.py      :: 12 · The Fire: CC0 scans (sources: docs/ates/VARLIK.md)
+python tools/dag_veri.py         :: 13 · The Mountain: elevation and imagery (sources: assets/dag/KAYNAKLAR.md)
+```
+
+The Submarine (8) bakes its light the first time it opens, which takes a few minutes, and keeps it in `cache/`.
 The OptiX device programs (`src/scenes/<scene>/device/`) are compiled at run time with NVRTC, so editing them needs no
 rebuild: press **F5** in the scene.
 
@@ -823,7 +843,7 @@ rebuild: press **F5** in the scene.
 
 ```bat
 build\pc_graphics.exe                       :: the gallery, borderless full screen on the primary monitor
-build\pc_graphics.exe --scene yikim         :: straight into a scene (altinsaat, fener, yikim, laboratuvar); Esc leads to the gallery
+build\pc_graphics.exe --scene koy           :: straight into a scene by its folder name; Esc leads to the gallery
 build\pc_graphics.exe --windowed            :: in a 1280x720 window
 build\pc_graphics.exe --set key=value       :: a setting of the scenes (scenes/<id>.cfg), repeatable
 build\pc_graphics.exe --lang en             :: English (or tr); otherwise the one chosen last in the gallery
@@ -836,81 +856,78 @@ build\pc_graphics.exe --autotest            :: the whole application once throug
 | F1 | the scene's keys |
 | H | hide the interface |
 | F12 | screenshot of the scene (`captures\<scene>_<date>`; scene 1 also writes a linear EXR) |
-| F5 | reload the scene's settings and recompile its OptiX programs (scenes 1 and 2) |
-| ↑ ↓, 1 to 4, Enter, mouse | choose and open in the gallery |
+| F5 | reload the scene's settings and GPU programs |
+| ↑ ↓, number keys, Enter, mouse | choose and open in the gallery |
 | A | the scene's details in the gallery (how it was made) |
-| L | the language in the gallery: Turkish ↔ English (TR \| EN at the top right) |
+| L | the language: Turkish ↔ English |
 
-| Scene 1 · Golden Hour | Scene 2 · Lighthouse | Scene 3 · Collapse | Scene 4 · Laboratory |
-| --- | --- | --- | --- |
-| Space still ↔ live · C next camera · ↑ ↓ exposure · ← → focus · R reset · P, V, N, D, G photons, haze, next-event estimation, denoiser, sun patches · 1 to 5 beauty, albedo, normal, caustics, cost | Space walk A ↔ B · B jump to the other view · P pause time · ← → time ∓1 s · ↑ ↓ exposure · 1 to 5 views · Tab first-person walk (WASD, mouse, Shift run, Space jump) | the panel's Building: apartment block, tower, house · 3 to 9 magnitude · ← → length (at the end: until stopped) · Space start or stop (with the mouse on the panel too) · T slow motion · P pause · left click wrecking ball (at most one a second) · ↑ ↓ its power · R rebuild · right mouse look · WASD, E/Q fly · Shift faster · wheel zoom · B bars · G denoising | 1 to 5 experiment · Space pour, run, stop · left click needle, fire; honey and sand: drag to move · B steel ball · T speed ×1, ×1/10, ×1/100 · P pause or play · ← → step a recording · right mouse look · WASD, E/Q fly · R set up again |
-
-The scenes' tools run without a window, from the same program:
+Each scene's own keys are on F1 inside it; [DEMO.md](DEMO.md) walks through all thirteen for a demonstration
+(Turkish: [GOSTERI.md](GOSTERI.md)). The scenes' measuring tools run without a window, from the same program, for
+example:
 
 ```bat
-build\pc_graphics.exe --headless --spp 2048 --denoise --out captures\name          :: scene 1 (also with --scene altinsaat)
-build\pc_graphics.exe --headless --live 80 --out captures\live\name
-build\pc_graphics.exe --selftest
-build\pc_graphics.exe --scene fener --headless --frames 64 --out captures\name
-build\pc_graphics.exe --scene fener --map captures\harita.png
-build\pc_graphics.exe --scene yikim --test                                          :: the solver's physical tests
-build\pc_graphics.exe --scene yikim --clip sarsinti --seconds 40 --set deprem.magnitude=7 --out captures\yikim\name
-build\pc_graphics.exe --scene laboratuvar --still --deney balon --tetik --kayit --t 0.024 --spp 192 --out captures\x.png
-build\pc_graphics.exe --scene laboratuvar --lab-test                                :: the experiments' measurements
+build\pc_graphics.exe --scene altinsaat --headless --spp 2048 --denoise --out captures\name   :: a converged still
+build\pc_graphics.exe --scene altinsaat --selftest                                            :: spectral self-tests
+build\pc_graphics.exe --scene yikim --test                                                    :: the solver's physical tests
+build\pc_graphics.exe --scene laboratuvar --lab-test                                          :: the experiments' measurements
+build\pc_graphics.exe --scene koy --test                                                      :: Snell's window, colour at depth, ...
+build\pc_graphics.exe --scene olcek --test olcek-hassasiyet                                   :: 62 decades in floating point
 ```
 
-Each scene's list is at the top of its `src/scenes/<scene>/<scene>_app.cpp`. A short Turkish guide for a demonstration
-is in [DEMO.md](DEMO.md) (Turkish: [GOSTERI.md](GOSTERI.md)).
+Each scene's full list is at the top of its `src/scenes/<scene>/<scene>_app.cpp`.
 
 ## Repository layout
 
 ```
 src/
   app/                the application: window, gallery, loading, the interface over a scene, help, scene registry
-  ui/                 the interface kit: rounded panels, shadows, images, text in IBM Plex (OpenGL 2, one GLSL program)
+  ui/                 the interface kit: rounded panels, shadows, images, text in IBM Plex (OpenGL, one GLSL program)
   core/               what the scenes share: settings files, image reading and writing, GPU readings (NVML), bloom
   shared/             headers shared by host and device code: vectors, tone mapping, spectra
   scenes/
-    altinsaat/        scene 1: spectral path tracer, photon grid, AI denoiser; device/ its OptiX programs
-    fener/            scene 2: world generation, real-time light pipeline, player; device/
-    yikim/            scene 3: hulls, the GPU solver (phys.cu), the building, earthquakes, tests, denoising filter; device/
-    laboratuvar/      scene 4: the particle solver, liquid surfaces, experiments, recordings, ballistics; device/
-    koy/              scene 5: deterministic spectral ray tracer, the island, under water, the wreck, amphorae; device/
-    heykel/           scene 6: the Menger sponge, ten thousand times closer by perturbation (CUDA)
-    olcek/            scene 7: tree of anchors, layer clocks, CUDA renderer, maps, density maps, the desert and the bottom
-    denizalti/        scene 8: room and equipment kit, decal atlas, OptiX oven (device/), OpenGL 4.6 tessellation pipeline (glsl/)
-    ayna/             scene 9: the lattice tracer, the maze, the beams, light maps, the mist, the materials (CUDA)
-    kuyu/             scene 10: the endless lattice, one-way walls, the rooms' insides, the structure's light table (CUDA)
-    orman/            scene 11: glTF scans, the forest's placement, tile and torus, baked probe grid, DLSS-RR; device/
+    altinsaat/        1  · spectral path tracer, photon grid, AI denoiser; device/ its OptiX programs
+    fener/            2  · world generation, real-time volumetric light, the walk and the player; device/
+    yikim/            3  · hulls, the GPU solver (phys.cu), the buildings, earthquakes, tests, denoising filter; device/
+    laboratuvar/      4  · the particle solver, liquid surfaces, experiments, recordings, ballistics; device/
+    koy/              5  · deterministic spectral ray tracer, the island, under water, the wreck, amphorae; device/
+    heykel/           6  · the Menger sponge by distance estimation, ten thousand times closer by perturbation (CUDA)
+    olcek/            7  · tree of anchors, layer clocks, CUDA renderer, maps, density maps; the second option, Speed
+    denizalti/        8  · room and equipment kit, decal atlas, OptiX oven (device/), OpenGL 4.6 tessellation (glsl/)
+    ayna/             9  · the lattice tracer, the maze, the beams, light maps, the mist, the materials (CUDA)
+    kuyu/             10 · the endless lattice, one-way walls, the rooms' insides, the structure's light table (CUDA)
+    orman/            11 · glTF scans, the forest's placement, tile and torus, baked probe grid, DLSS-RR; device/
+    ates/             12 · gas grid, burning wood, coals and sparks, the logs as rigid bodies, DLSS-RR; device/
+    dag/              13 · elevation tiles, the near ground, the atmosphere, the binoculars; device/
 scenes/               the scenes' settings (<scene>.cfg)
-assets/               fonts (IBM Plex), gallery pictures, blue-noise texture, earthquake records (ESM, AFAD TADAS)
-tools/                EXR statistics, FLIP and RMSE comparison, noise maps, contact sheets, prism planner, value studies;
-                      Scale's data (olcek_bugun.py: today's sky, olcek_veri.py: maps, stars, galaxies, web; its output not committed)
-docs/                 working journal in Turkish: application status and architecture; one folder per scene (plan, status)
+assets/               fonts (IBM Plex), gallery pictures, blue-noise texture, earthquake records; per-scene fetch scripts
+tools/                measuring and data scripts: EXR statistics, FLIP and RMSE comparison, flicker, contact sheets,
+                      the data of Scale and The Mountain (their output is not committed)
+docs/                 the working journal, in Turkish: the application's status and architecture; per scene its plan,
+                      status and measurements, including what was not verified
 third_party/fetch.sh  fetches the dependencies; the folder itself is not committed
 ```
 
-## Next scenes
-
-- Talked about, not started: a small complete game without an engine, set in the lighthouse's world (relight the
-  lighthouse, the beam as a puzzle, danger in the dark).
-- Scene 3 could still take dust (the fog machinery of scene 2 is the starting point), rougher fracture surfaces and
-  glass; it was closed without them, on purpose: its goal was the physics.
-
 ## Licence
 
-Private repository. All rights reserved. Scene 5's amphora profiles are written into the code from ArchAIDE consortium
-(2019), vector profiles of the University of Southampton's drawings (P. Copeland, *Roman Amphorae: a digital resource*,
-2014), CC BY 4.0, https://doi.org/10.5284/1050896; its scanned textures (Poly Haven, ambientCG) are CC0 and fetched by
-`assets/koy/fetch.py` (`assets/koy/LICENSES.md`). Scene 11's scans (Poly Haven, ambientCG) are CC0 too, fetched by
-`assets/orman/fetch.py` (sources in `docs/orman/VARLIK.md`). Scene 14's scans (Poly Haven) are CC0, fetched by
-`assets/ruya/fetch.py` (`assets/ruya/KAYNAKLAR.md`). Third-party components are fetched at build time under their own licences:
-the NVIDIA CUDA redistributables and OptiX SDK headers, the NVIDIA DLSS SDK (NVIDIA RTX SDK licence), GLFW (zlib), stb
-(public domain), tinyexr (BSD), cgltf (MIT). The IBM Plex
-fonts in `assets/fonts` are under the SIL Open Font License (`assets/fonts/LICENSE.txt`). Earthquake records: ESM, the
-Engineering Strong-Motion database (Mascandola et al., doi 10.13127/esm.3), and AFAD TADAS.
+The code is under the [MIT licence](LICENSE), and so are the pictures in `docs/` and `assets/gallery/`, which are
+renders of the scenes; where a picture shows third-party data (the stars and the Earth in Scale, the mountains in The
+Mountain), that data keeps its own licence and credit, listed below and in [NOTICE.md](NOTICE.md).
 
-Developed with Claude Code (Anthropic) in long autonomous sessions; the measurements behind every decision are in
-[docs/DURUM.md](docs/DURUM.md) (the application), [docs/altinsaat/DURUM.md](docs/altinsaat/DURUM.md),
-[docs/fener/DURUM.md](docs/fener/DURUM.md) and [docs/yikim/DURUM.md](docs/yikim/DURUM.md), and an honest account of where
-the work on scene 1 went wrong is in [docs/altinsaat/SINIRLAR.md](docs/altinsaat/SINIRLAR.md).
+- **Scans** (textures and models of scenes 5, 11, 12 and 13): Poly Haven and ambientCG, CC0, fetched by the scripts
+  above, not committed.
+- **Scene 5's amphora profiles**, written into the code: ArchAIDE consortium (2019), vector profiles of the University
+  of Southampton's drawings (P. Copeland, *Roman Amphorae: a digital resource*, 2014), CC BY 4.0,
+  https://doi.org/10.5284/1050896.
+- **Scene 7's data:** Copernicus Sentinel-2; NASA Blue Marble, GIBS (MODIS, VIIRS) and LRO; JPL DE440; the Minor
+  Planet Center; the HYG star database v4.1 (CC BY-SA 4.0); the 2MASS Redshift Survey; Gaia DR3; ESO/S. Brunier's
+  Milky Way panorama (CC BY 4.0). The full list with licences is in [assets/olcek/KAYNAKLAR.md](assets/olcek/KAYNAKLAR.md).
+- **Scene 13's elevation and colour:** Copernicus DEM GLO-30, © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH
+  2014-2018, provided under COPERNICUS by the European Union and ESA; Mapzen Terrain Tiles (SRTM, U.S. Geological
+  Survey); Sentinel-2 cloudless 2016 by EOX IT Services GmbH (modified Copernicus Sentinel data 2016), CC BY 4.0.
+- **Earthquake records** (scene 3): ESM, the Engineering Strong-Motion database (Mascandola et al., doi
+  10.13127/esm.3), and AFAD TADAS.
+- **Colour science:** the CIE colour-matching functions and illuminants (CIE, CC BY-SA 4.0).
+- **Fonts:** IBM Plex, SIL Open Font License 1.1 ([assets/fonts/LICENSE.txt](assets/fonts/LICENSE.txt)).
+- **Fetched at build time** under their own licences: the NVIDIA CUDA redistributables, the OptiX SDK headers and the
+  DLSS SDK (NVIDIA's licences), GLFW (zlib), stb (public domain), tinyexr (BSD), cgltf (MIT), the Khronos GL headers
+  (MIT).
