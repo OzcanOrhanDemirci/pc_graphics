@@ -1,5 +1,5 @@
-// The few OpenGL 2.0 entry points the interface kit needs beyond the 1.1 that opengl32.lib exports (shaders,
-// multitexture coordinates), loaded through GLFW once a context is current.
+// The few OpenGL entry points the interface kit needs beyond the 1.1 that opengl32.lib exports (2.0: shaders,
+// multitexture coordinates; 3.0: the off-screen frame), loaded through GLFW once a context is current.
 #pragma once
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
@@ -31,7 +31,7 @@ using GLchar_ = char;
     X(void, Uniform2f, (GLint, GLfloat, GLfloat))                                                              \
     X(void, Uniform4f, (GLint, GLfloat, GLfloat, GLfloat, GLfloat))                                            \
     X(void, ActiveTexture, (GLenum))                                                                           \
-    X(void, MultiTexCoord4f, (GLenum, GLfloat, GLfloat, GLfloat, GLfloat))
+    X(void, MultiTexCoord4f, (GLenum, GLfloat, GLfloat, GLfloat, GLfloat))                                         X(void, GenFramebuffers, (GLsizei, GLuint*))                                                                   X(void, DeleteFramebuffers, (GLsizei, const GLuint*))                                                          X(void, BindFramebuffer, (GLenum, GLuint))                                                                     X(void, FramebufferTexture2D, (GLenum, GLenum, GLenum, GLuint, GLint))                                         X(GLenum, CheckFramebufferStatus, (GLenum))                                                                    X(void, BlitFramebuffer, (GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLbitfield, GLenum))
 
 #define UI_GL_DECLARE(ret, name, args) extern ret(APIENTRY* name) args;
 UI_GL_FUNCS(UI_GL_DECLARE)
@@ -40,6 +40,8 @@ UI_GL_FUNCS(UI_GL_DECLARE)
 bool load();   // after glfwMakeContextCurrent
 
 constexpr GLenum FRAGMENT_SHADER = 0x8B30, VERTEX_SHADER = 0x8B31, COMPILE_STATUS = 0x8B81, LINK_STATUS = 0x8B82, TEXTURE0 = 0x84C0,
-                 TEXTURE1 = 0x84C1, CLAMP_TO_EDGE = 0x812F, GENERATE_MIPMAP = 0x8191;
+                 TEXTURE1 = 0x84C1, CLAMP_TO_EDGE = 0x812F, GENERATE_MIPMAP = 0x8191, FRAMEBUFFER = 0x8D40,
+                 READ_FRAMEBUFFER = 0x8CA8, DRAW_FRAMEBUFFER = 0x8CA9, COLOR_ATTACHMENT0 = 0x8CE0,
+                 FRAMEBUFFER_COMPLETE = 0x8CD5;
 
 }   // namespace ui::gl

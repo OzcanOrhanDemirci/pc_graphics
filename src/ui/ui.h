@@ -45,9 +45,11 @@ struct Image {
 // ---- lifetime (a current GL context is needed)
 bool init(const std::string& root, std::string& err);
 void shutdown();
-// the frame: pixel coordinates, origin top left
+// the frame: pixel coordinates, origin top left. It is drawn off screen and present() copies it to the window in one go,
+// before the swap: the window's buffer is never seen half drawn, layer by layer
 void begin(int width, int height);
 void end();
+void present();
 void clear(Color c);
 
 // ---- shapes

@@ -897,6 +897,7 @@ int App::run(const Options& opt) {
         dispatch(dt);
         if (mode_ != before && !quit_) dispatch(0.0);   // the new screen draws this frame (no stale picture)
         if (quit_) break;
+        ui::present();   // the frame drawn off screen, into the window in one copy
         if (mode_ != Mode::Running) keyQueue_.clear();
         leftClick_ = false;
         scroll_ = 0.0;

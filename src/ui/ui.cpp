@@ -146,6 +146,43 @@ std::string g_root;
 int g_w = 0, g_h = 0;
 bool g_inited = false;
 
+// The off-screen frame. Drawn straight into the window, the gallery broke up on screen dozens of times a second
+// (Özcan, 11-22): in a borderless window the swap does not wait for the desktop's composition, the gallery drew
+// ~140 frames a second, and the screen showed frames half drawn, most likely a buffer the next frame was already being
+// drawn into: the backdrop without the darkening over it, in triangles and tiles. The gallery's layers differ that
+// much; a scene is one picture, nearly the same as the last one. Finishing each frame before the swap (glFinish) did not help; drawing it off screen and copying
+// it in one go did (screen grabs: 38 broken of 311, then 0 of 312). A copy caught halfway mixes two whole frames.
+struct Target {
+    GLuint fbo = 0, tex = 0;
+    int w = 0, h = 0;
+    bool failed = false, drawn = false;
+} g_target;
+
+bool bindTarget(int w, int h) {
+    if (g_target.failed) return false;
+    if (!g_target.fbo) gl::GenFramebuffers(1, &g_target.fbo);
+    if (g_target.w != w || g_target.h != h) {
+        if (g_target.tex) glDeleteTextures(1, &g_target.tex);
+        glGenTextures(1, &g_target.tex);
+        glBindTexture(GL_TEXTURE_2D, g_target.tex);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+        gl::BindFramebuffer(gl::FRAMEBUFFER, g_target.fbo);
+        gl::FramebufferTexture2D(gl::FRAMEBUFFER, gl::COLOR_ATTACHMENT0, GL_TEXTURE_2D, g_target.tex, 0);
+        if (gl::CheckFramebufferStatus(gl::FRAMEBUFFER) != gl::FRAMEBUFFER_COMPLETE) {
+            std::fprintf(stderr, "ui: no off-screen frame, drawing straight to the window\n");
+            gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
+            g_target.failed = true;
+            return false;
+        }
+        g_target.w = w;
+        g_target.h = h;
+    }
+    gl::BindFramebuffer(gl::FRAMEBUFFER, g_target.fbo);
+    return true;
+}
+
 const Baked* bake(Font f, float size) {
     const int px = std::max(6, int(std::lround(size)));
     auto key = std::make_pair(int(f), px);
@@ -290,6 +327,9 @@ bool init(const std::string& root, std::string& err) {
 }
 
 void shutdown() {
+    if (g_target.fbo) gl::DeleteFramebuffers(1, &g_target.fbo);
+    if (g_target.tex) glDeleteTextures(1, &g_target.tex);
+    g_target = Target();
     for (auto& kv : g_baked) glDeleteTextures(1, &kv.second->tex);
     g_baked.clear();
     if (g_prog.id) gl::DeleteProgram(g_prog.id);
@@ -300,6 +340,7 @@ void shutdown() {
 void begin(int width, int height) {
     g_w = width;
     g_h = height;
+    g_target.drawn = bindTarget(width, height) || g_target.drawn;
     glViewport(0, 0, width, height);
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
@@ -314,6 +355,16 @@ void begin(int width, int height) {
     gl::ActiveTexture(gl::TEXTURE0);
     gl::Uniform1i(g_prog.tex, 0);
     gl::Uniform4f(g_prog.adj, 1.0f, 1.0f, 0.0f, 0.0f);
+}
+
+void present() {
+    if (!g_target.drawn) return;
+    g_target.drawn = false;
+    gl::BindFramebuffer(gl::READ_FRAMEBUFFER, g_target.fbo);
+    gl::BindFramebuffer(gl::DRAW_FRAMEBUFFER, 0);
+    glDisable(GL_SCISSOR_TEST);
+    gl::BlitFramebuffer(0, 0, g_target.w, g_target.h, 0, 0, g_target.w, g_target.h, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
 }
 
 void clear(Color c) {
