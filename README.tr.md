@@ -312,7 +312,7 @@ Orada ekranın genişliği 0,15 mm, iki saç teli kadardır.
   tavandan sönük bir ışık.
 - **Dalış turu (T):** on altı rastgele dalıştan seçilmiş dört dalış, on bin kata kadar, her onda bir katta durur.
 
-İlk hâli (yol izlenen sözde Klein bir "katedral") Özcan'ın ilk bakışından sonra değişti: grenliydi, titriyordu ve yüzeyi her
+İlk hâli (yol izlenen sözde Klein bir "katedral") benim ilk bakışımdan sonra değişti: grenliydi, titriyordu ve yüzeyi her
 ölçekte piksel boyu dairelerdi. Hepsi `docs/heykel/DURUM.md`'de.
 
 ### 7 · Ölçek · Ekim 2026
@@ -474,7 +474,7 @@ bırakırsın; aynalar her şeyi sonsuza dek çoğaltır.
   onunla süzülür: aynanın ardındaki desen, aynı uzaklıktan doğrudan bakıldığı kadar keskin ve sakin (ölçüldü: ideal
   aynadan aynı görüntü, piksel piksel). Küçük lambalar izdüşümdeki paylarıyla toplanır: derin tünelin lambaları titremez.
 - **Görüntü:** pikselde altı sabit örnek, her kare aynı, birikim ve gürültü giderici yok; ileri saçan hafif bir pus her
-  yol parçası boyunca kapalı biçimde; 2560 × 1440'ta saniyede 30-40 kare. Kalite ayarı yok.
+  yol parçası boyunca kapalı biçimde; 2560 × 1440'ta saniyede 30-44 kare. Kalite ayarı yok.
 
 Plan, kararlar, ölçümler ve doğrulanmayanlar `docs/ayna/` içinde.
 
@@ -585,10 +585,10 @@ Plan, kararlar, ölçümler ve doğrulanmayanlar `docs/ates/` içinde.
 | ![Doğuya bakış: Kaçkar'ın havadaki gölgesi ufka kadar, yanında aydınlık doruklar](docs/images/dag-golge.jpg) | ![Korkuluktan: alçak güneşte kaya ve taşlar, aşağıda vadi](docs/images/dag-kaya.jpg) |
 
 Tek dar hedef: **çizim mesafesi.** Kuzeydoğu Türkiye'de, Kaçkar'ın gerçek doruğunda küçük, korkuluklu bir teras, gün
-batımı. Göz terastan çıkamıyor ve bu her şeyi belirliyor. Oyunlar uzağı ayrıntı seviyeleriyle çizer, çünkü oyuncu her
+batımı. Görüş oradan hesaplanıyor ve bu her şeyi belirliyor. Oyunlar uzağı ayrıntı seviyeleriyle çizer, çünkü oyuncu her
 yere gidebilir. Burada 1 yay saniyelik yükseklik modelinin terastan görülebilen her hücresi bir kez bulunup üçgene
 dönüşür ve bir daha değişmez: hiçbir şey birden belirip yer değiştiremez, dürbünle (30 kata kadar) bakınca da orada aynı
-dağ durur. 146 milyon üçgen, saniyede 60 kare.
+dağ durur. 146 milyon üçgen, saniyede 60 kare. Korkuluktaki bir açıklıktan yamaca inilebilir.
 
 - **Gerçek zemin.** Copernicus GLO-30 yükseklik verisi, açık olmadığı yerde SRTM; uydunun kendi güneşi çıkarılmış
   Sentinel-2 bulutsuz renk; havanın olağan ışık kırılması hesaba katılmış bir küre. Panel dürbünün neye baktığını
@@ -601,8 +601,8 @@ dağ durur. 146 milyon üçgen, saniyede 60 kare.
   ışınla izler.
 - **Yakını taranmış.** Taşlık ve kaya yüzleri (Poly Haven, CC0) hem geometride hem gölgelendirmede, taranmış kayaların
   1500 kopyası.
-- **Pikselde on altı sabit ışın.** Zamansal birikim yok, gren yok. Canlı görüntü 64 ışınlık referansa karşı: ikinci fark
-  oranı 1,01.
+- **Pikselde on altı sabit ışın.** Zamansal birikim yok, gren yok. Dönerken ya da yürürken canlı görüntü 64 ışınlık
+  referanstan fazla titremez (oran 1,01).
 
 Plan, kararlar, ölçümler ve doğrulanmayanlar `docs/dag/` içinde. Yükseklik: Copernicus DEM, © DLR e.V. 2010-2014 ve
 © Airbus Defence and Space GmbH 2014-2018, provided under COPERNICUS by the European Union and ESA; Mapzen Terrain
@@ -649,7 +649,7 @@ Boşluk tuşu ikisi arasında geçer. Canlı kipte su dalgalanır, toz ve köpü
   gölgelendirilir. Ölçüldü: yeniden sıralama olmadan yol izleyici **6 kat yavaş**.
 - **Küreler özel ilkel.** OptiX'in yerleşik küresi içeriden vurulmuyor; su dolu cam küre siyah çıktı, köpükler tek
   film gibi davrandı. Tek bayraklık bir deney içeriden sıfır vuruş gösterdi; özel kesişim iki kökü de raporluyor.
-- **Varyans azaltmadan önce ölç.** Kazanmasını beklediğim iki teknik (güneşli lekelere üç yönlü MIS'le bağlanmak ve
+- **Varyans azaltmadan önce ölç.** Kazanmasını beklediğimiz iki teknik (güneşli lekelere üç yönlü MIS'le bağlanmak ve
   gök haritasının önem örneklemesi) yansız ve doğruydu ama eşit *sürede* kaybetti. Asıl kaldıraç maliyetti:
   prosedürel dokular karenin üçte ikisini alıyordu; pişirmek 2,3 kat verdi. İki teknik de kodda, varsayılan kapalı.
 - **Kostikler gürültü gidericinin dışında kalır.** Tersi denendi: tayfları yaydı.
@@ -743,7 +743,7 @@ Okunmaya değer kararlar:
   Düzeltmek Pazarcık ×1'i göçmeden ayakta kalmaya taşıdı.
 - **İç içe geçmeyi itmek bir şey fırlatmamalı.** İç içe geçmeler 2 m/s'ye kadar hızla dışarı itiliyordu. Tuğla
   korkuluğun ezilen bağı onu kirişe birkaç santim gömüyor; son lif kopunca gömülme bir anda itiliyor, 150 kg'lık blok
-  3-4 m/s ile yukarı fırlıyordu (Özcan gördü: hafif parçalar düşmek yerine fırlıyor). 0,5 m/s'de binadan fırlayan
+  3-4 m/s ile yukarı fırlıyordu (ekranda gördüm: hafif parçalar düşmek yerine fırlıyordu). 0,5 m/s'de binadan fırlayan
   tuğla (yerden 1 m'nin üstünde, bir karede 2 m/s'den fazla hızlanan) Pazarcık'ta 93'ten 1'e, Antakya'nın çöküşünden
   önce 44'ten 0'a indi; testler ve her kaydın binaya yaptığı değişmedi.
 - **Fiziğin yanına sığan gürültü giderici.** OptiX yapay zekâ gidericisi greni tamamen aldı, ama 9,7 ms'siyle fiziği
@@ -773,8 +773,8 @@ Okunmaya değer kararlar:
   bölünüyordu. Gökdelenin göçüşünde birbirine saplanmış iki parça, biri çok temas ederken birbirini eşitsiz itti ve 105
   m/s ile 190 m'ye çıktı. Çiftin iki cismine aynı pay verilince en hızlı parça 43,5 m/s (tepeden serbest düşüş 43,8);
   testler ve apartmanın davranışı aynı kaldı.
-- **Darbe bir cisimdir, sihir değil.** Tıklama önceleri parçayı dünyadan kaldırıyordu (Özcan: *"kolon pıt diye yok
-  oluyor"*). Şimdi top atılıyor. 1,4 t'luk top köşe kolonu yalnız 7 cm kaydırdı: katı parçalı modelde darbe yerel ezme
+- **Darbe bir cisimdir, sihir değil.** Tıklama önceleri parçayı dünyadan kaldırıyordu (ekranda kolon *"pıt diye yok
+  oluyordu"*). Şimdi top atılıyor. 1,4 t'luk top köşe kolonu yalnız 7 cm kaydırdı: katı parçalı modelde darbe yerel ezme
   yapamaz, 2,2 m'lik parçanın tamamına dağılır ve iki bağın kayma kapasitesi momentumu kopma eşiğinden önce yer.
   4,2 t'luk top kolonun ayağını koparıp gövdesini devirdi; çözücüye hiç dokunulmadı.
 - **Taşıyıcıyı ölç, üstünde duranı değil.** "Çatı ötelemesi" en üstteki parçaların ortalamasıydı, onlar da tuğla
@@ -784,7 +784,7 @@ Okunmaya değer kararlar:
 zincirler yavaş yakınsıyor; binanın ölçülen periyodu 0,45 s, yönetmelik formülünün 0,54 s'sine yakın). Bina bir
 mühendislik analiziyle karşılaştırılmadı; çözücünün testleri (serbest düşme, yığın, eğim, enerji, mafsal,
 determinizm, sönüm, deprem döngüsü) fiziksel akıl sağlığı denetimleri, 34'ün 32'si geçiyor, kalan ikisi konsol. Hareketi kliplerden
-Özcan değerlendirdi, yazarın gözü değil.
+ben değerlendirdim.
 
 ## Derleme
 

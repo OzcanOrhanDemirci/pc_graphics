@@ -40,8 +40,8 @@
 | [![Scene 5, The Island](assets/gallery/koy.jpg)](#5--the-island-ada--october-2026)<br>**5 · The Island** · clarity under water | [![Scene 6, The Sculpture](assets/gallery/heykel.jpg)](#6--the-sculpture-heykel--october-2026)<br>**6 · The Sculpture** · geometry |
 | [![Scene 7, Scale](assets/gallery/olcek.jpg)](#7--scale-ölçek--october-2026)<br>**7 · Scale** · 62 orders of magnitude | [![Scene 8, The Submarine](assets/gallery/denizalti.jpg)](#8--the-submarine-denizaltı--october-2026)<br>**8 · The Submarine** · atmosphere |
 | [![Scene 9, The Mirror](assets/gallery/ayna.jpg)](#9--the-mirror-ayna--october-2026)<br>**9 · The Mirror** · reflection | [![Scene 10, The Well](assets/gallery/kuyu.jpg)](#10--the-well-kuyu--october-2026)<br>**10 · The Well** · infinity |
-| [![Scene 11, The Forest](assets/gallery/orman.jpg)](#11--the-forest-orman--october-2026)<br>**11 · The Forest** · density | [![Scene 12, The Fire](assets/gallery/ates.jpg)](#12--the-fire-ateş--october-2026)<br>**12 · The Fire** · fire as physics |
-| [![Scene 13, The Mountain](assets/gallery/dag.jpg)](#13--the-mountain-dağ--november-2026)<br>**13 · The Mountain** · draw distance | |
+| [![Scene 11, Rainforest](assets/gallery/orman.jpg)](#11--rainforest-orman--october-2026)<br>**11 · Rainforest** · density | [![Scene 12, Fire](assets/gallery/ates.jpg)](#12--fire-ateş--october-2026)<br>**12 · Fire** · fire as physics |
+| [![Scene 13, Mountain](assets/gallery/dag.jpg)](#13--mountain-dağ--november-2026)<br>**13 · Mountain** · draw distance | |
 
 ## What this is
 
@@ -52,7 +52,7 @@ deterministic spectral ray tracer under water (5), distance estimation into a fr
 a camera that crosses 62 orders of magnitude on real data (7), light baked beforehand and drawn through tessellation
 (8), analytic tracers for a mirror labyrinth and an endless lattice (9, 10), OptiX with DLSS Ray Reconstruction for a
 dense forest (11), a fire on its own gas and wood physics (12), and terrain drawn to 387 km with no level of detail (13). The OptiX programs are compiled at run time with
-NVRTC, and F5 reloads them after an edit, without a rebuild.
+NVRTC, and in the scenes that allow it F5 reloads them after an edit, without a rebuild.
 
 The scenes were made one after another, and the later ones follow rules the earlier ones taught. The picture must be
 clean in motion: no grain and no shimmer, so live views give every pixel the same fixed samples every frame instead
@@ -321,7 +321,7 @@ thousand times, where the screen is 0.15 mm across (about two hairs).
   could see; a dim light from the ceiling.
 - **The dive tour (T):** four dives chosen from sixteen random ones, down to ten thousand times, stopping at every decade.
 
-The first version (a pseudo-Kleinian "cathedral", path traced) was replaced after Özcan's first look: grainy, flickering,
+The first version (a pseudo-Kleinian "cathedral", path traced) was replaced after my first look: grainy, flickering,
 and its surface was pixel-sized circles at every scale. Everything in `docs/heykel/DURUM.md` (Turkish).
 
 ### 7 · Scale *(Ölçek)* · October 2026
@@ -490,7 +490,7 @@ everything without end.
   distance (measured: the same picture through an ideal mirror, pixel for pixel). Small lamps count by their share of the
   footprint, so the deep tunnel's lamps do not twinkle.
 - **Picture:** six fixed samples a pixel, the same every frame, no accumulation, no denoiser; a light forward-scattering
-  mist in closed form along every piece of the way; 30 to 40 frames a second at 2560 × 1440. No quality settings.
+  mist in closed form along every piece of the way; 30 to 44 frames a second at 2560 × 1440. No quality settings.
 
 Plan, decisions, measurements and what is not verified in `docs/ayna/` (Turkish).
 
@@ -531,7 +531,7 @@ down a shaft between two columns of rooms.
 
 Plan, decisions, measurements and what is not verified in `docs/kuyu/` (Turkish).
 
-### 11 · The Forest *(Orman)* · October 2026
+### 11 · Rainforest *(Orman)* · October 2026
 
 | ![Along the stream: sun shafts through the mist, a fallen trunk across the water, ferns and broad leaves on a floor of fallen leaves](docs/images/orman-dere.jpg) | ![A standing trunk's bark close up, pachira shrubs beside it, the dark understorey behind](docs/images/orman-govde.jpg) |
 |---|---|
@@ -565,7 +565,7 @@ upon layer, and the graphics card's whole strength goes to how much there is. W 
 
 Plan, decisions, measurements and what is not verified in `docs/orman/` (Turkish).
 
-### 12 · The Fire *(Ateş)* · October 2026
+### 12 · Fire *(Ateş)* · October 2026
 
 | ![Standing by the pit at night: a flame over the logs and the bed of coals, the stones and the ground lit by it](docs/images/ates-ocak.jpg) | ![Crouched by it: the flame's blue foot on a log over the glowing coals](docs/images/ates-comelmis.jpg) |
 |---|---|
@@ -594,17 +594,17 @@ crouches, R lays the fire again.
 
 Plan, decisions, measurements and what is not verified in `docs/ates/` (Turkish).
 
-### 13 · The Mountain *(Dağ)* · November 2026
+### 13 · Mountain *(Dağ)* · November 2026
 
 | | |
 |:---:|:---:|
 | ![The first view: the sun over the Black Sea, its path on the water, ridge after ridge fading in the haze](docs/images/dag-gunes.jpg) | ![Through the binoculars: Elbrus with its two tops, 299 km away, the last light on its snow](docs/images/dag-elbruz.jpg) |
 | ![Looking east: Kaçkar's own shadow in the air, reaching to the horizon, peaks lit beside it](docs/images/dag-golge.jpg) | ![From the railing: rock and scree in the low sun, the valley below](docs/images/dag-kaya.jpg) |
 
-One narrow goal: **draw distance**. A small railed terrace on the real summit of Kaçkar in north-east Turkey at sunset; the eye cannot
-leave it, and that decides everything. Games draw the distance with levels of detail because the player can go anywhere. Here every
+One narrow goal: **draw distance**. A small railed terrace on the real summit of Kaçkar in north-east Turkey at sunset; the view is
+worked out from there, and that decides everything. Games draw the distance with levels of detail because the player can go anywhere. Here every
 cell of a 1 arc second elevation model the terrace can see is found once and becomes triangles, never to change: nothing can pop or
-switch, and through the binoculars (up to 30x) the same mountain stands there. 146 million triangles, 60 frames a second.
+switch, and through the binoculars (up to 30x) the same mountain stands there. 146 million triangles, 60 frames a second. A gap in the rail lets you walk down onto the slope.
 
 - **Real ground.** Copernicus GLO-30 elevation, SRTM where that is not public; Sentinel-2 cloudless colour with the satellite's own
   sun taken out; a sphere with the air's usual bending built in. The panel names what the binoculars look at.
@@ -614,7 +614,7 @@ switch, and through the binoculars (up to 30x) the same mountain stands there. 1
 - **The fade is physics.** Rayleigh, Mie, ozone, multiple scattering, the mountains' shadows in the air, in tables made once for the
   fixed eye. Terrain shadows are an exact horizon for each cell towards the sun, the rock near the terrace traces its own.
 - **Near is scanned.** Scree and rock faces (Poly Haven, CC0) in the geometry and the shading, 1500 copies of scanned rocks.
-- **Sixteen fixed rays a pixel.** No temporal accumulation, no grain. Live against a 64 ray reference: second difference ratio 1.01.
+- **Sixteen fixed rays a pixel.** No temporal accumulation, no grain. Turning or walking, the live image flickers no more than a 64-ray reference does (ratio 1.01).
 
 Plan, decisions, measurements and what is not verified in `docs/dag/` (Turkish). Elevation: Copernicus DEM, © DLR e.V. 2010-2014 and
 © Airbus Defence and Space GmbH 2014-2018, provided under COPERNICUS by the European Union and ESA; Mapzen Terrain Tiles, SRTM terrain
@@ -662,7 +662,7 @@ Space switches between them. In live mode the water ripples and the dust and bub
 - **Spheres are custom primitives.** OptiX's built-in sphere is not hit from inside; the water-filled glass sphere
   came out black and bubbles behaved as single films. A one-flag experiment showed zero inside hits; the custom
   intersection reports both roots.
-- **Measure before reducing variance.** Two techniques I expected to win (connecting to sunlit patches with
+- **Measure before reducing variance.** Two techniques we expected to win (connecting to sunlit patches with
   three-way MIS, and importance sampling the sky map) were unbiased and correct, but lost at equal *time*. The real
   lever was cost: procedural textures took two thirds of the frame; baking them gave 2.3×. Both techniques remain
   in the code, off by default.
@@ -761,7 +761,7 @@ Decisions worth reading:
   and no clip had shown it. Fixing it moved Pazarcık ×1 from collapse to standing.
 - **Pushing an overlap out must not throw things.** Overlaps were pushed out at up to 2 m/s. A brick parapet's
   crushing bond lets it sink a couple of centimetres into the beam; when its last fibre went, the overlap was pushed
-  out at once and a 150 kg block left upwards at 3 to 4 m/s (Özcan saw it: light pieces flying instead of falling).
+  out at once and a 150 kg block left upwards at 3 to 4 m/s (I saw it on screen: light pieces flying instead of falling).
   At 0.5 m/s, bricks thrown from the building (more than 2 m/s gained in one frame, above 1 m) went from 93 to 1
   under Pazarcık and from 44 to 0 before Antakya's collapse; the tests and what each record does to the building
   stayed the same.
@@ -795,7 +795,7 @@ Decisions worth reading:
   body's own contact count. In the tower's collapse two pieces wedged together, one touching many others, pushed each
   other unevenly and rose to 190 m at 105 m/s. With the same share for both bodies of a pair the fastest piece is 43.5
   m/s (a free fall from the top: 43.8); the tests and the apartment block's behaviour stayed the same.
-- **A blow is a body, not magic.** A click used to take the piece out of the world (Özcan: the column "just vanishes").
+- **A blow is a body, not magic.** A click used to take the piece out of the world (on screen the column "just vanished").
   Now it throws a ball. A 1.4 t ball moved a corner column by only 7 cm: in a model of rigid pieces a blow cannot crush
   locally, it spreads over the whole 2.2 m piece, and the shear capacity of its two bonds eats the momentum before the
   slip reaches breaking. A 4.2 t ball broke the column's foot out and toppled the rest; the solver was not touched.
@@ -806,7 +806,7 @@ Decisions worth reading:
 chains converge slowly; the building's measured period, 0.45 s, is close to the code formula's 0.54 s). The building
 is not checked against an engineering analysis; the solver's tests (free fall, stacking, slopes, energy, hinges,
 determinism, damping, the earthquake loop) are physical sanity checks, 32 of 34 passing, the two failures being the cantilever. Motion was
-judged by Özcan from clips, not by the author's eye.
+judged by me, from clips.
 
 ## Building
 
@@ -830,9 +830,9 @@ Five scenes read open data that is fetched rather than committed; run the script
 ```bat
 python assets/koy/fetch.py       :: 5 · The Island: CC0 scans (Poly Haven, ambientCG)
 python tools/olcek_veri.py       :: 7 · Scale: maps, stars, galaxies, the cosmic web (sources: assets/olcek/KAYNAKLAR.md)
-python assets/orman/fetch.py     :: 11 · The Forest: CC0 scans (sources: docs/orman/VARLIK.md)
-python assets/ates/fetch.py      :: 12 · The Fire: CC0 scans (sources: docs/ates/VARLIK.md)
-python tools/dag_veri.py         :: 13 · The Mountain: elevation and imagery (sources: assets/dag/KAYNAKLAR.md)
+python assets/orman/fetch.py     :: 11 · Rainforest: CC0 scans (sources: docs/orman/VARLIK.md)
+python assets/ates/fetch.py      :: 12 · Fire: CC0 scans (sources: docs/ates/VARLIK.md)
+python tools/dag_veri.py         :: 13 · Mountain: elevation and imagery (sources: assets/dag/KAYNAKLAR.md)
 ```
 
 The Submarine (8) bakes its light the first time it opens, which takes a few minutes, and keeps it in `cache/`.
@@ -901,7 +901,7 @@ src/
 scenes/               the scenes' settings (<scene>.cfg)
 assets/               fonts (IBM Plex), gallery pictures, blue-noise texture, earthquake records; per-scene fetch scripts
 tools/                measuring and data scripts: EXR statistics, FLIP and RMSE comparison, flicker, contact sheets,
-                      the data of Scale and The Mountain (their output is not committed)
+                      the data of Scale and Mountain (their output is not committed)
 docs/                 the working journal, in Turkish: the application's status and architecture; per scene its plan,
                       status and measurements, including what was not verified
 third_party/fetch.sh  fetches the dependencies; the folder itself is not committed
