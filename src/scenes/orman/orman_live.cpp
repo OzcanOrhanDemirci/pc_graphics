@@ -31,53 +31,72 @@ public:
         i.id = "orman";
         i.number = "11";
         i.title = L("Orman", "Rainforest");
-        i.subtitle = L("Yağmurdan sonra, sabahın erken saatinde bir yağmur ormanı", "A rainforest early in the morning, after the rain");
-        i.description = L("Bir derenin kıyısında, her yanı süren bir yağmur ormanında yürürsün: her yerde bir şey var, eğrelti, "
-                          "kök, yosun, taş, devrik gövde. Güneş yaprakların arasından süzülür.",
-                          "You walk by a stream in a rainforest that goes on all round, where something is everywhere: ferns, roots, "
-                          "moss, stones, a fallen trunk. The sun filters through the leaves.");
+        i.subtitle = L("Yağmurdan sonra sabah, sık bir yağmur ormanı", "A dense rainforest, early morning after rain");
+        i.description = L("Bir derenin kıyısında, her yanı bitkiyle dolu bir yağmur ormanında yürürsün: eğrelti, kök, yosun, taş, "
+                          "devrik gövde. Güneş yaprakların arasından süzülür, yerde pus durur. Orman bir duvarla bitmez; dümdüz "
+                          "yürürsen 396 m sonra dereye geri dönersin.",
+                          "You walk by a stream in a rainforest full of plants on every side: ferns, roots, moss, stones, a fallen "
+                          "trunk. The sun filters through the leaves and mist lies on the ground. No wall ends the forest; walk "
+                          "straight on and you reach the stream again after 396 m.");
         i.details = {
-            {L("Yoğunluk", "Density"),
-             L("Her bitki, taş ve gövde açık lisanslı gerçek bir tarama; aynı model binlerce kez kopyalanır, kopya bellekte bir kez "
-               "durur. Orman katlardan: yerde düşmüş yapraklar ve eğreltiler, göz hizasında çalılıklar, onların üstünde fidanlar ve "
-               "genç ağaçlar, en üstte tepe. Her katın yeri bir sebepten: eğreltiler nemli kıyıda sık, yapraklar gövdelerin ve "
-               "kayaların dibine yığılır, taşlar derenin yatağında, devrik gövde derenin üstünde. Derenin parçasının çevresinde "
-               "orman 400 metre sürer: kenarları birbirine oturan tek bir orman karosunun kopyaları. Dere kopyalanmaz, kendi "
-               "şeridinde akmayı sürdürür.",
-               "Every plant, stone and trunk is a real open-licence scan; one model is copied thousands of times and stays in "
-               "memory once. The forest is in layers: fallen leaves and ferns on the ground, thickets at the eye's height, "
-               "saplings and young trees over them, the crowns on top. Each has its place for a reason: ferns crowd the moist "
-               "banks, leaves pile at the foot of trunks and rocks, stones lie in the bed, the fallen trunk lies over the stream. "
-               "Around the stream's patch the forest goes on for 400 metres: copies of one tile of it whose sides meet. The stream "
-               "is not copied: it runs on in its own band.")},
-            {L("Görünürlük", "Visibility"),
-             L("Görüntü de ışın izlemeyle çizilir. Yapraklar ve dallar pikselden ince: yürürken birkaç sabit ışın onları "
-               "titretiyordu. Şimdi her karede pikselin başka bir noktasına tek ışın gider, NVIDIA DLSS Ray Reconstruction "
-               "kareleri hareketin izinden toplar. Uzaktaki yaprağın kapsaması piksellerin örnekleri arasında paylaşılır.",
-               "The picture itself is ray traced. Leaves and twigs are finer than a pixel: a few fixed rays made them shimmer "
-               "while walking. Now each frame sends one ray to another point of the pixel and NVIDIA DLSS Ray Reconstruction "
-               "gathers the frames along the motion. A far leaf's coverage is shared among the pixel's samples.")},
-            {L("Işık", "Light"),
-             L("Gökyüzünün ve sekmelerin ışığı yükleme sırasında pişirilir: ormanın içinde 30 santimde bir yoklama, her biri her "
-               "yönden gelen ışığı tutar. Güneş her karede canlı: her örnek yaprakların arasından kendi gölge ışınını yollar.",
-               "The light of the sky and of its bounces is baked while loading: a probe every 30 centimetres through the forest, "
-               "each holding the light from every direction. The sun is live every frame: every sample sends its own shadow "
-               "ray through the leaves.")},
+            {L("Katman katman yoğunluk", "Density in layers"),
+             L("Orman katlardan kurulur, her katın yeri bir sebepten: yerde düşmüş yapraklar ve eğreltiler, nemli kıyıda daha "
+               "sık; göz hizasında aralarında geçit kalan çalılıklar; onların üstünde fidanlar, genç ağaçlar ve tepe. Kayalar "
+               "kıyıda yarı gömülü, taşlar yatakta, devrik gövde derenin üstünde. Düşmüş yapraklar yaprak atlaslarından tek "
+               "tek kesilir ve zeminin üçgenlerine yatırılır.",
+               "The forest is built in layers, each placed for a reason: fallen leaves and ferns on the ground, thicker on the "
+               "moist banks; thickets at eye height with gaps between them; saplings, young trees and the canopy above. Rocks "
+               "sit half buried on the banks, stones in the bed, the fallen trunk across the stream. The fallen leaves are cut "
+               "one by one from leaf atlases and laid on the ground's triangles.")},
+            {L("Kopyalanan taramalar", "Instanced scans"),
+             L("Her bitki, taş ve gövde açık lisanslı gerçek bir taramadır; bir model binlerce kez kopyalanır ama bellekte bir "
+               "kez durur. Derenin çevresindeki 44 m'lik parça, kenarları birbirine oturan tek bir orman karosunun "
+               "kopyalarıyla çevrilidir: 9 × 9 karo, 396 m. Son karo ilkine dikilidir, orman simit gibi kendine döner. Dere "
+               "kopyalanmaz, geçtiği her karede kendi şeridi ayrı büyür.",
+               "Every plant, stone and trunk is a real open-licence scan; one model is copied thousands of times but stays in "
+               "memory once. The 44 m patch around the stream is surrounded by copies of one forest tile whose sides meet: "
+               "9 × 9 tiles, 396 m. The last tile is joined to the first, so the forest wraps round like a torus. The stream "
+               "is not copied: each tile it crosses grows its own band of it.")},
+            {L("Tek ışın, DLSS Ray Reconstruction", "One ray, DLSS Ray Reconstruction"),
+             L("Görüntü OptiX ile ışın izlenerek çizilir. Dallar ve yaprakçıklar pikselden incedir, birkaç sabit ışın yürürken "
+               "onları titretir. Bu yüzden her karede piksel başına tek ışın, pikselin içinde 16 adımlık bir dizinin sıradaki "
+               "noktasına gider ve NVIDIA DLSS Ray Reconstruction kareleri hareket vektörleriyle birleştirir; büyütme yapılmaz. "
+               "Kıyas için panelde 1-16 sabit örnek de var.",
+               "The image is ray traced with OptiX. Twigs and leaflets are finer than a pixel, and a few fixed rays make them "
+               "shimmer as you walk. So each frame sends one ray per pixel to the next point of a 16-step sequence inside it, "
+               "and NVIDIA DLSS Ray Reconstruction combines the frames along motion vectors, with no upscaling. For comparison "
+               "the panel also offers 1 to 16 fixed samples.")},
+            {L("Pişmiş gök ışığı, canlı güneş", "Baked skylight, live sun"),
+             L("Gök ışığı ve ışığın bir sekmesi yüklemede pişirilir: ormanın içinde 30 cm arayla yoklamalar, her biri her "
+               "yönden gelen ışığı 192 ışınla toplar. Güneş her karede canlıdır: her örnek güneş diskine kendi gölge ışınını "
+               "yollar, ışın bir yapraktan açık kalan payı kadar geçer. Pustaki huzmeler için güneşin havadaki görünürlüğü "
+               "10 cm'lik bir hacimde pişirilir.",
+               "The skylight and one bounce of light are baked while loading: probes every 30 cm through the forest, each "
+               "gathering the light from every direction with 192 rays. The sun is live every frame: each sample sends its own "
+               "shadow ray to the sun's disk, and a leaf lets it through by its open share. For the shafts in the mist, the "
+               "sun's visibility in the air is baked in a 10 cm volume.")},
+            {L("Islak orman ve dere", "The wet forest and the stream"),
+             L("Yağmurdan sonra pürüzlü yüzeyler ıslak parlar. Derenin suyu yansıma ve kırılma ışınlarıyla çizilir, "
+               "derinleştikçe çay rengine döner ve akışla kayan dalgacıklar taşır. Pus yerde yoğun, yukarı doğru incelir.",
+               "After the rain rough surfaces have a wet sheen. The stream's water is drawn with reflection and refraction "
+               "rays, turns tea-coloured with depth and carries ripples that drift with the flow. The mist is thick near the "
+               "ground and thins upwards.")},
             {L("Teşekkür", "Credits"), L("NVIDIA DLSS (NVIDIA RTX SDK). Varlıklar: Poly Haven ve ambientCG (CC0), docs/orman/VARLIK.md.",
                                          "NVIDIA DLSS (NVIDIA RTX SDK). Assets: Poly Haven and ambientCG (CC0), docs/orman/VARLIK.md.")}};
-        i.tags = {L("Yoğunluk", "Density"), L("Işık", "Light"), L("Doğa", "Nature")};
+        i.tags = {L("Yoğunluk", "Density"), L("Kopyalama", "Instancing"), L("DLSS-RR", "DLSS-RR")};
         i.image = "assets/gallery/orman.jpg";
         i.accent = 0x8DBF6A;
-        i.keys = {{L("Yürüyüş", "Walking"),
+        i.keys = {{L("Hareket", "Movement"),
                    {{L("Fare", "Mouse"), L("Etrafa bak", "Look around")},
-                    {"W A S D", L("Yürü", "Walk")},
-                    {"Shift", L("Koş", "Run")},
+                    {"W|A|S|D", L("Yürü", "Walk")},
+                    {"Shift", L("Basılı tutup koş", "Hold to run")},
                     {L("Boşluk", "Space"), L("Zıpla", "Jump")},
-                    {"C", L("Eğil", "Crouch")},
-                    {"Tab", L("İmleci bırak / al", "Release / take the cursor")},
-                    {"1 2 3 4", L("Bakışlar", "Views")},
-                    {"R", L("Başa dön", "Back to the start")},
-                    {"↑|↓", L("Pozlama", "Exposure")}}}};
+                    {"C", L("Basılı tutup eğil", "Hold to crouch")},
+                    {"Tab", L("İmleci panel için bırak / geri al", "Free the cursor for the panel / back")},
+                    {"R", L("Başa dön", "Back to the start")}}},
+                  {L("Bakış", "View"),
+                   {{"1|2|3|4", L("Hazır bakışlar", "Preset views")},
+                    {"↑|↓", L("Pozlamayı artır / azalt", "Exposure up / down")}}}};
         i.reloadable = true;
         return i;
     }
@@ -271,11 +290,11 @@ public:
         app::Control c;
         c.kind = app::Control::Kind::Choice;
         c.id = "samples";
-        c.title = L("ÖRNEK", "SAMPLES");
+        c.title = L("Örnek", "Samples");
         c.items = {"1", "4", "8", "16", "DLSS"};
         c.active = samples_;
-        c.detail = samples_ == kDlss ? L("Her karede tek ışın, DLSS Ray Reconstruction toplar", "One ray a frame, gathered by DLSS Ray Reconstruction")
-                                     : L("Pikselde sabit desenli ışın", "Rays a pixel, on a fixed pattern");
+        c.detail = samples_ == kDlss ? L("Karede piksel başına tek ışın, DLSS Ray Reconstruction birleştirir", "One ray per pixel a frame, combined by DLSS Ray Reconstruction")
+                                     : L("Piksel başına ışın, her karede aynı desende", "Rays per pixel, the same pattern every frame");
         s.controls.push_back(c);
     }
 

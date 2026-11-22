@@ -229,7 +229,8 @@ bool DagWorld::prepare(const std::string& root, const Config& cfg) {
     };
     Dem dem;
     if (!dem.open(assets + "/dem_1s.u16")) {
-        error = "assets/dag/dem_1s.u16 yok: python tools/dag_veri.py dem, sonra mosaic";
+        error = app::L("assets/dag/dem_1s.u16 yok. Hazırlamak için: python tools/dag_veri.py dem, ardından mosaic",
+                       "assets/dag/dem_1s.u16 is missing. To prepare it: python tools/dag_veri.py dem, then mosaic");
         return false;
     }
     const Geo geo(lat0, lon0);
@@ -380,7 +381,8 @@ bool DagWorld::prepare(const std::string& root, const Config& cfg) {
                 const float cell = ac[k], half = cell * n * 0.5f;
                 std::ifstream in(assets + "/" + aname[k] + ".rgb8", std::ios::binary);
                 if (!in) {
-                    error = "assets/dag/" + aname[k] + ".rgb8 yok: python tools/dag_veri.py imgfetch, imgbuild";
+                    error = "assets/dag/" + aname[k] + app::L(".rgb8 yok. Hazırlamak için: python tools/dag_veri.py imgfetch, ardından imgbuild",
+                                                              ".rgb8 is missing. To prepare it: python tools/dag_veri.py imgfetch, then imgbuild");
                     dem.close();
                     return false;
                 }
@@ -443,7 +445,7 @@ bool DagWorld::prepare(const std::string& root, const Config& cfg) {
             albedo[k].n = an[k];
             albedo[k].cell = ac[k];
             if (!readVec(f, albedo[k].rgba)) {
-                error = "cache/dag/" + aname[k] + ".bin okunamadi";
+                error = "cache/dag/" + aname[k] + app::L(".bin okunamadı", ".bin could not be read");
                 dem.close();
                 return false;
             }

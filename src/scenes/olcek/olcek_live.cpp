@@ -55,93 +55,86 @@ public:
         i.id = "olcek";
         i.number = "07";
         i.title = L("Ölçek", "Scale");
-        i.subtitle = L("İzmir'de bir sahilden evrenin kenarına ve Planck uzunluğuna", "From a beach in Izmir to the edge of the universe and to the Planck length");
-        i.description = L("Ayağının ucundaki kumdan başlayıp yalnız tekerlekle uzaklaşır ya da yaklaşırsın: dışarı Dünya, Güneş, Samanyolu, "
-                          "kozmik ağ; içeri kum tanesi, atom, çekirdek, proton, kuark ve Planck. Her şey gerçek yerinde ve gerçek boyunda, "
-                          "aradaki boşluklar da gerçek uzunluğunda.",
-                          "Start at the sand at your feet and move out or in with the wheel alone: out to the Earth, the Sun, the Milky "
-                          "Way, the cosmic web; in to a grain of sand, an atom, its nucleus, a proton, a quark and the Planck length. "
-                          "Everything at its true place and size, and the empty stretches between them at their true length too.");
-        i.description += L(" İkinci seçenek: roketle Andromeda'ya.", " The second option: by rocket to Andromeda.");
+        i.subtitle = L("Bir sahilden evrenin kenarına ve Planck boyuna", "From a beach to the universe's edge and Planck");
+        i.description = L("İzmir'de bir sahilde ayağının ucundaki kumdan başlarsın. Yalnız tekerlekle dışarı, Samanyolu'na ve kozmik ağa, "
+                          "ya da içeri, atoma, kuarka ve Planck uzunluğuna gidersin; boylar ve uzaklıklar gerçektir. Hız "
+                          "seçeneğinde roketle Proxima'ya ve Andromeda'ya uçarsın.",
+                          "You start at the sand by your feet on a beach in Izmir. With the wheel alone you go out to the Milky Way "
+                          "and the cosmic web, or in to an atom, a quark and the Planck length, at true sizes and distances. In the "
+                          "Speed option you fly a rocket to Proxima and Andromeda.");
         i.details = {
-            {L("Altmış iki onluk", "Sixty-two decades"),
-             L("Ekranın genişliği 10⁻³⁵ metreden 10²⁷ metreye iner çıkar. Mutlak bir konum yok: her şey bir çapa ağacına asılı "
-               "(Güneş, Dünya, sahildeki nokta, atom, çekirdek, proton, kuark), iki komşunun arası yalnız ortak atalarına kadar "
-               "toplanır; ekranda aynı anda görünen beş onluk için çift hassasiyet bolca yeter.",
-               "The screen's width runs from 10⁻³⁵ metres to 10²⁷ metres. There is no absolute position: everything hangs on a "
-               "tree of anchors (the Sun, the Earth, the beach point, an atom, its nucleus, a proton, a quark), and the way between "
-               "two neighbours is summed only up to their common ancestor; for the five decades on the screen at once, double "
-               "precision is plenty.")},
-            {L("Bugün", "Today"),
-             L("5 Ekim 2026, Çandarlı'da (Dikili) güneşin tam tepeden geçtiği an: gezegenler, Ay, Güneş ve Samanyolu'nun merkezi "
-               "o anın gerçek yerinde (JPL DE440). Zaman her ölçekte kendi hızıyla akar ama hiçbir şeyi değiştirmez: eve her "
-               "dönüşte aynı öğle.",
-               "5 October 2026, the moment the Sun crosses the meridian at Çandarlı (Dikili): the planets, the Moon, the Sun and "
-               "the Galaxy's centre where they truly were then (JPL DE440). Time flows at its own pace at every scale but changes "
-               "nothing: every way home ends at the same noon.")},
-            {L("Işık olan yerde gerçek veri", "Where there is light, real data"),
-             L("Kalenin önündeki kumsal Sentinel-2'den (10 m), kıyı çizgisi oradan; Dünya Blue Marble, üstünde o günlerin "
-               "MODIS ve VIIRS bulutları (deniz parıltısı bulut ürünüyle ayıklanmış). Ay LRO'dan. Asteroit ve Kuiper "
-               "kuşakları Minor Planet Center'ın 1,57 milyon yörüngesinden. 109.400 yıldız HYG'den, "
-               "Samanyolu'nun kolları ölçümlerden (Reid 2019), M31 ve M33 gerçek yönelimleriyle, 43.490 galaksi 2MRS'ten; "
-               "ötesi kozmik ağın gerçek istatistiği, bir dilim olarak.",
-               "The beach in front of the castle from Sentinel-2 (10 m), the shoreline from it; the Earth from Blue Marble, "
-               "with those days' MODIS and VIIRS clouds on it (the sea's glint sorted out by a cloud product). The Moon from "
-               "LRO. The asteroid and Kuiper belts from the Minor Planet Center's 1.57 million orbits. 109,400 stars from "
-               "HYG, the Milky Way's arms from measurements (Reid 2019), M31 and M33 in their true orientation, 43,490 "
-               "galaxies from 2MRS; beyond them the cosmic web's true statistics, as a slice.")},
-            {L("Işığın altında", "Below the light"),
-             L("Renk ışığın dalga boyunda söner, mikroskopların gri resimleri gelir; atomdan aşağısı temsili renkle "
-               "parçacıklar, sayılar gerçek. Elektronlar kabuklarının dağılımında ışık noktaları (içeri girerken yanından "
-               "geçerler), çekirdeğin 28 nükleonu, protonun renk yüklü üç kuarkı ve gluon akısı, kuarkın çevresinde her "
-               "ölçekte sanal çift halkaları (türleri kuvvetlerin o boydaki şiddetine göre), en dipte köpük ve bir sicim "
-               "(kuram).",
-               "Colour fades at the light's wavelength into the microscopes' grey pictures; from the atom down, particles "
-               "in a representational palette, the numbers true. Electrons as points of light in their shells' "
-               "distributions (they stream past on the way in), the nucleus's 28 nucleons, the proton's three coloured "
-               "quarks and their gluon flux, virtual pairs' loops at every scale about the quark (their kinds by the "
-               "forces' strengths at that size), at the bottom foam and a string (theory).")},
-            {L("Görüntü", "The picture"),
-             L("Her piksel her karede aynı dört sabit örneği alır: gren yok, titreme yok. Pikselin altına inen bir cisim ışığını "
-               "koruyarak noktaya döner; gözün kapağından hızlı dönen bir yörünge halkaya, hızlı titreşen bir sicim kenarları "
-               "parlak bir banda.",
-               "Every pixel takes the same four fixed samples every frame: no grain, no flicker. A body that shrinks below a pixel "
-               "turns into a point and keeps its light; an orbit faster than the eye's shutter turns into a ring, a string "
-               "vibrating faster into a band with bright edges.")},
-            {L("İkinci seçenek: Hız", "The second option: Speed"),
-             L("Roketle Proxima'ya (senin saatinle 15 dk, Dünya'da 4,25 yıl) ve Andromeda'ya (72 dk, 2,4 milyon yıl); zaman hep "
-               "gerçek. Gözde her ışın durgun çerçeveye çevrilir, ışık Doppler'le kayar: yıldızlar, Samanyolu (ESO/S. Brunier, "
-               "CC BY 4.0), kozmik fon (Planck), galaksiler, Proxima, Alfa Erboğa (Gaia DR3, Akeson 2021). Beş dokuzda önde "
-               "kırmızı bir güneş doğar; enerji gözü (E) bütün bantları gösterir. Yandan bir harita ve beş grafik.",
-               "By rocket to Proxima (15 min on your clock, 4.25 years on the Earth's) and to Andromeda (72 min, 2.4 million "
-               "years); time always real. In the eye every ray is turned back to the rest frame and its light Doppler-shifted: the "
-               "stars, the Milky Way (ESO/S. Brunier, CC BY 4.0), the cosmic background (Planck), the galaxies, Proxima, Alpha "
-               "Centauri (Gaia DR3, Akeson 2021). At five nines a red sun rises ahead; the energy eye (E) shows every band. "
-               "From the side a map, and five graphs.")}};
-        i.tags = {L("Ölçek", "Scale"), L("62 onluk", "62 decades"), L("Gerçek konumlar", "True positions"),
+            {L("62 mertebe, tek sayı türü", "62 orders of magnitude, doubles"),
+             L("Ekranın genişliği 1,6 × 10⁻³⁵ m'den (Planck uzunluğu) 1,8 × 10²⁷ m'ye kadar değişir; kamera tek bir doğru "
+               "üzerinde gider gelir. Mutlak konum tutulmaz: Laniakea'dan Güneş'e, Dünya'ya, sahile, bir silisyum çekirdeğine, "
+               "protona ve kuarka inen bir ağaçta her şey üstündekine göre metreyle durur. Uzaklıklar yalnız ortak ataya kadar "
+               "toplanır; ekranda aynı anda beş mertebe kadar göründüğünden çift duyarlıklı sayılar yeter.",
+               "The screen's width spans 1.6 × 10⁻³⁵ m (the Planck length) to 1.8 × 10²⁷ m; the camera only moves along one "
+               "line. No absolute position is stored: in a tree from Laniakea through the Sun, the Earth, the beach, a silicon "
+               "nucleus and a proton to a quark, everything sits in metres from its parent. Distances add up only to the "
+               "common ancestor, and with about five orders of magnitude on screen at once, doubles suffice.")},
+            {L("Sabit örnekler, gözün kapağı", "Fixed samples, the eye's shutter"),
+             L("Her piksel her karede aynı dört sabit örnekle çizilir ve örnekler pikselden biraz geniş bir süzgeçle birleşir; "
+               "önceki karelerden bir şey taşınmaz, görüntü kıpırdamaz. Pikselden küçülen bir cisim ışığını koruyarak noktaya "
+               "döner. Gözün 0,15 sn'lik kapağından hızlı olan zaman ortalamasıyla çizilir: hızlı dönen bir yörünge halka, hızlı "
+               "titreşen bir sicim kenarları parlak bir bant olur.",
+               "Every pixel is drawn from the same four fixed samples every frame, combined with a filter slightly wider than a "
+               "pixel; nothing is carried over between frames, so nothing shimmers. A body below a pixel becomes a point that "
+               "keeps its light. What is faster than the eye's 0.15 s shutter is drawn as its time average: a fast orbit becomes "
+               "a ring, a vibrating string a band with bright edges.")},
+            {L("Tek bir an: 5 Ekim 2026 öğlesi", "One moment: noon, 5 October 2026"),
+             L("Gezegenler, Ay, Güneş ve Samanyolu'nun merkezi, 5 Ekim 2026'da Çandarlı'da (Dikili) güneş öğlesindeki gerçek "
+               "yerlerindedir (JPL DE440). Zaman her ölçekte kendi hızında akar: Dünya döner, gezegenler yörüngelerinde ilerler. "
+               "Sahile dönerken saatler o ana geri sarılır, her seferinde aynı öğleye varırsın.",
+               "The planets, the Moon, the Sun and the Galaxy's centre stand where they were at solar noon at Çandarlı (Dikili) "
+               "on 5 October 2026 (JPL DE440). Time runs at its own pace at every scale: the Earth turns, the planets orbit. On "
+               "the way back the clocks wind back to that moment, so the beach is always at the same noon.")},
+            {L("Ölçümlerden gelen dünya", "The world from measurements"),
+             L("Kumsal ve kıyı Sentinel-2'den (10 m), Dünya o günlerin MODIS ve VIIRS bulutlarıyla Blue Marble'dan, Ay LRO'dan. "
+               "Asteroit ve Kuiper kuşakları Minor Planet Center'ın 1,57 milyon yörüngesinden, 109.400 yıldız HYG'den, "
+               "Samanyolu'nun kolları Reid 2019'dan, 43.490 galaksi 2MRS'ten; M31 ve M33 gerçek yönelimlerinde. Kataloğun "
+               "ötesindeki kozmik ağ, gerçek istatistikten üretilmiş bir örnektir.",
+               "Beach and shore from Sentinel-2 (10 m), the Earth from Blue Marble with those days' MODIS and VIIRS clouds, the "
+               "Moon from LRO. Asteroid and Kuiper belts from 1.57 million Minor Planet Center orbits, 109,400 stars "
+               "from HYG, the Milky Way's arms from Reid 2019, 43,490 galaxies from 2MRS, M31 and M33 in true orientation. Beyond "
+               "it the cosmic web is a sample with real statistics.")},
+            {L("Işığın dalga boyunun altında", "Below the wavelength of light"),
+             L("Renk burada biter: önce mikroskopların gri görüntüleri, atomdan aşağısı temsili renkli parçacıklar gelir, sayılar "
+               "gerçektir. Elektronlar kabuklarının dağılımında noktalardır; sonra silisyum-28 çekirdeğinin 28 nükleonu, protonun "
+               "renk yüklü üç kuarkı ve gluon akısı. Kuarkın çevresinde her ölçekte sanal çiftler halka çizer; en dipte Planck "
+               "boyunda köpük ve bir sicim vardır, ikisi de kuramdır.",
+               "Here colour ends: first microscopes' grey images, then, below the atom, particles in representational "
+               "colours with true numbers. Electrons are points spread like their shells; then the 28 nucleons of a silicon-28 "
+               "nucleus, the proton's three colour-charged quarks and their gluon flux. Virtual pairs loop around the quark at "
+               "every scale; at the bottom lie Planck-scale foam and a string, both theory.")},
+            {L("İkinci seçenek: Hız", "Second option: Speed"),
+             L("Roketle Proxima'ya (senin saatinle 15 dk, Dünya'da 4,25 yıl) ya da Andromeda'ya (72 dk, 2,4 milyon yıl) gidersin; "
+               "ekranın saati senin saatindir, özel görelilik tam formüllerle hesaplanır. Roketin gözünde sapınç göğü öne "
+               "toplar, Doppler ışığı kaydırır; ışık hızının %99,999'unda kozmik fon önde kırmızı bir güneş gibi doğar. Samanyolu "
+               "ESO/S. Brunier (CC BY 4.0), Proxima Gaia DR3, Alfa Erboğa Akeson 2021.",
+               "You fly to Proxima (15 min on your clock, 4.25 years on the Earth) or Andromeda (72 min, 2.4 million years); the "
+               "screen's clock is yours, and special relativity is exact. In the rocket's eye aberration gathers the sky ahead "
+               "and Doppler shifts its light; at 99.999% of light speed the cosmic background rises ahead as a red sun. Milky Way ESO/S. Brunier (CC BY 4.0), Proxima Gaia DR3, Alpha Centauri "
+               "Akeson 2021.")}};
+        i.tags = {L("62 mertebe", "62 orders of magnitude"), L("Gerçek konumlar", "True positions"),
                   L("Özel görelilik", "Special relativity")};
         i.image = "assets/gallery/olcek.jpg";
         i.accent = 0xE08BAE;
         i.keys = {{L("Ölçek", "Scale"),
-                   {{L("Tekerlek", "Wheel"), L("Uzaklaş, yaklaş", "Move out, move in")},
+                   {{L("Tekerlek", "Wheel"), L("Uzaklaş / yaklaş", "Zoom out / in")},
                     {"R", L("Sahile dön", "Back to the beach")},
-                    {"T", L("Tur: evrenin kenarına, geri, Planck'a, geri", "The tour: to the edge of the universe, back, to Planck, back")}}},
-                  {L("Hız", "Speed"),
-                   {{"W", L("İtiş: 1 g'den başlar, hızlandıkça artar (%1 c 1 dk, 21 dokuz 8 dk)",
-                            "Thrust: from 1 g, rising with the speed (1% c in 1 min, 21 nines in 8)")},
-                    {"S", L("Fren (aynı güçle; geri vites yok)", "Brake (the same power; no reverse)")},
-                    {L("Boşluk", "Space"), L("Otomatik varış: seçili hedefe (panelde Hedef: Proxima ya da Andromeda, istediğin an), "
-                                             "doğru anda frenleyip durur",
-                                             "Automatic arrival at the chosen target (the panel's Target: Proxima or Andromeda, at any "
-                                             "time), braking at the right moment")},
-                    {"Tab", L("Roketin gözü ↔ yandan", "The rocket's eye ↔ from the side")},
-                    {"G", L("Grafikler: aç, kapat", "The graphs: on, off")},
-                    {"E", L("Enerji gözü: bütün bantlar, sahte renkle (açık başlar)", "The energy eye: every band, in false colour (on at first)")},
-                    {L("Sürükle", "Drag"), L("Başını çevir (roketin gözü)", "Turn your head (the rocket's eye)")},
-                    {L("Tekerlek", "Wheel"), L("Dürbün (göz), ölçek (yandan)", "Binoculars (eye), scale (side)")},
-                    {"1-6", L("Yandan ölçek durakları: roket, Dünya ve Ay, Güneş Sistemi, yakın yıldızlar, Samanyolu, Yerel Grup",
-                              "Side view's scales: the rocket, the Earth and Moon, the Solar System, the nearby stars, the Milky Way, the Local Group")},
-                    {"R", L("İleri bak / rokete dön", "Look ahead / back to the rocket")}}}};
+                    {"T", L("Turu başlat / durdur", "Start / stop the tour")}}},
+                  {L("Hız · uçuş", "Speed · flight"),
+                   {{"W", L("Basılı tutup hızlan (1 g'den artarak)", "Hold to thrust (from 1 g, rising)")},
+                    {"S", L("Basılı tutup frenle", "Hold to brake")},
+                    {L("Boşluk", "Space"), L("Hedefe otomatik varış aç / kapat", "Auto-arrival at target on / off")}}},
+                  {L("Hız · görüntü", "Speed · view"),
+                   {{"Tab", L("Roketin gözü / yandan bakış", "Rocket's eye / side view")},
+                    {"G", L("Grafikler aç / kapat", "Graphs on / off")},
+                    {"E", L("Enerji gözü aç / kapat", "Energy eye on / off")},
+                    {L("Sol tık", "Left click"), L("Basılı tutup sürükle, etrafa bak", "Hold and drag to look around")},
+                    {L("Tekerlek", "Wheel"), L("Gözde yakınlaş, yandan ölçek değiştir", "Zoom (eye) / change scale (side)")},
+                    {"1|2|3|4|5|6", L("Yandan ölçek: roketten Yerel Grup'a", "Side scales: rocket to Local Group")},
+                    {"R", L("Öne bak / rokete dön", "Look ahead / back to the rocket")}}}};
         i.reloadable = true;
         return i;
     }
@@ -208,20 +201,19 @@ public:
                     const std::string pace = s.phi <= 0.0   ? L("duruyorsun", "at rest")
                                              : k.nines < 1.0 ? "β " + theme::num(k.beta, 2)
                                                              : theme::num(k.nines, 1) + L(" dokuz", " nines");
-                    note = std::string(L("Kaldığın yerden: hedef ", "Where you left it: target ")) + hz::targetName(s.target) + ", " + pace +
-                           L(". Baştan başlatmak için: panelde \"Yolculuğu baştan başlat\"", ". To start over: \"Start the journey over\" in the panel");
+                    note = std::string(L("Kaldığın yerden: ", "Resumed: ")) + hz::targetName(s.target) + ", " + pace +
+                           L(". Panelden baştan başlatabilirsin", ". You can start over on the panel");
                     // (a journey of the two legs, carried over: the choice told once)
                     if (restoreNote_ == 5)
-                        note += L(". Yeni: hedefi panelden seçiyorsun (Proxima ya da Andromeda), Boşluk seçilene gider",
-                                  ". New: you choose the target on the panel (Proxima or Andromeda), Space flies to it");
+                        note += L(". Hedef artık panelde seçilir", ". The target is now chosen on the panel");
                     resumeChip_ = true;
                     resumeChipUntil_ = in.now + 20.0;
                 } else if (mode_ == 1 && restoreNote_ >= 2) {
                     const std::string why = restoreNote_ == 2 ? L("eski bir sürümden (ivme değişti)", "from an older version (the drive changed)")
                                           : restoreNote_ == 3 ? L("daha yeni bir sürümden", "from a newer version")
-                                                              : L("okunamadı", "could not be read");
-                    note = L("Kayıtlı yolculuk ", "The saved journey is ") + why + L(": yolculuk Dünya'nın yanından başlıyor",
-                                                                                     ": the journey starts beside the Earth");
+                                                              : L("okunamadı", "unreadable");
+                    note = L("Kayıtlı yolculuk ", "The saved journey is ") + why + L(": Dünya'nın yanından başlıyorsun",
+                                                                                     ": you start beside the Earth");
                 }
                 if (mode_ == 1) restoreNote_ = 0;
                 host.toast(note);
@@ -252,8 +244,8 @@ public:
             hold_ = 0.0;
             pending_ = 0.0;
             home_ = false;
-            host.toast(L("Tur: evrenin kenarına, geri sahile, Planck'a, geri sahile. Tekerlek ya da T durdurur",
-                         "The tour: to the edge of the universe, back to the beach, to Planck, back. The wheel or T stops it"));
+            host.toast(L("Tur: evrenin kenarına, sahile, Planck uzunluğuna, sahile. Tekerlek, R ya da T durdurur",
+                         "Tour: to the universe's edge, the beach, the Planck length, the beach. Wheel, R or T stops it"));
         }
         if (in.pressed(GLFW_KEY_R)) {
             home_ = true;
@@ -330,15 +322,15 @@ public:
         if (tour_) s.chips.push_back({L("Tur", "Tour"), true});
         s.metrics.push_back({L("Bakılan", "Looking at"), a_.sc.lookingAt()});
         s.metrics.push_back({L("Ekranın genişliği", "The screen's width"), a_.sc.widthText()});
-        s.metrics.push_back({L("Kare", "Frame"), num(a_.frameMs, 1) + " ms"});
+        s.metrics.push_back({L("Kare süresi", "Frame time"), num(a_.frameMs, 1) + " ms"});
         app::Control c;
         c.kind = app::Control::Kind::Button;
         c.id = "tur";
-        c.text = tour_ ? L("Turu durdur", "Stop the tour") : L("Tur", "The tour");
+        c.text = tour_ ? L("Turu durdur", "Stop the tour") : L("Tur", "Tour");
         c.keys = "T";
         c.strong = !tour_;
         c.section = true;
-        c.detail = L("Evrenin kenarına, geri sahile, Planck'a, geri sahile", "To the edge of the universe, back to the beach, to Planck, back");
+        c.detail = L("Evrenin kenarına, sahile, Planck uzunluğuna, sahile", "To the universe's edge, the beach, the Planck length, the beach");
         s.controls.push_back(c);
     }
 
@@ -580,12 +572,12 @@ private:
             const bool stopsFirst = s.phi > 0.0 && (s.course.target != s.target || !hz::approaching(s));
             if (hz::atTarget(s)) note += L(": buradasın", ": you are here");
             else if (s.autopilot)
-                note += stopsFirst ? L(". Otomatik varış önce duruyor, sonra dönüp gidiyor", ". The automatic arrival stops first, then turns and goes")
-                                   : L(". Otomatik varış oraya gidiyor", ". The automatic arrival goes there");
+                note += stopsFirst ? L(". Otomatik varış önce durup dönüyor", ". Automatic arrival stops and turns first")
+                                   : L(". Otomatik varış oraya gidiyor", ". Automatic arrival is heading there");
             else if (s.phi <= 0.0 && far <= hz::captureRadius(a_.route, s.target))
-                note += L(". Yakınsın: son kısmı otomatik varış uçuyor", ". Close by: the automatic arrival flies the last stretch");
+                note += L(". Yakınsın: son kısmı otomatik varış uçar", ". Close by: automatic arrival flies the last stretch");
             else
-                note += stopsFirst ? L(". Boşluk oraya götürür (önce durur, döner)", ". Space takes you there (it stops and turns first)")
+                note += stopsFirst ? L(". Boşluk oraya götürür (önce durup döner)", ". Space takes you there (stopping and turning first)")
                                    : L(". Boşluk oraya götürür", ". Space takes you there");
             host.toast(note);
         }
@@ -599,28 +591,28 @@ private:
                                  : L("Zaten Proxima Centauri'desin: panelden başka bir hedef seç",
                                      "Already at Proxima Centauri: choose another target on the panel"));
         if (ev.autoOn)
-            host.toast(L("Otomatik varış: en kısa yoldan (gerekirse hızlanır), doğru anda frenleyip tam hedefte durur",
-                         "Automatic arrival: the quickest way (speeding up if it helps), braking at the right moment, stopping right at the target"));
+            host.toast(L("Otomatik varış: en kısa sürede gider, doğru anda frenler, tam hedefte durur",
+                         "Automatic arrival: the quickest trip, braking in time to stop right at the target"));
         if (ev.captured)
-            host.toast(L("Hedefin yakınında durdun: son kısmı otomatik varış uçuyor", "You stopped near the target: the automatic arrival flies the last stretch"));
+            host.toast(L("Hedefin yakınında durdun: son kısmı otomatik varış uçar", "You stopped near the target: automatic arrival flies the last stretch"));
         if (ev.autoOff) host.toast(L("Otomatik varış kapandı", "Automatic arrival off"));
         if (ev.autoCancelled) host.toast(L("Otomatik varış kapandı: kumanda sende", "Automatic arrival off: you are flying"));
         if (ev.overshoot && !overshootShown_)   // (reported every step of that brake: told once)
             host.toast(L("Bu hızla durulamaz: geçip duracak, dönüp gelecek", "Too fast to stop: it will pass, stop and come back"));
         overshootShown_ = ev.overshoot;
         if (ev.capReached)
-            host.toast(L("Hız tavanı: 21 dokuz. Işık hızına bundan fazla yaklaşmıyoruz (tasarım kararı)",
-                         "The speed cap: 21 nines. We go no closer to the speed of light (a design choice)"));
+            host.toast(L("Hız tavanı: 21 dokuz (0,999…9). Işık hızına daha çok yaklaşılmaz (tasarım kararı)",
+                         "Speed cap: 21 nines (0.999…9). No closer to light speed, by design"));
         if (ev.arrived) {
-            const std::string where = ev.arrivedAt == hz::kTargetProxima ? L("Proxima Centauri'ye vardın", "You have reached Proxima Centauri")
-                                                                         : L("Andromeda'ya vardın", "You have reached Andromeda");
+            const std::string where = ev.arrivedAt == hz::kTargetProxima ? L("Proxima'ya vardın", "At Proxima")
+                                                                         : L("Andromeda'ya vardın", "At Andromeda");
             std::string note = where;
             if (ev.legTau > 0.0)
-                note += L(": senin saatinle ", ": by your clock ") + clockText(ev.legTau) + L(", Dünya'da ", ", on the Earth ") +
-                        spanText(ev.legEarth) + L(" geçti", " passed");
+                note += L(": senin saatinle ", ": ") + clockText(ev.legTau) + L(", Dünya'da ", " on your clock, ") +
+                        spanText(ev.legEarth) + L(" geçti", " on the Earth");
             // what next: the other target is a choice on the panel
-            note += ev.arrivedAt == hz::kTargetProxima ? L(". Andromeda için panelde Hedef: Andromeda", ". For Andromeda: Target: Andromeda on the panel")
-                                                       : L(". Geri dönmek için panelde Hedef: Proxima", ". To go back: Target: Proxima on the panel");
+            note += ev.arrivedAt == hz::kTargetProxima ? L(". Andromeda'yı panelden seç", ". Pick Andromeda on the panel")
+                                                       : L(". Dönüş için panelden Proxima'yı seç", ". Pick Proxima on the panel to go back");
             host.toast(note);
         }
     }
@@ -731,7 +723,7 @@ private:
             st.metrics.push_back({L("β (ışık hızına oranı)", "β (of light's speed)"), betaText(k)});
             if (view_ == 0) st.metrics.push_back({L("Görüş açısı", "Field of view"), fovText(std::pow(10.0, zoom_))});
             else st.metrics.push_back({L("Ekranın genişliği", "The screen's width"), a_.sc.widthText()});
-            st.metrics.push_back({L("Kare", "Frame"), num(a_.frameMs + float(a_.hostMs), 1) + " ms"});
+            st.metrics.push_back({L("Kare süresi", "Frame time"), num(a_.frameMs + float(a_.hostMs), 1) + " ms"});
         } else {
         st.metrics.push_back({L("β (ışık hızına oranı)", "β (of light's speed)"), betaText(k)});
         st.metrics.push_back({L("Dokuz", "Nines"), num(k.nines, 2)});
@@ -748,7 +740,7 @@ private:
         }
         if (view_ == 0) st.metrics.push_back({L("Görüş açısı", "Field of view"), fovText(std::pow(10.0, zoom_))});
         else st.metrics.push_back({L("Ekranın genişliği", "The screen's width"), a_.sc.widthText()});
-        st.metrics.push_back({L("Kare", "Frame"), num(a_.frameMs + float(a_.hostMs), 1) + " ms"});
+        st.metrics.push_back({L("Kare süresi", "Frame time"), num(a_.frameMs + float(a_.hostMs), 1) + " ms"});
         }
 
         app::Control gr;
@@ -790,7 +782,7 @@ private:
         app::Control a;
         a.kind = app::Control::Kind::Button;
         a.id = "oto";
-        a.text = s.autopilot ? L("Otomatik varışı kapat", "Automatic arrival off") : L("Otomatik varış", "Automatic arrival");
+        a.text = s.autopilot ? L("Otomatik varışı kapat", "Stop automatic arrival") : L("Otomatik varış", "Automatic arrival");
         a.keys = L("Boşluk", "Space");
         a.strong = !s.autopilot && !here;
         a.enabled = !here || s.autopilot;
@@ -801,7 +793,7 @@ private:
         r.kind = app::Control::Kind::Button;
         r.id = "sifirla";
         r.text = L("Yolculuğu baştan başlat", "Start the journey over");
-        r.detail = L("İki kez bas", "Press twice");
+        r.detail = L("Onaylamak için iki kez bas", "Press twice to confirm");
         st.controls.push_back(r);
     }
 

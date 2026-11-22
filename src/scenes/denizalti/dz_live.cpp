@@ -25,40 +25,75 @@ public:
         i.number = "08";
         i.title = L("Denizaltı", "The Submarine");
         i.subtitle = L("Gece kırmızısında bir kontrol odası", "A control room under night red");
-        i.description = L("Tench sınıfı bir denizaltının kontrol odası, gece kırmızısı altında. Işık önceden, ilk açılışta "
-                          "birkaç dakika boyunca izlenip pişirilir; ekran kartının bütün gücü görüntüye gidiyor: her örnek ayrı gölgelendirilir, "
-                          "yüzeyler her karede yeniden bölünüp kabartılır.",
-                          "The control room of a Tench-class submarine under its night red. The light is traced and baked "
-                          "beforehand, for a few minutes on the first opening; the graphics card's whole strength goes to the picture: every sample shaded "
-                          "on its own, the surfaces cut and raised again every frame.");
+        i.description = L("Tench sınıfı bir denizaltının kontrol odası, üç kırmızı gece lambası ve harita masasının lambasıyla. "
+                          "İçinde bir insan gibi yürür, eğilir, göstergelere dürbünle yakından bakarsın. Işık ilk açılışta "
+                          "birkaç dakikada pişirilir, sonra diskten okunur.",
+                          "The control room of a Tench-class submarine, lit by three red night lamps and the chart table's lamp. "
+                          "You walk it like a person, crouch, and look closely at the gauges through binoculars. The light is "
+                          "baked for a few minutes on the first opening, then read from disk.");
         i.details = {
-            {L("Önceden pişirilmiş ışık", "Baked light"),
-             L("Canlıda ışık hesabı yok. Işık, ışın izlemeyle önceden ve normalde izlenenden kat kat uzun izlendi; "
-               "her yüzey noktasına yönüyle birlikte yazıldı. Görüntü onu okur.",
-               "No light is computed live. It was traced beforehand, far longer than a frame would allow, and written onto "
-               "every point of every surface with its direction. The picture reads it.")},
-            {L("Tessellation", "Tessellation"),
-             L("Yüzeyler her karede kameraya göre bölünür ve kabartılır: perçin, kaynak dikişi, diş, sac deseni. High'da bir "
-               "üçgen bir örnek kadardır.",
-               "The surfaces are cut and raised for the camera every frame: rivets, weld seams, threads, tread plate. On "
-               "High a triangle is as small as a sample.")},
-            {L("Süper örnekleme", "Supersampling"),
-             L("Her piksel 16 örneğe kadar ayrı ayrı gölgelendirilir; rastgele sayı yok, her karede aynı desen: gren ve "
-               "kıpırtı olmaz.",
-               "Each pixel is shaded up to 16 times; no random numbers, the same pattern every frame: no grain, no shimmer.")}};
-        i.tags = {L("Önceden pişirilmiş ışık", "Baked light"), L("Tessellation", "Tessellation"), L("SSAA 16x", "SSAA 16x")};
+            {L("Önceden pişmiş ışık", "Baked lighting"),
+             L("Odayı aydınlatan ışık canlıda hesaplanmaz. İlk açılışta OptiX ile yol izlenerek pişirilir: ışık haritasının "
+               "2 mm'lik her noktasından 512 yol, 12 sekmeye kadar. Her noktaya ışığın miktarı ve geldiği yön (L1 küresel "
+               "harmonikler) yazılır; her örnek bunu kabartılmış yüzeyin normaliyle okur, perçin ve dikişler de ışığa göre "
+               "gölgelenir. Pişirme yaklaşık 5 dakika sürer.",
+               "The light that fills the room is not computed live. It is path traced with OptiX on the first opening: 512 "
+               "paths from every 2 mm texel of the light map, up to 12 bounces. Each texel stores the light's amount and the "
+               "direction it comes from (L1 spherical harmonics), and every sample reads it with the displaced surface's "
+               "normal, so rivets and seams are shaded by it too. The bake takes about 5 minutes.")},
+            {L("Her karede tessellation", "Tessellation every frame"),
+             L("Yüzeyler her karede kameraya göre küçük üçgenlere bölünür ve kabartılır: perçinler, kaynak dikişleri, vida "
+               "dişleri, kabartmalı sac. Hedef üçgen kenarı Low'da yaklaşık 24 piksel, Medium'da 6 piksel, High'da 1,5 örnek. "
+               "Kabartması olmayan düz boya daha kaba bölünür, üçgenler kabartmanın olduğu yere gider.",
+               "Every frame the surfaces are cut into small triangles for the camera and displaced: rivets, weld seams, screw "
+               "threads, tread plate. The target triangle edge is about 24 pixels on Low, 6 pixels on Medium and 1.5 samples "
+               "on High. Flat paint with no relief is cut more coarsely, so the triangles go where the relief is.")},
+            {L("Örnek başına gölgelendirme", "Per-sample supersampling"),
+             L("Her piksel 16 örneğe kadar ayrı ayrı gölgelendirilir (SSAA). Örnek noktaları ekran kartının sabit desenidir; "
+               "rastgele sayı ve önceki karelerden taşınan bilgi yoktur, bu yüzden görüntüde gren ya da kıpırtı olmaz. 8K "
+               "16x canlıda değil, yalnız fotoğrafta (F12) 1920 × 1080'lik parçalar halinde çizilir.",
+               "Every pixel is shaded at up to 16 separate samples (SSAA). The sample positions are the GPU's fixed pattern, "
+               "with no random numbers and nothing carried over from earlier frames, so the picture has neither grain nor "
+               "shimmer. 8K 16x is drawn only for the photo (F12), in tiles of 1920 × 1080.")},
+            {L("Parlamalar ve yansımalar", "Highlights and reflections"),
+             L("Dört ana lambanın, yani üç gece lambasıyla harita lambasının parlaması her örnekte küre biçimli bir ışık "
+               "olarak hesaplanır; gölgesi pişmiş haritadan gelir. Metal ve parlak yüzeylerdeki yansımalar odaya dağıtılmış "
+               "54 küp haritadan (yansıma yoklaması) okunur. Her pürüzlülük düzeyi fırında ayrı izlenir, sonradan "
+               "bulanıklaştırılmaz.",
+               "The highlights of the four key lamps, the three night lamps and the chart lamp, are computed for every sample "
+               "as sphere lights; their shadows come from the bake. Reflections on metal and glossy surfaces are read from 54 "
+               "cube maps (reflection probes) placed through the room. Each roughness level is traced separately in the bake, "
+               "not blurred afterwards.")},
+            {L("Pus ve parlama", "Haze and bloom"),
+             L("Havadaki ince pus da önceden pişirilir: odayı 4 cm'lik hücrelere bölen bir hacme, lambaların gölgeleriyle "
+               "birlikte havaya ulaşan ışık yazılır. Her karede bu ışık, kameranın önüne kurulan bir ızgarada (High'da "
+               "160 × 90 × 64) bakış boyunca toplanır; lambaların ışık konileri buradan gelir. Parlak noktaların taşması "
+               "(bloom) yarım çözünürlükte eklenir.",
+               "The thin haze in the air is baked too: a volume of 4 cm cells stores the light that reaches the air, with the "
+               "lamps' shadows. Each frame that light is gathered along the view in a grid fitted to the camera (160 × 90 × 64 "
+               "on High), which is where the cones of lamplight come from. The glow around bright points (bloom) is added at "
+               "half resolution.")},
+            {L("Oda ve kaynakları", "The room and its sources"),
+             L("Oda, Tench sınıfı USS Thornback'in (sonradan TCG Uluçalireis) kontrol odasıdır: perdeden perdeye 8,23 m, "
+               "postalar 76,2 cm arayla. Ölçüler Balao sınıfının el kitaplarından ve Thornback'in planlarından alındı. "
+               "Panolar, manifoldlar, dalış istasyonu, masadaki seyir haritası ve bütün etiketler kodla modellendi.",
+               "The room is the control room of the Tench-class USS Thornback (later TCG Uluçalireis): 8.23 m from bulkhead "
+               "to bulkhead, frames 76.2 cm apart. The measurements come from the Balao-class manuals and Thornback's plans. "
+               "The panels, manifolds, diving station, the chart on the table and every label are modelled in code.")}};
+        i.tags = {L("Önceden pişmiş ışık", "Baked lighting"), L("Tessellation", "Tessellation"), L("SSAA 16x", "SSAA 16x")};
         i.image = "assets/gallery/denizalti.jpg";
         i.accent = 0xD9583F;
-        i.keys = {{L("Hareket", "Moving"),
+        i.keys = {{L("Hareket", "Movement"),
                    {{"W|A|S|D", L("Yürü", "Walk")},
+                    {"Shift", L("Basılı tutup yavaş yürü", "Hold to walk slowly")},
                     {L("Boşluk", "Space"), L("Zıpla", "Jump")},
-                    {"C", L("Eğil (basılı tut)", "Crouch (hold)")},
-                    {"Shift", L("Yavaş (yakından incele)", "Slow (look closely)")},
-                    {L("Fare", "Mouse"), L("Bak", "Look")},
-                    {"Tab", L("İmleç (panel için) / geri bakış", "Cursor (for the panel) / back to looking")},
-                    {L("Sağ tık", "Right button"), L("Dürbün (basılı tut)", "Binoculars (hold)")},
+                    {"C", L("Basılı tutup eğil", "Hold to crouch")},
+                    {L("Fare", "Mouse"), L("Etrafa bak", "Look around")},
+                    {L("Sağ tık", "Right click"), L("Basılı tutup dürbünle bak", "Hold for the binoculars")},
+                    {"Tab", L("İmleci panel için bırak / geri al", "Free the cursor for the panel / back")},
+                    {L("Sol tık", "Left click"), L("İmleç serbestken sürükleyip bak", "Drag to look while the cursor is free")},
                     {"R", L("Başa dön", "Back to the start")}}},
-                  {L("Görüntü", "Picture"), {{"↑|↓", L("Pozlama", "Exposure")}}}};
+                  {L("Görüntü", "Image"), {{"↑|↓", L("Pozlamayı artır / azalt", "Exposure up / down")}}}};
         i.reloadable = true;
         return i;
     }
@@ -78,15 +113,15 @@ public:
             a_.loadConfig();
             a_.build();
             a_.applyChoices();
-            st.label = L("Önceden pişirilmiş ışık okunuyor (ilk açılışta pişirilir: birkaç dakika)",
-                         "Reading the baked light (baked on the first opening: a few minutes)");
+            st.label = L("Pişmiş ışık okunuyor (ilk açılışta yaklaşık 5 dakika pişirilir)",
+                         "Reading the baked light (baked once, about 5 minutes on the first opening)");
             st.fraction = 0.15f;
             ++st.step;
             return;
         default: {
             std::string err;
             const bool ok = a_.ensureLight(err, [&](float f, const std::string& what) {
-                host.loadProgress(0.15f + 0.85f * f, L("İlk açılış, ışık pişiriliyor: ", "First opening, baking the light: ") + what);
+                host.loadProgress(0.15f + 0.85f * f, L("Işık pişiriliyor (yalnız ilk açılışta) · ", "Baking the light (first opening only) · ") + what);
             });
             if (!ok) {
                 st.error = err;
@@ -151,7 +186,7 @@ public:
         }
         // 8K 16x is the photo's only (a live frame would take seconds and the card's memory): live at 8K 4x
         if (a_.resIndex == 4 && a_.ssaaIndex == 4) {
-            if (!warned16_) host.toast(L("8K 16x yalnız fotoğrafta (F12): canlı görüntü 8K 4x", "8K 16x is for the photo only (F12): the live picture is 8K 4x"));
+            if (!warned16_) host.toast(L("8K 16x yalnız fotoğrafta (F12) çizilir, canlı görüntü 8K 4x", "8K 16x is drawn only for the photo (F12); the live image is 8K 4x"));
             warned16_ = true;
             a_.set.ssaa = 4;
         } else {
@@ -194,8 +229,8 @@ public:
             s.controls.push_back(c);
         };
         choice("res", L("Çözünürlük", "Resolution"), {"720p", "1080p", "1440p", "4K", "8K"}, a_.resIndex,
-               L("Çizim çözünürlüğü; ekrandan büyükse küçültülerek gelir", "The drawing's resolution; above the screen's it is scaled down"));
-        choice("ssaa", "SSAA", {"1x", "2x", "4x", "8x", "16x"}, a_.ssaaIndex, L("Piksel başına gölgelendirilen örnek", "Samples shaded per pixel"));
+               L("Çizimin çözünürlüğü, ekrandan büyükse küçültülerek gösterilir", "Render resolution, scaled down when larger than the screen"));
+        choice("ssaa", "SSAA", {"1x", "2x", "4x", "8x", "16x"}, a_.ssaaIndex, L("Piksel başına ayrı gölgelendirilen örnek sayısı", "Samples shaded separately per pixel"));
         const std::vector<std::string> lmh = {"Low", "Medium", "High"};
         choice("tess", "Tessellation", lmh, a_.set.tess, "", true);
         choice("gfx", L("Grafik", "Graphics"), lmh, a_.set.gfx, "");

@@ -58,11 +58,11 @@ Box panel(float x, float y, float w, float h, float S, const std::string& title,
 // how much of the Sun's output an energy is: seconds, minutes, hours, days, years
 std::string sunTime(double joules) {
     const double s = joules / kSunLuminosity;
-    if (s < 120.0) return sig3(s) + L(" saniyesi", " seconds");
-    if (s < 7200.0) return sig3(s / 60.0) + L(" dakikası", " minutes");
-    if (s < 86400.0 * 3.0) return sig3(s / 3600.0) + L(" saati", " hours");
-    if (s < kYear) return sig3(s / 86400.0) + L(" günü", " days");
-    return sig3(s / kYear) + L(" yılı", " years");
+    if (s < 120.0) return sig3(s) + L(" saniyesi", " s of the Sun");
+    if (s < 7200.0) return sig3(s / 60.0) + L(" dakikası", " min of the Sun");
+    if (s < 86400.0 * 3.0) return sig3(s / 3600.0) + L(" saati", " h of the Sun");
+    if (s < kYear) return sig3(s / 86400.0) + L(" günü", " days of the Sun");
+    return sig3(s / kYear) + L(" yılı", " years of the Sun");
 }
 
 // the band a blackbody's peak lies in (Wien: lambda = 2.898e-3 / T)
@@ -326,20 +326,20 @@ void drawCost(const Pano& p, PanoState&, Box b, float S) {
     };
     const Cost c = costOf(s.phi);
     auto big = [](double v) { return v < 1e4 ? theme::num(v, 2) : sciText(v, 2); };
-    row(L("Hareket enerjisi (1 ton)", "Energy of motion (1 t)"), L("Güneş'in ", "the Sun's ") + sunTime(c.kinetic), white(0.95f));
-    row(L("Foton roketinin yaktığı", "The photon rocket burns"), L("Güneş'in ", "the Sun's ") + sunTime(c.photon), white(0.95f));
-    row(L("Durmak için de yakarsa", "To stop again as well"), L("Güneş'in ", "the Sun's ") + sunTime(c.photonStop), white(0.95f));
+    row(L("Hareket enerjisi (1 ton)", "Kinetic energy (1 t)"), L("Güneş'in ", "") + sunTime(c.kinetic), white(0.95f));
+    row(L("Foton roketinin yaktığı", "Photon rocket's fuel"), L("Güneş'in ", "") + sunTime(c.photon), white(0.95f));
+    row(L("Durmak için de yakarsa", "With fuel to stop as well"), L("Güneş'in ", "") + sunTime(c.photonStop), white(0.95f));
     row(L("Kütle oranı (durmakla)", "Mass ratio (with stopping)"), big(c.massRatio) + "  (" + big(c.massRatioStop) + ")", white(0.95f));
     const bool driving = s.drive == Drive::Thrust || s.drive == Drive::Brake;
     row(L("İvme", "Acceleration"), !driving ? "0 g" : c.gees < 1e6 ? sig3(c.gees) + " g" : theme::num(c.gees / 1e6, 1) + L(" milyon g", " million g"),
         white(0.95f));
     const double sun = c.plate / kSolarConstant;
-    row(L("Önden gelen ışıma", "Light from ahead"), L("Güneş ışığının ", "sunlight × ") + (sun < 1e4 ? sig3(sun) : sciText(sun, 2)) + L(" katı", ""), gold(0.95f));
+    row(L("Önden gelen fon ışıması", "CMB on the bow"), L("Güneş ışığının ", "sunlight × ") + (sun < 1e4 ? sig3(sun) : sciText(sun, 2)) + L(" katı", ""), gold(0.95f));
     // the CMB ahead: its temperature and the colour of a blackbody that hot (and its band)
     {
         const double Tf = c.cmbAhead;
         const std::string v = (Tf < 100.0 ? sig3(Tf) : Tf < 1e5 ? theme::thousands((unsigned long long)std::llround(Tf)) : sciText(Tf, 2)) + " K · " + bandOf(Tf);
-        ui::text(b.x, y, L("Önde fon ışıması", "The CMB ahead"), lab);
+        ui::text(b.x, y, L("Fon sıcaklığı (önde)", "CMB temperature"), lab);
         const ui::TextStyle st = theme::mono(theme::Scale{S}, 14.5f, white(0.95f));
         const float vw = ui::measure(v, st);
         ui::text(b.x + b.w - vw, y + S * 1.0f, v, st);
@@ -352,11 +352,11 @@ void drawCost(const Pano& p, PanoState&, Box b, float S) {
         }
         y += S * 27.0f;
     }
-    row(L("Her hidrojen atomu", "Each hydrogen atom"), (c.hydrogen < 1e4 ? sig3(c.hydrogen) : sciText(c.hydrogen, 2)) + " eV", white(0.95f));
+    row(L("Çarpan her hidrojen atomu", "Each hydrogen atom hitting it"), (c.hydrogen < 1e4 ? sig3(c.hydrogen) : sciText(c.hydrogen, 2)) + " eV", white(0.95f));
     y += S * 6.0f;
     ui::textWrapped(b.x, y, b.w,
-                    L("Bir düşünce deneyi: hareketin fiziği gerçek; roketin mühendisliği (yakıt, ivme, kalkan) idealize.",
-                      "A thought experiment: the motion's physics is real; the rocket's engineering (fuel, acceleration, shield) idealised."),
+                    L("Bu bir düşünce deneyi. Hareketin fiziği gerçek; roketin yakıtı, ivmesi ve kalkanı ise varsayımdır.",
+                      "A thought experiment. The physics of the motion is real; the rocket's fuel, acceleration and shield are assumed."),
                     theme::small(theme::Scale{S}, white(0.42f)), 1.3f);
 }
 
@@ -492,11 +492,11 @@ void drawPanels(const Pano& p, PanoState& st, const ui::Rect& view, float Sapp, 
         case 2: drawSpacetime(p, panel(x, y, wk, hk, Sk, L("UZAY-ZAMAN", "SPACETIME")), Sk); break;
         case 4: {
             const std::string to = p.ship->target == kTargetAndromeda ? "→ Andromeda" : "→ Proxima";
-            drawRoad(p, st, panel(x, y, wk, hk, Sk, L("YOL", "THE WAY"), to), Sk);
+            drawRoad(p, st, panel(x, y, wk, hk, Sk, L("YOL", "ROUTE"), to), Sk);
             break;
         }
         case 8: drawClocks(p, st, panel(x, y, wk, hk, Sk, L("SAATLER", "CLOCKS"), "γ " + gammaText(p.k.gamma)), Sk); break;
-        case 16: drawCost(p, st, panel(x, y, wk, hk, Sk, L("BEDEL", "THE COST"), ""), Sk); break;
+        case 16: drawCost(p, st, panel(x, y, wk, hk, Sk, L("BEDEL", "COST"), ""), Sk); break;
         }
     };
     struct Item {
@@ -612,8 +612,8 @@ void drawEnergyKey(const ui::Rect& view, float Sapp, double phi, const Blackbody
     const ui::TextStyle band = theme::mono(theme::Scale{S}, 12.0f, white(0.62f));
     const ui::TextStyle mark = theme::mono(theme::Scale{S}, 12.5f, white(0.92f));
     const std::string title = L("ENERJİ GÖZÜ", "ENERGY EYE");
-    const std::string what = L("bütün bantlar, sahte renkle · fonun duruştaki parıltısı çıkarılmış",
-                               "every band, in false colour · the background's glow at rest taken out");
+    const std::string what = L("bütün bantlar sahte renkle · duruştaki fon ışıması çıkarılmış",
+                               "every band in false colour · the CMB at rest subtracted");
     const float tw = ui::measure(title, cap), gw = S * 14.0f, sw = ui::measure(what, sub);
     const float tx = x + 0.5f * (w - tw - gw - sw);
     ui::text(tx, y + S * 16.0f, title, cap);
@@ -641,7 +641,7 @@ void drawEnergyKey(const ui::Rect& view, float Sapp, double phi, const Blackbody
         std::string name;
         float x, tw;
     };
-    Mark ms[2] = {{ltC, L("fon ışıması", "the background glow"), 0, 0}, {ltS, L("yıldız ışığı", "starlight"), 0, 0}};
+    Mark ms[2] = {{ltC, L("fon ışıması", "CMB"), 0, 0}, {ltS, L("yıldız ışığı", "starlight"), 0, 0}};
     for (Mark& m : ms) {
         m.x = bx + barW * float(at(m.lt));
         m.tw = ui::measure(m.name + (m.lt > edge[6] ? " →" : ""), mark);

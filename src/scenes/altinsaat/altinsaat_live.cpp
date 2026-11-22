@@ -24,54 +24,76 @@ public:
         i.title = L("Altın Saat", "Golden Hour");
         i.subtitle = L("Cam ve taş, tayfına ayrılan güneş", "Glass and stone, sunlight split into its colours");
         i.description = L("Beton bir oda, beş dar yarıktan giren alçak güneş ve huzmelere asılı on dört kristal prizma. Prizmalar ışığı "
-                          "renklerine ayırıp duvarlara ve pusa saçıyor.",
-                          "A concrete room, a low sun coming in through five narrow slits, and fourteen crystal prisms hanging in its "
-                          "beams. The prisms split the light into its colours and scatter them over the walls and the haze.");
+                          "renklerine ayırıp duvarlara ve pusa saçar. Durağan kipte görüntü örnek biriktikçe netleşir; canlı kipte su "
+                          "dalgalanır, toz ve köpükler süzülür.",
+                          "A concrete room, a low sun through five narrow slits, and fourteen crystal prisms in its beams, splitting the "
+                          "light into colours over the walls and the haze. In still mode the image clears as samples build up; in live "
+                          "mode the water ripples, dust and bubbles drift.");
         i.details = {
-            {L("Işık nasıl hesaplanıyor", "How the light is computed"),
-             L("Spektral yol izleme: her ışın 360-830 nm arasından dört dalga boyu taşır. Hiçbir renk boyanmış değil; camın kırılma "
-               "indisi dalga boyuyla değiştiği için tayflar kendiliğinden çıkar, CIE 1931 gözlemcisiyle renge çevrilir.",
-               "Spectral path tracing: every ray carries four wavelengths between 360 and 830 nm. No colour is painted on: glass "
-               "bends each wavelength differently, so the spectra appear by themselves and become colour through the CIE 1931 "
-               "observer.")},
+            {L("Tayfsal yol izleme", "Spectral path tracing"),
+             L("Her ışın 360-830 nm arasından dört dalga boyu taşır. Hiçbir renk boyanmaz: camın kırılma indisi dalga boyuyla "
+               "değiştiği için (Sellmeier formülü) tayflar kendiliğinden çıkar ve CIE 1931 gözlemcisiyle renge çevrilir. Prizmayı "
+               "gören pikseller aynı rastgele sayılarla dört kez izlenir, camda her seferinde başka bir dalga boyu yol alır; "
+               "prizmadaki renk gürültüsü böylece düşer.",
+               "Every ray carries four wavelengths between 360 and 830 nm. No colour is painted on: the glass's refractive index "
+               "changes with wavelength (the Sellmeier formula), so the spectra appear by themselves and become colour through the "
+               "CIE 1931 observer. Pixels that see a prism are traced four times with the same random numbers, a different "
+               "wavelength carrying on through the glass each time, which lowers the colour noise there.")},
             {L("Güneş ve gök", "Sun and sky"),
-             L("5778 K kara cisim bir güneş; ışığı Rayleigh, aerosol ve ozon soğurmalı bir atmosferden geçer, ufka yakın güneş bu "
-               "yüzden turuncudur. Gök aynı atmosferden hesaplanmış spektral bir haritadır.",
-               "A 5778 K black-body sun whose light passes through an atmosphere with Rayleigh, aerosol and ozone absorption, which "
-               "is why a sun near the horizon is orange. The sky is a spectral map computed from the same atmosphere.")},
-            {L("Kostikler", "Caustics"),
-             L("Prizmaların ve suyun duvara düşürdüğü tayflar fotonlarla bulunur: güneşten cama gönderilen fotonlar ekran kartında bir "
-               "ızgaraya dizilir (aşamalı foton haritası). Pustaki renkli yelpazeler foton ışınlarıyla.",
-               "The spectra that the prisms and the water cast on the walls are found with photons: photons sent from the sun into "
-               "the glass are sorted into a grid on the graphics card (progressive photon mapping). The coloured fans in the haze "
-               "come from photon beams.")},
+             L("Güneş, ufkun 8° üstünde 5778 K sıcaklıkta bir kara cisimdir. Işığı Rayleigh ve aerosol saçılması, ozon soğurması "
+               "olan küresel bir atmosferden geçer; alçak güneş bu yüzden turuncudur. Gök, aynı atmosferden hesaplanmış "
+               "512×256 piksellik, 48 tayf bantlı bir haritadır.",
+               "The sun is a 5778 K black body 8° above the horizon. Its light passes through a spherical atmosphere with Rayleigh "
+               "and aerosol scattering and ozone absorption, which is why the low sun is orange. The sky is a 512×256 map with 48 "
+               "spectral bands, computed from the same atmosphere.")},
+            {L("Kostik: foton haritası", "Caustics: photon mapping"),
+             L("Prizmaların, su dolu cam kürenin ve havuzun duvarlara düşürdüğü tayflar fotonlarla bulunur. Her karede güneşten "
+               "cama ve suya 4 milyon foton gönderilir, ekran kartında bir ızgaraya dizilir; toplama yarıçapı kare kare küçülür "
+               "(aşamalı foton haritası). Pustaki renkli yelpazeleri foton ışınları, yani fotonun yolu boyunca pusa bırakılan "
+               "ışık çizer.",
+               "The spectra that the prisms, the water-filled glass globe and the pool cast on the walls are found with photons. "
+               "Every frame 4 million photons are sent from the sun into the glass and water and sorted into a grid on the GPU; the "
+               "gathering radius shrinks frame by frame (progressive photon mapping). The coloured fans in the haze come from photon "
+               "beams, light left in the haze along each photon's path.")},
             {L("Malzemeler", "Materials"),
-             L("Brüt beton, pirinç şeritli terrazzo, sıva, SF11 ve BK7 cam, su, sabun filmi (ince film girişimi). Yüzey ayrıntısı bir "
-               "kez dokuya pişirilir: kare 2,3 kat hızlandı.",
-               "Board-marked concrete, terrazzo with brass strips, plaster, SF11 and BK7 glass, water, soap film (thin-film "
-               "interference). Surface detail is baked into textures once: frames became 2.3 times faster.")},
-            {L("Durağan ve canlı", "Still and live"),
-             L("Durağan kipte örnekler sınırsız birikir, yapay zekâ gürültü gidericisi albedo ve normal kılavuzuyla temizler. Canlı "
-               "kipte 1280×720 çizilir, OptiX'in zamansal modeli 1440p'ye büyütür: 24 fps.",
-               "In the still mode samples accumulate without end and the AI denoiser cleans them, guided by albedo and normals. In "
-               "the live mode the scene is drawn at 1280×720 and OptiX's temporal model scales it up to 1440p: 24 fps.")},
-            {L("Donanım", "Hardware"),
-             L("C++20, CUDA ve OptiX 9.1; oyun motoru yok, RTX 4080'in ışın izleme çekirdeklerinde. Işınlar malzemelerine göre yeniden "
-               "sıralanır; bu olmadan altı kat yavaştı.",
-               "C++20, CUDA and OptiX 9.1; no game engine, on the RTX 4080's ray-tracing cores. Rays are regrouped by material "
-               "before shading; without that it was six times slower.")}};
-        i.tags = {L("Spektral yol izleme", "Spectral path tracing"), L("Foton haritası", "Photon mapping"),
-                  L("Yapay zekâ gürültü giderici", "AI denoiser")};
+             L("Kalıp izli brüt beton, pirinç şeritli terrazzo zemin, beyaz sıva, SF11 ve BK7 cam, su ve sabun köpükleri; "
+               "köpüklerin renkleri ince film girişiminden gelir. Yüzey ayrıntısı her ışında yeniden hesaplanmaz, açılışta bir kez "
+               "dokuya pişirilir: bu, kareyi 2,3 kat hızlandırdı.",
+               "Board-marked concrete, a terrazzo floor with brass strips, white plaster, SF11 and BK7 glass, water and soap "
+               "bubbles, whose colours come from thin-film interference. Surface detail is not recomputed for every ray but baked "
+               "into a texture once at load time, which made frames 2.3 times faster.")},
+            {L("Durağan ve canlı kip", "Still and live mode"),
+             L("Durağan kipte örnekler sınırsız birikir. OptiX'in yapay zekâ gürültü gidericisi, albedo ve normal kılavuzuyla "
+               "görüntüyü 8.192 örneğe kadar temizler, sonra ham görüntü gösterilir; kostikler gökkuşakları bulanmasın diye "
+               "gürültü gidericiye girmez. Canlı kipte 1280×720 çizilir, OptiX'in zamansal modeli 2560×1440'a büyütür: saniyede "
+               "yaklaşık 24 kare.",
+               "In still mode samples accumulate without end. OptiX's AI denoiser, guided by albedo and normals, cleans the image up "
+               "to 8,192 samples, then the raw image is shown; the caustics bypass the denoiser so the rainbows stay sharp. In live "
+               "mode the scene is drawn at 1280×720 and OptiX's temporal model scales it up to 2560×1440: about 24 frames a second.")},
+            {L("Motor ve donanım", "Engine and hardware"),
+             L("C++20, CUDA ve OptiX 9.1 ile yazıldı; oyun motoru yok, ışınlar RTX 4080'in ışın izleme çekirdeklerinde izlenir. "
+               "Işınlar gölgelendirmeden önce çarptıkları malzemeye göre yeniden gruplanır (OptiX SER); bu olmadan kare altı kat "
+               "yavaştı.",
+               "Written in C++20, CUDA and OptiX 9.1 with no game engine; rays are traced on the RTX 4080's ray-tracing cores. "
+               "Before shading, rays are regrouped by the material they hit (OptiX SER); without that a frame was six times "
+               "slower.")}};
+        i.tags = {L("Tayfsal yol izleme", "Spectral path tracing"), L("Foton haritası", "Photon mapping"),
+                  L("Gürültü giderme", "AI denoising")};
         i.image = "assets/gallery/altinsaat.jpg";
         i.accent = 0xE6B566;
-        i.keys = {{L("Işık", "Light"),
-                   {{L("Boşluk", "Space"), L("Durağan ↔ canlı", "Still ↔ live")}, {"C", L("Sonraki kamera", "Next camera")},
-                    {"↑|↓", L("Pozlama", "Exposure")}, {"←|→", L("Odak uzaklığı", "Focus distance")}, {"R", L("Birikimi sıfırla", "Start over")}}},
+        i.keys = {{L("Kip ve kamera", "Mode and camera"),
+                   {{L("Boşluk", "Space"), L("Durağan / canlı kip", "Still / live mode")}, {"C", L("Sonraki kamera", "Next camera")},
+                    {"←|→", L("Odağı yaklaştır / uzaklaştır", "Focus nearer / farther")},
+                    {"↑|↓", L("Pozlamayı artır / azalt", "Exposure up / down")}, {"R", L("Birikimi baştan başlat", "Restart the accumulation")}}},
                   {L("Katmanlar", "Layers"),
-                   {{"P", L("Fotonlar (kostikler)", "Photons (caustics)")}, {"V", L("Pus", "Haze")},
-                    {"N", L("Doğrudan ışık örneklemesi", "Direct light sampling")}, {"D", L("Yapay zekâ gürültü giderici", "AI denoiser")},
-                    {"G", L("Güneş lekesi bağlantısı", "Sun patch connection")}}},
-                  {L("Görünüm", "View"), {{"1–5", L("Güzel, albedo, normal, kostikler, maliyet", "Beauty, albedo, normal, caustics, cost")}}}};
+                   {{"P", L("Fotonları aç / kapat (kostik)", "Photons on / off (caustics)")}, {"V", L("Pusu aç / kapat", "Haze on / off")},
+                    {"N", L("Doğrudan ışık örneklemesini aç / kapat", "Direct light sampling on / off")},
+                    {"G", L("Güneşli yüzeyleri ışık say (aç / kapat)", "Sunlit patches as lights (on / off)")},
+                    {"D", L("Gürültü gidericiyi aç / kapat", "Denoiser on / off")}}},
+                  {L("Görünüm", "View"),
+                   {{"1", L("Son görüntü", "Final image")}, {"2|3", L("Albedo / normaller", "Albedo / normals")},
+                    {"4", L("Yalnız kostikler", "Caustics only")}, {"5", L("Maliyet ısı haritası", "Cost heat map")},
+                    {"6", L("Ham görüntü, gürültü giderilmeden", "Raw image, not denoised")}}}};
         i.reloadable = true;
         return i;
     }
@@ -82,7 +104,7 @@ public:
     void load(app::Host& host, app::LoadState& st) override {
         switch (st.step) {
         case 0:
-            st.label = L("Spektral yol izleyici derleniyor", "Compiling the spectral path tracer");
+            st.label = L("Tayfsal yol izleyici derleniyor", "Compiling the spectral path tracer");
             st.fraction = 0.05f;
             ++st.step;
             return;
@@ -139,7 +161,7 @@ public:
         if (in.pressed(GLFW_KEY_P)) toggle(L("Fotonlar", "Photons"), p.enablePhotons);
         if (in.pressed(GLFW_KEY_V)) toggle(L("Pus", "Haze"), p.enableHaze);
         if (in.pressed(GLFW_KEY_N)) toggle(L("Doğrudan ışık örneklemesi", "Direct light sampling"), p.enableNee);
-        if (in.pressed(GLFW_KEY_G)) toggle(L("Güneş lekesi bağlantısı", "Sun patch connection"), p.enableSunPatch);
+        if (in.pressed(GLFW_KEY_G)) toggle(L("Güneş lekesi örneklemesi", "Sun patch sampling"), p.enableSunPatch);
         if (in.pressed(GLFW_KEY_D)) { a_.denoise = !a_.denoise; host.toast(a_.denoise ? L("Gürültü giderici açık", "Denoiser on") : L("Gürültü giderici kapalı", "Denoiser off")); }
         for (int k = 0; k < 6; ++k)
             if (in.pressed(GLFW_KEY_1 + k)) p.view = k == 0 ? 0 : k;
@@ -180,14 +202,14 @@ public:
         const PassTimes& t = a_.renderer.times();
         s.chips.push_back({a_.live ? L("Canlı", "Live") : L("Durağan", "Still"), true});
         s.chips.push_back({L("Kamera ", "Camera ") + std::to_string(a_.camera + 1) + " / " + std::to_string(a_.scene.cameras.size())});
-        const char* views[] = {"", "Albedo", "Normal", L("Yalnız kostikler", "Caustics only"), L("Maliyet ısı haritası", "Cost heat map"), L("Görünüm 6", "View 6")};
+        const char* views[] = {"", "Albedo", "Normal", L("Yalnız kostikler", "Caustics only"), L("Maliyet ısı haritası", "Cost heat map"), L("Ham görüntü", "Raw image")};
         if (p.view > 0 && p.view < 6) s.chips.push_back({views[p.view], true});
         if (std::fabs(a_.ev - evDefault_) > 1e-3f) s.chips.push_back({L("Pozlama ", "Exposure ") + std::string(a_.ev > evDefault_ ? "+" : "") + num(a_.ev - evDefault_, 2) + " EV"});
         if (!p.enablePhotons) s.chips.push_back({L("Fotonlar kapalı", "Photons off")});
         if (!p.enableHaze) s.chips.push_back({L("Pus kapalı", "Haze off")});
-        if (!p.enableNee) s.chips.push_back({L("NEE kapalı", "NEE off")});
+        if (!p.enableNee) s.chips.push_back({L("Doğrudan ışık kapalı", "Direct light sampling off")});
         if (!a_.denoise) s.chips.push_back({L("Gürültü giderici kapalı", "Denoiser off")});
-        if (p.enableSunPatch) s.chips.push_back({L("Güneş lekesi açık", "Sun patches on")});
+        if (p.enableSunPatch) s.chips.push_back({L("Güneş lekesi örneklemesi açık", "Sun patch sampling on")});
         s.metrics.push_back({L("Yol izleme", "Path tracing"), num(t.render, 1) + " ms"});
         s.metrics.push_back({L("Fotonlar", "Photons"), num(t.photons + t.grid, 1) + " ms"});
         s.metrics.push_back({L("Gürültü giderici", "Denoiser"), num(a_.renderer.denoiseMs(), 1) + " ms"});

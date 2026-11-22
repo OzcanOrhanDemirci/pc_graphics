@@ -1,5 +1,7 @@
 #include "scenes/denizalti/dz_bake.h"
 
+#include "app/lang.h"
+
 #include <cuda_runtime.h>
 #include <nvrtc.h>
 #include <optix.h>
@@ -159,7 +161,7 @@ bool bake(const Mesh& m, const Atlas& a, const std::vector<DzLight>& lights, con
     auto say = [&](float f, const std::string& s) {
         if (progress) progress(f, s);
     };
-    say(0.0f, "teksel yuzeye yerlestiriliyor");
+    say(0.0f, app::L("ışık haritası yüzeylere yerleştiriliyor", "laying the light map onto the surfaces"));
     Rasterised ras = rasterise(m, a);
     const size_t nt = ras.texels.size();
     std::fprintf(stderr, "firin: atlas %dx%d, %zu teksel (%.0f%% dolu)\n", a.width, a.height, nt, 100.0 * nt / (double(a.width) * a.height));
@@ -175,7 +177,7 @@ bool bake(const Mesh& m, const Atlas& a, const std::vector<DzLight>& lights, con
     // ---- the device program
     const std::string src = readText(root + "/src/scenes/denizalti/device/dz_bake.cu");
     if (src.empty()) {
-        err = "dz_bake.cu okunamadi";
+        err = app::L("dz_bake.cu okunamadı", "could not read dz_bake.cu");
         return false;
     }
     nvrtcProgram prog;
@@ -397,7 +399,8 @@ bool bake(const Mesh& m, const Atlas& a, const std::vector<DzLight>& lights, con
             else if (ms > 500.0 && perLaunch > 1) perLaunch /= 2;
             const float f = float((double(done) + double(cnt) * s / o.samples) / double(nt));
             char line[160];
-            std::snprintf(line, sizeof(line), "isik izleniyor: %zu/%zu teksel, %u/%d ornek", b0 + cnt, nt, s, o.samples);
+            std::snprintf(line, sizeof(line), app::L("ışık izleniyor: %zu/%zu nokta, %u/%d örnek", "tracing the light: %zu/%zu texels, %u/%d samples"), b0 + cnt, nt, s,
+                          o.samples);
             say(0.05f + 0.85f * f, line);
         }
         CK(cudaMemcpy(h0.data(), acc[0], cnt * sizeof(float4), cudaMemcpyDeviceToHost));
@@ -424,7 +427,7 @@ bool bake(const Mesh& m, const Atlas& a, const std::vector<DzLight>& lights, con
     }
     // the Monte Carlo noise left: an edge-keeping filter in the atlas, inside each chart only (5 x 5 texels, weighted by
     // distance and by how alike the light is: a shadow's edge stays), then the padding filled; plane by plane
-    say(0.92f, "gurultu suzuluyor");
+    say(0.92f, app::L("gürültü süzülüyor", "filtering the noise"));
     std::vector<float> guide(atlasN, 0.0f);
     for (size_t i = 0; i < atlasN; ++i)
         if (chartOf[i] >= 0)
@@ -470,7 +473,7 @@ bool bake(const Mesh& m, const Atlas& a, const std::vector<DzLight>& lights, con
         dilate(dst, 4, a, ras.index);
         for (size_t i = 0; i < atlasN * 4; ++i) out.plane[k][i] = toHalf(dst[i]);
     }
-    say(0.96f, "kenarlar dolduruldu");
+    say(0.96f, app::L("kenarlar dolduruldu", "edges filled"));
 
     // ---- the haze volume: the room's bounds in 4 cm cells
     {
@@ -529,7 +532,7 @@ bool bake(const Mesh& m, const Atlas& a, const std::vector<DzLight>& lights, con
                 a1[2] = toHalf(h1[i].z * inv);
                 a1[3] = toHalf(0.0f);
             }
-            say(0.96f + 0.03f * float(b0 + cnt) / float(nv), "pus pisiriliyor");
+            say(0.96f + 0.03f * float(b0 + cnt) / float(nv), app::L("pus pişiriliyor", "baking the haze"));
         }
         std::printf("pus: %ux%ux%u hucre (%.0f mm), %d ornek\n", dim.x, dim.y, dim.z, cell * 1000.0f, o.volSamples);
     }
@@ -601,7 +604,7 @@ bool bake(const Mesh& m, const Atlas& a, const std::vector<DzLight>& lights, con
                 }
             }
             mipOff += n;
-            say(0.97f + 0.02f * float(m + 1) / mips, "yansima yoklamalari");
+            say(0.97f + 0.02f * float(m + 1) / mips, app::L("yansıma yoklamaları pişiriliyor", "baking the reflection probes"));
         }
         int invalid = 0;
         for (float v : valid) invalid += v == 0.0f ? 1 : 0;
@@ -626,7 +629,7 @@ bool bake(const Mesh& m, const Atlas& a, const std::vector<DzLight>& lights, con
     optixModuleDestroy(module);
     optixDeviceContextDestroy(ctx);
     out.bakeSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
-    say(1.0f, "bitti");
+    say(1.0f, app::L("bitti", "done"));
     return true;
 }
 

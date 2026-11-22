@@ -29,55 +29,70 @@ public:
         i.id = "ates";
         i.number = "12";
         i.title = L("Ateş", "Fire");
-        i.subtitle = L("Karanlıkta, açık havada taş bir ocakta yanan ateş", "A fire burning in a stone pit, outdoors in the dark");
-        i.description = L("Taş bir ocakta, karanlıkta yanan odun ateşi. Alevin biçimi, rengi, ışığı ve kıvılcımları elle "
-                          "çizilmedi: hepsi yanmanın fiziğinden, gerçek zamanda hesaplanıyor.",
-                          "A wood fire burning in a stone pit in the dark. The flame's shape, colour and light and its sparks are "
-                          "not drawn by hand: they are all computed from the physics of burning, in real time.");
+        i.subtitle = L("Gecenin karanlığında taş ocakta yanan ateş", "A fire burning in a stone pit in the dark");
+        i.description = L("Aysız bir gecede, açık havada taş bir ocakta yanan odun ateşi. Alevin biçimi, rengi, ışığı ve "
+                          "kıvılcımları elle çizilmez, yanmanın fiziğinden gerçek zamanda hesaplanır. Ocağın çevresinde yürür, "
+                          "çömelip yakından bakar, R ile ateşi baştan yakarsın.",
+                          "A wood fire in a stone pit, outdoors on a moonless night. The flame's shape, colour and light and its "
+                          "sparks are not drawn by hand but computed from the physics of burning in real time. Walk round the "
+                          "pit, crouch to look closely, and press R to lay the fire again.");
         i.details = {
-            {L("Gaz", "Gas"),
-             L("Ocağın üstünde 7,5 milimetrelik bir ızgarada sıcak gaz akar: kaldırma, ısının genleştirdiği hacim, havanın "
-               "değişen yoğunluğu. Odunun uçucuları oksijenle karıştıkları hızla yanar; karışım alev sıcaklığına ulaşamıyorsa "
-               "(boğulan, havasız) yanmaz. İs yakıt tarafında oluşur, alev cephesinde yanar; ışığını Planck yasasıyla saçar.",
-               "Over the pit hot gas flows on a 7.5 millimetre grid: buoyancy, the volume heat expands, the air's changing "
-               "density. The wood's volatiles burn as fast as they mix with oxygen; a mixture that cannot reach flame "
-               "temperature (smothered, starved of air) does not burn. Soot forms on the fuel side, burns at the flame front, "
-               "and sends out its light by Planck's law.")},
-            {L("Odun", "Wood"),
-             L("Her kütük yamalara bölünür, her yama yüzeyinden özüne katman katman: ısınır, kurur, Di Blasi'nin üç tepkimesiyle "
-               "uçucuya ve köre ayrışır. Kömür yüzeyde oksijenle yanar (kor), külü onu örter. Kütükler birbirlerini "
-               "ışımayla ısıtır: tek kütük yanmaz.",
-               "Each log is cut into patches, each patch layered from its surface to its core: it heats, dries and breaks "
-               "down by Di Blasi's three reactions into volatiles and char. The char burns at the surface with oxygen (an "
-               "ember), its ash covers it. The logs warm each other by radiation: a single log will not burn.")},
-            {L("Işık", "Light"),
-             L("Ateşin ışığı gazın kendi ışımasından gelir: taşlar, toprak ve kütükler her karede ondan aydınlanır, gölgeleri "
-               "ışın izlemeyle. Alevin rengi isin sıcaklığından, korun kızıllığı yüzeyinkinden.",
-               "The fire's light comes from the gas's own emission: the stones, the ground and the logs are lit by it each "
-               "frame, their shadows ray traced. The flame's colour is its soot's temperature, the ember's red its surface's.")},
-            {L("Kıvılcım", "Sparks"),
-             L("Her kıvılcım bir kömür pulu: odunun içinde buhar ve uçucu cebi patlayınca (çıtırtı) fırlar, alevin çektiği hava "
-               "kızgın kabuktan koparır ya da kora oturan odun saçar. Gazın akışı onu taşır, ağırlığı kalınlığından, sürüklenmesi "
-               "genişliğinden: ince pul tüyle yükselir, kalını yere düşer. Ulaşan oksijenle yanar, rengi kendi sıcaklığıdır; "
-               "yanıp bitince ya da soğuyunca söner.",
-               "Each spark is a flake of char: thrown out when a pocket of steam and volatiles bursts in the wood (a crackle), "
-               "torn off a glowing crust by the air the flame draws in, or knocked out of the embers by wood settling on them. "
-               "The gas's flow carries it, its weight its thickness's, its drag its breadth's: a thin flake rides the plume up, "
-               "a thick one falls. It burns with the oxygen that reaches it, its colour its own temperature; it goes out "
-               "burnt away or cooled.")},
+            {L("Yanan gaz", "The burning gas"),
+             L("Ocağın üstünde 7,5 mm'lik hücrelerden bir ızgarada (128 × 192 × 128) sıcak gaz akar, saniyede 120 adım: "
+               "kaldırma kuvveti, ısının genleştirdiği hacim, havanın değişen yoğunluğu. Odunun uçucuları oksijenle "
+               "karıştıkları hızla yanar; karışım alev sıcaklığına ulaşamıyorsa, yani boğulmuş ya da havasızsa yanmaz. İs "
+               "yakıt tarafında oluşur, alev cephesinde yanar.",
+               "Over the pit hot gas flows on a grid of 7.5 mm cells (128 × 192 × 128), 120 steps a second: buoyancy, the "
+               "volume heat expands, the air's changing density. The wood's volatiles burn as fast as they mix with oxygen; "
+               "a mixture that cannot reach flame temperature, smothered or starved of air, does not burn. Soot forms on the "
+               "fuel side and burns at the flame front.")},
+            {L("Odun ve kor", "Wood and embers"),
+             L("Her kütük yamalara bölünür, her yama yüzeyden öze 12 katmandır: ısınır, 100 °C'de kurur, Di Blasi'nin üç "
+               "tepkimesiyle gaza, katrana ve kömüre ayrışır. Kömür yüzeyde oksijenle yanıp kor olur, bıraktığı kül onu "
+               "örter. Alevin ve sıcak yüzeylerin ışıması her yamaya ulaşır, kütükler birbirini böyle ısıtır. Kodda yanmayı "
+               "ya da sönmeyi söyleyen bir kural yoktur, hepsi bu hesaptan çıkar.",
+               "Each log is cut into patches, each patch 12 layers from surface to core: it heats, dries at 100 °C and breaks "
+               "down by Di Blasi's three reactions into gas, tar and char. The char burns with oxygen at the surface as an "
+               "ember, and the ash it leaves covers it. The radiation of the flame and the hot surfaces reaches every patch, "
+               "which is how the logs warm each other. No rule in the code says burn or go out; it all follows from this.")},
+            {L("Ateşin ışığı", "The fire's light"),
+             L("Alevin ışığı isin sıcaklığındaki Planck tayfıdır; dipteki mavi, alev cephesinin kendi ışımasıdır (CH* ve "
+               "C₂*). Alev sabit adımlarla ışın yürütülerek çizilir; sıcak hava ışını kırar, arkadaki taşlar titrer. Taşlar, "
+               "toprak ve kütükler her karede gazın ışıyan hücrelerinden aydınlanır, gölgeleri OptiX ile ışın izlenir. Korun "
+               "kızıllığı yüzeyin kendi sıcaklığıdır.",
+               "The flame's light is the Planck spectrum of its soot's temperature; the blue at its base is the flame front's "
+               "own emission (CH* and C₂*). The flame is drawn by marching rays in fixed steps, and the hot air bends them, "
+               "so the stones behind it shimmer. The stones, ground and logs are lit every frame by the gas's glowing cells, "
+               "with shadows ray traced in OptiX. An ember's red is its surface's own temperature.")},
+            {L("Kıvılcımlar", "Sparks"),
+             L("Her kıvılcım yanan bir kömür puludur: odunun içinde buhar ve uçucu cebi patlayınca (çıtırtı) fırlar ya da "
+               "alevin çektiği hava onu kızgın yüzeyden koparır. Gazın akışı onu taşır; ince pul tüyle yükselir, kalını "
+               "düşer. Ulaşan oksijenle yanar, rengi kendi sıcaklığıdır; yanıp bitince ya da soğuyunca söner.",
+               "Each spark is a burning flake of char: thrown out when a pocket of steam and volatiles bursts in the wood (a "
+               "crackle), or torn off a glowing surface by the air the flame draws in. The gas's flow carries it; a thin flake "
+               "rides the plume up, a thick one falls. It burns with the oxygen that reaches it, its colour its own "
+               "temperature, and goes out burnt away or cooled.")},
+            {L("Yüzeyler ve DLSS", "Surfaces and DLSS"),
+             L("Ateşin aydınlattığı yüzeyler piksel başına tek ışınla çizilir, NVIDIA DLSS Ray Reconstruction kareleri "
+               "birleştirir. Alev ve kıvılcımlar hareket vektörü taşımadığı için DLSS'ten sonra ayrı bir katmanda eklenir. "
+               "Pozlama göz uyumu gibi kendini ayarlar; ateşin ulaşmadığı gök tam siyahtır.",
+               "The firelit surfaces are drawn with one ray per pixel, and NVIDIA DLSS Ray Reconstruction combines the frames. "
+               "The flame and the sparks carry no motion vectors, so they are added in a layer of their own after DLSS. The "
+               "exposure adjusts itself like eye adaptation; the sky the fire does not reach stays pure black.")},
             {L("Teşekkür", "Credits"), L("NVIDIA DLSS (NVIDIA RTX SDK). Varlıklar: Poly Haven (CC0), docs/ates/VARLIK.md.",
                                          "NVIDIA DLSS (NVIDIA RTX SDK). Assets: Poly Haven (CC0), docs/ates/VARLIK.md.")}};
-        i.tags = {L("Fizik", "Physics"), L("Yanma", "Combustion"), L("Işık", "Light")};
+        i.tags = {L("Yanma fiziği", "Combustion"), L("Gaz akışı", "Fluid flow"), L("Işınım", "Radiation")};
         i.image = "assets/gallery/ates.jpg";
         i.accent = 0xE8894A;
-        i.keys = {{L("Yürüyüş", "Walking"),
+        i.keys = {{L("Hareket", "Movement"),
                    {{L("Fare", "Mouse"), L("Etrafa bak", "Look around")},
-                    {"W A S D", L("Yürü", "Walk")},
-                    {"C", L("Çömel", "Crouch")},
-                    {"Tab", L("İmleci bırak / al", "Release / take the cursor")},
-                    {"1 2 3 4", L("Bakışlar", "Views")},
+                    {"W|A|S|D", L("Ocağın çevresinde yürü", "Walk round the pit")},
+                    {"C", L("Basılı tutup çömel", "Hold to crouch")},
+                    {"Tab", L("İmleci bırak / geri al", "Free the cursor / back")}}},
+                  {L("Sahne", "Scene"),
+                   {{"1|2|3|4", L("Hazır bakışlar", "Preset views")},
                     {"R", L("Ateşi baştan yak", "Lay the fire again")},
-                    {"↑|↓", L("Pozlama", "Exposure")}}}};
+                    {"↑|↓", L("Pozlamayı artır / azalt", "Exposure up / down")}}}};
         i.reloadable = true;
         return i;
     }
@@ -113,7 +128,7 @@ public:
         }
         case 3:
             a_.initSim();
-            st.label = L("Alevler doğruluyor", "The flames standing up");
+            st.label = L("Ateşin ilk saniyeleri hesaplanıyor", "Computing the fire's first seconds");
             st.fraction = 0.6f;
             ++st.step;
             return;
@@ -157,7 +172,7 @@ public:
         }
         if (in.pressed(GLFW_KEY_R)) {
             a_.lay(a_.layout);
-            host.toast(L("Ateş yeniden yakıldı", "The fire laid again"));
+            host.toast(L("Ateş baştan yakıldı", "The fire was laid again"));
         }
         for (int k = 0; k < AtesApp::viewCount(); ++k)
             if (in.pressed(GLFW_KEY_1 + k)) goView(k);
@@ -232,11 +247,11 @@ public:
 
     void status(app::Status& s) override {
         using theme::num;
-        s.chips.push_back({num(a_.gas.stats.hrr / 1000.0, 1) + " kW", true});
-        s.chips.push_back({num(a_.wood.stats.mass, 2) + L(" kg odun", " kg wood")});
-        s.chips.push_back({L("kor ", "embers ") + num(a_.wood.stats.hottest - 273.15, 0) + " °C"});
+        s.chips.push_back({L("ısı gücü ", "heat output ") + num(a_.gas.stats.hrr / 1000.0, 1) + " kW", true});
+        s.chips.push_back({L("kalan odun ve kömür ", "wood and char left ") + num(a_.wood.stats.mass, 2) + " kg"});
+        s.chips.push_back({L("en sıcak yüzey ", "hottest surface ") + num(a_.wood.stats.hottest - 273.15, 0) + " °C"});
         s.metrics.push_back({L("Kare", "Frame"), num(a_.R.renderMs + a_.R.volumeMs + a_.R.displayMs, 1) + " ms"});
-        s.metrics.push_back({L("Gaz", "Gas"), num(a_.gas.stats.stepMs, 1) + " ms"});
+        s.metrics.push_back({L("Gaz adımı", "Gas step"), num(a_.gas.stats.stepMs, 1) + " ms"});
     }
 
     void screenshot(app::Host& host) override {

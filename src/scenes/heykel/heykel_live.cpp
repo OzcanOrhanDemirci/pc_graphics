@@ -38,47 +38,71 @@ public:
         i.id = "heykel";
         i.number = "06";
         i.title = L("Heykel", "The Sculpture");
-        i.subtitle = L("Köşesi kesilmiş bir Menger süngeri, on bin kat yakına", "A Menger sponge cut through, ten thousand times closer");
-        i.description = L("Karanlık bir odada, bir kaidenin üstünde beyaz, mat bir küp: ortasından kesilmiş, kesitinde altı köşeli yıldızlar. "
-                          "Yaklaştıkça yıldızların ve kare tünellerin içinden yenileri açılır; on bin katta ekranın genişliği 0,15 mm, iki "
-                          "saç teli kadardır ve yapı orada da sürer.",
-                          "A white, matte cube on a plinth in a dark room, cut through its middle, six-pointed stars in the cut. Come "
-                          "closer and new stars and square tunnels open inside them; at ten thousand times the screen is 0.15 mm across, "
-                          "two hairs' width, and the structure goes on there too.");
+        i.subtitle = L("Kesilmiş bir Menger süngeri, on bin kat yakın", "A cut Menger sponge, ten thousand times closer");
+        i.description = L("Karanlık bir odada, kaidenin üstünde ortasından kesilmiş beyaz bir küp durur; kesitte altı köşeli yıldızlar "
+                          "vardır. Tekerlekle imlece doğru yaklaşırsın; yıldızların ve kare tünellerin içinden yenileri açılır. "
+                          "On bin katta ekran 0,15 mm genişliğindedir, yapı orada da sürer.",
+                          "A white cube cut through its middle stands on a plinth in a dark room, six-pointed stars in the cut. The "
+                          "wheel takes you towards the cursor, and new stars and square tunnels open inside them. At ten thousand "
+                          "times the screen is 0.15 mm across, and the structure goes on.");
         i.details = {
-            {L("Geometri", "Geometry"),
-             L("Menger süngeri, köşegeninden kesilmiş: biçim üçgenlerden değil bir formülden gelir, ışın yüzeye formülün söylediği "
-               "uzaklıkla adım adım yürür. Her noktada yalnız en az dört piksel büyüklüğündeki delikler çizilir; daha küçükleri "
-               "gren olurdu. Yaklaştıkça yenileri gerçek kare tüneller olarak merkezlerinden genişleyerek açılır.",
-               "A Menger sponge cut along its diagonal: the form comes from a formula, not from triangles, and a ray walks to the "
-               "surface by the distance the formula gives. At every point only holes at least four pixels wide are drawn; smaller "
-               "ones would be grain. As you come closer the next ones open as true square tunnels, widening from their centres.")},
-            {L("On bin kat", "Ten thousand times"),
-             L("Ekran kartının sayıları orada bir pikseli ayırt edemez. Derin Mandelbrot yakınlaşmalarının yolu: bir çapa noktasının "
-               "yörüngesi ana işlemcide çift hassasiyetle hesaplanır, her piksel ondan küçük bir fark olarak izlenir. Ölçülen hata "
-               "on bin katta pikselin on binde altısı.",
-               "There the graphics card's numbers cannot tell one pixel from the next. The deep Mandelbrot zooms' way: one anchor "
-               "point's orbit is computed in double precision on the processor, every pixel follows it as a small difference. The "
-               "measured error at ten thousand times: six ten-thousandths of a pixel.")},
+            {L("Formülden gelen biçim", "A shape from a formula"),
+             L("Heykel bir Menger süngerinin yarısıdır: küp, uzun köşegenine dik olarak tam ortasından kesilmiş, altıgen kesit "
+               "sana dönük. Biçim üçgenlerden değil bir formülden gelir. Formül her noktada yüzeye olan uzaklığı verir; ışın her "
+               "adımda o uzaklık kadar ilerleyerek yüzeye ulaşır (en çok 400 adım).",
+               "The sculpture is half a Menger sponge: the cube is cut through its centre, across its long diagonal, and the "
+               "hexagonal cut faces you. The shape comes from a formula, not from triangles. The formula gives the distance to "
+               "the surface at any point, and a ray reaches the surface by stepping that distance at a time (at most 400 steps).")},
+            {L("Dört piksellik delik kuralı", "The four-pixel hole rule"),
+             L("Her noktada yalnız ekranda en az dört piksel büyüklüğündeki delikler çizilir; daha küçükleri gren olurdu. "
+               "Yaklaştıkça bir sonraki düzeyin delikleri gerçek kare tüneller olarak, merkezlerinden genişleyerek açılır. "
+               "İki düzeyin biçimini karıştırmak yıldızları üçgene çeviriyordu; bu yolla biçim hiçbir yakınlıkta bozulmaz.",
+               "At every point only holes at least four pixels wide on screen are drawn; smaller ones would be grain. As you "
+               "come closer, the next level's holes open as true square tunnels, widening from their centres. Blending two "
+               "levels' shapes turned the stars into triangles; this way the form holds at every distance.")},
+            {L("On bin kat: pertürbasyon", "Ten thousand times: perturbation"),
+             L("On bin katta komşu pikseller, ekran kartının tek hassasiyetli sayılarıyla birbirinden ayrılamaz; düz hesapta hata "
+               "0,24 piksel olur. Derin Mandelbrot yakınlaştırmalarının yöntemi kullanılır: bin kattan sonra bir çapa noktasının "
+               "yolu CPU'da çift hassasiyetle hesaplanır, her piksel ondan küçük bir fark olarak izlenir. On bin katta ölçülen "
+               "hata 0,017 piksel.",
+               "At ten thousand times the GPU's single-precision numbers can no longer tell neighbouring pixels apart; computed "
+               "plainly, the error is 0.24 pixel. The method of deep Mandelbrot zooms is used: beyond a thousand times, one anchor "
+               "point's path is computed in double precision on the CPU, and every pixel follows it as a small difference. The "
+               "measured error at ten thousand times is 0.017 pixel.")},
+            {L("Her kare aynı, birikim yok", "Every frame the same"),
+             L("Rastgele sayı kullanılmaz. Her piksel her karede aynı dört sabit noktadan örneklenir ve örnekler 1,5 piksellik "
+               "Blackman-Harris süzgeciyle birleştirilir. Kareler üst üste biriktirilmez: hareket ederken gördüğün, durunca "
+               "gördüğünle aynıdır. Ekran kartı yalnız bir şey değiştiğinde yeni kare çizer.",
+               "No random numbers are used. Every pixel is sampled at the same four fixed points every frame, and the samples "
+               "are combined with a 1.5-pixel Blackman-Harris filter. Frames are not accumulated: what you see in motion is what "
+               "you see at rest. The GPU draws a new frame only when something changes.")},
             {L("Işık", "Light"),
-             L("Bir spot, merceğin üstünde hafif bir halka ışık ve tavandan sönük bir ışık. Spot sen yaklaştıkça seninle yaklaşır, "
-               "yolu kapalıysa yakında açık bir açı arar. Rastgele sayı yok: her piksel her karede aynı sabit örnekleri alır, "
-               "durunca yenileri eklenir (kenarlar, spotun yarı gölgesi), hiç gren olmaz.",
-               "A spot, a faint ring light on the lens and a dim light from the ceiling. The spot comes closer as you do, and if "
-               "its way is blocked it looks for an open angle nearby. No random numbers: every pixel takes the same fixed samples "
-               "every frame, still it adds more of them (the edges, the spot's penumbra), never grain.")}};
-        i.tags = {L("Geometri", "Geometry"), L("Fraktal", "Fractal"), L("10.000 kat", "10,000 times")};
+             L("Ana ışık bir spot. Sen yaklaştıkça hedefi yaklaştığın yere yumuşakça kayar; yolu kapanırsa yakında açık bir hat "
+               "arar ve oraya bir karede değil, yavaşça döner. Yumuşak gölgesi, gölge ışını boyunca ölçülen uzaklıklardan kestirilir. "
+               "Kameranın hemen üstündeki zayıf, gölgesiz bir ışık spotun gölgesinde kalan yapıyı da okutur.",
+               "The main light is a spot. As you come closer its target slides smoothly to where you are going; if its way is "
+               "blocked it looks for an open line nearby and turns there slowly, not in one frame. Its soft shadow is estimated "
+               "from the distances measured along the shadow ray. A faint, shadowless light just above the camera keeps the "
+               "structure readable in the spot's shadow too.")},
+            {L("Kamera heykelin yanında kalır", "The camera stays by the sculpture"),
+             L("Tekerlek yalnız heykelin bir noktasına yaklaşır, boşluğa değil. Kamera geri çekilirken ve dönerken yolunu sınar, "
+               "modele çarpınca durur ve ilk görünümdeki uzaklığından öteye gidemez. Arkası duvarsa uzaklaşma, gelinen yolu geri "
+               "sarar.",
+               "The wheel only closes in on a point of the sculpture, never on empty space. Pulling back and turning, the camera "
+               "tests its path, stops at the model, and never goes further than its distance in the first view. With a wall "
+               "behind it, zooming out retraces the way it came.")}};
+        i.tags = {L("Mesafe alanı (SDF)", "Signed distance field"), L("Fraktal", "Fractal"), L("Pertürbasyon", "Perturbation")};
         i.image = "assets/gallery/heykel.jpg";
         i.accent = 0x9D8CE0;
         i.keys = {{L("Bakış", "View"),
-                   {{L("Tekerlek", "Wheel"), L("İmlecin gösterdiği yere yaklaş, uzaklaş", "Zoom towards the cursor, and out")},
-                    {L("Sağ tık", "Right button"), L("Sürükle: heykeli çevir", "Drag: turn the sculpture")},
-                    {"R", L("İlk görünüm", "The first view")},
-                    {"T", L("Dalış turu (başlat / durdur)", "The dive tour (start / stop)")}}},
+                   {{L("Tekerlek", "Wheel"), L("İmlece doğru yaklaş, geri uzaklaş", "Zoom to the cursor, and back out")},
+                    {L("Sağ tık", "Right click"), L("Basılı sürükle: heykeli çevir", "Drag: turn the sculpture")},
+                    {"R", L("İlk görünüme dön", "Back to the first view")},
+                    {"T", L("Dalış turunu başlat / durdur", "Start / stop the dive tour")}}},
                   {L("Işık", "Light"),
-                   {{L("Sol tık", "Left button"), L("Işığı tıklanan yere çevir", "Point the light at what is clicked")},
-                    {L("Sol tık", "Left button"), L("Sürükle: ışığı o noktanın çevresinde döndür", "Drag: swing the light around that spot")},
-                    {"↑|↓", L("Pozlama", "Exposure")}, {"F", L("Netlik alanı: makro / hepsi net", "Depth of field: macro / all sharp")}}}};
+                   {{L("Sol tık", "Left click"), L("Işığı tıklanan yere çevir", "Aim the light at the spot clicked")},
+                    {L("Sol tık", "Left click"), L("Sürükle: ışığı çevresinde gezdir", "Drag: swing the light around it")},
+                    {"↑|↓", L("Pozlama ±0,25 EV", "Exposure ±0.25 EV")}, {"F", L("Netlik alanı: makro / hepsi net", "Depth of field: macro / all sharp")}}}};
         i.reloadable = true;
         return i;
     }
@@ -254,7 +278,7 @@ public:
         c.text = tour_ ? L("Turu durdur", "Stop the tour") : L("Dalış turu", "The dive tour");
         c.keys = "T";
         c.strong = !tour_;
-        c.detail = L("Dört noktaya on bin kata kadar iner; her katta durup netleşir", "Four dives to ten thousand times; it stops to sharpen at every step");
+        c.detail = L("Dört noktaya on bin kata dek iner; 10, 100, 1.000 ve 10.000 katta durur", "Four dives to 10,000 times, pausing at 10, 100, 1,000 and 10,000");
         s.controls.push_back(c);
         app::Control d;
         d.kind = app::Control::Kind::Choice;
@@ -301,7 +325,7 @@ private:
         beginDive();
         h_.defaultLight();
         h_.aimLight(h_.homeFocus);
-        host.toast(L("Dalış turu: dört nokta, on bin kata kadar. Bir tuş ya da fare durdurur", "The dive tour: four dives to ten thousand times. A key or the mouse stops it"));
+        host.toast(L("Dalış turu: dört nokta, on bin kata dek. Fare, R ya da T durdurur", "The dive tour: four dives to ten thousand times. The mouse, R or T stops it"));
     }
     void beginDive() {
         h_.home();   // the lamp keeps where it is (out of the last dive it came back to the first view's scale)

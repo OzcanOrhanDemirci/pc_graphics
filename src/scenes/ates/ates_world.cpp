@@ -1,5 +1,6 @@
 // Scene 12 "Ateş": the run (ates_app.h): the world, the fire's wood, a frame's simulation and picture.
 #include "scenes/ates/ates_app.h"
+#include "app/lang.h"
 
 #include "core/image_io.h"
 #include "scenes/ates/ates_spectra.h"
@@ -201,7 +202,7 @@ void AtesApp::buildWorld() {
 
 bool AtesApp::initRenderer(std::string& err) {
     if (!R.init(width, height, root)) {
-        err = "renderer";
+        err = app::L("Işın izleme başlatılamadı (OptiX ya da CUDA)", "Ray tracing could not start (OptiX or CUDA)");
         return false;
     }
     std::string log;

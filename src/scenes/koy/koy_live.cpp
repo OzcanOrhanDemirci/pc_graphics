@@ -24,60 +24,75 @@ public:
         i.number = "05";
         i.title = L("Ada", "The Island");
         i.subtitle = L("Bir adanın iskelesinden maviye", "From an island's pier into the blue");
-        i.description = L("Küçük bir adanın beton iskelesinin altında karanlık bir salonda başlarsın. Dubaların çizdiği yoldan kum yavaş yavaş "
-                          "derinleşir: kayalara yaslanmış amforalar, yarı yıkık bir kalyon, en uçta dibi görünmeyen maviye inen bir "
-                          "şamandıra halatı. Yüzeye çıkılmaz; çok derine inersen basınç seni geri yollar.",
-                          "You start in a dark hall under a small island's concrete pier. Along a lane of buoys the sand deepens slowly: "
-                          "amphorae gathered against rocks, a half-fallen galleon, and at the far end a buoy's rope going down into a blue "
-                          "with no bottom in sight. There is no surfacing; go too deep and the pressure sends you back.");
+        i.description = L("Küçük bir adanın beton iskelesinin altındaki karanlık salonda başlarsın. Dubaların çizdiği yolda kum "
+                          "derinleşir: kayalara yaslanmış amforalar, yarı yıkık bir kalyon, en uçta maviye inen bir şamandıra halatı. "
+                          "Yüzeye çıkamazsın; fazla derinde oksijen seni zehirler.",
+                          "You start in a dark hall under a small island's concrete pier. Along a lane of buoys the sand deepens: "
+                          "amphorae against the rocks, a half-fallen galleon, at the end a buoy's rope going down into the blue. "
+                          "You cannot surface; dive too deep and the oxygen poisons you.");
         i.details = {
-            {L("Netlik önce", "Sharpness first"),
-             L("Her piksel her karede aynı sabit alt piksel örnekleriyle çizilir (titreşim yok, geçmiş yok); kenardaki piksellere örnek "
-               "eklenir, pikselden biraz geniş bir süzgeçle birleştirilir. Zamansal tahmin kullanılmaz.",
-               "Every pixel is drawn with the same fixed sub-pixel samples every frame (no jitter, no history); pixels on an edge get "
-               "more, joined by a filter a little wider than a pixel. No temporal guessing.")},
-            {L("Gerçek zamanlı ışık", "Real-time light"),
+            {L("Sabit örnekli süper örnekleme", "Fixed-pattern supersampling"),
+             L("Her piksel, her karede aynı noktalardan alınan sabit örneklerle çizilir (varsayılan 4). Karede rastgele sayı yoktur, "
+               "önceki karelerden de bir şey taşınmaz; bu yüzden görüntü kıpırdamaz ve hareket edince bulanmaz. Örnekleri birbirini "
+               "tutmayan kenar piksellerine toplam 12 örnek verilir ve hepsi 1,5 piksel yarıçaplı bir Blackman-Harris süzgeciyle "
+               "birleştirilir. TAA ya da DLSS gibi zamansal bir yöntem kullanılmaz.",
+               "Every pixel is drawn from the same fixed set of samples every frame (4 by default). A frame uses no random numbers "
+               "and carries nothing over from earlier frames, so the image neither shimmers nor smears in motion. Edge pixels, whose "
+               "samples disagree, get 12 samples in all, combined with a Blackman-Harris filter of 1.5 pixel radius. No temporal "
+               "method such as TAA or DLSS is used.")},
+            {L("Dalgalar ve kostik", "Waves and caustics"),
+             L("Deniz yüzeyi her karede FFT ile hesaplanır: 4 m/s'lik bir esintinin dalgaları. Kostik için yüzeydeki 1024×1024 "
+               "hücrenin her biri bir güneş demeti sayılır; kırılan her demetin kapladığı alan 20 derinlik diliminde tam olarak "
+               "hesaplanır. Hiçbir şey sayılmadığı için kostikte gürültü yoktur.",
+               "The sea surface is computed every frame with an FFT: the waves of a 4 m/s breeze. For the caustics every cell of a "
+               "1024×1024 grid on the surface is a beam of sunlight, and the area each refracted beam covers is computed exactly in "
+               "20 depth slices. Nothing is counted, so the caustics have no noise.")},
+            {L("Gölgeler ve karanlık salon", "Shadows and the dark hall"),
              L("Güneşin gölgesi su yüzeyinden sonra havada da sürer: iskelenin tahta aralıklarından ve beton başlığın kırık "
-               "deliklerinden sızan ışık, kumda ve suda dalgayla salınır. Başlığın altında gökten gelen dağınık ışık da kesilir: "
-               "karanlık bir salon. Su üstü yalnız alttan, Snell penceresinden görünür.",
-               "The sun's shadow goes on through the air past the water's surface: the light leaking between the pier's boards and "
-               "through the broken holes of its concrete head sways with the waves on the sand and in the water. Under the head the "
-               "sky's diffuse light is cut too: a dark hall. Above the water is seen only from below, through Snell's window.")},
-            {L("Batık", "The wreck"),
-             L("38 metrelik bir kalyon, tek bir gövde fonksiyonundan kereste kereste kurulmuş: postalar, kaplama sıraları, iki "
-               "güverte, kıç ve baş kasaraları, pencereli ayna, lumbaralar ve toplar, kırık direkler, çapa. Yamaçta başı aşağıda, "
-               "sancağa yatmış; sancak tarafı çökmüş, kaburgaları açıkta. İçine girilir.",
-               "A 38 metre galleon built timber by timber from one hull function: frames, strakes of planking, two decks, the "
-               "castles fore and aft, the stern with its windows, gunports and guns, broken masts, an anchor. On the slope bow down, "
-               "listing to starboard; the starboard side has fallen in, its ribs bare. You can swim inside.")},
-            {L("Derinlik ve basınç", "Depth and pressure"),
-             L("Kum adadan uzaklaştıkça hep derinleşir: 3,5 m'den 100 m'nin ötesine. Derinde zemin görünmez, dalınca belirir. "
-               "Havadaki oksijenin kısmi basıncı 1,6 bar'ı (~66 m) aşınca zehirlenme başlar: görüş daralır, kararır, iskele "
-               "merdiveninde yeniden başlarsın.",
-               "The sand keeps deepening away from the island: from 3.5 m to past 100 m. Deep down the floor cannot be seen until "
-               "you dive towards it. When the oxygen's partial pressure in the air passes 1.6 bar (~66 m) toxicity sets in: the "
-               "view narrows, goes black, and you start again at the pier's ladder.")},
-            {L("Tayfsal su", "Spectral water"),
-             L("Suyun soğurması ve saçılması 5 nm adımla, yayımlanmış ölçümlerden; güneş ve gök tayfı, göz eğrileri. Renkler "
-               "derinlikle kendiliğinden maviye döner; gözün renk uyumu yarı yolda.",
-               "The water's absorption and scattering every 5 nm from published measurements; the spectra of sun and sky, the eye's "
-               "curves. Colours turn blue with depth on their own; the eye adapts its colour halfway.")},
-            {L("Amforalar", "Amphorae"),
-             L("Dört tip (Dressel 1B, 1A, 2-4, Lamboglia 2), müze çizimlerinin profillerinden (ArchAIDE, Southampton Üniversitesi, "
-               "CC BY 4.0); kırık gövdeler, kulplu boyunlar, parçalar.",
-               "Four types (Dressel 1B, 1A, 2-4, Lamboglia 2), from the profiles of museum drawings (ArchAIDE, University of "
-               "Southampton, CC BY 4.0); broken bodies, necks with handles, sherds.")}};
-        i.tags = {L("Gerçek zamanlı ışık", "Real-time light"), L("Batık", "Wreck"), L("Tayfsal su optiği", "Spectral water optics")};
+               "deliklerinden sızan ışık, kumda ve suda dalgayla salınır. Başlığın altındaki salonun ışığı açılışta önceden "
+               "hesaplanır; gökten gelen ışık orada kesilir. Su üstü yalnız Snell penceresinden, suyun altından gökyüzünün "
+               "göründüğü daireden görünür.",
+               "The sun's shadow carries on through the air above the water: light leaking between the pier's boards and through "
+               "the broken holes of its concrete head sways with the waves on the sand and in the water. The light of the hall under "
+               "the head is computed at load time; the sky's light is cut off there. Above the water is seen only through Snell's "
+               "window, the circle of sky visible from below.")},
+            {L("Tayfsal su ve göz", "Spectral water and the eye"),
+             L("Suyun soğurması ve saçılması 380-780 nm arasında 5 nm adımla, yayımlanmış ölçümlerden hesaplanır: saf su Pope ve "
+               "Fry 1997, parçacıklar Jerlov IB tipi (Solonenko ve Mobley 2015), güneş ASTM G173, göz CIE 1931. Renkler derinlikle "
+               "kendiliğinden maviye döner. Göz, çevresinin parlaklığına ve rengine yarı yolda uyar.",
+               "The water's absorption and scattering are computed every 5 nm from 380 to 780 nm from published measurements: pure "
+               "water from Pope and Fry 1997, particles from Jerlov type IB (Solonenko and Mobley 2015), the sun from ASTM G173, the "
+               "eye from CIE 1931. Colours turn blue with depth on their own. The eye adapts halfway to the brightness and colour "
+               "around it.")},
+            {L("Derinlik, basınç ve oksijen", "Depth, pressure and oxygen"),
+             L("Kum adadan uzaklaştıkça derinleşir: iskelenin ucunda 3,5 m, amforalarda 12 m, batıkta 22 m, ötede 100 m'yi aşar. "
+               "Havadaki oksijenin kısmi basıncı (ppO₂) 1,6 bar'ı, yani yaklaşık 66 m'yi geçince zehirlenme başlar: görüş daralır, "
+               "kararır ve iskele merdiveninde yeniden başlarsın. Gerçekte dakikalar süren etki burada saniyelere kısaltıldı.",
+               "The sand deepens away from the island: 3.5 m at the end of the pier, 12 m at the amphorae, 22 m at the wreck, past "
+               "100 m beyond. When the oxygen's partial pressure in the air (ppO₂) passes 1.6 bar, about 66 m, toxicity sets in: the "
+               "view narrows, goes black, and you start again at the pier's ladder. What takes minutes in reality takes seconds here.")},
+            {L("Batık ve amforalar", "The wreck and the amphorae"),
+             L("38 metrelik kalyon, gövdenin biçimini veren tek bir fonksiyondan kereste kereste kurulur: postalar, kaplama, iki "
+               "güverte, kasaralar, pencereli ayna, toplar, kırık direkler, çapa. Başı aşağıda, sancağa yatık durur; içine "
+               "girebilirsin. Amforaların dört tipi müze çizimlerinden (ArchAIDE, Southampton Üniversitesi, CC BY 4.0), dokular "
+               "CC0 taramalardan (ambientCG, Poly Haven).",
+               "The 38 m galleon is built timber by timber from one function that gives the hull its shape: frames, planking, two "
+               "decks, castles, a windowed stern, guns, broken masts, an anchor. It lies bow down, listing to starboard, and you can "
+               "swim inside. The four amphora types come from museum drawings (ArchAIDE, University of Southampton, CC BY 4.0), the "
+               "textures from CC0 scans (ambientCG, Poly Haven).")}};
+        i.tags = {L("Sabit süper örnekleme", "Fixed supersampling"), L("Kostik demetleri", "Beam caustics"),
+                  L("Tayfsal su optiği", "Spectral water optics")};
         i.image = "assets/gallery/koy.jpg";
         i.accent = 0x4FB8C8;
         i.keys = {{L("Dalgıç", "Diver"),
-                   {{"W|A|S|D", L("Yüz", "Swim")}, {L("Boşluk", "Space"), L("Yukarı", "Up")}, {"C", L("Aşağı", "Down")},
-                    {"Shift", L("Güçlü palet vuruşu", "Strong kick")}, {"Tab", L("Fareyle bak (aç/kapa)", "Mouse look (on/off)")},
-                    {L("Sağ tık", "Right button"), L("Basılı tutup bak", "Hold to look")}}},
+                   {{"W|A|S|D", L("Yüz", "Swim")}, {L("Boşluk", "Space"), L("Yukarı çık", "Rise")}, {"C", L("Aşağı in", "Sink")},
+                    {"Shift", L("Güçlü palet vuruşu (basılı tut)", "Hold for a strong kick")},
+                    {"Tab", L("Fareyle bakışı aç / kapat", "Mouse look on / off")},
+                    {L("Sağ tık", "Right click"), L("Basılı tutup bak", "Hold to look")}}},
                   {L("Sahne", "Scene"),
-                   {{"P", L("Zamanı durdur (durunca örnekler birikir)", "Pause time (still: samples accumulate)")},
-                    {"E", L("Kenar piksellerini göster", "Show the edge pixels")}, {"K", L("Kostik aç/kapa", "Caustics on/off")},
-                    {"↑|↓", L("Pozlama", "Exposure")}}}};
+                   {{"P", L("Zamanı durdur / sürdür", "Pause / resume time")},
+                    {"E", L("Kenar piksellerini göster / gizle", "Show / hide the edge pixels")},
+                    {"K", L("Kostiği aç / kapat", "Caustics on / off")}, {"↑|↓", L("Pozlamayı artır / azalt", "Exposure up / down")}}}};
         i.reloadable = true;
         return i;
     }
@@ -87,7 +102,7 @@ public:
     void load(app::Host& host, app::LoadState& st) override {
         switch (st.step) {
         case 0:
-            st.label = L("Işık programları derleniyor", "Compiling the light programs");
+            st.label = L("Işın izleme programları derleniyor", "Compiling the ray-tracing programs");
             st.fraction = 0.05f;
             ++st.step;
             return;
@@ -97,7 +112,7 @@ public:
             k_.loadConfig();
             k_.renderer.init(k_.width, k_.height, k_.root);
             if (!k_.compile()) { st.error = L("Işın izleme programları derlenemedi (ayrıntı konsolda).", "The ray-tracing programs did not compile (see the console)."); return; }
-            st.label = L("Suyun ışığı hesaplanıyor: tayf, saçılma, ışık alanı", "Computing the water's light: spectra, scattering, the light field");
+            st.label = L("Dünya kuruluyor, suyun ışığı hesaplanıyor", "Building the world, computing the water's light");
             st.fraction = 0.2f;
             ++st.step;
             return;
@@ -152,8 +167,8 @@ public:
             }
             k_.applyQuality();
             if (e.id == "ornek" && k_.quality.baseGot < k_.quality.base)
-                host.toast(L("Kart belleği " + std::to_string(k_.quality.base) + " örneğe yetmedi: " + std::to_string(k_.quality.baseGot) +
-                                 " kullanılıyor (dokuyu düşürünce yer açılır)",
+                host.toast(L("Ekran kartı belleği " + std::to_string(k_.quality.base) + " örneğe yetmedi: " + std::to_string(k_.quality.baseGot) +
+                                 " kullanılıyor (dokuyu düşürmek yer açar)",
                              "Not enough GPU memory for " + std::to_string(k_.quality.base) + " samples: using " + std::to_string(k_.quality.baseGot) +
                                  " (lower textures free room)"));
             resetAccum();
@@ -168,7 +183,8 @@ public:
         }
         if (in.pressed(GLFW_KEY_P)) {
             paused_ = !paused_;
-            host.toast(paused_ ? L("Zaman durdu: durunca örnekler birikir", "Time paused: samples accumulate while still") : L("Zaman akıyor", "Time runs"));
+            host.toast(paused_ ? L("Zaman durdu: kıpırdamazsan piksel başına 256 örnekli bir kare çizilir", "Time paused: hold still for a frame of 256 samples per pixel")
+                               : L("Zaman yeniden akıyor", "Time runs again"));
             resetAccum();
         }
         if (in.pressed(GLFW_KEY_E)) k_.renderer.params().view = k_.renderer.params().view == 1 ? 0 : 1;
@@ -191,8 +207,8 @@ public:
         const float tunnel0 = k_.renderer.params().tunnel, black0 = k_.renderer.params().blackout;
         k_.stepBody(dt);
         if (k_.restarts != restarts)
-            host.toast(L("Oksijen zehirlenmesi: ppO2 1,6 bar'ı aştı (~66 m). Merdivende yeniden başladın",
-                         "Oxygen toxicity: ppO2 passed 1.6 bar (~66 m). You start again at the ladder"));
+            host.toast(L("Oksijen zehirlenmesi: ppO₂ 1,6 bar'ı aştı (yaklaşık 66 m). Merdivende yeniden başladın",
+                         "Oxygen toxicity: ppO₂ passed 1.6 bar (about 66 m). You start again at the ladder"));
         const bool moved = length(k_.diver.pos - before.pos) > 1e-5f || k_.diver.yaw != before.yaw || k_.diver.pitch != before.pitch ||
                            k_.renderer.params().tunnel != tunnel0 || k_.renderer.params().blackout != black0;
         if (!paused_) t_ += in.dt;
@@ -217,50 +233,51 @@ public:
     void status(app::Status& s) override {
         using theme::num;
         const KoyTimes& tm = k_.renderer.times();
-        if (paused_) s.chips.push_back({accum_ ? L("Durdu · birikiyor", "Paused · accumulating") : L("Zaman durdu", "Time paused"), true});
+        if (paused_) s.chips.push_back({accum_ ? L("Durdu · 256 örnek", "Paused · 256 samples") : L("Zaman durdu", "Time paused"), true});
         if (look_) s.chips.push_back({L("Fareyle bakış", "Mouse look")});
         if (k_.renderer.params().view == 1) s.chips.push_back({L("Kenar pikselleri", "Edge pixels"), true});
         if (loading_) {
             s.chips.push_back({L("Doku yükleniyor", "Textures loading"), true});
             s.busy = loadFraction_;
             s.busyTitle = L("Doku değişiyor · ", "Textures changing · ") + tierName(k_.world.texMode);
-            s.busyLabel = loadWhat_.empty() ? L("Hazırlanıyor", "Getting ready") : roleName(loadWhat_) + L(" çözülüyor", " decoding");
+            s.busyLabel = loadWhat_.empty() ? L("Hazırlanıyor", "Getting ready") : roleName(loadWhat_) + L(" açılıyor", " being decoded");
         }
         if (!k_.caustics) s.chips.push_back({L("Kostik kapalı", "Caustics off"), true});
         s.metrics.push_back({L("Derinlik", "Depth"), num(-k_.diver.pos.y, 1) + " m"});
         s.metrics.push_back({L("Basınç", "Pressure"), num(k_.pressureBar(), 2) + " bar"});
-        s.metrics.push_back({L("Oksijen (ppO2)", "Oxygen (ppO2)"), num(k_.ppO2(), 2) + " bar"});
+        s.metrics.push_back({L("Oksijen (ppO₂)", "Oxygen (ppO₂)"), num(k_.ppO2(), 2) + " bar"});
         if (k_.ppO2() >= k_.cfg.f("o2.limit", 1.6f))
-            s.chips.push_back({L("ppO2 1,6 üstü: oksijen zehirlenmesi", "ppO2 above 1.6: oxygen toxicity"), true});
+            s.chips.push_back({L("ppO₂ 1,6 üstü: zehirlenme", "ppO₂ above 1.6: toxicity"), true});
         else if (k_.ppO2() >= 1.4f)
-            s.chips.push_back({L("ppO2 1,4 üstü: dalış sınırı", "ppO2 above 1.4: the diving limit"), true});
-        s.metrics.push_back({L("Dünya", "World"), num(tm.world, 1) + " ms"});
+            s.chips.push_back({L("ppO₂ 1,4 üstü: dalış sınırı", "ppO₂ above 1.4: dive limit"), true});
+        s.metrics.push_back({L("Deniz ve kostik", "Sea and caustics"), num(tm.world, 1) + " ms"});
         s.metrics.push_back({L("Işık sütunları", "Light shafts"), num(tm.shafts, 1) + " ms"});
         s.metrics.push_back({L("Örnekler", "Samples"), num(tm.base, 1) + " ms"});
         s.metrics.push_back({L("Kenar", "Edges"), num(tm.edge, 1) + " ms · " + theme::thousands(tm.edgePixels)});
-        s.metrics.push_back({L("Çözüm ve ton", "Resolve and tone"), num(tm.resolve + tm.final, 1) + " ms"});
+        s.metrics.push_back({L("Süzgeç ve ton eşleme", "Filter and tone map"), num(tm.resolve + tm.final, 1) + " ms"});
         s.metrics.push_back({L("Pozlama", "Exposure"), (k_.evAdapt >= 0 ? "+" : "") + num(k_.evAdapt, 2) + " EV"});
         {
             app::Control c;
             c.kind = app::Control::Kind::Choice;
             c.id = "ornek";
-            c.title = L("Örnek", "Samples");
+            c.title = L("Piksel örneği", "Pixel samples");
             c.items = {"1", "4", "8", "16", "32"};
             for (int k = 0; k < 5; ++k)
                 if (kBaseChoices[k] == k_.quality.baseGot) c.active = k;
-            c.detail = L("Piksel başına sabit örnek (her yerde); 32: tamponu 1,9 GB, saniyede bir iki kare",
-                         "Fixed samples a pixel (everywhere); 32: a 1.9 GB buffer, a frame or two a second");
+            c.detail = L("Her pikselin sabit örneği; 32'de tampon 1,9 GB, bellek yetmezse daha azı",
+                         "Fixed samples for every pixel; 32 needs a 1.9 GB buffer, else fewer");
             s.controls.push_back(c);
         }
         {
             app::Control c;
             c.kind = app::Control::Kind::Choice;
             c.id = "kenar";
-            c.title = L("Kenar", "Edges");
+            c.title = L("Kenar örneği", "Edge samples");
             c.items = {"4", "8", "12", "16", "32"};
             for (int k = 0; k < 5; ++k)
                 if (kEdgeChoices[k] == k_.quality.edge) c.active = k;
-            c.detail = L("Kenardaki piksele toplam örnek (örnekten az olamaz)", "Samples in all for a pixel on an edge (never fewer than the samples)");
+            c.detail = L("Kenardaki bir pikselin toplam örneği (piksel örneğinden az olmaz)",
+                         "Samples in all for a pixel on an edge (never fewer than pixel samples)");
             s.controls.push_back(c);
         }
         {
@@ -270,8 +287,8 @@ public:
             c.title = L("Doku", "Textures");
             c.items = {L("Düşük", "Low"), L("Normal", "Normal"), L("Yüksek", "High")};
             c.active = k_.world.texMode;
-            c.detail = L("Düşük 1K · Normal 2K · Yüksek 8K, kum ve ayrıntı katmanı 16K; yalnız seçilen kartta durur",
-                         "Low 1K · Normal 2K · High 8K, the sand and the detail layer 16K; only the one chosen stays on the card");
+            c.detail = L("Düşük 1K, normal 2K, yüksek 8K; yüksekte kum ve kaya ayrıntısı 16K",
+                         "Low 1K, normal 2K, high 8K; on high the sand and rock detail are 16K");
             c.section = true;
             s.controls.push_back(c);
         }
@@ -304,20 +321,20 @@ private:
     void resetAccum() { accum_ = 0; }
     static std::string tierName(int t) { return t == 0 ? L("Düşük", "Low") : t == 1 ? L("Normal", "Normal") : L("Yüksek", "High"); }
     static std::string tierToast(int t) {
-        return t == 0   ? L("Doku: düşük (her şey 1K, ayrıntı katmanı dahil)", "Textures: low (everything 1K, the detail layer too)")
-               : t == 1 ? L("Doku: normal (her şey 2K)", "Textures: normal (everything 2K)")
-                        : L("Doku: yüksek (taramalar 8K, kum ve ayrıntı katmanı 16K)", "Textures: high (the scans 8K, the sand and the detail layer 16K)");
+        return t == 0   ? L("Doku: düşük (hepsi 1K, kaya ayrıntısı dahil)", "Textures: low (all 1K, the rock detail too)")
+               : t == 1 ? L("Doku: normal (hepsi 2K)", "Textures: normal (all 2K)")
+                        : L("Doku: yüksek (taramalar 8K, kum ve kaya ayrıntısı 16K)", "Textures: high (scans 8K, the sand and rock detail 16K)");
     }
     // a set's folder (assets/koy/cc0) in words
     static std::string roleName(const std::string& f) {
         const bool k16 = f.find("16k") != std::string::npos, k8 = f.find("8k") != std::string::npos;
         const std::string size = k16 ? " (16K)" : k8 ? " (8K)" : "";
-        if (f.rfind("kum2", 0) == 0) return L("İkinci kum", "The second sand") + size;
+        if (f.rfind("kum2", 0) == 0) return L("Kabuk kırıntılı kum", "Shell-grit sand") + size;
         if (f.rfind("kum", 0) == 0) return L("Kum", "Sand") + size;
-        if (f.rfind("kaya_ayrinti", 0) == 0) return L("Kaya ayrıntısı (atlas)", "Rock detail (atlas)") + size;
+        if (f.rfind("kaya_ayrinti", 0) == 0) return L("Kaya ayrıntısı", "Rock detail") + size;
         if (f.rfind("kaya", 0) == 0) return L("Kaya", "Rock") + size;
-        if (f.rfind("amfora", 0) == 0) return L("Amfora kili", "The jars' clay") + size;
-        if (f.rfind("kabuk", 0) == 0) return L("Deniz kabuğu", "Sea crust") + size;
+        if (f.rfind("amfora", 0) == 0) return L("Amfora kili", "Amphora clay") + size;
+        if (f.rfind("kabuk", 0) == 0) return L("Kabuk örtüsü", "Encrusting coat") + size;
         if (f.rfind("ahsap", 0) == 0) return L("Ahşap", "Wood") + size;
         if (f.rfind("beton", 0) == 0) return L("Beton", "Concrete") + size;
         return f;

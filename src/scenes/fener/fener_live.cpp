@@ -20,55 +20,73 @@ public:
         i.id = "fener";
         i.number = "02";
         i.title = L("Fener", "Lighthouse");
-        i.subtitle = L("Siste dönen bir huzme, gece ve orman", "A beam turning in the fog, night and forest");
-        i.description = L("Sisli bir gece: siste dönen bir fener huzmesi, kara köknarlar ve tek sıcak pencere. İki bakış arasında orman "
-                          "içinden yürünür; istersen adalarda kendin dolaşırsın.",
-                          "A foggy night: a lighthouse beam turning in the fog, black firs and a single warm window. A walk through the "
-                          "forest joins two views; you can also roam the islands yourself.");
+        i.subtitle = L("Gece sisinde dönen bir fener huzmesi", "A lighthouse beam turning in the night fog");
+        i.description = L("Sisli bir gecede bir fener döner; huzmeleri sisi yarar, kara köknarlar ve tek sıcak pencere onlara karşı "
+                          "kararır. Boşlukla iki bakış arasında ormanın içinden yürürsün, Tab ile adalarda kendin dolaşırsın.",
+                          "On a foggy night a lighthouse turns. Its beams cut through the fog, and black firs and one warm window stand "
+                          "dark against them. Space walks you through the forest between two views; Tab lets you roam the islands.");
         i.details = {
-            {L("Hacimsel ışık", "Volumetric light"),
-             L("Sis gerçek bir ortam olarak hesaplanır: her pikselde ışın sisin içinde yürür, fenerin ve ayın ışığını gölgeleriyle "
-               "toplar. Huzme bu yüzden ağaçların ve kulenin ardında kesilir.",
-               "The fog is computed as a real medium: in every pixel a ray marches through it and gathers the light of the "
-               "lighthouse and the moon with their shadows, which is why the beam is cut off behind the trees and the tower.")},
-            {L("Gerçek zamanlı", "Real time"),
-             L("1440p'de kare başına 7,6 ms: yüzeyler, tam çözünürlükte hacim, zamansal birikim, TAA ve parlama. Az örnek, mavi gürültü "
-               "ve önceki karelerin birikimiyle temiz kalır.",
-               "7.6 ms a frame at 1440p: surfaces, the volume at full resolution, temporal accumulation, TAA and glow. Few samples, "
-               "blue noise and the frames before keep it clean.")},
-            {L("Dünya", "The world"),
-             L("İki ada yükseklik alanıyla; deniz kırk dalganın toplamından analitik bir yüzey. Orman altı çeşit köknarın yaklaşık 32 "
-               "bin örneği; ışın izleme donanımı yüz milyonlarca üçgeni örnekleyerek taşır.",
-               "Two islands as height fields; the sea an analytic surface summed from forty waves. The forest is about 32 thousand "
-               "instances of six kinds of fir: the ray-tracing hardware carries hundreds of millions of triangles by instancing.")},
-            {L("Sanat kararları", "Art decisions"),
-             L("Gerçek siste huzmenin ileri saçılımı yanına göre ~100 kat güçlüdür; kamera huzmenin içindeyken bütün sis düz beyaza "
-               "döner. Oran 5'e indirildi. Göz, ormanın karanlığına yarı yolda uyar.",
-               "In real fog the beam scatters ~100 times more forwards than sideways, and with the camera inside the beam all the "
-               "fog turns flat white. The ratio was brought down to 5. The eye adapts halfway to the darkness of the forest.")},
-            {L("Yolculuk ve oyuncu", "The walk and the player"),
-             L("Boşluk kamerayı iki bakış arasında 778 m orman içinden yürütür. Tab birinci şahıs kipine geçer: yer yüksekliği "
-               "adaların kendisinden, ağaçlar ve kule engel, derin suda yüzülür.",
-               "Space walks the camera 778 m through the forest between the two views. Tab switches to first person: the ground "
-               "is the islands' own height, trees and the tower are in the way, and deep water is swum.")},
-            {L("Görüntü", "The picture"),
-             L("Renk RGB'de (tayfsal değil), ACES ton eşleme ve soğuk gölgelerle; 8 bit panelde bantlanmasın diye mavi gürültüyle "
-               "titreştirilir.",
-               "Colour in RGB (not spectral), ACES tone mapping and cold shadows; dithered with blue noise so that an 8-bit panel "
-               "shows no banding.")}};
-        i.tags = {L("Gerçek zamanlı hacimsel ışık", "Real-time volumetric light"), L("Zamansal birikim", "Temporal accumulation"),
+            {L("Siste tek saçılmalı ışık", "Single scattering in the fog"),
+             L("Sis, yoğunluğu yükseklikle azalan bir ortam olarak hesaplanır. Her pikselde bakış ışını sisin içinde ilerler, fenerin "
+               "ışığını 8, ayınkini 4 örnekle toplar. Her örnek kendi gölge ışınını atar; huzme bu yüzden ağaçların ve kulenin "
+               "ardında kesilir. Fener örnekleri, ışının lambaya en yakın geçtiği yerde sıklaşan eşit açılı örneklemeyle seçilir.",
+               "The fog is a medium whose density falls with height. In every pixel the view ray marches through it and gathers "
+               "the lamp's light with 8 samples and the moon's with 4. Each sample casts its own shadow ray, which is why the beams "
+               "stop behind the trees and the tower. Equi-angular sampling crowds the lamp's samples where the ray passes closest "
+               "to the light.")},
+            {L("Az örnek, zamansal birikim", "Few samples over many frames"),
+             L("Huzme hiç durmadığı için her kare kendi başına temiz olmalı. INSIDE'ın yolu izlenir: örnekler mavi gürültüyle "
+               "dağıtılır, sis önceki karelerle birleştirilir (eski kare yeni bakışa taşınır, komşu piksellere göre kırpılır), "
+               "sonra bütün görüntüye TAA uygulanır. Sis tam çözünürlükte çizilir; yarım çözünürlük yakın silüetlerde parlak hale "
+               "bırakıyordu.",
+               "The beams never stop, so every frame has to be clean on its own. The recipe is INSIDE's: samples are spread with "
+               "blue noise, the fog is blended with earlier frames (the old frame reprojected to the new view and clamped to its "
+               "neighbours), then TAA runs over the whole picture. The fog is drawn at full resolution; half resolution left "
+               "bright halos on near silhouettes.")},
+            {L("Sanat için fizikten sapmalar", "Departures from physics, for art"),
+             L("Gerçek siste huzme ileriye, yanına göre yaklaşık 100 kat güçlü saçılır; kamera huzmenin içine girince bütün sis "
+               "düz beyaza döner. Burada bu oran yaklaşık 5'e indirildi ve huzmenin sisteki parlaklığına yumuşak bir tavan kondu. "
+               "Ay diski 0,55° (gerçeği 0,26°). Zayıf, aşağı eğik bir ışık lobu ormanı ve denizi süpürür.",
+               "In real fog the beam scatters about 100 times more forwards than sideways, and with the camera inside the beam "
+               "all the fog turns flat white. Here that ratio is brought down to about 5, and the beam's brightness in the fog "
+               "has a soft ceiling. The moon's disc is 0.55° (the real one 0.26°). A faint lobe tilted downwards sweeps the "
+               "forest and the sea.")},
+            {L("Göz uyumu ve renk", "Eye adaptation and colour"),
+             L("Sık ormanın içi açık bakışlardan yaklaşık 4,8 EV daha karanlıktır. Göz bu farkın yarısına 1,5 saniyede uyar: orman "
+               "yine karanlık hissettirir ama okunur. Renk RGB'de hesaplanır (tayfsal değil), ACES eğrisiyle ekrana indirilir, "
+               "siyahlara hafif soğuk bir ton eklenir. 8 bitlik ekranda bant oluşmasın diye her piksele çok az mavi gürültü katılır.",
+               "Inside the dense forest it is about 4.8 EV darker than in the open views. The eye adapts to half that difference "
+               "in 1.5 seconds, so the forest still feels dark but reads. Colour is computed in RGB (not spectral), brought to "
+               "the screen with the ACES curve, with a slight cold tint in the blacks. A trace of blue noise in every pixel "
+               "keeps an 8-bit screen free of banding.")},
+            {L("Adalar, deniz ve orman", "Islands, sea and forest"),
+             L("İki ada, yükseklik fonksiyonlarından üretilen ağlardır. Deniz düz bir yüzeydir; kırk dalganın toplamı yalnız "
+               "yüzeyin eğimini verir ve ayın parıltısı bu dalgalarda kırılır. Orman yedi çeşit köknarın on binlerce kopyasıdır; "
+               "ışın izleme donanımı aynı ağları yeniden kullanarak yüz milyonlarca üçgeni taşır.",
+               "The two islands are meshes generated from height functions. The sea is a flat surface; a sum of forty waves "
+               "gives only its slope, and the moon's glitter breaks up on those waves. The forest is tens of thousands of copies "
+               "of seven kinds of fir; the ray-tracing hardware reuses the same meshes to carry hundreds of millions of "
+               "triangles.")},
+            {L("Yürüyüş ve oyuncu kipi", "The walk and player mode"),
+             L("Boşluk kamerayı iki bakış arasında 778 m'lik bir yoldan ormanın içinden yürütür; yumuşak kalkar, yumuşak durur. "
+               "Tab birinci şahıs kipine geçer: yer yüksekliği adaların kendi fonksiyonundan gelir, ağaç gövdeleri, kule ve kulübe "
+               "engeldir, derin suda yüzersin. Dünyada oyuncu için ayrıca kurulmuş bir şey yoktur.",
+               "Space walks the camera 778 m through the forest between the two views, easing off and easing to a stop. Tab "
+               "switches to first person: the ground height comes from the islands' own functions, tree trunks, the tower and "
+               "the cabin are in the way, and in deep water you swim. Nothing in the world was built for the player.")}};
+        i.tags = {L("Hacimsel ışık", "Volumetric light"), L("Zamansal birikim", "Temporal accumulation"),
                   L("Oyuncu kipi", "Player mode")};
         i.image = "assets/gallery/fener.jpg";
         i.accent = 0x86B3DA;
         i.keys = {{L("Sahne", "Scene"),
-                   {{L("Boşluk", "Space"), L("A ↔ B yürü (yolda: geri dön)", "Walk A ↔ B (on the way: turn back)")},
-                    {"B", L("Öbür bakışa atla", "Jump to the other view")}, {"P", L("Zamanı durdur", "Pause time")},
-                    {"←|→", L("Zaman ∓1 sn", "Time ∓1 s")}, {"↑|↓", L("Pozlama", "Exposure")},
-                    {"1–5", L("Son, yüzey, hacim, derinlik, normal", "Final, surface, volume, depth, normal")}}},
+                   {{L("Boşluk", "Space"), L("A ↔ B yürü; yoldayken geri dön", "Walk A ↔ B; on the way, turn back")},
+                    {"B", L("Öbür bakışa atla", "Jump to the other view")}, {"P", L("Zamanı durdur / sürdür", "Pause / resume time")},
+                    {"←|→", L("Zamanı 1 sn geri / ileri al", "Time 1 s back / forward")}, {"↑|↓", L("Pozlama ±0,25 EV", "Exposure ±0.25 EV")},
+                    {"1|2|3|4|5", L("Son, yüzey, sis, derinlik, normal", "Final, surface, fog, depth, normal")}}},
                   {L("Oyuncu", "Player"),
-                   {{"Tab", L("Sahne → oyuncu → fener adası → sahne", "Scene → player → lighthouse island → scene")},
-                    {"W|A|S|D", L("Yürü", "Walk")}, {L("Fare", "Mouse"), L("Bak", "Look")}, {"Shift", L("Koş", "Run")},
-                    {L("Boşluk", "Space"), L("Zıpla", "Jump")}}}};
+                   {{"Tab", L("Sahne → oyuncu → fener adası → sahne", "Scene → player → lighthouse → scene")},
+                    {"W|A|S|D", L("Yürü", "Walk")}, {L("Fare", "Mouse"), L("Etrafa bak", "Look around")},
+                    {"Shift", L("Basılı tutup koş", "Hold to run")}, {L("Boşluk", "Space"), L("Zıpla", "Jump")}}}};
         i.reloadable = true;
         return i;
     }
@@ -188,11 +206,11 @@ public:
                                 true});
         if (f_.mode == 0 && !f_.journey.moving()) s.chips.push_back({f_.view == 0 ? L("A · Pencere", "A · Window") : L("B · Yücelik", "B · Lookout")});
         if (paused_) s.chips.push_back({L("Zaman durdu", "Time paused"), true});
-        const char* views[] = {"", L("Yalnız yüzey", "Surface only"), L("Yalnız hacim", "Volume only"), L("Derinlik", "Depth"), "Normal"};
+        const char* views[] = {"", L("Yalnız yüzey", "Surface only"), L("Yalnız sis", "Fog only"), L("Derinlik", "Depth"), "Normal"};
         if (f_.renderer.params().view > 0 && f_.renderer.params().view < 5) s.chips.push_back({views[f_.renderer.params().view], true});
         s.metrics.push_back({L("Yüzey", "Surface"), num(tm.surface, 1) + " ms"});
-        s.metrics.push_back({L("Hacim", "Volume"), num(tm.volume + tm.resolve, 1) + " ms"});
-        s.metrics.push_back({L("Birikim ve ışıltı", "Accumulation and glow"), num(tm.compose + tm.taa + tm.glow + tm.final, 1) + " ms"});
+        s.metrics.push_back({L("Sis", "Fog"), num(tm.volume + tm.resolve, 1) + " ms"});
+        s.metrics.push_back({L("Birikim ve parlama", "Accumulation and glow"), num(tm.compose + tm.taa + tm.glow + tm.final, 1) + " ms"});
         s.metrics.push_back({L("Göz uyumu", "Eye adaptation"), (f_.evAdapt >= 0 ? "+" : "") + num(f_.evAdapt, 2) + " EV"});
         if (f_.mode == 0 && f_.journey.moving()) {
             s.progress = f_.journey.d / std::max(1.0f, f_.journey.length());

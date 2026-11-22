@@ -26,64 +26,81 @@ public:
         i.number = "03";
         i.title = L("Yıkım", "Collapse");
         i.subtitle = L("Betonarme yapılar, deprem ve kırılma", "Concrete buildings, earthquakes and fracture");
-        i.description = L("Üç betonarme yapı: beş katlı bir apartman, otuz katlı bir gökdelen, beşik çatılı bir ev. 3'ten 9'a kadar "
-                          "depremlerle sarsılır, çatlar, gerekirse çöker; tıkladığın yere bir yıkım topu çarpar.",
-                          "Three reinforced-concrete buildings: a five-storey apartment block, a thirty-storey tower and a house with a "
-                          "gable roof. Earthquakes of magnitude 3 to 9 shake them, crack them and, if strong enough, bring them down; "
-                          "a wrecking ball hits wherever you click.");
+        i.description = L("Dört betonarme yapıdan birini seçersin: beş katlı bir apartman, otuz katlı bir gökdelen, sismik izolasyonlu "
+                          "bir kule ya da bir ev. 3 ile 9 arası büyüklükte bir depremle sarsar, tıkladığın yere yıkım topu atarsın; "
+                          "yapı çatlar, eğilir, gerekirse çöker.",
+                          "You pick one of four reinforced-concrete buildings: a five-storey apartment block, a thirty-storey tower, a "
+                          "base-isolated tower or a house. You shake it with a magnitude 3 to 9 earthquake and throw a wrecking ball "
+                          "where you click; it cracks, bends and may collapse.");
         i.details = {
-            {L("Kendi fizik çözücümüz", "Our own physics solver"),
-             L("Oyun motoru ya da hazır fizik kütüphanesi yok. Ekran kartında XPBD, saniyede 2.400 alt adım. Her parçanın kendi kabuğu, "
-               "kütlesi ve eylemsizliği var: apartman 3.006, gökdelen 8.404, ev 456 parça.",
-               "Our GPU runs XPBD at 2,400 substeps a second. Every piece has "
-               "its own hull, mass and inertia: 3,006 in the apartment block, 8,404 in the tower, 456 in the house.")},
-            {L("Beton ve donatı", "Concrete and steel"),
-             L("Parçalar liflerle birbirine bağlı. Beton çekmede çatlar, basınçta ezilir; donatı akar ve 6 cm uzayınca kopar. "
-               "Kapasiteyi aşan kısım kalıcı olur: mafsallaşan kolon eğik kalır. Üç yapının da malzemesi aynı.",
-               "The pieces are bonded by fibres. Concrete cracks in tension and crushes in compression; the bars yield and snap "
-               "after 6 cm of stretch. What exceeds the capacity stays: a column that formed a hinge stays bent. All three "
-               "buildings are made of the same materials.")},
-            {L("Depremler", "Earthquakes"),
-             L("Her büyüklük gerçek bir kuvvetli yer hareketi kaydından (AFAD, ESM): o büyüklüğün süresine kesilir, tepe ivmesine "
-               "ölçeklenir, iki kez integre edilip zeminin hareketine çevrilir. Daha uzun ya da sürekli sarsıntıda kaydın güçlü "
-               "kısmı dikişsiz bir döngüye dönüşür.",
-               "Each magnitude comes from a real strong-motion record (AFAD, ESM): cut to that magnitude's length, scaled to its "
-               "peak acceleration and integrated twice into the ground's motion. For longer or endless shaking the record's "
-               "strong part becomes a seamless loop.")},
-            {L("Yıkım topu", "Wrecking ball"),
-             L("Tıklanan yere bakış yönünden döküm çelik bir top gelir. Gücü çubukla: yarım ton ve saatte 29 km'den, çapı 5 m, "
-               "500 ton ve saatte 400 km'lik bir göktaşına. Top da öteki parçalar gibi bir cisim; neyin kırılıp devrileceğine "
-               "çözücü karar verir.",
-               "A cast steel ball comes from where you look to where you click. Its power is a slider: from half a tonne at 29 "
-               "km/h to a meteor 5 m across, 500 tonnes at 400 km/h. The ball is a body like the others; the solver decides what "
-               "breaks and topples.")},
+            {L("Kendi katı cisim çözücümüz", "Our own rigid-body solver"),
+             L("Oyun motoru ya da hazır fizik kütüphanesi kullanılmaz. Bina dışbükey katı parçalardan kurulur: apartman 3.006, "
+               "gökdelen 8.404, sismik kule 5.142, ev 456 parça. Ekran kartında çalışan XPBD çözücüsü (konum tabanlı dinamik) "
+               "saniyede 2.400 küçük adım atar; parçalar arasındaki bağlar ve temaslar her adımda yeniden çözülür.",
+               "No game engine and no physics library. A building is made of convex rigid pieces: 3,006 in the apartment block, "
+               "8,404 in the tower, 5,142 in the isolated tower, 456 in the house. An XPBD solver (position-based dynamics) on "
+               "the GPU takes 2,400 small steps a second, solving the bonds and contacts between pieces again at every step.")},
+            {L("Beton, donatı ve kalıcı hasar", "Concrete, steel, lasting damage"),
+             L("Komşu parçalar, ortak yüzlerine yayılmış beton ve çelik liflerle birbirine bağlıdır. Beton çekmede çatlar, basınçta "
+               "ezilir; donatı akar ve 6 cm uzayınca kopar. Sınırı aşan şekil değişimi kalıcıdır: mafsallaşan kolon eğik kalır. "
+               "Apartman, gökdelen ve evde 1990'ların C16 betonu ve S220 donatısı var. Sismik kulede 40 MPa beton ve 420 MPa "
+               "donatı var; kule kauçuk yastıklar üstünde 3,5 saniyelik periyotla salınır.",
+               "Neighbouring pieces are bonded by concrete and steel fibres spread over their shared face. Concrete cracks in "
+               "tension and crushes in compression; the bars yield and snap after 6 cm of stretch. Deformation past the limit "
+               "stays: a column that formed a hinge stays bent. The apartment block, tower and house use 1990s C16 concrete "
+               "and S220 bars; the isolated tower, 40 MPa concrete and 420 MPa bars, sways on rubber bearings with a 3.5-second "
+               "period.")},
             {L("Aynı deprem, aynı yıkım", "Same quake, same collapse"),
-             L("Temas ve bağ toplamları kayan noktalı atomikler yerine sabit noktada tutulur: aynı deprem aynı binayı her seferinde "
-               "aynı biçimde yıkar. Sınırdaki yapıyı ölçebilmek bunu gerektirdi.",
-               "Contact and bond sums are kept in fixed point instead of floating-point atomics: the same earthquake brings the "
-               "same building down the same way every time. Measuring a structure at its limit required it.")},
-            {L("Görüntü", "The picture"),
-             L("OptiX ile ışın izleme: yumuşak gölgeli güneş, gök ve zeminden bir sekme. Piksel başına altı örnek; gren, her parçanın "
-               "hareketini izleyen kendi süzgecimizle temizlenir (1080p'de 2,4 ms).",
-               "Ray tracing with OptiX: a sun with soft shadows, the sky and one bounce off the ground. Six samples a pixel; the "
-               "grain is cleaned by our own filter, which follows each piece's motion (2.4 ms at 1080p).")}};
-        i.tags = {L("Kendi fizik çözücüsü", "Own physics solver"), L("Gerçek deprem kayıtları", "Real earthquake records"), L("Canlı", "Live")};
+             L("Ekran kartında binlerce iş parçacığı aynı toplamlara ekleme yapar. Kayan noktalı sayılarda toplama sırası sonucu "
+               "değiştirdiği için bina bir denemede yıkılıp ötekinde ayakta kalıyordu. Toplamlar sabit noktalı tamsayılarla "
+               "tutulur: aynı deprem aynı binayı her seferinde aynı biçimde yıkar ve sınırdaki bir yapı ölçülebilir. Gökdelenin "
+               "enkazında geç beliren küçük bir sapmanın kaynağı henüz bulunmadı.",
+               "Thousands of GPU threads add into the same sums, and with floating-point numbers the order of addition changes "
+               "the result: a building fell in one run and stood in the next. The sums are kept as fixed-point integers, so "
+               "the same earthquake brings the same building down the same way every time, and a structure at its limit can "
+               "be measured. A small late drift in the tower's debris remains, its source not yet found.")},
+            {L("Işın izleme ve gürültü giderme", "Ray tracing and denoising"),
+             L("OptiX ile ışın izleme: yumuşak gölgeli güneş, gökten gelen ışık ve güneşli zeminden tek bir sekme; sismik kulenin "
+               "camı bir kez izlenen ayna yansıması verir. Piksel başına 6 örnek alınır, kalan gren her parçanın hareketini izleyen "
+               "kendi süzgecimizle 1080p'de 2,4 ms'de temizlenir. G tuşu OptiX'in yapay zekâ gürültü gidericisine geçer.",
+               "Ray tracing with OptiX: a sun with soft shadows, light from the sky and one bounce off the sunlit ground; the "
+               "isolated tower's glass gives a mirror reflection traced once. Six samples per pixel; the remaining grain is "
+               "cleaned in 2.4 ms at 1080p by our own filter, which follows each piece's motion. G switches to OptiX's AI "
+               "denoiser.")},
+            {L("Gerçek kayıtlardan depremler", "Earthquakes from real records"),
+             L("Her büyüklük, AFAD ve ESM'nin yayımladığı gerçek bir kuvvetli yer hareketi kaydından gelir. Kaydın güçlü kısmı o "
+               "büyüklüğün süresine kesilir, tepe ivmesine ölçeklenir (3'te 0,012 g, 9'da 1,1 g) ve üç bileşeni iki kez integre "
+               "edilip zeminin hareketine çevrilir. Daha uzun ya da sürekli sarsıntıda bu kısım dikişsiz bir döngüye dönüşür.",
+               "Each magnitude comes from a real strong-motion record published by AFAD and ESM. The record's strong part is cut "
+               "to that magnitude's length, scaled to its peak acceleration (0.012 g at 3, 1.1 g at 9), and its three components "
+               "are integrated twice into the ground's motion. For longer or endless shaking that part becomes a seamless loop.")},
+            {L("Yıkım topu", "Wrecking ball"),
+             L("Tıkladığın noktaya kameranın yanından döküm çelik bir top gelir. Çubuk boyunu ve hızını birlikte ayarlar: saatte "
+               "29 km giden 0,5 tondan, 5 m çaplı, 514 tonluk ve saatte 396 km giden, bilerek abartılmış bir göktaşına. Top da "
+               "öteki parçalar gibi bir cisimdir; neyin kırılıp devrileceğine çözücü karar verir.",
+               "A cast steel ball flies from beside the camera to where you click. The slider sets its size and speed together: "
+               "from half a tonne at 29 km/h to a meteor, overdone on purpose, 5 m across, 514 tonnes at 396 km/h. The ball is a "
+               "body like the others; the solver decides what breaks and topples.")}};
+        i.tags = {L("Katı cisim fiziği", "Rigid-body physics"), L("Gerçek deprem kaydı", "Real quake records"), L("Işın izleme", "Ray tracing")};
         i.image = "assets/gallery/yikim.jpg";
         i.accent = 0xE5764A;
         i.keys = {{L("Deprem", "Earthquake"),
-                   {{"3–9", L("Büyüklüğü seç", "Choose the magnitude")},
-                    {"←|→", L("Süre: kısalt / uzat (en sonda: durdurana kadar)", "Length: shorter / longer (at the end: until stopped)")},
+                   {{"3|–|9", L("Büyüklüğü seç", "Choose the magnitude")},
+                    {"←|→", L("Süreyi kısalt / uzat, en uçta sonsuz", "Shorter / longer; at the end, endless")},
                     {L("Boşluk", "Space"), L("Depremi başlat / durdur", "Start / stop the earthquake")},
-                    {"T", L("Ağır çekim: ×1, ×0,25, ×0,1", "Slow motion: ×1, ×0.25, ×0.1")}, {"P", L("Zamanı durdur", "Pause time")}}},
-                  {L("Müdahale", "Intervene"),
-                   {{L("Sol tık", "Left click"), L("Yıkım topu at (saniyede en çok bir)", "Throw a wrecking ball (at most one a second)")},
-                    {"↑|↓", L("Topun gücü", "The ball's power")}, {"R", L("Binayı baştan kur", "Rebuild the building")}}},
+                    {"T", L("Ağır çekim: ×1, ×0,25, ×0,1", "Slow motion: ×1, ×0.25, ×0.1")},
+                    {"P", L("Zamanı durdur / sürdür", "Pause / resume time")}}},
+                  {L("Top ve bina", "Ball and building"),
+                   {{L("Sol tık", "Left click"), L("Yıkım topu at (saniyede en çok bir)", "Throw a ball (at most one a second)")},
+                    {"↑|↓", L("Topun gücü", "The ball's power")}, {"R", L("Binayı yeniden kur", "Rebuild the building")}}},
                   {L("Kamera", "Camera"),
-                   {{L("Sağ tık|Fare", "Right click|Mouse"), L("Bak", "Look")}, {"W|A|S|D", L("Uç (W baktığın yöne)", "Fly (W where you look)")},
-                    {"E|Q", L("Yukarı / aşağı", "Up / down")}, {"Shift", L("Hızlı", "Fast")}, {L("Tekerlek", "Wheel"), L("Yakınlaş", "Zoom")}}},
+                   {{L("Sağ tık|+|Fare", "Right click|+|Mouse"), L("Basılı tutup etrafa bak", "Hold to look around")},
+                    {"W|A|S|D", L("Uç; W baktığın yöne gider", "Fly; W goes where you look")},
+                    {"E|Q", L("Yüksel / alçal", "Rise / sink")}, {"Shift", L("Basılı tutunca hızlı", "Hold to go fast")},
+                    {L("Tekerlek", "Wheel"), L("Yakınlaş / uzaklaş", "Zoom in / out")}}},
                   {L("Görüntü", "Picture"),
                    {{"B", L("Donatıyı göster / gizle", "Show / hide the bars")},
-                    {"G", L("Gürültü giderici: süzgeç, yapay zekâ, ham", "Denoising: filter, AI, raw")}}}};
+                    {"G", L("Süzgeç, yapay zekâ ya da ham görüntü", "Denoiser: filter, AI or raw")}}}};
         return i;
     }
     static std::unique_ptr<app::Scene> make() { return std::make_unique<YikimLive>(); }
@@ -93,7 +110,7 @@ public:
     void load(app::Host& host, app::LoadState& st) override {
         switch (st.step) {
         case 0: {
-            st.label = L("Ekran kartı ve ışın izleme programları hazırlanıyor", "Preparing the graphics card and the ray-tracing programs");
+            st.label = L("Ekran kartı ve ışın izleme programları hazırlanıyor", "Preparing the GPU and the ray-tracing programs");
             st.fraction = 0.05f;
             ++st.step;
             return;
@@ -158,14 +175,14 @@ public:
             }
             camMoved_ = true;
             resetClock = true;
-            host.toast(buildingName(building_) + std::string(L(" kuruldu", " is up")));
+            host.toast(buildingName(building_) + std::string(L(" kuruldu", ": ready")));
         }
         // keys
         if (in.pressed(GLFW_KEY_G)) {
             y_.renderer.denoiseMode = (y_.renderer.denoiseMode + 1) % 3;
             host.toast(y_.renderer.denoiseMode == 0   ? L("Gürültü giderici kapalı: ham görüntü", "Denoising off: the raw picture")
                        : y_.renderer.denoiseMode == 1 ? L("Gürültü giderici: hızlı süzgeç", "Denoising: the fast filter")
-                                                      : L("Gürültü giderici: yapay zekâ", "Denoising: AI"));
+                                                      : L("Gürültü giderici: OptiX yapay zekâ", "Denoising: the OptiX AI denoiser"));
         }
         if (in.pressed(GLFW_KEY_P)) {
             paused_ = !paused_;
@@ -266,7 +283,7 @@ public:
 
     void status(app::Status& s) override {
         using theme::num;
-        if (y_.quakeOn) s.chips.push_back({L("Deprem sürüyor", "Earthquake"), true});
+        if (y_.quakeOn) s.chips.push_back({L("Deprem sürüyor", "Earthquake under way"), true});
         if (paused_) s.chips.push_back({L("Zaman durdu", "Time paused"), true});
         if (speedIdx_) s.chips.push_back({speedIdx_ == 1 ? L("Ağır çekim ×0,25", "Slow motion ×0.25") : L("Ağır çekim ×0,1", "Slow motion ×0.1"), true});
         if (y_.renderer.denoiseMode != 1) s.chips.push_back({y_.renderer.denoiseMode == 0 ? L("Ham görüntü", "Raw picture") : L("Yapay zekâ gürültü giderici", "AI denoiser")});
@@ -308,7 +325,7 @@ public:
             for (int m = quakeMagnitudeMin(); m <= quakeMagnitudeMax(); ++m) c.items.push_back(std::to_string(m));
             c.active = magnitude_ - quakeMagnitudeMin();
             if (const QuakeMagnitude* q = quakeMagnitude(magnitude_))
-                c.detail = std::string(magnitudeName(magnitude_)) + L(" · tepe ivme ", " · peak acceleration ") + num(q->pgaG, q->pgaG < 0.1 ? 3 : 2) + " g";
+                c.detail = std::string(magnitudeName(magnitude_)) + L(" · tepe ivmesi ", " · peak acceleration ") + num(q->pgaG, q->pgaG < 0.1 ? 3 : 2) + " g";
             s.controls.push_back(c);
         }
         const double own = quakeOwnSeconds(magnitude_);
@@ -526,12 +543,12 @@ private:
     static constexpr int kBuildings = 4;
     static const char* buildingKey(int b) { return b == 1 ? "gokdelen" : b == 2 ? "ev" : b == 3 ? "sismik" : "apartman"; }
     static const char* buildingName(int b) {
-        return b == 1 ? L("Gökdelen", "Tower") : b == 2 ? L("Ev", "House") : b == 3 ? L("Sismik", "Seismic") : L("Apartman", "Apartments");
+        return b == 1 ? L("Gökdelen", "Tower") : b == 2 ? L("Ev", "House") : b == 3 ? L("Sismik", "Seismic") : L("Apartman", "Apartment");
     }
     static const char* buildingNote(int b) {
         return b == 1   ? L("30 kat, 97 m · camlı lobi", "30 storeys, 97 m · glass lobby")
                : b == 2 ? L("Tek kat, beşik çatı", "One storey, gable roof")
-               : b == 3 ? L("26 kat ve iğne · sismik izolasyon", "26 storeys and a spire · base isolation")
+               : b == 3 ? L("26 kat ve çelik iğne, ~123 m · sismik izolasyon", "26 storeys and a steel spire, ~123 m · base isolation")
                         : L("5 kat · zemin katta dükkânlar", "5 storeys · shops on the ground floor");
     }
     int building_ = 0;

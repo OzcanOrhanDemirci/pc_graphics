@@ -30,41 +30,71 @@ public:
         i.id = "kuyu";
         i.number = "10";
         i.title = L("Kuyu", "The Well");
-        i.subtitle = L("Aynalı odalardan bir kafeste sonsuz düşüş", "An endless fall through a lattice of mirrored rooms");
-        i.description = L("Sonsuz bir kafeste, ışığı kendi içinde sonsuza dek dönen kapalı odaların arasından yavaşça aşağı düşersin. "
-                          "Her oda başka bir dünya; sen dışarıdan bakan gözsün.",
-                          "You fall slowly down an endless lattice, past closed rooms whose light turns inside them without end. "
-                          "Every room is another world; you are the eye looking in from outside.");
+        i.subtitle = L("Aynalı odalardan bir kafeste sonsuz düşüş", "An endless fall through mirrored rooms");
+        i.description = L("Sonsuz bir kafeste aynalı odaların arasından yavaşça aşağı düşersin. Her odanın içinde ışık duvardan "
+                          "duvara seker ve sonsuza dek tekrarlanır. Etrafa bakar, bir odanın camına yaklaşır, düşüşü durdurur ya da "
+                          "Shift ile kafesin içinden hızla geçersin.",
+                          "You fall slowly down an endless lattice past mirrored rooms. Inside each room the light bounces from "
+                          "wall to wall and repeats without end. You look around, drift up to a room's glass, stop the fall, or "
+                          "hold Shift to race through the lattice.");
         i.details = {
-            {L("Tek yönlü duvar", "One-way walls"),
-             L("Her oda yarım inçlik gri camdan bir küp; iç yüzünde 40 nm gümüş film. İçeriden bakan ışığın %93'ü döner, dışarı ancak "
-               "%1'i çıkar; dışarıdan cam %4 yansıtır. Değerler gümüşün ölçülmüş kırılma indisinden ve camın veri sayfasından hesaplanır.",
-               "Every room is a cube of half-inch grey glass with a 40 nm silver film on its inner face. Of the light inside, 93% "
-               "turns back and barely 1% gets out; from outside the glass reflects 4%. The values are worked out from silver's "
-               "measured index and the glass's data sheet.")},
-            {L("İzleyici", "Tracer"),
-             L("Işın kafeste hücreden hücreye yürür, her hücrede yalnız oradaki odayı ve on iki demeti görür; odaya girince duvarlar, "
-               "aynalar ve metal arasında ağırlığı bitene dek seker. Yüzeyler kesin: öteleme ve sınır hacmi yok.",
-               "A ray walks the lattice cell by cell, meeting in each only its room and its twelve bundles; inside a room it bounces "
-               "between the walls, the mirrors and the metal until its weight is spent. The surfaces are exact: no offsets, no "
-               "bounding volumes.")},
-            {L("Görüntü", "Picture"),
-             L("Pikselde altı sabit örnek, her kare aynı; birikim ve gürültü giderici yok. Küçük ışıklar ışının konisindeki payıyla "
-               "toplanır: en derin yansıma da titremez.",
-               "Six fixed samples a pixel, the same every frame; no accumulation and no denoiser. Small lights count by their share "
-               "of the ray's footprint: even the deepest reflection does not twinkle.")}};
-        i.tags = {L("Sonsuzluk", "Infinity"), L("Yansıma", "Reflection"), L("Işık", "Light")};
+            {L("Sonsuz oda kafesi", "An endless lattice of rooms"),
+             L("Uzay 8 m'lik küplere bölünür. Her küpün ortasında 3,6 m'lik cam bir oda durur, odanın on iki kenarından sonsuza "
+               "0,6 m'lik demetler uzanır. Işın kafeste hücreden hücreye yürür ve her hücrede yalnız oradaki odayı ve demetleri "
+               "sınar; yüzeyler analitik olarak kesin çözülür. Her oda 20 düzenden birini, küpün 48 simetrisinden biriyle "
+               "döndürülmüş olarak taşır. Kafes hiç bitmez, uzaktaki odalar pusta söner.",
+               "Space is cut into 8 m cubes. Each holds a 3.6 m glass room at its centre, and 0.6 m bundles run to infinity "
+               "from the room's twelve edges. A ray walks the lattice cell by cell and tests only that cell's room and bundles, "
+               "all solved exactly. Each room holds one of 20 layouts, turned by one of the cube's 48 symmetries. The lattice "
+               "never ends; distant rooms fade into the haze.")},
+            {L("Tek yönlü cam duvar", "One-way glass walls"),
+             L("Her oda, iç yüzünde 45 nm gümüş film olan 12,7 mm'lik gri camdan bir küptür. 550 nm'de duvar içeriden gelen "
+               "ışığın %94,5'ini geri döndürür, dışarıdan %4,1'ini yansıtır ve iki yönde de yalnız %0,71'ini geçirir. Tek "
+               "yönlülük, aydınlık içeriyle karanlık dışarının farkından doğar. Değerler ince film formülüyle, gümüşün ölçülmüş "
+               "optik sabitlerinden (Johnson ve Christy, 1972) ve camın veri sayfasından hesaplanır.",
+               "Each room is a cube of 12.7 mm grey glass with a 45 nm silver film on its inner face. At 550 nm the wall "
+               "returns 94.5% of the light from inside, reflects 4.1% from outside and lets only 0.71% through either way. The "
+               "one-way look comes from a bright inside against a dark outside. The values follow from thin-film optics, "
+               "silver's measured constants (Johnson and Christy, 1972) and the glass's data sheet.")},
+            {L("Odanın içinde sonsuz yansıma", "Endless reflections in a room"),
+             L("Camdan giren ışın odada gümüş duvarlar, aynalar, krom bir küre ya da bakır bir sarkaç arasında 256 kereye kadar "
+               "seker. Kalan yolun ekrana katabileceği ışık yarım renk kademesinin altına inince yol biter; bu sınır pozlamayla "
+               "birlikte değişir. İnce gümüş kırmızıyı maviden çok yansıttığı için derin yansımalar kehribara kayar.",
+               "A ray that enters through the glass bounces up to 256 times between the silver walls, mirrors, a chrome sphere "
+               "or a copper pendulum. The path ends once the light it could still add to the screen falls below half a colour "
+               "step, so the limit moves with the exposure. Thin silver reflects red more than blue, so the deepest reflections "
+               "turn amber.")},
+            {L("Demetleri aydınlatan ışık", "Light on the bundles"),
+             L("Demetleri yalnız odaların camından sızan ışık aydınlatır. Kafes yinelendiği için bu ışık bir hücrenin demetleri "
+               "üzerinde bir kez hesaplanır: 2 × 2,5 cm'lik her doku noktasından Fibonacci sarmalına dizili 4096 ışın atılır ve "
+               "çarptıkları oda yüzü tabloya yazılır. Odaların parlaklığı kare çizilirken bu tabloyla çarpılır. Demetlerin yüzü "
+               "kitap sırtı gibi ipliklerdir; cilalılar camın, altın varaklar altının yansımasıyla parlar.",
+               "The bundles are lit only by the light leaking from the rooms' glass. As the lattice repeats, this light is "
+               "worked out once over one cell's bundles: 4096 rays on a Fibonacci spiral leave every 2 × 2.5 cm texel, and the "
+               "room face each one meets is written to a table. Each frame multiplies the rooms' brightness by that table. The "
+               "bundles are faced with threads like book spines; varnished ones shine like glass, gold leaf like gold.")},
+            {L("Sabit örnekli görüntü", "Fixed-sample image"),
+             L("Her piksel her karede aynı altı sabit örnekle çizilir; önceki karelerden bir şey taşınmaz, gürültü giderici "
+               "yoktur. Küçük bir ampulün derin bir yansıması pikselden küçülünce ışının konisine düşen payıyla sayılır, bu "
+               "yüzden hareket ederken yanıp sönmez. Aynı oda yüzüne giren örnekler odanın içini tek ışınla paylaşır; küre ya "
+               "da ayna olan odalarda üç ışın kullanılır.",
+               "Every pixel is drawn from the same six fixed samples every frame. Nothing is carried over from earlier frames "
+               "and there is no denoiser. When the deep image of a small bulb shrinks below a pixel, it is counted by its share "
+               "of the ray's cone, so it does not twinkle in motion. Samples entering the same room face share one ray for the "
+               "interior; rooms with a sphere or a mirror get three.")}};
+        i.tags = {L("Sonsuzluk", "Infinity"), L("Yansıma", "Reflection"), L("İnce film optiği", "Thin-film optics")};
         i.image = "assets/gallery/kuyu.jpg";
         i.accent = 0xD9A25B;
         i.keys = {{L("Hareket", "Moving"),
                    {{L("Fare", "Mouse"), L("Etrafa bak", "Look around")},
-                    {"W A S D", L("Yatay kay", "Drift level")},
+                    {"W|A|S|D", L("Yatay kay", "Drift level")},
                     {L("Boşluk", "Space"), L("Yüksel", "Rise")},
                     {"C", L("Alçal", "Sink")},
-                    {"Q E", L("Düşüşü yavaşlat / hızlandır", "Slow / quicken the fall")},
-                    {"Shift", L("Basılı tut: gittikçe hızlan", "Hold: faster and faster")},
-                    {"Tab", L("İmleci bırak / al", "Release / take the cursor")},
-                    {"1 2 3 4", L("Bakışlar: kuyu, oda, kafes, yukarı", "Views: the shaft, a room, the lattice, up")},
+                    {"Q|E", L("Düşüşü yavaşlat / hızlandır", "Slow / quicken the fall")},
+                    {"Shift", L("Basılı tutup gittikçe hızlan", "Hold to go faster and faster")},
+                    {"Tab", L("İmleci bırak / geri al", "Release / take back the cursor")}}},
+                  {L("Bakış", "View"),
+                   {{"1|2|3|4", L("Kuyu, oda, kafes, yukarı", "Shaft, room, lattice, up")},
                     {"R", L("Başa dön", "Back to the start")},
                     {"↑|↓", L("Pozlama", "Exposure")}}}};
         i.reloadable = true;
@@ -131,7 +161,7 @@ public:
                 vel_ = make_float3(0, 0, 0);
                 if (k == 1) {   // before a room the fall stops: E takes it on
                     fall_ = 0;
-                    host.toast(L("Bir odanın önünde durdun: E düşüşü sürdürür", "Stopped before a room: E falls on"));
+                    host.toast(L("Bir odanın önünde durdun. E ile düşüşe devam edersin.", "Stopped before a room. Press E to fall on."));
                 }
             }
         if (in.pressed(GLFW_KEY_Q)) fall_ = std::max(0, fall_ - 1);
@@ -254,7 +284,7 @@ public:
 
     void status(app::Status& s) override {
         using theme::num;
-        s.chips.push_back({fall_ == 0 ? L("Duruyor", "Still") : L("Düşüş ", "Falling ") + num(kFall[fall_], 1) + " m/s", true});
+        s.chips.push_back({fall_ == 0 ? L("Düşüş durdu", "Fall stopped") : L("Düşüş ", "Falling ") + num(kFall[fall_], 1) + " m/s", true});
         const float sp = length(vel_);
         s.metrics.push_back({L("Hız", "Speed"), (sp < 10.0f ? num(sp, 1) : theme::thousands((unsigned long long)std::llround(sp))) + " m/s"});
         s.metrics.push_back({L("Kare", "Frame"), num(a_.frameMs, 1) + " ms"});

@@ -30,50 +30,71 @@ public:
         i.id = "dag";
         i.number = "13";
         i.title = L("Dağ", "Mountain");
-        i.subtitle = L("Kaçkar'ın tepesinde gün batımı: ufka kadar gerçek yeryüzü", "Sunset on Kaçkar's summit: the real Earth out to the horizon");
-        i.description = L("Küçük, korkuluklu bir seyir terasındasın, Kaçkar'ın 3.937 metrelik doruğunda. Aşağıda sırtlar ve Karadeniz; sağda Kafkaslar, "
-                          "arkada Ağrı. Gördüğün her tepe gerçek, en uzağı yüzlerce kilometre ötede ve hava onu yavaş yavaş siler.",
-                          "You stand on a small railed viewing terrace on Kaçkar's 3,937 metre summit. Below are ridges and the Black Sea; to the right the "
-                          "Caucasus, behind you Ararat. Every peak you see is real, the farthest hundreds of kilometres away, and the air slowly "
-                          "wipes it out.");
+        i.subtitle = L("Kaçkar'da gün batımı, ufka kadar gerçek yeryüzü", "Sunset on Kaçkar, the real Earth to the horizon");
+        i.description = L("Kaçkar'ın 3.937 metrelik doruğunda, korkuluklu küçük bir terastasın. Önünde Karadeniz'e batan güneş, sağında "
+                          "Kafkaslar, arkanda Ağrı. Gördüğün her tepe gerçek, en uzağı yaklaşık 390 km ötede. Dürbünle uzağa bakar, "
+                          "korkuluğun açıklığından dağa inersin.",
+                          "You stand on a small railed terrace on Kaçkar's 3,937 m summit, the sun setting over the Black Sea ahead, "
+                          "the Caucasus to the right, Ararat behind. Every peak is real, the farthest about 390 km away. Look far "
+                          "with the binoculars or step through the gap onto the mountain.");
         i.details = {
-            {L("Çizim mesafesi", "Draw distance"),
-             L("Ayrıntı seviyesi yok. Terastan görünebilen yeryüzünün her hücresi önceden bulunur ve üçgen olur: gerçek yükseklik "
-               "verisinin 30 metrelik hücreleri, yüzlerce kilometre ötede bile. Korkuluktaki açıklıktan araziye çıkabilirsin.",
-               "No level of detail. Every cell of the Earth the terrace can see is found beforehand and becomes triangles: the real "
-               "elevation model's 30 metre cells, even hundreds of kilometres away. You can reach the mountainside through the gap in the railing.")},
-            {L("Hava", "Air"),
-             L("Uzaktaki yerin solması sis efekti değil: Rayleigh ve Mie saçılması, ozon, çoklu saçılma; dağların havadaki gölgesi. "
-               "Dünya'nın eğriliği geometrinin içinde: uzak sırtlar ufkun arkasına batar. Güneş yere havanın süzdüğü renkle gelir: "
-               "dorukta altın, vadide mavi.",
-               "The fading of the distant ground is not a fog effect: Rayleigh and Mie scattering, ozone, multiple scattering, the "
-               "mountains' shadows in the air. The Earth's curve is in the geometry: far ridges sink behind the horizon. The sun "
-               "arrives in the colour the air lets through: gold on the peaks, blue in the valleys.")},
-            {L("Net görüntü", "Sharp picture"),
-             L("Her pikselde sabit desenli on altı ışın: kaba kuvvet süper örnekleme. Zamansal biriktirme yok, gren yok. Durunca "
-               "güzelleşen görüntü de yok: her kare aynı kare.",
-               "Sixteen rays a pixel on a fixed pattern: brute-force supersampling. No temporal accumulation, no grain, nothing that "
-               "improves when you stop: every frame is the same frame.")},
+            {L("LOD olmadan çizim mesafesi", "Draw distance without LOD"),
+             L("Oyunlar uzağı ayrıntı düzeyiyle (LOD) kabalaştırır, çünkü göz her yere gidebilir. Burada görüş terasın "
+               "çevresinden hesaplanır: tepeden görünebilen yeryüzünün her hücresi önceden bir kez bulunur ve üçgen olur, "
+               "1 yay saniyelik (yaklaşık 30 m) yükseklik modelinin hücreleri, yüzlerce kilometre ötede bile. Uzak ağ "
+               "yaklaşık 52 milyon üçgendir; hiçbir şey sonradan değişmez ya da belirmez, dürbün de aynı geometriyi gösterir.",
+               "Games coarsen the distance with levels of detail (LOD) because the eye can go anywhere. Here the view is "
+               "worked out from around the terrace: every cell of the Earth visible from the summit is found once beforehand "
+               "and becomes triangles, the 1 arc second (about 30 m) elevation model's cells, even hundreds of kilometres "
+               "away. The far mesh is about 52 million triangles; nothing switches or pops in, and the binoculars show the "
+               "same geometry.")},
+            {L("Hava ve Dünya'nın eğriliği", "The air and the Earth's curve"),
+             L("Uzaktaki yerin solması bir sis efekti değil, havanın hesabıdır: Rayleigh ve Mie saçılması, ozonun soğurması, "
+               "çoklu saçılma ve dağların havaya düşen gölgesi. Dünya geometrinin içinde eğridir; havanın kırılmasıyla etkin "
+               "yarıçapı 7.323 km, uzak sırtlar ufkun ardına batar. Güneş yere havanın süzdüğü renkle gelir: dorukta altın, "
+               "vadide mavi.",
+               "The fading of the distant ground is not a fog effect but the air worked out: Rayleigh and Mie scattering, "
+               "ozone absorption, multiple scattering and the mountains' shadows cast into the air. The Earth is curved in "
+               "the geometry, with an effective radius of 7,323 km for the air's refraction, so far ridges sink behind the "
+               "horizon. The sun reaches the ground in the colour the air lets through: gold on the peaks, blue in the valleys.")},
+            {L("Sabit desenli süper örnekleme", "Fixed-pattern supersampling"),
+             L("Her piksel, her karede aynı noktalardan atılan 16 ışınla çizilir (panelde 4-64) ve ışınlar Gauss biçimli bir "
+               "süzgeçle birleştirilir. Önceki karelerden bir şey taşınmaz: görüntüde gren yoktur, durunca netleşen ya da "
+               "hareket edince bulanan bir şey de yoktur. Yüzlerce kilometre ötedeki ince sırt çizgileri bu yüzden kıpırdamaz.",
+               "Every pixel is drawn from 16 rays (4 to 64 in the panel) cast through the same points every frame and combined "
+               "with a Gaussian filter. Nothing is carried over from earlier frames: there is no grain, and nothing sharpens "
+               "when you stop or smears when you move. That keeps the thin ridgelines hundreds of kilometres away steady.")},
+            {L("Terasın çevresindeki kaya", "The rock around the terrace"),
+             L("Korkuluktan aşağı bakınca yakın zemin de ufuk kadar doğru olmalı. Terasın çevresinde iki halka ağ var, 1,5 "
+               "km'ye kadar ince, 30 km'ye kadar daha kaba; taranmış kaya dokusu bunlarda gerçek kabartma olur. Üç taranmış "
+               "kayanın 1.500 kopyası korkuluğun dışına dağılır. Yakında her örnek güneşe bir gölge ışını atar, uzak yer "
+               "gölgesini önceden hesaplanmış ufuklardan alır.",
+               "Looking down from the railing, the near ground has to hold up as well as the horizon. Two ring meshes "
+               "surround the terrace, fine out to 1.5 km and coarser out to 30 km, and a scanned rock texture becomes real "
+               "relief on them. 1,500 copies of three scanned rocks lie outside the railing. Near the summit each sample casts "
+               "a shadow ray to the sun; the far ground takes its shadow from precomputed horizons.")},
             {L("Teşekkür", "Credits"),
              L("Yükseklik: Copernicus DEM GLO-30 (© DLR, © Airbus, Copernicus); Ermenistan ve Azerbaycan çevresinde SRTM (Mapzen Terrain Tiles, USGS). Renk: Sentinel-2 cloudless 2016, EOX (CC BY 4.0, "
-               "değiştirilmiş Copernicus Sentinel verisi). assets/dag/KAYNAKLAR.md.",
+               "değiştirilmiş Copernicus Sentinel verisi). Kaya: Poly Haven taramaları (CC0). assets/dag/KAYNAKLAR.md.",
                "Elevation: Copernicus DEM GLO-30 (© DLR, © Airbus, Copernicus); around Armenia and Azerbaijan SRTM (Mapzen Terrain Tiles, USGS). Colour: Sentinel-2 cloudless 2016 by EOX (CC BY 4.0, "
-               "modified Copernicus Sentinel data). assets/dag/KAYNAKLAR.md.")}};
-        i.tags = {L("Çizim mesafesi", "Draw distance"), L("Atmosfer", "Atmosphere"), L("Gerçek yer", "Real place")};
+               "modified Copernicus Sentinel data). Rock: Poly Haven scans (CC0). assets/dag/KAYNAKLAR.md.")}};
+        i.tags = {L("Çizim mesafesi", "Draw distance"), L("Atmosfer", "Atmosphere"), L("Gerçek arazi", "Real terrain")};
         i.image = "assets/gallery/dag.jpg";
         i.accent = 0xE89A6C;
-        i.keys = {{L("Yürüyüş", "Walking"),
+        i.keys = {{L("Hareket", "Movement"),
                    {{L("Fare", "Mouse"), L("Etrafa bak", "Look around")},
-                    {"W A S D", L("Yürü", "Walk")},
-                    {"Shift", L("Koş", "Run")},
-                    {"Alt", L("Çok hızlı koş", "Sprint")},
+                    {"W|A|S|D", L("Yürü", "Walk")},
+                    {"Shift", L("Basılı tutup koş", "Hold to run")},
+                    {"Alt", L("Basılı tutup on kat hızlı git", "Hold to move ten times faster")},
                     {L("Boşluk", "Space"), L("Zıpla", "Jump")},
-                    {"C", L("Eğil", "Crouch")},
-                    {L("Sağ tık", "Right click"), L("Dürbün (tekerlek yaklaştırır)", "Binoculars (the wheel zooms)")},
-                    {"Tab", L("İmleci bırak / al", "Release / take the cursor")},
-                    {"1 2 3 4 5", L("Bakışlar", "Views")},
-                    {"R", L("Başa dön", "Back to the start")},
-                    {"↑|↓", L("Pozlama", "Exposure")}}}};
+                    {"C", L("Basılı tutup eğil", "Hold to crouch")},
+                    {"Tab", L("İmleci panel için bırak / geri al", "Free the cursor for the panel / back")},
+                    {"R", L("Başa dön", "Back to the start")}}},
+                  {L("Bakış", "View"),
+                   {{L("Sağ tık", "Right click"), L("Basılı tutup dürbünle bak", "Hold for the binoculars")},
+                    {L("Sağ tık|+|Tekerlek", "Right click|+|Wheel"), L("Dürbünün büyütmesi (3x-30x)", "Binocular zoom (3x-30x)")},
+                    {"1|2|3|4|5", L("Hazır bakış yönleri", "Preset views")},
+                    {"↑|↓", L("Pozlamayı artır / azalt", "Exposure up / down")}}}};
         i.reloadable = true;
         return i;
     }
@@ -235,10 +256,10 @@ public:
         app::Control c;
         c.kind = app::Control::Kind::Choice;
         c.id = "samples";
-        c.title = L("ÖRNEK", "SAMPLES");
+        c.title = L("Örnek", "Samples");
         c.items = {"4", "8", "16", "32", "64"};
         c.active = samples_;
-        c.detail = L("Pikselde sabit desenli ışın", "Rays a pixel, on a fixed pattern");
+        c.detail = L("Piksel başına ışın, her karede aynı desende", "Rays per pixel, the same pattern every frame");
         s.controls.push_back(c);
     }
 
@@ -257,7 +278,7 @@ public:
         }
         a_.buildAir();
         a_.applyDisplay();
-        host.toast(L("Ayarlar ve programlar yeniden yüklendi", "Settings and programs reloaded"));
+        host.toast(L("Ayarlar, hava tabloları ve programlar yeniden yüklendi", "Settings, air tables and programs reloaded"));
     }
 
     void unload() override {

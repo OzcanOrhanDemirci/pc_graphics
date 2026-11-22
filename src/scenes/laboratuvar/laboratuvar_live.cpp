@@ -42,16 +42,16 @@ std::string deneyName(Deney d) {
 }
 std::string deneyNote(Deney d) {
     switch (d) {
-    case Deney::Su: return L("Beher bardağa dökülür · kaba hesap, istersen ince", "A beaker poured into a glass · coarse, fine if asked");
-    case Deney::Bal: return L("Kaşıktan cam tabağa · canlı · fareyle gezdir", "From a dipper onto a glass dish · live · drag to move");
-    case Deney::Kum: return L("Huniden masaya ve behere · canlı · fareyle gezdir", "From a funnel onto the table and a beaker · live · drag to move");
-    case Deney::Balon: return L("Balona tıkla: iğne · kaba hesap, istersen ince", "Click the balloon: a needle · coarse, fine if asked");
-    case Deney::Karpuz: return L("Karpuza tıkla: silah · kaba hesap, istersen ince", "Click the melon: a gun · coarse, fine if asked");
-    case Deney::Jel: return L("Balistik jel bloğu, bloğa tıkla: tabanca, saniyede bir atış · kaba hesap, istersen ince",
-                              "A ballistic gel block, click it: a pistol, a shot a second · coarse, fine if asked");
-    case Deney::Damla: return L("İnce süt katmanına bir damla: taç · kaba hesap, istersen ince", "A drop into a thin layer of milk: the crown · coarse, fine if asked");
-    case Deney::Kup: return L("Renkli plastik küplerden küp, ortasında patlayıcı · Patlat ya da küpe tıkla · kaba hesap, istersen ince",
-                              "A cube of coloured plastic cubes, a charge at its middle · Blow it up, or click it · coarse, fine if asked");
+    case Deney::Su: return L("Beherdeki su bardağa dökülür; ince hesap isteğe bağlı.", "A beaker of water is poured into a glass; fine pass on request.");
+    case Deney::Bal: return L("Bal kaşıktan cam tabağa akar; canlı hesaplanır, fareyle sürükle.", "Honey runs from a dipper onto a glass dish; live, drag to move it.");
+    case Deney::Kum: return L("Kum huniden masaya ve behere dökülür; canlı, fareyle sürükle.", "Sand pours from a funnel onto the table and a beaker; live, drag it.");
+    case Deney::Balon: return L("Balona tıkla, iğne batsın; ince hesap isteğe bağlı.", "Click the balloon to prick it; fine pass on request.");
+    case Deney::Karpuz: return L("Karpuza tıkla, ateş edilsin; ince hesap isteğe bağlı.", "Click the melon to shoot it; fine pass on request.");
+    case Deney::Jel: return L("Balistik jel: tıkla, saniyede bir atış; ince hesap isteğe bağlı.",
+                              "Ballistic gel: click to shoot, once a second; fine pass on request.");
+    case Deney::Damla: return L("İnce süt katmanına düşen damla taç açar; ince hesap isteğe bağlı.", "A drop into a thin layer of milk makes a crown; fine pass on request.");
+    case Deney::Kup: return L("Plastik küplerden küp, ortasında patlayıcı. Patlat ya da küpe tıkla.",
+                              "A cube of plastic cubes with a charge inside. Blow it up or click it.");
     }
     return "";
 }
@@ -66,60 +66,86 @@ public:
         i.id = "laboratuvar";
         i.number = "04";
         i.title = L("Laboratuvar", "Laboratory");
-        i.subtitle = L("Sıvı ve tanecik fiziği, ağır çekim", "Liquids and grains in slow motion");
-        i.description = L("Bir ağır çekim fotoğraf masası: bardağa dökülen su, kaşıktan akan bal, huniden dökülen kum, patlayan su balonu, "
-                          "vurulan karpuz, balistik jel, renkli küçük küplerden patlayan bir küp. Fizik ne derse o; hızlı anlar istenince ince "
-                          "hesaplanır, istediğin hızda ve açıdan izlenir.",
-                          "A high-speed photography table: water poured into a glass, honey off a dipper, sand from a funnel, a water "
-                          "balloon popping, a watermelon shot, ballistic gel, a cube of small coloured cubes blown apart. Whatever the physics "
-                          "says; fast moments are computed finely when asked, and watched at any speed, from any side.");
+        i.subtitle = L("Ağır çekimde sıvı, kum ve kırılan cisimler", "Liquids, sand and breaking solids in slow motion");
+        i.description = L("Ağır çekim fotoğraf masasında sekiz deney: dökülen su, akan bal ve kum, patlayan su balonu, vurulan karpuz "
+                          "ve jel, süte düşen damla, havaya uçan bir küp. Deneyi başlatırsın, hızlı anı istersen ince hesaplatırsın, "
+                          "sonra istediğin hızda ve açıdan izlersin.",
+                          "Eight experiments on a high-speed photography table: water poured, honey and sand flowing, a water balloon "
+                          "popped, a melon and gel shot, a drop into milk, a cube blown apart. You trigger it, have the fast moment "
+                          "computed finely, then watch at any speed from any side.");
         i.details = {
-            {L("Tek çözücü", "One solver"),
-             L("Her şey tanecik: su ve bal yoğunluk kısıtıyla (PBF), kum sürtünmeli tanelerle, lastik ve karpuz kopabilen bağlarla (XPBD). "
-               "Bağları kopan karpuz eti suyuna döner.",
-               "Everything is particles: water and honey by a density constraint (PBF), sand by grains with friction, rubber and "
-               "watermelon by breakable bonds (XPBD). Melon flesh that loses its bonds turns to juice.")},
-            {L("Kayıt", "Recording"),
-             L("Tetik kaba dünyada hemen oynar; istenirse aynı girdilerle ince dünya (1,5-2,5 mm tanecik) arka planda saniyenin "
-               "1/600'ü ile 1/5000'i aralıklarla hesaplanır. Video yok: saklanan fiziktir, her açıdan canlı çizilir.",
-               "The trigger plays at once on a coarse world; asked for, a fine world (1.5-2.5 mm particles) computes the same inputs "
-               "in the background, kept every 1/600 to 1/5000 of a second. No video: what is kept is the physics, drawn live from any view.")},
+            {L("Tek tanecik çözücüsü", "One particle solver"),
+             L("Küp dışındaki yedi deney aynı ekran kartı çözücüsünde taneciklerle kurulur. Su, bal ve süt bir yoğunluk kısıtıyla "
+               "(PBF, konuma dayalı akışkan) sıkışmadan akar; kum sürtünmeli tanelerdir. Balon lastiği, karpuz ve jel kopabilen "
+               "esnek bağlarla (XPBD) bir arada durur; bütün bağları kopan karpuz eti suya döner. Kum yığını 32,5° ile durur, "
+               "kuru kumun 30-35° aralığında.",
+               "The seven experiments other than the cube run as particles on one GPU solver. Water, honey and milk flow without "
+               "compressing under a density constraint (PBF, position-based fluids); sand is grains with friction. The balloon's "
+               "rubber, the melon and the gel hold together with breakable elastic bonds (XPBD), and melon flesh that loses all "
+               "its bonds turns to juice. The sand pile stands at 32.5°, within dry sand's 30-35°.")},
+            {L("Ağır çekim ve ince hesap", "Slow motion and the fine pass"),
+             L("Tetik önce kaba dünyada hemen oynar. İstersen aynı girdiler arka planda ince bir dünyada yeniden hesaplanır: "
+               "tanecikler 0,4-2,5 mm, saniyede 600 ile 5.000 an saklanır. Video kaydedilmez, saklanan fiziktir; kayıt her açıdan "
+               "canlı çizilir, ileri geri sarılır, 1/100 hıza dek yavaşlatılır. Ağır çekimde alt adım kısalmaz, seyrekleşir; "
+               "aradaki kareler iki adımın arasından çizilir.",
+               "A trigger plays at once on the coarse world. If you ask, the same inputs are computed again in a fine world in "
+               "the background, with particles of 0.4 to 2.5 mm and 600 to 5,000 moments kept a second. No video is made: what is "
+               "kept is the physics, drawn live from any side, scrubbed and slowed down to 1/100. In slow motion the substeps get "
+               "rarer, not shorter, and the frames between them are interpolated.")},
             {L("Katı küpler", "Rigid cubes"),
-             L("Küp deneyinde her küçük küp katı bir cisim: kutu kutuya temas, renklere bölünmüş Gauss-Seidel, yığın için şok yayılımı, "
-               "sürtünme, sekme, hava direnci. 64'ten bir milyona; patlama yön yön Gurney'nin.",
-               "In the cube experiment each small cube is a rigid body: box on box, Gauss-Seidel by colour, shock propagation for stacks, "
-               "friction, bounce, air drag. From 64 to a million; the blast Gurney's along each direction.")},
-            {L("Yüzeyler", "Surfaces"),
-             L("Sıvıların yüzeyi her karede taneciklerinden kurulur (anizotropik çekirdekler); tane görünmez.",
-               "Every frame each liquid's surface is built from its particles (anisotropic kernels); no grain shows.")},
-            {L("Cam ve ışık", "Glass and light"),
-             L("OptiX ile yol izleme: kalınlıklı cam, kırılan su ve bal, kehribar soğurma; arkadan yumuşak panel, sıvı fotoğrafçılığının "
-               "klasik ışığı.",
-               "Path tracing with OptiX: thick glass, refracting water and honey, amber absorption; a soft panel behind, the classic "
-               "light of liquid photography.")},
-            {L("Gerçek ölçüler", "Real numbers"),
-             L("Tüfek yükleri üretici tablolarından, dokuda balistik jele kalibre; suyun hacmi korunur, kum 30-35° yığılır.",
-               "Rifle loads from manufacturers' tables, calibrated in tissue to ballistic gelatin; water keeps its volume, sand piles "
-               "at 30-35°.")}};
+             L("Küp deneyinde her küçük küp kendi dönüşü olan katı bir cisimdir, 64 taneden bir milyona dek. Kutu kutuya temaslar "
+               "ekran kartında renklere bölünmüş Gauss-Seidel ile çözülür: aynı renkteki küpler birbirine değmez, bu yüzden aynı "
+               "anda çözülebilir. Şok yayılımı yığını durdurur; sürtünme, sekme ve hava direnci de hesaba girer. Patlama her yöne "
+               "Gurney denklemiyle, o yöndeki küplerin kütlesine göre hız verir.",
+               "In the cube experiment each small cube is a rigid body with its own rotation, from 64 of them up to a million. "
+               "Box-on-box contacts are solved on the GPU by Gauss-Seidel split into colours: cubes of one colour never touch, so "
+               "they can be solved at once. Shock propagation lets a stack come to rest, with friction, bounce and air drag on top. "
+               "The blast gives each direction a speed by the Gurney equation, from the mass of cubes lying that way.")},
+            {L("Taneciklerden sıvı yüzeyi", "Liquid surfaces from particles"),
+             L("Sıvının yüzeyi her karede taneciklerden yeniden kurulur. Her taneciğe, komşularının dizilişine göre basık bir "
+               "elipsoit çekirdek verilir (Yu ve Turk, 2013); düz yüzey düz kalır, ince bir su perdesi dağılmaz. Yoğunluk alanından "
+               "ekran kartında üçgen ağ çıkarılır, tek kalan damlacıklar küre olarak çizilir. Tanecik görünmez, sıvı görünür.",
+               "Each frame the liquid's surface is rebuilt from its particles. Every particle gets an ellipsoid kernel flattened by "
+               "how its neighbours lie (Yu and Turk, 2013), so a flat surface stays flat and a thin sheet holds together. A triangle "
+               "mesh is taken from the density field on the GPU, and lone droplets are drawn as spheres. You see liquid, not "
+               "particles.")},
+            {L("Cam, sıvı ve ışık", "Glass, liquid and light"),
+             L("Görüntü OptiX ile yol izlenerek çizilir: ışın camda ve sıvıda Fresnel'e göre yansır ya da kırılır, içinden geçtiği "
+               "yol boyunca soğurulur; balın kehribar rengi buradan gelir. Arkada, sıvı fotoğrafçılığındaki gibi kenarları yumuşak "
+               "düşen büyük bir ışık paneli durur. Her kare 1920 × 1080'de piksel başına 4 örnekle çizilir, önceki karelerle "
+               "harmanlanır ve OptiX'in yapay zekâ gürültü gidericisinden geçer.",
+               "The image is path traced with OptiX: in glass and liquid a ray reflects or refracts by Fresnel and is absorbed along "
+               "its way through, which is where honey's amber comes from. Behind stands a large light panel whose edges fall off "
+               "softly, as in liquid photography. Each frame is drawn at 1920 × 1080 with 4 samples per pixel, blended with earlier "
+               "frames and passed through OptiX's AI denoiser.")},
+            {L("Gerçek mermiler", "Real rounds"),
+             L("Tabanca ve tüfek mermileri gerçek yüklerdir: .22 LR'den .50 AE'ye, 5,56 mm'den .50 BMG'ye; kütle ve hızları üretici "
+               "ve ordu veri sayfalarından alınır. Merminin yol boyunca yavaşlaması ve bıraktığı enerji, %10'luk balistik jelde "
+               "yayımlanmış ölçümlere göre ayarlanır.",
+               "The pistol and rifle rounds are real loads, from .22 LR to .50 AE and from 5.56 mm to .50 BMG, with masses and "
+               "speeds from manufacturer and army data sheets. How a bullet slows along its path and the energy it leaves are "
+               "calibrated against published measurements in 10% ballistic gelatin.")}};
         i.tags = {L("Sıvı fiziği", "Fluid physics"), L("Ağır çekim", "Slow motion"), L("Yol izleme", "Path tracing")};
         i.image = "assets/gallery/laboratuvar.jpg";
         i.accent = 0x6FC2B4;
         i.reloadable = true;
         i.keys = {{L("Deney", "Experiment"),
-                   {{"1-8", L("Su, bal, kum, balon, karpuz, jel, süt damlası, küp", "Water, honey, sand, balloon, melon, gel, milk drop, cube")},
-                    {L("Boşluk", "Space"), L("Dök / akıt / durdur / patlat", "Pour / run / stop / blow up")},
-                    {L("Sol tık", "Left click"), L("İğne, ateş (jelde saniyede bir); balda ve kumda sürükle: gezdir", "Needle, fire (the gel: once a second); honey and sand: drag to move")},
-                    {"I", L("İnce hesap yap / durdur", "Fine pass: start / stop")},
-                    {"R", L("Yeniden kur; ince kayıtta: kaba hesaba dön", "Set up again; in a fine recording: back to the coarse world")}}},
+                   {{"1|–|8", L("Deneyi seç (paneldeki sırayla)", "Choose an experiment (panel order)")},
+                    {L("Boşluk", "Space"), L("Başlat: dök, ateş et, patlat", "Trigger: pour, fire, blow up")},
+                    {L("Sol tık", "Left click"), L("Hedefe tıkla, sürükleyip akışı gezdir", "Click a target, drag to steer a stream")},
+                    {"I", L("İnce hesabı başlat / durdur", "Start / stop the fine pass")},
+                    {"R", L("Yeniden kur ya da ince kayıttan çık", "Reset, or leave the fine recording")}}},
                   {L("Zaman", "Time"),
                    {{"T", L("Hız: ×1, ×1/10, ×1/100", "Speed: ×1, ×1/10, ×1/100")},
                     {"P", L("Durdur / oynat", "Pause / play")},
-                    {"← →", L("Kayıtta geri / ileri", "Back / on in a recording")}}},
+                    {"←|→", L("Kayıtta 10 ms geri / ileri", "10 ms back / on in a recording")},
+                    {"Shift|+|←|→", L("Kayıtta 100 ms geri / ileri", "100 ms back / on in a recording")}}},
                   {L("Kamera", "Camera"),
-                   {{L("Sağ tık|Fare", "Right click|Mouse"), L("Bak", "Look")},
-                    {"W A S D", L("Baktığın yöne git", "Move where you look")},
-                    {"E Q", L("Yukarı / aşağı", "Up / down")},
-                    {"Shift", L("Hızlı", "Fast")},
+                   {{L("Sağ tık|+|Fare", "Right click|+|Mouse"), L("Basılı tutup bak", "Hold to look around")},
+                    {"W|A|S|D", L("Hareket et", "Move")},
+                    {"Q|E", L("Aşağı / yukarı", "Down / up")},
+                    {L("Tekerlek", "Wheel"), L("İleri / geri", "Forward / back")},
+                    {"Shift", L("Basılı tutup hızlı git", "Hold to move fast")},
                     {"C", L("Kamerayı deneye döndür", "Camera back to the experiment")}}}};
         return i;
     }
@@ -329,7 +355,7 @@ public:
                     playing_ = true;
                     firstPlayDone_ = false;
                     speedIdx_ = 0;
-                    host.toast(L("İnce kayıt hazır: gerçek hızda oynuyor", "The fine recording is ready: playing at real speed"));
+                    host.toast(L("İnce kayıt hazır, gerçek hızda oynuyor", "The fine recording is ready, playing at real speed"));
                 }
             }
             if (mode_ == Mode::Playback && playing_ && !paused_) {
@@ -338,7 +364,7 @@ public:
                     playT_ = rec_.duration();
                     if (!rec_.computing()) {
                         playing_ = false;
-                        if (!firstPlayDone_) host.toast(L("Kayıt bitti: zaman çubuğuyla gez, hızı seç, kamerayla dolaş", "Done: scrub the time bar, pick a speed, fly round"));
+                        if (!firstPlayDone_) host.toast(L("Kayıt bitti. Zaman çubuğunda gezin, hızı seç, kamerayla dolaş.", "Recording done. Scrub the time bar, pick a speed, fly around."));
                         firstPlayDone_ = true;
                     }
                 }
@@ -372,7 +398,7 @@ public:
         using theme::num;
         // what is on screen
         if (mode_ == Mode::Playback) s.chips.push_back({firstPlayDone_ ? L("İnce kayıt", "Fine recording") : L("İnce kayıt · gerçek hız", "Fine recording · real speed"), true});
-        else if (!events_.empty() && deneyRecorded(deney_)) s.chips.push_back({L("Kaba hesap", "Coarse"), true});
+        else if (!events_.empty() && deneyRecorded(deney_)) s.chips.push_back({L("Kaba hesap", "Coarse pass"), true});
         else s.chips.push_back({L("Canlı", "Live"), false});
         if (rec_.computing()) s.chips.push_back({L("İnce hesap %", "Fine pass ") + num(100.0 * rec_.progress(), 0) + L("", "%")});
         if (paused_) s.chips.push_back({L("Zaman durdu", "Time paused"), true});
@@ -409,7 +435,7 @@ public:
             c.value = li.height;
             const float h = a_.cfg.f("damla.yukseklik_en_az", 0.05f) + li.height * (a_.cfg.f("damla.yukseklik_en_cok", 0.5f) - a_.cfg.f("damla.yukseklik_en_az", 0.05f));
             c.text = num(h * 100.0, 0) + " cm";
-            c.detail = L("Damlanın düştüğü yükseklik: çarpma hızı ", "The drop falls from here: it lands at ") + num(std::sqrt(2.0 * 9.81 * h), 1) + L(" m/sn", " m/s");
+            c.detail = L("Bu yükseklikten düşen damla ", "From this height the drop lands at ") + num(std::sqrt(2.0 * 9.81 * h), 1) + L(" m/s ile çarpar", " m/s");
             s.controls.push_back(c);
         }
         if (deney_ == Deney::Su) {
@@ -421,7 +447,7 @@ public:
             c.value = li.height;
             const float h = a_.cfg.f("su.yukseklik_en_az", 0.12f) + li.height * (a_.cfg.f("su.yukseklik_en_cok", 0.45f) - a_.cfg.f("su.yukseklik_en_az", 0.12f));
             c.text = num(h * 100.0, 0) + " cm";
-            c.detail = L("Beherin ağzı bardağın üstünde · bırakınca yeniden kurulur", "The beaker's lip over the glass · rebuilt when let go");
+            c.detail = L("Beherin ağzının yüksekliği; bırakınca deney yeniden kurulur", "The height of the beaker's lip; set up again when you let go");
             s.controls.push_back(c);
         }
         if (deney_ == Deney::Bal || deney_ == Deney::Kum) {
@@ -434,7 +460,7 @@ public:
             c.section = true;
             c.value = li.flow;
             const float q = a_.cfg.f(pre + "akis_en_az", honey ? 0.5f : 3.0f) + li.flow * (a_.cfg.f(pre + "akis_en_cok", honey ? 5.0f : 25.0f) - a_.cfg.f(pre + "akis_en_az", honey ? 0.5f : 3.0f));
-            c.text = num(q, 1) + L(" mL/sn", " mL/s");
+            c.text = num(q, 1) + L(" mL/s", " mL/s");
             s.controls.push_back(c);
             app::Control h;
             h.kind = app::Control::Kind::Slider;
@@ -466,8 +492,8 @@ public:
             c.value = li.fineness;
             c.text = theme::thousands(unsigned(n * n * n)) + " (" + std::to_string(n) + "³)";
             const float side = a_.cfg.f("kup.boyut", 0.10f);
-            c.detail = L("Her biri ", "Each ") + num(side / n * 1000.0, n >= 32 ? 1 : 0) + L(" mm · bırakınca yeniden kurulur", " mm · set up again when let go") +
-                       (n >= 64 ? L(" · canlıda yavaş: ince hesapla izle", " · slow live: watch it computed finely") : std::string());
+            c.detail = L("Her biri ", "Each ") + num(side / n * 1000.0, n >= 32 ? 1 : 0) + L(" mm; bırakınca deney yeniden kurulur", " mm; set up again when you let go") +
+                       (n >= 64 ? L(". Canlıda yavaş, ince hesapla izle", ". Slow live: watch the fine pass") : std::string());
             s.controls.push_back(c);
             app::Control g;
             g.kind = app::Control::Kind::Slider;
@@ -480,7 +506,7 @@ public:
             // the speed of a face's middle (Gurney: the cone's mass over the charge's)
             const float M = a_.cfg.f("kup.yogunluk", 1050.0f) * std::pow(0.5f * side, 3.0f) / 3.0f, Cs = ch * 1e-3f / (4.0f * 3.14159265f);
             const float vf = 2440.0f / std::sqrt(M / Cs + 0.6f);
-            g.detail = L("Yüzün ortası ~", "A face's middle ~") + num(vf, vf < 10.0f ? 1 : 0) + L(" m/sn çıkar · ", " m/s · ") +
+            g.detail = L("Bir yüzün ortası ~", "A face's middle leaves at ~") + num(vf, vf < 10.0f ? 1 : 0) + L(" m/s ile çıkar: ", " m/s: ") +
                        (vf < 0.6f ? L("dökülür", "crumbles") : vf < 6.0f ? L("dağılır", "scatters") : L("patlar", "bursts"));
             s.controls.push_back(g);
         }
@@ -495,7 +521,7 @@ public:
             c.value = li.power;
             c.mark = 0.5f;
             c.text = L0.name;
-            c.detail = num(L0.shot.mass * 1000.0, 1) + " g · " + num(L0.shot.velocity, 0) + L(" m/sn · ", " m/s · ") + num(L0.energy(), 0) + " J";
+            c.detail = num(L0.shot.mass * 1000.0, 1) + " g · " + num(L0.shot.velocity, 0) + L(" m/s · ", " m/s · ") + num(L0.energy(), 0) + " J";
             s.controls.push_back(c);
         }
         {   // the main action
@@ -526,10 +552,10 @@ public:
                 c.text = L("İnce hesap yap", "Compute it finely");
                 if (deney_ == Deney::Kup) {   // the same cubes, finer steps
                     const float k = float(a_.cfg.i("kup.ince_alt_adim", 48)) / float(std::max(1, a_.cfg.i("kup.alt_adim", 20)));
-                    c.detail = L("Aynı küpler, ", "The same cubes, ") + num(k, 1) + L(" kat ince adımla, arka planda", "x finer steps, in the background");
+                    c.detail = L("Aynı küpler arka planda ", "The same cubes in the background, ") + num(k, 1) + L(" kat ince adımla hesaplanır", "x finer steps");
                 } else {
-                    c.detail = L("Aynı girdilerle ", "The same inputs with ") + num(a_.cfg.f(std::string(deneyKey(deney_)) + ".aralik_ince", 0.0015f) * 1000.0, 1) +
-                               L(" mm tanecik, arka planda", " mm particles, in the background");
+                    c.detail = L("Aynı girdiler arka planda ", "The same inputs with ") + num(a_.cfg.f(std::string(deneyKey(deney_)) + ".aralik_ince", 0.0015f) * 1000.0, 1) +
+                               L(" mm tanecikle hesaplanır", " mm particles, in the background");
                 }
             }
             s.controls.push_back(c);
@@ -543,7 +569,7 @@ public:
             const double T = rec_.duration();
             c.value = float(mode_ == Mode::Playback ? playT_ / T : rec_.computed() / T);
             c.text = num((mode_ == Mode::Playback ? playT_ : rec_.computed()) * 1000.0, 0) + " ms";
-            c.detail = rec_.computing() ? L("Hesaplanan ", "Computed ") + num(rec_.computed(), 2) + " / " + num(T, 2) + L(" sn · tıkla, izle", " s · click to watch")
+            c.detail = rec_.computing() ? L("Hesaplanan ", "Computed ") + num(rec_.computed(), 2) + " / " + num(T, 2) + L(" sn · tıklayıp izle", " s · click to watch")
                                         : L("İnce kayıt: ", "Fine recording: ") + num(rec_.spacing() * 1000.0, 1) +
                                               (rec_.hasCubes() ? L(" mm küp, saniyede ", " mm cubes, ") : L(" mm tanecik, saniyede ", " mm particles, ")) +
                                               num(rec_.busyRate(), 0) + L(" an", " moments a second") +
@@ -733,7 +759,7 @@ private:
             prevValid_ = false;
             lerpA_ = 1.0f;
             changed_ = true;
-            host.toast(L("Kaba hesap (ince kayıt zaman çubuğunda)", "The coarse world (the fine recording is on the time bar)"));
+            host.toast(L("Kaba hesaba dönüldü; ince kayıt zaman çubuğunda duruyor", "Back to the coarse world; the fine recording stays on the time bar"));
             return;
         }
         choose(host, deney_, true);
@@ -750,7 +776,7 @@ private:
             return;
         }
         if (events_.empty()) {
-            host.toast(L("Önce tetikle: ince hesap aynı girdileri yeniden hesaplar", "Trigger it first: the fine pass computes the same inputs again"));
+            host.toast(L("Önce deneyi başlat; ince hesap aynı girdileri yeniden hesaplar", "Trigger it first; the fine pass computes the same inputs again"));
             return;
         }
         if (rec_.active()) return;   // done: it is on the time bar
@@ -817,7 +843,7 @@ private:
             rec_.release();
             autoPlay_ = false;
         }
-        if (events_.size() == 1) host.toast(L("Kaba hesap · ince için: İnce hesap yap (I)", "Coarse · for the fine pass: Compute it finely (I)"));
+        if (events_.size() == 1) host.toast(L("Kaba hesap oynuyor. İnce hesap için I'ya bas.", "The coarse pass is playing. Press I for the fine pass."));
         else host.toast(L("Atış ", "Shot ") + std::to_string(events_.size()));
     }
 

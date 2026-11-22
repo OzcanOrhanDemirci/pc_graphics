@@ -1,4 +1,6 @@
 #include "scenes/denizalti/dz_render.h"
+
+#include "app/lang.h"
 #include "scenes/denizalti/dz_bake.h"
 #include "scenes/denizalti/dz_decal.h"
 #include "scenes/denizalti/dz_gl.h"
@@ -34,7 +36,7 @@ bool readFile(const std::string& path, std::string& out) {
 bool preprocess(const std::string& dir, const std::string& name, std::string& out, std::string& err, int depth = 0) {
     std::string src;
     if (!readFile(dir + "/" + name, src)) {
-        err = "okunamadi: " + dir + "/" + name;
+        err = app::L("okunamadı: ", "could not read: ") + dir + "/" + name;
         return false;
     }
     std::istringstream in(src);
@@ -168,7 +170,7 @@ bool Renderer::buildPrograms(std::string& err) {
 bool Renderer::init(const std::string& root, std::string& err) {
     root_ = root;
     if (!dzgl::load(err)) {
-        err = "OpenGL 4.6 islevleri eksik: " + err;
+        err = app::L("Ekran kartının sürücüsünde OpenGL 4.6 işlevleri eksik: ", "The GPU driver lacks OpenGL 4.6 functions: ") + err;
         return false;
     }
     glVersion = reinterpret_cast<const char*>(glGetString(GL_VERSION));

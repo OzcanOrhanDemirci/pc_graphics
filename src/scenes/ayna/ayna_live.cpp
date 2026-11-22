@@ -29,64 +29,83 @@ public:
         i.id = "ayna";
         i.number = "09";
         i.title = L("Ayna", "The Mirror");
-        i.subtitle = L("Ayna labirentinde yansımanın yansıması", "The reflection of a reflection, in a mirror labyrinth");
-        i.description = L("Elhamra kemerli bir ayna labirentinde süzülen krom bir küresin. Kendi ışığını yakarsın, renkli lambalar bırakırsın; "
-                          "aynalar her şeyi sonsuza dek çoğaltır.",
-                          "You are a chrome sphere floating through a mirror labyrinth of Moorish arches. You shine your own light and "
-                          "leave coloured lamps behind; the mirrors multiply everything without end.");
+        i.subtitle = L("Ayna labirentinde yansımanın yansıması", "Reflections of reflections in a mirror maze");
+        i.description = L("Endülüs kemerli bir ayna labirentinde süzülen krom bir küresin. Önündeki yarıktan kendi ışığını yakar, rengini ve "
+                          "gücünü seçer, ardında renkli lambalar bırakırsın. Karşılıklı aynalar her şeyi derin bir tünelde yeniden ve "
+                          "yeniden çoğaltır.",
+                          "You are a chrome sphere floating through a mirror labyrinth of Moorish arches. You shine your own light from a "
+                          "slit in your front, choose its colour and strength, and leave coloured lamps behind. Facing mirrors repeat "
+                          "everything down a deep tunnel.");
         i.details = {
-            {L("Yansıma", "Reflection"),
-             L("Her ayna ölçülmüş değerlerle: 6 mm float camın ön yüzü, arkasında gümüş, camın iki geçişteki soğurması. Dik gelişte "
-               "kırmızının %79'u, yeşil ve mavinin %84'ü döner: derin tünel kararır ve camgöbeği-yeşile döner, ayarı yok.",
-               "Every mirror from measured constants: the front of 6 mm float glass, silver behind it, the glass's absorption both "
-               "ways. Straight on, 79% of red and 84% of green and blue come back: the deep tunnel darkens and turns cyan-green, "
-               "with no setting.")},
-            {L("İzleyici", "Tracer"),
-             L("Labirent üçgen bir ızgarada; ışın hücreden hücreye yürür, her hücrede yalnız oradaki zemini, sütunları, kemerleri ve "
-               "aynaları görür. Yüzeyler kesin: tünelin kırkıncı kopyası hesaplanan yerinden on binde bir piksel sapar.",
-               "The labyrinth stands on a triangular lattice; a ray walks from cell to cell, meeting in each only its floor, columns, "
-               "arches and mirrors. The surfaces are exact: the tunnel's fortieth copy lies a ten-thousandth of a pixel from where it "
-               "is computed.")},
-            {L("Aynadan ışık", "Light by the mirrors"),
-             L("Işığın aynadan duvara yolu planda kesin bir hüzme ağacıyla bulunur: her ışığın her aynadaki görüntüsü, pencerelerden "
-               "ve sütunlardan geçebildiği kama. Örnekleme yok, gren yok; aynı izleyiciyle bir milyar fotona karşı %99 uyum.",
-               "The light's way from a mirror to a wall is found exactly, in plan, by a tree of beams: each light's image in each "
-               "mirror, and the wedge of it that passes the windows and the columns. No sampling, no grain; 99% agreement with a "
-               "billion photons through the same tracer.")},
+            {L("Ölçülmüş değerlerle ayna", "Mirrors from measured optics"),
+             L("Her ayna, 6 mm float camın arkasındaki gümüştür ve ölçülmüş optik sabitlerle hesaplanır: camın ön yüzündeki "
+               "yansıma, gümüş ve camın iki geçişteki soğurması (Rubin 1985, Johnson ve Christy 1972). Dik gelişte kırmızının "
+               "%79'u, yeşil ve mavinin %84'ü geri döner. Bu yüzden karşılıklı aynalardaki tünel derinleştikçe kararır ve "
+               "camgöbeği-yeşile döner; bunun için ayrı bir ayar yok.",
+               "Every mirror is silver behind 6 mm of float glass, computed from measured optical constants: the reflection off "
+               "the glass's front face, the silver, and the glass's absorption on the way in and out (Rubin 1985, Johnson and "
+               "Christy 1972). Straight on, 79% of red and 84% of green and blue come back, so the tunnel between facing mirrors "
+               "darkens and turns cyan-green as it deepens, with no setting for it.")},
+            {L("Hücreden hücreye kesin izleme", "Exact tracing, cell by cell"),
+             L("OptiX değil, CUDA ile yazılmış kendi izleyicimiz. Labirent 60 derecelik üçgen bir ızgarada 54 hücredir; ışın "
+               "hücreden hücreye yürür ve her hücrede yalnız oradaki zemin, tavan, sütun, kemer ve aynalarla kesişir. Yüzeyler "
+               "düzlem, çember ve silindir olarak kesin hesaplanır: iki paralel ayna arasındaki tünelin 40. kopyası, olması "
+               "gereken yerden on binde bir pikselden az sapar.",
+               "Not OptiX but our own tracer, written in CUDA. The labyrinth is 54 cells on a 60-degree triangular grid; a ray "
+               "walks from cell to cell and meets in each only that cell's floor, ceiling, columns, arches and mirrors. Surfaces "
+               "are solved exactly as planes, circles and cylinders: between two parallel mirrors the tunnel's 40th copy lies "
+               "within a ten-thousandth of a pixel of where it should be.")},
+            {L("Aynadan yansıyan ışık", "Light off the mirrors"),
+             L("Yol izleme, nokta bir ışığın aynadan duvara giden yolunu bulamaz. Aynalar dik ve ızgara çizgileri üstünde durduğu "
+               "için bu yol planda kesin bulunur: her ışığın her aynadaki görüntüsünden, pencerelerden ve sütunların arasından "
+               "geçebilen bir kama çıkar; bunların hepsi bir hüzme ağacı oluşturur. Örnekleme olmadığı için gren de yok. Aynı "
+               "izleyiciyle atılan bir milyar fotonla %99 uyuşur.",
+               "Path tracing cannot find a point light's way off a mirror onto a wall. Because the mirrors are upright and stand "
+               "on the grid lines, that way is found exactly in plan: from each light's image in each mirror comes a wedge that "
+               "passes the windows and the gaps between columns, and together they form a tree of beams. No sampling, so no "
+               "grain. It agrees to 99% with a billion photons shot through the same tracer.")},
             {L("Işık haritaları", "Light maps"),
-             L("Bırakılan lambalar ve fenerler durur: ışıkları bırakıldıkları an yüzeylere pişer, küremizin gölgesi her karede "
-               "hesaplanır. Bizim ışığımız her kare yeniden pişer; kendi hücresindeki doğrudan ışığı piksel başına, keskin.",
-               "The lamps left behind and the lanterns stand still: their light is baked into the surfaces the moment they are "
-               "left, our sphere's shadow worked out every frame. Our own light is baked again every frame; straight in its own "
-               "cell it is computed per pixel, sharp.")},
-            {L("Netlik", "Sharpness"),
-             L("Her ışın kendi izdüşüm konisini taşır: desenler onunla süzülür, aynanın ardındaki desen aynı uzaklıktan doğrudan "
-               "bakıldığı kadar keskin. Küçük lambalar konideki paylarıyla toplanır, derin tünelde titremez.",
-               "Every ray carries its own footprint: the patterns are filtered by it, so behind a mirror a pattern is as sharp as "
-               "seen straight at the same distance. Small lamps count by their share of the footprint: in the deep tunnel they do "
-               "not twinkle.")},
-            {L("Görüntü", "Picture"),
-             L("Pikselde altı sabit örnek, her kare aynı; birikim ve gürültü giderici yok. Hafif pus her yol parçası boyunca kapalı "
-               "biçimde. 2560 × 1440'ta saniyede 30-40 kare.",
-               "Six fixed samples a pixel, the same every frame; no accumulation and no denoiser. A light mist, in closed form along "
-               "every piece of the way. 30 to 40 frames a second at 2560 x 1440.")}};
-        i.tags = {L("Yansıma", "Reflection"), L("Işık", "Light"), L("Labirent", "Labyrinth")};
+             L("Bırakılan lambalar ve dört pirinç fener yerinde durur. Işıkları, doğrudan ve bütün aynalardan gelen haliyle, "
+               "bırakıldıkları an yüzeylerin ışık haritasına pişirilir; küremizin onlardan düşen gölgesi her karede piksel başına "
+               "hesaplanır. Bizim ışığımız bizimle yürüdüğü için her kare yarım çözünürlüklü bir haritaya yeniden pişer (1,8 ms); "
+               "kendi hücresindeki doğrudan ışığı piksel başına keskin hesaplanır.",
+               "The lamps you leave and the four brass lanterns stay put. Their light, direct and from every mirror, is baked "
+               "into the surfaces' light maps the moment they are placed; our sphere's shadow from them is worked out per pixel "
+               "every frame. Our own light moves with us, so it is baked again every frame into a half-resolution map (1.8 ms); "
+               "its direct light in its own cell is computed per pixel, sharp.")},
+            {L("Işının izdüşümüyle süzme", "Filtering by the ray's footprint"),
+             L("Her ışın, piksele düşen kendi izdüşüm konisini taşır. Desenler bu koniyle süzülür; bu yüzden aynanın ardındaki bir "
+               "desen, aynı uzaklıktan doğrudan bakıldığı kadar keskin ve sakindir. Küçük lambalar da koninin örttüğü paylarıyla "
+               "toplanır: derin tünelde piksel boyunun altına inen lambalar titremez, sabit bir nokta olarak kalır.",
+               "Every ray carries its own footprint, the cone a pixel covers. Patterns are filtered by that cone, so a pattern "
+               "behind a mirror is as sharp and as steady as one seen directly from the same distance. Small lamps count by the "
+               "share of the cone they cover: deep in the tunnel, lamps smaller than a pixel do not twinkle but stay a steady "
+               "point.")},
+            {L("Örnekleme, pus ve hız", "Sampling, haze and speed"),
+             L("Pikselde her kare aynı 6 sabit örnek alınır; önceki karelerden birikim ve gürültü giderici yok, örnekler komşu "
+               "piksellere hafifçe taşarak birleşir. Hafif, ileri saçan bir pus her yol parçası boyunca örneklemeden, formülle "
+               "hesaplanır ve ışığımızın konisini görünür kılar. 2560 × 1440'ta saniyede yaklaşık 30-44 kare.",
+               "Six fixed samples per pixel, the same every frame; nothing carried over from earlier frames, no denoiser. Each "
+               "pixel's samples spill slightly into its neighbours. A light, forward-scattering haze is "
+               "computed in closed form along every piece of a path, without sampling, and shows the cone of our light. About "
+               "30 to 44 frames a second at 2560 × 1440.")}};
+        i.tags = {L("Analitik ışın izleme", "Analytic ray tracing"), L("Ölçülmüş optik", "Measured optics"), L("Işık haritaları", "Light maps")};
         i.image = "assets/gallery/ayna.jpg";
         i.accent = 0x7FC8C2;
-        i.keys = {{L("Hareket", "Moving"),
+        i.keys = {{L("Hareket", "Movement"),
                    {{L("Fare", "Mouse"), L("Etrafa bak", "Look around")},
-                    {"W A S D", L("İleri, geri, yanlara", "Forward, back, sideways")},
+                    {"W|A|S|D", L("İleri, geri, yanlara", "Forward, back, sideways")},
                     {L("Boşluk", "Space"), L("Yüksel", "Rise")},
                     {"C", L("Alçal", "Sink")},
-                    {"Shift", L("Hızlı", "Fast")},
-                    {"Tab", L("İmleci bırak / al", "Release / take the cursor")},
-                    {"1 2 3 4", L("Bakışlar: koridor, ayna, salon, zemin", "Views: the corridor, the mirror, the hall, the floor")},
+                    {"Shift", L("Basılı tutunca hızlı", "Hold to go fast")},
+                    {"Tab", L("İmleci bırak / geri al", "Free / capture the cursor")},
+                    {"1|2|3|4", L("Bakışlar: koridor, ayna, salon, zemin", "Views: corridor, mirror, hall, floor")},
                     {"R", L("Başa dön", "Back to the start")}}},
                   {L("Işık", "Light"),
-                   {{"Q E", L("Işığın rengi", "The light's colour")},
-                    {L("Tekerlek", "Wheel"), L("Işığın şiddeti", "The light's strength")},
-                    {"F", L("Işık aç / kapat", "Light on / off")},
-                    {L("Sol tık, G", "Left button, G"), L("Lamba bırak", "Leave a lamp")},
+                   {{"Q|E", L("Işığın rengi (8 renk)", "Light colour (8 colours)")},
+                    {L("Tekerlek", "Wheel"), L("Işığın gücü (8 kademe)", "Light strength (8 steps)")},
+                    {"F", L("Işığı aç / kapat", "Light on / off")},
+                    {L("Sol tık|/|G", "Left click|/|G"), L("Lamba bırak (en çok 8)", "Drop a lamp (at most 8)")},
                     {"X", L("Lambaları topla", "Gather the lamps")},
                     {"↑|↓", L("Pozlama", "Exposure")}}}};
         i.reloadable = true;
@@ -98,7 +117,7 @@ public:
     void load(app::Host& host, app::LoadState& st) override {
         switch (st.step) {
         case 0:
-            st.label = L("Labirent kuruluyor", "Building the labyrinth");
+            st.label = L("Labirent kuruluyor, fenerlerin ışığı pişiyor", "Building the labyrinth and baking the lanterns' light");
             st.fraction = 0.2f;
             ++st.step;
             return;
@@ -231,8 +250,8 @@ public:
         s.chips.push_back({std::string(AynaApp::paletteName(a_.colorIndex, tr)), true});
         s.chips.push_back({a_.lightOn ? L("Işık ", "Light ") + std::to_string(a_.levelIndex + 1) + "/" + std::to_string(AynaApp::levelCount())
                                       : L("Işık kapalı", "Light off")});
-        if (!a_.lamps.empty()) s.chips.push_back({L("Lamba ", "Lamps ") + std::to_string(a_.lamps.size())});
-        s.metrics.push_back({L("Kare", "Frame"), num(a_.frameMs, 1) + " ms"});
+        if (!a_.lamps.empty()) s.chips.push_back({L("Lamba: ", "Lamps: ") + std::to_string(a_.lamps.size())});
+        s.metrics.push_back({L("Kare süresi", "Frame time"), num(a_.frameMs, 1) + " ms"});
     }
 
     void screenshot(app::Host& host) override {
@@ -269,7 +288,7 @@ public:
 private:
     void dropLamp(app::Host& host) {
         if (int(a_.lamps.size()) >= a_.cfg.i("lamp.max", 8)) {
-            host.toast(L("En çok 8 lamba: X ile topla", "Eight lamps at most: X gathers them"));
+            host.toast(L("En çok 8 lamba bırakılır: X hepsini toplar", "Eight lamps at most: X gathers them all"));
             return;
         }
         // in front of the sphere, level, where it fits

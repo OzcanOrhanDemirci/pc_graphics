@@ -148,7 +148,7 @@ bool DagApp::prepareWorld(std::string& err) {
 
 bool DagApp::initRenderer(std::string& err) {
     if (!R.init(width, height, root)) {
-        err = "renderer";
+        err = app::L("Işın izleme başlatılamadı (OptiX ya da CUDA)", "Ray tracing could not start (OptiX or CUDA)");
         return false;
     }
     if (!R.compile(err)) return false;
