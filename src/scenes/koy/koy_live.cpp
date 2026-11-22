@@ -264,7 +264,7 @@ public:
             c.items = {"1", "4", "8", "16", "32"};
             for (int k = 0; k < 5; ++k)
                 if (kBaseChoices[k] == k_.quality.baseGot) c.active = k;
-            c.detail = L("Her pikselin sabit örneği; 32'de tampon 1,9 GB, bellek yetmezse daha azı",
+            c.detail = L("Her pikselin sabit örneği; 32'de 1,9 GB tampon, sığmazsa daha az",
                          "Fixed samples for every pixel; 32 needs a 1.9 GB buffer, else fewer");
             s.controls.push_back(c);
         }
