@@ -3,6 +3,8 @@
   python assets/deprem/fetch.py              the four ESM records (12 files); re-runnable (skips what is there and correct),
                                              then checks the Bayrakli record and says how to get it if it is missing
   python assets/deprem/fetch.py --zip F.zip  takes the Bayrakli record out of the zip TADAS gives (nested zips too)
+  python assets/deprem/fetch.py --check      only checks what is there, downloads nothing
+  --lang tr|en                               the language of the messages (default: the application's, from user.cfg)
 
 The files are not committed (their redistribution licence is not stated); this script is. Sources and credit (NOTICE.md):
   ESM, the Engineering Strong-Motion database: Mascandola C., Felicetta C., Russo E., Luzi L., Lanzano G., Sgobba S.,
@@ -19,7 +21,7 @@ are pinned whole.
 
 Bayrakli (2020 Samos earthquake, station TK.3513) is in AFAD TADAS only: ESM has that earthquake but no TK record of it.
 TADAS gives it after a guest login in the browser, so it is a step done by hand (this script does not log in):
-  1. https://tadas.afad.gov.tr , "Misafir Girisi" (Guest Login)
+  1. https://tadas.afad.gov.tr , "Misafir Girişi" (Guest Login)
   2. the earthquake of 2020-10-30 11:51:24 (Mw 6.6, Samos; TADAS event 10614), station 3513 (Izmir Bayrakli),
      record 20201030115124_3513
   3. download it processed: data type "mp", "Acc" (acceleration), format "asc2"
@@ -27,8 +29,7 @@ TADAS gives it after a guest login in the browser, so it is a step done by hand 
      (or unzip it and put 20201030115124_3513_mp_Acc_E.asc, _N.asc, _U.asc in assets/deprem/ yourself)
 Without it the scene opens and every magnitude but 3 and 4 (whose waveform it is) works.
 
-Its messages follow the application's language (lang in user.cfg at the repository root, which the gallery's language
-button writes), or --lang tr|en; with neither they are given in both.
+The messages follow the application's language (tools/dil.py).
 """
 import argparse
 import hashlib
@@ -40,28 +41,35 @@ import urllib.request
 import zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(HERE, '..', '..', 'tools'))
+import dil  # noqa: E402
+from dil import say  # noqa: E402
+
+HELP_TR = """Yıkım'ın deprem kayıtları: indirir, her dosyayı denetler, sahnenin okuduğu yere koyar (assets/deprem/).
+
+  python assets/deprem/fetch.py              dört ESM kaydı (12 dosya); yeniden çalıştırılabilir (yerinde ve doğru olanı
+                                             atlar), sonra Bayraklı kaydını denetler, yoksa nasıl alınacağını yazar
+  python assets/deprem/fetch.py --zip F.zip  Bayraklı kaydını TADAS'ın verdiği zip'ten çıkarır (iç içe zip'ler de olur)
+  python assets/deprem/fetch.py --check      yalnız yerinde olanı denetler, hiçbir şey indirmez
+  --lang tr|en                               iletilerin dili (öntanımlı: uygulamanınki, user.cfg'den)
+
+Dosyalar depoya işlenmez (yeniden dağıtım lisansları belirtilmemiş); bu betik işlenir. Kaynaklar ve atıf: NOTICE.md.
+Her dosya, sahnenin ayarlandığı kopyanın SHA-256 özetine sabitlenir (ESM dosyalarında indirme anını yazan tek başlık
+satırı dışarıda bırakılarak).
+
+Bayraklı (2020 Sisam depremi, istasyon TK.3513) yalnız AFAD TADAS'ta var. TADAS onu tarayıcıda misafir girişinden sonra
+verir, bu yüzden elle yapılan bir adımdır (bu betik giriş yapmaz):
+  1. https://tadas.afad.gov.tr , "Misafir Girişi"
+  2. 30.10.2020 11:51:24 depremi (Mw 6,6, Sisam; TADAS olay 10614), istasyon 3513 (İzmir Bayraklı),
+     kayıt 20201030115124_3513
+  3. işlenmiş olarak indirin: veri tipi "mp", "Acc" (ivme), biçim "asc2"
+  4. python assets/deprem/fetch.py --zip <indirilen zip>
+     (ya da zip'i açıp 20201030115124_3513_mp_Acc_E.asc, _N.asc, _U.asc dosyalarını assets/deprem/ içine kendiniz koyun)
+Bu kayıt olmadan sahne açılır; dalgası onun olan 3 ve 4 dışındaki bütün büyüklükler çalışır.
+"""
 UA = {'User-Agent': 'pc_graphics-deprem-fetch'}
 ESM = 'https://esm-db.eu/esmws/eventdata/1/query?eventid={event}&network={net}&station={sta}&format=ascii&processing-type=MP&data-type=ACC'
 STAMP = b'DATA_TIMESTAMP_YYYYMMDD_HHMMSS:'
-LANG = None   # 'tr', 'en', or None for both (set in main)
-
-
-def app_lang():
-    """the language the application was last left in (user.cfg at the repository root), as src/app/lang.cpp reads it"""
-    try:
-        with open(os.path.join(HERE, '..', '..', 'user.cfg'), encoding='utf-8') as f:
-            for line in f:
-                p = line.split()
-                if len(p) >= 3 and p[0] == 'lang' and p[1] == '=':
-                    return 'en' if p[2] == 'en' else 'tr'
-    except OSError:
-        pass
-    return None
-
-
-def say(tr, en):
-    """a message in the chosen language, or both (English first) when none is known"""
-    return tr if LANG == 'tr' else en if LANG == 'en' else en + '\n' + tr
 
 # ESM records: one request gives a zip of the three components, named as the scene reads them
 ESM_RECORDS = [
@@ -124,12 +132,12 @@ def fetch_esm(rec):
         with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=300) as r:
             body = r.read()
     except (urllib.error.URLError, OSError) as e:
-        sys.exit(say(f'INDIRILEMEDI: {rec["name"]}\n  {url}\n  {e}\n  ESM (esm-db.eu) erisilebilir mi? Sonra yeniden calistirin.',
+        sys.exit(say(f'İNDİRİLEMEDİ: {rec["name"]}\n  {url}\n  {e}\n  ESM (esm-db.eu) erişilebilir mi? Sonra yeniden çalıştırın.',
                      f'COULD NOT DOWNLOAD: {rec["name"]}\n  {url}\n  {e}\n  Is ESM (esm-db.eu) reachable? Then run this again.'))
     try:
         z = zipfile.ZipFile(io.BytesIO(body))
     except zipfile.BadZipFile:
-        sys.exit(say(f'ESM zip vermedi: {rec["name"]}\n  {url}\n  yanit: {body[:300]!r}',
+        sys.exit(say(f'ESM zip vermedi: {rec["name"]}\n  {url}\n  yanıt: {body[:300]!r}',
                      f'ESM did not return a zip: {rec["name"]}\n  {url}\n  reply: {body[:300]!r}'))
     names = set(z.namelist())
     for n, pin in rec['files'].items():
@@ -138,10 +146,27 @@ def fetch_esm(rec):
                          f'not in the ESM zip: {n}\n  {url}\n  zip: {sorted(names)}'))
         data = z.read(n)
         if esm_digest(data) != pin:
-            sys.exit(say(f'OZET TUTMADI: {n}\n  {url}\n  ESM kaydi degismis olabilir; sahne bu kayitla ayarlandi, denetlemeden kullanmayin.',
+            sys.exit(say(f'ÖZET TUTMADI: {n}\n  {url}\n  ESM kaydı değişmiş olabilir; sahne bu kayıtla ayarlandı, denetlemeden kullanmayın.',
                          f'HASH MISMATCH: {n}\n  {url}\n  The ESM record may have changed; the scene was tuned with this one, do not use it unchecked.'))
         write(n, data)
     return len(rec['files'])
+
+
+def check_esm():
+    """--check: which ESM files are missing or not the pinned ones; nothing is downloaded"""
+    wrong = 0
+    for rec in ESM_RECORDS:
+        for n, pin in rec['files'].items():
+            if not os.path.exists(os.path.join(HERE, n)):
+                print(say(f'  yok: {n}', f'  missing: {n}'))
+                wrong += 1
+            elif not good(n, pin, esm_digest):
+                print(say(f'  özet tutmadı: {n}', f'  hash mismatch: {n}'))
+                wrong += 1
+    total = sum(len(r['files']) for r in ESM_RECORDS)
+    print(say(f'ESM: {total} dosyadan {total - wrong} tanesi yerinde ve doğru' + ('' if not wrong else '; indirmek için: python assets/deprem/fetch.py'),
+              f'ESM: {total - wrong} of {total} files present and correct' + ('' if not wrong else '; to fetch them: python assets/deprem/fetch.py')))
+    return wrong == 0
 
 
 def members(z):
@@ -161,32 +186,33 @@ def take_zip(path):
         found = {n: d for n, d in members(z) if n in BAYRAKLI}
     for n, pin in BAYRAKLI.items():
         if n not in found:
-            sys.exit(say(f'zip\'te yok: {n}\n  {path}\n  TADAS\'tan kayit 20201030115124_3513, "mp", "Acc", "asc2" olarak mi indirildi?',
+            sys.exit(say(f'zip\'te yok: {n}\n  {path}\n  TADAS\'tan kayıt 20201030115124_3513, "mp", "Acc", "asc2" olarak mı indirildi?',
                          f'not in the zip: {n}\n  {path}\n  Was record 20201030115124_3513 downloaded from TADAS as "mp", "Acc", "asc2"?'))
         if whole_digest(found[n]) != pin:
-            sys.exit(say(f'OZET TUTMADI: {n} ({path})\n  sahnenin ayarlandigi kayit degil (baska bir islem tipi ya da bicim mi?)',
+            sys.exit(say(f'ÖZET TUTMADI: {n} ({path})\n  sahnenin ayarlandığı kayıt değil (başka bir işlem tipi ya da biçim mi?)',
                          f'HASH MISMATCH: {n} ({path})\n  not the record the scene was tuned with (another processing type or format?)'))
         write(n, found[n])
-    print(say(f'alindi: Bayrakli (TK.3513), {len(BAYRAKLI)} dosya', f'taken: Bayrakli (TK.3513), {len(BAYRAKLI)} files'))
+    print(say(f'alındı: Bayraklı (TK.3513), {len(BAYRAKLI)} dosya', f'taken: Bayrakli (TK.3513), {len(BAYRAKLI)} files'))
 
 
 def check_bayrakli():
     bad = [n for n, pin in BAYRAKLI.items() if os.path.exists(os.path.join(HERE, n)) and not good(n, pin, whole_digest)]
     missing = [n for n in BAYRAKLI if not os.path.exists(os.path.join(HERE, n))]
     if not bad and not missing:
+        print(say('Bayraklı (TK.3513): yerinde ve doğru', 'Bayrakli (TK.3513): present and correct'))
         return True
-    tr = ('\nBayrakli kaydi (2020 Sisam depremi, TK.3513; buyukluk 3 ve 4 bunu kullanir) elle indirilir:\n'
-          + ''.join(f'  yok: {n}\n' for n in missing) + ''.join(f'  ozet tutmadi: {n}\n' for n in bad) +
-          '  1. https://tadas.afad.gov.tr , "Misafir Girisi"\n'
-          '  2. 30.10.2020 11:51:24 depremi (Mw 6,6, Sisam; TADAS olay 10614), istasyon 3513 (Izmir Bayrakli),\n'
-          '     kayit 20201030115124_3513\n'
-          '  3. islenmis olarak indirin: "mp", "Acc" (ivme), bicim "asc2"\n'
+    tr = ('\nBayraklı kaydı (2020 Sisam depremi, TK.3513; büyüklük 3 ve 4 bunu kullanır) elle indirilir:\n'
+          + ''.join(f'  yok: {n}\n' for n in missing) + ''.join(f'  özet tutmadı: {n}\n' for n in bad) +
+          '  1. https://tadas.afad.gov.tr , "Misafir Girişi"\n'
+          '  2. 30.10.2020 11:51:24 depremi (Mw 6,6, Sisam; TADAS olay 10614), istasyon 3513 (İzmir Bayraklı),\n'
+          '     kayıt 20201030115124_3513\n'
+          '  3. işlenmiş olarak indirin: veri tipi "mp", "Acc" (ivme), biçim "asc2"\n'
           '  4. python assets/deprem/fetch.py --zip <indirilen zip>\n'
-          '     (ya da zip\'i acip 20201030115124_3513_mp_Acc_E.asc, _N.asc, _U.asc dosyalarini assets/deprem/ icine koyun)\n'
-          '  Bu kayit olmadan sahne acilir; 3 ve 4 disindaki butun buyuklukler calisir.')
+          '     (ya da zip\'i açıp 20201030115124_3513_mp_Acc_E.asc, _N.asc, _U.asc dosyalarını assets/deprem/ içine koyun)\n'
+          '  Bu kayıt olmadan sahne açılır; 3 ve 4 dışındaki bütün büyüklükler çalışır.')
     en = ('\nThe Bayrakli record (2020 Samos earthquake, TK.3513; magnitudes 3 and 4 use it) is downloaded by hand:\n'
           + ''.join(f'  missing: {n}\n' for n in missing) + ''.join(f'  hash mismatch: {n}\n' for n in bad) +
-          '  1. https://tadas.afad.gov.tr , "Misafir Girisi" (Guest Login)\n'
+          '  1. https://tadas.afad.gov.tr , "Misafir Girişi" (Guest Login)\n'
           '  2. the earthquake of 2020-10-30 11:51:24 (Mw 6.6, Samos; TADAS event 10614), station 3513 (Izmir Bayrakli),\n'
           '     record 20201030115124_3513\n'
           '  3. download it processed: data type "mp", "Acc" (acceleration), format "asc2"\n'
@@ -198,12 +224,16 @@ def check_bayrakli():
 
 
 def main():
-    global LANG
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('--zip', help='the zip TADAS gave for record 20201030115124_3513')
-    ap.add_argument('--lang', choices=('tr', 'en'), help='the language of the messages (default: the application\'s, from user.cfg)')
+    dil.choose(dil.argv_lang())   # before the parser: --help is given in the chosen language too
+    ap = argparse.ArgumentParser(description=say(HELP_TR, __doc__), formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument('--zip', help=say('TADAS\'ın 20201030115124_3513 kaydı için verdiği zip', 'the zip TADAS gave for record 20201030115124_3513'))
+    ap.add_argument('--check', action='store_true', help=say('yalnız denetle, indirme', 'only check, download nothing'))
+    ap.add_argument('--lang', choices=('tr', 'en'), help=say('iletilerin dili (öntanımlı: uygulamanınki, user.cfg\'den)',
+                                                           'the language of the messages (default: the application\'s, from user.cfg)'))
     args = ap.parse_args()
-    LANG = args.lang or app_lang()
+    if args.check:
+        ok = check_esm()
+        sys.exit(0 if check_bayrakli() and ok else 1)
     if args.zip:
         take_zip(args.zip)
     total = 0
@@ -212,7 +242,7 @@ def main():
         total += n
         if n:
             print(say(f'indirildi: {rec["name"]} ({n} dosya)', f'downloaded: {rec["name"]} ({n} files)'))
-    print(say(f'tamam: ESM, {len(ESM_RECORDS)} kayit, {total} yeni dosya', f'done: ESM, {len(ESM_RECORDS)} records, {total} new files'))
+    print(say(f'tamam: ESM, {len(ESM_RECORDS)} kayıt, {total} yeni dosya', f'done: ESM, {len(ESM_RECORDS)} records, {total} new files'))
     if not check_bayrakli():
         sys.exit(1)
 

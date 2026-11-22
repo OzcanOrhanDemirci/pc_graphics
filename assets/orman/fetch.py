@@ -1,9 +1,11 @@
 """Orman's open-licence assets: downloads them, checks every file, puts them where the scene reads them (assets/orman/cc0/).
 
-  python assets/orman/fetch.py                  every asset in manifest.json; re-runnable (skips what is there and correct)
+  python assets/orman/fetch.py                 every asset in manifest.json; re-runnable (skips what is there and correct)
+  python assets/orman/fetch.py --check         only checks what is there, downloads nothing
   python assets/orman/fetch.py --pin ph:fern_02 adds a Poly Haven asset (model or texture, 2K) to the manifest
   python assets/orman/fetch.py --pin acg:LeafSet010   adds an ambientCG asset (its 2K-JPG zip; 2K-PNG if it has no JPG)
-  python assets/orman/fetch.py --only fern_02   just these ids
+  python assets/orman/fetch.py --only fern_02  just these ids
+  --lang tr|en                                 the language of the messages (default: the application's, from user.cfg)
 
 The files are not committed (large); this script, manifest.json and docs/orman/VARLIK.md are. Layout, per asset id:
   Poly Haven model   cc0/<id>/<id>_2k.gltf, <id>.bin, textures/... as Poly Haven ships the glTF; the alpha map (the glTF's
@@ -12,6 +14,7 @@ The files are not committed (large); this script, manifest.json and docs/orman/V
   Poly Haven texture cc0/<id>/<id>_<map>_2k.<ext> (diff, nor_gl, rough, ao, disp, arm: what it has)
   ambientCG          cc0/<id>/<the zip's members> (<id>_2K-JPG_Color.jpg, _NormalGL, _Roughness, _Opacity, ...)
 Poly Haven gives every file's md5 (pinned with --pin); ambientCG gives none: the zip's SHA-256 is pinned on --pin's download.
+The messages follow the application's language (tools/dil.py).
 """
 import argparse
 import hashlib
@@ -19,14 +22,34 @@ import json
 import os
 import shutil
 import sys
+import urllib.error
 import urllib.request
 import zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(HERE, '..', '..', 'tools'))
+import dil  # noqa: E402
+from dil import say  # noqa: E402
+
+SCENE_TR = 'Orman'
+HELP_TR = f"""{SCENE_TR} sahnesinin açık lisanslı varlıkları: indirir, her dosyayı denetler, sahnenin okuduğu yere koyar
+(assets/{os.path.basename(HERE)}/cc0/).
+
+  python assets/{os.path.basename(HERE)}/fetch.py                  manifest.json'daki her varlık; yeniden çalıştırılabilir
+                                               (yerinde ve doğru olanı atlar)
+  python assets/{os.path.basename(HERE)}/fetch.py --check          yalnız yerinde olanı denetler, hiçbir şey indirmez
+  python assets/{os.path.basename(HERE)}/fetch.py --pin ph:fern_02 manifest'e bir Poly Haven varlığı ekler (model ya da doku, 2K)
+  python assets/{os.path.basename(HERE)}/fetch.py --pin acg:LeafSet010   bir ambientCG varlığı ekler (2K-JPG zip'i; JPG yoksa 2K-PNG)
+  python assets/{os.path.basename(HERE)}/fetch.py --only fern_02   yalnız bu kimlikler
+  --lang tr|en                                 iletilerin dili (öntanımlı: uygulamanınki, user.cfg'den)
+
+Dosyalar depoya işlenmez (büyükler); bu betik, manifest.json ve docs/{os.path.basename(HERE)}/VARLIK.md işlenir. Poly Haven her
+dosyanın md5'ini verir (--pin ile sabitlenir); ambientCG vermez: zip'in SHA-256'sı --pin'in indirmesinde sabitlenir.
+"""
 OUT = os.path.join(HERE, 'cc0')
 DL = os.path.join(HERE, '_dl')
 MANIFEST = os.path.join(HERE, 'manifest.json')
-UA = {'User-Agent': 'pc_graphics-orman-fetch'}
+UA = {'User-Agent': f'pc_graphics-{os.path.basename(HERE)}-fetch'}
 RES = '2k'
 
 
@@ -55,8 +78,12 @@ def good(path, entry):
 
 def download(url, path):
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=900) as r, open(path + '.part', 'wb') as f:
-        shutil.copyfileobj(r, f, 1 << 22)
+    try:
+        with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=900) as r, open(path + '.part', 'wb') as f:
+            shutil.copyfileobj(r, f, 1 << 22)
+    except (urllib.error.URLError, OSError) as e:
+        sys.exit(say(f'İNDİRİLEMEDİ: {url}\n  {e}\n  Bağlantı var mı? Sonra yeniden çalıştırın: indirilmiş olan atlanır.',
+                     f'COULD NOT DOWNLOAD: {url}\n  {e}\n  Is the connection up? Then run this again: what is there is skipped.'))
     os.replace(path + '.part', path)
 
 
@@ -66,7 +93,7 @@ def fetch_entry(path, entry):
         return False
     download(entry['url'], path)
     if not good(path, entry):
-        sys.exit(f'OZET TUTMADI: {path}\n  {entry}')
+        sys.exit(say(f'ÖZET TUTMADI: {path}\n  {entry}', f'HASH MISMATCH: {path}\n  {entry}'))
     return True
 
 
@@ -123,7 +150,7 @@ def pin_ambientcg(aid):
     by_attr = {d['attribute']: d for d in downloads}
     d = by_attr.get('2K-JPG') or by_attr.get('2K-PNG')
     if not d:
-        sys.exit(f'{aid}: 2K zip yok ({sorted(by_attr)})')
+        sys.exit(say(f'{aid}: 2K zip yok ({sorted(by_attr)})', f'{aid}: no 2K zip ({sorted(by_attr)})'))
     zpath = os.path.join(DL, d['fileName'])
     if not (os.path.exists(zpath) and os.path.getsize(zpath) == d['size']):
         download(d['fullDownloadPath'], zpath)
@@ -153,18 +180,50 @@ def fetch_asset(a):
     return got
 
 
+def check_asset(a):
+    """--check: the files of one asset that are missing or not the pinned ones (a zip's members: present)"""
+    wrong = []
+    for e in a['files']:
+        if 'zip' in e:
+            dest = os.path.join(OUT, a['id'])
+            if not (os.path.isdir(dest) and os.listdir(dest)) and not good(os.path.join(DL, e['zip']), e):
+                wrong.append(e['zip'])
+        elif not good(os.path.join(OUT, e['path']), e):
+            wrong.append(e['path'])
+    return wrong
+
+
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument('--pin', nargs='*', default=[])
-    ap.add_argument('--only', nargs='*', default=[])
+    dil.choose(dil.argv_lang())   # before the parser: --help is given in the chosen language too
+    ap = argparse.ArgumentParser(description=say(HELP_TR, __doc__), formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument('--check', action='store_true', help=say('yalnız denetle, indirme', 'only check, download nothing'))
+    ap.add_argument('--pin', nargs='*', default=[], help=say('manifest\'e eklenecek varlıklar (ph:<kimlik>, acg:<kimlik>)',
+                                                             'assets to add to the manifest (ph:<id>, acg:<id>)'))
+    ap.add_argument('--only', nargs='*', default=[], help=say('yalnız bu kimlikler', 'just these ids'))
+    ap.add_argument('--lang', choices=('tr', 'en'), help=say('iletilerin dili (öntanımlı: uygulamanınki, user.cfg\'den)',
+                                                           'the language of the messages (default: the application\'s, from user.cfg)'))
     args = ap.parse_args()
     m = load_manifest()
+    rel = os.path.basename(HERE)
+    if args.check:
+        bad = 0
+        for a in m['assets']:
+            if args.only and a['id'] not in args.only:
+                continue
+            for w in check_asset(a):
+                print(say(f'  eksik ya da özeti tutmuyor: {a["id"]}: {w}', f'  missing or hash mismatch: {a["id"]}: {w}'))
+                bad += 1
+        print(say(f'{len(m["assets"])} varlık; ' + (f'{bad} dosya eksik, indirmek için: python assets/{rel}/fetch.py' if bad else 'hepsi yerinde ve doğru'),
+                  f'{len(m["assets"])} assets; ' + (f'{bad} files missing, to fetch them: python assets/{rel}/fetch.py' if bad else 'all present and correct')))
+        sys.exit(1 if bad else 0)
     if args.pin:
         for spec in args.pin:
-            src, aid = spec.split(':', 1)
-            entry = pin_polyhaven(aid) if src == 'ph' else pin_ambientcg(aid) if src == 'acg' else sys.exit(f'kaynak? {spec}')
+            src, _, aid = spec.partition(':')
+            if src not in ('ph', 'acg') or not aid:
+                sys.exit(say(f'kaynak? {spec} (ph:<kimlik> ya da acg:<kimlik>)', f'source? {spec} (ph:<id> or acg:<id>)'))
+            entry = pin_polyhaven(aid) if src == 'ph' else pin_ambientcg(aid)
             m['assets'] = [x for x in m['assets'] if x['id'] != aid] + [entry]
-            print(f'sabitlendi: {aid} ({entry["kind"]}, {len(entry["files"])} dosya)')
+            print(say(f'sabitlendi: {aid} ({entry["kind"]}, {len(entry["files"])} dosya)', f'pinned: {aid} ({entry["kind"]}, {len(entry["files"])} files)'))
         save_manifest(m)
     total = 0
     for a in m['assets']:
@@ -173,8 +232,8 @@ def main():
         n = fetch_asset(a)
         total += n
         if n:
-            print(f'indirildi: {a["id"]} ({n} dosya)')
-    print(f'tamam: {len(m["assets"])} varlik, {total} yeni dosya')
+            print(say(f'indirildi: {a["id"]} ({n} dosya)', f'downloaded: {a["id"]} ({n} files)'))
+    print(say(f'tamam: {len(m["assets"])} varlık, {total} yeni dosya', f'done: {len(m["assets"])} assets, {total} new files'))
 
 
 if __name__ == '__main__':

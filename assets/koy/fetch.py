@@ -1,10 +1,14 @@
 """Koy's CC0 scans: downloads them, checks every file's SHA-256, puts them where the scene reads them (assets/koy/cc0/).
 
   python assets/koy/fetch.py            re-runnable: skips what is there and correct
+  python assets/koy/fetch.py --check    only checks that every file the scene reads is there, downloads nothing
+  --lang tr|en                          the language of the messages (default: the application's, from user.cfg)
 
 The files are not committed (CC0, but large); this script and LICENSES.md are. Sources and why each was chosen:
 docs/koy/VERI.md. Every hash was pinned by the K0 research pass (2026-10-03) and checked against the provider's own md5.
+The messages follow the application's language (tools/dil.py).
 """
+import argparse
 import hashlib
 import io
 import json
@@ -12,10 +16,24 @@ import os
 import shutil
 import struct
 import sys
+import urllib.error
 import urllib.request
 import zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(HERE, '..', '..', 'tools'))
+import dil  # noqa: E402
+from dil import say  # noqa: E402
+
+HELP_TR = """Koy'un CC0 taramaları: indirir, her dosyanın SHA-256'sını denetler, sahnenin okuduğu yere koyar (assets/koy/cc0/).
+
+  python assets/koy/fetch.py            yeniden çalıştırılabilir: yerinde ve doğru olanı atlar
+  python assets/koy/fetch.py --check    yalnız sahnenin okuduğu her dosyanın yerinde olduğunu denetler, hiçbir şey indirmez
+  --lang tr|en                          iletilerin dili (öntanımlı: uygulamanınki, user.cfg'den)
+
+Dosyalar depoya işlenmez (CC0 ama büyük); bu betik ve LICENSES.md işlenir. Kaynaklar ve neden seçildikleri:
+docs/koy/VERI.md. Her özet K0 araştırmasında (2026-10-03) sabitlendi ve sağlayıcının kendi md5'iyle denetlendi.
+"""
 OUT = os.path.join(HERE, 'cc0')
 DL = os.path.join(HERE, '_dl')
 
@@ -106,6 +124,15 @@ def sha256(data):
     return hashlib.sha256(data).hexdigest()
 
 
+def unreachable(url, e):
+    sys.exit(say(f'İNDİRİLEMEDİ: {url}\n  {e}\n  Bağlantı var mı? Sonra yeniden çalıştırın: indirilmiş olan atlanır.',
+                 f'COULD NOT DOWNLOAD: {url}\n  {e}\n  Is the connection up? Then run this again: what is there is skipped.'))
+
+
+def mismatch(name, want, got):
+    sys.exit(say(f'ÖZET TUTMADI: {name}\n  beklenen {want}\n  gelen    {got}', f'HASH MISMATCH: {name}\n  expected {want}\n  got      {got}'))
+
+
 def fetch(name):
     url, want = FILES[name]
     path = os.path.join(DL, name)
@@ -114,13 +141,16 @@ def fetch(name):
         if sha256(data) == want:
             return data
     req = urllib.request.Request(url, headers={'User-Agent': 'pc_graphics-koy-fetch'})
-    data = urllib.request.urlopen(req, timeout=120).read()
+    try:
+        data = urllib.request.urlopen(req, timeout=120).read()
+    except (urllib.error.URLError, OSError) as e:
+        unreachable(url, e)
     got = sha256(data)
     if got != want:
-        sys.exit(f'HASH TUTMADI: {name}\n  beklenen {want}\n  gelen    {got}')
+        mismatch(name, want, got)
     os.makedirs(DL, exist_ok=True)
     open(path, 'wb').write(data)
-    print(f'indirildi: {name} ({len(data) / 1e6:.1f} MB)')
+    print(say(f'indirildi: {name} ({len(data) / 1e6:.1f} MB)', f'downloaded: {name} ({len(data) / 1e6:.1f} MB)'))
     return data
 
 
@@ -140,13 +170,16 @@ def fetch_file(name):
         return path
     os.makedirs(DL, exist_ok=True)
     req = urllib.request.Request(url, headers={'User-Agent': 'pc_graphics-koy-fetch'})
-    with urllib.request.urlopen(req, timeout=900) as r, open(path + '.part', 'wb') as f:
-        shutil.copyfileobj(r, f, 1 << 22)
+    try:
+        with urllib.request.urlopen(req, timeout=900) as r, open(path + '.part', 'wb') as f:
+            shutil.copyfileobj(r, f, 1 << 22)
+    except (urllib.error.URLError, OSError) as e:
+        unreachable(url, e)
     got = file_sha256(path + '.part')
     if got != want:
-        sys.exit(f'HASH TUTMADI: {name}\n  beklenen {want}\n  gelen    {got}')
+        mismatch(name, want, got)
     os.replace(path + '.part', path)
-    print(f'indirildi: {name} ({os.path.getsize(path) / 1e6:.1f} MB)')
+    print(say(f'indirildi: {name} ({os.path.getsize(path) / 1e6:.1f} MB)', f'downloaded: {name} ({os.path.getsize(path) / 1e6:.1f} MB)'))
     return path
 
 
@@ -185,7 +218,34 @@ def gltf_to_mesh(gltf_bytes, bin_bytes, out_path):
     return nv, nt
 
 
+def expected():
+    """every file main() leaves in cc0/ (what the scene reads), relative to it"""
+    out = [f'kum/{v[0]}' for v in SAND.values()] + ['kaya_model/mesh.bin', 'kaya_model/albedo.jpg', 'kaya_model/normal.jpg']
+    for folder in ('kaya_model_8k', 'kaya_ayrinti', 'kaya_ayrinti_8k', 'amfora_kil_8k', 'kabuk_8k', 'ahsap_8k', 'beton_8k', 'kum2_8k',
+                   'kaya_ayrinti_16k', 'kum_8k', 'kum_16k'):
+        out += [f'{folder}/albedo.jpg', f'{folder}/normal.jpg']
+    return out + ['kum_4k/albedo.jpg', 'kum_4k/normal.jpg', 'kum_4k/rough.jpg']
+
+
+def check():
+    """--check: which of the scene's files are missing (their downloads were hash-checked when they were made)"""
+    missing = [p for p in expected() if not os.path.exists(os.path.join(OUT, p))]
+    for p in missing:
+        print(say(f'  yok: cc0/{p}', f'  missing: cc0/{p}'))
+    n = len(expected())
+    print(say(f'{n} dosyadan {n - len(missing)} tanesi yerinde' + (', indirmek için: python assets/koy/fetch.py' if missing else ''),
+              f'{n - len(missing)} of {n} files present' + (', to fetch them: python assets/koy/fetch.py' if missing else '')))
+    return not missing
+
+
 def main():
+    dil.choose(dil.argv_lang())   # before the parser: --help is given in the chosen language too
+    ap = argparse.ArgumentParser(description=say(HELP_TR, __doc__), formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument('--check', action='store_true', help=say('yalnız denetle, indirme', 'only check, download nothing'))
+    ap.add_argument('--lang', choices=('tr', 'en'), help=say('iletilerin dili (öntanımlı: uygulamanınki, user.cfg\'den)',
+                                                           'the language of the messages (default: the application\'s, from user.cfg)'))
+    if ap.parse_args().check:
+        sys.exit(0 if check() else 1)
     os.makedirs(OUT, exist_ok=True)
     # the sand: ambientCG Ground054 (fine even sand, about 3.5 m a tile)
     kum = os.path.join(OUT, 'kum')
@@ -195,15 +255,15 @@ def main():
         for member, (dst, want) in SAND.items():
             data = z.read(member)
             if sha256(data) != want:
-                sys.exit(f'HASH TUTMADI: {member}')
+                mismatch(member, want, sha256(data))
             open(os.path.join(kum, dst), 'wb').write(data)
-        print('kum: ambientCG Ground054 (2K)')
+        print(say('kum: ambientCG Ground054 (2K)', 'sand: ambientCG Ground054 (2K)'))
     # the boulder: Poly Haven boulder_01 (photogrammetry), its mesh as raw arrays and its textures
     kaya = os.path.join(OUT, 'kaya_model')
     os.makedirs(kaya, exist_ok=True)
     if not os.path.exists(os.path.join(kaya, 'mesh.bin')):
         nv, nt = gltf_to_mesh(fetch('boulder_01_2k.gltf'), fetch('boulder_01.bin'), os.path.join(kaya, 'mesh.bin'))
-        print(f'kaya: Poly Haven boulder_01, {nv} kose, {nt} ucgen')
+        print(say(f'kaya: Poly Haven boulder_01, {nv} köşe, {nt} üçgen', f'boulder: Poly Haven boulder_01, {nv} vertices, {nt} triangles'))
     for src, dst in (('boulder_01_diff_2k.jpg', 'albedo.jpg'), ('boulder_01_nor_gl_2k.jpg', 'normal.jpg')):
         p = os.path.join(kaya, dst)
         if not os.path.exists(p):
@@ -233,7 +293,7 @@ def main():
         for key, dst in (('_Color.jpg', 'albedo.jpg'), ('_NormalGL.jpg', 'normal.jpg'), ('_Roughness.jpg', 'rough.jpg')):
             member = [n for n in names if n.endswith(key)][0]
             open(os.path.join(kum4, dst), 'wb').write(z.read(member))
-        print('kum: ambientCG Ground054 (4K)')
+        print(say('kum: ambientCG Ground054 (4K)', 'sand: ambientCG Ground054 (4K)'))
     kum8 = os.path.join(OUT, 'kum_8k')
     os.makedirs(kum8, exist_ok=True)
     if not os.path.exists(os.path.join(kum8, 'normal.jpg')):
@@ -242,7 +302,7 @@ def main():
         for key, dst in (('_Color.jpg', 'albedo.jpg'), ('_NormalGL.jpg', 'normal.jpg')):   # roughness unused: not extracted
             member = [n for n in names if n.endswith(key)][0]
             open(os.path.join(kum8, dst), 'wb').write(z.read(member))
-        print('kum: ambientCG Ground054 (8K)')
+        print(say('kum: ambientCG Ground054 (8K)', 'sand: ambientCG Ground054 (8K)'))
     # the 16K set (panel "Ultra"): the sand and the rock detail layer; the boulder's own scan ends at 8K
     ayr16 = os.path.join(OUT, 'kaya_ayrinti_16k')
     os.makedirs(ayr16, exist_ok=True)
@@ -261,8 +321,8 @@ def main():
                 with z.open(member) as s, open(os.path.join(kum16, dst) + '.part', 'wb') as d:
                     shutil.copyfileobj(s, d, 1 << 22)
                 os.replace(os.path.join(kum16, dst) + '.part', os.path.join(kum16, dst))
-        print('kum: ambientCG Ground054 (16K)')
-    print('tamam:', OUT)
+        print(say('kum: ambientCG Ground054 (16K)', 'sand: ambientCG Ground054 (16K)'))
+    print(say(f'tamam: {OUT}', f'done: {OUT}'))
 
 
 if __name__ == '__main__':

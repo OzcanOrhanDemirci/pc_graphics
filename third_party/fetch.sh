@@ -2,8 +2,36 @@
 # Fetches the third-party pieces into third_party/. Re-runnable: skips what is there.
 # CUDA comes as NVIDIA's per-component redistributable archives (no installer, no driver,
 # no admin rights): only what nvcc, the runtime, NVRTC and NVML need.
+# The messages follow the application's language (lang in user.cfg at the repository root, as tools/dil.py reads it),
+# or --lang tr|en; with neither, both. -h / --help says what it fetches and downloads nothing.
 set -euo pipefail
 cd "$(dirname "$0")"
+lang="" help=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -h|--help) help=1 ;;
+    --lang) lang="${2:-}"; shift ;;
+    --lang=*) lang="${1#--lang=}" ;;
+    *) echo "? $1 (bash third_party/fetch.sh [--lang tr|en] [--help])" >&2; exit 2 ;;
+  esac
+  shift
+done
+if [ -z "$lang" ] && [ -f ../user.cfg ]; then
+  lang=$(sed -n 's/^lang *= *\([a-z]*\).*/\1/p' ../user.cfg | head -n 1)
+fi
+case "$lang" in tr|en) ;; *) lang="" ;; esac
+say() { case "$lang" in tr) echo "$1" ;; en) echo "$2" ;; *) echo "$2"; echo "$1" ;; esac; }
+if [ "$help" = 1 ]; then
+  say "bash third_party/fetch.sh   üçüncü taraf parçaları third_party/ içine indirir; yeniden çalıştırılabilir, yerinde olanı atlar.
+  CUDA 13.4 (NVIDIA'nın bileşen arşivleri: kurulum yok, sürücüye dokunulmaz, yönetici hakkı gerekmez), OptiX 9.1 başlıkları,
+  DLSS SDK, GLFW 3.4, stb, tinyexr, cgltf, OpenGL başlıkları. Git Bash, curl, git ve python gerekir.
+  --lang tr|en   iletilerin dili (öntanımlı: uygulamanınki, user.cfg'den)" \
+      "bash third_party/fetch.sh   fetches the third-party pieces into third_party/; re-runnable, skips what is there.
+  CUDA 13.4 (NVIDIA's per-component archives: no installer, the driver untouched, no admin rights), OptiX 9.1 headers,
+  the DLSS SDK, GLFW 3.4, stb, tinyexr, cgltf, OpenGL headers. Needs Git Bash, curl, git and python.
+  --lang tr|en   the language of the messages (default: the application's, from user.cfg)"
+  exit 0
+fi
 CUDA_VER=13.4.2
 BASE=https://developer.download.nvidia.com/compute/cuda/redist
 mkdir -p _dl cuda
@@ -54,4 +82,4 @@ fi
 mkdir -p gl/GL gl/KHR
 [ -f gl/GL/glext.h ] || curl -sSL -o gl/GL/glext.h https://registry.khronos.org/OpenGL/api/GL/glext.h
 [ -f gl/KHR/khrplatform.h ] || curl -sSL -o gl/KHR/khrplatform.h https://registry.khronos.org/EGL/api/KHR/khrplatform.h
-echo "done"
+say "tamam: third_party/ hazır" "done: third_party/ is ready"

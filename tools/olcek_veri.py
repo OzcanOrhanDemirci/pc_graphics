@@ -1,31 +1,67 @@
-"""Sahne 7 "Olcek": verileri indirir ve sahnenin okuyacagi bicime hazirlar (PLAN §6). Cikti assets/olcek/ (git disi),
-kaynaklar ve lisanslar assets/olcek/KAYNAKLAR.md (git'te).
+"""Scene 7 "Olcek": downloads its data and prepares it in the form the scene reads (PLAN §6). Output in assets/olcek/
+(not committed); sources and licences in assets/olcek/KAYNAKLAR.md (committed). Needs numpy, pillow, scipy and rasterio.
 
-Her doku ayni bicimde yazilir: <ad>.tex = 16 baytlik baslik (b"OLTX", genislik, yukseklik, duzey sayisi; uint32) ve
-ardindan en inceden en kabaya mip duzeyleri, RGBA8 (sRGB). Mip'ler dogrusal isikta ortalanir (sRGB'de ortalamak
-koyulastirir). Sahne dosyayi oldugu gibi ekran kartina kopyalar: acilista cozme yok.
+  python tools/olcek_veri.py           every step below (the same as "all" or "hepsi"); a few GB the first time
+  python tools/olcek_veri.py check     only checks that every file the scene reads is there, downloads nothing
+  python tools/olcek_veri.py s2        the home bay: Sentinel-2 L2A true colour, 10 m, 8192^2 (82 km)
+  python tools/olcek_veri.py bmng      the Earth: Blue Marble NG October, global 21600x10800 + the Aegean at 500 m
+  python tools/olcek_veri.py ay        the Moon: LRO colour (CGI Moon Kit)
+  python tools/olcek_veri.py kiyi      the beach point's shore: signed distance from the Sentinel-2 water mask (after s2)
+  python tools/olcek_veri.py bulut     the day's real clouds: NASA GIBS (MODIS Terra around home, VIIRS for the world)
+  python tools/olcek_veri.py yildiz    the stars: HYG v4.1 (every star with a known distance, its place, light and colour)
+  python tools/olcek_veri.py galaksi   the galaxies: 2MASS Redshift Survey (44,600 galaxies, distance from redshift)
+  python tools/olcek_veri.py ag        the cosmic web: a statistical sample by the Zel'dovich approximation (256^3, 600 Mpc)
+  python tools/olcek_veri.py asteroit  the asteroid belts: the Minor Planet Center's MPCORB
+  python tools/olcek_veri.py cie       the CIE 1931 2-degree colour matching functions (Hiz: light's colour at any speed)
+  python tools/olcek_veri.py samanyolu the Milky Way's panorama: ESO/S. Brunier, its stars taken out
+  --lang tr|en                         the language of the messages (default: the application's, from user.cfg)
 
-Yerel izgaralar sahildeki noktanin (olcek_bugun.h: kLat, kLon) cevresinde azimutal esit uzaklikli (aeqd) izdusumde,
-dogu ve kuzey metre: sahnenin GGround eksenleriyle ayni.
+Every texture is written the same way: <name>.tex = a 16-byte header (b"OLTX", width, height, level count; uint32), then
+the mip levels from finest to coarsest, RGBA8 (sRGB). The mips are averaged in linear light (averaging in sRGB darkens).
+The scene copies the file to the GPU as it is: nothing is decoded when it opens.
 
-  python tools/olcek_veri.py s2        # evin koyu: Sentinel-2 L2A gercek renk, 10 m, 8192^2 (82 km)
-  python tools/olcek_veri.py bmng      # Dunya: Blue Marble NG Ekim, kuresel 21600x10800 + Ege 500 m yerel
-  python tools/olcek_veri.py ay        # Ay: LRO renk (CGI Moon Kit)
-  python tools/olcek_veri.py kiyi      # sahildeki noktanin kiyisi: Sentinel-2 su maskesinden isaretli uzaklik
-  python tools/olcek_veri.py bulut     # bugunun gercek bulutlari: NASA GIBS (MODIS Terra ev cevresi, VIIRS dunya)
-  python tools/olcek_veri.py yildiz    # yildizlar: HYG v4.1 (uzakligi bilinen her yildiz, gercek yeri, isigi, rengi)
-  python tools/olcek_veri.py galaksi   # galaksiler: 2MASS Redshift Survey (44.600 galaksi, kirmiziya kaymadan uzaklik)
-  python tools/olcek_veri.py ag        # kozmik ag: Zel'dovich yaklasimiyla istatistiksel bir ornek (256^3, 600 Mpc)
-  python tools/olcek_veri.py cie       # CIE 1931 2 derece renk eslestirme fonksiyonlari (Hiz: isigin her hizdaki rengi)
-  python tools/olcek_veri.py hepsi
+The local grids are in an azimuthal equidistant (aeqd) projection around the beach point (olcek_bugun.h: kLat, kLon),
+east and north in metres: the same axes as the scene's ground. The messages follow the application's language
+(tools/dil.py).
 """
 import math
 import os
 import re
 import sys
+import urllib.error
 import urllib.request
 
-import numpy as np
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import dil  # noqa: E402
+from dil import say  # noqa: E402
+
+HELP_TR = """Sahne 7 "Ölçek": verilerini indirir ve sahnenin okuduğu biçime hazırlar (PLAN §6). Çıktı assets/olcek/ (depoya
+işlenmez); kaynaklar ve lisanslar assets/olcek/KAYNAKLAR.md (depoda). numpy, pillow, scipy ve rasterio gerekir.
+
+  python tools/olcek_veri.py           aşağıdaki bütün adımlar ("hepsi" ya da "all" ile aynı); ilk seferde birkaç GB
+  python tools/olcek_veri.py check     yalnız sahnenin okuduğu her dosyanın yerinde olduğunu denetler, hiçbir şey indirmez
+  python tools/olcek_veri.py s2        evin koyu: Sentinel-2 L2A gerçek renk, 10 m, 8192^2 (82 km)
+  python tools/olcek_veri.py bmng      Dünya: Blue Marble NG Ekim, küresel 21600x10800 + Ege 500 m yerel
+  python tools/olcek_veri.py ay        Ay: LRO renk (CGI Moon Kit)
+  python tools/olcek_veri.py kiyi      sahildeki noktanın kıyısı: Sentinel-2 su maskesinden işaretli uzaklık (s2'den sonra)
+  python tools/olcek_veri.py bulut     günün gerçek bulutları: NASA GIBS (ev çevresi MODIS Terra, dünya VIIRS)
+  python tools/olcek_veri.py yildiz    yıldızlar: HYG v4.1 (uzaklığı bilinen her yıldız, gerçek yeri, ışığı, rengi)
+  python tools/olcek_veri.py galaksi   galaksiler: 2MASS Redshift Survey (44.600 galaksi, kırmızıya kaymadan uzaklık)
+  python tools/olcek_veri.py ag        kozmik ağ: Zel'dovich yaklaşımıyla istatistiksel bir örnek (256^3, 600 Mpc)
+  python tools/olcek_veri.py asteroit  asteroit kuşakları: Minor Planet Center'ın MPCORB'u
+  python tools/olcek_veri.py cie       CIE 1931 2 derece renk eşleme fonksiyonları (Hız: ışığın her hızdaki rengi)
+  python tools/olcek_veri.py samanyolu Samanyolu panoraması: ESO/S. Brunier, yıldızları çıkarılmış
+  --lang tr|en                         iletilerin dili (öntanımlı: uygulamanınki, user.cfg'den)
+
+Her doku aynı biçimde yazılır: <ad>.tex = 16 baytlık başlık (b"OLTX", genişlik, yükseklik, düzey sayısı; uint32), ardından
+en inceden en kabaya mip düzeyleri, RGBA8 (sRGB). Sahne dosyayı olduğu gibi ekran kartına kopyalar.
+"""
+
+dil.choose(dil.take_lang(sys.argv))
+try:
+    import numpy as np
+except ImportError:
+    sys.exit(say('numpy gerekli: pip install numpy pillow scipy rasterio', 'numpy is needed: pip install numpy pillow scipy rasterio'))
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "assets", "olcek")
@@ -70,8 +106,9 @@ def write_tex(path, rgba):
         f.write(np.array([rgba.shape[1], rgba.shape[0], len(levels)], dtype=np.uint32).tobytes())
         for lv in levels:
             f.write(np.ascontiguousarray(lv).tobytes())
-    print(f"  yazildi {os.path.relpath(path, ROOT)}: {rgba.shape[1]}x{rgba.shape[0]}, {len(levels)} duzey, "
-          f"{os.path.getsize(path) / 1e6:.0f} MB")
+    rel, mb = os.path.relpath(path, ROOT), os.path.getsize(path) / 1e6
+    print(say(f"  yazıldı {rel}: {rgba.shape[1]}x{rgba.shape[0]}, {len(levels)} düzey, {mb:.0f} MB",
+              f"  written {rel}: {rgba.shape[1]}x{rgba.shape[0]}, {len(levels)} levels, {mb:.0f} MB"))
 
 
 def fetch(url, name):
@@ -79,14 +116,18 @@ def fetch(url, name):
     path = os.path.join(DL, name)
     if os.path.exists(path) and os.path.getsize(path) > 0:
         return path
-    print("  indiriliyor", url)
+    print(say("  indiriliyor", "  downloading"), url)
     req = urllib.request.Request(url, headers={"User-Agent": "pc_graphics olcek_veri.py"})
-    with urllib.request.urlopen(req) as r, open(path + ".part", "wb") as f:
-        while True:
-            b = r.read(1 << 20)
-            if not b:
-                break
-            f.write(b)
+    try:
+        with urllib.request.urlopen(req) as r, open(path + ".part", "wb") as f:
+            while True:
+                b = r.read(1 << 20)
+                if not b:
+                    break
+                f.write(b)
+    except (urllib.error.URLError, OSError) as e:
+        sys.exit(say(f"İNDİRİLEMEDİ: {url}\n  {e}\n  Bağlantı var mı? Sonra yeniden çalıştırın: indirilmiş olan atlanır.",
+                     f"COULD NOT DOWNLOAD: {url}\n  {e}\n  Is the connection up? Then run this again: what is there is skipped."))
     os.replace(path + ".part", path)
     return path
 
@@ -119,7 +160,7 @@ def s2_tiles(lat, lon, half_m):
             best[tile] = (nod, f["assets"]["visual"]["href"], f["id"])
     out = sorted(best.values(), key=lambda t: t[0])
     for nod, href, fid in out:
-        print(f"  {fid}: bos %{nod:.1f}")
+        print(say(f"  {fid}: boş %{nod:.1f}", f"  {fid}: no data {nod:.1f} %"))
     return [href for _, href, _ in out]
 
 
@@ -142,7 +183,7 @@ def s2(size=8192, res=10.0):
             m = (band.max(axis=0) > 0) & (valid == 0)
             dst[:, m] = band[:, m]
             valid[m] = 1
-            print(f"  {url.split('/')[-2]}: kapsanan %{100 * valid.mean():.1f}")
+            print(say(f"  {url.split('/')[-2]}: kapsanan %{100 * valid.mean():.1f}", f"  {url.split('/')[-2]}: covered {100 * valid.mean():.1f} %"))
     # TCI is linear in reflectance: DN 255 = 0.2 (L2A, B04/B03/B02 scaled 0..2000 of 10000). Stored as sRGB of
     # reflectance / 0.25 like every other map here (the scene multiplies by 0.25): more levels for the dark sea
     refl = dst.astype(np.float32) / 255.0 * 0.2
@@ -251,7 +292,8 @@ def kiyi(half=2048.0, res=2.0):
     gy, gx = np.gradient(out, res)
     nx, ny = gx[m // 2, m // 2], -gy[m // 2, m // 2]   # towards the sea, east and north
     ang = math.degrees(math.atan2(ny, nx))
-    print(f"  kiyi: sahildeki nokta suya {-centre:.1f} m (+ karada), denize dogru yon {ang:.0f} derece (doguya gore)")
+    print(say(f"  kıyı: sahildeki nokta suya {-centre:.1f} m (+ karada), denize doğru yön {ang:.0f} derece (doğuya göre)",
+              f"  shore: the beach point is {-centre:.1f} m from the water (+ on land), towards the sea at {ang:.0f} degrees (from east)"))
     with open(os.path.join(OUT, "kiyi.sdf"), "wb") as f:
         f.write(b"OLSD")
         f.write(np.array([m], np.uint32).tobytes())
@@ -260,7 +302,7 @@ def kiyi(half=2048.0, res=2.0):
     from PIL import Image
     v = np.clip(0.5 + out / 200.0, 0, 1)
     Image.fromarray((v * 255).astype(np.uint8)).resize((1024, 1024)).save(os.path.join(OUT, "kiyi_onizleme.png"))
-    print(f"  yazildi assets/olcek/kiyi.sdf: {m}x{m}, {res} m")
+    print(say(f"  yazıldı assets/olcek/kiyi.sdf: {m}x{m}, {res} m", f"  written assets/olcek/kiyi.sdf: {m}x{m}, {res} m"))
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -327,7 +369,8 @@ def bulut(date="2026-10-05", world_date=None):
     rgba = np.concatenate([sat_l, np.round(a * 255).astype(np.uint8)[..., None]], axis=2)
     write_tex(os.path.join(OUT, "bulut_ege.tex"), rgba)
     Image.fromarray((a * 255).astype(np.uint8)).resize((1024, 1024), Image.BOX).save(os.path.join(OUT, "bulut_ege_alfa.png"))
-    print(f"  ev cevresi bulut orani %{100 * a.mean():.1f}, sahildeki noktada {a[size // 2, size // 2]:.2f}")
+    print(say(f"  ev çevresi bulut oranı %{100 * a.mean():.1f}, sahildeki noktada {a[size // 2, size // 2]:.2f}",
+              f"  cloud cover around home {100 * a.mean():.1f} %, at the beach point {a[size // 2, size // 2]:.2f}"))
     del c1
     # ---- the world: VIIRS NOAA-20, 8192 x 4096. Its daily mosaic carries the sunglint of each swath (broad, smooth, grey
     # bands over the tropical sea) that the difference against Blue Marble takes for cloud. So the cloud is also asked
@@ -344,7 +387,8 @@ def bulut(date="2026-10-05", world_date=None):
         cover = (cot[..., 3] > 0).mean()
         if world_date is not None or (nodata < 0.25 and cover > 0.2):
             break
-        print(f"  {wd}: dunya %{100 * nodata:.0f} bos, bulut urunu %{100 * cover:.0f}: bir onceki gun")
+        print(say(f"  {wd}: dünya %{100 * nodata:.0f} boş, bulut ürünü %{100 * cover:.0f}: bir önceki gün",
+                  f"  {wd}: the world {100 * nodata:.0f} % empty, the cloud product {100 * cover:.0f} %: the day before"))
         # an unfinished day is not kept: a later run fetches it again
         for name in (f"viirs_cot_{wd}_dunya.png", f"viirs_{wd}_dunya.jpg"):
             if os.path.exists(os.path.join(DL, name)):
@@ -358,7 +402,7 @@ def bulut(date="2026-10-05", world_date=None):
     rgba = np.concatenate([sat, np.round(a * 255).astype(np.uint8)[..., None]], axis=2)
     write_tex(os.path.join(OUT, "bulut_dunya.tex"), rgba)
     Image.fromarray((a * 255).astype(np.uint8)).resize((2048, 1024), Image.BOX).save(os.path.join(OUT, "bulut_dunya_alfa.png"))
-    print(f"  dunya ({wd}) bulut orani %{100 * a.mean():.1f}")
+    print(say(f"  dünya ({wd}) bulut oranı %{100 * a.mean():.1f}", f"  the world ({wd}) cloud cover {100 * a.mean():.1f} %"))
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -410,7 +454,8 @@ def yildiz():
         f.write(pos.tobytes())
         f.write(att.tobytes())
     near = sum(1 for r in rows if (r[0] ** 2 + r[1] ** 2 + r[2] ** 2) ** 0.5 < 10 * pc)
-    print(f"  yazildi assets/olcek/yildizlar.bin: {n} yildiz ({near} tanesi 10 pc icinde)")
+    print(say(f"  yazıldı assets/olcek/yildizlar.bin: {n} yıldız ({near} tanesi 10 pc içinde)",
+              f"  written assets/olcek/yildizlar.bin: {n} stars ({near} within 10 pc)"))
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -428,10 +473,11 @@ def cie():
     path = fetch(CIE_URL, "CIE_xyz_1931_2deg.csv")
     h = hashlib.sha256(open(path, "rb").read()).hexdigest()
     if h != CIE_SHA256:
-        raise SystemExit(f"  CIE tablosunun ozeti beklenen degil: {h}")
+        raise SystemExit(say(f"  CIE tablosunun özeti beklenen değil: {h}", f"  the CIE table's hash is not the expected one: {h}"))
     shutil.copyfile(path, os.path.join(OUT, "cie1931_2deg.csv"))
     rows = sum(1 for line in open(path) if line.strip())
-    print(f"  yazildi assets/olcek/cie1931_2deg.csv: {rows} satir (360-830 nm), sha256 dogrulandi")
+    print(say(f"  yazıldı assets/olcek/cie1931_2deg.csv: {rows} satır (360-830 nm), sha256 doğrulandı",
+              f"  written assets/olcek/cie1931_2deg.csv: {rows} rows (360-830 nm), sha256 verified"))
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -456,10 +502,10 @@ def samanyolu(W=2048, mu=20.5):
     path = fetch(ESO_URL, "eso0932a.jpg")
     h = hashlib.sha256(open(path, "rb").read()).hexdigest()
     if h != ESO_SHA256:
-        raise SystemExit(f"  ESO panoramasinin ozeti beklenen degil: {h}")
+        raise SystemExit(say(f"  ESO panoramasının özeti beklenen değil: {h}", f"  the ESO panorama's hash is not the expected one: {h}"))
     im = np.asarray(Image.open(path).convert("RGB"))
     lin = srgb_to_lin(im)
-    print(f"  panorama {im.shape[1]}x{im.shape[0]}: yildizlar medyanla siliniyor")
+    print(say(f"  panorama {im.shape[1]}x{im.shape[0]}: yıldızlar medyanla siliniyor", f"  panorama {im.shape[1]}x{im.shape[0]}: the stars taken out by a median"))
     med = np.stack([ndimage.median_filter(lin[..., c], size=9, mode="wrap") for c in range(3)], axis=2)
     # what the median leaves of the brightest stars and the planet (their halos wider than it): clipped at three times the
     # two-degree median of their surroundings (the Milky Way's own clouds seldom reach that)
@@ -470,7 +516,8 @@ def samanyolu(W=2048, mu=20.5):
     b = 90.0 - (np.arange(H) + 0.5) * 180.0 / H
     floor = np.percentile(med[np.abs(b) > 40.0].reshape(-1, 3), 20, axis=0)
     med = np.clip(med - floor, 0.0, None)
-    print(f"  yer gok parlamasi tabani (R, G, B): {floor[0]:.4f} {floor[1]:.4f} {floor[2]:.4f}")
+    fl = f"{floor[0]:.4f} {floor[1]:.4f} {floor[2]:.4f}"
+    print(say(f"  yer gök parlaması tabanı (R, G, B): {fl}", f"  the ground's sky glow floor (R, G, B): {fl}"))
     Hn = W // 2
     out = np.zeros((Hn, W, 3), np.float32)
     for c in range(3):
@@ -490,7 +537,9 @@ def samanyolu(W=2048, mu=20.5):
     target = 1361.0 * 10.0 ** (-0.4 * (mu + 26.74)) * 206264.806 ** 2
     k = target / peak
     out *= k
-    print(f"  olcek: en parlak birkac derece {target:.3e} W/m^2/sr ({mu} kadir/yay saniyesi^2); ortalama {float(np.mean(Y)) * k:.3e}")
+    mean = float(np.mean(Y)) * k
+    print(say(f"  ölçek: en parlak birkaç derece {target:.3e} W/m^2/sr ({mu} kadir/yay saniyesi^2); ortalama {mean:.3e}",
+              f"  scale: the brightest few degrees {target:.3e} W/m^2/sr ({mu} mag/arcsec^2); mean {mean:.3e}"))
     rgba = np.concatenate([out, (cct / 1e4)[..., None]], axis=2).astype(np.float16)
     dst = os.path.join(OUT, "samanyolu_gok.bin")
     with open(dst, "wb") as f:
@@ -499,7 +548,9 @@ def samanyolu(W=2048, mu=20.5):
         f.write(np.ascontiguousarray(rgba).tobytes())
     prev = lin_to_srgb(np.clip(out / (target * 1.2), 0.0, 1.0))
     Image.fromarray(prev).save(os.path.join(OUT, "samanyolu_gok_onizleme.png"))
-    print(f"  yazildi assets/olcek/samanyolu_gok.bin: {W}x{Hn}, {os.path.getsize(dst) / 1e6:.0f} MB (onizleme: samanyolu_gok_onizleme.png)")
+    mb = os.path.getsize(dst) / 1e6
+    print(say(f"  yazıldı assets/olcek/samanyolu_gok.bin: {W}x{Hn}, {mb:.0f} MB (önizleme: samanyolu_gok_onizleme.png)",
+              f"  written assets/olcek/samanyolu_gok.bin: {W}x{Hn}, {mb:.0f} MB (preview: samanyolu_gok_onizleme.png)"))
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -539,7 +590,7 @@ def galaksi(H0=70.0):
         f.write(np.array([len(pos)], np.uint32).tobytes())
         f.write(np.ascontiguousarray(pos).tobytes())
         f.write(np.ascontiguousarray(att).tobytes())
-    print(f"  yazildi assets/olcek/galaksiler.bin: {len(pos)} galaksi (2MRS)")
+    print(say(f"  yazıldı assets/olcek/galaksiler.bin: {len(pos)} galaksi (2MRS)", f"  written assets/olcek/galaksiler.bin: {len(pos)} galaxies (2MRS)"))
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -594,7 +645,8 @@ def ag(N=256, L=600.0, seed=11, growth=1.25):
     from scipy import ndimage
     rho = ndimage.gaussian_filter(rho, 0.8, mode="wrap")
     rho /= rho.mean()
-    print(f"  ag: yogunluk en cok {rho.max():.0f} kat, bos hucre %{100 * (rho < 0.1).mean():.0f}")
+    print(say(f"  ağ: yoğunluk en çok {rho.max():.0f} kat, boş hücre %{100 * (rho < 0.1).mean():.0f}",
+              f"  web: density at most {rho.max():.0f} times, empty cells {100 * (rho < 0.1).mean():.0f} %"))
     with open(os.path.join(OUT, "ag.bin"), "wb") as f:
         f.write(b"OLWB")
         f.write(np.array([N], np.uint32).tobytes())
@@ -603,7 +655,7 @@ def ag(N=256, L=600.0, seed=11, growth=1.25):
     from PIL import Image
     v = np.log1p(rho)
     Image.fromarray(np.clip(v[:, :, N // 2] / v.max() * 255, 0, 255).astype(np.uint8)).resize((768, 768)).save(os.path.join(OUT, "ag_kesit.png"))
-    print(f"  yazildi assets/olcek/ag.bin: {N}^3, {L:.0f} Mpc")
+    print(say(f"  yazıldı assets/olcek/ag.bin: {N}^3, {L:.0f} Mpc", f"  written assets/olcek/ag.bin: {N}^3, {L:.0f} Mpc"))
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -647,7 +699,7 @@ def asteroit(samples=12):
             a_l.append(a); e_l.append(e); i_l.append(inc); w_l.append(w); O_l.append(O); M_l.append(M); ep_l.append(ep)
     a = np.array(a_l); e = np.array(e_l); inc = np.radians(i_l); w = np.radians(w_l); O = np.radians(O_l)
     M0 = np.radians(M_l); ep = np.array(ep_l)
-    print(f"  MPCORB: {len(a)} yorunge")
+    print(say(f"  MPCORB: {len(a)} yörünge", f"  MPCORB: {len(a)} orbits"))
     # today (the scene's moment), days from J2000
     t_today = 9774.0 + 0.4162   # 2026-10-05 09:59 UTC
     nmot = 0.01720209895 / a ** 1.5   # rad/day
@@ -702,13 +754,45 @@ def asteroit(samples=12):
         for k in ("L4", "L5"):
             t = out["trojans"][k]
             f.write(f"trojan {k} {t['n']} {t['lon']:.3f} {t['sigLon']:.3f}\n")
-    print(f"  ana kusak {out['counts']['main']}, Truvalilar {out['counts']['trojans']} (L4 {out['trojans']['L4']['n']}, "
-          f"L5 {out['trojans']['L5']['n']}), Kuiper {out['counts']['kuiper']}")
+    c, t = out['counts'], out['trojans']
+    print(say(f"  ana kuşak {c['main']}, Truvalılar {c['trojans']} (L4 {t['L4']['n']}, L5 {t['L5']['n']}), Kuiper {c['kuiper']}",
+              f"  main belt {c['main']}, Trojans {c['trojans']} (L4 {t['L4']['n']}, L5 {t['L5']['n']}), Kuiper {c['kuiper']}"))
 
+
+# what the scene reads, by the step that writes it (the scene falls back to placeholders for the missing ones)
+OUTPUTS = {"s2": ["s2_ev.tex"], "bmng": ["bmng_dunya.tex", "bmng_kusak.tex", "bmng_ege.tex"], "ay": ["ay.tex"], "kiyi": ["kiyi.sdf"],
+           "bulut": ["bulut_dunya.tex", "bulut_ege.tex"], "yildiz": ["yildizlar.bin"], "galaksi": ["galaksiler.bin"], "ag": ["ag.bin"],
+           "asteroit": ["kusaklar.txt"], "cie": ["cie1931_2deg.csv"], "samanyolu": ["samanyolu_gok.bin"]}
+
+
+def check():
+    bad = 0
+    for step, files in OUTPUTS.items():
+        for name in files:
+            if not os.path.exists(os.path.join(OUT, name)):
+                print(say(f"  yok: assets/olcek/{name} (adım: {step})", f"  missing: assets/olcek/{name} (step: {step})"))
+                bad += 1
+    n = sum(len(f) for f in OUTPUTS.values())
+    print(say(f"{n} dosyadan {n - bad} tanesi yerinde" + (", hazırlamak için: python tools/olcek_veri.py" if bad else ""),
+              f"{n - bad} of {n} files present" + (", to prepare them: python tools/olcek_veri.py" if bad else "")))
+    sys.exit(1 if bad else 0)
+
+
+STEPS = ("s2", "bmng", "ay", "kiyi", "bulut", "yildiz", "galaksi", "ag", "asteroit", "cie", "samanyolu", "kusak")
 
 if __name__ == "__main__":
     what = sys.argv[1] if len(sys.argv) > 1 else "hepsi"
+    what = "hepsi" if what == "all" else what
+    if what == "check":
+        check()
+    if what not in STEPS + ("hepsi",):
+        print(say(HELP_TR, __doc__))
+        sys.exit(0 if what in ("-h", "--help", "help") else 2)
     os.makedirs(OUT, exist_ok=True)
+    try:
+        import PIL, rasterio, scipy  # noqa: F401  (the steps import them where they need them; asked for here, before any download)
+    except ImportError as e:
+        sys.exit(say(f"{e.name} gerekli: pip install numpy pillow scipy rasterio", f"{e.name} is needed: pip install numpy pillow scipy rasterio"))
     if what in ("s2", "hepsi"):
         s2()
     if what in ("bmng", "hepsi"):
