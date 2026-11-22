@@ -1083,6 +1083,8 @@ int runAynaCli(int argc, char** argv) {
     a.root = PROJECT_ROOT;
     std::string out = "captures/ayna", which = "all";
     int w = 0, h = 0;
+    std::string pathFile;   // --path: a camera path, one pose a line
+    bool pathRef = false;
     bool headless = false, hasFree = false, plan = false;
     std::string test;
     std::vector<float2> probes;
@@ -1098,6 +1100,8 @@ int runAynaCli(int argc, char** argv) {
         else if (s == "--set") a.overrides.push_back(next());
         else if (s == "--root") a.root = next();
         else if (s == "--scene") next();
+        else if (s == "--path") pathFile = next();
+        else if (s == "--path-ref") pathRef = true;
         else if (s == "--plan") plan = true;
         else if (s == "--probe") {   // "x y" at the output's size: the first surface there and its light, both ways
             float x = 0, y = 0;
@@ -1265,6 +1269,39 @@ int runAynaCli(int argc, char** argv) {
     if (plan) {
         const std::string p = out + "/ayna_plan.png";
         std::printf("plan: %s\n", a.maze.savePlan(p, 80) ? p.c_str() : "YAZILAMADI");
+    }
+    if (!pathFile.empty()) {
+        // a camera path (a seamless loop is a closed one): "x y z yaw pitch fov" a line, '#' a comment;
+        // frame_NNNN.png for each, the live frame or with --path-ref the reference (the pattern four times, shifted)
+        std::FILE* f = std::fopen(pathFile.c_str(), "r");
+        if (!f) { std::printf("yol okunamadi: %s\n", pathFile.c_str()); a.release(); return 1; }
+        char line[512];
+        int n = 0;
+        const auto p0 = std::chrono::high_resolution_clock::now();
+        while (std::fgets(line, sizeof(line), f)) {
+            if (line[0] == '#') continue;
+            double x, y, z, tm = -1.0;
+            float yaw, pitch, fov;
+            const int got = std::sscanf(line, "%lf %lf %lf %f %f %f %lf", &x, &y, &z, &yaw, &pitch, &fov, &tm);
+            if (got < 6) continue;
+            a.cam.pos = make_float3(float(x), float(y), float(z));
+            a.cam.yaw = yaw;
+            a.cam.pitch = pitch;
+            a.cam.fovY = fov;
+            char name[64];
+            std::snprintf(name, sizeof(name), "/frame_%04d", n++);
+            if (pathRef) {
+                a.saveReference(out + name);
+            } else {
+                a.render();
+                a.save(out + name);
+            }
+        }
+        std::fclose(f);
+        std::printf("yol: %d kare %.1f sn -> %s\n", n,
+                    std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - p0).count(), out.c_str());
+        a.release();
+        return 0;
     }
     for (int i = 0; i < AynaApp::viewCount(); ++i) {
         if (hasFree ? i > 0 : (which != "all" && std::stoi(which) != i)) continue;
