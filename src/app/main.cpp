@@ -30,6 +30,8 @@ __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 0;
 #endif
 
 int main(int argc, char** argv) {
+    std::setvbuf(stdout, nullptr, _IONBF, 0);   // a piped log keeps its last lines when the run is killed (MSVC has no
+                                                // line buffering: _IOLBF is full)
     app::Options opt;
     opt.root = PROJECT_ROOT;
     std::string scene;
