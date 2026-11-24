@@ -4,22 +4,77 @@
 //                                                    cerceve, bina, kontrol)
 //   pc_graphics.exe --scene yikim --clip kolon|sarsinti --seconds S --out captures/x    frames (30 fps) + an mp4 (ffmpeg)
 //   pc_graphics.exe --scene yikim --still T --out captures/x     the scenario simulated to T seconds, one clean frame
-//   options: --scenario kolon|sarsinti, --spp N, --width W, --height H, --set key=value (deprem.magnitude=3..9), --root dir
+//   options: --scenario kolon|sarsinti, --spp N, --width W, --height H (or --w, --h), --set key=value
+//            (deprem.magnitude=3..9), --root dir
+//   --clip ... --slow f        slow motion: every saved frame (30 a second of video) moves the scenario on by f/30 s
+//                              (0.25: four times slower) and every frame is saved; the solver steps at most 1/60 s
+//                              at a time (finer where a frame is shorter: the same event, sampled finer). --seconds
+//                              is the scenario's time
+//   --clip ... --path <file>   the camera per saved frame (src/core/cam_path.h), frames frame_NNNN.png: as many as
+//                              the path has poses, each at the 7th column's scenario time if every line has one,
+//                              else at frame x f/30 (f from --slow, else 1). A line: "x y z yaw pitch fov [time]",
+//                              x y z the camera in metres, yaw 0 along +z growing towards +x and pitch up positive,
+//                              radians; fov vertical, degrees. With --slow or --path the scenario's own camera is
+//                              printed in that form
 #include "scenes/yikim/yikim_app.h"
+#include "core/cam_path.h"
 #include "core/image_io.h"
+#include "scenes/yikim/fly_camera.h"
 
 #include <filesystem>
 #include <map>
 #include <set>
 
 
-static int runClip(YikimApp& app, double seconds, double still, unsigned spp, const std::string& outPrefix) {
+// a clip's own timing (--slow, --path): the scenario's time at each step and each step's length, and the step each
+// saved frame is taken after
+struct ClipPlan {
+    double slow = 0.0;                        // > 0: a saved frame is slow/30 s of the scenario
+    const std::vector<CamPose>* path = nullptr;
+    bool timed = false;                       // the path gives each frame's time
+    std::vector<double> stepT, stepH;         // per step k: the time after it, its length (step 0: the start, none)
+    std::vector<int> frameStep;               // per saved frame: the step it follows
+    bool custom() const { return slow > 0.0 || path; }
+    bool build(double seconds) {
+        const double f = slow > 0.0 ? slow : 1.0, frameDt = f / 30.0;
+        std::vector<double> T;
+        if (path) {
+            for (size_t i = 0; i < path->size(); ++i) T.push_back(timed ? (*path)[i].time : double(i) * frameDt);
+        } else {
+            const int n = int(std::round(seconds / frameDt));
+            for (int i = 0; i <= n; ++i) T.push_back(double(i) * frameDt);
+        }
+        stepT.assign(1, 0.0);
+        stepH.assign(1, 0.0);
+        frameStep.clear();
+        double cur = 0.0;
+        for (double t : T) {
+            if (t < cur - 1e-9) {
+                std::printf("yikim: yolun zamani geri gidiyor (%.4f s, once %.4f s)\n", t, cur);
+                return false;
+            }
+            const double gap = t - cur;
+            const int n = gap <= 1e-9 ? 0 : std::max(1, int(std::ceil(gap * 60.0 - 1e-6)));
+            for (int j = 1; j <= n; ++j) {
+                stepT.push_back(j == n ? t : cur + gap * j / n);
+                stepH.push_back(gap / n);
+            }
+            if (n > 0) cur = t;
+            frameStep.push_back(int(stepT.size()) - 1);
+        }
+        return true;
+    }
+};
+
+static int runClip(YikimApp& app, double seconds, double still, unsigned spp, const std::string& outPrefix, const ClipPlan& plan) {
     namespace fs = std::filesystem;
     const bool clip = still < 0.0;
+    const bool custom = clip && plan.custom();
     const std::string dir = clip ? outPrefix : fs::path(outPrefix).parent_path().string();
     if (!dir.empty()) fs::create_directories(dir);
     const double dt = 1.0 / 60.0;
-    const int frames = int(std::round((clip ? seconds : still) / dt));
+    const int frames = custom ? int(plan.stepT.size()) - 1 : int(std::round((clip ? seconds : still) / dt));
+    size_t nextFrame = 0;   // custom: the next saved frame
     std::vector<uchar4> px;
     double physMs = 0, rendMs = 0;
     int shots = 0;
@@ -48,10 +103,10 @@ static int runClip(YikimApp& app, double seconds, double still, unsigned spp, co
     int kicks = 0;
     float kickUp = 0, kickSide = 0;
     for (int k = 0; k <= frames; ++k) {
-        const double t = k * dt;
+        const double t = custom ? plan.stepT[k] : k * dt;
         app.events(t);
         if (k > 0) {
-            app.world.step(float(dt));
+            app.world.step(float(custom ? plan.stepH[k] : dt));
             physMs += app.world.lastMs;
             secMs += app.world.lastMs;
             secMax = std::max(secMax, app.world.lastMs);
@@ -296,20 +351,37 @@ static int runClip(YikimApp& app, double seconds, double still, unsigned spp, co
             }
             if (shown) reportedBreak = true;
         }
-        const bool shoot = clip ? (k % 2 == 0) : (k == frames);
-        if (!shoot) continue;
+        int want = 0;   // frames saved after this step
+        if (custom)
+            while (nextFrame + want < plan.frameStep.size() && plan.frameStep[nextFrame + want] == k) ++want;
+        else
+            want = (clip ? (k % 2 == 0) : (k == frames)) ? 1 : 0;
+        if (want == 0) continue;
         app.renderer.updateWorld(app.world);
         app.world.download();
         app.renderer.params().groundY = float(app.world.pos[0].y);
         app.renderer.params().groundShift = make_float2(float(app.world.pos[0].x), float(app.world.pos[0].z));
-        app.renderer.render(spp, false);
-        rendMs += app.renderer.lastMs;
-        app.renderer.download(px);
-        char name[512];
-        if (clip) std::snprintf(name, sizeof(name), "%s/f_%05d.png", outPrefix.c_str(), shots);
-        else std::snprintf(name, sizeof(name), "%s.png", outPrefix.c_str());
-        writePNG(name, int(app.width), int(app.height), reinterpret_cast<const unsigned char*>(px.data()));
-        ++shots;
+        for (int w = 0; w < want; ++w) {
+            if (plan.path) {
+                const CamPose& q = (*plan.path)[size_t(shots)];
+                FlyCamera fc;
+                fc.pos = make_float3(float(q.x), float(q.y), float(q.z));
+                fc.yaw = q.yaw;
+                fc.pitch = q.pitch;
+                fc.fovDeg = q.fov;
+                fc.apply(app.renderer.params().cam, app.width, app.height);
+            }
+            app.renderer.render(spp, false);
+            rendMs += app.renderer.lastMs;
+            app.renderer.download(px);
+            char name[512];
+            if (clip && plan.path) std::snprintf(name, sizeof(name), "%s/%s.png", outPrefix.c_str(), camPathFrameName(shots).c_str());
+            else if (clip) std::snprintf(name, sizeof(name), "%s/f_%05d.png", outPrefix.c_str(), shots);
+            else std::snprintf(name, sizeof(name), "%s.png", outPrefix.c_str());
+            writePNG(name, int(app.width), int(app.height), reinterpret_cast<const unsigned char*>(px.data()));
+            ++shots;
+        }
+        if (custom) nextFrame += size_t(want);
         if (k % 60 == 0 || !clip) {
             const PhysStats st = app.world.stats();
             std::printf("t=%5.2f s  kirik lif %5d  catlak %5d  temas yamasi %4d  fizik %.2f ms  goruntu %.1f ms\n", t, st.broken, st.cracked, st.contacts,
@@ -358,7 +430,8 @@ static int runClip(YikimApp& app, double seconds, double still, unsigned spp, co
     }
     if (clip) {
         const std::string mp4 = outPrefix + ".mp4";
-        const std::string cmd = "ffmpeg -loglevel error -y -framerate 30 -i \"" + outPrefix + "/f_%05d.png\" -c:v libx264 -pix_fmt yuv420p -crf 18 \"" + mp4 + "\"";
+        const std::string cmd = "ffmpeg -loglevel error -y -framerate 30 -i \"" + outPrefix + (plan.path ? "/frame_%04d.png" : "/f_%05d.png") +
+                                "\" -c:v libx264 -pix_fmt yuv420p -crf 18 \"" + mp4 + "\"";
         const int rc = std::system(cmd.c_str());
         std::printf("%s %s\n", rc == 0 ? "video:" : "VIDEO YAPILAMADI:", mp4.c_str());
     } else {
@@ -379,6 +452,8 @@ int runYikimCli(int argc, char** argv) {
     unsigned spp = 16;
     std::string clipName;
     bool sizeGiven = false;
+    double slow = 0.0;
+    std::string pathFile;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         auto next = [&]() { return i + 1 < argc ? std::string(argv[++i]) : std::string(); };
@@ -391,6 +466,10 @@ int runYikimCli(int argc, char** argv) {
         else if (a == "--spp") spp = unsigned(std::stoi(next()));
         else if (a == "--width") { app.width = unsigned(std::stoi(next())); sizeGiven = true; }
         else if (a == "--height") { app.height = unsigned(std::stoi(next())); sizeGiven = true; }
+        else if (a == "--w") { app.width = unsigned(std::stoi(next())); sizeGiven = true; }
+        else if (a == "--h") { app.height = unsigned(std::stoi(next())); sizeGiven = true; }
+        else if (a == "--slow") slow = std::stod(next());
+        else if (a == "--path") pathFile = next();
         else if (a == "--out") out = next();
         else if (a == "--set") app.overrides.push_back(next());
         else if (a == "--root") app.root = next();
@@ -404,6 +483,18 @@ int runYikimCli(int argc, char** argv) {
         return 2;
     }
     (void)sizeGiven;
+    std::vector<CamPose> poses;
+    ClipPlan plan;
+    plan.slow = slow;
+    if (!pathFile.empty()) {
+        std::string perr;
+        if (!readCamPath(pathFile, poses, perr, &plan.timed)) {
+            std::printf("yikim: %s\n", perr.c_str());
+            return 1;
+        }
+        plan.path = &poses;
+    }
+    if (still < 0.0 && plan.custom() && !plan.build(seconds)) return 1;
     app.renderer.init(app.width, app.height, app.root);
     std::string log;
     const double t0 = ynow();
@@ -413,8 +504,16 @@ int runYikimCli(int argc, char** argv) {
     app.renderer.uploadWorld(app.world);
     app.applyRender();
     app.setCamera();
+    if (plan.custom()) {   // the scenario's camera as a path line
+        const YCamera& c = app.renderer.params().cam;
+        std::printf("yikim: kamera (yol bicimiyle) %.3f %.3f %.3f %.4f %.4f %.1f\n", c.pos.x, c.pos.y, c.pos.z, std::atan2(c.fwd.x, c.fwd.z),
+                    std::asin(std::max(-1.0f, std::min(1.0f, c.fwd.y))), 2.0f * std::atan(c.tanHalfY) * 180.0f / 3.14159265f);
+        if (still < 0.0)
+            std::printf("yikim: %zu kare, senaryo %.3f s, %zu adim%s\n", plan.frameStep.size(), plan.stepT.back(), plan.stepT.size() - 1,
+                        plan.path ? (plan.timed ? ", zaman yoldan" : ", zaman kare x f/30") : "");
+    }
     const std::string prefix = out.empty() ? app.root + "/captures/yikim_" + app.scenario : out;
-    const int rc = runClip(app, seconds, still, still >= 0.0 ? std::max(spp, 64u) : spp, prefix);
+    const int rc = runClip(app, seconds, still, still >= 0.0 ? std::max(spp, 64u) : spp, prefix, plan);
     app.renderer.shutdown();
     return rc;
 }
