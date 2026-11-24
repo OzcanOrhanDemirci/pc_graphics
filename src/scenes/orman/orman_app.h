@@ -49,6 +49,7 @@ public:
     static int viewCount();
     std::string summary() const;
     void release();
+    void setClock(double t) { clock_ = t; }   // the scene's clock (the water's flow); render(dt) adds dt to it
 
 private:
     int groundMaterial_ = -1, waterMaterial_ = -1;

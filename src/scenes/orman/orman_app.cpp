@@ -1,5 +1,20 @@
+// Scene 11 "Orman": one run's state and the command-line tools (pc_graphics.exe --scene orman ...):
+//   [--view 0..3]... [--cam "x y z yaw pitch [fov]"]...   stills (the feet put on the ground) to <out>_bakisN.png /
+//                                                         <out>_serbest.png; --bench N times N live frames after each
+//   --kararlilik N [--yol yan|ileri|don] [--hiz v] [--ref S]   a walk: live_NNNN.png and ref_NNNN.png in <out>/
+//   --path <file> [--ref S] [--pozlama izle|sabit]   a camera path (src/core/cam_path.h), the reference only (S fixed
+//        samples a pixel, at most 16, no DLSS: nothing carried from frame to frame) to <out>/frame_NNNN.png. A line is
+//        "x y z yaw pitch fov [time]": x y z the eye itself in world metres (y absolute, not above the ground: a
+//        crane's move stays smooth over the bed's bumps; nothing pushes it out of a trunk or the ground), yaw 0 along
+//        -z growing to the left and pitch up positive, radians; fov vertical, degrees; time the scene's clock in
+//        seconds (the water's flow), else frame/30. The exposure: izle (default) settles on the first frame, then
+//        follows as the eye does, a frame being 1/30 s; sabit holds the first frame's.
+//   --path <file> --path-zemin   no picture: the ground's height, the water's level and the eye's height above them
+//        for every pose (to write a path by)
+//   common: --w W --h H, --out <prefix or folder> (relative to the project), --set key=value, --root dir
 #include "scenes/orman/orman_app.h"
 
+#include "core/cam_path.h"
 #include "core/image_io.h"
 
 #include <algorithm>
@@ -347,6 +362,8 @@ int runOrmanCli(int argc, char** argv) {
     int bench = 0, stab = 0, refSpp = 16;
     std::string path = "yan";
     float speed = 1.3f;
+    std::string camPath, exposureMode = "izle";
+    bool groundOnly = false;
     for (int i = 1; i < argc; ++i) {
         const std::string s = argv[i];
         auto next = [&]() { return i + 1 < argc ? std::string(argv[++i]) : std::string(); };
@@ -361,6 +378,9 @@ int runOrmanCli(int argc, char** argv) {
         else if (s == "--yol") path = next();
         else if (s == "--hiz") speed = std::stof(next());
         else if (s == "--ref") refSpp = std::stoi(next());
+        else if (s == "--path") camPath = next();
+        else if (s == "--pozlama") exposureMode = next();
+        else if (s == "--path-zemin") groundOnly = true;
         else if (s == "--cam") {
             OrmanCam c;
             if (std::sscanf(next().c_str(), "%f %f %f %f %f %f", &c.feet.x, &c.feet.y, &c.feet.z, &c.yaw, &c.pitch, &c.fovY) >= 5) {
@@ -376,13 +396,42 @@ int runOrmanCli(int argc, char** argv) {
     for (const auto& id : a.assets.missing) std::printf("orman: eksik %s\n", id.c_str());
     a.buildWorld();
     for (const auto& [id, n] : a.world.counts) std::printf("  %-28s %lld kopya\n", id.c_str(), n);
+    std::vector<CamPose> poses;
+    if (!camPath.empty()) {
+        std::string perr;
+        if (!readCamPath(camPath, poses, perr)) {
+            std::fprintf(stderr, "orman: %s\n", perr.c_str());
+            return 1;
+        }
+        // the eye over the ground (and over the water where the stream is): a pose under it, or nearly, is reported
+        int under = 0;
+        for (size_t k = 0; k < poses.size(); ++k) {
+            const CamPose& q = poses[k];
+            const float3 h = a.world.home(make_float3(float(q.x), 0.0f, float(q.z)));
+            const float g = a.world.height(h.x, h.z), wl = a.world.waterLevel(h.x);
+            const bool wet = wl > g;
+            const float over = float(q.y) - (wet ? wl : g);
+            if (over < 0.05f) ++under;
+            if (groundOnly || over < 0.05f) {
+                char water[48] = "";
+                if (wet) std::snprintf(water, sizeof(water), ", su %.3f m", wl);
+                std::printf("  poz %4zu (%.2f %.2f %.2f): zemin %.3f m%s, goz ustunde %.3f m%s\n", k, q.x, q.y, q.z, g, water, over,
+                            over < 0.05f ? "  ALTINDA" : "");
+            }
+        }
+        std::printf("orman: yol %zu poz, %d tanesi zeminin ya da suyun 5 cm'den yakininda ya da altinda\n", poses.size(), under);
+        if (groundOnly) {
+            a.release();
+            return 0;
+        }
+    }
     std::string err;
     if (!a.initRenderer(err)) {
         std::fprintf(stderr, "orman: %s\n", err.c_str());
         return 1;
     }
     a.bakeLight();
-    if (a.cfg.i("dlss", 1) != 0) {
+    if (a.cfg.i("dlss", 1) != 0 && poses.empty()) {
         if (a.setDlss(true)) std::printf("orman: DLSS-RR acik (DLAA, piksel basina bir ornek)\n");
         else std::printf("orman: DLSS-RR kapali: %s\n", a.R.dlssError.c_str());
     }
@@ -412,6 +461,49 @@ int runOrmanCli(int argc, char** argv) {
             std::printf("orman: olcum %d kare: ortalama %.2f ms, en kotu %.2f ms\n", bench, sum / bench, worst);
         }
     };
+    if (!poses.empty()) {
+        // the path's frames: each the reference, drawn whole on its own (fixed samples, no history), at its time
+        const std::string dir = (fs::path(a.root) / out).generic_string();
+        fs::create_directories(dir, ec);
+        a.R.setPattern(refSpp, a.cfg.f("filter.sigma", 0.42f));
+        auto place = [&](const CamPose& q) {
+            a.cam = OrmanCam();
+            a.cam.feet = make_float3(float(q.x), float(q.y), float(q.z));
+            a.cam.eyeHeight = 0.0f;
+            a.cam.yaw = q.yaw;
+            a.cam.pitch = q.pitch;
+            a.cam.fovY = q.fov;
+        };
+        const float frameDt = 1.0f / 30.0f;   // the viewer's time between frames: the exposure follows by it
+        auto timeOf = [&](size_t k) { return poses[k].time >= 0.0 ? poses[k].time : double(k) / 30.0; };
+        // the exposure settled on the first frame (a render with no time passing takes the frame's own)
+        place(poses[0]);
+        a.setClock(timeOf(0));
+        a.render(0.0f);
+        if (exposureMode == "sabit") {
+            a.exposureEv = std::log2(a.autoExposure);
+            a.autoOn = false;
+        }
+        double sum = 0.0;
+        const double p0 = nowMs();
+        for (size_t k = 0; k < poses.size(); ++k) {
+            place(poses[k]);
+            const float dt = a.autoOn ? frameDt : 0.0f;
+            a.setClock(timeOf(k) - dt);   // render(dt) adds it back
+            const double t0 = nowMs();
+            a.render(dt);
+            const std::string name = dir + "/" + camPathFrameName(int(k));
+            a.save(name);
+            const double ms = nowMs() - t0;
+            sum += ms;
+            std::printf("orman: %s.png (t %.3f s, %.0f ms, pozlama x%.3f, sonlu olmayan ornek %u)\n", name.c_str(), timeOf(k), ms, a.autoExposure,
+                        a.R.badSamples);
+        }
+        std::printf("orman: yol %zu kare %dx%d, referans %d ornek, kare basina %.0f ms (toplam %.1f s) -> %s\n", poses.size(), a.width, a.height,
+                    refSpp, sum / double(poses.size()), (nowMs() - p0) / 1000.0, dir.c_str());
+        a.release();
+        return 0;
+    }
     if (stab > 0) {
         // a walk at 60 frames a second for tools/titreme.py and tools/kararlilik.py: each moment drawn live (the
         // configured samples) and as a reference (--ref samples), the same exposure (settled once, then held) and the
