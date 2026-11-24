@@ -6,7 +6,18 @@
 //                   [--cam x,y,z,yaw,pitch] [--fov derece] [--debug 0..2] [--yerdegistirme 0|1]
 //                                                                      one frame to captures/denizalti/<ad>.png
 //   pc_graphics.exe --scene denizalti --headless --test catlak         tessellation cracks: pinholes counted
+//   pc_graphics.exe --scene denizalti --headless --path <file> [--ssaa 1..16]
+//                                                                      a camera path (src/core/cam_path.h): every pose
+//                                                                      drawn as --foto draws (tiles with a guard band), 16x
+//                                                                      unless --ssaa says otherwise, to <out>/frame_NNNN.png.
+//                                                                      A line: "x y z yaw pitch fov [time]", x y z the eye
+//                                                                      in metres, yaw 0 along +z growing towards +x and pitch
+//                                                                      up positive, radians; fov vertical, degrees (time: the
+//                                                                      scene has no clock that shows; passed on)
+//   common: --w W --h H (any picture size, after --res), --out <folder> (instead of captures/denizalti/; relative to
+//           the project)
 #include "scenes/denizalti/dz_app.h"
+#include "core/cam_path.h"
 #include "core/image_io.h"
 #include "scenes/denizalti/dz_gl.h"
 
@@ -348,6 +359,8 @@ int runCli(int argc, char** argv) {
     a.set.tessOff = hasArg(argc, argv, "--bolmesiz");
     a.set.normalDetail = argValue(argc, argv, "--detay", "1") != "0";
     a.applyChoices();
+    if (hasArg(argc, argv, "--w")) a.set.width = std::stoi(argValue(argc, argv, "--w"));
+    if (hasArg(argc, argv, "--h")) a.set.height = std::stoi(argValue(argc, argv, "--h"));
     const std::string camArg = argValue(argc, argv, "--cam");
     if (!camArg.empty()) {
         float v[5] = {0, 0, 0, 0, 0};
@@ -358,7 +371,31 @@ int runCli(int argc, char** argv) {
     }
     const std::string fov = argValue(argc, argv, "--fov");
     if (!fov.empty()) a.cam.fovY = std::stof(fov) * 3.14159265f / 180.0f;
-    const std::string out = a.root + "/captures/denizalti/";
+    const std::string outArg = argValue(argc, argv, "--out");
+    const std::string out = outArg.empty() ? a.root + "/captures/denizalti/" : (std::filesystem::path(a.root) / outArg).generic_string() + "/";
+    // the photo as F12 makes it: tiles of 1920 x 1080 with a 192 px guard band, at the settings' size
+    auto photo = [&](std::vector<uint8_t>& img, double time) {
+        const int W = a.set.width, H = a.set.height, nx = (W + 1919) / 1920, ny = (H + 1079) / 1080, guard = nx * ny > 1 ? 192 : 0;
+        img.assign(size_t(W) * H * 4, 0);
+        for (int t = 0; t < nx * ny; ++t) {
+            const int tx = t % nx, ty = t / nx;
+            const int x0 = tx * W / nx, x1 = (tx + 1) * W / nx, y0 = ty * H / ny, y1 = (ty + 1) * H / ny;
+            Settings s = a.set;
+            s.fullW = W;
+            s.fullH = H;
+            s.tileX = x0 - guard;
+            s.tileY = y0 - guard;
+            s.width = (x1 - x0) + 2 * guard;
+            s.height = (y1 - y0) + 2 * guard;
+            a.renderer.draw(a.cam, s, s.width, s.height, time);
+            std::vector<uint8_t> px;
+            a.renderer.readOutput(px);
+            for (int y = y0; y < y1; ++y)
+                std::memcpy(&img[(size_t(y) * W + x0) * 4], &px[(size_t(y - y0 + guard) * s.width + guard) * 4], size_t(x1 - x0) * 4);
+        }
+        glFinish();
+        return nx * ny;
+    };
 
     if (hasArg(argc, argv, "--olc")) {
         std::printf("taban agi: %zu ucgen, en ince ucgen %.3f mm\n", a.renderer.baseTris, a.renderer.finestTriangle * 1000.0f);
@@ -406,31 +443,47 @@ int runCli(int argc, char** argv) {
     if (hasArg(argc, argv, "--foto")) {
         // the photo as F12 makes it: tiles of 1920 x 1080 with a 192 px guard band
         const std::string name = argValue(argc, argv, "--foto");
-        const int W = a.set.width, H = a.set.height, nx = (W + 1919) / 1920, ny = (H + 1079) / 1080, guard = nx * ny > 1 ? 192 : 0;
-        std::vector<uint8_t> img(size_t(W) * H * 4);
+        const int W = a.set.width, H = a.set.height;
+        std::vector<uint8_t> img;
         const auto t0 = std::chrono::steady_clock::now();
-        for (int t = 0; t < nx * ny; ++t) {
-            const int tx = t % nx, ty = t / nx;
-            const int x0 = tx * W / nx, x1 = (tx + 1) * W / nx, y0 = ty * H / ny, y1 = (ty + 1) * H / ny;
-            Settings s = a.set;
-            s.fullW = W;
-            s.fullH = H;
-            s.tileX = x0 - guard;
-            s.tileY = y0 - guard;
-            s.width = (x1 - x0) + 2 * guard;
-            s.height = (y1 - y0) + 2 * guard;
-            a.renderer.draw(a.cam, s, s.width, s.height, 0.0);
-            std::vector<uint8_t> px;
-            a.renderer.readOutput(px);
-            for (int y = y0; y < y1; ++y)
-                std::memcpy(&img[(size_t(y) * W + x0) * 4], &px[(size_t(y - y0 + guard) * s.width + guard) * 4], size_t(x1 - x0) * 4);
-        }
-        glFinish();
+        const int tiles = photo(img, 0.0);
         const double sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
         std::filesystem::create_directories(out);
         setPNGCompression(1);
         writePNG(out + name + ".png", W, H, img.data());
-        std::printf("foto %s: %dx%d %dx, %d parca, %.1f sn\n", name.c_str(), W, H, a.set.ssaa, nx * ny, sec);
+        std::printf("foto %s: %dx%d %dx, %d parca, %.1f sn\n", name.c_str(), W, H, a.set.ssaa, tiles, sec);
+        return 0;
+    }
+    if (hasArg(argc, argv, "--path")) {
+        std::vector<CamPose> poses;
+        std::string perr;
+        if (!readCamPath(argValue(argc, argv, "--path"), poses, perr)) {
+            std::printf("denizalti: %s\n", perr.c_str());
+            return 1;
+        }
+        if (!hasArg(argc, argv, "--ssaa")) a.set.ssaa = 16;
+        std::printf("denizalti: baslangic pozu (yol bicimiyle) %.3f %.3f %.3f %.4f %.4f %.1f\n", a.cam.pos.x, a.cam.pos.y, a.cam.pos.z, a.cam.yaw, a.cam.pitch,
+                    a.cam.fovY * 180.0f / 3.14159265f);
+        std::filesystem::create_directories(out);
+        setPNGCompression(1);
+        const auto p0 = std::chrono::steady_clock::now();
+        int tiles = 0;
+        for (size_t k = 0; k < poses.size(); ++k) {
+            const CamPose& q = poses[k];
+            a.cam.pos = make_float3(float(q.x), float(q.y), float(q.z));
+            a.cam.yaw = q.yaw;
+            a.cam.pitch = q.pitch;
+            a.cam.fovY = q.fov * 3.14159265f / 180.0f;
+            const auto t0 = std::chrono::steady_clock::now();
+            std::vector<uint8_t> img;
+            tiles = photo(img, q.time >= 0.0 ? q.time : double(k) / 30.0);
+            const std::string name = out + camPathFrameName(int(k)) + ".png";
+            writePNG(name, a.set.width, a.set.height, img.data());
+            std::printf("  %s (%.0f ms)\n", name.c_str(), std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
+        }
+        const double sec = std::chrono::duration<double>(std::chrono::steady_clock::now() - p0).count();
+        std::printf("yol: %zu kare %dx%d %dx (%d parca), kare basina %.0f ms -> %s\n", poses.size(), a.set.width, a.set.height, a.set.ssaa, tiles,
+                    1000.0 * sec / double(poses.size()), out.c_str());
         return 0;
     }
     if (hasArg(argc, argv, "--kare")) {
