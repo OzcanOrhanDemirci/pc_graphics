@@ -4,12 +4,18 @@
 //        one picture: the coarse world (or with --kayit the fine recording) S seconds after the trigger
 //   --scene laboratuvar --seq --deney D [--tetik] --t0 A --t1 B --kare N [--kayit] --out dir
 //        N pictures from A to B (my own checking: no video is made)
+//   --scene laboratuvar --seq --deney D [--tetik] [--kayit] --path <file> [--t0 A --t1 B] --out dir
+//        a camera path (src/core/cam_path.h): one picture a pose, frame_NNNN.png, at the 7th column's time if every
+//        line has one, else spread from A to B as --seq spreads them. A line: "x y z yaw pitch fov [time]", x y z the
+//        camera in metres, yaw 0 along +z growing towards +x and pitch up positive, radians; fov vertical, degrees
+//        (the focus stays the experiment's). The experiment's own camera is printed in that form
 //   --scene laboratuvar --test [name]          the solver's tests (solver_tests.cpp)
 //   --scene laboratuvar --surface-test [name]  the liquid surface's tests
 //   --scene laboratuvar --weapons-test [name]  the loads and the gelatin calibration
 //   --scene laboratuvar --lab-test [name]      the experiments' measurements (lab_tests.cpp)
-// Common: --width --height, --set key=value, --cam "x y z" --look "x y z", --fov.
+// Common: --width --height (or --w --h), --set key=value, --cam "x y z" --look "x y z", --fov.
 #include "scenes/laboratuvar/laboratuvar_app.h"
+#include "core/cam_path.h"
 #include "scenes/laboratuvar/lab_kernels.h"
 #include "scenes/laboratuvar/lab_record.h"
 #include "core/image_io.h"
@@ -363,6 +369,7 @@ int runLaboratuvarCli(int argc, char** argv) {
     std::vector<std::pair<std::string, std::string>> camSet;
     float3 camPos{}, camAim{};
     bool camGiven = false;
+    std::string pathFile;
     LabInputs inputs;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
@@ -402,6 +409,9 @@ int runLaboratuvarCli(int argc, char** argv) {
         else if (a == "--spp") spp = unsigned(std::stoi(next()));
         else if (a == "--width") app.width = unsigned(std::stoi(next()));
         else if (a == "--height") app.height = unsigned(std::stoi(next()));
+        else if (a == "--w") app.width = unsigned(std::stoi(next()));
+        else if (a == "--h") app.height = unsigned(std::stoi(next()));
+        else if (a == "--path") pathFile = next();
         else if (a == "--cam") { camPos = v3(next()); camGiven = true; }
         else if (a == "--look") camAim = v3(next());
         else if (a == "--fov") camSet.push_back({"kamera.fov", next()});
@@ -422,6 +432,17 @@ int runLaboratuvarCli(int argc, char** argv) {
     }
     const Deney d = parseDeney(deneyS);
     if (d == Deney::Bal || d == Deney::Kum) trig = trig || false;
+    std::vector<CamPose> camPoses;
+    bool timed = false;
+    if (!pathFile.empty() && mode == "seq") {
+        std::string perr;
+        if (!readCamPath(pathFile, camPoses, perr, &timed)) {
+            std::printf("laboratuvar: %s\n", perr.c_str());
+            return 1;
+        }
+        if (timed)   // a recording covers up to the path's last moment
+            for (const CamPose& q : camPoses) t1 = std::max(t1, q.time);
+    }
     std::string log;
     // the world: coarse (live), or a recording's fine pass
     LabWorld w;
@@ -620,6 +641,24 @@ int runLaboratuvarCli(int argc, char** argv) {
         const std::string path = out.empty() ? app.root + "/captures/laboratuvar/" + deneyS + ".png" : out;
         save(app, path);
         std::printf("yazildi: %s\n", path.c_str());
+    } else if (!camPoses.empty()) {
+        const std::string dir = out.empty() ? app.root + "/captures/laboratuvar/" + deneyS : out;
+        {
+            const LabCam& c = app.cam;
+            std::printf("laboratuvar: kamera (yol bicimiyle) %.4f %.4f %.4f %.4f %.4f %.1f\n", c.pos.x, c.pos.y, c.pos.z, c.yaw, c.pitch, c.fovDeg);
+        }
+        const int n = int(camPoses.size());
+        for (int k = 0; k < n; ++k) {
+            const CamPose& q = camPoses[size_t(k)];
+            app.cam.pos = make_float3(float(q.x), float(q.y), float(q.z));
+            app.cam.yaw = q.yaw;
+            app.cam.pitch = q.pitch;
+            app.cam.fovDeg = q.fov;
+            app.cam.apply(app.renderer.params().cam, app.width, app.height);
+            drawAt(timed ? q.time : n > 1 ? t0 + (t1 - t0) * k / (n - 1) : t0);
+            save(app, dir + "/" + camPathFrameName(k) + ".png");
+        }
+        std::printf("yazildi: %s (%d kare)\n", dir.c_str(), n);
     } else {
         const std::string dir = out.empty() ? app.root + "/captures/laboratuvar/" + deneyS : out;
         for (int k = 0; k < frames; ++k) {
