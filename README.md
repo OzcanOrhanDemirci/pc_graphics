@@ -884,6 +884,17 @@ build\pc_graphics.exe --scene olcek --test olcek-hassasiyet                     
 
 Each scene's full list is at the top of its `src/scenes/<scene>/<scene>_app.cpp`.
 
+For video, several scenes render a camera path: a text file with one pose a line, `x y z yaw pitch fov [time]`
+(`src/core/cam_path.h`), one `frame_NNNN.png` per pose, at any size:
+
+```bat
+build\pc_graphics.exe --scene orman --path move.txt --ref 16 --w 1080 --h 1920 --out captures\orman_move   :: converged reference frames
+build\pc_graphics.exe --scene denizalti --headless --path move.txt --w 1080 --h 1920 --out captures\dz_move :: 16x supersampled
+build\pc_graphics.exe --scene yikim --clip kolon --slow 0.25 --path move.txt --spp 64 --w 1080 --h 1920    :: engine slow motion
+build\pc_graphics.exe --scene laboratuvar --seq --deney su --tetik --kayit --path move.txt --out captures\lab_move
+build\pc_graphics.exe --scene altinsaat --headless --path move.txt --spp 1024 --w 1080 --h 1920 --out captures\as_move
+```
+
 ## Repository layout
 
 ```
