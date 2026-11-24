@@ -3,9 +3,16 @@
 //   pc_graphics.exe [--scene altinsaat] --headless --spp N --out captures/name     N samples per pixel, PNG + EXR
 //   pc_graphics.exe [--scene altinsaat] --headless --live N --out captures/name    N live frames: timings, flicker, frames
 //   pc_graphics.exe [--scene altinsaat] --selftest       spectral tests (CMF, D65, Sellmeier, thin film, Newton colours)
-//   options: --camera k, --width W, --height H, --set key=value, --view v, --furnace, --spp-per-launch k,
+//   pc_graphics.exe --scene altinsaat --headless --path <file> --spp N --out dir   a camera path (src/core/cam_path.h):
+//            every pose N samples per pixel from nothing, to dir/frame_NNNN.png (no EXR; with --denoise the frame is the
+//            AI denoiser's, each frame on its own: it may flicker between frames). A line: "x y z yaw pitch fov
+//            [time]", x y z the camera in metres, yaw 0 along +z growing towards +x and pitch up positive, radians; fov
+//            vertical, degrees; the lens and its focus distance stay --camera's; time is not used (the still room).
+//            --camera's own pose is printed in that form
+//   options: --camera k, --width W, --height H (or --w, --h), --set key=value, --view v, --furnace, --spp-per-launch k,
 //            --denoise (also write _dn.png), --auto-ev target, --seed s, --compile-only
 #include "scenes/altinsaat/altinsaat_app.h"
+#include "core/cam_path.h"
 #include "core/gpu_stats.h"
 
 #include <ctime>
@@ -79,6 +86,40 @@ static int runHeadless(AltinSaat& app, int spp, const std::string& out) {
     return 0;
 }
 
+// A camera path: every pose converged on its own from nothing, the preset's lens and focus kept
+static int runPath(AltinSaat& app, int spp, const std::vector<CamPose>& poses, const std::string& dir) {
+    std::filesystem::create_directories(dir);
+    const auto base = app.renderer.params().cam;
+    std::printf("altinsaat: kamera (yol bicimiyle) %.4f %.4f %.4f %.4f %.4f %.2f\n", base.pos.x, base.pos.y, base.pos.z, std::atan2(base.fwd.x, base.fwd.z),
+                std::asin(std::max(-1.0f, std::min(1.0f, base.fwd.y))), 2.0f * std::atan(base.tanHalfY) * 180.0f / 3.14159265f);
+    app.renderer.renderFrame();   // the first launch finishes OptiX's lazy compilation
+    const double p0 = nowSec();
+    for (size_t k = 0; k < poses.size(); ++k) {
+        const CamPose& q = poses[k];
+        auto& c = app.renderer.params().cam;
+        c = base;
+        c.pos = make_float3(float(q.x), float(q.y), float(q.z));
+        c.fwd = normalize(make_float3(std::sin(q.yaw) * std::cos(q.pitch), std::sin(q.pitch), std::cos(q.yaw) * std::cos(q.pitch)));
+        c.right = normalize(cross(c.fwd, make_float3(0, 1, 0)));
+        c.up = cross(c.right, c.fwd);
+        c.tanHalfY = std::tan(0.5f * q.fov * 3.14159265f / 180.0f);
+        c.tanHalfX = c.tanHalfY * float(app.width) / float(app.height);
+        app.renderer.resetAccumulation();
+        const double t0 = nowSec();
+        while (int(app.renderer.samplesPerPixel()) < spp) app.renderer.renderFrame();
+        if (app.headlessDenoise) app.renderer.denoise(0.0f);
+        app.renderer.tonemap();
+        app.renderer.downloadOutput(app.pixels);
+        if (app.headlessDenoise) app.renderer.clearDenoised();
+        const std::string name = dir + "/" + camPathFrameName(int(k)) + ".png";
+        writePNG(name, int(app.width), int(app.height), reinterpret_cast<const unsigned char*>(app.pixels.data()));
+        std::printf("  %s (%u spp, %.0f ms)\n", name.c_str(), app.renderer.samplesPerPixel(), 1000.0 * (nowSec() - t0));
+    }
+    std::printf("yol: %zu kare %ux%u, %d spp, kare basina %.0f ms -> %s\n", poses.size(), app.width, app.height, spp,
+                1000.0 * (nowSec() - p0) / double(poses.size()), dir.c_str());
+    return 0;
+}
+
 // Live mode without a window: frames at a fixed rate, per-pass timings, flicker = mean absolute difference of
 // consecutive displayed frames (8-bit), and a few frames written for inspection.
 static int runLiveHeadless(AltinSaat& app, int frames, float fps, const std::string& out) {
@@ -134,7 +175,7 @@ int runAltinSaatCli(int argc, char** argv) {
     int spp = 64, view = 0, sppPerLaunch = 1;
     unsigned int seed = 0;
     int liveFrames = 0;
-    std::string out;
+    std::string out, pathFile;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         auto next = [&]() { return i + 1 < argc ? std::string(argv[++i]) : std::string(); };
@@ -153,6 +194,9 @@ int runAltinSaatCli(int argc, char** argv) {
         else if (a == "--camera") app.camera = std::stoi(next());
         else if (a == "--width") app.width = unsigned(std::stoi(next()));
         else if (a == "--height") app.height = unsigned(std::stoi(next()));
+        else if (a == "--w") app.width = unsigned(std::stoi(next()));
+        else if (a == "--h") app.height = unsigned(std::stoi(next()));
+        else if (a == "--path") pathFile = next();
         else if (a == "--view") view = std::stoi(next());
         else if (a == "--set") app.overrides.push_back(next());
         else if (a == "--root") app.root = next();
@@ -187,7 +231,16 @@ int runAltinSaatCli(int argc, char** argv) {
     std::printf("scene: %zu triangles, %zu spheres, %zu materials, %zu portals\n", app.scene.indices.size(), app.scene.spheres.size(),
                 app.scene.materials.size(), app.scene.portals.size());
     int rc = 0;
-    if (headless && liveFrames > 0) rc = runLiveHeadless(app, liveFrames, 30.0f, out.empty() ? app.root + "/captures/live_" + timestamp() : out);
+    std::vector<CamPose> poses;
+    if (headless && !pathFile.empty()) {
+        std::string perr;
+        if (!readCamPath(pathFile, poses, perr)) {
+            std::printf("altinsaat: %s\n", perr.c_str());
+            rc = 1;
+        } else {
+            rc = runPath(app, spp, poses, out.empty() ? app.root + "/captures/yol_" + timestamp() : out);
+        }
+    } else if (headless && liveFrames > 0) rc = runLiveHeadless(app, liveFrames, 30.0f, out.empty() ? app.root + "/captures/live_" + timestamp() : out);
     else if (headless) rc = runHeadless(app, spp, out.empty() ? app.root + "/captures/headless_" + timestamp() : out);
 
     gpuStatsShutdown();
