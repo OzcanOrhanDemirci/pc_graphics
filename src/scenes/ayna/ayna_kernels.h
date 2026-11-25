@@ -136,6 +136,7 @@ struct View {
     float3 slitFwd{0, 0, -1}, slitUp{0, 1, 0};   // our sphere's slit: its axis and its long side's normal
     float slitHalfW = 0.04f, slitHalfH = 0.007f; // its half width and half height on the sphere (m)
     int skipRoot = 0;                // the bake of E2: our light's straight light in its own cell is not baked
+    int bakeSS = 1;                  // the bakes: each texel the mean of bakeSS x bakeSS points over its area (1: its centre)
     int ghosts = 1;                  // the mirrors' front-surface ghosts of the lights, for the path's first this many mirrors
     int ghostCells = 10;             // how far a ghost's ray is followed
     // the tools (Ö1): a mirror plane in front of the eye, met before anything else; 1 ideal (all reflected, no glass),

@@ -484,6 +484,7 @@ View AynaApp::makeView() const {
     v.maxSteps = cfg.i("steps", 1500);
     v.debug = debug;
     v.beams = cfg.i("beams", 1);
+    v.bakeSS = cfg.i("bake.ss", 1);   // both light maps: each texel the mean over its area (k x k points; 1: its centre)
     v.hazeSigma = cfg.f("haze.sigma", 0.0f);
     v.hazeAbsorb = cfg.f("haze.absorb", 0.0f);
     v.hazeG = cfg.f("haze.g", 0.6f);
@@ -770,16 +771,21 @@ void AynaApp::probe(float x, float y) {
     probePixel(v, x, y);
 }
 
-bool AynaApp::saveReference(const std::string& pathNoExt) {
-    // the four renders' light averaged before the display transform (as one render of 64 samples would be)
+bool AynaApp::saveReference(const std::string& pathNoExt, int grid) {
+    // grid x grid renders, the pattern shifted to the centres of a grid x grid split of the pixel, their light averaged
+    // before the display transform (grid 2: the four renders at +-1/4, as one render of 64 samples would be; a path
+    // capture's --gecis raises it, so thin detail stops stepping between the same fixed points as the camera moves)
+    grid = std::max(1, grid);
     std::vector<float4> acc(size_t(width) * height, make_float4(0, 0, 0, 0));
-    const float offs[4][2] = {{-0.25f, -0.25f}, {0.25f, -0.25f}, {-0.25f, 0.25f}, {0.25f, 0.25f}};
-    for (int k = 0; k < 4; ++k) {
-        subX = offs[k][0];
-        subY = offs[k][1];
-        render();
-        const std::vector<float4> h = hdrHost();
-        for (size_t i = 0; i < acc.size(); ++i) acc[i] = acc[i] + h[i] * 0.25f;
+    const float wk = 1.0f / float(grid * grid);
+    for (int j = 0; j < grid; ++j) {
+        for (int i = 0; i < grid; ++i) {
+            subX = (float(i) + 0.5f) / float(grid) - 0.5f;
+            subY = (float(j) + 0.5f) / float(grid) - 0.5f;
+            render();
+            const std::vector<float4> h = hdrHost();
+            for (size_t q = 0; q < acc.size(); ++q) acc[q] = acc[q] + h[q] * wk;
+        }
     }
     subX = subY = 0.0f;
     cudaMemcpy(hdr_, acc.data(), acc.size() * sizeof(float4), cudaMemcpyHostToDevice);
@@ -1085,6 +1091,7 @@ int runAynaCli(int argc, char** argv) {
     int w = 0, h = 0;
     std::string pathFile;   // --path: a camera path, one pose a line
     bool pathRef = false;
+    int refGrid = 2;
     bool headless = false, hasFree = false, plan = false;
     std::string test;
     std::vector<float2> probes;
@@ -1102,6 +1109,7 @@ int runAynaCli(int argc, char** argv) {
         else if (s == "--scene") next();
         else if (s == "--path") pathFile = next();
         else if (s == "--path-ref") pathRef = true;
+        else if (s == "--gecis") refGrid = std::max(1, std::stoi(next()));   // the reference's grid: K x K shifts of the 16
         else if (s == "--plan") plan = true;
         else if (s == "--probe") {   // "x y" at the output's size: the first surface there and its light, both ways
             float x = 0, y = 0;
@@ -1291,7 +1299,7 @@ int runAynaCli(int argc, char** argv) {
             char name[64];
             std::snprintf(name, sizeof(name), "/frame_%04d", n++);
             if (pathRef) {
-                a.saveReference(out + name);
+                a.saveReference(out + name, refGrid);
             } else {
                 a.render();
                 a.save(out + name);

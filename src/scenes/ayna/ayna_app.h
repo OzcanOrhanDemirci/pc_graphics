@@ -73,7 +73,7 @@ public:
     float3 tmN{0, 0, 1};
     float tmD = 0.0f;
     // the tools: a reference picture, the mean of four renders shifted by a quarter pixel (16 samples each: 64)
-    bool saveReference(const std::string& pathNoExt);
+    bool saveReference(const std::string& pathNoExt, int grid = 2);
     std::vector<float4> hdrHost() const {
         std::vector<float4> h(size_t(width) * height);
         cudaMemcpy(h.data(), hdr_, h.size() * sizeof(float4), cudaMemcpyDeviceToHost);

@@ -769,10 +769,10 @@ __device__ float3 lightAt(const View& v, const Cell& c, int kind, int k, float3 
 }
 
 // the bake: one texel's surface point, its normal and its cell; false if the texel is on no surface
-__device__ bool texelPoint(const View& v, const LightMapBlock& b, int x, int y, float3& p, float3& n) {
+__device__ bool texelPoint(const View& v, const LightMapBlock& b, int x, int y, float3& p, float3& n, float ox = 0.5f, float oy = 0.5f) {
     const Lattice& g = v.g;
     const float ts = (b.type <= 1) ? (v.bake == 2 ? 2.0f * v.lm.texel : v.lm.texel) : b.ts;
-    const float fx = (float(x) + 0.5f) * ts, fy = (float(y) + 0.5f) * ts;
+    const float fx = (float(x) + ox) * ts, fy = (float(y) + oy) * ts;
     switch (b.type) {
     case 0:
     case 1: {
@@ -861,12 +861,45 @@ __global__ void kBake(View v, const LightMapBlock* blocks, unsigned bit) {
     loadCell(v, i, j, up, c);
     if (c.idx < 0) return;
     int straight = 0;
-    const float3 E = beamLight(v, c, p, n, 1.0f, v.beams == 2 ? 1 : 0, nullptr, &straight);
+    float3 E = beamLight(v, c, p, n, 1.0f, v.beams == 2 ? 1 : 0, nullptr, &straight);
+    if (v.bakeSS > 1) {
+        // the texel's area, not its centre (kBakeDyn says why); the bit stays the centre's
+        const int k = v.bakeSS;
+        float3 S = make_float3(0, 0, 0);
+        int got = 0;
+        for (int sy = 0; sy < k; ++sy) {
+            for (int sx = 0; sx < k; ++sx) {
+                float3 ps, ns;
+                if (!texelPoint(v, b, x, y, ps, ns, (float(sx) + 0.5f) / float(k), (float(sy) + 0.5f) / float(k))) continue;
+                const float3 qs = ps + ns * 0.002f;
+                int si, sj, su;
+                locate(v.g, qs.x, qs.z, si, sj, su);
+                if (cellIndex(v.g, si, sj, su) < 0) continue;
+                Cell cs;
+                loadCell(v, si, sj, su, cs);
+                if (cs.idx < 0) continue;
+                S += beamLight(v, cs, ps, ns, 1.0f, v.beams == 2 ? 1 : 0, nullptr, nullptr);
+                ++got;
+            }
+        }
+        if (got > 0) E = S * (1.0f / float(got));
+    }
     float4& t = v.lm.E[b.offset + y * b.w + x];
     t.x += E.x;
     t.y += E.y;
     t.z += E.z;
     t.w = __uint_as_float(__float_as_uint(t.w) | (straight ? bit : 0u) | kTexelValid);
+}
+
+// our light's light at one surface point (its cell's beams; a point in a passage's window takes its neighbour's too)
+__device__ float3 dynLightAt(const View& v, float3 p, float3 n) {
+    const float3 q = p + n * 0.002f;
+    int i, j, up;
+    locate(v.g, q.x, q.z, i, j, up);
+    if (cellIndex(v.g, i, j, up) < 0) return make_float3(0, 0, 0);
+    Cell c;
+    loadCell(v, i, j, up, c);
+    return beamLight(v, c, p, n, 1.0f, 0, nullptr, nullptr);
 }
 
 __global__ void kBakeDyn(View v, const LightMapBlock* blocks) {
@@ -879,20 +912,23 @@ __global__ void kBakeDyn(View v, const LightMapBlock* blocks) {
         t = make_float4(0, 0, 0, 0);
         return;
     }
-    const float3 q = p + n * 0.002f;
-    int i, j, up;
-    locate(v.g, q.x, q.z, i, j, up);
-    const int ci = cellIndex(v.g, i, j, up);
     float3 E = make_float3(0, 0, 0);
-    if (ci >= 0 && v.cellStart[ci * kBins * kBins + kBins * kBins] > v.cellStart[ci * kBins * kBins]) {
-        Cell c;
-        loadCell(v, i, j, up, c);
-        E = beamLight(v, c, p, n, 1.0f, 0, nullptr, nullptr);
-    } else if (ci >= 0) {
-        // a cell without our light's beams: but a point in a passage's window takes its neighbour's too
-        Cell c;
-        loadCell(v, i, j, up, c);
-        E = beamLight(v, c, p, n, 1.0f, 0, nullptr, nullptr);
+    if (v.bakeSS <= 1) {
+        E = dynLightAt(v, p, n);
+    } else {
+        // the texel's area, not its centre: our light moves with us and the shadows it throws through the arches and
+        // the mirrors are finer than a texel; a centre alone steps along their edges, and the steps change every frame
+        const int k = v.bakeSS;
+        int got = 0;
+        for (int sy = 0; sy < k; ++sy) {
+            for (int sx = 0; sx < k; ++sx) {
+                float3 ps, ns;
+                if (!texelPoint(v, b, x, y, ps, ns, (float(sx) + 0.5f) / float(k), (float(sy) + 0.5f) / float(k))) continue;
+                E += dynLightAt(v, ps, ns);
+                ++got;
+            }
+        }
+        E = got > 0 ? E * (1.0f / float(got)) : dynLightAt(v, p, n);
     }
     t = make_float4(E.x, E.y, E.z, __uint_as_float(kTexelValid));
 }

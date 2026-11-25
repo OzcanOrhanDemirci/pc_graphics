@@ -126,6 +126,15 @@ Nasıl yapılabileceği aşağıda "Sıradaki"de.
    kıpırtı 0,0014 → 0,0007 ölçüldü, ama bu büyük ölçüde kenar piksellerinin referansın kendi desenini birebir kopyalaması:
    4 ek örnekle hiç kazanç yok (0,00137), 64'lük referansa karşı kazanç yalnız %11 (0,0020 → 0,00177). Bedeli kare başına
    6-8 ms (en kötü bakış 26 → 34 ms). Ö5'i bozup ölçüyü "kandıran" bir kazanç olduğu için alınmadı.
+10. **Texel'in alanı, merkezi değil (2026-11-25, video çekimi için).** Özcan pc_graphics videosunda Ayna'nın üst
+    kısımlarında gölge ve ışığın kırılıp oynadığını gördü. Neden: iki harita da texel'in ışığını yalnız merkezinden
+    alıyordu. Işığımızın aynalardan ve kemerlerden attığı gölgeler 2 cm'lik texelden ince; harita kenarlarında basamak
+    yapıyor, ışık bizimle yürüdükçe basamaklar her kare biçim değiştiriyordu (lambaların 1 cm'lik haritası da basamaklı,
+    ama durgun). Piksel örneği artırmak bunu değiştirmiyor (ölçüldü). `bake.ss = k`: texel, alanındaki k x k noktanın
+    ortalaması (varsayılan 1, eski davranış). 8 ile kıpırtı, 16'lık alan ortalamasına karşı 0,00086 → 0,00021 (blok
+    0,00038 → 0,00010); görüntü aynı. Pişirme k² kat pahalı: canlıda kapalı, çekimde açık. `beams = 1` (piksel başına
+    kesin ışık) da kıpırtısız, ama üst duvarlarda koyu, keskin bir ayna gölgesi ağı çiziyor (haritanın 2 cm'si onu
+    yumuşak lekelere çeviriyordu). O resim onaylanan resim değildi, çekimde kullanılmadı.
 
 ## Gece boyunca bulunan ve düzeltilen hatalar (kısa)
 

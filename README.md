@@ -893,7 +893,13 @@ build\pc_graphics.exe --scene denizalti --headless --path move.txt --w 1080 --h 
 build\pc_graphics.exe --scene yikim --clip kolon --slow 0.25 --path move.txt --spp 64 --w 1080 --h 1920    :: engine slow motion
 build\pc_graphics.exe --scene laboratuvar --seq --deney su --tetik --kayit --path move.txt --out captures\lab_move
 build\pc_graphics.exe --scene altinsaat --headless --path move.txt --spp 1024 --w 1080 --h 1920 --out captures\as_move
+build\pc_graphics.exe --scene ayna --headless --path move.txt --path-ref --gecis 4 --set bake.ss=8 --w 1080 --h 1920 --out captures\ayna_move
 ```
+
+Ayna's `--path-ref` draws its 16-point pattern shifted to a K x K grid inside the pixel (`--gecis K`, default 2: 64
+samples; 4: 256). `bake.ss=8` bakes each light-map texel as the mean of 8 x 8 points over its area instead of its
+centre: the shadows our light throws through the arches and mirrors are finer than a texel, and a centre alone steps
+along their edges, steps that change every frame as the light moves with the camera (the lamps' map steps too, still).
 
 ## Repository layout
 
