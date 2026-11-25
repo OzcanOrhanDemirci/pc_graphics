@@ -105,8 +105,9 @@ bool OrmanRenderer::init(int width, int height, const std::string& root) {
 // the pixel's samples drawn from its reconstruction filter (a Gaussian, sigma in pixels) through the inverse of its
 // distribution, one axis at a time, on a fixed stratified pattern: every sample weighs the same, nothing is stored
 // between pixels, the same every frame
-void OrmanRenderer::setPattern(int spp, float sigma) {
+void OrmanRenderer::setPattern(int spp, float sigma, int pass, int passes) {
     spp = std::clamp(spp, 1, ORMAN_MAX_SPP);
+    if (spp < 16) passes = 1;
     static const float2 p4[4] = {{0.375f, 0.125f}, {0.875f, 0.375f}, {0.125f, 0.625f}, {0.625f, 0.875f}};
     static const float2 p8[8] = {{0.5625f, 0.3125f}, {0.4375f, 0.6875f}, {0.8125f, 0.5625f}, {0.3125f, 0.1875f},
                                  {0.1875f, 0.8125f}, {0.0625f, 0.4375f}, {0.6875f, 0.9375f}, {0.9375f, 0.0625f}};
@@ -139,9 +140,25 @@ void OrmanRenderer::setPattern(int spp, float sigma) {
     };
     params.spp = n;
     params.covBias = 0.5f * std::log2(float(n)) + 0.6f;
+    params.sampleFrac = passes > 1 ? (float(pass) + 0.5f) / float(passes) : 0.5f;
+    // a capture's passes (setPasses): pass j takes points j*16 .. j*16+15 of one Hammersley set of 16 x passes points
+    // (only their union counts: the passes are averaged), dealt to the sample indices turned by the pass, so a sample's
+    // alpha threshold and mist step are not tied to one band of the pixel
+    auto hammersley = [&](int k) {
+        const int q = (((k - pass) % 16 + 16) % 16) * 13 % 16;   // k = (5 q + pass) mod 16
+        const unsigned int m = unsigned(pass * 16 + q), N = unsigned(16 * passes);
+        unsigned int r = m;
+        r = (r << 16) | (r >> 16);
+        r = ((r & 0x00FF00FFu) << 8) | ((r & 0xFF00FF00u) >> 8);
+        r = ((r & 0x0F0F0F0Fu) << 4) | ((r & 0xF0F0F0F0u) >> 4);
+        r = ((r & 0x33333333u) << 2) | ((r & 0xCCCCCCCCu) >> 2);
+        r = ((r & 0x55555555u) << 1) | ((r & 0xAAAAAAAAu) >> 1);
+        return make_float2((float(m) + 0.5f) / float(N), float(double(r) / 4294967296.0) + 0.5f / float(N));
+    };
     for (int k = 0; k < n; ++k) {
         // a stratum's centre (the patterns' points sit on a 1/16 lattice: nudged half a step inwards)
-        const float2 u = src ? make_float2(src[k].x + 1.0f / 32.0f, src[k].y + 1.0f / 32.0f) : make_float2(0.5f, 0.5f);
+        const float2 u = passes > 1 ? hammersley(k)
+                         : src ? make_float2(src[k].x + 1.0f / 32.0f, src[k].y + 1.0f / 32.0f) : make_float2(0.5f, 0.5f);
         params.pattern[k] = n == 1 ? make_float2(0, 0) : make_float2(std::clamp(probit(u.x) * sigma, -1.5f, 1.5f), std::clamp(probit(u.y) * sigma, -1.5f, 1.5f));
         // the sun's disk: the same pattern on the unit disk (concentric map)
         const float a = 2.0f * u.x - 1.0f, b = 2.0f * u.y - 1.0f;
@@ -720,7 +737,33 @@ bool OrmanRenderer::enableDlss(bool on) {
 
 void OrmanRenderer::render() {
     CUDA_CHECK(cudaEventRecord(ev0_, cudaStream_t(stream_)));
-    launch(rgRender_, params.width, params.height, 1);
+    if (passes_ > 1 && !(dlssOn_ && params.dlss)) {
+        // a capture's passes: the same frame drawn with each pass's points and averaged before the glare and the display
+        const size_t n = size_t(width_) * height_;
+        std::vector<float4> one(n), sum(n, make_float4(0, 0, 0, 0));
+        for (int j = 0; j < passes_; ++j) {
+            setPattern(16, passSigma_, j, passes_);
+            launch(rgRender_, params.width, params.height, 1);
+            CUDA_CHECK(cudaStreamSynchronize(cudaStream_t(stream_)));
+            CUDA_CHECK(cudaMemcpy(one.data(), params.hdr, n * sizeof(float4), cudaMemcpyDeviceToHost));
+            for (size_t i = 0; i < n; ++i) {
+                sum[i].x += one[i].x;
+                sum[i].y += one[i].y;
+                sum[i].z += one[i].z;
+                sum[i].w += one[i].w;
+            }
+        }
+        const float w = 1.0f / float(passes_);
+        for (auto& c : sum) {
+            c.x *= w;
+            c.y *= w;
+            c.z *= w;
+            c.w *= w;
+        }
+        CUDA_CHECK(cudaMemcpy(params.hdr, sum.data(), n * sizeof(float4), cudaMemcpyHostToDevice));
+    } else {
+        launch(rgRender_, params.width, params.height, 1);
+    }
     CUDA_CHECK(cudaEventRecord(evD_, cudaStream_t(stream_)));
     dlssMs = 0.0f;
     if (dlssOn_ && params.dlss) {

@@ -87,6 +87,8 @@ struct OrmanParams {
     int spp;
     float2 pattern[ORMAN_MAX_SPP];   // sub-pixel offsets from the pixel's centre (pixels), the filter's own distribution
     float covBias;            // a leaf's coverage read this many levels above the sample's own (the pixel's reach)
+    float sampleFrac;         // where in its 1/spp step a sample's alpha threshold and mist step sit (0.5; the capture's
+                              // passes move it, so their union fills the steps)
     float lodBias;            // texture levels finer by this (DLSS gathers the frames: it samples finer)
 
     // DLSS Ray Reconstruction (orman_dlss.h): one sample a pixel at this frame's place in it, the guides it reads

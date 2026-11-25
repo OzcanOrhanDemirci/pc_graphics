@@ -90,7 +90,7 @@ extern "C" __global__ void __anyhit__alpha() {
         // the pixel reads nearly the same coverage, so how many stop changes smoothly as the leaf moves
         const float ac = tex2DLod<float>(cudaTextureObject_t(m.alpha), uv.x, uv.y, fmaxf(lod + params.covBias, 0.0f));
         const unsigned int hs = hash32(optixGetInstanceId() * 0x9E3779B9u ^ (optixGetPrimitiveIndex() + 1u) * 0x85EBCA6Bu ^ optixGetSbtGASIndex());
-        float tk = (float(info & 0xFFu) + 0.5f) / float(n) + float(hs >> 8) * (1.0f / 16777216.0f);
+        float tk = (float(info & 0xFFu) + params.sampleFrac) / float(n) + float(hs >> 8) * (1.0f / 16777216.0f);
         tk -= floorf(tk);
         const float v = a + (ac - a) * far, cut = m.alphaCutoff + (tk - m.alphaCutoff) * far;
         if (v < cut) optixIgnoreIntersection();
@@ -442,7 +442,7 @@ static __forceinline__ __device__ float3 mist(float3 o, float3 d, float tEnd, in
     const int N = params.fogSteps;
     const float g = params.fogG, cs = dot(d, params.sunDir);
     const float phase = (1.0f - g * g) / (4.0f * 3.14159265f * powf(fmaxf(1.0f + g * g - 2.0f * g * cs, 1e-4f), 1.5f));
-    const float f = (float(sample) + 0.5f) / float(params.spp);
+    const float f = (float(sample) + params.sampleFrac) / float(params.spp);
     for (int i = 0; i < N; ++i) {
         const float u0 = float(i) / N, u1 = float(i + 1) / N;
         const float t0 = L * u0 * u0, t1 = L * u1 * u1;

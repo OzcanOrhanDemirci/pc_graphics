@@ -72,7 +72,15 @@ public:
     // the sun's visibility in the air (the mist's shafts), a 3D texture of h-metre voxels over [lo, hi] (the tile's
     // wraps, baked in its copy at `at`)
     void bakeSunVis(bool tile, float3 lo, float3 hi, float h, float3 at, OBakeStats& st);
-    void setPattern(int spp, float sigma);
+    // the fixed pattern of spp samples a pixel; with passes > 1 (spp 16) pass `pass`'s share of a larger pattern
+    void setPattern(int spp, float sigma, int pass = 0, int passes = 1);
+    // a capture's frame drawn `passes` times, 16 samples each, the passes averaged (16 x passes samples a pixel, the
+    // textures and leaf coverage read as at 16): 1 is the plain fixed pattern
+    void setPasses(int passes, float sigma) {
+        passes_ = passes < 1 ? 1 : passes;
+        passSigma_ = sigma;
+        setPattern(16, sigma, 0, passes_);
+    }
     // DLSS Ray Reconstruction instead of the fixed samples (false and dlssError when it cannot be set up); the app fills
     // dlssFrame's jitter, matrices and reset before each render
     bool enableDlss(bool on);
@@ -117,6 +125,8 @@ private:
     Plane planes_[kPlanes];
     OrmanDlss dlss_;
     bool dlssOn_ = false;
+    int passes_ = 1;
+    float passSigma_ = 0.42f;
     cudaEvent_t evD_ = nullptr;
     void freePlanes();
     void launch(CUdeviceptr rg, unsigned int w, unsigned int h, unsigned int d);
